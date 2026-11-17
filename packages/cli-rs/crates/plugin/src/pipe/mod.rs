@@ -1568,6 +1568,10 @@ impl Scripts {
     /// its manifest was refused as the old guest's, and charged to its reloads.
     fn from_plugin(self: &Rc<Self>, up: Up) {
         let Some((id, activation)) = sender(&up) else { return };
+        // An activation that spilled fails as a whole: nothing more of it is applied.
+        if self.spilled_by(&id, activation) {
+            return self.refuse_spilled(up);
+        }
         let guest = self.guest(&id).filter(|guest| activation == 0 || guest.activation() == activation);
         let Some(guest) = guest else {
             if self.candidate(&id, activation) {
@@ -1597,11 +1601,17 @@ impl Scripts {
     }
 
     /// Keeps `up` of a plugin the loader has not registered yet, for its activation.
-    /// Past [`EARLY`] messages, one is not kept, and nothing of it is dropped silently (big-boi's catalog review,
-    /// final): a batch of effects is answered at once, a failure for each, so what waits for it settles; and the
-    /// activation is failed once it is registered, as what it registered or watched in a message not kept is lost.
+    /// Keeps a message of an activation not registered yet, up to [`EARLY`]. The activation that sends more spilled,
+    /// and fails as a whole, before anything it sent is applied (big-boi's catalog review): from then on nothing of it
+    /// is kept or applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and
+    /// once it is registered what it sent before is refused alike, not replayed, and it fails. Replaying what fit let a
+    /// fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came after missed
+    /// it.
     fn keep(&self, up: Up) {
         let Some((id, activation)) = sender(&up) else { return };
+        if self.spilled_by(&id, activation) {
+            return self.refuse_spilled(up);
+        }
         let mut early = self.early.borrow_mut();
         let kept = early.entry(id.clone()).or_default();
         if kept.len() < EARLY {
@@ -1609,28 +1619,42 @@ impl Scripts {
         }
         drop(early);
         log::warn!("plugin {id}: over {EARLY} messages before it was registered; it fails once it is");
-        self.spilled.borrow_mut().insert(id.clone(), activation);
-        if let Up::Effects { seq, effects, .. } = up {
+        self.spilled.borrow_mut().insert(id, activation);
+        self.refuse_spilled(up);
+    }
+
+    /// Whether activation `activation` of plugin `id` spilled ([`Scripts::keep`]).
+    fn spilled_by(&self, id: &str, activation: u64) -> bool {
+        self.spilled.borrow().get(id).is_some_and(|spilled| *spilled == 0 || *spilled == activation)
+    }
+
+    /// Refuses `up`, a message of an activation that spilled: a batch of effects is answered as refused, a failure for
+    /// each, to the activation that sent it, so what waits for it settles once; anything else is dropped, as the
+    /// activation fails.
+    fn refuse_spilled(&self, up: Up) {
+        if let Up::Effects { id, activation, seq, effects } = up {
             let results = vec![serde_json::Value::Null; effects.len()];
             self.settle(&Down::Answered { id, activation, key: format!("b{seq}"), results }, 0);
         }
     }
 
-    /// What plugin `id` sent before its activation `guest` was registered; and, when some of it was not kept, its
-    /// failure.
+    /// What plugin `id` sent before its activation was registered, now its guest's; or, when that activation spilled,
+    /// all of it refused, and the activation failed, after the turn, as the setup that registers it is still at work.
     fn registered(self: &Rc<Self>, id: &str) {
         let early = self.early.borrow_mut().remove(id).unwrap_or_default();
-        early.into_iter().for_each(|up| self.up(up));
-        let spilled = self.spilled.borrow_mut().remove(id);
-        if let (Some(activation), Some(guest)) = (spilled, self.guest(id)) {
-            if activation == 0 || guest.activation() == activation {
-                // After the turn: the setup that registers it is still at work.
-                let why = format!("it sent more than {EARLY} messages before the host registered it, and lost some");
-                crate::defer(&self.host, move |_| guest.fail(why));
-                return;
+        let Some(activation) = self.guest(id).map(|guest| guest.activation()).filter(|at| self.spilled_by(id, *at))
+        else {
+            return early.into_iter().for_each(|up| self.up(up));
+        };
+        early.into_iter().for_each(|up| self.refuse_spilled(up));
+        let (this, id) = (self.this.clone(), id.to_owned());
+        crate::defer(&self.host, move |_| {
+            let Some(scripts) = this.upgrade() else { return };
+            scripts.spilled.borrow_mut().remove(&id);
+            if let Some(guest) = scripts.guest(&id).filter(|guest| guest.activation() == activation) {
+                guest.fail(format!("it sent more than {EARLY} messages before the host registered it, and lost some"));
             }
-            self.spilled.borrow_mut().insert(id.to_owned(), activation);
-        }
+        });
     }
 
     /// What `seq` waited for, now answered.

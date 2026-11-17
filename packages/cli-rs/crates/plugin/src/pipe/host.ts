@@ -875,6 +875,13 @@ function deactivate(plugin: Plugin) {
   generations.delete(plugin.activation)
   plugin.active = false
   plugin.deactivated = true
+  // What it still waits on the host for settles once, as refused: no answer or reply reaches an activation that
+  // ended, whose generation is gone (big-boi's catalog review).
+  for (const resolvers of plugin.answers.values()) for (const resolve of resolvers) resolve(undefined)
+  plugin.answers.clear()
+  for (const reply of plugin.replies.values()) reply.resolve({ Err: "the plugin's activation ended" })
+  plugin.replies.clear()
+  plugin.parts.clear()
   for (const mount of plugin.mounts.values()) {
     try {
       plugin.surfaces[mount.surface]?.unmount?.(mount.id)
