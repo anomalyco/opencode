@@ -685,7 +685,12 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
             "Delete 2 draft",
         );
         step("cleared drafts", &["return"], None, "0 drafts");
-        if !matches!(carrier, Carrier::Luau(_)) {
+        // A Luau plugin reads no files.
+        #[cfg(feature = "luau")]
+        let reads_files = !matches!(carrier, Carrier::Luau(_));
+        #[cfg(not(feature = "luau"))]
+        let reads_files = true;
+        if reads_files {
             step("import", &["down", "down", "return"], Some(&path), "Stage 2 messages");
             step("imported", &["return"], None, "2 messages staged");
         }
@@ -694,6 +699,89 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
         Some(Observed { steps, requests })
     });
     let _ = std::fs::remove_file(file);
+}
+
+// --- opencode-goal-plugin (complex): a slot read from the messages' tool results, and a summary in a select
+
+/// An assistant message with one completed tool call of `name` whose result is `text`.
+fn goal_message(id: &str, name: &str, text: &str) -> Value {
+    json!({
+        "id": id, "type": "assistant", "agent": "build", "model": { "providerID": "provider", "id": "model" },
+        "content": [{
+            "type": "tool", "id": format!("call_{id}"), "name": name,
+            "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": text }] },
+            "time": { "created": 20, "ran": 21, "completed": 22 },
+        }],
+        "finish": "stop", "time": { "created": 20, "completed": 23 },
+    })
+}
+
+fn goal_server(seen: &Seen) -> Option<Reply> {
+    let goal = json!({
+        "sessionID": "ses_p", "objective": "Ship the parser rewrite", "status": "active", "tokenBudget": 20,
+        "tokensUsed": 10, "timeUsedSeconds": 3725, "createdAt": 1, "updatedAt": 2, "continuationFailures": 0,
+        "lastStatus": "Low-progress continuation turn detected (2/unbounded).", "maxAutoTurns": null,
+        "maxDurationSeconds": 7200, "noProgressTokenThreshold": null, "maxNoProgressTurns": null, "noProgressTurns": 2,
+        "budgetWrapupSent": false, "stopReason": "token budget reached (10/20)", "history": [], "checkpoints": [],
+        "lastCheckpoint": null, "lastAssistantText": "", "lastAssistantMessageID": "", "autoTurns": 4,
+        "remainingTokens": 10,
+    });
+    let (ses_p, ses_q) = (session("ses_p", "Goal", None, 2), session("ses_q", "Cleared", None, 1));
+    match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": ses_p }))),
+        ("GET", "/api/session/ses_q") => Some((200, json!({ "data": ses_q }))),
+        ("GET", "/api/session") => Some((200, json!({ "data": [ses_p, ses_q], "cursor": {} }))),
+        ("GET", "/api/session/ses_p/message") => {
+            let result = json!({ "goal": goal }).to_string();
+            Some((200, json!({ "data": [goal_message("msg_p", "get_goal", &result)], "cursor": {} })))
+        }
+        ("GET", "/api/session/ses_q/message") => {
+            let messages = [goal_message("msg_q2", "clear_goal", "{}"), goal_message("msg_q1", "get_goal", "{}")];
+            Some((200, json!({ "data": messages, "cursor": {} })))
+        }
+        ("GET", path) if path.ends_with("/inbox") => Some((200, json!({ "data": [] }))),
+        ("POST", "/api/session/ses_p/prompt") => Some((200, json!({ "data": { "id": "inb_1" } }))),
+        _ => None,
+    }
+}
+
+// Expected: on each column, with `locale: "zh-CN"`, the sidebar block shows an active goal in Chinese, its stop reason
+// and last status presented as the plugin's own; the palette's `目标` opens the summary with Pause among its options,
+// and Pause sends the Chinese prompt. On a session whose newest goal tool cleared the goal, the block is gone and the
+// summary says there is none, with Refresh alone.
+#[test]
+fn goal_plugin_shows_and_sends_alike_in_ts_rust_and_luau() {
+    trio("@prevalentware/opencode-goal-plugin", "goal-plugin", |carrier| {
+        let options = json!({ "locale": "zh-CN" });
+        let h = open_with(&[carrier], 170, goal_server, false, None, Some(&options))?;
+        h.wait_for("Ship the parser rewrite");
+        h.settle();
+        let mut steps = vec![("sidebar".to_owned(), cells(&h, SIDEBAR, 0..40))];
+        let summary = |h: &Port, steps: &mut Vec<(String, Vec<String>)>, name: &str| {
+            h.app.press("ctrl+p");
+            h.wait_for("Search commands");
+            h.app.type_text("目标");
+            h.wait_for("查看、暂停");
+            h.app.press("return");
+            h.wait_for("刷新");
+            h.settle();
+            steps.push((name.to_owned(), screen(h)));
+        };
+        summary(&h, &mut steps, "summary");
+        h.app.press("down");
+        h.app.press("down");
+        h.app.press("return");
+        h.wait(&format!("{carrier:?}: the pause is sent"), || !h.sent("/api/session/ses_p/prompt").is_empty());
+        h.settle();
+        h.tui.navigate(crate::support::session_route("ses_q"));
+        h.wait_for("Cleared");
+        h.settle();
+        steps.push(("cleared".to_owned(), cells(&h, SIDEBAR, 0..40)));
+        summary(&h, &mut steps, "none");
+        let mut requests = requests(&h, &["/api/session/ses_p/prompt"]);
+        requests.extend(requests_of(&h, |seen| seen.path.ends_with("/message")));
+        Some(Observed { steps, requests })
+    });
 }
 
 /// The reads the server saw that `keep` keeps, each once, sorted.

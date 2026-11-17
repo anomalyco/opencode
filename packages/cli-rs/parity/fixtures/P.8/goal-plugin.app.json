@@ -1,0 +1,71 @@
+{
+ "scenario": "P.8/goal-plugin",
+ "width": 150,
+ "height": 40,
+ "directory": "/tmp/opencode/packages/tui",
+ "config": {
+  "plugins": ["./out/npm/node_modules/@prevalentware/opencode-goal-plugin"],
+  "animations": false,
+  "experimental": {"new-designs":true}
+ },
+ "args": {
+  "sessionID": "ses_g"
+ },
+ "env": {
+  "OPENCODE_PARITY_PLUGIN": "npm",
+  "OPENCODE_GOAL_STATE_PATH": "/nonexistent/opencode-goal-plugin/goals.json"
+ },
+ "routes": [
+  {"path":"/api/session/ses_g","json":{"data":{"id":"ses_g","title":"Rewrite the parser","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+  {"path":"/api/session","json":{"data":[{"id":"ses_g","title":"Rewrite the parser","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+  {"path":"/api/session/ses_g/message","json":{"data":[{"id":"msg_3","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"tool","id":"call_2","name":"get_goal","state":{"status":"completed","input":{},"content":[{"type":"text","text":"{\"goal\":{\"sessionID\":\"ses_g\",\"objective\":\"Ship the parser rewrite\",\"status\":\"paused\",\"tokenBudget\":50000,\"tokensUsed\":1200,\"timeUsedSeconds\":725,\"createdAt\":1700000000,\"updatedAt\":1700000600,\"completionEvidence\":null,\"blocker\":null,\"closedAt\":null,\"continuationFailures\":0,\"lastStatus\":\"Goal paused.\",\"maxAutoTurns\":10,\"maxDurationSeconds\":3600,\"noProgressTokenThreshold\":null,\"maxNoProgressTurns\":null,\"noProgressTurns\":1,\"budgetWrapupSent\":false,\"stopReason\":\"paused\",\"history\":[{\"type\":\"created\",\"detail\":\"Goal set.\",\"timestamp\":1700000000}],\"checkpoints\":[{\"summary\":\"Lexer done\",\"timestamp\":1700000300}],\"lastCheckpoint\":{\"summary\":\"Lexer done\",\"timestamp\":1700000300},\"lastAssistantText\":\"\",\"lastAssistantMessageID\":\"\",\"autoTurns\":3,\"lastContinuationAt\":null,\"remainingTokens\":48800}}"}]},"time":{"created":30,"ran":31,"completed":32}},{"type":"text","text":"Paused."}],"finish":"stop","time":{"created":30,"completed":31}},{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"tool","id":"call_1","name":"create_goal","state":{"status":"completed","input":{},"content":[{"type":"text","text":"not json"}]},"time":{"created":20,"ran":21,"completed":22}}],"finish":"stop","time":{"created":20,"completed":21}},{"id":"msg_1","type":"user","text":"Rewrite the parser","time":{"created":10}}],"cursor":{}}},
+  {"path":"/api/session/ses_g/inbox","json":{"data":[]}},
+  {"method":"POST","path":"/api/session/ses_g/prompt","json":{"data":{"id":"inb_1"}}}
+ ],
+ "steps": [
+  {"checkpoint":"sidebar","until":"Ship the parser rewrite","fixture":"P.8/goal-plugin/sidebar"},
+  {"keys":["ctrl+p"]},
+  {"checkpoint":"commands","until":"Search commands","masks":[{"x":41,"y":13,"width":62,"height":14,"reason":"the host's palette list, which the plugin does not draw"}],"fixture":"P.8/goal-plugin/commands"},
+  {"type":"goal"},
+  {"checkpoint":"palette","until":"View, pause, resume","fixture":"P.8/goal-plugin/palette"},
+  {"keys":["enter"]},
+  {"checkpoint":"summary","until":"Refresh","fixture":"P.8/goal-plugin/summary"},
+  {"keys":["down","down","enter"]},
+  {"checkpoint":"sent","until":"Paused.","fixture":"P.8/goal-plugin/sent"}
+ ],
+ "requests": {
+  "writes": [
+   {"method":"POST","path":"/api/session/ses_g/prompt","query":{},"body":{"text":"Resume the current session goal by calling update_goal_status with status \"active\", then continue working toward it."},"status":200,"json":{"data":{"id":"inb_1"}}}
+  ],
+  "reads": [
+   {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
+   {"method":"GET","path":"/api/experimental/session/ses_g/terminal","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
+   {"method":"GET","path":"/api/integration","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/location","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}}},
+   {"method":"GET","path":"/api/mcp","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/mcp/resource","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"resources":[],"templates":[]}}},
+   {"method":"GET","path":"/api/model","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/plugin","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/project","query":{},"status":200,"json":[]},
+   {"method":"GET","path":"/api/provider","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/reference","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode/packages/tui","canonical":"/tmp/opencode/packages/tui"}},"data":[]}},
+   {"method":"GET","path":"/api/session","query":{"limit":["200"],"order":["desc"],"parentID":["ses_g"]},"status":200,"json":{"data":[{"id":"ses_g","title":"Rewrite the parser","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/active","query":{},"status":200,"json":{"data":{}}},
+   {"method":"GET","path":"/api/session/ses_g","query":{},"status":200,"json":{"data":{"id":"ses_g","title":"Rewrite the parser","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+   {"method":"GET","path":"/api/session/ses_g/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_g/inbox","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_g/message","query":{"limit":["20"],"order":["desc"]},"status":200,"json":{"data":[{"id":"msg_3","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"tool","id":"call_2","name":"get_goal","state":{"status":"completed","input":{},"content":[{"type":"text","text":"{\"goal\":{\"sessionID\":\"ses_g\",\"objective\":\"Ship the parser rewrite\",\"status\":\"paused\",\"tokenBudget\":50000,\"tokensUsed\":1200,\"timeUsedSeconds\":725,\"createdAt\":1700000000,\"updatedAt\":1700000600,\"completionEvidence\":null,\"blocker\":null,\"closedAt\":null,\"continuationFailures\":0,\"lastStatus\":\"Goal paused.\",\"maxAutoTurns\":10,\"maxDurationSeconds\":3600,\"noProgressTokenThreshold\":null,\"maxNoProgressTurns\":null,\"noProgressTurns\":1,\"budgetWrapupSent\":false,\"stopReason\":\"paused\",\"history\":[{\"type\":\"created\",\"detail\":\"Goal set.\",\"timestamp\":1700000000}],\"checkpoints\":[{\"summary\":\"Lexer done\",\"timestamp\":1700000300}],\"lastCheckpoint\":{\"summary\":\"Lexer done\",\"timestamp\":1700000300},\"lastAssistantText\":\"\",\"lastAssistantMessageID\":\"\",\"autoTurns\":3,\"lastContinuationAt\":null,\"remainingTokens\":48800}}"}]},"time":{"created":30,"ran":31,"completed":32}},{"type":"text","text":"Paused."}],"finish":"stop","time":{"created":30,"completed":31}},{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"tool","id":"call_1","name":"create_goal","state":{"status":"completed","input":{},"content":[{"type":"text","text":"not json"}]},"time":{"created":20,"ran":21,"completed":22}}],"finish":"stop","time":{"created":20,"completed":21}},{"id":"msg_1","type":"user","text":"Rewrite the parser","time":{"created":10}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/ses_g/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/shell","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/skill","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/vcs","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"branch":{"current":"main","default":"main"}}}},
+   {"method":"POST","path":"/api/rpc/opencode.goal/get","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"body":{"input":{"sessionID":"ses_g"}},"status":200,"json":{"output":null}}
+  ]
+ }
+}
