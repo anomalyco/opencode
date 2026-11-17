@@ -330,8 +330,8 @@ pub(crate) enum Extra {
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
-    /// The box that holds the host's code view of the claimed fence, which is the mounted node's widget.
-    Fence,
+    /// The box that holds the host's code view of the claimed fence: its background restyles with the theme.
+    Fence(View),
     /// The image.
     Image(opentui::widget::ImageView),
     /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
@@ -698,7 +698,7 @@ impl Tree {
     /// Whether a widget of the tree shows the host's code view of a claimed fence ([`Node::Fence`]).
     pub fn holds_fence(&self) -> bool {
         let mut found = false;
-        each(&self.nodes, &mut |node| found |= matches!(node.extra, Extra::Fence));
+        each(&self.nodes, &mut |node| found |= matches!(node.extra, Extra::Fence(_)));
         found
     }
 
@@ -1972,6 +1972,8 @@ impl Pass<'_, '_> {
             (Node::Code { .. }, Extra::Code(code, _)) => {
                 code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme((*self.syntax()).clone());
             }
+            // Under a keep too: the code view in it is the host's, which restyles with its fence (carbon c2a-3).
+            (Node::Fence { bg: Some(bg), .. }, Extra::Fence(view)) => drop(view.bg(fill(theme, Some(bg)))),
             _ => return,
         }
         count(|work| work.set += 1);
@@ -2272,7 +2274,7 @@ impl Pass<'_, '_> {
                 if let Some(code) = env.fence.and_then(|fence| fence()) {
                     view.add(&code);
                 }
-                (view.as_any(), Extra::Fence)
+                (view.as_any(), Extra::Fence(view))
             }
             Node::Slot { .. } | Node::Keep { .. } => unreachable!("a slot is placed, and a keep is held"),
         };
