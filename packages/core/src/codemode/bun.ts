@@ -300,6 +300,7 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 const writer = (handle: Handle, options?: { readonly highWaterMark?: number }) => {
   supports("A file writer", options, ["highWaterMark"])
   const chunks: Array<Uint8Array> = []
+  let buffered = 0
   let started = false
   const flush = () =>
     Effect.suspend(() => {
@@ -309,6 +310,7 @@ const writer = (handle: Handle, options?: { readonly highWaterMark?: number }) =
           Effect.sync(() => {
             started = true
             chunks.length = 0
+            buffered = 0
           }),
         ),
       )
@@ -318,7 +320,7 @@ const writer = (handle: Handle, options?: { readonly highWaterMark?: number }) =
       const bytes = typeof chunk === "string" || chunk instanceof Uint8Array ? toBytes(chunk) : undefined
       if (!bytes) throw new TypeError("A file writer takes a string or a Uint8Array.")
       chunks.push(bytes)
-      const buffered = chunks.reduce((total, item) => total + item.byteLength, 0)
+      buffered += bytes.byteLength
       return buffered < (options?.highWaterMark ?? Infinity) ? bytes.byteLength : Effect.as(flush(), bytes.byteLength)
     },
     flush,
