@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { constants as os } from "os"
 import path from "path"
 import { fileURLToPath } from "url"
+import { Glob } from "@opencode/util/glob"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileWrite } from "../file-write.js"
@@ -32,40 +33,70 @@ const ops = {
   readFile: op("open", function* (host, file, options?: Encoding) {
     const bytes = (yield* host.files.read(yield* read(host, file))).bytes
     const encoding = typeof options === "string" ? options : options?.encoding
-    if (encoding) return Buffer.from(bytes).toString(encoding)
-    // Node returns a Buffer, whose toString() is UTF-8, so `JSON.parse(fs.readFileSync(p))` works. Programs have no
-    // Buffer, so text comes back as text and only other bytes as a Uint8Array.
-    const text = Buffer.from(bytes).toString("utf8")
-    return Buffer.from(text).equals(bytes) ? text : bytes
+    return encoding ? Buffer.from(bytes).toString(encoding) : Buffer.from(bytes)
   }),
-  writeFile: op("open", (host, file, data: Data, options?: Encoding) => write(host, file, toBytes(data, options))),
-  appendFile: op("open", function* (host, file, data: Data, options?: Encoding) {
-    yield* outside(host, [file])
-    const current = yield* host.files.read((yield* host.access.resolve({ path: file })).absolute).pipe(
-      Effect.map((result) => result.bytes),
-      Effect.catchTag("Environment.NotFound", () => Effect.succeed(new Uint8Array())),
-    )
-    yield* write(host, file, Buffer.concat([current, toBytes(data, options)]))
+  writeFile: op("open", function* (host, file, data: Data, options?: Encoding | { readonly flag?: string }) {
+    const flag = typeof options === "object" && options !== null && "flag" in options ? options.flag : undefined
+    if (flag?.startsWith("a")) return yield* append(host, file, toBytes(data, encodingOf(options)))
+    if (flag?.includes("x")) {
+      const [absolute] = yield* outside(host, [file])
+      if ((yield* typeOf(host, absolute!)) !== undefined) return yield* Effect.fail("EEXIST" as const)
+    }
+    yield* write(host, file, toBytes(data, encodingOf(options)))
   }),
+  appendFile: op("open", (host, file, data: Data, options?: Encoding) => append(host, file, toBytes(data, options))),
   readdir: op("scandir", function* (host, file, options?: { withFileTypes?: boolean; recursive?: boolean }) {
     const entries = yield* walk(host.files, yield* read(host, file), options?.recursive === true)
     if (options?.withFileTypes !== true) return entries.map((entry) => entry.path)
-    return entries.map((entry) => ({
-      name: path.basename(entry.path),
-      parentPath: path.join(file, path.dirname(entry.path)),
-      ...kind(entry.type),
-    }))
+    return entries.map((entry) =>
+      dirent(path.basename(entry.path), path.join(file, path.dirname(entry.path)), entry.type),
+    )
   }),
-  stat: op("stat", (host, file) => stat(host, file, true)),
-  lstat: op("lstat", (host, file) => stat(host, file, false)),
+  stat: op("stat", function* (host, file, options?: { throwIfNoEntry?: boolean }) {
+    return yield* missingIsUndefined(stat(host, file, true), options)
+  }),
+  lstat: op("lstat", function* (host, file, options?: { throwIfNoEntry?: boolean }) {
+    return yield* missingIsUndefined(stat(host, file, false), options)
+  }),
   access: op("access", function* (host, file) {
     yield* Environment.typeFollowing(host.files, yield* read(host, file))
   }),
   mkdir: op("mkdir", function* (host, file, options?: { recursive?: boolean }) {
+    if (options?.recursive === true) return yield* mkdirp(host, file)
     const [absolute] = yield* edit(host, [file])
-    if (options?.recursive !== true && (yield* Environment.exists(host.files, absolute)))
-      return yield* Effect.fail("EEXIST" as const)
-    yield* host.files.mkdir(absolute)
+    if ((yield* typeOf(host, absolute!)) !== undefined) return yield* Effect.fail("EEXIST" as const)
+    if ((yield* typeOf(host, path.dirname(absolute!))) === undefined) return yield* Effect.fail("ENOENT" as const)
+    yield* host.files.mkdir(absolute!)
+  }),
+  // A new directory named `prefix` plus six random characters.
+  mkdtemp: op("mkdtemp", function* (host, prefix) {
+    for (;;) {
+      const directory =
+        prefix + Array.from(crypto.getRandomValues(new Uint8Array(6)), (byte) => alphabet[byte % 62]).join("")
+      const [absolute] = yield* edit(host, [directory])
+      if ((yield* typeOf(host, absolute!)) !== undefined) continue
+      if ((yield* typeOf(host, path.dirname(absolute!))) === undefined) return yield* Effect.fail("ENOENT" as const)
+      yield* host.files.mkdir(absolute!)
+      return directory
+    }
+  }),
+  rmdir: op("rmdir", function* (host, file, options?: { recursive?: boolean }) {
+    const [absolute] = yield* outside(host, [file])
+    const type = yield* typeOf(host, absolute!)
+    if (type === undefined) return yield* Effect.fail("ENOENT" as const)
+    if (type !== "directory") return yield* Effect.fail("ENOTDIR" as const)
+    const inside = yield* tree(host, absolute!)
+    if (inside.length > 0 && options?.recursive !== true) return yield* Effect.fail("ENOTEMPTY" as const)
+    yield* edit(host, [absolute!, ...inside.map((item) => path.join(absolute!, item))])
+    yield* host.files.remove(absolute!)
+  }),
+  truncate: op("open", function* (host, file, length?: number) {
+    const [absolute] = yield* edit(host, [file])
+    const bytes = (yield* host.files.read(absolute!)).bytes
+    const size = Math.max(0, length ?? 0)
+    const next = new Uint8Array(size)
+    next.set(bytes.subarray(0, size))
+    yield* host.files.write(absolute!, next)
   }),
   rm: op("rm", remove),
   unlink: op("unlink", (host, file) => remove(host, file)),
@@ -91,6 +122,59 @@ const ops = {
     }
     yield* write(host, destination, bytes)
   }),
+  cp: op(
+    "cp",
+    function* (host, file, to: PathLike, options?: { recursive?: boolean; force?: boolean; errorOnExist?: boolean }) {
+      const destination = toPath(to)
+      const [source] = yield* outside(host, [file])
+      const type = yield* typeOf(host, yield* read(host, file))
+      if (type === undefined) return yield* Effect.fail("ENOENT" as const)
+      const overwrite = options?.force !== false
+      const copyOne = function* (from: string, into: string) {
+        const bytes = (yield* host.files.read(yield* read(host, from))).bytes
+        const [absolute] = yield* outside(host, [into])
+        if ((yield* typeOf(host, absolute!)) !== undefined && !overwrite) {
+          if (options?.errorOnExist === true) return yield* Effect.fail("EEXIST" as const)
+          return
+        }
+        yield* write(host, into, bytes)
+      }
+      if (type !== "directory") return yield* copyOne(file, destination)
+      if (options?.recursive !== true) return yield* Effect.fail("EISDIR" as const)
+      const entries = yield* walk(host.files, source!, true)
+      for (const entry of entries.filter((item) => item.type === "directory"))
+        yield* mkdirp(host, path.join(destination, entry.path))
+      yield* mkdirp(host, destination)
+      for (const entry of entries.filter((item) => item.type !== "directory"))
+        yield* copyOne(path.join(file, entry.path), path.join(destination, entry.path))
+    },
+  ),
+  glob: op(
+    "scandir",
+    function* (host, pattern, options?: { cwd?: string; exclude?: ReadonlyArray<string>; withFileTypes?: boolean }) {
+      const cwd = options?.cwd ?? "."
+      const segments = pattern.split("/")
+      const literal = segments.findIndex((segment) => /[*?[\]{}()!+@]/.test(segment))
+      // The fixed part of the pattern is where listing starts, and what read permission is asked for.
+      const base = path.join(cwd, (literal < 0 ? segments : segments.slice(0, literal)).join("/") || ".")
+      const root = yield* read(host, base)
+      const shown = (relative: string) => path.join(path.relative(cwd, base), relative)
+      const matches = (relative: string) =>
+        Glob.match(pattern, shown(relative), { dot: false }) &&
+        !(options?.exclude ?? []).some((item) => Glob.match(item, shown(relative), { dot: false }))
+      if (literal < 0) {
+        const type = yield* typeOf(host, root)
+        if (type === undefined) return []
+        return [options?.withFileTypes === true ? dirent(path.basename(base), path.dirname(base), type) : pattern]
+      }
+      const entries = (yield* walk(host.files, root, pattern.includes("**"))).filter((entry) => matches(entry.path))
+      if (options?.withFileTypes === true)
+        return entries.map((entry) =>
+          dirent(path.basename(entry.path), path.join(base, path.dirname(entry.path)), entry.type),
+        )
+      return entries.map((entry) => shown(entry.path))
+    },
+  ),
 }
 
 const variants = (wrap: (operation: Op) => Op, suffix: string) =>
@@ -103,9 +187,11 @@ export const extension = Extension.make({
     fs: {
       // A copy that isn't marked async is synchronous, and blocks on the Effect it returns.
       ...variants((operation) => operation.bind(undefined), "Sync"),
-      existsSync: op("access", function* (host, file) {
-        return yield* Environment.exists(host.files, yield* read(host, file))
-      }),
+      // As in Node, existsSync never throws: a path it may not check doesn't exist.
+      existsSync: (file: PathLike) =>
+        op("access", function* (host, file) {
+          return yield* Environment.exists(host.files, yield* read(host, file))
+        })(file).pipe(Effect.orElseSucceed(() => false)),
       constants,
       promises: { ...variants(Extension.async, ""), constants },
     },
@@ -167,6 +253,50 @@ function* write(host: Host, file: string, content: Uint8Array) {
   const [absolute] = yield* edit(host, [file])
   yield* host.files.write(absolute, content)
 }
+
+// Appends under the path's lock, so concurrent appends to one file keep every chunk.
+function* append(host: Host, file: string, bytes: Uint8Array) {
+  const [absolute] = yield* outside(host, [file])
+  const current = yield* host.files.read(absolute!).pipe(
+    Effect.map((result) => result.bytes),
+    Effect.catchTag("Environment.NotFound", () => Effect.succeed(new Uint8Array())),
+  )
+  yield* write(host, file, Buffer.concat([current, bytes]))
+}
+
+// A recursive mkdir: like Node, it returns the first directory it created, written the way the path was given, or
+// undefined when the directory already existed.
+function* mkdirp(host: Host, file: string): Generator<Effect.Effect<unknown, unknown>, string | undefined, unknown> {
+  const [absolute] = yield* edit(host, [file])
+  const existing = yield* typeOf(host, absolute!)
+  if (existing === "directory") return undefined
+  if (existing !== undefined) return yield* Effect.fail("EEXIST" as const)
+  const created = yield* firstMissing(host, absolute!)
+  yield* host.files.mkdir(absolute!)
+  return path.join(file, path.relative(absolute!, created))
+}
+
+// The first directory that doesn't exist yet on the way to `absolute`.
+function* firstMissing(host: Host, absolute: string): Generator<Effect.Effect<unknown, unknown>, string, unknown> {
+  const parent = path.dirname(absolute)
+  if (parent === absolute) return absolute
+  const type = yield* typeOf(host, parent)
+  if (type === undefined) return yield* firstMissing(host, parent)
+  if (type !== "directory" && type !== "symlink") return yield* Effect.fail("ENOTDIR" as const)
+  return absolute
+}
+
+// `throwIfNoEntry: false` makes a missing path undefined instead of ENOENT.
+const missingIsUndefined = <A, E, R>(
+  effect: Generator<Effect.Effect<unknown, unknown>, A, unknown>,
+  options?: { readonly throwIfNoEntry?: boolean },
+) =>
+  Effect.gen(() => effect).pipe(
+    Effect.catchIf(
+      (error) => options?.throwIfNoEntry === false && error instanceof Environment.NotFound,
+      () => Effect.undefined,
+    ),
+  )
 
 // Every path inside a removed directory is authorized, so an edit rule for one of them still applies.
 function* remove(host: Host, file: string, options?: { recursive?: boolean; force?: boolean }) {
@@ -230,7 +360,26 @@ const kind = (type: Environment.FileType) => ({
   isFile: () => type === "file",
   isDirectory: () => type === "directory",
   isSymbolicLink: () => type === "symlink",
+  isFIFO: () => false,
+  isSocket: () => false,
+  isBlockDevice: () => false,
+  isCharacterDevice: () => false,
 })
+
+// Node's Dirent: `path` is the deprecated name of `parentPath`.
+const dirent = (name: string, parentPath: string, type: Environment.FileType) => ({
+  name,
+  parentPath,
+  path: parentPath,
+  ...kind(type),
+})
+
+const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+const encodingOf = (options: Encoding | { readonly flag?: string } | undefined) =>
+  typeof options === "string"
+    ? options
+    : (options as { readonly encoding?: BufferEncoding | null } | null | undefined)?.encoding
 
 const toBytes = (data: Data, options?: Encoding) =>
   typeof data === "string"

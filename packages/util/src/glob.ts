@@ -26,7 +26,7 @@ export namespace Glob {
     return glob(pattern, toGlobOptions(options))
   }
 
-  export function match(pattern: string, filepath: string): boolean {
-    return minimatch(filepath, pattern, { dot: true })
+  export function match(pattern: string, filepath: string, options: { dot?: boolean } = {}): boolean {
+    return minimatch(filepath, pattern, { dot: options.dot ?? true })
   }
 }

@@ -571,6 +571,96 @@ describe("fs", () => {
     ])
   })
 
+  const runFs = async (directory: string, code: string, permission = allowAll, files = fileServices(directory)) => {
+    const result = await Effect.runPromise(createCodeMode(new Map(), permission, files).execute({ code }, context))
+    return JSON.parse(result.output.output)
+  }
+
+  test("mkdir, mkdtemp, rmdir and truncate behave like Node", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "long.txt"), "abcdef")
+    expect(
+      await runFs(
+        tmp.path,
+        `const first = fs.mkdirSync("a/b/c", { recursive: true })
+        const again = fs.mkdirSync("a/b/c", { recursive: true })
+        let missingParent
+        try { fs.mkdirSync("x/y") } catch (e) { missingParent = e.code }
+        const temp = fs.mkdtempSync("tmp-")
+        let notEmpty
+        try { fs.rmdirSync("a") } catch (e) { notEmpty = e.code }
+        fs.rmdirSync("a", { recursive: true })
+        fs.truncateSync("long.txt", 3)
+        return [first, again ?? null, missingParent, /^tmp-[A-Za-z0-9]{6}$/.test(temp), fs.statSync(temp).isDirectory(),
+          notEmpty, fs.existsSync("a"), fs.readFileSync("long.txt", "utf8")]`,
+      ),
+    ).toEqual(["a", null, "ENOENT", true, true, "ENOTEMPTY", false, "abc"])
+  })
+
+  test("cp copies files and folders, and glob matches paths like Node", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
+    await Bun.write(path.join(tmp.path, "src", "nested", "b.ts"), "b")
+    await Bun.write(path.join(tmp.path, "src", "nested", "c.md"), "c")
+    await Bun.write(path.join(tmp.path, "src", ".hidden", "d.ts"), "d")
+    expect(
+      await runFs(
+        tmp.path,
+        `fs.cpSync("src", "copy", { recursive: true })
+        fs.cpSync("src/a.ts", "one.ts")
+        let needsRecursive
+        try { fs.cpSync("src", "nope") } catch (e) { needsRecursive = e.code }
+        return [fs.globSync("copy/**/*.ts").sort(), fs.readFileSync("one.ts", "utf8"), needsRecursive,
+          fs.globSync("src/*.ts"), fs.globSync("src/**/*", { exclude: ["**/*.md"] }).sort(),
+          fs.globSync("src/a.ts", { withFileTypes: true }).map((d) => [d.name, d.isFile()])]`,
+      ),
+    ).toEqual([
+      ["copy/a.ts", "copy/nested/b.ts"],
+      "a",
+      "EISDIR",
+      ["src/a.ts"],
+      ["src/a.ts", "src/nested", "src/nested/b.ts"],
+      [["a.ts", true]],
+    ])
+  })
+
+  test("readFile returns a Buffer, stat can skip a missing path, and writeFile takes append and exclusive flags", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "log.txt"), "one")
+    expect(
+      await runFs(
+        tmp.path,
+        `fs.writeFileSync("log.txt", "two", { flag: "a" })
+        let exclusive
+        try { fs.writeFileSync("log.txt", "x", { flag: "wx" }) } catch (e) { exclusive = e.code }
+        const entry = fs.readdirSync(".", { withFileTypes: true })[0]
+        return [Buffer.isBuffer(fs.readFileSync("log.txt")), fs.readFileSync("log.txt").toString(), exclusive,
+          fs.statSync("missing", { throwIfNoEntry: false }) ?? null, [entry.name, entry.parentPath, entry.isFIFO()]]`,
+      ),
+    ).toEqual([true, "onetwo", "EEXIST", null, ["log.txt", ".", false]])
+  })
+
+  test("existsSync is false for a path it may not check, instead of throwing", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "secret.txt"), "x")
+    const denyReads = {
+      assert: (input: Permission.AssertInput) =>
+        input.action === "read"
+          ? Effect.fail(
+              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+            )
+          : Effect.void,
+    }
+    expect(
+      await runFs(
+        tmp.path,
+        `return fs.existsSync("secret.txt")`,
+        permissionService(denyReads),
+        fileServices(tmp.path, denyReads),
+      ),
+    ).toBe(false)
+  })
+
   test("readFile without an encoding gives text for UTF-8 files and bytes otherwise", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "data.json"), '{"a":1}')
