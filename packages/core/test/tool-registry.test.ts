@@ -639,6 +639,41 @@ describe("Tool", () => {
     }).pipe(Effect.provide(Logger.layer([logger])))
   })
 
+  it.effect("reports an unconvertible overlay schema once without dropping healthy tools", () => {
+    const output: unknown[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => output.push(entry.message))
+    return Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const overlay: Info[] = [
+        { ...make(), options: { codemode: false } },
+        {
+          ...make(),
+          name: "broken",
+          options: { namespace: "client" },
+          // Valid Standard Schema, but the vendor does not implement JSON Schema conversion.
+          input: { "~standard": { version: 1, vendor: "test", validate: (value) => ({ value }) } },
+        },
+      ]
+      const first = yield* registry.snapshot([], overlay)
+      yield* registry.snapshot()
+      const second = yield* registry.snapshot([], overlay)
+      expect(first.definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+      expect(first.codeModeCatalog?.tools).toEqual([])
+      expect(second.definitions[0]).toBe(first.definitions[0])
+      expect(output).toEqual([
+        [
+          "Skipping invalid tool registration",
+          {
+            name: "broken",
+            namespace: "client",
+            error:
+              'Invalid tool definition client_broken: Schema vendor "test" does not support JSON Schema conversion',
+          },
+        ],
+      ])
+    }).pipe(Effect.provide(Logger.layer([logger])))
+  })
+
   it.effect("skipped registrations leave existing tools and scoped cleanup intact", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

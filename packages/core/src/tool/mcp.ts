@@ -2,6 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
+import type { Info } from "@opencode/schema/tool"
 import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { extension } from "mime-types"
@@ -26,11 +27,12 @@ export const name = (server: string, tool: string) =>
   effectiveName({ name: tool, options: { namespace: namespace(server) } })
 
 export interface Interface {
+  /** Stable owner-bound definitions for this session's current MCP list. */
+  readonly sessionTools: (owner: Session.ID) => Effect.Effect<ReadonlyArray<Info>>
   /**
    * Wait for the initial MCP tool registration, give servers still connecting a bounded chance to
    * finish, then bring the registry up to date without waiting for the debounced reload.
    */
-  readonly sessionTools: (owner: Session.ID) => Effect.Effect<ReadonlyArray<Parameters<Tool.Editor["add"]>[0]>>
   readonly flush: Effect.Effect<void>
 }
 
@@ -46,8 +48,9 @@ export const layer = Layer.effect(
     const toolOutput = yield* ToolOutput.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
+    const overlays = new WeakMap<ReadonlyArray<Mcp.Tool>, ReadonlyArray<Info>>()
 
-    const definition = (tool: Mcp.Tool, owner?: Session.ID): Parameters<Tool.Editor["add"]>[0] => ({
+    const definition = (tool: Mcp.Tool, owner?: Session.ID): Info => ({
       name: tool.name,
       options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
       description: tool.description ?? "",
@@ -143,8 +146,15 @@ export const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({
-      sessionTools: (owner) =>
-        mcp.sessionTools(owner).pipe(Effect.map((tools) => tools.map((tool) => definition(tool, owner)))),
+      sessionTools: Effect.fnUntraced(function* (owner) {
+        const source = yield* mcp.sessionTools(owner)
+        if (!source.length) return []
+        const cached = overlays.get(source)
+        if (cached) return cached
+        const tools = source.map((tool) => definition(tool, owner))
+        overlays.set(source, tools)
+        return tools
+      }),
       flush: Effect.gen(function* () {
         yield* Fiber.await(initial)
         yield* mcp.awaitStartup()

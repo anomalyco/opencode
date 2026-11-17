@@ -39,7 +39,11 @@ type Data = {
   definitions: Map<string, ToolDefinition>
   namespaces: Map<string, Tool.Namespace>
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
+  catalog?: { names: string; tool: Tool.Info; value: CodeModeCatalog.Inventory; definition: ToolDefinition }
 }
+
+// A new base registry starts with no overlays; detaching an owner releases its weak key.
+type Base = Data & { overlays: WeakMap<ReadonlyArray<Tool.Info>, Data> }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
@@ -195,22 +199,14 @@ const layer = Layer.effect(
       return yield* executeTool(selected, event.tool, event.input, context)
     })
 
-    let catalog:
-      | {
-          data: Data
-          names: string
-          inventory: CodeModeTool.Inventory
-          value: CodeModeCatalog.Inventory
-          definition: ToolDefinition
-        }
-      | undefined
-    const state = State.create<Data, Editor>({
+    const state = State.create<Base, Editor>({
       name: "tool",
       initial: () => ({
         tools: new Map(),
         definitions: new Map(),
         namespaces: new Map(),
         errors: [],
+        overlays: new WeakMap(),
       }),
       editor: (editor) => ({
         list: () => Array.from(editor.tools.values()),
@@ -223,10 +219,7 @@ const layer = Layer.effect(
           }
           editor.namespaces.set(namespace.name, { ...namespace })
         },
-        add: (tool) => {
-          const id = effectiveName(tool)
-          commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } })
-        },
+        add: (tool) => add(editor, tool),
         update: (id, update) => {
           const current = editor.tools.get(id)
           if (!current) return
@@ -243,106 +236,87 @@ const layer = Layer.effect(
           editor.definitions.delete(id)
         },
       }),
-      notify: (value) => {
-        catalog = undefined
-        return Effect.forEach(
-          value.errors,
-          ({ kind, name, namespace, error }) =>
-            Effect.logError(`Skipping invalid ${kind} registration`, {
-              name,
-              namespace,
-              error: error.message,
-            }),
-          { discard: true },
-        )
-      },
+      notify: reportErrors,
     })
+
+    const withOverlay = Effect.fnUntraced(function* (base: Base, overlay: ReadonlyArray<Tool.Info>) {
+      const cached = base.overlays.get(overlay)
+      if (cached) return cached
+      const data: Data = {
+        tools: new Map(base.tools),
+        definitions: new Map(base.definitions),
+        namespaces: base.namespaces,
+        errors: [],
+      }
+      for (const tool of overlay) add(data, tool)
+      base.overlays.set(overlay, data)
+      yield* reportErrors(data)
+      return data
+    })
+
+    const catalogFor = (data: Data, visible: string[]) => {
+      const names = visible.join("\0")
+      if (data.catalog?.names === names) return data.catalog
+      const tools = new Map(visible.map((name) => [name, data.tools.get(name)!]))
+      const inventory = { tools, namespaces: data.namespaces }
+      const tool = CodeModeTool.create(
+        inventory,
+        (name, tool, input, context) => run(tools, tool, name, input, context),
+        permission,
+      )
+      data.catalog = { names, tool, value: CodeModeTool.catalog(inventory), definition: definition(tool) }
+      return data.catalog
+    }
 
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, overlay) =>
-        Effect.sync(() => {
-          const base = state.get()
-          const data = overlay?.length
-            ? { ...base, tools: new Map(base.tools), definitions: new Map(base.definitions), errors: [] }
-            : base
-          for (const tool of overlay ?? []) {
-            const id = effectiveName(tool)
-            commit(data, id, { ...tool, id })
-          }
-          const active = new Map<string, Tool.Info>()
-          const rules = permissions ?? []
-          for (const [name, tool] of data.tools) {
-            if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
-            active.set(name, tool)
-          }
-          const codeModeEnabled = !whollyDisabled("execute", rules)
-          // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const direct = codeModeEnabled
-            ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-            : active
-          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const names = Array.from(codeModeTools.keys()).join("\0")
-          // Discovery is immutable for a registry revision and visible tool set. Keep executors
-          // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
-          // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
-          const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
-          const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(
-                codeModeInventory,
-                (name, tool, input, context) => run(codeModeInventory.tools, tool, name, input, context),
-                permission,
-              )
-            : undefined
-          const codeModeCatalog = !codeModeEnabled
-            ? undefined
-            : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
-          const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
-          if (data === base && codeModeCatalog && codeModeDefinition)
-            catalog = {
-              data,
-              names,
-              inventory: codeModeInventory,
-              value: codeModeCatalog,
-              definition: codeModeDefinition,
+      snapshot: Effect.fn("Tool.snapshot")(function* (permissions, overlay) {
+        const base = state.get()
+        const data = overlay?.length ? yield* withOverlay(base, overlay) : base
+        const rules = permissions ?? []
+        const codeModeEnabled = !whollyDisabled("execute", rules)
+        const direct = new Map<string, Tool.Info>()
+        const visible: string[] = []
+        for (const [name, tool] of data.tools) {
+          if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
+          if (codeModeEnabled && tool.options?.codemode !== false) visible.push(name)
+          else direct.set(name, tool)
+        }
+        const catalog = codeModeEnabled ? catalogFor(data, visible) : undefined
+        return {
+          ...(catalog && { codeModeCatalog: catalog.value }),
+          definitions: [
+            ...Array.from(direct.keys())
+              .sort()
+              .map((name) => data.definitions.get(name)!),
+            ...(catalog ? [catalog.definition] : []),
+          ],
+          execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
+            const context: Tool.Context = {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              messageID: input.messageID,
+              id: Tool.CallID.make(input.call.id),
+              progress: input.progress ?? (() => Effect.void),
+              cancel: input.cancel,
             }
-          return {
-            ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
-            definitions: [
-              ...Array.from(direct)
-                .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([name]) => data.definitions.get(name)!),
-              ...(codeModeDefinition ? [codeModeDefinition] : []),
-            ],
-            execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
-              const context: Tool.Context = {
-                sessionID: input.sessionID,
-                agent: input.agent,
-                messageID: input.messageID,
-                id: Tool.CallID.make(input.call.id),
-                progress: input.progress ?? (() => Effect.void),
-                cancel: input.cancel,
-              }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
-              const requested = input.definitions?.get(event.tool)
-              // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
-                return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
-              const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
-              return yield* new Tool.Error({
-                message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
-              })
-            }),
-          }
-        }),
-      ),
+            const event = yield* beforeExecute(input.call.name, input.call.input, context)
+            const requested = input.definitions?.get(event.tool)
+            // Preserve session context removal and alias resolution, now after the repair hook.
+            if (!requested && input.definitions && (direct.has(event.tool) || catalog?.tool.name === event.tool))
+              return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
+            const name = requested?.name ?? event.tool
+            if (name === "execute" && catalog) return yield* executeTool(catalog.tool, name, event.input, context)
+            const tool = direct.get(name)
+            if (tool) return yield* executeTool(tool, name, event.input, context)
+            return yield* new Tool.Error({
+              message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
+            })
+          }),
+        }
+      }),
       check: Effect.fn("Tool.check")(function* (input) {
         if (whollyDisabled("execute", input.permissions)) {
           return {
@@ -381,6 +355,20 @@ const layer = Layer.effect(
     })
   }),
 )
+
+function reportErrors(data: Data) {
+  return Effect.forEach(
+    data.errors,
+    ({ kind, name, namespace, error }) =>
+      Effect.logError(`Skipping invalid ${kind} registration`, { name, namespace, error: error.message }),
+    { discard: true },
+  )
+}
+
+function add(editor: Data, tool: Tool.Info) {
+  const id = effectiveName(tool)
+  commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } })
+}
 
 /** Store a valid tool under its effective name, or record why it was skipped. */
 function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {

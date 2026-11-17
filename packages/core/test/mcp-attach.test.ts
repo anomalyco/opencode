@@ -150,6 +150,76 @@ it.live("attaches a client MCP server and routes its tools with the session", ()
   }),
 )
 
+it.live("reuses each owner's catalog across interleaved steps without sharing call routing", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const tools = yield* McpTool.Service
+    const registry = yield* Tool.Service
+    yield* tools.flush
+    const a = Session.ID.make("ses_client_a")
+    const b = Session.ID.make("ses_client_b")
+    const first = yield* clientServer("same", ["shared"])
+    const second = yield* clientServer("same", ["shared"])
+    const scope = yield* Scope.fork(yield* Scope.Scope)
+    yield* mcp.attach("tui", first.client, a).pipe(Scope.provide(scope))
+    yield* mcp.attach("tui", second.client, b)
+    const snapshot = (owner: Session.ID, rules?: Permission.Ruleset) =>
+      tools.sessionTools(owner).pipe(Effect.flatMap((overlay) => registry.snapshot(rules, overlay)))
+    const run = (snapshot: Tool.Snapshot, sessionID: Session.ID) =>
+      snapshot.execute({
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_shared", name: "execute", input: { code: "return tools.tui.shared({})" } },
+      })
+
+    const directory = yield* registry.snapshot()
+    const left = yield* snapshot(a)
+    const right = yield* snapshot(b)
+    expect(left.definitions.map((tool) => tool.name)).toEqual(["execute"])
+    expect(left.codeModeCatalog?.tools).toMatchObject([{ name: "tui", tools: [{ name: "shared" }] }])
+    const repeated = yield* snapshot(a)
+    expect(repeated.codeModeCatalog).toBe(left.codeModeCatalog)
+    expect(repeated.definitions[0]).toBe(left.definitions[0])
+    expect((yield* snapshot(b)).codeModeCatalog).toBe(right.codeModeCatalog)
+    expect((yield* registry.snapshot()).codeModeCatalog).toBe(directory.codeModeCatalog)
+    yield* run(repeated, a)
+    yield* run(right, b)
+    expect(first.sessions).toEqual([a])
+    expect(second.sessions).toEqual([b])
+
+    // An identical replacement changes who handles a call, not what the owner advertises.
+    const replacement = yield* clientServer("same", ["shared"])
+    yield* mcp.attach("tui", replacement.client, a).pipe(Scope.provide(scope))
+    expect((yield* snapshot(a)).codeModeCatalog).toBe(left.codeModeCatalog)
+    yield* run(left, a)
+    expect(first.sessions).toEqual([a])
+    expect(replacement.sessions).toEqual([a])
+
+    const changed = yield* clientServer("updated", ["shared"])
+    yield* mcp.attach("tui", changed.client, a).pipe(Scope.provide(scope))
+    const updated = yield* snapshot(a)
+    expect(updated.codeModeCatalog?.tools).toMatchObject([{ name: "tui", tools: [{ description: "updated shared" }] }])
+    expect(updated.codeModeCatalog).not.toBe(left.codeModeCatalog)
+    expect((yield* snapshot(b)).codeModeCatalog).toBe(right.codeModeCatalog)
+
+    const hidden = yield* snapshot(a, [{ action: "tui_shared", resource: "*", effect: "deny" }])
+    expect(hidden.codeModeCatalog?.tools).toEqual([])
+    const direct = yield* snapshot(a, [{ action: "execute", resource: "*", effect: "deny" }])
+    expect(direct.codeModeCatalog).toBeUndefined()
+    expect(direct.definitions.map((tool) => tool.name)).toEqual(["tui_shared"])
+
+    yield* registry.transform((editor) => editor.namespace({ name: "tui", description: "New base namespace" }))
+    const revised = yield* snapshot(b)
+    expect(revised.codeModeCatalog?.tools).toMatchObject([{ name: "tui", description: "New base namespace" }])
+    expect(revised.codeModeCatalog).not.toBe(right.codeModeCatalog)
+    yield* Scope.close(scope, Exit.void)
+    expect((yield* snapshot(a)).codeModeCatalog).toBe((yield* registry.snapshot()).codeModeCatalog)
+    expect((yield* snapshot(b)).codeModeCatalog).toBe(revised.codeModeCatalog)
+    expect((yield* run(left, a)).output).toMatchObject({ error: true })
+    expect(second.sessions).toEqual([b])
+  }),
+)
+
 it.live("removes an attached entry when its scope closes", () =>
   Effect.gen(function* () {
     const mcp = yield* Mcp.Service

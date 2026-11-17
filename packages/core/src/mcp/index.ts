@@ -123,6 +123,25 @@ type AttachedEntry = {
   tools: ReadonlyArray<Tool>
 }
 
+class SessionClients extends Map<ServerName, AttachedEntry[]> {
+  #sources: ReadonlyArray<ReadonlyArray<Tool>> = []
+  #tools: ReadonlyArray<Tool> = []
+
+  tools() {
+    if (
+      this.size === this.#sources.length &&
+      this.values().every((stack, i) => stack.at(-1)?.tools === this.#sources[i])
+    )
+      return this.#tools
+    this.#sources = Array.from(this.values(), (stack) => stack.at(-1)!.tools)
+    const tools = this.#sources.flat()
+    // Calls resolve the current connection by owner and name, so an identical re-list or
+    // replacement connection needs no new tool definitions.
+    if (!isDeepStrictEqual(this.#tools, tools)) this.#tools = tools
+    return this.#tools
+  }
+}
+
 // How long a model call may wait for a server that is still connecting, counted from when it began.
 const STARTUP_GRACE_MS = 2_000
 
@@ -173,8 +192,8 @@ export interface Interface extends State.Transformable<Editor> {
     transport: Transport,
     owner?: Session.ID,
   ) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
-  /** Only the client's tools owned by this session, never the Location catalog. */
-  readonly sessionTools: (owner: Session.ID) => Effect.Effect<Tool[]>
+  /** Only this owner's client tools. A nonempty list keeps its identity until its contents change. */
+  readonly sessionTools: (owner: Session.ID) => Effect.Effect<ReadonlyArray<Tool>>
   readonly tools: () => Effect.Effect<Tool[]>
   /**
    * Waits for servers that are still connecting, each until it settles or until its startup grace
@@ -286,7 +305,7 @@ export const layer = (options?: Options) =>
 
       const entries = new Map<ServerName, ServerEntry>()
       const attached = new Map<ServerName, AttachedEntry[]>()
-      const owned = new Map<Session.ID, Map<ServerName, AttachedEntry[]>>()
+      const owned = new Map<Session.ID, SessionClients>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -809,8 +828,8 @@ export const layer = (options?: Options) =>
             return yield* new McpClient.ConnectError({ server: name, message: "Connection closed" })
           }
           const entry: AttachedEntry = { scope, client: result.connection, tools: toAttachedTools(name, result.tools) }
-          const group = owner ? (owned.get(owner) ?? new Map<ServerName, AttachedEntry[]>()) : attached
-          if (owner) owned.set(owner, group)
+          if (owner && !owned.has(owner)) owned.set(owner, new SessionClients())
+          const group = owner ? owned.get(owner)! : attached
           group.set(name, [...(group.get(name) ?? []), entry])
           const locked = <E>(effect: Effect.Effect<void, E>) =>
             fork(effect.pipe(attachedLocks.withLock(key), Effect.ignore))
@@ -976,8 +995,7 @@ export const layer = (options?: Options) =>
         attach: Effect.fn("MCP.attach")(function* (client, transport, owner) {
           yield* attach(ServerName.make(client), transport, owner)
         }),
-        sessionTools: (owner) =>
-          Effect.sync(() => Array.from(owned.get(owner)?.values() ?? []).flatMap((stack) => stack.at(-1)?.tools ?? [])),
+        sessionTools: (owner) => Effect.sync(() => owned.get(owner)?.tools() ?? []),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
         tools: Effect.fn("MCP.tools")(function* () {
           const clients = Array.from(attached.values()).flatMap((stack) => stack.at(-1)?.tools ?? [])
