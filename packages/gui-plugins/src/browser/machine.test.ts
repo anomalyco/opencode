@@ -8,6 +8,7 @@ import {
   sessionError,
   sessionPending,
   sessionRegistration,
+  revealGuard,
   sessionSuspended,
   transition,
   type Attachment,
@@ -95,6 +96,126 @@ const ready = (state = replay(attach()).state) => replay([paneState(state, inven
 const types = (effects: readonly MachineEffect[]) => effects.map((effect) => effect.type)
 
 describe("browser pane machine", () => {
+  const activity = (state: State) => ({ type: "pane.activity" as const, sessionKey: key, attempt: attempt(state),
+    tabID: tabA, reveal: true, room: true, enabled: true, onScreen: true, opened: false, visible: false })
+
+  test.each([
+    ["closed pane", {}, "open"],
+    ["another browser tab, Review or Files selected", { opened: true }, "mark"],
+    ["target already visible", { opened: true, visible: true }, "none"],
+    ["session off screen or window hidden", { onScreen: false }, "none"],
+    ["disabled", { enabled: false }, "mark"],
+    ["open pane with setting disabled", { enabled: false, opened: true }, "mark"],
+    ["no room beside the chat", { room: false }, "mark"],
+    ["navigate, popup, focus, implicit open or quiet tab", { reveal: false }, "mark"],
+    ["superseded binding", { attempt: -1 }, "none"],
+    ["since-closed tab", { tabID: tabB }, "none"],
+  ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
+    const start = ready()
+    const next = transition(start, { ...activity(start), ...input })
+    expect(types(next.effects)).toEqual(expected === "open" ? ["focus-strip-tab"] : [])
+    expect(attachment(next.state)?.unseen).toEqual(expected === "mark" ? [tabA] : [])
+  })
+
+  test("closing the pane during a run wins until reopening it or finishing the run", () => {
+    const start = ready()
+    const side = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+    const hidden = replay([side(true), side(false)], start).state
+    expect(transition(hidden, activity(hidden)).effects).toEqual([])
+    const nextRun = transition(hidden, { type: "execution.ended", sessionKey: key }).state
+    expect(types(transition(nextRun, activity(nextRun)).effects)).toEqual(["focus-strip-tab"])
+    const mark = replay([side(true), { ...activity(hidden), opened: true }], hidden).state
+    expect(attachment(mark)?.unseen).toEqual([tabA])
+    expect(attachment(transition(mark, { type: "activity.seen", sessionKey: key, tabID: tabA }).state)?.unseen).toEqual([])
+  })
+
+  test("only the newly revealed page is held back, and an old timer cannot expose it", () => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const token = revealGuard(reveal, key, tabA)
+
+    if (!token) throw new Error("expected reveal guard")
+    expect(revealGuard(reveal, key, tabB)).toBeUndefined()
+    const again = transition(reveal, activity(reveal)).state
+    const stale = transition(again, { type: "reveal.elapsed", sessionKey: key, token }).state
+    expect(stale).toBe(again)
+    const elapsed = transition(reveal, { type: "reveal.elapsed", sessionKey: key, token }).state
+    expect(revealGuard(elapsed, key, tabA)).toBeUndefined()
+  })
+
+  test("the reveal delay starts once, when the pane draws the page", () => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const token = revealGuard(reveal, key, tabA) ?? -1
+    const drawn = transition(reveal, { type: "reveal.drawn", sessionKey: key, token })
+    expect(drawn.effects).toEqual([{ type: "expire-reveal", sessionKey: key, token }])
+    expect(revealGuard(drawn.state, key, tabA)).toBe(token)
+    expect(transition(drawn.state, { type: "reveal.drawn", sessionKey: key, token })).toEqual({ state: drawn.state, effects: [] })
+    expect(transition(reveal, { type: "reveal.drawn", sessionKey: key, token: token + 1 })).toEqual({ state: reveal, effects: [] })
+  })
+
+  test.each([
+    ["navigating the revealed blank tab", { type: "navigate", tabID: tabA, url: "https://example.com" }, false],
+    ["selecting another tab", { type: "tabs.focus", tabID: tabB }, false],
+    ["the strip selecting the revealed tab", { type: "tabs.focus", tabID: tabA }, true],
+  ] as const)("a reveal the pane never drew does not hold the person's own command: %s", (_label, action, guarded) => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const next = transition(reveal, { type: "session.command", sessionKey: key, action, focusAddress: false })
+    expect(types(next.effects)).toEqual(["send-command"])
+    expect(revealGuard(next.state, key, tabA) !== undefined).toBe(guarded)
+  })
+
+  test("starting with a closed pane does not dismiss the run; file previews use the same rule without replay", () => {
+    const start = ready()
+    const observed = transition(start, { type: "side.changed", sessionKey: key, open: false, running: true }).state
+    const file = { ...activity(observed), type: "pane.file" as const, path: "report.pdf" }
+    expect(transition(observed, file).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: true }])
+    expect(transition(observed, { ...file, opened: true }).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: false }])
+    expect(transition(observed, { ...file, onScreen: false })).toEqual({ state: observed, effects: [] })
+  })
+
+  test.each([
+    ["the person's queued prompt", "user", "queue", "queue", "closed"],
+    ["the person's steer", "user", "steer", "steer", "dismissed"],
+    ["the person's steer they moved to the queue", "user", "steer", "queue", "closed"],
+    ["the person's queued prompt they moved to steer", "user", "queue", "steer", "dismissed"],
+    ["a synthetic item or a compaction", "other", "queue", "queue", "dismissed"],
+  ] as const)("a delivered inbox item ends the person's dismissal only for %s", (_label, author, enqueued, delivered, side) => {
+    const start = ready()
+    const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+
+    const next = replay([
+      changed(true),
+      changed(false),
+      ...(author === "user" ? [{ type: "prompt.enqueued" as const, sessionKey: key, id: "msg_1", delivery: enqueued }] : []),
+      { type: "inbox.delivery.changed", sessionKey: key, id: "msg_1", delivery: delivered },
+      { type: "inbox.cancelled", sessionKey: key, id: "msg_other" },
+      { type: "inbox.delivered", sessionKey: key, id: "msg_1" },
+    ], start).state
+
+    expect(attachment(next)?.side).toBe(side)
+    expect(attachment(next)?.prompts).toEqual({})
+    expect(types(transition(next, activity(next)).effects)).toEqual(side === "closed" ? ["focus-strip-tab"] : [])
+    // The reset opens nothing by itself: a restored inventory is not a show request.
+    expect(types(transition(next, paneState(next, inventory(tab(tabA)))).effects)).not.toContain("focus-strip-tab")
+  })
+
+  test("a cancelled queued prompt no longer ends the dismissal", () => {
+    const start = ready()
+    const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+
+    const next = replay([
+      changed(true),
+      changed(false),
+      { type: "prompt.enqueued", sessionKey: key, id: "msg_1", delivery: "queue" },
+      { type: "inbox.cancelled", sessionKey: key, id: "msg_1" },
+      { type: "inbox.delivered", sessionKey: key, id: "msg_1" },
+    ], start).state
+
+    expect(attachment(next)?.side).toBe("dismissed")
+  })
+
   test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {
     const start = ready()
     const closed = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.registration.closed")).state
@@ -586,7 +707,8 @@ describe("browser pane machine", () => {
               value.phase,
               value.embeds,
               value.strip,
-              value.strip.mirrored,
+                value.strip.mirrored,
+                value.unseen,
               value.addressFocus,
               ...(value.addressFocus.status === "opening" ? [value.addressFocus.known] : []),
               ...(value.browser ? [value.browser, value.browser.tabs, ...value.browser.tabs] : []),

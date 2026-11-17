@@ -88,6 +88,14 @@ export default function BrowserSettings() {
           />
         </ui.SettingsRow>
         <ui.SettingsRow
+          id="settings-browser-agent-pages"
+          title={ctx.t("settings.agentPages.title")}
+          description={ctx.t("settings.agentPages.description")}
+        >
+          <ui.Switch label={ctx.t("settings.agentPages.title")} hideLabel checked={preferences.value.agentPages !== false}
+            onChange={agentPages => preferences.update(draft => { draft.agentPages = agentPages })} />
+        </ui.SettingsRow>
+        <ui.SettingsRow
           id="settings-browser-remote"
           title={ctx.t("settings.remote.title")}
           description={ctx.t("settings.remote.description")}

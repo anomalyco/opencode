@@ -5,6 +5,47 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { previewRoot } from "@opencode/util/preview-scope"
 import { resolvePreviewRequest, workspaceFile, type PreviewSource } from "./workspace-file"
+import { workspacePages } from "./workspace-pages"
+
+test("external hand-off uses a live grant, its pinned root and the physical HTML file", async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), "handoff-"))
+  await using cleanup = new AsyncDisposableStack()
+  cleanup.defer(() => rm(temp, { recursive: true, force: true }))
+  const root = await realpath(temp)
+  const reports = path.join(root, "reports")
+  const file = path.join(reports, "report.html")
+  await mkdir(reports)
+  await writeFile(file, "report")
+  await writeFile(path.join(root, "other.html"), "outside grant")
+  const host = "11111111-1111-1111-1111-111111111111"
+
+  const pages = workspacePages({ grant: () => ({ host, release() {} }) }, root,
+    { type: "local", roots: () => [root] }, new AbortController().signal, () => undefined)
+
+  const url = await pages.load(pathToFileURL(file).href, () => {})
+
+  if (!url) throw new Error("missing preview")
+  const launches: string[] = []
+  const open = (url: string) => pages.external(url, async (target) => { launches.push(target) })
+  expect(await open(url)).toBe(true)
+
+  await writeFile(path.join(reports, "notes.txt"), "not HTML")
+
+  const linked = await symlink(path.join(reports, "notes.txt"), path.join(reports, "alias.html")).then(() => true, (error: NodeJS.ErrnoException) => {
+    // Some Windows workers lack permission to create file symlinks.
+    if (process.platform === "win32" && error.code === "EPERM") return false
+    throw error
+  })
+
+  if (linked) expect(await open(new URL("alias.html", url).href)).toBe(false)
+
+  for (const address of [url.replace(host, "other"), pathToFileURL(file).href, new URL("../other.html", url).href, new URL("file.exe", url).href])
+    expect(await open(address)).toBe(false)
+
+  pages.dispose()
+  expect(await open(url)).toBe(false)
+  expect(launches).toEqual([file])
+})
 
 test("preview and reveal resolve existing regular files under the real workspace, including a linked root", async () => {
   const temp = await mkdtemp(path.join(tmpdir(), "preview-"))

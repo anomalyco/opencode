@@ -324,6 +324,17 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.embeds` (main)          | `Embeds`                                                                           | `create(view, window)` places a web page                         |
 | `ctx.cli` (main)             | `Cli`                                                                              | The opencode CLI the app runs                                    |
 
+### Contracts
+
+The contracts `file`, `review` and `browser` publish with the SDK as `@opencode/plugin/gui/<name>`. Read one with `ctx.use`.
+
+The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen:
+`const id = await browser.experimental.open(session, url)`, then `await browser.experimental.close(id)` from the same
+plugin instance. Experimental: may change without compatibility guarantees. The branded handle survives a session rebind.
+It ends with the plugin instance or the window, when the person clicks or types in the tab or runs a command on it, and
+when the agent uses the tab. `close` returns true only for a tab closed now; a page that asks "Leave site?" stays open.
+`open(session, url)` stays fire-and-forget.
+
 ### Built-in only
 
 `@opencode/plugin/gui/builtin` holds what only the built-ins use. It is never published and is not in the modules a plugin bundle may require; a public SDK module never imports it.
@@ -335,7 +346,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
 | `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                |
 | `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
-| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`                                            |
+| `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
 | `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |
 | `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                   |
 

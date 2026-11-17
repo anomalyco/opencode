@@ -157,6 +157,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     register: async (input, caller) => (await load()).register(caller.window, input.binding, input),
     load: async (input, caller) => (await pane()).load(caller.window, input.binding, input.tabID),
     command: async (input, caller) => (await pane()).command(caller.window, input.binding, input.command),
+    createTab: async (input, caller) => (await pane()).createTab(caller.window, input.binding, input.owner, input.url),
+    closeTab: async (input, caller) => (await pane()).closeTab(caller.window, input.binding, input.owner, input.id),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
     notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss, input.copy),
     reviewLink: async (input, caller) => (await pane()).reviewLink(caller.window, input.binding, input.url),
@@ -169,6 +171,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     clearCache: async (input, caller) => (await pane()).clearCache(caller.window, input.binding, input.tabID, input.address),
     reveal: async (input, caller) => (await pane()).reveal(caller.window, input.binding, input.tabID),
+    openPage: async (input, caller) => (await pane()).openPage(caller.window, input.binding, input.tabID, input.expected),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),
     forget: async (input) => (await load()).forget(input.server,input.session),
   })

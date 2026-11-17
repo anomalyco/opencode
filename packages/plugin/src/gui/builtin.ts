@@ -3,7 +3,7 @@
 
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
-import { Registry, type Catalog, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
+import { Registry, type Catalog, type Cleanup, type Contract, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
 import type { Desktop, Layout, Locale, StorageScope, StoreOptions } from "./host-apis.js"
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
@@ -284,6 +284,8 @@ export interface BuiltinDesktop extends Desktop {
 
 /** `Layout` with the abilities only built-ins use. */
 export interface BuiltinLayout extends Layout {
+  /** Whether the current session row can fit a readable conversation beside the minimum side pane. */
+  fitsSide(): boolean
   /**
    * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog). Does nothing when the
    * command is unavailable or disabled. App command ids are the app's own, not a plugin contract.
@@ -305,6 +307,13 @@ export interface BuiltinLocale extends Locale {
 
 /** The window context as the app's host builds it for every plugin, with the members only built-ins use. */
 export interface BuiltinContext extends Context {
+  /**
+   * Provides a separate implementation to each consuming plugin instance. The host supplies its identity and lifetime.
+   * @param token - A contract owned by this provider.
+   * @param bind - Creates the implementation the named consumer alone receives, until its signal aborts.
+   * @returns Withdraws the contract early.
+   */
+  provideFor<T>(token: Contract<T>, bind: (consumer: string, signal: AbortSignal) => T): Cleanup
   /** Desktop-only abilities, `forceFocus` included; undefined on the web. */
   readonly desktop: BuiltinDesktop | undefined
   /** The interface language and its writing direction, which `setDirection` overrides. */

@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { uuid } from "@opencode/util/uuid"
 import type { BrowserPane, FindAction, PaneEvent, PromptAnswer } from "./ipc"
 
@@ -18,6 +19,8 @@ export type Registration = {
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
+  createTab(owner: string, url: string, onScreen: () => boolean): Promise<ExperimentalBrowserTab>
+  closeTab(owner: string, id: ExperimentalBrowserTab): Promise<boolean>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
@@ -29,6 +32,7 @@ export type Registration = {
   clearSite(tabID: Browser.TabID): Promise<void>
   clearCache(tabID: Browser.TabID, address: string): Promise<void>
   reveal(tabID: Browser.TabID): Promise<void>
+  openPage(tabID: Browser.TabID, expected: string): Promise<void>
   close(): void
 }
 
@@ -69,6 +73,15 @@ export function openBinding(input: {
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
+    closeTab: (owner, id) => ready.then(() => client.closeTab({ binding, owner, id })),
+    async createTab(owner, url, onScreen) {
+      if (!onScreen()) throw new Error("browser.pane.notOnScreen")
+      await ready
+
+      if (status.closed || !onScreen()) throw new Error("browser.pane.notOnScreen")
+
+      return client.createTab({ binding, owner, url })
+    },
     find: (tabID, action) => ready.then(() => client.find({ binding, tabID, action })),
     notice: (tabID, token, dismiss, copy) => ready.then(() => client.notice({ binding, tabID, token, dismiss, copy })),
     reviewLink: (url) => ready.then(() => client.reviewLink({ binding, url })),
@@ -91,6 +104,7 @@ export function openBinding(input: {
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     clearCache: (tabID, address) => ready.then(() => client.clearCache({ binding, tabID, address })),
     reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
+    openPage: (tabID, expected) => ready.then(() => client.openPage({ binding, tabID, expected })),
     close() {
       if (status.closed) return
       status.closed = true

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
-import { agentDriven } from "./policy"
+import { activityOwner, agentDriven } from "./policy"
 import { createBrowserRestoreStore, restoredActivity } from "./restore"
 
 test("keeps which tabs the agent drove across a restart, so they come back with every agent-driven limit", () => {
@@ -27,23 +27,28 @@ test("keeps which tabs the agent drove across a restart, so they come back with 
   store.save(
     "server\nses_a",
     { tabs: [{ id: agentTab, url: "https://accounts.example/pk" }, { id: userTab, url: "https://docs.example/" }], focusedTabID: userTab },
-    (tabID) => tabID === agentTab,
+    (tabID) => (tabID === agentTab ? { agentRuns: 0, control: "agent", agent: "build" } : undefined),
   )
 
   const saved = createBrowserRestoreStore(storage).load("server\nses_a")
 
   expect(saved).toEqual({
     tabs: [
-      { id: agentTab, url: "https://accounts.example/pk", agent: true },
+      { id: agentTab, url: "https://accounts.example/pk", control: "agent", agent: "build" },
       { id: userTab, url: "https://docs.example/" },
     ],
     focusedTabID: userTab,
   })
 
-  // The pane seeds its tabs from the mark: the agent's tab is agent-driven for good, but not running or recent.
+  // The pane seeds its tabs from the mark: the agent's tab is agent-driven for good and still the agent's, with no
+  // command running. The earlier `agent: true` mark reads the same way.
   const activity = restoredActivity(saved)
   const restored = activity.get(agentTab)
   expect([...activity.keys()]).toEqual([agentTab])
   expect(restored && agentDriven(restored)).toBe(true)
-  expect(restored && agentDriven(restored, Date.now())).toBe(false)
+  expect(restored).toEqual({ agentRuns: 0, control: "agent", agent: "build" })
+  expect(restored && activityOwner(restored)).toBe("agent")
+  expect(
+    restoredActivity({ tabs: [{ id: agentTab, url: "https://accounts.example/pk", agent: true }], focusedTabID: null }).get(agentTab)?.control,
+  ).toBe("agent")
 })

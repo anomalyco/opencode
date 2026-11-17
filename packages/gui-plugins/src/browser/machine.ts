@@ -71,6 +71,15 @@ export type Attachment = {
   readonly error: string | undefined
   readonly strip: Strip
   readonly addressFocus: AddressFocus
+  readonly side: "unobserved" | "open" | "closed" | "dismissed"
+  readonly unseen: readonly Browser.TabID[]
+  /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
+  readonly prompts: Readonly<Record<string, "steer" | "queue">>
+  /**
+   * The tab an agent's show request opened the pane on. Its page stays hidden until the delay ends, which runs
+   * (`timing`) from the moment the pane would draw the page, so a click aimed at the chat cannot land in it.
+   */
+  readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
 }
 
 /**
@@ -87,6 +96,29 @@ export type State =
   | { readonly status: "disposed" }
 
 export type Event =
+  /** The person's prompt entered the session's inbox. Steers, compactions and synthetic items are not reported. */
+  | { readonly type: "prompt.enqueued"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivery.changed"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivered" | "inbox.cancelled"; readonly sessionKey: string; readonly id: string }
+  | { readonly type: "pane.file"; readonly sessionKey: string; readonly attempt: number; readonly path: string; readonly enabled: boolean; readonly onScreen: boolean; readonly room: boolean; readonly opened: boolean }
+  | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
+  | { readonly type: "execution.ended"; readonly sessionKey: string }
+  | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  /** The pane would now draw the revealed page. */
+  | { readonly type: "reveal.drawn"; readonly sessionKey: string; readonly token: number }
+  | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
+  | {
+      readonly type: "pane.activity"
+      readonly reveal: boolean
+      readonly room: boolean
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+      readonly enabled: boolean
+      readonly onScreen: boolean
+      readonly opened: boolean
+      readonly visible: boolean
+    }
   | { readonly type: "disposed" }
   | { readonly type: "ipc.changed"; readonly ipc: Ipc }
   | { readonly type: "session.capability.changed"; readonly sessionKey: string }
@@ -158,6 +190,9 @@ export type Event =
     }
 
 export type MachineEffect =
+  | { readonly type: "present-file"; readonly sessionKey: string; readonly path: string; readonly select: boolean }
+  /** Starts the delay after which `reveal.elapsed` shows the revealed page. */
+  | { readonly type: "expire-reveal"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "open-registration"
       readonly sessionKey: string
@@ -307,6 +342,16 @@ export function sessionTab(state: State, sessionKey: string, tabID: string) {
   return sessionBrowser(state, sessionKey)?.tabs.find((tab) => tab.id === tabID)
 }
 
+export function unseenActivity(state: State, sessionKey: string, tabID: string) {
+  return attachmentOf(state, sessionKey)?.unseen.some(id => id === tabID) ?? false
+}
+
+export function revealGuard(state: State, sessionKey: string, tabID: string) {
+  const reveal = attachmentOf(state, sessionKey)?.reveal
+
+  return reveal?.tabID === tabID ? reveal.token : undefined
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }
@@ -394,6 +439,9 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     error: undefined,
     strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
     addressFocus: noFocus(),
+    side: "unobserved",
+    unseen: [],
+    prompts: {},
   })
 }
 
@@ -435,6 +483,75 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   const phase = attachment.phase
 
   switch (event.type) {
+    case "prompt.enqueued":
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    case "inbox.delivery.changed": {
+      if (!(event.id in attachment.prompts) || attachment.prompts[event.id] === event.delivery) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    }
+
+    case "inbox.delivered":
+    case "inbox.cancelled": {
+      if (!(event.id in attachment.prompts)) return { state, effects: [] }
+      // Only the person's next queued prompt starts over. A steer belongs to the run whose pane they closed.
+      const next = event.type === "inbox.delivered" && attachment.prompts[event.id] === "queue" && attachment.side === "dismissed"
+
+      return put(state, key, {
+        ...attachment,
+        side: next ? "closed" : attachment.side,
+        prompts: Object.fromEntries(Object.entries(attachment.prompts).filter(([id]) => id !== event.id)),
+      })
+    }
+
+    case "side.changed": {
+      const dismissed = event.running && (attachment.side === "open" || attachment.side === "dismissed")
+      const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
+
+      return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side, reveal: event.open ? attachment.reveal : undefined })
+    }
+
+    case "execution.ended":
+      return attachment.side === "dismissed" ? put(state, key, { ...attachment, side: "closed" }) : { state, effects: [] }
+    case "reveal.drawn": {
+      const reveal = attachment.reveal
+
+      if (!reveal || reveal.token !== event.token || reveal.timing) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, reveal: { ...reveal, timing: true } }, [
+        { type: "expire-reveal", sessionKey: key, token: reveal.token },
+      ])
+    }
+
+    case "reveal.elapsed":
+      return attachment.reveal?.token === event.token ? put(state, key, { ...attachment, reveal: undefined }) : { state, effects: [] }
+    case "activity.seen":
+      return attachment.unseen.includes(event.tabID)
+        ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
+        : { state, effects: [] }
+    case "pane.file":
+    case "pane.activity": {
+      if (!current(phase, event.attempt) || !event.onScreen || !attachment.strip.located)
+        return { state, effects: [] }
+      const select = !event.opened && event.room && event.enabled && attachment.side !== "dismissed" && (event.type === "pane.file" || event.reveal)
+
+      if (event.type === "pane.file") return { state, effects: [{ type: "present-file", sessionKey: key, path: event.path, select }] }
+
+      if (!attachment.browser?.tabs.some(tab => tab.id === event.tabID)) return { state, effects: [] }
+
+      if (select) {
+        const token = state.issued + 1
+
+        return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID, timing: false } }, [
+          { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID },
+        ], token)
+      }
+
+      if (event.visible || attachment.unseen.includes(event.tabID)) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, unseen: [...attachment.unseen, event.tabID] })
+    }
+
     case "session.capability.changed":
       if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
 
@@ -458,8 +575,17 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return wake(state, key, attachment, false)
     case "session.created":
       return wake(state, key, attachment, true)
-    case "session.command":
-      return command(state, key, attachment, event)
+    case "session.command": {
+      const reveal = attachment.reveal
+
+      // The person's own command ends the guard, so their navigation or tab switch is never held. Selecting the
+      // revealed tab in the strip answers with tabs.focus for it, which is the reveal itself, not the person.
+      if (!reveal || (event.action.type === "tabs.focus" && event.action.tabID === reveal.tabID))
+        return command(state, key, attachment, event)
+
+      return command(state, key, { ...attachment, reveal: undefined }, event)
+    }
+
     case "command.settled": {
       const focus = attachment.addressFocus
 
@@ -751,6 +877,7 @@ function paneState(
       ...attachment,
       phase: { status: "ready", attempt: phase.attempt },
       browser: event.state,
+      unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
       error: event.error,
       strip: mirrored.strip,
       addressFocus: follow(attachment.addressFocus, event.state),

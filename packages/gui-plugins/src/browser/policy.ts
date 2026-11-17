@@ -112,69 +112,44 @@ export function pagePermission(permission: string, origin: string, declared: (id
   )
 }
 
-/**
- * How long after an agent command what happens in its tab with no user input since still counts as the command's: a
- * download its click started, or a script it ran that acts later, as a timer does.
- */
-export const DOWNLOAD_GRACE_MS = 30_000
+/** Absent on a person's untouched tab; reclaimed only by input or a person-issued command, never by elapsed time. */
+export type TabActivity = { agentRuns: number; control?: "agent" | "reclaimed"; agent?: string }
 
-export type TabActivity = { agentRuns: number; agentEndedAt?: number; userInputAt?: number; agent?: string }
+export function recordPageInput(activity: TabActivity, origin: "agent" | "user") {
+  if (origin === "agent") activity.control = "agent"
 
-/**
- * Whether the agent drives a tab: the one rule for every "did the agent cause this". Without `now` it is sticky: true
- * from the tab's first agent command, or one inherited from its opener (`childActivity`), until the tab closes; site
- * permissions, clipboard writes and where a prompt puts focus ask this way. With the event's time it is the
- * running-or-recent window: true while an agent command runs, and within `DOWNLOAD_GRACE_MS` after one ended unless the
- * user clicked or typed in the tab since; downloads and opening external apps ask this way (`activityOwner`).
- */
-export function agentDriven(activity: Readonly<TabActivity>, now?: number): boolean {
-  if (activity.agentRuns > 0) return true
+  if (origin === "user" && agentDriven(activity)) activity.control = "reclaimed"
+}
 
-  if (activity.agentEndedAt === undefined) return false
+/** An agent focus is an agent operation. A strip selection (including auto-reveal) is not input to the page. */
+export function recordTabFocus(activity: TabActivity, origin: "agent" | "user") {
+  if (origin === "agent") recordPageInput(activity, origin)
+}
 
-  if (now === undefined) return true
-
-  return (
-    now - activity.agentEndedAt <= DOWNLOAD_GRACE_MS &&
-    (activity.userInputAt === undefined || activity.userInputAt < activity.agentEndedAt)
-  )
+/** Permission, preview-read and prompt-focus restrictions outlive even an explicit human takeover. */
+export function agentDriven(activity: Readonly<TabActivity>): boolean {
+  return activity.agentRuns > 0 || activity.control !== undefined
 }
 
 /** A child inherits provenance, not its opener's in-flight run counter. */
 export function childActivity(activity: Readonly<TabActivity>): TabActivity {
-  return activity.agentRuns ? { ...activity, agentRuns: 0, agentEndedAt: Date.now() } : { ...activity }
-}
-
-/** What a tab's activity was when something happened in it, at `now`. */
-export type AgentActivity = {
-  readonly now: number
-  readonly agentRunning: boolean
-  readonly agentEndedAt?: number
-  readonly userInputAt?: number
+  return activity.agentRuns ? { ...activity, agentRuns: 0, control: "agent" } : { ...activity }
 }
 
 /**
- * Whose a download in a tab is. Only one the agent caused (`activityOwner`) is the agent's, and never one where the
- * page or any address it came through is an extension's. Every other download is the user's and takes the system's
- * save flow, which the agent cannot read.
+ * Extension bytes must not go to the agent; neither may an agent-driven extension download open a native picker.
  */
 export function downloadOwner(
-  download: AgentActivity & { readonly page: ReadonlyArray<string>; readonly chain: ReadonlyArray<string> },
-): "agent" | "user" {
-  if ([...download.page, ...download.chain].some(Browser.extensionOrigin)) return "user"
+  download: TabActivity & { readonly page: ReadonlyArray<string>; readonly chain: ReadonlyArray<string> },
+): "agent" | "user" | "block" {
+  if (activityOwner(download) === "user") return "user"
 
-  return activityOwner(download)
+  return [...download.page, ...download.chain].some(Browser.extensionOrigin) ? "block" : "agent"
 }
 
-/** Who caused what happened at `now`: `agentDriven` with the event's time, as downloads and external apps ask it. */
-export function activityOwner(event: AgentActivity): "agent" | "user" {
-  const activity = {
-    agentRuns: Number(event.agentRunning),
-    agentEndedAt: event.agentEndedAt,
-    userInputAt: event.userInputAt,
-  }
-
-  return agentDriven(activity, event.now) ? "agent" : "user"
+/** A page timer, an idle period and selecting the strip do not authorize a native dialog. */
+export function activityOwner(activity: Readonly<TabActivity>): "agent" | "user" {
+  return activity.agentRuns > 0 || activity.control === "agent" ? "agent" : "user"
 }
 
 /** Actions that only take a tab away from its document, which the agent may run on an extension page to leave it. */

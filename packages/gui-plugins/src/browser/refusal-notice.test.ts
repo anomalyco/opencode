@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { activityOwner, downloadOwner, recordTabFocus, type TabActivity } from "./policy"
 import { externalTarget, navigationNotice, popupActivated } from "./refusal-notice"
 
 test("refusals describe the actual destination without displaying private, misleading or unbounded targets", () => {
@@ -60,6 +61,14 @@ test("a popup needs Chromium's activation report for that same target", () => {
   expect(popupActivated({ url, userGesture: false }, url)).toBe(false)
   expect(popupActivated({ url, userGesture: true }, `${url}other`)).toBe(false)
   expect(popupActivated(undefined, url)).toBe(false)
+})
+
+test("selecting a revealed agent tab grants neither app-link activation nor a user download", () => {
+  const activity: TabActivity = { agentRuns: 0 }
+  recordTabFocus(activity, "agent")
+  recordTabFocus(activity, "user")
+  expect(navigationNotice("mailto:test@example.invalid", {}, activityOwner(activity))).toMatchObject({ action: "copy" })
+  expect(downloadOwner({ ...activity, page: ["https://test.invalid"], chain: [] })).toBe("agent")
 })
 
 test("conversation links use only the conversation subset of the page policy", () => {

@@ -11,6 +11,7 @@ import {
   isCurrentPage,
   resolveControlFrame,
   selectBinding,
+  selectInventory,
   selectOwnedBinding,
   transitionBinding,
   transitionPane,
@@ -91,7 +92,7 @@ test("the saved-tab record after stopping a deferred restore is the original add
   const value = documentTab(stopped, { id: tabA, canGoBack: false, canGoForward: false })
   const opened = play(start, on({ type: "tab.opened", tabID: tabA, attempt, tab: prior }))
   const next = play(opened.state, on({ type: "tab.published", tabID: tabA, attempt, tab: value }))
-  expect(next.effects).toContainEqual({ type: "save-restore", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
+  expect(next.effects).toContainEqual({ type: "save-restore", binding: "b1", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
 })
 
 test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {
@@ -102,6 +103,18 @@ test("a refused restore keeps its saved address, reports the reason once and con
   expect(entry(result.state).tabs.get(tabA)).toMatchObject({ status: "unloaded", tab: {url, loadError:"browser.restore.outside"} })
   expect(entry(result.state).nextAttempt).toBe(entry(start).nextAttempt)
   expect(transitionPane(result.state, event)).toEqual({state:result.state, effects:[]})
+})
+
+test("agent activity neither selects the person's tab nor gives another window a binding", () => {
+  const start = attached({ tabs: [tab(tabA, dashboard, "A"), tab(tabB, dashboard, "B")], focusedTabID: tabA })
+  const next = transitionPane(start, on({ type: "tab.active", tabID: tabB }))
+  const own = selectOwnedBinding(next.state, 1, "b1")
+
+  if (!own) throw new Error("missing fixture binding")
+  expect(selectOwnedBinding(next.state, 2, "b1")).toBeUndefined()
+  expect(selectInventory(own).focusedTabID).toBe(tabA)
+  expect(selectInventory(own, "agent").focusedTabID).toBe(tabB)
+  expect(next.effects.some(effect => effect.type === "emit" && effect.event.type === "focus")).toBe(false)
 })
 
 test("reconnect tears down the previous native pages before restoring the same window and session", () => {
@@ -332,6 +345,7 @@ describe("tabs", () => {
     expect(crashed.effects).toContainEqual({ type: "release-pages", binding: "b1", attempts: [1] })
     expect(crashed.effects).toContainEqual({
       type: "save-restore",
+      binding: "b1",
       storageKey: "server\nb1",
       snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA },
     })
