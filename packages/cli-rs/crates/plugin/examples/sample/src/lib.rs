@@ -9,9 +9,15 @@
 //! and the route are still the 1.3 surface. Callbacks reach the host only
 //! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
 //! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table. The `abi-1-4` feature builds
-//! [`v1_4`], a plugin written against ABI 1.4 on a frozen copy of that crate.
+//! [`v1_4`], a plugin written against ABI 1.4 on a frozen copy of that crate. The `abi-2-0` feature, without the default
+//! `current`, builds this source as it is on a frozen copy of the 2.0 crate of before the contract 2.x additions.
 
 #![cfg_attr(any(feature = "abi-1-3", feature = "abi-1-4"), allow(dead_code, unused_imports))]
+
+// The `abi-2-0` build: the same source on the frozen 2.0 SDK crate of before the contract 2.x additions, under the name
+// the source uses, with no current SDK beside it.
+#[cfg(all(feature = "abi-2-0", not(feature = "current")))]
+extern crate abi_2_0 as opencode_plugin_abi;
 
 /// The `witness` feature's static constructor: the platform loader runs it as it maps the library.
 #[cfg(feature = "witness")]

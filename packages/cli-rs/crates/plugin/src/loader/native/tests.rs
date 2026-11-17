@@ -24,11 +24,14 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
     }
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("../../target/sample-plugin");
+    // The frozen 2.0 SDK replaces the current one, which the default feature brings.
+    let frozen = features.split(',').any(|feature| feature == "abi-2-0");
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
         .args(["build", "--quiet", "--manifest-path"])
         .arg(root.join("examples/sample/Cargo.toml"))
         .arg("--target-dir")
         .arg(&target)
+        .args(frozen.then_some("--no-default-features"))
         .args(["--features", features])
         .status()
         .unwrap();
@@ -104,6 +107,40 @@ fn the_sample_registers_a_command_a_fence_a_slot_and_a_route() {
     assert!(screen.contains("sample plugin v1: home.footer"), "{screen}");
     assert!(screen.contains("Sample route hello"), "{screen}");
     assert!(screen.contains("said hello 1 times"), "{screen}");
+}
+
+/// What the sample built as `library` shows through the script of
+/// [`the_sample_registers_a_command_a_fence_a_slot_and_a_route`]: its version, its status, its fences, the effects of
+/// its commands, and its slot and route on screen.
+fn sampled(library: &[u8]) -> Vec<String> {
+    let host = host();
+    let registry = active(&host, library);
+    let mut seen = vec![format!("{:?}", Native.inspect(library)), format!("{:?}", status(&registry))];
+    seen.push(markdown(&host, &registry, "```sample\nhello\nworld\n```\n"));
+    seen.push(markdown(&host, &registry, "```sample-mode\nx\n```\n"));
+    host.keymap().dispatch("sample.hello", None);
+    host.keymap().dispatch("sample.open", None);
+    host.app.advance(Duration::from_millis(1));
+    seen.push(format!("{:?} {:?} {:?}", host.toasts.borrow(), host.storage.borrow(), host.routes.borrow()));
+    let parent = View::new(host.app());
+    registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().clear();
+    host.app().root().add(&parent);
+    let route = registry.route(&*host, "sample", "hello").unwrap();
+    host.app().root().add(&route.root());
+    host.app.render();
+    seen.push(host.app.text());
+    seen
+}
+
+// Expected (contract 2.x additions): a plugin built against the 2.0 SDK of before the additions (the sample on a frozen
+// copy of that crate) loads in this host as a 2.0 plugin and shows what the same source built on the current SDK
+// shows: the additions are additive on the wire, and a host feature it does not know changes nothing for it.
+#[test]
+fn a_plugin_built_before_the_additions_behaves_the_same() {
+    let (before, now) = (sampled(&build("abi-2-0")), sampled(&build("")));
+    assert!(before[2].contains("SAMPLE v1 HELLO") && before[5].contains("Sample route hello"), "{before:#?}");
+    assert_eq!(before, now);
 }
 
 #[test]

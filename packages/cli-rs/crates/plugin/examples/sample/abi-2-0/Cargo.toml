@@ -1,0 +1,24 @@
+# A frozen copy of `opencode-plugin-abi` at ABI 2.0 before the contract 2.x additions (`src/` is unchanged from
+# 95da0a369e). The sample's `abi-2-0` feature builds today's sample against it, as a plugin built before the additions
+# is, and the loader's tests check that this host loads it and that it behaves as the sample built on the current SDK
+# does. Never edit `src/`.
+[package]
+name = "opencode-plugin-abi-2-0"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# The features its source names, as the crate had them; the sample turns neither on.
+[features]
+host = []
+next = []
+
+[dependencies]
+opencode-api-types = { path = "../../../../api-types" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+
+[lib]
+test = false
+doctest = false

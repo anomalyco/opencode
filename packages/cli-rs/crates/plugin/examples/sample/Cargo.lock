@@ -218,12 +218,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencode-plugin-abi-2-0"
+version = "0.1.0"
+dependencies = [
+ "opencode-api-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "opencode-sample-plugin"
 version = "0.1.0"
 dependencies = [
  "opencode-plugin-abi",
  "opencode-plugin-abi-1-3",
  "opencode-plugin-abi-1-4",
+ "opencode-plugin-abi-2-0",
  "serde_json",
 ]
 
