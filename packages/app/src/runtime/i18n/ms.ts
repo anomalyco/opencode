@@ -1010,7 +1010,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · konteks {{context}}",
   "model.details.left": "Baki",
   "model.details.resets": "Ditetapkan semula",
-  "model.details.usage": "{{label}} · ditetapkan semula {{time}}",
   "common.ok": "OK",
   "common.retry": "Cuba lagi",
   "session.child.status.running": "Sedang berjalan",

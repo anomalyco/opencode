@@ -1067,7 +1067,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontekst",
   "model.details.left": "Tilbage",
   "model.details.resets": "Nulstilles",
-  "model.details.usage": "{{label}} · nulstilles {{time}}",
   "common.ok": "OK",
   "common.retry": "Prøv igen",
   "session.child.status.running": "Kører",

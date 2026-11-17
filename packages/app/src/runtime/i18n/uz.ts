@@ -1020,7 +1020,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontekst",
   "model.details.left": "Qoldi",
   "model.details.resets": "Yangilanadi",
-  "model.details.usage": "{{label}} · {{time}} da yangilanadi",
   "common.ok": "OK",
   "common.retry": "Qayta urinish",
   "session.child.status.running": "Bajarilmoqda",

@@ -1021,7 +1021,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontextus",
   "model.details.left": "Hátralévő",
   "model.details.resets": "Visszaáll",
-  "model.details.usage": "{{label}} · visszaáll: {{time}}",
   "common.ok": "OK",
   "common.retry": "Próbálja újra",
   "session.child.status.running": "Fut",

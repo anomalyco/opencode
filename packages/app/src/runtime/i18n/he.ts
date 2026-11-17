@@ -996,7 +996,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · הקשר {{context}}",
   "model.details.left": "נותר",
   "model.details.resets": "מתאפס",
-  "model.details.usage": "{{label}} · מתאפס {{time}}",
   "common.ok": "אישור",
   "common.retry": "נסה שוב",
   "session.child.status.running": "פועל",

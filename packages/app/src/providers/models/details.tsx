@@ -162,13 +162,6 @@ export function ModelDetails(props: {
           })}
         </bdi>
         <Show when={summary()}>{(value) => <div>{value()}</div>}</Show>
-        <Show when={props.usage}>
-          {(usage) => (
-            <div classList={{ "text-v2-state-fg-danger": usage().reached }}>
-              {language.t("model.details.usage", { label: usage().label, time: usage().resets })}
-            </div>
-          )}
-        </Show>
       </div>
     </Show>
   )

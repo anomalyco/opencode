@@ -1006,7 +1006,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} samanhangur",
   "model.details.left": "Eftir",
   "model.details.resets": "Nullstillast",
-  "model.details.usage": "{{label}} · nullstillast {{time}}",
   "common.ok": "OK",
   "common.retry": "Royn aftur",
   "session.child.status.running": "Koyrir",

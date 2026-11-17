@@ -1032,7 +1032,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · སྐབས་དོན་ {{context}}",
   "model.details.left": "ལྷག་ལུས།",
   "model.details.resets": "སླར་སྒྲིག",
-  "model.details.usage": "{{label}} · {{time}} ལུ་སླར་སྒྲིག",
   "common.ok": "བཏུབ།",
   "common.retry": "ལོག་འབད་རྩོལ་བསྐྱེད།",
   "session.child.status.running": "གཡོག་བཀོལ་དོ།",

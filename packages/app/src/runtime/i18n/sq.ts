@@ -1014,7 +1014,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · kontekst {{context}}",
   "model.details.left": "Mbetur",
   "model.details.resets": "Rivendoset",
-  "model.details.usage": "{{label}} · rivendoset {{time}}",
   "common.ok": "OK",
   "common.retry": "Provo sërish",
   "session.child.status.running": "Në ekzekutim",

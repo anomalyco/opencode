@@ -1001,7 +1001,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · បរិបទ {{context}}",
   "model.details.left": "នៅសល់",
   "model.details.resets": "កំណត់ឡើងវិញ",
-  "model.details.usage": "{{label}} · កំណត់ឡើងវិញ {{time}}",
   "common.ok": "យល់ព្រម",
   "common.retry": "ព្យាយាមម្តងទៀត",
   "session.child.status.running": "កំពុងដំណើរការ",

@@ -1035,7 +1035,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} περιβάλλον",
   "model.details.left": "Απομένει",
   "model.details.resets": "Επαναφορά",
-  "model.details.usage": "{{label}} · επαναφορά {{time}}",
   "common.ok": "OK",
   "common.retry": "Δοκιμάστε ξανά",
   "session.child.status.running": "Εκτελείται",

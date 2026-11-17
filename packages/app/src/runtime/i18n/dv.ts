@@ -1045,7 +1045,6 @@ export const dict = {
   "model.details.summary": "⁨{{provider}}⁩ · ⁨{{context}}⁩ ކޮންޓެކްސްޓް",
   "model.details.left": "ބާކީ",
   "model.details.resets": "ރީސެޓްވާނީ",
-  "model.details.usage": "⁨{{label}}⁩ · ⁨{{time}}⁩ ގައި ރީސެޓްވާނެ",
   "common.ok": "OK",
   "common.retry": "އަލުން ޖައްސަވާ",
   "session.child.status.running": "ހިނގަމުން",

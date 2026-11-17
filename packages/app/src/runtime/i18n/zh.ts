@@ -1033,7 +1033,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} 上下文",
   "model.details.left": "剩余",
   "model.details.resets": "重置",
-  "model.details.usage": "{{label}} · {{time}} 重置",
   "common.ok": "确定",
   "common.retry": "重试",
   "session.child.status.running": "运行中",

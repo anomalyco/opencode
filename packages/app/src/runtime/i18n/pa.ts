@@ -1020,7 +1020,6 @@ export const dict = {
   "model.details.summary": "⁨{{provider}}⁩ · ⁨{{context}}⁩ تناظر",
   "model.details.left": "باقی",
   "model.details.resets": "ری سیٹ",
-  "model.details.usage": "⁨{{label}}⁩ · ⁨{{time}}⁩ ری سیٹ",
   "common.ok": "ٹھیک اے",
   "common.retry": "فیر کوشش کرو",
   "session.child.status.running": "چل رہیا اے",

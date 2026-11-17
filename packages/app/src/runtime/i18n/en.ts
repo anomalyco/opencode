@@ -318,7 +318,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} context",
   "model.details.left": "Left",
   "model.details.resets": "Resets",
-  "model.details.usage": "{{label}} · resets {{time}}",
+  "model.details.resetsAt": "Resets {{time}}",
 
   "common.search.placeholder": "Search",
   "common.goBack": "Navigate back",

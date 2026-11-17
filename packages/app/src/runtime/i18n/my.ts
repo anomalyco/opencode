@@ -1019,7 +1019,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · ဆက်စပ်အကြောင်းအရာ {{context}}",
   "model.details.left": "ကျန်",
   "model.details.resets": "ပြန်စမည်",
-  "model.details.usage": "{{label}} · {{time}} တွင် ပြန်စမည်",
   "common.ok": "OK",
   "common.retry": "ထပ်ကြိုးစားပါ",
   "session.child.status.running": "လုပ်ဆောင်နေသည်",

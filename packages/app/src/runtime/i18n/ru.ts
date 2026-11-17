@@ -1103,7 +1103,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · контекст {{context}}",
   "model.details.left": "Осталось",
   "model.details.resets": "Сброс",
-  "model.details.usage": "{{label}} · сброс {{time}}",
   "common.ok": "OK",
   "common.retry": "Повторить",
   "session.child.status.running": "Выполняется",

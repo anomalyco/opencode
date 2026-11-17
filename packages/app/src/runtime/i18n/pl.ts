@@ -1053,7 +1053,6 @@ export const dict = {
   "model.details.summary": "{{provider}} · kontekst {{context}}",
   "model.details.left": "Pozostało",
   "model.details.resets": "Reset",
-  "model.details.usage": "{{label}} · reset {{time}}",
   "common.ok": "OK",
   "common.retry": "Spróbuj ponownie",
   "session.child.status.running": "Działa",
