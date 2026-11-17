@@ -40,6 +40,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the plugin across its builds, as one that names a command anew on each mount does, fails with "it changed its
   registrations … and never settled", where TS would keep it running. A fetch the plugin waits for across a reload
   settles once (CT-1).
+- **A key a command declines** goes on, as in TS. The JS host answers after the frame, so a key that runs a plugin's
+  command holds the keys after it until the JS host answered, as TS runs a command before the next key. A command
+  that returned `false`, whose `enabled` says no, or whose layer ended declines, and its key is routed again first,
+  past that command and any that declined it before, to the host's own keys and the composer (CT-8: linear's `r`,
+  `P.8/linear-keys`; CT-19: rundev's space and Enter, `P.8/rundev-keys`; `P.8/host-keys` has the same keys with no
+  plugin). The key reaches the composer a round trip to the JS host later than TS's, and the host lists a disabled
+  command, where TS does not bind it. A command the palette or a slash runs declines nothing.
 - **`data.listen`** hears every event as `{ details }`, through one subscription of the plugin to each type the generated
   client names (`EventSubscribeInput`), made with its first listener; a type the client does not name, as a plugin's
   own `rpc.*` events, never comes. The streaming deltas (`session.*.delta`) do not come, as the host's store sends no

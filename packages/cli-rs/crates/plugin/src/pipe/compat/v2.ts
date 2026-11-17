@@ -858,15 +858,16 @@ export function context(base: Base, carrier: Carrier) {
   )
   const client = { ...raw, rpc }
 
-  // Each command name runs the newest live registration of it that is enabled: a layer of a component that ended, or a
-  // command whose `enabled` says no, runs nothing.
+  // Each command name runs the newest live registration of it that is enabled. A layer of a component that ended, or a
+  // command whose `enabled` says no, runs nothing and answers `false`, as a command that declines: the key that ran it
+  // goes on to the host, as TS binds no disabled command (CT-8) and lets a declined key fall through (CT-19).
   const registrations = new Map<string, Array<{ retired: boolean; commands: Map<string, Json> }>>()
   const dispatch = (name: string, input?: string) => {
     const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
     const command = live.at(-1)?.commands.get(name)
-    if (!command) return
+    if (!command) return false
     const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
-    if (enabled) return command.run(input)
+    return enabled ? command.run(input) : false
   }
   const commands = (registration: { retired: boolean; commands: Map<string, Json> }, scope?: string) => {
     const names: string[] = []

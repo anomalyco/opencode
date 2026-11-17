@@ -1342,7 +1342,7 @@ mod tests {
         let (hello_file, answer_file) = (dir.path().join("hello"), dir.path().join("answer"));
         std::fs::write(&hello_file, hello()).unwrap();
         let mut answer: Vec<u8> = (1..=4).flat_map(tree).collect();
-        answer.extend(control(&Up::Done { seq: 1, effects: Vec::new(), error: None }));
+        answer.extend(control(&Up::Done { seq: 1, effects: Vec::new(), error: None, declined: false }));
         std::fs::write(&answer_file, answer).unwrap();
         // It answers once it read the event, never before it was sent.
         let script = format!(

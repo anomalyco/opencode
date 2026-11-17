@@ -509,6 +509,8 @@ struct Call {
     /// The mount the call's requests belong to: a route command's, or the input owner's, which outlives the owner
     /// (bigboi's freeze pass). What it asks for is that mount's, as in process.
     mount: Option<Weak<()>>,
+    /// The key that ran a command, which goes on to the host if the command declines.
+    key: Option<Keyed>,
 }
 
 /// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
@@ -658,6 +660,8 @@ pub struct Scripts {
     /// The ping last answered, and whether a tree waited then.
     pong: Cell<Option<(u64, bool)>>,
     hold: RefCell<Hold>,
+    /// The commands the key put back now goes past ([`Keyed`]).
+    aside: RefCell<Vec<String>>,
     /// What the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
     held: RefCell<Option<Vec<Up>>>,
     /// The fault armed for the next handler's message, and a message a swap holds back.
@@ -675,7 +679,8 @@ pub struct Scripts {
 struct Hold {
     /// The command's sequence, while it holds.
     seq: Option<u64>,
-    keys: VecDeque<KeyEvent>,
+    /// Each with the commands it goes past as it is put back: those that declined it ([`Keyed`]).
+    keys: VecDeque<(KeyEvent, Vec<String>)>,
     timer: Option<TimerId>,
     /// Keys put back now, which the intercept lets through.
     replaying: bool,
@@ -683,6 +688,22 @@ struct Hold {
 
 /// The most keys a hold keeps; past it the oldest goes, and the log says so.
 const HELD: usize = 64;
+
+/// The key that ran a JS plugin's command, and the commands it goes past if the command declines: this one and those
+/// that declined it before (CT-8, CT-19). A command is named `<plugin>\0<name>`.
+#[derive(Clone)]
+pub(crate) struct Keyed {
+    key: KeyEvent,
+    aside: Vec<String>,
+}
+
+impl Keyed {
+    pub(crate) fn new(key: KeyEvent, scripts: &Scripts, command: &str) -> Self {
+        let mut aside = scripts.aside.borrow().clone();
+        aside.push(command.to_owned());
+        Self { key, aside }
+    }
+}
 
 impl Scripts {
     pub fn new(config: Config, host: &Rc<dyn Host>) -> Rc<Self> {
@@ -721,6 +742,7 @@ impl Scripts {
             stopped: RefCell::default(),
             pong: Cell::new(None),
             hold: RefCell::default(),
+            aside: RefCell::default(),
             held: RefCell::default(),
             fault: Cell::new(None),
             swapped: RefCell::default(),
@@ -1504,7 +1526,7 @@ impl Scripts {
             Up::Unsupported { seq, reason } => self.answered_load(seq, Loading::Unsupported(reason)),
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
-            Up::Done { seq, effects, error } => {
+            Up::Done { seq, effects, error, declined } => {
                 self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
                 match waiting {
@@ -1523,6 +1545,9 @@ impl Scripts {
                             || self.guest(&call.plugin).filter(|guest| guest.activation() == call.activation);
                         if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
                             guest.done(seq, &call, effects, error);
+                        }
+                        if declined {
+                            self.declined(&call);
                         }
                         // The keys it held go on once its effects applied: they are deferred, and so is this, after
                         // them (review bigboi-5).
@@ -1827,7 +1852,7 @@ impl Scripts {
         }
         for call in calls {
             if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
-                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.mount));
+                self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.mount), call.key);
             }
         }
         self.reconcile();
@@ -1844,7 +1869,7 @@ impl Scripts {
     }
 
     /// Runs a call of `guest`: a command, an event, an input event of `owner`'s input owner, or a command of its route
-    /// mount. A command in `holds` holds the keys after it.
+    /// mount. A command in `holds` holds the keys after it; `key` is the key that ran a command.
     fn call(
         self: &Rc<Self>,
         guest: &Rc<Guest>,
@@ -1852,11 +1877,13 @@ impl Scripts {
         request: opencode_plugin_abi::Request,
         hold: bool,
         owner: Owning,
+        key: Option<Keyed>,
     ) {
-        self.call_as(guest, export, request, hold, crate::behave::user(), owner);
+        self.call_as(guest, export, request, hold, crate::behave::user(), owner, key);
     }
 
     /// [`Scripts::call`] for the user's input when `user`.
+    #[allow(clippy::too_many_arguments)]
     fn call_as(
         self: &Rc<Self>,
         guest: &Rc<Guest>,
@@ -1865,11 +1892,13 @@ impl Scripts {
         hold: bool,
         user: bool,
         (owner, mount): Owning,
+        key: Option<Keyed>,
     ) {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
         let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
-        let call = Call { guest: Rc::downgrade(guest), plugin: id, activation, export, user, request, owner, mount };
+        let guest = Rc::downgrade(guest);
+        let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
         self.send(message, Some(Waiting::Call(Box::new(call))));
         if hold {
             self.start_hold(seq);
@@ -1900,7 +1929,20 @@ impl Scripts {
             hold.keys.pop_front();
             log::warn!("a held key was dropped: over {HELD} keys held");
         }
-        hold.keys.push_back(key);
+        hold.keys.push_back((key, Vec::new()));
+    }
+
+    /// Whether the key put back now goes past `command` (`<plugin>\0<name>`), which declined it.
+    pub(crate) fn stepped_aside(&self, command: &str) -> bool {
+        self.aside.borrow().iter().any(|aside| aside == command)
+    }
+
+    /// Command `call` declined the key that ran it: the key goes on first of what its hold keeps, past the commands that
+    /// declined it.
+    fn declined(&self, call: &Call) {
+        if let Some(keyed) = &call.key {
+            self.hold.borrow_mut().keys.push_front((keyed.key, keyed.aside.clone()));
+        }
     }
 
     fn start_hold(self: &Rc<Self>, seq: u64) {
@@ -1919,11 +1961,14 @@ impl Scripts {
     }
 
     /// The command `seq` returned, or its time ran out: the keys it held go on, in order. One that holds again keeps
-    /// the rest held.
+    /// the rest held. A key a command declined after its hold ran out goes on now.
     fn release_hold(&self, seq: u64) {
-        if self.hold.borrow().seq != Some(seq) {
+        let hold = self.hold.borrow();
+        let declined_late = hold.seq.is_none() && !hold.replaying && !hold.keys.is_empty();
+        if hold.seq != Some(seq) && !declined_late {
             return;
         }
+        drop(hold);
         self.release_all_holds();
     }
 
@@ -1941,11 +1986,13 @@ impl Scripts {
                 if hold.seq.is_some() {
                     break;
                 }
-                let Some(key) = hold.keys.pop_front() else { break };
+                let Some((key, aside)) = hold.keys.pop_front() else { break };
                 hold.replaying = true;
+                *self.aside.borrow_mut() = aside;
                 key
             };
             host.app().dispatch(opentui::prelude::Event::Key(key));
+            self.aside.borrow_mut().clear();
             self.hold.borrow_mut().replaying = false;
         }
     }

@@ -250,6 +250,10 @@ pub enum Up {
         effects: Vec<HostRequest>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// A command declined (it returned `false`, or it is disabled or gone): the key that ran it goes on to the host
+        /// (CT-8, CT-19).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        declined: bool,
     },
     /// Effects plugin `id` asked for outside any call: a timer, a promise, a reactive update. Answered with
     /// [`Down::Answered`] under `seq`, the plugin's own count.

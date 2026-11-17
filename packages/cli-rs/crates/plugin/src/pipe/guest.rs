@@ -21,7 +21,7 @@ use crate::limits;
 use crate::loader::native::{Answers, Ctx, To, apply, handle};
 use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
-use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, route, tui_command};
+use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, keyed_command, route};
 
 /// The reads a plugin watches at most (FT-9: opencode-tokscope watches about 80, a store each of its 64 history shards
 /// and a dozen others). What they push is charged to the plugin's content, which bounds their memory.
@@ -270,12 +270,24 @@ impl Guest {
 
     /// [`Guest::call`] for an input event of an input owner, or a command of a route mount, whose effects are theirs.
     fn call_for(self: &Rc<Self>, export: &'static str, request: Request, hold: bool, owner: super::Owning) {
+        self.call_keyed(export, request, hold, owner, None);
+    }
+
+    /// [`Guest::call_for`] of a command a key ran, which goes on to the host if the command declines.
+    fn call_keyed(
+        self: &Rc<Self>,
+        export: &'static str,
+        request: Request,
+        hold: bool,
+        owner: super::Owning,
+        key: Option<super::Keyed>,
+    ) {
         if self.ended() {
             return;
         }
         self.refresh();
         if let Some(scripts) = self.scripts.upgrade() {
-            scripts.call(self, export, request, hold, owner);
+            scripts.call(self, export, request, hold, owner, key);
         }
     }
 
@@ -660,25 +672,33 @@ impl Answers for Guest {
     }
 }
 
+/// A command of the plugin's, which runs on the JS host; a route's runs for the mount `alive`. A key that runs it holds
+/// the keys after it until the JS host answers, as TS runs a command before the next key. If the command declines (it
+/// returned `false`, or it is disabled), the key goes on to the host with this command stepped aside, as TS binds no
+/// disabled command and lets a declined key fall through (CT-8, CT-19).
+fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: Option<Weak<()>>) -> TuiCommand {
+    let (called, name) = (guest.clone(), command.name.clone());
+    let hold = guest.loaded.holds.contains(&name);
+    let entry = format!("{}\u{0}{name}", guest.id());
+    let (scripts, aside) = (guest.scripts.clone(), entry.clone());
+    keyed_command(command, move |input, key| {
+        let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
+        let key = key.and_then(|key| Some(super::Keyed::new(*key, &*scripts.upgrade()?, &entry)));
+        called.call_keyed("run-command", request, hold || key.is_some(), (None, alive.clone()), key);
+    })
+    .enabled(opentui::keymap::Condition::when({
+        let scripts = guest.scripts.clone();
+        move || !scripts.upgrade().is_some_and(|scripts| scripts.stepped_aside(&aside))
+    }))
+}
+
 /// Registers what the plugin's setup listed, each calling it on the JS host.
 fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     let manifest = &guest.loaded.manifest;
     let disposed = guest.clone();
     setup.on_dispose(move || disposed.dispose());
-    let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> = manifest
-        .commands
-        .iter()
-        .map(|command| {
-            let called = guest.clone();
-            let name = command.name.clone();
-            let hold = guest.loaded.holds.contains(&name);
-            let run = tui_command(command, move |input| {
-                let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-                called.call("run-command", request, hold);
-            });
-            (command.scope.clone(), run)
-        })
-        .collect();
+    let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> =
+        manifest.commands.iter().map(|command| (command.scope.clone(), js_command(guest, command, None))).collect();
     // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4). A route's commands are
     // bound to each of its mounts below.
     let (layers, _) = route::split(commands);
@@ -718,15 +738,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
                 let routed = crate::loader::native::routed(manifest, name);
                 let guest = guest.clone();
                 Rc::new(move |alive: &Weak<()>| {
-                    let command = |command: &opencode_plugin_abi::Command| {
-                        let (called, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
-                        let hold = guest.loaded.holds.contains(&name);
-                        tui_command(command, move |input| {
-                            let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-                            called.call_for("run-command", request, hold, (None, Some(alive.clone())));
-                        })
-                    };
-                    routed.iter().map(command).collect()
+                    routed.iter().map(|command| js_command(&guest, command, Some(alive.clone()))).collect()
                 })
             }
             v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Rc::new(|_| Vec::new()),

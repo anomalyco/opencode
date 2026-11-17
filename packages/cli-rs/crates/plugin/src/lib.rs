@@ -660,8 +660,16 @@ fn in_process(plugin: abi::Plugin) -> Definition {
 /// The keymap command of a plugin's `command`, which calls `run` with its input. It runs for the user's input unless
 /// a plugin effect dispatched it ([`flush`]): a command the plugin runs itself, or one a reply or a result runs.
 pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + 'static) -> TuiCommand {
-    let mut entry = TuiCommand::new(command.name.clone(), move |input, _| {
-        behave::as_user(!FLUSHING.with(Cell::get), || run(input));
+    keyed_command(command, move |input, _| run(input))
+}
+
+/// [`tui_command`] whose `run` also gets the key that ran it, if a key did.
+pub(crate) fn keyed_command(
+    command: &abi::Command,
+    run: impl Fn(Option<&str>, Option<&KeyEvent>) + 'static,
+) -> TuiCommand {
+    let mut entry = TuiCommand::new(command.name.clone(), move |input, key| {
+        behave::as_user(!FLUSHING.with(Cell::get), || run(input, key));
     })
     .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
     // The keymap refuses an empty title, which a hidden command may have.
