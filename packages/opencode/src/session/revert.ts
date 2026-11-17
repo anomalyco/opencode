@@ -9,6 +9,9 @@ import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
+import { InstanceState } from "@/effect/instance-state"
+import { NamedError } from "@opencode-ai/core/util/error"
+import path from "path"
 
 export const RevertInput = Schema.Struct({
   sessionID: SessionID,
@@ -69,7 +72,8 @@ const layer = Layer.effect(
 
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-      yield* snap.revert(patches)
+      const kept = yield* snap.revert(patches)
+      if (kept.length) yield* reportKept(input.sessionID, kept)
       if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
       const index = all.findIndex((msg) => msg.info.id === rev.messageID)
       const range = index < 0 ? [] : all.slice(index)
@@ -86,6 +90,18 @@ const layer = Layer.effect(
         },
       })
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+    })
+
+    const reportKept = Effect.fnUntraced(function* (sessionID: SessionID, files: string[]) {
+      const ctx = yield* InstanceState.context
+      const names = files.map((file) => path.relative(ctx.worktree, file).replaceAll("\\", "/"))
+      const listed = names.slice(0, 5).join(", ") + (names.length > 5 ? ` and ${names.length - 5} more` : "")
+      const count = names.length === 1 ? "1 file" : `${names.length} files`
+      const message = `Revert kept ${count} as is because the snapshot store no longer has the earlier version: ${listed}`
+      yield* events.publish(Session.Event.Error, {
+        sessionID,
+        error: new NamedError.Unknown({ message }).toObject(),
+      })
     })
 
     const unrevert = Effect.fn("SessionRevert.unrevert")(function* (input: { sessionID: SessionID }) {
