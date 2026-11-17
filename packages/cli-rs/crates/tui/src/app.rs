@@ -720,7 +720,8 @@ fn route_keys(tui: &Rc<Tui>) {
 
 /// The host's close rule for the reserved chord, which no plugin sees (synthesis 3.8): it closes the plugin's surface
 /// that has the input, one level, as TS's diff viewer binds `app.exit` to close itself: a focused overlay, else a
-/// focused panel, else a route, which goes back where it came from. Whether it closed one; if not, the chord goes on
+/// focused panel, else a focused slot surface, whose focus goes back to the composer, else a route, which goes back
+/// where it came from. Whether it closed one; if not, the chord goes on
 /// to the host's own keys (`app.exit`). The composer's draft stays, and a rebound `app.exit` changes nothing of it
 /// (review carbon-2).
 fn close_plugin_surface(tui: &Tui) -> bool {
@@ -734,6 +735,16 @@ fn close_plugin_surface(tui: &Tui) -> bool {
     if panel.is_some() {
         tui.panels.close(tui);
         return true;
+    }
+    // A slot surface a plugin focused (a field, `focus-input`): the composer takes the focus back, and the chord stops
+    // there, so neither the composer's draft nor the app is lost to it (carbon c2a-1).
+    if tui.router.surface_focused(tui) && !matches!(tui.route(), Route::Plugin { .. }) {
+        opencode_plugin::Host::focus_composer(tui);
+        if opencode_plugin::Host::composer_focused(tui) {
+            // The plugins' layers stop holding at the composer too, until the focus moves again.
+            tui.router.escape(tui);
+            return true;
+        }
     }
     if !matches!(tui.route(), Route::Plugin { .. }) {
         return false;

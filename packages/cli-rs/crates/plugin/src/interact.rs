@@ -916,6 +916,11 @@ impl Router {
             .any(|view| focus_within(host.app(), view.id()))
     }
 
+    /// Whether the focus is in a live surface of a plugin: a slot claim's, a panel, an overlay or a route.
+    pub fn surface_focused(&self, host: &dyn Host) -> bool {
+        self.offered(host)
+    }
+
     /// Whether an overlay has the focus.
     fn overlaid(&self, host: &dyn Host) -> bool {
         self.overlays.borrow().iter().any(|shown| focus_within(host.app(), shown.frame.id()))
