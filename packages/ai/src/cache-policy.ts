@@ -232,9 +232,10 @@ const isMarker = (message: Message) => effortUpdate(message) !== undefined || to
 
 // The previous request ended at the message before the newest assistant reply and wrote its tail entry there.
 // Marking that message again reads the entry directly, however many blocks the reply and the newest message add.
+// The tail breakpoint skips markers, so this one does too.
 const markPreviousTail = (messages: ReadonlyArray<Message>, hint: CacheHint, budget: Budget) => {
   const reply = lastIndexOfRole(messages, "assistant")
-  const index = messages.findLastIndex((message, i) => i < reply && effortUpdate(message) === undefined)
+  const index = messages.findLastIndex((message, i) => i < reply && !isMarker(message))
   return markMessageAt(messages, index, hint, budget)
 }
 

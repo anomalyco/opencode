@@ -181,6 +181,46 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("'auto' on Anthropic marks the previous tail before a tool change", () =>
+    Effect.gen(function* () {
+      const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object", properties: {} } })
+      const prepared = yield* compileRequest(
+        ai.request({
+          // Opus 5 takes tool changes in place, as a system message after the user turn.
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-opus-5", capabilities: { tools: { updates: ["add", "remove", "replace"] } } }),
+          tools: [tool("read"), tool("edit")],
+          messages: [
+            Message.user("first"),
+            Message.assistant("reply"),
+            Message.user("latest"),
+            Message.tools({ add: [tool("write")], remove: ["edit"] }),
+            Message.assistant("second reply"),
+            Message.user("newest"),
+          ],
+          cache: "auto",
+        }),
+      )
+
+      const body = prepared.body as {
+        messages: Array<{ role: string; content: Array<{ type: string; cache_control?: unknown }> }>
+      }
+      // The previous request ended with the tool change and put its tail breakpoint on "latest", before it.
+      expect(body.messages.map((message) => [message.role, message.content.map((part) => part.cache_control)])).toEqual(
+        [
+          ["user", [undefined]],
+          ["assistant", [undefined]],
+          ["user", [{ type: "ephemeral" }]],
+          ["system", [undefined, undefined]],
+          ["assistant", [undefined]],
+          ["user", [{ type: "ephemeral" }]],
+        ],
+      )
+      expect(body.messages[3]?.content.map((part) => part.type)).toEqual(["tool_addition", "tool_removal"])
+    }),
+  )
+
   it.effect("a message with nothing that carries a marker leaves its slot to the system prompt", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -311,6 +351,37 @@ describe("applyCachePolicy", () => {
       expect(body.tools.map((tool) => tool.cache_control)).toEqual([hour, hour])
       expect(body.system[0]?.cache_control).toEqual(hour)
       expect(body.messages[0]?.content[0]?.cache_control).toEqual(hour)
+    }),
+  )
+
+  it.effect("a hinted tool added mid-conversation takes the longer lifetime of the markers after it", () =>
+    Effect.gen(function* () {
+      const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object", properties: {} } })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-opus-5", capabilities: { tools: { updates: ["add", "remove", "replace"] } } }),
+          tools: [tool("read")],
+          messages: [
+            Message.user("first"),
+            Message.tools({ add: [{ ...tool("write"), cache: new CacheHint({ type: "ephemeral", ttl: "5m" }) }] }),
+            Message.assistant("reply"),
+            Message.user("latest"),
+          ],
+          cache: { ttl: "1h" },
+        }),
+      )
+
+      const body = prepared.body as {
+        messages: Array<{
+          content: Array<{ cache_control?: unknown; tool?: { definition?: { cache_control?: unknown } } }>
+        }>
+      }
+      // The added tool's marker sits on its definition, before the hour-long tail breakpoint.
+      const hour = { type: "ephemeral", ttl: "1h" }
+      expect(body.messages[1]?.content[0]?.tool?.definition?.cache_control).toEqual(hour)
+      expect(body.messages[3]?.content[0]?.cache_control).toEqual(hour)
     }),
   )
 
