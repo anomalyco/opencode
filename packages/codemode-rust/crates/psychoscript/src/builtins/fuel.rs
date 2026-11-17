@@ -19,8 +19,6 @@ use crate::vm::Vm;
 
 /// A call into a bytecode function.
 pub const FN: i32 = 1;
-/// A loop back-edge.
-pub const LOOP: i32 = 1;
 /// A call of a native, a `$` helper included.
 pub const NATIVE: i32 = 50;
 
@@ -45,7 +43,7 @@ pub fn native(vm: &mut Vm) {
 /// One loop iteration ended at its back-edge.
 #[inline]
 pub fn step(vm: &mut Vm) {
-    vm.fuel(LOOP);
+    vm.fuel_step();
 }
 
 /// A native built-in (`Array.from`, `sort`) handing its work on to a prelude function: its own call, then the

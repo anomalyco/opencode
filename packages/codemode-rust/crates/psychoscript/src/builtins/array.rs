@@ -879,6 +879,7 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     };
     // The reference's loops walk every index, holes a sparse array skips here included: `walked` counts the
     // positions its loops have passed, from the end for `reduceRight`.
+    let sparse = order.is_some();
     let at = |i: usize| if reverse { full - 1 - i } else { i };
     let mut walked = 0;
     let mut k = 0;
@@ -887,7 +888,9 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     } else {
         loop {
             if k >= n {
-                holes(vm, &mut walked, full);
+                if sparse {
+                    holes(vm, &mut walked, full);
+                }
                 let label = if reverse { "reduceRight" } else { "reduce" };
                 return Err(vm.type_error(&format!(
                     "Array.{label} of an empty array with no initial value."
@@ -895,8 +898,10 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
             }
             k += 1;
             let i = index(k - 1);
-            holes(vm, &mut walked, at(i));
-            walked = at(i) + 1;
+            if sparse {
+                holes(vm, &mut walked, at(i));
+                walked = at(i) + 1;
+            }
             if let Some(v) = present(vm, id, i) {
                 break v;
             }
@@ -906,14 +911,18 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     while k < n {
         let i = index(k);
         k += 1;
-        holes(vm, &mut walked, at(i));
+        if sparse {
+            holes(vm, &mut walked, at(i));
+            walked = at(i) + 1;
+        }
         if let Some(v) = present(vm, id, i) {
             acc = vm.call_counted(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
         }
         fuel::step(vm);
-        walked = at(i) + 1;
     }
-    holes(vm, &mut walked, full);
+    if sparse {
+        holes(vm, &mut walked, full);
+    }
     vm.bytecode_builtin();
     Ok(acc)
 }

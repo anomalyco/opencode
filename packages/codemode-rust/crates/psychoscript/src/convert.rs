@@ -326,12 +326,6 @@ fn write_json(
     if mode.restart.get() {
         return Ok(false);
     }
-    if !mode.walk
-        && matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
-    {
-        mode.restart.set(true);
-        return Ok(false);
-    }
     let mut v = apply_to_json(vm, &v, key, Some(mode))?;
     if let Some(f) = &opts.replacer_fn {
         let kv = key_value(vm, key);
@@ -374,6 +368,10 @@ fn write_json(
                 return Ok(false);
             }
             if matches!(vm.heap[id as usize].kind, Kind::Promise(_)) {
+                if !mode.walk {
+                    mode.restart.set(true);
+                    return Ok(false);
+                }
                 return Err(vm.type_error("Cannot serialize a promise; await it first"));
             }
             if stack.contains(&id) {

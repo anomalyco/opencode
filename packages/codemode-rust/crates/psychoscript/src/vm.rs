@@ -561,6 +561,16 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// A back-edge of a built-in's loop, which the reference's bytecode runs: it counts for this VM's own checks
+    /// too, as a back-edge of the program's does.
+    #[inline]
+    pub(crate) fn fuel_step(&mut self) {
+        self.budget -= 1;
+        if self.budget <= 0 {
+            let _ = self.budget_out(false);
+        }
+    }
+
     /// Fuel a built-in spends where the reference's bytecode for it would: see `builtins/fuel.rs`.
     #[inline]
     pub(crate) fn fuel(&mut self, n: i32) {
@@ -593,7 +603,19 @@ impl<'rt> Vm<'rt> {
 
     /// Calls `f` as the reference's bytecode calls a callback: a native costs fifty, unless it is itself written in
     /// bytecode there.
+    #[inline(always)]
     pub(crate) fn call_counted(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
+        if let Value::Obj(id) = *f
+            && !matches!(self.heap[id as usize].kind, Kind::Closure(_))
+        {
+            return self.call_counted_other(f, this, args);
+        }
+        self.call(f, this, args)
+    }
+
+    /// `call_counted` of anything but a closure, which costs its frame's unit itself.
+    #[inline(never)]
+    fn call_counted_other(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
         if let Value::Obj(id) = *f {
             match &self.heap[id as usize].kind {
                 Kind::Native { f, .. } => {
