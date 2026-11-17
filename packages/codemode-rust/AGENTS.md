@@ -2,6 +2,14 @@
 
 A Rust port of OpenCode's Code Mode (`packages/codemode` in anomalyco/opencode, the reference implementation), embeddable in Rust programs with no Bun, Node or other JavaScript engine at build or run time.
 
+## Parity with the TypeScript package
+
+This package is a second way to run and embed the same language, not a replacement. `packages/codemode` stays, and the two packages must stay equally capable in both directions.
+
+- A language feature, built-in or host API lands in both packages or in neither. Rust-native forms of a reference API (futures instead of Effects, closures or traits instead of services) are fine; Rust-only capabilities are not.
+- Conformance expectations are always generated from `packages/codemode`; never edit them by hand. CI regenerates them and fails on any difference.
+- `test262/rust-skipped.txt` lists reference-passing files Rust still fails; it may only shrink.
+
 ## Scope: minimal, targeted
 
 In scope:
