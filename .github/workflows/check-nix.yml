@@ -19,7 +19,7 @@ jobs:
   nix-eval:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -95,9 +95,3 @@ jobs:
 
           echo ""
           echo "=== All evaluations passed ==="
-
-      # Builds the Nix node_modules tree and runs the module identity test inside it,
-      # so a regression in the install filters fails here instead of at TUI startup.
-      - name: Check dependency identity
-        timeout-minutes: 20
-        run: nix build .#checks.x86_64-linux.dependency-identity --print-build-logs

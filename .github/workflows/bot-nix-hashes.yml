@@ -90,7 +90,27 @@ jobs:
           fi
 
           echo "$HASH" > hash.txt
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
           echo "Computed hash for ${SYSTEM}: $HASH"
+
+      # Dependency identity can only be checked against a tree built with its real
+      # hash, and this job is where that hash first exists. A pull request cannot
+      # carry the new hash (only bot/nix-hashes may), so check-nix cannot run this
+      # check: a filter or dependency change would make its pinned hash stale
+      # before the test ran. Running it here covers those changes after merge.
+      - name: Check dependency identity
+        env:
+          SYSTEM: ${{ matrix.system }}
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: |
+          set -euo pipefail
+
+          # node_modules.nix only reads the entry for the current system.
+          printf '{"nodeModules":{"%s":"%s"}}\n' "$SYSTEM" "$HASH" > nix/hashes.json
+
+          # path: evaluates the working tree so the hash above is used instead of
+          # the one committed in nix/hashes.json.
+          nix build "path:$PWD#checks.${SYSTEM}.dependency-identity" --print-build-logs
 
       - name: Upload hash
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

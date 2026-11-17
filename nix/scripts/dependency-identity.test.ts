@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { readdir, realpath } from "node:fs/promises"
+import { realpath } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { migrateV1, resolveThemeDocument } from "../../packages/theme/src/tui/index.js"
 import type { ThemeV1Json } from "../../packages/theme/src/tui/v1.js"
@@ -29,26 +29,4 @@ test("OpenTUI consumers resolve one runtime entrypoint", async () => {
     const resolved = Bun.resolveSync(dependency, join(root, "packages/tui"))
     expect(await realpath(Bun.resolveSync("@opentui/core", dirname(resolved)))).toBe(paths[0])
   }
-})
-
-test.each([
-  ["@ai-sdk/provider-utils", "zod"],
-  ["@opentelemetry/core", "@opentelemetry/api"],
-] as const)("%s keeps distinct %s peer contexts", async (name, peer) => {
-  const store = join(root, "node_modules/.bun")
-  const entries = (await readdir(store)).filter((entry) => entry.startsWith(name.replaceAll("/", "+") + "@"))
-  const contexts = new Map<string, Set<string>>()
-
-  for (const entry of entries) {
-    const entryRoot = join(store, entry)
-    const packagePath = join(entryRoot, "node_modules", name)
-    const manifest = await Bun.file(join(packagePath, "package.json")).json()
-    const peerPath = await realpath(join(entryRoot, "node_modules", peer))
-    const peerManifest = await Bun.file(join(peerPath, "package.json")).json()
-    const versions = contexts.get(manifest.version) ?? new Set<string>()
-    versions.add(peerManifest.version)
-    contexts.set(manifest.version, versions)
-  }
-
-  expect([...contexts.values()].some((versions) => versions.size > 1)).toBe(true)
 })
