@@ -1128,6 +1128,13 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
                 let val = clone_value(vm, &val, memo)?;
                 vm.define(cid, k, val);
             }
+            // A sparse array's copy keeps its length, which may run past its last element.
+            if vm.heap[id as usize].flags & SPARSE != 0 {
+                let (n, lk) = (vm.array_len(id), vm.names.length);
+                let o = &mut vm.heap[cid as usize];
+                o.flags |= SPARSE;
+                o.props.insert(lk, Value::Num(n as f64), 0);
+            }
             Ok(copy)
         }
         Plan::Object => {

@@ -80,13 +80,62 @@ fn items<'a>(vm: &'a Vm, id: Id) -> &'a [Value] {
     }
 }
 
+#[inline]
 fn len(vm: &Vm, id: Id) -> usize {
-    items(vm, id).len()
+    vm.array_len(id)
+}
+
+#[inline]
+fn is_sparse(vm: &Vm, id: Id) -> bool {
+    vm.heap[id as usize].flags & SPARSE != 0
+}
+
+/// A sparse array's own element `i` past its items.
+fn tail_elem(vm: &Vm, id: Id, i: usize) -> Option<Value> {
+    if !is_sparse(vm, id) {
+        return None;
+    }
+    let key = vm.atoms.lookup(&i.to_string())?;
+    vm.heap[id as usize].props.get(key).copied()
 }
 
 /// Element `i` as the array holds it, with a hole read as `undefined` and not looked up on the prototypes.
 fn item(vm: &Vm, id: Id, i: usize) -> Value {
-    undef(items(vm, id).get(i).cloned().unwrap_or_default())
+    match items(vm, id).get(i) {
+        Some(v) => undef(*v),
+        None => tail_elem(vm, id, i).unwrap_or_default(),
+    }
+}
+
+/// The indexes below `n` a method that skips holes visits: `None` for all of them, or for a sparse array only
+/// those it holds, so a huge length is not walked index by index.
+fn visit_order(vm: &Vm, id: Id, n: usize) -> Option<Vec<usize>> {
+    if !is_sparse(vm, id) {
+        return None;
+    }
+    let dense = items(vm, id).len().min(n);
+    let tail = vm
+        .sparse_tail(id)
+        .into_iter()
+        .map(|(i, _)| i)
+        .filter(|i| *i < n);
+    Some((0..dense).chain(tail).collect())
+}
+
+/// The `k`th index of a visit order over `n` indexes, or `None` past its end.
+#[inline]
+fn visit_at(order: &Option<Vec<usize>>, n: usize, k: usize) -> Option<usize> {
+    match order {
+        None => (k < n).then_some(k),
+        Some(o) => o.get(k).copied(),
+    }
+}
+
+/// Makes `this` array dense for a method that walks its items.
+fn dense_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
+    let id = arr_id(vm, this)?;
+    vm.densify(id)?;
+    Ok(id)
 }
 
 fn undef(v: Value) -> Value {
@@ -261,6 +310,9 @@ fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     for a in args {
         vm.reject_circular(id, a, "Array.push result")?;
     }
+    if is_sparse(vm, id) {
+        return push_sparse(vm, id, args);
+    }
     let items = array_items(vm, id)?;
     if items.len() + args.len() > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
@@ -269,15 +321,44 @@ fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Num(items.len() as f64))
 }
 
+/// `push` on a sparse array: each value is a far element, up to the largest length an array may have.
+fn push_sparse(vm: &mut Vm, id: Id, args: &[Value]) -> Res {
+    let n = len(vm, id);
+    if n + args.len() > u32::MAX as usize {
+        // As the reference's host words it: one value and several take different paths there.
+        return Err(vm.range_error(if args.len() == 1 {
+            "Length exceeded the maximum array length"
+        } else {
+            "Invalid array length"
+        }));
+    }
+    for (k, v) in args.iter().enumerate() {
+        let key = vm.atoms.intern(&(n + k).to_string());
+        vm.set_obj(id, key, *v)?;
+    }
+    Ok(Value::Num((n + args.len()) as f64))
+}
+
 fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    if is_sparse(vm, id) {
+        check_mutable(vm, id, Some(-1))?;
+        let n = len(vm, id);
+        let last = vm.atoms.intern(&(n - 1).to_string());
+        let v = item(vm, id, n - 1);
+        let lk = vm.names.length;
+        let o = &mut vm.heap[id as usize];
+        o.props.remove(last);
+        o.props.insert(lk, Value::Num((n - 1) as f64), 0);
+        return Ok(v);
+    }
     Ok(undef(
         items_mut(vm, id, Some(-1))?.pop().unwrap_or_default(),
     ))
 }
 
 fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let items = items_mut(vm, id, Some(-1))?;
     if items.is_empty() {
         return Ok(Value::Undef);
@@ -286,7 +367,7 @@ fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     check_mutable(vm, id, Some(args.len() as i64))?;
     for a in args {
         vm.reject_circular(id, a, "Array.unshift result")?;
@@ -301,11 +382,31 @@ fn a_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let n = len(vm, id);
     let s = to_index(vm, &arg(args, 0), n, 0)?;
     let e = to_index(vm, &arg(args, 1), n, n)?;
-    let out = if s < e {
-        items(vm, id)[s..e].to_vec()
-    } else {
-        Vec::new()
-    };
+    if s >= e {
+        return Ok(vm.new_array(Vec::new()));
+    }
+    if is_sparse(vm, id) {
+        return slice_sparse(vm, id, s, e);
+    }
+    let out = items(vm, id)[s..e].to_vec();
+    Ok(vm.new_array(out))
+}
+
+/// `slice` of a sparse array: the elements it holds in the range, with holes between them.
+fn slice_sparse(vm: &mut Vm, id: Id, s: usize, e: usize) -> Res {
+    if e - s > MAX_ARRAY_LEN {
+        return Err(vm.range_error("Invalid array length."));
+    }
+    let mut out = vec![Value::Uninit; e - s];
+    let dense = items(vm, id);
+    for (i, v) in dense.iter().enumerate().take(e).skip(s) {
+        out[i - s] = *v;
+    }
+    for (i, v) in vm.sparse_tail(id) {
+        if (s..e).contains(&i) {
+            out[i - s] = v;
+        }
+    }
     Ok(vm.new_array(out))
 }
 
@@ -320,7 +421,7 @@ fn splice_args(vm: &mut Vm, args: &[Value], n: usize) -> Result<(usize, usize), 
 }
 
 fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let n = len(vm, id);
     let (start, count) = splice_args(vm, args, n)?;
     let insert: Vec<Value> = args.iter().skip(2).cloned().collect();
@@ -333,7 +434,7 @@ fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let n = len(vm, id);
     let (start, count) = splice_args(vm, args, n)?;
     let mut out = without_holes(items(vm, id));
@@ -342,11 +443,12 @@ fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_concat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let mut out = items(vm, id).to_vec();
     for a in args {
         match a {
             Value::Obj(o) if matches!(vm.heap[*o as usize].kind, Kind::Array(_)) => {
+                vm.densify(*o)?;
                 out.extend_from_slice(items(vm, *o));
             }
             v => out.push(*v),
@@ -363,6 +465,7 @@ pub fn join(vm: &mut Vm, id: Id, sep: &str, seen: &mut Vec<Id>) -> Result<String
         return Ok(String::new());
     }
     seen.push(id);
+    vm.densify(id)?;
     let mut out = String::new();
     let n = len(vm, id);
     for i in 0..n {
@@ -410,7 +513,7 @@ fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let key = vm.atoms.intern_static("toLocaleString");
     let mut out = String::new();
     let mut i = 0;
@@ -434,7 +537,7 @@ fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     // Fewer than two items means no writes at all, so a frozen one-item array reverses fine.
     if len(vm, id) > 1 {
         items_mut(vm, id, None)?.reverse();
@@ -443,7 +546,7 @@ fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn a_to_reversed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let mut out = without_holes(items(vm, id));
     out.reverse();
     Ok(vm.new_array(out))
@@ -463,8 +566,15 @@ fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         .enumerate()
         .skip(from)
         .find(|(_, v)| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
-        .map(|(i, _)| i as f64);
-    Ok(Value::Num(r.unwrap_or(-1.0)))
+        .map(|(i, _)| i);
+    // A sparse array's far elements come after its items.
+    let r = r.or_else(|| {
+        vm.sparse_tail(id)
+            .into_iter()
+            .find(|(i, v)| *i >= from && *i < n && vm.strict_eq(v, &x))
+            .map(|(i, _)| i)
+    });
+    Ok(Value::Num(r.map_or(-1.0, |i| i as f64)))
 }
 
 fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -487,10 +597,23 @@ fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if from < 0.0 {
         return Ok(Value::Num(-1.0));
     }
-    let items = items(vm, id);
-    let r = (0..=from as usize)
+    let from = from as usize;
+    let tail = vm.sparse_tail(id);
+    let far = tail
+        .iter()
         .rev()
-        .find(|i| !matches!(items[*i], Value::Uninit) && vm.strict_eq(&items[*i], &x));
+        .find(|(i, v)| *i <= from && vm.strict_eq(v, &x))
+        .map(|(i, _)| *i);
+    let items = items(vm, id);
+    let r = far.or_else(|| {
+        (0..=from.min(items.len().saturating_sub(1)))
+            .rev()
+            .find(|i| {
+                items
+                    .get(*i)
+                    .is_some_and(|v| !matches!(v, Value::Uninit) && vm.strict_eq(v, &x))
+            })
+    });
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
@@ -502,12 +625,39 @@ fn a_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         return Ok(Value::Bool(false));
     }
     let from = to_index(vm, &arg(args, 1), n, 0)?;
+    if is_sparse(vm, id) {
+        return Ok(Value::Bool(includes_sparse(vm, id, &x, from, n)));
+    }
     Ok(Value::Bool(
         items(vm, id)
             .iter()
             .skip(from)
             .any(|v| vm.same_value_zero(&undef(*v), &x)),
     ))
+}
+
+/// `includes` on a sparse array: its elements from `from`, and its holes, which read as undefined.
+fn includes_sparse(vm: &Vm, id: Id, x: &Value, from: usize, n: usize) -> bool {
+    let dense = items(vm, id);
+    let tail = vm.sparse_tail(id);
+    let mut held = 0;
+    for v in dense.iter().skip(from) {
+        if !matches!(v, Value::Uninit) {
+            held += 1;
+        }
+        if vm.same_value_zero(&undef(*v), x) {
+            return true;
+        }
+    }
+    for (i, v) in &tail {
+        if *i >= from && *i < n {
+            held += 1;
+            if vm.same_value_zero(v, x) {
+                return true;
+            }
+        }
+    }
+    matches!(x, Value::Undef) && held < n.saturating_sub(from)
 }
 
 /// Calls `f(value, index, array)` for each index below the starting length while `visit` returns `None`, reading
@@ -547,6 +697,18 @@ fn each_present<T>(
     let f = callback(vm, args, name)?;
     let this_arg = arg(args, 1);
     let n = len(vm, id);
+    if let Some(order) = visit_order(vm, id, n) {
+        for i in order {
+            let Some(v) = present(vm, id, i) else {
+                continue;
+            };
+            let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
+            if let Some(t) = visit(vm, i, v, r) {
+                return Ok(Some(t));
+            }
+        }
+        return Ok(None);
+    }
     for i in 0..n {
         let Some(v) = present(vm, id, i) else {
             continue;
@@ -630,6 +792,9 @@ fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    if len(vm, id) > MAX_ARRAY_LEN {
+        return Err(vm.range_error("Invalid array length."));
+    }
     // Skipped indexes stay holes.
     let mut out = vec![Value::Uninit; len(vm, id)];
     each_present(vm, &this, args, "Array.map", |_, i, _, r| {
@@ -651,7 +816,15 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
         },
     )?;
     let n = len(vm, id);
-    let index = |k: usize| if reverse { n - 1 - k } else { k };
+    let order = visit_order(vm, id, n);
+    let n = order.as_ref().map_or(n, Vec::len);
+    let index = |k: usize| {
+        let k = if reverse { n - 1 - k } else { k };
+        match &order {
+            None => k,
+            Some(o) => o[k],
+        }
+    };
     let mut k = 0;
     let mut acc = if args.len() >= 2 {
         args[1]
@@ -778,8 +951,18 @@ fn merge_sort<T: Clone>(
     Ok(v)
 }
 
+/// Makes `this` dense for a sort, which fails as the reference's host does when it cannot copy the elements.
+fn sort_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
+    let id = arr_id(vm, this)?;
+    if len(vm, id) > MAX_ARRAY_LEN {
+        return Err(vm.range_error("Out of memory"));
+    }
+    vm.densify(id)?;
+    Ok(id)
+}
+
 fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = sort_id(vm, &this)?;
     // Holes sort last, after undefined, and stay holes; a comparator that throws leaves the array as it was.
     let cmp = arg(args, 0);
     let list = items_mut(vm, id, None)?.clone();
@@ -798,7 +981,7 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = sort_id(vm, &this)?;
     sort_comparator(vm, &arg(args, 0), "Array.toSorted")?;
     let list = without_holes(items(vm, id));
     let sorted = sort_values(vm, list, &arg(args, 0))?;
@@ -816,6 +999,9 @@ fn flatten(vm: &Vm, out: &mut Vec<Value>, list: &[Value], depth: f64) {
             && let Kind::Array(inner) = &vm.heap[*o as usize].kind
         {
             flatten(vm, out, inner, depth - 1.0);
+            // A sparse array's far elements follow its items; its holes are dropped anyway.
+            let tail: Vec<Value> = vm.sparse_tail(*o).into_iter().map(|(_, v)| v).collect();
+            flatten(vm, out, &tail, depth - 1.0);
             continue;
         }
         out.push(*v);
@@ -823,7 +1009,7 @@ fn flatten(vm: &Vm, out: &mut Vec<Value>, list: &[Value], depth: f64) {
 }
 
 fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let depth = match arg(args, 0) {
         Value::Undef => 1.0,
         v => to_integer(vm.number_of(&v)?),
@@ -840,12 +1026,14 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     each_present(vm, &this, args, "Array.flatMap", |vm, _, _, r| {
         match r {
             Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
-                let mut at = 0;
-                while at < len(vm, inner) {
+                let n = len(vm, inner);
+                let order = visit_order(vm, inner, n);
+                let mut k = 0;
+                while let Some(at) = visit_at(&order, len(vm, inner).min(n), k) {
+                    k += 1;
                     if let Some(v) = present(vm, inner, at) {
                         out.push(v);
                     }
-                    at += 1;
                 }
             }
             r => out.push(r),
@@ -863,6 +1051,9 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let v = arg(args, 0);
     check_mutable(vm, id, None)?;
     vm.reject_circular(id, &v, "Array.fill result")?;
+    if e > items(vm, id).len() {
+        vm.densify(id)?;
+    }
     let items = array_items(vm, id)?;
     for slot in items.iter_mut().take(e).skip(s) {
         *slot = v;
@@ -871,7 +1062,7 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let n = len(vm, id);
     let target = to_index(vm, &arg(args, 0), n, 0)?;
     let start = to_index(vm, &arg(args, 1), n, 0)?;
@@ -907,7 +1098,7 @@ fn a_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+    let id = dense_id(vm, &this)?;
     let n = len(vm, id);
     let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
         return Err(vm.range_error("Invalid index"));

@@ -346,6 +346,9 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
         return Ok(vm.text(s).to_owned());
     };
     let id = *id;
+    if matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
+        vm.densify(id)?;
+    }
     Ok(match &vm.heap[id as usize].kind {
         Kind::Array(items) => {
             let items = items.clone();

@@ -174,3 +174,18 @@ fn uncaught_lone_surrogates_are_replaced_in_diagnostics() {
         "TypeError: bad \u{fffd}"
     );
 }
+
+#[test]
+fn sparse_arrays_visit_only_their_elements() {
+    // The reference gives these results after walking all 30 million indexes, too slowly for a conformance case.
+    let outcome = run(
+        &Runtime::new(),
+        r#"const a = []; a[30000000] = 2; a[1] = 1
+        const b = []; b[30000000] = "z"; b[0] = "a"
+        return [a.reduce((s, x) => s + x, 0), a.reduceRight((s, x, i) => s + "," + i, ""), a.some((x) => x === 2), a.every((x) => x > 0), [b].flat(), [0].flatMap(() => b)]"#,
+    );
+    assert_eq!(
+        outcome.result.unwrap(),
+        json!([3, ",30000000,1", true, true, ["a", "z"], ["a", "z"]])
+    );
+}

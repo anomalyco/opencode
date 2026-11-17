@@ -464,14 +464,14 @@ fn proto_property_is_enumerable(vm: &mut Vm, this: Value, args: &[Value], _: Id)
     let id = object_receiver(vm, &this, "propertyIsEnumerable")?;
     let k = vm.key_of(&arg(args, 0))?;
     let o = &vm.heap[id as usize];
+    // A sparse array's far elements are properties, read below.
     if let Kind::Array(items) = &o.kind
         && let Some(i) = vm.atoms.index(k)
+        && items
+            .get(i as usize)
+            .is_some_and(|v| !matches!(v, Value::Uninit))
     {
-        return Ok(Value::Bool(
-            items
-                .get(i as usize)
-                .is_some_and(|v| !matches!(v, Value::Uninit)),
-        ));
+        return Ok(Value::Bool(true));
     }
     Ok(Value::Bool(
         o.props
@@ -517,8 +517,11 @@ pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {
     let Value::Obj(id) = v else {
         return Ok(Vec::new());
     };
-    if let Kind::Array(items) = &vm.heap[*id as usize].kind {
-        return Ok(crate::ops::without_holes(items));
+    if let Kind::Array(_) = &vm.heap[*id as usize].kind {
+        vm.densify(*id)?;
+        if let Kind::Array(items) = &vm.heap[*id as usize].kind {
+            return Ok(crate::ops::without_holes(items));
+        }
     }
     let lk = vm.names.length;
     let len = vm.get_obj(*id, lk);
@@ -689,6 +692,8 @@ fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     if vm.is_callable(&replacer) {
         opts.replacer_fn = Some(replacer);
     } else if let Value::Obj(id) = replacer
+        && matches!(vm.heap[id as usize].kind, Kind::Array(_))
+        && vm.densify(id).is_ok()
         && let Kind::Array(items) = &vm.heap[id as usize].kind
     {
         let items = items.clone();
@@ -828,6 +833,13 @@ fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     if contains_opaque(vm, &data, &mut Vec::new()) {
         vm.logs.push("[opaque reference]".into());
         return Ok(Value::Undef);
+    }
+    for v in [data, arg(args, 1)] {
+        if let Value::Obj(id) = v
+            && matches!(vm.heap[id as usize].kind, Kind::Array(_))
+        {
+            vm.densify(id)?;
+        }
     }
     let columns = match arg(args, 1) {
         Value::Obj(id) => match &vm.heap[id as usize].kind {

@@ -1050,6 +1050,10 @@ fn to_host(
                 HostValue::Bytes(data)
             }
         }
+        Kind::Array(_) if vm.heap[id as usize].flags & SPARSE != 0 => {
+            vm.densify(id)?;
+            return to_host(vm, v, label, depth, seen);
+        }
         Kind::Array(items) => {
             let items = items.clone();
             let mut out = Vec::with_capacity(items.len());

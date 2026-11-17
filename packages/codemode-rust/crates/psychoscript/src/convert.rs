@@ -87,6 +87,7 @@ fn to_json_inner(
                 return Err(invalid_data(vm, "Data is nested more than 32 levels deep."));
             }
             stack.push(id);
+            vm.densify(id)?;
             let out = match &vm.heap[id as usize].kind {
                 Kind::Array(items) => {
                     let items = items.clone();
@@ -296,6 +297,7 @@ fn write_json(
             let inner = format!("{gap}{}", opts.indent);
             let is_array = matches!(vm.heap[id as usize].kind, Kind::Array(_));
             if is_array {
+                vm.densify(id)?;
                 let len = match &vm.heap[id as usize].kind {
                     Kind::Array(items) => items.len(),
                     _ => 0,
@@ -427,7 +429,7 @@ fn quote_str(vm: &Vm, out: &mut String, s: crate::strings::StrId) {
 }
 
 /// Quotes text that is not a carrier.
-#[inline]
+#[inline(always)]
 fn quote_plain(out: &mut String, s: &str) {
     out.push('"');
     let bytes = s.as_bytes();
@@ -773,6 +775,11 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
             match &vm.heap[id as usize].kind {
                 Kind::Array(items) => {
                     let items = items.clone();
+                    let _ = vm.densify(id);
+                    let items = match &vm.heap[id as usize].kind {
+                        Kind::Array(dense) if dense.len() != items.len() => dense.clone(),
+                        _ => items,
+                    };
                     out.push('[');
                     for (i, item) in items.iter().enumerate() {
                         if i > 0 {
@@ -782,6 +789,10 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                         if !matches!(item, Value::Uninit) {
                             format_inner(vm, out, item, seen);
                         }
+                    }
+                    // An array too long to lay out shows the elements it starts with.
+                    if vm.heap[id as usize].flags & SPARSE != 0 {
+                        out.push_str(",…");
                     }
                     out.push(']');
                 }

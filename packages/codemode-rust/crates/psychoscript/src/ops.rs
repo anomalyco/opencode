@@ -92,7 +92,7 @@ impl<'rt> Vm<'rt> {
                         {
                             return *v;
                         }
-                    } else if key == self.names.length {
+                    } else if key == self.names.length && o.flags & SPARSE == 0 {
                         return Value::Num(items.len() as f64);
                     }
                 }
@@ -165,6 +165,12 @@ impl<'rt> Vm<'rt> {
     /// prototype's items (`Array.prototype[0] = x`), which store it without interning it.
     #[cold]
     pub(crate) fn inherited_elem(&mut self, id: Id, i: usize) -> Option<Value> {
+        if self.heap[id as usize].flags & SPARSE != 0
+            && let Some(key) = self.atoms.lookup(&i.to_string())
+            && let Some(v) = self.heap[id as usize].props.get(key)
+        {
+            return Some(*v);
+        }
         let proto = self.heap[id as usize].proto?;
         if let Some(key) = self.atoms.lookup(&i.to_string()) {
             return self.has_key(proto, key).then(|| self.get_obj(proto, key));
@@ -377,8 +383,9 @@ impl<'rt> Vm<'rt> {
                         items[i] = val;
                         return Ok(());
                     }
-                    if i >= MAX_ARRAY_LEN {
-                        return Err(self.range_error("Invalid array length."));
+                    if flags & SPARSE != 0 || i >= MAX_ARRAY_LEN {
+                        self.sparse_set(id, key, i, val);
+                        return Ok(());
                     }
                     items.resize(i, Value::Uninit);
                     items.push(val);
@@ -393,9 +400,11 @@ impl<'rt> Vm<'rt> {
                         _ => self.number_of(&val)?,
                     };
                     if n < 0.0 || n.fract() != 0.0 || n as usize > MAX_ARRAY_LEN {
-                        return Err(self.range_error("Invalid array length."));
+                        return Err(self.range_error("Invalid array length"));
                     }
-                    if let Kind::Array(items) = &mut self.heap[id as usize].kind {
+                    if flags & SPARSE != 0 {
+                        self.unsparse(id, n as usize);
+                    } else if let Kind::Array(items) = &mut self.heap[id as usize].kind {
                         items.resize(n as usize, Value::Uninit);
                     }
                     return Ok(());
@@ -499,9 +508,11 @@ impl<'rt> Vm<'rt> {
             let i = i as usize;
             if i < items.len() {
                 items[i] = val;
-            } else if i < MAX_ARRAY_LEN {
+            } else if i < MAX_ARRAY_LEN && o.flags & SPARSE == 0 {
                 items.resize(i, Value::Uninit);
                 items.push(val);
+            } else {
+                self.sparse_set(id, key, i, val);
             }
             return;
         }
@@ -541,7 +552,9 @@ impl<'rt> Vm<'rt> {
             Kind::Array(_) if key == length => true,
             Kind::Array(items) | Kind::Arguments(items) if index.is_some() => {
                 match items.get_mut(index.unwrap_or_default() as usize) {
-                    Some(Value::Uninit) | None => false,
+                    Some(Value::Uninit) => false,
+                    // A sparse array's far element is a property.
+                    None => fixed && o.props.find(key).is_some(),
                     Some(_) if fixed => true,
                     Some(slot) => {
                         *slot = Value::Uninit;
@@ -659,11 +672,14 @@ impl<'rt> Vm<'rt> {
         match &o.kind {
             Kind::Array(items) | Kind::Arguments(items) => {
                 if let Some(i) = self.atoms.index(key) {
-                    return items
+                    // A sparse array keeps far elements as properties.
+                    if items
                         .get(i as usize)
-                        .is_some_and(|v| !matches!(v, Value::Uninit));
-                }
-                if key == self.names.length && matches!(o.kind, Kind::Array(_)) {
+                        .is_some_and(|v| !matches!(v, Value::Uninit))
+                    {
+                        return true;
+                    }
+                } else if key == self.names.length && matches!(o.kind, Kind::Array(_)) {
                     return true;
                 }
             }
@@ -695,6 +711,96 @@ impl<'rt> Vm<'rt> {
             cur = p;
         }
         Ok(false)
+    }
+
+    /// An array's length; a sparse array keeps it as an own property.
+    #[inline]
+    pub fn array_len(&self, id: Id) -> usize {
+        let o = &self.heap[id as usize];
+        match &o.kind {
+            Kind::Array(_) if o.flags & SPARSE != 0 => match o.props.get(self.names.length) {
+                Some(Value::Num(n)) => *n as usize,
+                _ => 0,
+            },
+            Kind::Array(items) => items.len(),
+            _ => 0,
+        }
+    }
+
+    /// Writes element `i` of an array past its items: a far element is an own property, which makes the array
+    /// sparse, and the length grows to cover it.
+    #[cold]
+    #[inline(never)]
+    fn sparse_set(&mut self, id: Id, key: Atom, i: usize, val: Value) {
+        let len = self.array_len(id);
+        let lk = self.names.length;
+        let o = &mut self.heap[id as usize];
+        o.flags |= SPARSE;
+        o.props.insert(key, val, DEFAULT_FLAGS);
+        if i >= len {
+            o.props.insert(lk, Value::Num((i + 1) as f64), 0);
+        }
+    }
+
+    /// The indexes and values of a sparse array's elements past its items, in index order.
+    pub fn sparse_tail(&self, id: Id) -> Vec<(usize, Value)> {
+        let o = &self.heap[id as usize];
+        let mut tail: Vec<(usize, Value)> = o
+            .props
+            .items
+            .iter()
+            .filter_map(|p| Some((self.atoms.index(p.key)? as usize, p.value)))
+            .collect();
+        tail.sort_unstable_by_key(|(i, _)| *i);
+        tail
+    }
+
+    /// Makes a sparse array of length `n` (at most `MAX_ARRAY_LEN`) dense again, dropping elements at `n` and past.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn unsparse(&mut self, id: Id, n: usize) {
+        let tail = self.sparse_tail(id);
+        let lk = self.names.length;
+        let o = &mut self.heap[id as usize];
+        let keys: Vec<Atom> = o
+            .props
+            .items
+            .iter()
+            .filter(|p| p.key == lk || self.atoms.index(p.key).is_some())
+            .map(|p| p.key)
+            .collect();
+        for k in keys {
+            o.props.remove(k);
+        }
+        o.flags &= !SPARSE;
+        if let Kind::Array(items) = &mut o.kind {
+            items.resize(n, Value::Uninit);
+            for (i, v) in tail {
+                if i < n {
+                    items[i] = v;
+                }
+            }
+        }
+    }
+
+    /// Makes an array dense for code that walks its items, which fails when it is longer than an array may be.
+    #[inline]
+    pub fn densify(&mut self, id: Id) -> Result<(), Value> {
+        if self.heap[id as usize].flags & SPARSE == 0 {
+            return Ok(());
+        }
+        self.densify_sparse(id)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn densify_sparse(&mut self, id: Id) -> Result<(), Value> {
+        let n = self.array_len(id);
+        if n > MAX_ARRAY_LEN {
+            return Err(self.range_error("Invalid array length."));
+        }
+        self.unsparse(id, n);
+        Ok(())
     }
 
     /// Own enumerable string keys in JavaScript order: integer keys ascending, then insertion order.
@@ -1129,6 +1235,13 @@ impl<'rt> Vm<'rt> {
     pub fn iterate_to_vec(&mut self, v: &Value) -> Result<Vec<Value>, Value> {
         if let Value::Obj(id) = v {
             match &self.heap[*id as usize].kind {
+                Kind::Array(_) if self.heap[*id as usize].flags & SPARSE != 0 => {
+                    if self.array_len(*id) > MAX_ARRAY_LEN {
+                        return Err(self.range_error("Invalid array length"));
+                    }
+                    self.densify(*id)?;
+                    return self.iterate_to_vec(v);
+                }
                 Kind::Array(items) => return Ok(without_holes(items)),
                 Kind::Set(m) => {
                     return Ok(m.entries.iter().flatten().map(|(k, _)| *k).collect());
@@ -1154,7 +1267,7 @@ impl<'rt> Vm<'rt> {
         let mut out = Vec::new();
         while let Some(x) = self.iter_step(&it)? {
             if out.len() >= MAX_ARRAY_LEN {
-                return Err(self.range_error("Invalid array length."));
+                return Err(self.range_error("Invalid array length"));
             }
             out.push(x);
         }
@@ -1564,6 +1677,14 @@ impl<'rt> Vm<'rt> {
                         })
                     }
                     _ => None,
+                };
+                let item = match item {
+                    None if self.heap[target as usize].flags & SPARSE != 0
+                        && pos < self.array_len(target) =>
+                    {
+                        Some(self.inherited_elem(target, pos).unwrap_or_default())
+                    }
+                    item => item,
                 };
                 let step = if item.is_some() { 1 } else { u32::MAX };
                 if let Kind::ArrayIter { pos: p, .. } = &mut self.heap[id as usize].kind {

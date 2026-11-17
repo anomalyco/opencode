@@ -247,6 +247,9 @@ fn bytes_from(vm: &mut Vm, value: &Value, second: &Value, third: &Value) -> Resu
     }
     if let Value::Obj(id) = value {
         let id = *id;
+        if matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
+            vm.densify(id)?;
+        }
         if let Kind::Array(items) = &vm.heap[id as usize].kind {
             let items = items.clone();
             let mut out = Vec::with_capacity(items.len());
@@ -263,6 +266,8 @@ fn bytes_from(vm: &mut Vm, value: &Value, second: &Value, third: &Value) -> Resu
         let d = vm.get_obj(id, dk);
         if let (Value::Str(t), Value::Obj(did)) = (t, d)
             && vm.text(t) == "Buffer"
+            && matches!(vm.heap[did as usize].kind, Kind::Array(_))
+            && vm.densify(did).is_ok()
             && let Kind::Array(items) = &vm.heap[did as usize].kind
         {
             let items = items.clone();
@@ -395,6 +400,11 @@ fn buffer_byte_length(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn buffer_concat(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let list = arg(args, 0);
+    if let Value::Obj(id) = list
+        && matches!(vm.heap[id as usize].kind, Kind::Array(_))
+    {
+        vm.densify(id)?;
+    }
     let items = match list {
         Value::Obj(id) => match &vm.heap[id as usize].kind {
             Kind::Array(items) => items.clone(),

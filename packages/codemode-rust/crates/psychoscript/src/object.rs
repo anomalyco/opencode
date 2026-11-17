@@ -343,6 +343,9 @@ pub const SEALED: u8 = 4;
 pub const NAME_DELETED: u8 = 8;
 /// A function whose own `length` was deleted; it reads the inherited one.
 pub const LENGTH_DELETED: u8 = 16;
+/// An array too long for its items: they hold a dense prefix, and its other elements and its length are own
+/// properties (see `Vm::array_len`).
+pub const SPARSE: u8 = 32;
 
 pub struct Obj {
     pub proto: Option<Id>,
