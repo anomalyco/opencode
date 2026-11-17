@@ -1428,7 +1428,6 @@ language/expressions/delete/S11.4.1_A2.2_T3.js  # TypeError: Cannot read propert
 language/expressions/delete/S11.4.1_A3.2_T3.js  # TypeError: MyFunction cannot be constructed: user-defined constructors and classes are not supported
 language/expressions/delete/S11.4.1_A3.3_T3.js  # TypeError: MyFunction cannot be constructed: user-defined constructors and classes are not supported
 language/expressions/delete/S8.12.7_A2_T2.js  # TypeError: Palette cannot be constructed: user-defined constructors and classes are not supported. C
-language/expressions/delete/non-reference-return-true.js  # TypeError: Only data fields may be deleted.
 language/expressions/delete/super-property-topropertykey.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true

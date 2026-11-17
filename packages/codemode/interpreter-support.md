@@ -234,6 +234,8 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
       assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
       non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
+      A primitive base deletes from its wrapper: `delete "abc"[5]` and `delete (1).x` are `true`, while a string's
+      own index or `length` throws.
 - [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
       `"[object Function]"` rather than the source text (unless the function has its own `toString` or `valueOf`),
       `isNaN(fn)` is `true`.

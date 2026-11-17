@@ -231,6 +231,18 @@ describe("property deletion", () => {
     ).toEqual([[true, true, true, true, true], true, "TypeError"])
   })
 
+  test("a primitive base deletes from its wrapper: only a string's indexes and length are own", async () => {
+    expect(
+      await value(`
+        const failures = []
+        for (const remove of [() => delete "abc"[0], () => delete "abc".length]) {
+          try { remove() } catch (error) { failures.push(error.name) }
+        }
+        return [delete "abc"[3], delete "abc".foo, delete (1).x, delete true.y, delete void typeof 0, failures]
+      `),
+    ).toEqual([true, true, true, true, true, ["TypeError", "TypeError"]])
+  })
+
   test("evaluates computed object and key expressions once", async () => {
     expect(
       await value(`
