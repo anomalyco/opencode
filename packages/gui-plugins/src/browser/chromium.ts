@@ -1201,9 +1201,8 @@ export function createBrowserPage(
       if (origin === "agent") {
         if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
         activity.agentRuns++
+        recordPageInput(activity, origin)
       }
-
-      if (origin === "agent") recordPageInput(activity, origin)
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
