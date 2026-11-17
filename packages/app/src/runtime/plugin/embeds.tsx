@@ -258,14 +258,29 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   // The native embed always paints above the DOM, so hide it while a floating
   // menu, select, or popover overlaps it. Tooltips are excluded.
   const covered = (rect: DOMRect) => {
+    if (!element) return false
     const floating = document.querySelectorAll(overlay)
+    const layer = Number(element.closest<HTMLElement>("[data-dialog-layer]")?.dataset.dialogLayer ?? -1)
 
     // An index loop: this runs every frame of a transition or a drag.
     for (let index = 0; index < floating.length; index++) {
-      if (floating[index].contains(element ?? null)) continue
-      const r = floating[index].getBoundingClientRect()
+      if (floating[index].contains(element)) continue
+      // A dialog's own backdrop, and those of the dialogs beneath it, are behind an embed inside it.
+      const backdrop = floating[index].getAttribute("data-dialog-backdrop")
 
-      if (overlaps(rect, r)) return true
+      if (backdrop !== null && Number(backdrop) <= layer) continue
+
+      if (overlaps(rect, floating[index].getBoundingClientRect())) return true
+    }
+
+    // Surfaces portalled to the body after the embed's own root are above it even when nobody marked them, so an
+    // unmarked menu or panel is covered rather than painted over.
+    for (
+      let portal = ancestorBelow(document.body, element)?.nextElementSibling;
+      portal;
+      portal = portal.nextElementSibling
+    ) {
+      if (!portal.querySelector('[role="tooltip"]') && floats(portal, rect, 3)) return true
     }
 
     return false
@@ -664,6 +679,31 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       {props.children}
     </div>
   )
+}
+
+// The child of `root` that contains `node`.
+function ancestorBelow(root: Element, node: Element) {
+  for (let current: Element | null = node; current; current = current.parentElement) {
+    if (current.parentElement === root) return current
+  }
+}
+
+// Whether a visible, positioned surface that takes input, `depth` levels into a portal at most, overlaps the box. A
+// wrapper that lets input through is transparent: a full-window portal container never counts, only what it holds.
+function floats(node: Element, rect: DOMRect, depth: number): boolean {
+  // Marked surfaces were measured with their dialog layer.
+  if (node.matches(overlay)) return false
+  const style = getComputedStyle(node)
+
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false
+
+  if ((style.position === "fixed" || style.position === "absolute") && style.pointerEvents !== "none") {
+    const box = node.getBoundingClientRect()
+
+    if (box.width > 1 && box.height > 1 && overlaps(rect, box)) return true
+  }
+
+  return depth > 0 && Array.from(node.children).some((child) => floats(child, rect, depth - 1))
 }
 
 // Decodes a JPEG still, so it paints in the frame it enters the DOM. Undefined when there is none or it cannot decode.

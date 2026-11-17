@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
@@ -13,6 +14,11 @@ const modules = {
 story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
+  await mountPane(page)
+  await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+async function mountPane(page: Page) {
   await page.evaluate(async (modules) => {
     const [{ mountBrowserPane }, { createEmbeds }, { createAppLinks }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
@@ -31,8 +37,7 @@ story.beforeEach(async ({ mount, page }) => {
       useLanguage: language.useLanguage,
     })
   }, modules)
-  await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
-})
+}
 
 story("reviews the actual application target only after a trusted click", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
@@ -151,6 +156,46 @@ story("a spinner inside a persistent floating surface does not measure the pane 
   })
 
   expect(reads).toBe(0)
+  await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("covers the page with unmarked portalled surfaces but not tooltips or transparent wrappers", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  const portal = await page.locator("#browser-panel").evaluateHandle((panel) => {
+    const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
+    const box = `position:fixed; top:${pane.top + 8}px; left:${pane.left + 8}px; width:120px; height:60px`
+    const tooltip = document.createElement("div")
+    tooltip.innerHTML = `<div style="${box}" role="tooltip">Tip</div>`
+    const wrapper = document.createElement("div")
+    wrapper.style.cssText = "position:fixed; inset:0; pointer-events:none"
+    document.body.append(tooltip, wrapper)
+    const surface = document.createElement("div")
+    surface.innerHTML = `<div style="${box}; background:Canvas; pointer-events:auto">Unmarked menu</div>`
+
+    return { surface, wrapper }
+  })
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await portal.evaluate(({ surface }) => document.body.append(surface))
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await portal.evaluate(({ surface, wrapper }) => wrapper.append(surface.firstElementChild!))
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await portal.evaluate(({ wrapper }) => wrapper.replaceChildren())
+  await expect(native).toHaveAttribute("data-visible", "true")
+})
+
+story("covers the page with an app dialog's backdrop for as long as the backdrop is there", async ({ mount, page }) => {
+  // The fixture reports no open dialog to the embeds, and the dialog was portalled before the pane: only the marked
+  // backdrop itself covers the page, independent of the dialog stack's open state, which ends as the exit starts.
+  await mount("ui-dialog--with-popups")
+  await expect(page.getByRole("dialog", { name: "Popups" })).toBeVisible()
+  await mountPane(page)
+  const native = page.getByTestId("native-Alpha")
+  await expect(native).toHaveAttribute("data-layout-calls", /[1-9]/)
+  await expect(page.locator('[data-component="dialog-overlay"]')).toHaveCount(1)
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await page.keyboard.press("Escape")
+  await expect(page.locator('[data-component="dialog-overlay"]')).toHaveCount(0)
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 

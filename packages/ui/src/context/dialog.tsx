@@ -190,6 +190,8 @@ function init(container: () => HTMLElement | undefined) {
             <Kobalte.Portal mount={container()}>
               <Kobalte.Overlay
                 data-component="dialog-overlay"
+                data-floating-overlay
+                data-dialog-backdrop={selectLayerIndex(machine(), attempt)}
                 style={{ "z-index": zIndex() }}
                 onClick={() => dispatch({ type: "backdrop.click", attempt })}
               />
