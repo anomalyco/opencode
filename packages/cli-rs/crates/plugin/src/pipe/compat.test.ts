@@ -636,7 +636,7 @@ test("a built renderable returned draws nothing, and a node's layout is the host
   expect(refs.box.getLayout()).toMatchObject({ x: 0, y: 0, width: 0, height: 0 })
   // A node the host has not laid out yet reads 0×0, which is not a size; an unchanged size is not a change.
   fake.push(key, { x: 0, y: 1, width: 0, height: 0 })
-  expect([sizes, refs.box.width]).toEqual([[], undefined])
+  expect([sizes, refs.box.width]).toEqual([[], 0])
   fake.push(key, { x: 2, y: 3, width: 30, height: 4 })
   fake.push(key, { x: 2, y: 3, width: 30, height: 4 })
   expect(sizes).toEqual([30])
