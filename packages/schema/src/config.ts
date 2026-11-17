@@ -23,6 +23,16 @@ import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
 import { ConfigWorktree } from "./config/worktree.js"
 
+/**
+ * A plain file name looked up like AGENTS.md: no `.` alone, no two dots in a row, no path separator, no glob
+ * character, no control character and none of the characters Windows reserves in file names.
+ */
+export const InstructionFileName = Schema.String.check(
+  Schema.isPattern(/^\.?[^./\\*?[\]{}<>:"|\u0000-\u001f]+(?:\.[^./\\*?[\]{}<>:"|\u0000-\u001f]+)*\.?$/u),
+).annotate({ identifier: "Config.InstructionFileName" })
+
+export const DefaultInstructionFiles: readonly string[] = ["AGENTS.md"]
+
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
@@ -96,6 +106,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   instructions: Schema.String.pipe(Schema.Array, optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
+  }),
+  instruction_files: InstructionFileName.pipe(Schema.Array, Schema.check(Schema.isUnique()), optional).annotate({
+    description:
+      'File names looked up as instruction files, in list order, while the experimental instruction_files flag is on (default: ["AGENTS.md"])',
   }),
   references: ConfigReference.Info.pipe(optional).annotate({
     description: "Named local directories or Git repositories available as external context",

@@ -378,6 +378,8 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
 
+export type ConfigInstructionFileName = string
+
 export type ConfigWorktree = { directory: string }
 
 export type ConfigModelReasoning =
@@ -2552,6 +2554,7 @@ export type ConfigEntry =
           }
         }
         instructions?: Array<string>
+        instruction_files?: Array<ConfigInstructionFileName>
         references?: {
           [x: string]:
             | string
@@ -2622,6 +2625,7 @@ export type ConfigEntry =
           console_watches?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
+          instruction_files?: boolean
           schedules?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }

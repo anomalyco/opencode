@@ -3,7 +3,10 @@ export * as InstructionDiscovery from "./instruction-discovery.js"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { createPatch } from "diff"
+import { DefaultInstructionFiles, type Entry } from "@opencode/schema/config"
 import { Bus } from "./bus.js"
+import { Config } from "./config.js"
+import { Flag } from "./flag.js"
 import { Instructions } from "./instructions/index.js"
 import { State } from "./state.js"
 
@@ -119,6 +122,12 @@ export function configured(options?: Options) {
 }
 
 export const node = configured()
+
+/** The file names the global, upward and read-time lookups search for. `instruction_files` applies only while its flag is on. */
+export function fileNames(entries: readonly Entry[], flags: Flag.Interface) {
+  if (!flags.resolve(entries).instruction_files.enabled) return DefaultInstructionFiles
+  return Config.latest(entries, "instruction_files") ?? DefaultInstructionFiles
+}
 
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")

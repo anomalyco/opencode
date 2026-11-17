@@ -8,10 +8,12 @@ import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
 import { Watcher } from "@opencode/core/filesystem/watcher"
+import { Flag } from "@opencode/core/flag"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -31,17 +33,22 @@ const instructionLayer = (input: {
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
   instructions?: string[]
+  entries?: Document[]
   http?: HttpClient.HttpClient
   project?: boolean
 }) => {
   const watcher = Watcher.testLayer
-  const config = Config.testLayer(input.instructions ? [configured(input.instructions)] : [])
+  const config = Config.testLayer([
+    ...(input.instructions ? [configured(input.instructions)] : []),
+    ...(input.entries ?? []),
+  ])
   return Layer.mergeAll(
     AppNodeBuilder.build(
       LayerNode.group([
         InstructionDiscovery.node,
         Bus.node,
         Config.node,
+        Flag.node,
         FSUtil.node,
         Global.node,
         Location.node,
@@ -62,7 +69,7 @@ const instructionLayer = (input: {
         Watcher.node.replace(watcher),
         ...(input.filesystemLayer ? [FSUtil.node.replace(input.filesystemLayer)] : []),
       ],
-    ),
+    ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, undefined))),
     watcher,
     config,
     Layer.succeed(HttpClient.HttpClient, input.http ?? respond(() => new Response(null, { status: 404 }))),
@@ -75,6 +82,16 @@ const start = Effect.fnUntraced(function* (ctx = host()) {
 })
 
 const configured = (instructions: string[]) => new Document({ type: "document", info: new Info({ instructions }) })
+
+const instructionFiles = (enabled: boolean, names?: string[], file?: string) =>
+  new Document({
+    type: "document",
+    ...(file === undefined ? {} : { path: AbsolutePath.make(file) }),
+    info: new Info({
+      experimental: new ConfigExperimental.Info({ instruction_files: enabled }),
+      ...(names === undefined ? {} : { instruction_files: names }),
+    }),
+  })
 
 const readFailure = (tag: "NotFound" | "Unknown", code: string, file: string) =>
   PlatformError.systemError({
@@ -721,5 +738,305 @@ describe("ConfigInstructionPlugin.Plugin", () => {
       const repo = path.resolve("/repo")
       expect(observed.values).toEqual([{ targets: ["AGENTS.md"], start: repo, stop: repo, type: "file" }])
     }),
+  )
+})
+
+describe("ConfigInstructionPlugin.Plugin instruction_files", () => {
+  const projectLocation = (directory: string, project: string) =>
+    Layer.succeed(
+      Location.Service,
+      Location.Service.of(
+        location({ directory: AbsolutePath.make(directory) }, { projectDirectory: AbsolutePath.make(project) }),
+      ),
+    )
+
+  const write = (files: Record<string, string>) =>
+    Effect.promise(() =>
+      Promise.all(
+        Object.entries(files).map(async ([file, content]) => {
+          await fs.mkdir(path.dirname(file), { recursive: true })
+          await fs.writeFile(file, content)
+        }),
+      ),
+    )
+
+  const text = (files: [string, string][]) =>
+    files.map(([file, content]) => `Instructions from: ${file}\n${content}`).join("\n\n")
+
+  it.live("loads every listed name from the global directory and the upward walk in list order", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "repo")
+        const directory = path.join(project, "packages", "core")
+        return Effect.gen(function* () {
+          yield* write({
+            [path.join(global, "AGENTS.md")]: "global agents",
+            [path.join(global, "CLAUDE.md")]: "global claude",
+            [path.join(project, "AGENTS.md")]: "project agents",
+            [path.join(project, "CLAUDE.md")]: "project claude",
+            [path.join(directory, "CLAUDE.md")]: "package claude",
+          })
+
+          const discovery = yield* start()
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toEqual(
+            [
+              path.join(global, "CLAUDE.md"),
+              path.join(global, "AGENTS.md"),
+              path.join(directory, "CLAUDE.md"),
+              path.join(directory, "AGENTS.md"),
+              path.join(project, "packages", "CLAUDE.md"),
+              path.join(project, "packages", "AGENTS.md"),
+              path.join(project, "CLAUDE.md"),
+              path.join(project, "AGENTS.md"),
+            ].map((file) => ({ path: file, type: "file" })),
+          )
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            text([
+              [path.join(global, "CLAUDE.md"), "global claude"],
+              [path.join(global, "AGENTS.md"), "global agents"],
+              [path.join(directory, "CLAUDE.md"), "package claude"],
+              [path.join(project, "CLAUDE.md"), "project claude"],
+              [path.join(project, "AGENTS.md"), "project agents"],
+            ]),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home: path.join(tmp.path, "home"),
+              entries: [instructionFiles(true, ["CLAUDE.md", "AGENTS.md"])],
+              locationServiceLayer: projectLocation(directory, project),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+  ;(process.platform === "win32" ? it.live.skip : it.live)("loads a file reached through two listed names once", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "repo")
+        return Effect.gen(function* () {
+          yield* write({
+            [path.join(global, "AGENTS.md")]: "global agents",
+            [path.join(project, "AGENTS.md")]: "project agents",
+          })
+          yield* Effect.promise(async () => {
+            await fs.symlink(path.join(global, "AGENTS.md"), path.join(global, "CLAUDE.md"))
+            await fs.symlink(path.join(project, "AGENTS.md"), path.join(project, "CLAUDE.md"))
+          })
+
+          const discovery = yield* start()
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            text([
+              [path.join(global, "AGENTS.md"), "global agents"],
+              [path.join(project, "AGENTS.md"), "project agents"],
+            ]),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home: path.join(tmp.path, "home"),
+              entries: [instructionFiles(true, ["AGENTS.md", "CLAUDE.md"])],
+              locationServiceLayer: projectLocation(project, project),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("looks up only AGENTS.md while the flag is off or no list is set", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "repo")
+        return Effect.gen(function* () {
+          yield* write({
+            [path.join(global, "AGENTS.md")]: "global agents",
+            [path.join(global, "CLAUDE.md")]: "global claude",
+            [path.join(project, "AGENTS.md")]: "project agents",
+            [path.join(project, "CLAUDE.md")]: "project claude",
+          })
+          for (const entry of [instructionFiles(false, ["AGENTS.md", "CLAUDE.md"]), instructionFiles(true)]) {
+            yield* Effect.gen(function* () {
+              const discovery = yield* start()
+              expect((yield* readInitial(yield* discovery.load())).text).toBe(
+                text([
+                  [path.join(global, "AGENTS.md"), "global agents"],
+                  [path.join(project, "AGENTS.md"), "project agents"],
+                ]),
+              )
+            }).pipe(
+              Effect.provide(
+                instructionLayer({
+                  config: global,
+                  home: path.join(tmp.path, "home"),
+                  entries: [entry],
+                  locationServiceLayer: projectLocation(project, project),
+                }),
+              ),
+            )
+          }
+        })
+      }),
+    ),
+  )
+
+  it.live("an empty list skips the global file and the walk but keeps configured instructions", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "repo")
+        const rules = path.join(project, "rules.md")
+        return Effect.gen(function* () {
+          yield* write({
+            [path.join(global, "AGENTS.md")]: "global agents",
+            [path.join(project, "AGENTS.md")]: "project agents",
+            [rules]: "rules",
+          })
+          const discovery = yield* start()
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toEqual([{ path: rules, type: "file" }])
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(text([[rules, "rules"]]))
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home: path.join(tmp.path, "home"),
+              instructions: ["rules.md"],
+              entries: [instructionFiles(true, [])],
+              locationServiceLayer: projectLocation(project, project),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("follows names added to and removed from the list while running", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const project = path.join(tmp.path, "repo")
+        const agents = path.join(project, "AGENTS.md")
+        const claude = path.join(project, "CLAUDE.md")
+        return Effect.gen(function* () {
+          yield* write({ [agents]: "agents", [claude]: "claude" })
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const watcher = yield* Watcher.Test
+          const reconfigure = (entry: Document) =>
+            config
+              .setEntries([entry])
+              .pipe(Effect.andThen(triggerAndWait(PubSub.publish(events, configUpdated()).pipe(Effect.asVoid))))
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(text([[agents, "agents"]]))
+
+          yield* reconfigure(instructionFiles(true, ["AGENTS.md", "CLAUDE.md"]))
+          expect(yield* watcher.subscriptions()).toContainEqual({ path: claude, type: "file" })
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            text([
+              [agents, "agents"],
+              [claude, "claude"],
+            ]),
+          )
+
+          yield* reconfigure(instructionFiles(true, ["AGENTS.md"]))
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(text([[agents, "agents"]]))
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              home: path.join(tmp.path, "home"),
+              entries: [instructionFiles(true)],
+              locationServiceLayer: projectLocation(project, project),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("a project list does not change which global file loads", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "repo")
+        const files = {
+          [path.join(global, "AGENTS.md")]: "global agents",
+          [path.join(global, "CLAUDE.md")]: "global claude",
+          [path.join(project, "AGENTS.md")]: "project agents",
+          [path.join(project, "CLAUDE.md")]: "project claude",
+        }
+        const load = (entries: Document[], expected: [string, string][]) =>
+          Effect.gen(function* () {
+            const discovery = yield* start()
+            expect((yield* readInitial(yield* discovery.load())).text).toBe(text(expected))
+          }).pipe(
+            Effect.provide(
+              instructionLayer({
+                config: global,
+                home: path.join(tmp.path, "home"),
+                entries,
+                locationServiceLayer: projectLocation(project, project),
+              }),
+            ),
+          )
+        const globalConfig = path.join(global, "opencode.json")
+        const projectConfig = path.join(project, "opencode.json")
+        return Effect.gen(function* () {
+          yield* write(files)
+          yield* load(
+            [instructionFiles(true, ["CLAUDE.md"], globalConfig), instructionFiles(true, [], projectConfig)],
+            [[path.join(global, "CLAUDE.md"), "global claude"]],
+          )
+          yield* load(
+            [instructionFiles(true, ["CLAUDE.md"], globalConfig), instructionFiles(true, ["AGENTS.md"], projectConfig)],
+            [
+              [path.join(global, "CLAUDE.md"), "global claude"],
+              [path.join(project, "AGENTS.md"), "project agents"],
+            ],
+          )
+          yield* load(
+            [instructionFiles(true, ["CLAUDE.md"], globalConfig), instructionFiles(false, undefined, projectConfig)],
+            [
+              [path.join(global, "CLAUDE.md"), "global claude"],
+              [path.join(project, "AGENTS.md"), "project agents"],
+            ],
+          )
+        })
+      }),
+    ),
+  )
+
+  it.live("global config chooses the global file names, also when the project contains the global directory", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, ".config", "opencode")
+        return Effect.gen(function* () {
+          yield* write({
+            [path.join(global, "AGENTS.md")]: "global agents",
+            [path.join(global, "CLAUDE.md")]: "global claude",
+          })
+          const discovery = yield* start()
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            text([[path.join(global, "CLAUDE.md"), "global claude"]]),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home: path.join(tmp.path, "home"),
+              entries: [instructionFiles(true, ["CLAUDE.md"], path.join(global, "opencode.json"))],
+              locationServiceLayer: projectLocation(tmp.path, tmp.path),
+            }),
+          ),
+        )
+      }),
+    ),
   )
 })

@@ -20,6 +20,8 @@ export const registry = {
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:
     "Enable the full Code Mode work in progress. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=full_codemode or experimental.full_codemode: true.",
+  instruction_files:
+    "Look up the file names in the top-level instruction_files list, such as AGENTS.md and CLAUDE.md, as instruction files in the global config directory, in the upward walk from the workspace, and when the read tool reads a file or lists a directory.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

@@ -17254,6 +17254,13 @@
               "type": "string"
             }
           },
+          "instruction_files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Config.InstructionFileName"
+            },
+            "uniqueItems": true
+          },
           "references": {
             "type": "object",
             "additionalProperties": {
@@ -17347,6 +17354,9 @@
                 "type": "boolean"
               },
               "full_codemode": {
+                "type": "boolean"
+              },
+              "instruction_files": {
                 "type": "boolean"
               },
               "schedules": {
@@ -17446,6 +17456,10 @@
           }
         },
         "additionalProperties": false
+      },
+      "Config.InstructionFileName": {
+        "type": "string",
+        "pattern": "^\\.?[^./\\\\*?[\\]{}<>:\"|\\u0000-\\u001f]+(?:\\.[^./\\\\*?[\\]{}<>:\"|\\u0000-\\u001f]+)*\\.?$"
       },
       "Config.LSP.ServerEncoded": {
         "type": "object",

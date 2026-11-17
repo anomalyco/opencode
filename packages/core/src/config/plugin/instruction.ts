@@ -9,6 +9,7 @@ import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
+import { Flag } from "../../flag.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Instructions } from "../../instructions/index.js"
 import { Location } from "../../location.js"
@@ -25,6 +26,7 @@ export const Plugin = define({
     // entries are explicit requests, not discovery.
     yield* Effect.gen(function* () {
       const config = yield* Config.Service
+      const flags = yield* Flag.Service
       const fs = yield* FSUtil.Service
       const global = yield* Global.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
@@ -32,34 +34,38 @@ export const Plugin = define({
       const watcher = yield* Watcher.Service
       const changes = yield* PubSub.sliding<string>(1)
       const watches = yield* FiberMap.make<string>()
+      const candidateWatches = yield* FiberMap.make<string>()
       const lock = Semaphore.makeUnsafe(1)
       const start = yield* fs.resolve(location.directory)
       const root = yield* fs.resolve(location.project.directory)
       const home = yield* fs.resolve(global.home)
+      const globalDirectory = yield* fs.resolve(global.config)
       const project = discovery.project && FSUtil.contains(root, start)
       const stop = FSUtil.contains(home, start) ? home : root
-      const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
-      const configured: { sources: string[]; remote: Map<string, InstructionDiscovery.File> } = {
+      const configured: {
+        sources: string[]
+        remote: Map<string, InstructionDiscovery.File>
+        names: readonly string[]
+        globalFiles: readonly string[]
+      } = {
         sources: [],
         remote: new Map(),
+        names: [],
+        globalFiles: [],
       }
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
-      // The ancestor walk can reach the global file when the location sits
-      // beneath the global config dir; global: false excludes it there too.
-      const candidates = [
-        ...(discovery.global ? [globalFile] : []),
-        ...(project
-          ? ancestorDirectories(start, stop)
-              .map((directory) => join(directory, "AGENTS.md"))
-              .filter((file) => discovery.global || file !== globalFile)
-          : []),
-      ]
-      for (const file of new Set(candidates)) {
-        const updates = yield* watcher.subscribe({ path: file, type: "file" })
-        yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
-      }
+      const watch = Effect.fnUntraced(function* (map: FiberMap.FiberMap<string>, files: ReadonlySet<string>) {
+        for (const [key] of Array.from(map)) if (!files.has(key)) yield* FiberMap.remove(map, key)
+        for (const file of files) {
+          const updates = yield* watcher.subscribe({ path: file, type: "file" })
+          yield* FiberMap.run(map, file, updates.pipe(Stream.runForEach(publish)), {
+            onlyIfMissing: true,
+            startImmediately: true,
+          })
+        }
+      })
 
       // A missing file may be mid-save and is transient; a denied file (e.g. outside a sandbox grant) stays absent.
       const read = Effect.fn("ConfigInstructionPlugin.read")(function* (filepath: string) {
@@ -76,18 +82,19 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        if (!discovery.global || !(yield* fs.isFile(globalFile))) return []
-        const file = yield* read(globalFile)
-        return file instanceof InstructionDiscovery.File ? [file] : []
+        if (!discovery.global) return []
+        const existing = yield* Effect.filter(configured.globalFiles, fs.isFile)
+        const files = yield* Effect.forEach(existing, read)
+        return files.filter((file) => file instanceof InstructionDiscovery.File)
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
-        if (!project) return []
+        if (!project || configured.names.length === 0) return []
         const walked = yield* Effect.forEach(
-          yield* fs.up({ targets: ["AGENTS.md"], start, stop, type: "file" }),
+          yield* fs.up({ targets: [...configured.names], start, stop, type: "file" }),
           fs.resolve,
         )
-        const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
+        const discovered = new Set(walked.filter((file) => discovery.global || !configured.globalFiles.includes(file)))
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file) => file instanceof InstructionDiscovery.File)
@@ -134,14 +141,7 @@ export const Plugin = define({
             if (file instanceof InstructionDiscovery.File) files.push(file)
           }
         }
-        for (const [key] of Array.from(watches)) if (!watched.has(key)) yield* FiberMap.remove(watches, key)
-        for (const file of watched) {
-          const updates = yield* watcher.subscribe({ path: file, type: "file" })
-          yield* FiberMap.run(watches, file, updates.pipe(Stream.runForEach(publish)), {
-            onlyIfMissing: true,
-            startImmediately: true,
-          })
-        }
+        yield* watch(watches, watched)
         return files
       })
 
@@ -151,6 +151,34 @@ export const Plugin = define({
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
         function* () {
           const entries = yield* config.entries()
+          const names = InstructionDiscovery.fileNames(entries, flags)
+          const outside = yield* Effect.filter(entries, (entry) =>
+            entry.type === "document" && entry.path !== undefined
+              ? fs
+                  .resolve(entry.path)
+                  .pipe(Effect.map((file) => !FSUtil.contains(root, file) || FSUtil.contains(globalDirectory, file)))
+              : Effect.succeed(true),
+          )
+          const globalFiles = [
+            ...new Set(
+              yield* Effect.forEach(InstructionDiscovery.fileNames(outside, flags), (name) =>
+                fs.resolve(join(global.config, name)),
+              ),
+            ),
+          ]
+          // The ancestor walk can reach a global file when the location sits
+          // beneath the global config dir; global: false excludes it there too.
+          yield* watch(
+            candidateWatches,
+            new Set([
+              ...(discovery.global ? globalFiles : []),
+              ...(project
+                ? ancestorDirectories(start, stop)
+                    .flatMap((directory) => names.map((name) => join(directory, name)))
+                    .filter((file) => discovery.global || !globalFiles.includes(file))
+                : []),
+            ]),
+          )
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
@@ -171,6 +199,8 @@ export const Plugin = define({
             { concurrency: 4 },
           )
           configured.sources = sources
+          configured.names = names
+          configured.globalFiles = globalFiles
           configured.remote = new Map(
             fetched.filter((file) => file !== undefined).map((file) => [file.path, file] as const),
           )

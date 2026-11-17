@@ -3,7 +3,7 @@ export * as ConfigNormalize from "./normalize.js"
 import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
-import { Info } from "@opencode/schema/config"
+import { DefaultInstructionFiles, Info, InstructionFileName } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
@@ -190,6 +190,7 @@ export function normalize(input: unknown): Result {
     encoded.plugins = [...legacyPlugins, ...nativePlugins]
 
   normalizeSkills(input, encoded, diagnostics)
+  normalizeInstructionFiles(input, encoded, diagnostics)
   normalizeMcp(input, encoded, diagnostics)
   normalizeCompaction(input, encoded, diagnostics)
   normalizePolicies(input, encoded, diagnostics)
@@ -245,6 +246,32 @@ function normalizeSkills(input: Record<string, unknown>, encoded: Record<string,
     ...decodeList(input.skills.paths, Schema.String, ["skills", "paths"], diagnostics, decodeEncoded),
     ...decodeList(input.skills.urls, Schema.String, ["skills", "urls"], diagnostics, decodeEncoded),
   ]
+}
+
+function normalizeInstructionFiles(
+  input: Record<string, unknown>,
+  encoded: Record<string, unknown>,
+  diagnostics: Diagnostic[],
+) {
+  if (!own(input, "instruction_files")) return
+  const names = decodeList(
+    input.instruction_files,
+    InstructionFileName,
+    ["instruction_files"],
+    diagnostics,
+    decodeValue,
+  )
+  if (!Array.isArray(input.instruction_files)) return
+  if (names.length || input.instruction_files.length === 0) {
+    encoded.instruction_files = [...new Set(names)]
+    return
+  }
+  diagnostics.push({
+    kind: "invalid",
+    path: ["instruction_files"],
+    message: "used the default list because no entry is valid",
+  })
+  encoded.instruction_files = [...DefaultInstructionFiles]
 }
 
 function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
