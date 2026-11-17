@@ -1449,7 +1449,6 @@ export type ExperimentalSessionLogOutput =
               readonly name: string
               readonly description: string
               readonly inputSchema: { readonly [x: string]: unknown }
-              readonly outputSchema?: { readonly [x: string]: unknown } | undefined
               readonly freeform?:
                 | (
                     | { readonly type: "text" }

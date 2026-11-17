@@ -25694,9 +25694,6 @@
           "inputSchema": {
             "type": "object"
           },
-          "outputSchema": {
-            "type": "object"
-          },
           "freeform": {
             "$ref": "#/components/schemas/Tool.Freeform"
           },

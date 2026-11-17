@@ -72,6 +72,11 @@ describe("SessionToolChanges", () => {
     expect(changeFrom(history, [read, tool("edit", "The edit tool", {})])).toBeUndefined()
   })
 
+  test("ignores a changed output schema, which is never sent", () => {
+    const withOutput = ToolDefinition.make({ ...edit, outputSchema: { type: "object", properties: { ok: {} } } })
+    expect(changeFrom(history, [read, withOutput])).toBeUndefined()
+  })
+
   test("diffs additions, removals and redefinitions by name", () => {
     expect(changeFrom(history, [read, edit, write])).toEqual({ add: [stored(write)], remove: [] })
     expect(changeFrom(history, [read])).toEqual({ add: [], remove: ["edit"] })

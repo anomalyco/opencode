@@ -524,7 +524,6 @@ export type ToolDefinition = {
   name: string
   description: string
   inputSchema: { [x: string]: JsonValue }
-  outputSchema?: { [x: string]: JsonValue }
   freeform?: ToolFreeform
   native?: { [x: string]: JsonValue }
 }
@@ -533,7 +532,6 @@ export type ToolDefinition1 = {
   name: string
   description: string
   inputSchema: { [x: string]: any }
-  outputSchema?: { [x: string]: any }
   freeform?: ToolFreeform
   native?: { [x: string]: any }
 }

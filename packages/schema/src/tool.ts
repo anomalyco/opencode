@@ -26,7 +26,6 @@ export const Definition = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
   inputSchema: Schema.Record(Schema.String, Schema.Unknown),
-  outputSchema: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   freeform: Freeform.pipe(optional),
   native: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Tool.Definition" })

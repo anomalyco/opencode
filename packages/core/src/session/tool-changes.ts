@@ -106,12 +106,11 @@ const fold = (tools: ReadonlyArray<Tool.Definition>, change: Tool.Changes | unde
   return [...kept, ...change.add.filter((tool) => !names.has(tool.name))]
 }
 
-/** What the provider sees of a tool. */
+// What the provider sees of a tool. An output schema is never sent, so changing one isn't a tool change.
 const definition = (tool: ToolDefinition): Tool.Definition => ({
   name: tool.name,
   description: tool.description,
   inputSchema: tool.inputSchema,
-  ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
   ...(tool.freeform === undefined ? {} : { freeform: tool.freeform }),
   ...(tool.native === undefined ? {} : { native: tool.native }),
 })
