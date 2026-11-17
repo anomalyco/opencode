@@ -230,8 +230,6 @@ export const dict = {
   "dialog.fork.empty": "هیچ پیامی برای فورک وجود ندارد",
   "dialog.directory.action.selectFile": "فایل را انتخاب کنید",
   "dialog.directory.action.selectFolder": "پوشه را انتخاب کنید",
-  "dialog.directory.root": "ریشه",
-  "dialog.directory.parent": "پدر و مادر",
   "dialog.directory.readError": "خواندن این پوشه ممکن نیست",
   "dialog.server.add.title": "سرور اضافه کنید",
   "dialog.server.add.url": "آدرس سرور",

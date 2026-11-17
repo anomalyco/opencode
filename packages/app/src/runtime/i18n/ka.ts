@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "განშტოებისთვის შეტყობინებები არ არის",
   "dialog.directory.action.selectFile": "აირჩიეთ ფაილი",
   "dialog.directory.action.selectFolder": "აირჩიე საქაღალდე",
-  "dialog.directory.root": "ძირეული",
-  "dialog.directory.parent": "მშობელი",
   "dialog.directory.readError": "ამ საქაღალდის წაკითხვა შეუძლებელია",
   "dialog.server.add.title": "სერვერის დამატება",
   "dialog.server.add.url": "სერვერის მისამართი",

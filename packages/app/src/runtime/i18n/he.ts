@@ -229,8 +229,6 @@ export const dict = {
   "dialog.fork.empty": "אין הודעות שמהן אפשר ליצור הפעלה",
   "dialog.directory.action.selectFile": "בחר קובץ",
   "dialog.directory.action.selectFolder": "בחר תיקייה",
-  "dialog.directory.root": "שורש",
-  "dialog.directory.parent": "תיקיית אב",
   "dialog.directory.readError": "לא ניתן לקרוא את התיקייה הזו",
   "dialog.server.add.title": "הוסף שרת",
   "dialog.server.add.url": "כתובת שרת",

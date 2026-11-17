@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "Engin skilaboð til að punga frá",
   "dialog.directory.action.selectFile": "Veldu skrá",
   "dialog.directory.action.selectFolder": "Veldu möppu",
-  "dialog.directory.root": "Rót",
-  "dialog.directory.parent": "Foreldri",
   "dialog.directory.readError": "Get ekki lesið þessa möppu",
   "dialog.server.add.title": "Bæta við netþjóni",
   "dialog.server.add.url": "Heimilisfang netþjóns",

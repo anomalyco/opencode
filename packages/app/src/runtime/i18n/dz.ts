@@ -232,8 +232,6 @@ export const dict = {
   "dialog.fork.empty": "ལས་ཕོརཀ་འབད་ནི་ལུ་འཕྲིན་དོན་མེད།",
   "dialog.directory.action.selectFile": "ཡིག་སྣོད་སེལ་འཐུ་འབད།",
   "dialog.directory.action.selectFolder": "སྣོད་འཛིན་སེལ་འཐུ་འབད།",
-  "dialog.directory.root": "ར༌ཏོག",
-  "dialog.directory.parent": "ཕ་མ།",
   "dialog.directory.readError": "སྣོད་འཛིན་འདི་ལྷག་མི་ཚུགས།",
   "dialog.server.add.title": "སར་བར་ཁ་སྐོང་འབད།",
   "dialog.server.add.url": "སར་བར་ཁ་བྱང་།",

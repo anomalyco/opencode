@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "በላይ አስተያየት መስጠት ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "አስተያየት ያክሉ",
+  "ui.lineComment.add": "አስተያየት ያክሉ",
+  "ui.lineComment.actions": "የምርጫ ድርጊቶች",
   "ui.lineComment.contextPlaceholder": "ለዚህ ለውጥ አውድ ጨምር",
   "ui.lineComment.submit": "አስተያየት",
   "ui.lineComment.cancel": "ሰርዝ",

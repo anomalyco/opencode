@@ -32,6 +32,7 @@ const builtins = [
   "URLSearchParams",
   "Headers",
   "Uint8Array",
+  "Buffer",
   "TextEncoder",
   "TextDecoder",
   "Promise",
@@ -80,6 +81,7 @@ export const createBuiltins = (): Builtins => {
   }
   const iterator = plain()
   const asyncIterator = plain()
+  const uint8Array = plain()
   return {
     Object: object,
     Function: fn,
@@ -96,7 +98,9 @@ export const createBuiltins = (): Builtins => {
     URL: plain(),
     URLSearchParams: plain(),
     Headers: plain(),
-    Uint8Array: plain(),
+    Uint8Array: uint8Array,
+    /** Node's Buffer: a Uint8Array whose text conversions default to UTF-8. */
+    Buffer: new Obj(uint8Array),
     TextEncoder: plain(),
     TextDecoder: plain(),
     Promise: plain(),

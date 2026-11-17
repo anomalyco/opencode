@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "Nėra pranešimų, iš kurių būtų galima išsišakoti",
   "dialog.directory.action.selectFile": "Pasirinkite failą",
   "dialog.directory.action.selectFolder": "Pasirinkite aplanką",
-  "dialog.directory.root": "Šaknis",
-  "dialog.directory.parent": "Tėvas",
   "dialog.directory.readError": "Nepavyko perskaityti šio aplanko",
   "dialog.server.add.title": "Pridėti serverį",
   "dialog.server.add.url": "Serverio adresas",

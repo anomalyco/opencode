@@ -246,8 +246,6 @@ export const dict = {
   "dialog.fork.empty": "Žiadne správy na vytvorenie vetvy",
   "dialog.directory.action.selectFile": "Vybrať súbor",
   "dialog.directory.action.selectFolder": "Vybrať priečinok",
-  "dialog.directory.root": "Koreň",
-  "dialog.directory.parent": "Nadradený",
   "dialog.directory.readError": "Nepodarilo sa načítať tento priečinok",
   "dialog.server.add.title": "Pridať server",
   "dialog.server.add.url": "Adresa servera",

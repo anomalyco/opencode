@@ -220,8 +220,6 @@ export const dict = {
   "dialog.fork.empty": "No hi ha missatges per bifurcar",
   "dialog.directory.action.selectFile": "Seleccioneu el fitxer",
   "dialog.directory.action.selectFolder": "Seleccioneu la carpeta",
-  "dialog.directory.root": "Arrel",
-  "dialog.directory.parent": "Pare",
   "dialog.directory.readError": "No es pot llegir aquesta carpeta",
   "dialog.server.add.title": "Afegeix servidor",
   "dialog.server.add.url": "Adreça del servidor",

@@ -375,8 +375,6 @@ export const dict = {
   "dialog.fork.empty": "Nessun messaggio da cui effettuare il fork",
   "dialog.directory.action.selectFile": "Seleziona file",
   "dialog.directory.action.selectFolder": "Seleziona la cartella",
-  "dialog.directory.root": "Radice",
-  "dialog.directory.parent": "Cartella superiore",
   "dialog.directory.readError": "Impossibile leggere questa cartella",
   "dialog.server.add.title": "Aggiungi server",
   "dialog.server.add.url": "Indirizzo del server",

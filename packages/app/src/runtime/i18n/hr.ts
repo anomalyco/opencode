@@ -233,8 +233,6 @@ export const dict = {
   "dialog.fork.empty": "Nema poruka za račvanje",
   "dialog.directory.action.selectFile": "Odaberite datoteku",
   "dialog.directory.action.selectFolder": "Odaberite mapu",
-  "dialog.directory.root": "Korijen",
-  "dialog.directory.parent": "Roditelj",
   "dialog.directory.readError": "Nije moguće pročitati ovu mapu",
   "dialog.server.add.title": "Dodaj poslužitelj",
   "dialog.server.add.url": "Adresa poslužitelja",

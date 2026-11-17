@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Салаалах зурвас алга",
   "dialog.directory.action.selectFile": "Файл сонгоно уу",
   "dialog.directory.action.selectFolder": "Фолдер сонгоно уу",
-  "dialog.directory.root": "Үндэс",
-  "dialog.directory.parent": "Эцэг эх",
   "dialog.directory.readError": "Энэ фолдерыг унших боломжгүй байна",
   "dialog.server.add.title": "Сервер нэмэх",
   "dialog.server.add.url": "Серверийн хаяг",

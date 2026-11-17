@@ -459,8 +459,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Seleccionar archivo",
   "dialog.directory.action.selectFolder": "Seleccionar carpeta",
-  "dialog.directory.root": "Raíz",
-  "dialog.directory.parent": "Carpeta superior",
   "dialog.directory.readError": "No se puede leer esta carpeta",
 
   "dialog.server.add.title": "Añadir un servidor",

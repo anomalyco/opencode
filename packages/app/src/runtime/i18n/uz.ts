@@ -221,8 +221,6 @@ export const dict = {
   "dialog.fork.empty": "Hech qanday xabar yo'q",
   "dialog.directory.action.selectFile": "Faylni tanlang",
   "dialog.directory.action.selectFolder": "Jildni tanlang",
-  "dialog.directory.root": "Ildiz",
-  "dialog.directory.parent": "Ota-ona",
   "dialog.directory.readError": "Bu jildni oʻqib boʻlmadi",
   "dialog.server.add.title": "Server qo'shish",
   "dialog.server.add.url": "Server manzili",

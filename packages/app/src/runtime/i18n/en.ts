@@ -416,12 +416,12 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Select file",
   "dialog.directory.action.selectFolder": "Select folder",
-  "dialog.directory.search.placeholder": "Search projects or enter ~/path…",
+  "dialog.directory.breadcrumbs": "Folder path",
+  "dialog.directory.search.placeholder": "Search folders or enter ~/path…",
   "dialog.directory.recent": "Recent",
+  "dialog.directory.moreProjects": "More projects",
   "dialog.directory.recentProject": "{{name}} ({{path}})",
   "dialog.directory.gitRepo": "git repo",
-  "dialog.directory.root": "Root",
-  "dialog.directory.parent": "Parent",
   "dialog.directory.readError": "Unable to read this folder",
 
   "dialog.server.add.title": "Add server",

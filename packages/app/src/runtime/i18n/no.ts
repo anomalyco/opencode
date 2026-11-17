@@ -433,8 +433,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Velg fil",
   "dialog.directory.action.selectFolder": "Velg mappe",
-  "dialog.directory.root": "Rot",
-  "dialog.directory.parent": "Overordnet",
   "dialog.directory.readError": "Kan ikke lese denne mappen",
 
   "dialog.server.add.title": "Legg til en server",

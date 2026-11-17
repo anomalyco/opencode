@@ -250,8 +250,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "เลือกไฟล์",
   "dialog.directory.action.selectFolder": "เลือกโฟลเดอร์",
-  "dialog.directory.root": "โฟลเดอร์ราก",
-  "dialog.directory.parent": "โฟลเดอร์หลัก",
   "dialog.directory.readError": "ไม่สามารถอ่านโฟลเดอร์นี้ได้",
 
   "dialog.server.add.title": "เพิ่มเซิร์ฟเวอร์",

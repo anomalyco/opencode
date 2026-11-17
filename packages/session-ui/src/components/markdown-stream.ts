@@ -1,4 +1,5 @@
 import { createMarkdownStream, type MarkdownBlock, type PatchmarkStream } from "@opencode/patchmark"
+import { isMathFence } from "@opencode/ui/context/marked-parser"
 import { completedProjection } from "./markdown-projection"
 
 export type Block = {
@@ -35,7 +36,10 @@ function toBlock(block: MarkdownBlock): Block {
 
   if (cached) return cached
 
-  if (block.kind.type === "code" || block.kind.type === "mermaid") {
+  // A closed math fence goes to the Markdown parser, which draws it as display math; while it streams it stays code.
+  const math = block.kind.type === "code" && block.kind.complete && isMathFence(block.kind.language)
+
+  if (!math && (block.kind.type === "code" || block.kind.type === "mermaid")) {
     const item: Block = {
       raw: block.raw,
       src: block.kind.source,
@@ -53,7 +57,7 @@ function toBlock(block: MarkdownBlock): Block {
     return item
   }
 
-  const mode = block.status === "settled" ? "full" : "live"
+  const mode = math || block.status === "settled" ? "full" : "live"
   const defs = block.defs ? `\n\n${block.defs}` : ""
   const base = mode === "live" ? (block.liveRaw ?? block.raw) : block.raw
 
