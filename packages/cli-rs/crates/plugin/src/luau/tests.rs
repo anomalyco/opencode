@@ -242,6 +242,72 @@ fn a_plugin_that_allocates_past_its_cap_fails() {
     assert!(error.contains("memory"), "{error}");
 }
 
+/// The test binary's variable that runs [`a_table_move_past_the_array_limit_raises_and_does_not_crash`]'s plugin in the
+/// child the row starts.
+const CHILD: &str = "OPENCODE_LUAU_TEST_CHILD";
+
+// Expected (luau-safety A, safety-audit #1): Luau's own conformance line, which crashed the process on 740's default
+// flags, is an error that fails the plugin. The plugin runs in a child process, so a crash fails this row and not the
+// whole test binary.
+#[test]
+fn a_table_move_past_the_array_limit_raises_and_does_not_crash() {
+    let name = "a_table_move_past_the_array_limit_raises_and_does_not_crash";
+    if std::env::var_os(CHILD).is_none() {
+        let test = format!("{}::{name}", module_path!().split_once("::").unwrap().1);
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([test.as_str(), "--exact", "--nocapture", "--test-threads=1"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "the child ended with {}:\n{stdout}\n{stderr}", output.status);
+        assert!(stdout.contains("1 passed"), "the child ran no row:\n{stdout}");
+        return;
+    }
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "move" }, function(host)
+                table.move({}, 1, 2147483647, 1, {[-2147483648] = 1})
+                host:toast({ variant = "info", message = "moved" })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("move", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("the move failed");
+    assert!(error.contains("table overflow"), "{error}");
+    assert!(host.toasts.borrow().iter().all(|toast| toast.message != "moved"));
+}
+
+// Expected (luau-safety A, safety-audit #2): a sparse `table.move` over 2^31 indices returns at once, where 740's
+// default flags walked every index for about 20 s of CPU with no safepoint, past the 2 s watchdog.
+#[test]
+fn a_sparse_table_move_returns_at_once() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "move" }, function(host)
+                local ok, moved = pcall(table.move, {}, 0, 2^31 - 2, 2^35, {})
+                host:toast({ variant = "info", message = `{ok} {next(moved)}` })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    let start = Instant::now();
+    keymap(&host).dispatch("move", None);
+    let took = start.elapsed();
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    assert!(took < Duration::from_millis(1500), "the move held the thread {took:?}");
+    let message = host.toasts.borrow().last().unwrap().message.clone();
+    assert_eq!(message, "true nil", "the move returns its empty destination");
+}
+
 // Expected (luau-spike 1.4): no file system, no process, no `require` outside the plugin, no `loadstring`, frozen
 // globals; one plugin's VM shares nothing with another's.
 #[test]
