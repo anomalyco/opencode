@@ -496,7 +496,11 @@ fn copies_and_the_parent_report_their_outcome() {
 
 /// The export written to the working directory for `session`, removed once read.
 fn take_export(extension: &str, session: &str) -> Option<String> {
-    let entries = std::fs::read_dir(std::env::current_dir().ok()?).ok()?;
+    take_export_in(&std::env::current_dir().ok()?, extension, session)
+}
+
+fn take_export_in(directory: &std::path::Path, extension: &str, session: &str) -> Option<String> {
+    let entries = std::fs::read_dir(directory).ok()?;
     entries.flatten().find_map(|entry| {
         let name = entry.file_name().to_string_lossy().into_owned();
         if !(name.starts_with("session-") && name.ends_with(extension)) {
@@ -580,9 +584,10 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     kit.wait_for("Fixed it.");
     kit.leader("x");
     kit.wait_for("Export session");
-    // Right switches the format to JSON; Down and Space turn Sanitize on; Enter saves.
+    // Right switches the format to JSON; Down past Location and Space turn Sanitize on; Enter saves.
     kit.app.press("right");
     kit.wait_for("Sanitize");
+    kit.app.press("down");
     kit.app.press("down");
     kit.app.press("space");
     kit.wait_for("‹ on ›");
@@ -596,6 +601,22 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     assert_eq!(value["messages"].as_array().unwrap().len(), 4);
     // Pretty-printed with two spaces and the server's key order.
     assert!(text.starts_with("{\n  \"info\": {\n    \"id\": \"ses_export_js\",\n"), "{text}");
+
+    let kit = Kit::new(session("ses_export_tmp", json!({})), turns(), vec![]);
+    kit.wait_for("Fixed it.");
+    kit.leader("x");
+    kit.wait_for("Export session");
+    // Down and Space move Location to temp (#62490); Enter saves there and the result names that path.
+    kit.app.press("down");
+    kit.app.press("space");
+    kit.wait_for("‹ temp ›");
+    kit.app.press("return");
+    let screen = kit.wait_for("Session exported");
+    let temp = opencode_local::paths::temp();
+    assert!(take_export(".md", "ses_export_tmp").is_none());
+    let markdown = take_export_in(&temp, ".md", "ses_export_tmp").expect("the export in the temporary directory");
+    assert!(markdown.starts_with("# Fix the parser\n"), "{markdown}");
+    assert!(screen.contains(&format!("Saved to {}", temp.join("session-").display())), "{screen}");
 }
 
 /// The fixtures are the `new-designs` dialogs, the only design the Rust TUI draws.

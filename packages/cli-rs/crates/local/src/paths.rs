@@ -77,6 +77,11 @@ pub fn home() -> String {
         .unwrap_or_default()
 }
 
+/// The system's temporary directory, Node's `os.tmpdir()`.
+pub fn temp() -> PathBuf {
+    tmpdir(Flavor::NATIVE, &|name| std::env::var_os(name))
+}
+
 // Git Bash and MSYS set `HOME` on Windows, sometimes to another directory; libuv reads `USERPROFILE` first there.
 fn home_dir(flavor: Flavor, var: &impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
     let order = match flavor {
