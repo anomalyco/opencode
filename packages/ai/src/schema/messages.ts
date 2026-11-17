@@ -240,7 +240,8 @@ export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
 /**
  * Tools changed here: `add` appends or redefines tools by name, `remove` drops them by name. Planning sets the other
- * fields on each marker it keeps in place, so protocols send it without replaying the history before it.
+ * fields on each marker it keeps in place, so protocols send it without replaying the history before it; values a
+ * caller sets are ignored. They are schema fields because the message constructor drops undeclared keys.
  */
 export const ToolChanges = Schema.Struct({
   add: Schema.Array(Schema.suspend((): Schema.Codec<ToolEntry> => ToolEntry)),
