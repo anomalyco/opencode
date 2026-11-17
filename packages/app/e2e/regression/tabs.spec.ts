@@ -505,6 +505,7 @@ test("option arrows move to the previous or next tab, and with shift to the next
 })
 
 const clickTab = (_: Page, tab: Locator) => tab.click()
+
 const press = (key: string) => (page: Page) => page.keyboard.press(key)
 
 for (const row of [
