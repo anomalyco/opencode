@@ -1,6 +1,18 @@
-//! `upgrade` (alias `update`), delegated to the TypeScript CLI (D.1).
+//! `upgrade` (alias `update`): it never delegates and upgrades nothing (deviation D01-upgrade). It says on stderr how
+//! this binary is updated, and exits 1:
+//!
+//! - a preview build (`0.0.0-native-<run>`): re-run the preview's install script;
+//! - an `opencode` bundled beside it: it is updated with that `opencode`, so run `opencode upgrade`. Running that from
+//!   here would be the client asking the server binary to replace the client, which Windows cannot do to a running
+//!   `opencode-native.exe`;
+//! - a source build (`local`): rebuild it;
+//! - any other build: it has no updater, and is updated the way it was installed.
+//!
+//! An `opencode` on `PATH` or named by `OPENCODE_TS_BIN` is a separate TypeScript install; those lookups only start a
+//! server.
 
-use opencode_service::delegate;
+use std::path::Path;
+
 use opencode_util::error;
 
 use super::Context;
@@ -8,40 +20,62 @@ use crate::args::UpgradeArgs;
 use crate::help::VERSION;
 
 pub fn run(_context: &Context, _args: &UpgradeArgs) -> error::Result<()> {
-    // `opencode upgrade` would update a TypeScript install, not this build (deviation D01-preview-upgrade).
-    if let Some(message) = preview_message(VERSION) {
-        eprint!("{message}");
-        return Err(crate::output::Exit(1).into());
-    }
-    // The TypeScript binary replaces this process, so this process's queued records go first. It is the one bundled
-    // beside this binary when there is one, whose `upgrade` replaces both.
-    crate::telemetry::flush();
-    Err(delegate::forward().into())
+    eprint!("{}", message(VERSION, opencode_util::bundle::server().as_deref()));
+    Err(crate::output::Exit(1).into())
 }
 
-/// What `upgrade` prints instead of delegating, for a preview build (`0.0.0-native-<run>`), which bundles its server.
-pub(crate) fn preview_message(version: &str) -> Option<&'static str> {
-    version.starts_with("0.0.0-native-").then_some(
-        "This is an OpenCode native CLI preview build; re-run the install script to update it and its bundled server.\n\
-         `opencode upgrade` updates a separate TypeScript install, not this one.\n",
-    )
+/// What `upgrade` says in a build of `version`, with `bundled` the `opencode` installed beside it.
+fn message(version: &str, bundled: Option<&Path>) -> String {
+    const SEPARATE: &str = "`opencode upgrade` updates a separate TypeScript install, not this one.\n";
+    if version.starts_with("0.0.0-native-") {
+        return format!(
+            "This is an OpenCode native CLI preview build; re-run the install script to update it and its bundled \
+             server.\n{SEPARATE}"
+        );
+    }
+    if let Some(bundled) = bundled {
+        return format!(
+            "This opencode-native is updated with the opencode installed beside it ({}): run `opencode upgrade`.\n",
+            bundled.display()
+        );
+    }
+    if version == "local" {
+        return format!("This opencode-native is a source build; rebuild it to update it.\n{SEPARATE}");
+    }
+    format!("This opencode-native has no updater; update it the way you installed it.\n{SEPARATE}")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::preview_message;
+    use super::*;
 
+    // Expected (native-upgrade): `upgrade` upgrades nothing and says, for the install it detects, how this binary is
+    // updated. A preview build is sent to its install script, bundled or not; a bundled `opencode` beside any other
+    // build is the one to upgrade; a source build without one is rebuilt; anything else has no updater. An `opencode`
+    // on `PATH` or in `OPENCODE_TS_BIN` is not an input.
     #[test]
-    fn preview_builds_do_not_delegate() {
-        assert_eq!(
-            preview_message("0.0.0-native-12"),
-            Some(
-                "This is an OpenCode native CLI preview build; re-run the install script to update it and its bundled server.\n\
-                 `opencode upgrade` updates a separate TypeScript install, not this one.\n"
-            )
+    fn upgrade_says_how_this_install_is_updated() {
+        const SEPARATE: &str = "`opencode upgrade` updates a separate TypeScript install, not this one.\n";
+        let preview = format!(
+            "This is an OpenCode native CLI preview build; re-run the install script to update it and its bundled \
+             server.\n{SEPARATE}"
         );
-        for version in ["local", "2.2.7", "0.0.0-dev-1229", "0.0.0-native"] {
-            assert_eq!(preview_message(version), None, "{version}");
+        let bundled = Path::new("/opt/opencode/opencode");
+        let beside = "This opencode-native is updated with the opencode installed beside it (/opt/opencode/opencode): \
+                      run `opencode upgrade`.\n";
+        let source = format!("This opencode-native is a source build; rebuild it to update it.\n{SEPARATE}");
+        let none = format!("This opencode-native has no updater; update it the way you installed it.\n{SEPARATE}");
+        let rows: &[(&str, Option<&Path>, &str)] = &[
+            ("0.0.0-native-12", Some(bundled), &preview),
+            ("0.0.0-native-12", None, &preview),
+            ("2.4.0", Some(bundled), beside),
+            ("local", Some(bundled), beside),
+            ("local", None, &source),
+            ("2.4.0", None, &none),
+            ("0.0.0-native", None, &none),
+        ];
+        for (version, bundled, expected) in rows {
+            assert_eq!(message(version, *bundled), *expected, "{version} {bundled:?}");
         }
     }
 }

@@ -56,8 +56,6 @@ impl Fake {
 fn every_delegated_command_gets_the_arguments_as_typed() {
     let fake = Fake::new();
     let cases: &[&[&str]] = &[
-        &["upgrade", "v1.2.3", "-m", "npm"],
-        &["update", "--method=brew"],
         &["uninstall", "--dry-run", "-f"],
         &["serve", "--port", "4096", "--cors", "a", "--cors", "b", "--service"],
         &["--log-level", "debug", "plugin", "list", "--builtin"],
@@ -180,6 +178,90 @@ fn usage_errors_and_bare_plugin_never_start_the_binary() {
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("Manage plugins"));
     assert!(!Path::new(&fake.dir.path().join("args")).exists());
+}
+
+// Expected (native-upgrade): `upgrade` runs nothing and exits 1. Beside a bundled `opencode` it says to run that
+// `opencode upgrade`; with only an `opencode` on `PATH` or in `OPENCODE_TS_BIN`, this source build says to rebuild. In
+// none of them does any `opencode` run, and its flags keep their errors.
+#[test]
+fn upgrade_runs_no_opencode() {
+    let separate = Fake::new();
+    let install = Install::new();
+    let client = install.path().join("opencode-native");
+    // A hard link, as the client finds what is beside its own real path; a copy where the link cannot be made.
+    std::fs::hard_link(env!("CARGO_BIN_EXE_opencode-native"), &client)
+        .or_else(|_| std::fs::copy(env!("CARGO_BIN_EXE_opencode-native"), &client).map(drop))
+        .unwrap();
+    // It records into `bundled`, the separate install into `args`, both in `DELEGATE_DIR`.
+    write_script(&install.path().join("opencode"), &FAKE.replace("/args", "/bundled"));
+    let run = |client: &Path, args: &[&str], ts_bin: bool, path: bool| {
+        let mut command = Command::new(client);
+        command
+            .args(args)
+            .env("XDG_DATA_HOME", separate.dir.path())
+            .env("DELEGATE_DIR", install.path())
+            .env("PATH", if path { std::env::join_paths([separate.dir.path()]).unwrap() } else { "".into() })
+            .env_remove("OPENCODE_TS_BIN");
+        if ts_bin {
+            command.env("OPENCODE_TS_BIN", separate.dir.path().join("opencode"));
+        }
+        let output = command.output().unwrap();
+        let ran = ["bundled", "args"].map(|name| install.path().join(name).exists());
+        assert_eq!(ran, [false, false], "an opencode ran for {args:?}");
+        output
+    };
+    let bundled = std::fs::canonicalize(install.path().join("opencode")).unwrap();
+    let beside = format!(
+        "This opencode-native is updated with the opencode installed beside it ({}): run `opencode upgrade`.\n",
+        bundled.display()
+    );
+    let source = "This opencode-native is a source build; rebuild it to update it.\n\
+                  `opencode upgrade` updates a separate TypeScript install, not this one.\n";
+    let rows: [(&Path, &[&str], bool, bool, &str); 4] = [
+        // Bundled, with a separate install in both lookups too.
+        (&client, &["upgrade", "v1.2.3", "-m", "npm"], true, true, &beside),
+        (&client, &["update", "--method=brew"], true, true, &beside),
+        // `PATH` alone and `OPENCODE_TS_BIN` alone, with nothing beside the binary.
+        (Path::new(env!("CARGO_BIN_EXE_opencode-native")), &["upgrade"], false, true, source),
+        (Path::new(env!("CARGO_BIN_EXE_opencode-native")), &["upgrade"], true, false, source),
+    ];
+    for (client, args, ts_bin, path, expected) in rows {
+        let output = run(client, args, ts_bin, path);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            expected,
+            "{args:?}, OPENCODE_TS_BIN {ts_bin}, PATH {path}"
+        );
+        assert!(output.stdout.is_empty(), "{output:?}");
+    }
+    // A flag's error comes first, as in TS.
+    let output = run(&client, &["upgrade", "--method", "apt"], true, true);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("apt") && !stderr.contains("opencode-native is"), "{stderr}");
+}
+
+/// A new directory in cargo's target directory, on the file system of the test binaries, so they hard-link there.
+struct Install(std::path::PathBuf);
+
+impl Install {
+    fn new() -> Self {
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("upgrade-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Install {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[test]

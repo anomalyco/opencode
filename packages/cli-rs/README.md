@@ -18,12 +18,16 @@ version, into `~/.local/lib/opencode-native/`, and links `~/.local/bin/opencode-
 be installed: the bundled `opencode` stays off `PATH`, so your own `opencode`, if any, is untouched.
 
 `opencode-native` runs the TypeScript binary for its background service and standalone server, delegates `serve`,
-`upgrade`, `plugin` and remote access to it, and runs TypeScript TUI plugins on its Bun. It takes
+`plugin` and remote access to it, and runs TypeScript TUI plugins on its Bun. It takes
 `OPENCODE_TS_BIN` when set, else the `opencode` beside its own executable (its real path, through links), else
 `opencode` on `PATH`. When the TUI or `mini` finds a background service of another version in its channel, it
 restarts it on that binary and says `Restarting background server (version mismatch)...`, as the TypeScript TUI
-does. `opencode-native upgrade` in a preview build only tells you to re-run the install script, which updates both
-binaries; the next start then restarts the old service.
+does.
+
+`opencode-native upgrade` upgrades nothing; it says how this binary is updated. In a preview build that is re-running
+the install script, which updates both binaries; the next start then restarts the old service. With `opencode`
+installed beside it, it is `opencode upgrade`, which replaces both. A source build is rebuilt. Anything else has no
+updater: an `opencode` on `PATH` or in `OPENCODE_TS_BIN` is a separate TypeScript install.
 
 The bundled server is built for the channel `latest`, which `opencode-native` uses when `OPENCODE_CHANNEL` is unset,
 so it shares `service.json` and your sessions with a TypeScript install of a release. The bundled server always
