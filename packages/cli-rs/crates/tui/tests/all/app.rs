@@ -238,6 +238,15 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         }
     }
 
+    // A write a last key starts can come after the last checkpoint, as the recorder's stays open past it: a JS plugin's
+    // declined Enter goes on once the JS host answered, and the prompt goes then (CT-19). Wait, at most `UNTIL`, until as
+    // many writes went as TS sent.
+    let writes = || memory.requests().iter().filter(|logged| !app::is_read(&logged.method, &logged.path)).count();
+    let deadline = Instant::now() + SETTLE;
+    while !(memory.in_flight() == 0 && writes() >= recording.requests.writes.len()) && Instant::now() < deadline {
+        app.wait_until(Duration::from_millis(25), || false);
+        app.advance(Duration::from_millis(25));
+    }
     let log = memory.requests();
     let all: Vec<Sent> = log.iter().map(sent).collect();
     let unmatched: Vec<Sent> = log.iter().filter(|logged| logged.unmatched).map(sent).collect();
