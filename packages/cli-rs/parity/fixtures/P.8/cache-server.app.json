@@ -24,6 +24,7 @@
  "steps": [
   {"checkpoint":"sidebar","until":"Open full prompt","fixture":"P.8/cache-server/sidebar"},
   {"type":"/lastprompt"},
+  {"checkpoint":"slash","until":"Show full last prompt","fixture":"P.8/cache-server/slash"},
   {"keys":["enter"]},
   {"checkpoint":"dialog","until":"Esc · Close","fixture":"P.8/cache-server/dialog"}
  ],
