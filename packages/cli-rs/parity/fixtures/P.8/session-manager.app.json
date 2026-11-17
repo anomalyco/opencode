@@ -24,6 +24,7 @@
  "steps": [
   {"checkpoint":"session","until":"Plan the release","fixture":"P.8/session-manager/session"},
   {"type":"/session-manager"},
+  {"checkpoint":"slash","until":"Browse, rename and delete","fixture":"P.8/session-manager/slash"},
   {"keys":["enter"]},
   {"checkpoint":"page","until":"Draft the notes","fixture":"P.8/session-manager/page"},
   {"keys":["k"]},

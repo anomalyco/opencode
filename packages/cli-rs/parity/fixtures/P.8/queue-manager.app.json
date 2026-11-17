@@ -25,6 +25,7 @@
  "steps": [
   {"checkpoint":"session","until":"Ready.","fixture":"P.8/queue-manager/session"},
   {"type":"/qm"},
+  {"checkpoint":"slash","until":"Queue Manager","fixture":"P.8/queue-manager/slash"},
   {"keys":["enter"]},
   {"checkpoint":"menu","until":"native pending","fixture":"P.8/queue-manager/menu"},
   {"keys":["down","enter"]},

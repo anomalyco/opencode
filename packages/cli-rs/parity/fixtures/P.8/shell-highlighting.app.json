@@ -23,6 +23,7 @@
  "steps": [
   {"checkpoint":"session","until":"Highlighted.","fixture":"P.8/shell-highlighting/session"},
   {"type":"/plugins"},
+  {"checkpoint":"slash","until":"Plugins","fixture":"P.8/shell-highlighting/slash"},
   {"keys":["enter"]},
   {"checkpoint":"plugins","until":"shell-highlighting","fixture":"P.8/shell-highlighting/plugins"}
  ],

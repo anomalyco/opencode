@@ -37,7 +37,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   mode of the plugin's own, such as `modal` or one it pushes, binds its commands everywhere, and they decline unless it
   is the input mode, CT-31: opencode-usage-report's `r`, `P.8/usage-report-keys`) and
   a command's `enabled` are kept; its `priority`, `bindings` and slash `aliases` are not mapped (the contract's command has one slash name: TS's
-  completion lists the aliases too, `P.8/file-browser` `slash`). Its `target` holds
+  completion lists the aliases too, `P.8/file-browser` `slash`; the native and Luau ports' command has one as well,
+  `P.8/context-grid` `slash`). Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
   the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command
