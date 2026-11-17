@@ -6,7 +6,13 @@ import type {
   ToolDefinition as ToolDefinitionClass,
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
-import { ToolDefinition, ToolFailure, ToolOutput, type ToolDefinitionInput } from "./schema/index.js"
+import {
+  ToolDefinition,
+  ToolFailure,
+  ToolOutput,
+  type ToolDefinitionInput,
+  type ToolEntryInput,
+} from "./schema/index.js"
 import { isRecord } from "./utils/record.js"
 
 /**
@@ -93,6 +99,12 @@ export interface Tool<Input extends ToolInput = any, Success extends ToolSchema<
   readonly _legacyResult: boolean
   /** @internal */
   readonly _definition: ToolDefinitionClass
+}
+
+/** Tool changes for `Message.tools`: `add` takes what a request's `tools` takes, `remove` the same tools or their names. */
+export interface ToolChangesInput {
+  readonly add?: ReadonlyArray<Tool | ToolEntryInput>
+  readonly remove?: ReadonlyArray<Tool | ToolEntryInput | string>
 }
 
 /** A tool with an `execute` handler, which `LLM.loop` and `ToolRuntime.dispatch` can run. */

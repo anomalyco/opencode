@@ -339,7 +339,9 @@ function inventoryTools(inventory: Inventory) {
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
-      output: child.outputSchema ?? Schema.NullOr(Schema.String),
+      // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
+      // and a plugin may have renamed the call to a tool with another output.
+      output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
@@ -446,7 +448,9 @@ function formatResult(result: CodeMode.Result) {
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
+  const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
+  return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 // Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
