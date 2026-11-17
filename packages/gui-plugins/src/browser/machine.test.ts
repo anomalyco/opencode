@@ -97,37 +97,113 @@ const ready = (state = replay(attach()).state) => replay([paneState(state, inven
 const types = (effects: readonly MachineEffect[]) => effects.map((effect) => effect.type)
 
 describe("browser pane machine", () => {
+  // A preview of tab A for the routed session, in a window with room, with the pane closed.
   const activity = (state: State) => ({ type: "pane.activity" as const, sessionKey: key, attempt: attempt(state),
-    tabID: tabA, reveal: true, room: true, enabled: true, onScreen: true, opened: false, visible: false })
+    tabID: tabA, reveal: "tab" as const, room: true, enabled: true, onScreen: true, opened: false, visible: false })
 
+  const side = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+
+  // "open": the tab is selected behind the click guard. "select": selected and marked, with no guard, as nobody is
+  // looking. "mark": only the unseen mark. "none": nothing.
   test.each([
-    ["closed pane", {}, "open"],
-    ["another browser tab, Review or Files selected", { opened: true }, "mark"],
+    ["a preview with the pane closed", {}, "open"],
+    ["a preview with another browser tab, Review or Files selected", { opened: true }, "open"],
+    ["a focused new tab with the pane closed", { reveal: "pane" }, "open"],
+    ["a focused new tab with another tab selected", { reveal: "pane", opened: true }, "mark"],
     ["target already visible", { opened: true, visible: true }, "none"],
-    ["session off screen or window hidden", { onScreen: false }, "none"],
-    ["disabled", { enabled: false }, "mark"],
-    ["open pane with setting disabled", { enabled: false, opened: true }, "mark"],
+    ["a preview of the tab a closed pane has selected", { visible: true }, "open"],
+    ["a preview for a session off screen or in a hidden window", { onScreen: false }, "select"],
+    ["a preview off screen with the setting turned off", { onScreen: false, enabled: false }, "mark"],
+    ["a focused new tab off screen", { onScreen: false, reveal: "pane" }, "none"],
+    ["the setting turned off", { enabled: false }, "mark"],
+    ["open pane with the setting turned off", { enabled: false, opened: true }, "mark"],
     ["no room beside the chat", { room: false }, "mark"],
-    ["navigate, popup, focus, implicit open or quiet tab", { reveal: false }, "mark"],
+    ["navigate, popup, focus, implicit open or quiet tab", { reveal: "none" }, "mark"],
     ["superseded binding", { attempt: -1 }, "none"],
     ["since-closed tab", { tabID: tabB }, "none"],
   ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
     const start = ready()
     const next = transition(start, { ...activity(start), ...input })
-    expect(types(next.effects)).toEqual(expected === "open" ? ["focus-strip-tab"] : [])
-    expect(attachment(next.state)?.unseen).toEqual(expected === "mark" ? [tabA] : [])
+    expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : [])
+    expect(attachment(next.state)?.unseen).toEqual(expected === "mark" || expected === "select" ? [tabA] : [])
+    expect(revealGuard(next.state, key, tabA) !== undefined).toBe(expected === "open")
   })
 
-  test("closing the pane during a run wins until reopening it or finishing the run", () => {
+  test("closing the pane the agent showed its page in wins until reopening it or finishing the run", () => {
     const start = ready()
-    const side = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
-    const hidden = replay([side(true), side(false)], start).state
+    const shown = transition(start, activity(start)).state
+    const hidden = replay([side(true), side(false)], shown).state
+    expect(attachment(hidden)?.side).toBe("dismissed")
     expect(transition(hidden, activity(hidden)).effects).toEqual([])
     const nextRun = transition(hidden, { type: "execution.ended", sessionKey: key }).state
     expect(types(transition(nextRun, activity(nextRun)).effects)).toEqual(["focus-strip-tab"])
-    const mark = replay([side(true), { ...activity(hidden), opened: true }], hidden).state
+    const mark = replay([side(true), { ...activity(hidden), reveal: "pane", opened: true }], hidden).state
     expect(attachment(mark)?.unseen).toEqual([tabA])
     expect(attachment(transition(mark, { type: "activity.seen", sessionKey: key, tabID: tabA }).state)?.unseen).toEqual([])
+  })
+
+  // The person opens the side panel to look at something of their own, closes it, and only then does the agent ask to
+  // show its first page: closing that panel was no answer to the agent.
+  test("closing a pane that showed nothing of the agent's keeps its first show request", () => {
+    const start = ready()
+    const closed = replay([side(true), side(false)], start).state
+    expect(attachment(closed)?.side).toBe("closed")
+    expect(types(transition(closed, activity(closed)).effects)).toEqual(["focus-strip-tab"])
+  })
+
+  test("closing a pane in which the agent worked on the visible tab is a dismissal", () => {
+    const start = ready()
+
+    const hidden = replay(
+      [side(true), { ...activity(start), reveal: "none", opened: true, visible: true }, side(false)],
+      start,
+    ).state
+
+    expect(attachment(hidden)?.side).toBe("dismissed")
+    expect(transition(hidden, activity(hidden)).effects).toEqual([])
+  })
+
+  test("a show request that arrives before its tab's inventory lands with it, after the strip has the tab", () => {
+    const start = ready()
+    const early = transition(start, { ...activity(start), tabID: tabB })
+    expect(early.effects).toEqual([])
+    const landed = transition(early.state, paneState(early.state, inventory(tab(tabA), tab(tabB))))
+
+    expect(landed.effects).toEqual([
+      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [tabB] },
+      { type: "record-history", sessionKey: key },
+      { type: "focus-strip-tab", sessionKey: key, tabID: tabB },
+    ])
+    expect(revealGuard(landed.state, key, tabB)).toBeDefined()
+    // It lands once.
+    expect(types(transition(landed.state, paneState(landed.state, inventory(tab(tabA), tab(tabB)))).effects)).not.toContain("focus-strip-tab")
+  })
+
+  test("a show request that arrives before the strip can be written lands when it can", () => {
+    const start = replay(attach(key, false)).state
+    const listed = transition(start, paneState(start, inventory(tab(tabA)))).state
+    const early = transition(listed, activity(listed))
+    expect(early.effects).toEqual([])
+    const located = transition(early.state, { type: "session.located", sessionKey: key, located: true })
+
+    expect(located.effects).toEqual([
+      { type: "sync-strip", sessionKey: key, keep: [tabA], open: [tabA] },
+      { type: "focus-strip-tab", sessionKey: key, tabID: tabA },
+    ])
+    expect(revealGuard(located.state, key, tabA)).toBeDefined()
+  })
+
+  test("a newer request replaces a kept one, and a kept mark lands as a mark", () => {
+    const start = ready()
+
+    const kept = replay(
+      [{ ...activity(start), tabID: tabB }, { ...activity(start), tabID: tabC, reveal: "none" }],
+      start,
+    ).state
+
+    const landed = transition(kept, paneState(kept, inventory(tab(tabA), tab(tabB), tab(tabC))))
+    expect(types(landed.effects)).not.toContain("focus-strip-tab")
+    expect(attachment(landed.state)?.unseen).toEqual([tabC])
   })
 
   test("only the newly revealed page is held back, and an old timer cannot expose it", () => {
@@ -167,13 +243,25 @@ describe("browser pane machine", () => {
     expect(revealGuard(next.state, key, tabA) !== undefined).toBe(guarded)
   })
 
-  test("starting with a closed pane does not dismiss the run; file previews use the same rule without replay", () => {
+  test.each([
+    ["the pane closed", {}, true],
+    ["another tab selected in the open pane", { opened: true }, true],
+    ["the setting turned off", { enabled: false }, false],
+    ["no room beside the chat", { room: false }, false],
+  ] as const)("a file preview is selected with %s, and starting with a closed pane does not dismiss the run", (_label, input, select) => {
     const start = ready()
     const observed = transition(start, { type: "side.changed", sessionKey: key, open: false, running: true }).state
-    const file = { ...activity(observed), type: "pane.file" as const, path: "report.pdf" }
-    expect(transition(observed, file).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: true }])
-    expect(transition(observed, { ...file, opened: true }).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: false }])
-    expect(transition(observed, { ...file, onScreen: false })).toEqual({ state: observed, effects: [] })
+    const file = { ...activity(observed), type: "pane.file" as const, path: "report.pdf", ...input }
+    expect(transition(observed, file).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select }])
+  })
+
+  test("a file preview follows the person's dismissal, counts as shown, and waits for an off-screen session's file panel", () => {
+    const start = ready()
+    const file = { ...activity(start), type: "pane.file" as const, path: "report.pdf" }
+    expect(transition(start, { ...file, onScreen: false })).toEqual({ state: start, effects: [] })
+    const hidden = replay([file, side(true), side(false)], start).state
+    expect(attachment(hidden)?.side).toBe("dismissed")
+    expect(transition(hidden, file).effects).toEqual([{ type: "present-file", sessionKey: key, path: file.path, select: false }])
   })
 
   test.each([
@@ -187,6 +275,7 @@ describe("browser pane machine", () => {
     const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
 
     const next = replay([
+      activity(start),
       changed(true),
       changed(false),
       ...(author === "user" ? [{ type: "prompt.enqueued" as const, sessionKey: key, id: "msg_1", delivery: enqueued }] : []),
@@ -207,6 +296,7 @@ describe("browser pane machine", () => {
     const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
 
     const next = replay([
+      activity(start),
       changed(true),
       changed(false),
       { type: "prompt.enqueued", sessionKey: key, id: "msg_1", delivery: "queue" },

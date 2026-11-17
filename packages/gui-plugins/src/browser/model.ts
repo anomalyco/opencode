@@ -338,8 +338,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
     if (event.type === "activity" || event.type === "preview") {
+      // On screen means the person can see the session now: it is routed, in a window that is neither hidden nor minimized.
       const presentation = { sessionKey, attempt, enabled: ctx.stores.preferences.value.agentPages !== false,
-        onScreen: sessions.current()?.key === sessionKey, room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(), opened: layout.side.opened(drive.ref) }
+        onScreen: sessions.current()?.key === sessionKey && document.visibilityState === "visible", room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(), opened: layout.side.opened(drive.ref) }
 
       if (event.type === "preview") return dispatch({ ...presentation, type: "pane.file", path: event.path })
 

@@ -877,7 +877,7 @@ export function createBrowserPane(input: {
         const popup = create(binding, { initialize: false, popupOptions, activity, opener: id })
 
         if (activityOwner(activity) === "agent") {
-          announce(binding, popup.state().id, false, !background)
+          announce(binding, popup.state().id, "none", !background)
 
           return popup.contents
         }
@@ -979,12 +979,12 @@ export function createBrowserPane(input: {
   }
 
   /** Reports the page's state after a command, which may have changed it without a page event yet. */
-  function announce(binding: string, tabID: Browser.TabID, reveal: boolean, active: boolean) {
+  function announce(binding: string, tabID: Browser.TabID, reveal: "none" | "pane" | "tab", active: boolean) {
     if (active) dispatchBinding(binding, { type: "tab.active", tabID })
     const handle = handles.get(binding)
 
-    if (handle && !handle.win.isDestroyed() && handle.win.isVisible() && !handle.win.isMinimized())
-      emit(binding, { type: "activity", tabID, reveal: reveal && !handle.background.has(tabID) })
+    // A hidden or minimized window hears it too: its model selects the tab, so the page shows when the person returns.
+    if (handle) emit(binding, { type: "activity", tabID, reveal: handle.background.has(tabID) ? "none" : reveal })
   }
 
   function refresh(binding: string, tabID: Browser.TabID, page: BrowserPage) {
@@ -997,7 +997,7 @@ export function createBrowserPane(input: {
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
 
-    const present = (tabID: Browser.TabID, reveal = false, active = true) => {
+    const present = (tabID: Browser.TabID, reveal: "none" | "pane" | "tab" = "none", active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
       announce(binding, tabID, reveal, active)
     }
@@ -1054,7 +1054,8 @@ export function createBrowserPane(input: {
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
-        present(tabID, true)
+        // A preview means "show this to the person": it takes the pane even when another tab is selected there.
+        present(tabID, "tab")
         opening.move()
 
         return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
@@ -1119,7 +1120,7 @@ export function createBrowserPane(input: {
           await opened.execute({ action: { type: "navigate", tabID, url: action.url }, files: [] }, signal, origin)
         refresh(binding, tabID, opened)
 
-        if (origin === "agent") present(tabID, action.focus === true, action.focus !== false)
+        if (origin === "agent") present(tabID, action.focus === true ? "pane" : "none", action.focus !== false)
         opening.move()
 
         return { value: opened.state(), files: [] }
@@ -1171,7 +1172,7 @@ export function createBrowserPane(input: {
     const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 
-    if (origin === "agent" && action.type === "navigate") present(action.tabID, false, false)
+    if (origin === "agent" && action.type === "navigate") present(action.tabID, "none", false)
 
     return result
   }

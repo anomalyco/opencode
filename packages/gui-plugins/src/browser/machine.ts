@@ -84,7 +84,21 @@ export type Attachment = {
   readonly failure: Failure | undefined
   readonly strip: Strip
   readonly addressFocus: AddressFocus
+  /**
+   * `dismissed`: the person closed the pane during a run in which it had shown the agent's page (`shown`), so nothing
+   * opens it again until the run ends, their next queued prompt starts, or they open it themselves.
+   */
   readonly side: "unobserved" | "open" | "closed" | "dismissed"
+  /**
+   * The pane has shown the agent's page in this run: a show request opened or took the pane, or the agent worked in
+   * the tab the open pane showed. Closing a pane that showed none of that says nothing about the agent's pages.
+   */
+  readonly shown: boolean
+  /**
+   * What an agent's activity asks of the pane, kept while it cannot be applied: the strip cannot be written yet, or the
+   * inventory that carries the tab has not arrived. It applies once both are there, and a newer one replaces it.
+   */
+  readonly held?: Presentation
   readonly unseen: readonly Browser.TabID[]
   /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
   readonly prompts: Readonly<Record<string, "steer" | "queue">>
@@ -93,6 +107,18 @@ export type Attachment = {
    * (`timing`) from the moment the pane would draw the page, so a click aimed at the chat cannot land in it.
    */
   readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
+}
+
+/**
+ * What an agent's activity on a tab asks of the pane. `select`: the tab is selected, which opens a closed pane.
+ * `onScreen`: the person sees the session now, so the click guard applies and the tab needs no unseen mark.
+ * `visible`: the open pane already shows the tab.
+ */
+export type Presentation = {
+  readonly tabID: Browser.TabID
+  readonly select: boolean
+  readonly onScreen: boolean
+  readonly visible: boolean
 }
 
 /**
@@ -122,7 +148,11 @@ export type Event =
   | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "pane.activity"
-      readonly reveal: boolean
+      /**
+       * `none`: the tab is only marked. `pane`: a closed pane opens on the tab. `tab`: the tab is selected, in a closed
+       * pane or in an open one that shows another tab (a preview).
+       */
+      readonly reveal: "none" | "pane" | "tab"
       readonly room: boolean
       readonly sessionKey: string
       readonly attempt: number
@@ -462,6 +492,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
     addressFocus: noFocus(),
     side: "unobserved",
+    shown: false,
     unseen: [],
     prompts: {},
   })
@@ -522,19 +553,25 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return put(state, key, {
         ...attachment,
         side: next ? "closed" : attachment.side,
+        // Their queued prompt is the next run, which has shown nothing yet.
+        shown: event.type === "inbox.delivered" && attachment.prompts[event.id] === "queue" ? false : attachment.shown,
         prompts: Object.fromEntries(Object.entries(attachment.prompts).filter(([id]) => id !== event.id)),
       })
     }
 
     case "side.changed": {
-      const dismissed = event.running && (attachment.side === "open" || attachment.side === "dismissed")
+      // Closing a pane that showed nothing of the agent's in this run, such as one the person opened to look at
+      // something else, is not an answer to the agent: its next show request still opens the pane.
+      const dismissed = event.running && (attachment.side === "dismissed" || (attachment.side === "open" && attachment.shown))
       const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
 
       return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side, reveal: event.open ? attachment.reveal : undefined })
     }
 
     case "execution.ended":
-      return attachment.side === "dismissed" ? put(state, key, { ...attachment, side: "closed" }) : { state, effects: [] }
+      if (attachment.side !== "dismissed" && !attachment.shown) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, side: attachment.side === "dismissed" ? "closed" : attachment.side, shown: false })
     case "reveal.drawn": {
       const reveal = attachment.reveal
 
@@ -551,27 +588,34 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return attachment.unseen.includes(event.tabID)
         ? put(state, key, { ...attachment, unseen: attachment.unseen.filter(id => id !== event.tabID) })
         : { state, effects: [] }
-    case "pane.file":
+    case "pane.file": {
+      // Only the routed session has a file panel, which holds its own write until the session's location is known.
+      if (!current(phase, event.attempt) || !event.onScreen) return { state, effects: [] }
+      // A file preview is a show request: it takes the pane even when another tab is selected there.
+      const select = event.room && event.enabled && attachment.side !== "dismissed"
+      const effects: MachineEffect[] = [{ type: "present-file", sessionKey: key, path: event.path, select }]
+
+      return select && !attachment.shown ? put(state, key, { ...attachment, shown: true }, effects) : { state, effects }
+    }
+
     case "pane.activity": {
-      if (!current(phase, event.attempt) || !event.onScreen || !attachment.strip.located)
-        return { state, effects: [] }
-      const select = !event.opened && event.room && event.enabled && attachment.side !== "dismissed" && (event.type === "pane.file" || event.reveal)
+      if (!current(phase, event.attempt)) return { state, effects: [] }
 
-      if (event.type === "pane.file") return { state, effects: [{ type: "present-file", sessionKey: key, path: event.path, select }] }
+      // Off screen only a preview acts: its tab is selected in the session's strip, so it shows when the person returns.
+      if (!event.onScreen && event.reveal !== "tab") return { state, effects: [] }
 
-      if (!attachment.browser?.tabs.some(tab => tab.id === event.tabID)) return { state, effects: [] }
+      const select =
+        event.enabled &&
+        attachment.side !== "dismissed" &&
+        (!event.onScreen || (event.room && (event.reveal === "tab" || (event.reveal === "pane" && !event.opened))))
 
-      if (select) {
-        const token = state.issued + 1
-
-        return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID, timing: false } }, [
-          { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID },
-        ], token)
-      }
-
-      if (event.visible || attachment.unseen.includes(event.tabID)) return { state, effects: [] }
-
-      return put(state, key, { ...attachment, unseen: [...attachment.unseen, event.tabID] })
+      return present(state, key, attachment, {
+        tabID: event.tabID,
+        select,
+        onScreen: event.onScreen,
+        // The strip's selected tab is not on show while its pane is closed.
+        visible: event.onScreen && event.opened && event.visible,
+      })
     }
 
     case "session.capability.changed":
@@ -694,6 +738,39 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   }
 }
 
+// Applies what an agent's activity asks of the pane, or keeps it until it can be applied: the strip must be writable and
+// the inventory must carry the tab. Nothing is dropped for arriving first.
+function present(state: Open, key: string, attachment: Attachment, request: Presentation): Transition {
+  if (!attachment.strip.located || !attachment.browser?.tabs.some((tab) => tab.id === request.tabID))
+    return attachment.held === request ? { state, effects: [] } : put(state, key, { ...attachment, held: request })
+  const settled = { ...attachment, held: undefined }
+
+  // The agent worked in the tab the person is looking at.
+  if (request.visible)
+    return attachment.shown && !attachment.held ? { state, effects: [] } : put(state, key, { ...settled, shown: true })
+  const marked = attachment.unseen.includes(request.tabID) ? attachment.unseen : [...attachment.unseen, request.tabID]
+
+  if (!request.select)
+    return marked === attachment.unseen && !attachment.held ? { state, effects: [] } : put(state, key, { ...settled, unseen: marked })
+  const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: request.tabID }
+
+  // Nobody is looking, so no click can land in the page: the tab waits selected, with its mark.
+  if (!request.onScreen) return put(state, key, { ...settled, unseen: marked }, [focus])
+  const token = state.issued + 1
+
+  return put(state, key, { ...settled, shown: true, reveal: { token, tabID: request.tabID, timing: false } }, [focus], token)
+}
+
+// A kept request lands with the state that makes it possible.
+function settle(result: { readonly state: Open; readonly effects: readonly MachineEffect[] }, key: string): Transition {
+  const attachment = result.state.sessions[key]
+
+  if (!attachment?.held) return result
+  const applied = present(result.state, key, attachment, attachment.held)
+
+  return { state: applied.state, effects: [...result.effects, ...applied.effects] }
+}
+
 // Writes held while the session's location was unknown land once the server reports it. A held focus lands only for
 // a tab the desktop still has.
 function located(state: Open, key: string, attachment: Attachment, value: boolean): Transition {
@@ -705,14 +782,17 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
   const ids = attachment.browser?.tabs.map((tab) => tab.id)
   const focus = strip.focus
 
-  return put(
-    state,
+  return settle(
+    put(
+      state,
+      key,
+      { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
+      [
+        ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
+        ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
+      ],
+    ),
     key,
-    { ...attachment, strip: { located: true, mirrored: ids ?? [], prune: false, focus: undefined } },
-    [
-      ...(ids ? sync(key, ids, strip.mirrored, strip.prune) : []),
-      ...(focus && ids?.includes(focus) ? [{ type: "focus-strip-tab" as const, sessionKey: key, tabID: focus }] : []),
-    ],
   )
 }
 
@@ -902,24 +982,28 @@ function paneState(
       ? moved(attachment, event.state) ? undefined : attachment.failure
       : { id: state.issued + 1, code: event.error, action: undefined }
 
-  return put(
-    state,
+  // The strip gets the inventory's tabs first, so a kept request selects a tab the strip already has.
+  return settle(
+    put(
+      state,
+      key,
+      {
+        ...attachment,
+        phase: { status: "ready", attempt: phase.attempt },
+        browser: event.state,
+        unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
+        failure,
+        strip: mirrored.strip,
+        addressFocus: follow(attachment.addressFocus, event.state),
+      },
+      [
+        ...(phase.status === "registering" ? [{ type: "cancel-register-timeout" as const, sessionKey: key }] : []),
+        ...mirrored.effects,
+        ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
+      ],
+      failure === attachment.failure ? state.issued : state.issued + 1,
+    ),
     key,
-    {
-      ...attachment,
-      phase: { status: "ready", attempt: phase.attempt },
-      browser: event.state,
-      unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
-      failure,
-      strip: mirrored.strip,
-      addressFocus: follow(attachment.addressFocus, event.state),
-    },
-    [
-      ...(phase.status === "registering" ? [{ type: "cancel-register-timeout" as const, sessionKey: key }] : []),
-      ...mirrored.effects,
-      ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
-    ],
-    failure === attachment.failure ? state.issued : state.issued + 1,
   )
 }
 

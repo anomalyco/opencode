@@ -1592,7 +1592,7 @@ export function mountBrowserRegion(input: RegionHost) {
                 <button onClick={() => {
                   const binding = latest()?.binding
 
-                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: true } }))
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: "pane" } }))
                 }}>Agent show request</button>
                 <output>Plugin closed: {apiResult()}</output>
               <button

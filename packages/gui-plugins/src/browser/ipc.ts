@@ -154,7 +154,9 @@ export const PaneEvent = Schema.Union([
   // What the tab waits on the user for; null once nothing waits.
   Schema.Struct({ type: Schema.Literal("prompt"), tabID: Browser.TabID, prompt: Schema.NullOr(PromptView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
-  Schema.Struct({ type: Schema.Literal("activity"), tabID: Browser.TabID, reveal: Schema.Boolean }),
+  // What the agent did on the tab asks of the pane. `none`: nothing, the tab is only marked. `pane`: a closed pane
+  // opens on the tab. `tab`: the tab is selected, in a closed pane or in an open one that shows another tab.
+  Schema.Struct({ type: Schema.Literal("activity"), tabID: Browser.TabID, reveal: Schema.Literals(["none", "pane", "tab"]) }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
     type: Schema.Literal("state"),
