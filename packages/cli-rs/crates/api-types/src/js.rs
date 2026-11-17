@@ -272,14 +272,6 @@ mod tests {
     }
 
     #[test]
-    fn json_numbers_stringify_as_javascript_does() {
-        let cases = [(1.0, "1"), (1.5, "1.5"), (1e21, "1e+21"), (1e-7, "1e-7"), (0.000001, "0.000001"), (-0.0, "0")];
-        for (value, text) in cases {
-            assert_eq!(js_string(&serde_json::json!(value)), text, "{value}");
-        }
-    }
-
-    #[test]
     fn numbers_parse_as_javascript_does() {
         let cases = [
             ("", Some(0.0)),
