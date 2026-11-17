@@ -189,7 +189,8 @@ impl<'rt> Vm<'rt> {
             (Value::Obj(id), Value::Num(n)) => {
                 if let Kind::Array(items) = &self.heap[*id as usize].kind {
                     let i = *n as usize;
-                    if i as f64 == *n {
+                    // 2^32 - 1 and above are not array indexes but plain keys.
+                    if i as f64 == *n && i < u32::MAX as usize {
                         return Ok(match items.get(i) {
                             Some(v) if !matches!(v, Value::Uninit) => *v,
                             _ => self.missing_elem(*id, i),
