@@ -2,6 +2,7 @@ import type { OpenCode } from "./client.js"
 
 export * from "./generated/index.js"
 export { OpenCode } from "./client.js"
+export { mediaHashFromUri, withMediaRefs, type MediaRequestOptions } from "./media.js"
 export type {
   AgentApi,
   CommandApi,
@@ -21,4 +22,8 @@ export type {
   SkillApi,
 } from "./api.js"
 export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types.js"
+export type {
+  MediaFileAttachment as PromptMediaFileAttachment,
+  Attachment as PromptAttachment,
+} from "@opencode/schema/prompt"
 export type OpenCodeClient = ReturnType<typeof OpenCode.make>

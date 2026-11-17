@@ -1,43 +1,72 @@
-import { describe, expect, test } from "bun:test"
-import { displayCharAt, displaySlice, mentionTriggerIndex, slashTriggerIndex } from "../../src/prompt/display"
+import { afterAll, describe, expect, test } from "bun:test"
+import { measureEditText, TextareaRenderable } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
+import { mentionTriggerIndex, promptOffsetIndex, slashTriggerIndex } from "../../src/prompt/display"
+
+// A real textarea checks the helpers against the offsets that the prompt editor shows.
+const setup = await createTestRenderer({ width: 40, height: 4 })
+afterAll(setup.dispose)
+const area = new TextareaRenderable(setup.renderer, { width: 40, height: 4 })
+setup.renderer.root.add(area)
+const widthMethod = setup.renderer.widthMethod
+
+// Each sample takes a different number of editor cells than JavaScript string widths report.
+const samples = ["\f", "\0", "\x1b", "\x7f", "\x85", "\t", "中文", "e\u0301", "👨‍👩‍👧‍👦", "\n", "\r\n"]
 
 describe("prompt display", () => {
-  test("uses display-width offsets for mentions", () => {
-    expect(mentionTriggerIndex("@")).toBe(0)
-    expect(mentionTriggerIndex("test @")).toBe(5)
-    expect(mentionTriggerIndex("中文 @")).toBe(5)
-    expect(mentionTriggerIndex("こんにちは @")).toBe(11)
-    expect(mentionTriggerIndex("한국어 @")).toBe(7)
-    expect(mentionTriggerIndex("🙂 @")).toBe(3)
-    expect(mentionTriggerIndex("中文 @src file", Bun.stringWidth("中文 @src"))).toBe(5)
-    expect(displayCharAt("中文 @src", Bun.stringWidth("中文 @"))).toBe("s")
-    expect(displaySlice("中文 @src", 5, Bun.stringWidth("中文 @src"))).toBe("@src")
-    expect(displaySlice("中文 @src", 6, Bun.stringWidth("中文 @src"))).toBe("src")
-    expect(mentionTriggerIndex("👨‍👩‍👧‍👦 @src", Bun.stringWidth("👨‍👩‍👧‍👦 @src"))).toBe(3)
-    expect(displayCharAt("👨‍👩‍👧‍👦 @src", Bun.stringWidth("👨‍👩‍👧‍👦 @"))).toBe("s")
-    expect(displaySlice("👨‍👩‍👧‍👦 @src", 3, Bun.stringWidth("👨‍👩‍👧‍👦 @src"))).toBe("@src")
-    expect(mentionTriggerIndex("@file1\n@file2", 13)).toBe(7)
-    expect(displayCharAt("@file1\n@file2", 6)).toBe("\n")
-    expect(displaySlice("@file1\n@file2", 8, 13)).toBe("file2")
-    expect(mentionTriggerIndex("@file1\nfoo @file2", 17)).toBe(11)
-    expect(mentionTriggerIndex("中文 @one\n@two", 14)).toBe(10)
-    expect(displaySlice("中文 @one\n@two", 11, 14)).toBe("two")
-    expect(mentionTriggerIndex("中文@")).toBeUndefined()
-    expect(mentionTriggerIndex("こんにちは@")).toBeUndefined()
-    expect(mentionTriggerIndex("한국어@")).toBeUndefined()
-    expect(mentionTriggerIndex("🙂@")).toBeUndefined()
-    expect(mentionTriggerIndex("hello@")).toBeUndefined()
-    expect(mentionTriggerIndex("foo@bar.com")).toBeUndefined()
-    expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
+  test.each([
+    ["@", mentionTriggerIndex],
+    ["/", slashTriggerIndex],
+  ] as const)("places the %s trigger where the editor shows it", (trigger, find) => {
+    const texts = [
+      `\t${trigger}file`,
+      ...samples.flatMap((sample) => [`${sample} ${trigger}x ${sample}`, `${sample}\n${trigger}x\r\n${sample}`]),
+    ]
+    const results = texts.map((text) => {
+      area.setText(text)
+      const index = text.indexOf(trigger)
+      const offset = find(area.getTextRange(0, measureEditText(text.slice(0, index + 2), { widthMethod })), widthMethod)
+      if (offset === undefined) return { text }
+      const plain = area.plainText
+      return {
+        text,
+        shown: area.getTextRange(offset, offset + 1),
+        index: promptOffsetIndex(text, offset, widthMethod) === index,
+        before: plain.slice(0, promptOffsetIndex(plain, offset, widthMethod)) === area.getTextRange(0, offset),
+      }
+    })
+    expect(results).toEqual(texts.map((text) => ({ text, shown: trigger, index: true, before: true })))
   })
 
-  test("finds slash attachments at token boundaries", () => {
-    expect(slashTriggerIndex("/")).toBe(0)
-    expect(slashTriggerIndex("Review this /api-design")).toBe(12)
-    expect(slashTriggerIndex("中文 /api-design")).toBe(5)
-    expect(slashTriggerIndex("Review /api design")).toBeUndefined()
-    expect(slashTriggerIndex("Review /tmp/file.ts")).toBeUndefined()
-    expect(slashTriggerIndex("https://opencode.ai/docs")).toBeUndefined()
-    expect(slashTriggerIndex("src/prompt/index.ts")).toBeUndefined()
+  test("ignores triggers inside a token or before whitespace", () => {
+    const texts = [
+      "中文@",
+      "🙂@",
+      "foo@bar.com",
+      "中文 @src file",
+      "\0@x",
+      "Review /api design",
+      "Review /tmp/file.ts",
+      "https://opencode.ai/docs",
+      "\0/x",
+    ]
+    expect(
+      texts.filter(
+        (text) => (mentionTriggerIndex(text, widthMethod) ?? slashTriggerIndex(text, widthMethod)) !== undefined,
+      ),
+    ).toEqual([])
+  })
+
+  test.each(["wcwidth", "unicode"] as const)("maps an offset to the last grapheme boundary under %s", (method) => {
+    const measure = (value: string) => measureEditText(value, { widthMethod: method })
+    const text = samples.join("a")
+    const boundaries = [
+      ...Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text), (part) => part.index),
+      text.length,
+    ]
+    const offsets = Array.from({ length: measure(text) + 3 }, (_, offset) => offset - 1)
+    expect(offsets.map((offset) => promptOffsetIndex(text, offset, method))).toEqual(
+      offsets.map((offset) => boundaries.findLast((index) => measure(text.slice(0, index)) <= offset) ?? 0),
+    )
   })
 })

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { MouseButton, TextAttributes, type MouseEvent, type ScrollBoxRenderable } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
 import { truncateFilePath } from "../../ui/file-path"
 import { stringWidth } from "../../util/string-width"
 import { useTheme } from "../../context/theme"
@@ -27,6 +28,7 @@ export type DiffViewerFileTreeProps = {
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
+  const renderer = useRenderer()
   const theme = useTheme()
   const [sourceHovered, setSourceHovered] = createSignal(false)
   const list = () => props.layout === "list"
@@ -51,7 +53,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
     const height = list() ? 2 : 1
     const scrollSelectedIntoView = () => scrollFileTreeRowIntoView(scroll, top, height)
     scrollSelectedIntoView()
-    requestAnimationFrame(scrollSelectedIntoView)
+    renderer.requestAnimationFrame(scrollSelectedIntoView)
   })
 
   return (
@@ -133,6 +135,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                     }
                     const foreground = () => {
                       if (row.kind === "directory") return theme.text.muted
+                      if (selected()) return theme.text.action.primary.selected
                       return reviewed() ? theme.text.muted : theme.text.base
                     }
                     const background = () => {

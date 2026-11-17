@@ -4,11 +4,10 @@ import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Plugin } from "@opencode/core/plugin"
 import type { InstancePlugins } from "@opencode/core/plugin/instance"
-import { Location } from "@opencode/schema/location"
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, Duration, Effect, Layer, LayerMap, Scope } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
@@ -66,7 +65,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           Layer.unwrap(
             Effect.gen(function* () {
               const configuration = yield* options.configure(input.key).pipe(Effect.orDie)
-              return Instance.layer(Location.Ref.make({ directory: input.directory, workspaceID: input.workspaceID }), {
+              return Instance.layer(input, {
                 plugins: configuration.plugins,
                 replacements: [
                   ...replacements(),
@@ -102,7 +101,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           ),
         { idleTimeToLive: Duration.infinity },
       )
-      return Instance.Service.of({ provide })
+      return Instance.Service.of({ provide, live: (session) => RcMap.has(instances.rcMap, key(session)) })
     }),
   )
 }

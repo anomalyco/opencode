@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Clock, Effect, Schedule } from "effect"
-import { TestClock } from "effect/testing"
+import { Deferred, Effect, Logger, Schedule } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -21,7 +21,7 @@ const methodID = Integration.MethodID.make("browser")
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* DigitalOceanPlugin.effect(host)
 })
 
@@ -48,14 +48,20 @@ const discovery = Effect.gen(function* () {
     })
     draft.models.update(Provider.ID.openai, Model.ID.make("router:alpha"), () => {})
   })
-  const remote: { status: number; body: unknown; requests: HttpClientRequest.HttpClientRequest[] } = {
+  const remote: {
+    status: number
+    body: unknown
+    requests: HttpClientRequest.HttpClientRequest[]
+    gate?: Deferred.Deferred<void>
+  } = {
     status: 200,
     body: { model_routers: [{ name: "alpha" }, { name: "configured" }] },
     requests: [],
   }
   const http = HttpClient.make((request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       remote.requests.push(request)
+      if (remote.gate) yield* Deferred.await(remote.gate)
       return HttpClientResponse.fromWeb(request, Response.json(remote.body, { status: remote.status }))
     }),
   )
@@ -93,7 +99,7 @@ describe("DigitalOceanPlugin", () => {
     }),
   )
 
-  it.effect("refreshes routers, retains the latest success on errors, and accepts an empty inventory", () =>
+  it.effect("loads routers for the signed-in account", () =>
     Effect.gen(function* () {
       const fixture = yield* discovery
       yield* oauthCredential()
@@ -118,38 +124,47 @@ describe("DigitalOceanPlugin", () => {
         name: "Configured router",
         limit: { context: 256_000 },
       })
+    }),
+  )
 
-      fixture.remote.body = { model_routers: [{ name: "beta" }] }
-      yield* TestClock.adjust("4 minutes")
+  it.effect("loads nothing and logs nothing at startup when the access token has expired", () =>
+    Effect.gen(function* () {
+      const fixture = yield* discovery
+      const warnings: unknown[] = []
+      yield* TestClock.adjust("1 second")
+      yield* oauthCredential("do-token", 1)
+      yield* fixture.install.pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((entry) => {
+              if (entry.logLevel === "Warn" || entry.logLevel === "Error") warnings.push(entry.message)
+            }),
+          ]),
+        ),
+      )
+      yield* drain
+      expect(fixture.remote.requests).toHaveLength(0)
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
+      expect(warnings).toEqual([])
+    }),
+  )
+
+  it.effect("refreshes routers in the background with the latest access token", () =>
+    Effect.gen(function* () {
+      const fixture = yield* discovery
+      const credentials = yield* Credential.Service
+      const credential = yield* oauthCredential()
+      yield* fixture.install
       yield* drain
       expect(fixture.remote.requests).toHaveLength(1)
-      yield* TestClock.adjust("1 minute")
+
+      yield* credentials.update(credential.id, {
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "rotated-token", refresh: "", expires: 0 }),
+      })
+      yield* TestClock.adjust("10 minutes")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(2)
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
-
-      fixture.remote.status = 503
-      yield* TestClock.adjust("5 minutes")
-      yield* drain
-      expect(fixture.remote.requests).toHaveLength(3)
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
-
-      fixture.remote.status = 200
-      fixture.remote.body = { model_routers: [{ name: 123 }] }
-      yield* TestClock.adjust("5 minutes")
-      yield* drain
-      expect(fixture.remote.requests).toHaveLength(4)
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
-
-      fixture.remote.body = { model_routers: [] }
-      yield* TestClock.adjust("5 minutes")
-      yield* drain
-      expect(fixture.remote.requests).toHaveLength(5)
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
-      expect(yield* fixture.models.get(providerID, Model.ID.make("snapshot-model"))).toBeDefined()
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:configured"))).toBeDefined()
-      expect(yield* fixture.models.get(Provider.ID.openai, Model.ID.make("router:alpha"))).toBeDefined()
+      expect(fixture.remote.requests[1]?.headers.authorization).toBe("Bearer rotated-token")
     }),
   )
 
@@ -165,7 +180,7 @@ describe("DigitalOceanPlugin", () => {
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
 
-      fixture.remote.status = 503
+      fixture.remote.status = 401
       const second = yield* oauthCredential("other-account")
       yield* drain
       expect(fixture.remote.requests.at(-1)?.headers.authorization).toBe("Bearer other-account")
@@ -173,9 +188,6 @@ describe("DigitalOceanPlugin", () => {
 
       fixture.remote.status = 200
       fixture.remote.body = { model_routers: [{ name: "beta" }] }
-      yield* TestClock.adjust("5 minutes")
-      yield* drain
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
 
       const count = fixture.remote.requests.length
       yield* credentials.create({ integrationID, value: Credential.Key.make({ type: "key", key: "do-key" }) })
@@ -192,17 +204,32 @@ describe("DigitalOceanPlugin", () => {
     }),
   )
 
-  it.effect("stops discovery when the token expires while retaining its last successful inventory", () =>
+  it.effect("shows a returning account's cached routers at once and refreshes them in the background", () =>
     Effect.gen(function* () {
       const fixture = yield* discovery
-      yield* oauthCredential("do-token", (yield* Clock.currentTimeMillis) + 60_000)
+      const credentials = yield* Credential.Service
+      const first = yield* oauthCredential()
       yield* fixture.install
       yield* drain
-      expect(fixture.remote.requests).toHaveLength(1)
-      yield* TestClock.adjust("5 minutes")
+      fixture.remote.body = { model_routers: [{ name: "beta" }] }
+      yield* oauthCredential("other-account")
       yield* drain
-      expect(fixture.remote.requests).toHaveLength(1)
-      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
+      const router = (name: string) => fixture.models.get(providerID, Model.ID.make(`router:${name}`))
+      expect(yield* router("beta")).toBeDefined()
+
+      fixture.remote.body = { model_routers: [{ name: "gamma" }] }
+      fixture.remote.gate = yield* Deferred.make<void>()
+      const count = fixture.remote.requests.length
+      yield* credentials.activate(first.id)
+      yield* drain
+      expect(yield* router("alpha")).toBeDefined()
+      expect(fixture.remote.requests).toHaveLength(count + 1)
+
+      yield* Deferred.succeed(fixture.remote.gate, undefined)
+      yield* drain
+      expect(yield* router("alpha")).toBeUndefined()
+      expect(yield* router("gamma")).toBeDefined()
+      expect(fixture.remote.requests).toHaveLength(count + 1)
     }),
   )
 

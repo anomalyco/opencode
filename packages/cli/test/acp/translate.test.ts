@@ -8,12 +8,14 @@ import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
 import {
   assistantMessage,
+  backgroundShell,
   childCreated,
   delivered,
   durableEvent,
   ephemeralEvent,
   failed,
   reasoningDelta,
+  shellNotice,
   stepEnded,
   succeeded,
   textDelta,
@@ -45,10 +47,10 @@ const usage = (input: number, output: number, reasoning = 0, read = 0, write = 0
 const providerError = { type: "provider.error", message: "summary request failed" }
 const compaction = {
   started: (sessionID: string = root) =>
-    durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: "msg_compact" }),
+    durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: "msg_compact" }),
   delta: (text: string, sessionID: string = root) => ephemeralEvent("session.compaction.delta", { sessionID, text }),
   ended: (text: string, sessionID: string = root) =>
-    durableEvent("session.compaction.ended", { sessionID, reason: "manual", text, recent: "" }),
+    durableEvent("session.compaction.ended", { sessionID, reason: "manual", text }),
   failed: (error: { type: string; message: string }, reason: "auto" | "manual" = "manual") =>
     durableEvent("session.compaction.failed", { sessionID: root, reason, error }),
 }
@@ -533,7 +535,7 @@ const rows: Row[] = [
   {
     name: "replays a completed compaction as one terminal update",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "completed", summary: "Summary", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "Summary" })],
     expected: {
       updates: [{ compactionId: "msg_compaction", status: "completed", summary: [{ type: "text", text: "Summary" }] }],
     },
@@ -541,7 +543,7 @@ const rows: Row[] = [
   {
     name: "replays a compaction without a summary as cleared",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "completed", summary: "", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "" })],
     expected: { updates: [{ status: "completed", summary: null }] },
   },
   {
@@ -559,12 +561,12 @@ const rows: Row[] = [
   {
     name: "skips a running compaction on replay",
     ctx: { compaction: true },
-    messages: [compactionMessage({ status: "running", summary: "", recent: "" })],
+    messages: [compactionMessage({ status: "running", summary: "" })],
     expected: { updates: [] },
   },
   {
     name: "replays a compaction as a marker when the client lacks the capability",
-    messages: [compactionMessage({ status: "completed", summary: "Summary", recent: "" })],
+    messages: [compactionMessage({ status: "completed", summary: "Summary" })],
     expected: {
       updates: [
         {
@@ -573,6 +575,59 @@ const rows: Row[] = [
         },
       ],
     },
+  },
+  {
+    name: "keeps a background shell pending after its turn ends",
+    events: live(...backgroundShell(root, "sh_bg"), succeeded(root)),
+    expected: { terminal: "succeeded", pending: true },
+  },
+  {
+    name: "keeps a background shell pending until its queued notice is delivered",
+    events: live(...backgroundShell(root, "sh_bg"), shellNotice(root, "msg_notice", "sh_bg"), succeeded(root)),
+    expected: { pending: true },
+  },
+  {
+    name: "settles a background shell once its notice is delivered",
+    events: live(
+      ...backgroundShell(root, "sh_bg"),
+      shellNotice(root, "msg_notice", "sh_bg"),
+      delivered(root, "msg_notice"),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "settles a background shell whose notice is cancelled",
+    events: live(
+      ...backgroundShell(root, "sh_bg"),
+      shellNotice(root, "msg_notice", "sh_bg"),
+      durableEvent("session.inbox.cancelled", { sessionID: root, inboxID: "msg_notice" }),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "settles a shell that exits before its call's result arrives",
+    events: live(
+      shellNotice(root, "msg_notice", "sh_fast"),
+      ...backgroundShell(root, "sh_fast"),
+      delivered(root, "msg_notice"),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "leaves a user's shell command, whose notice waits for the next prompt, out of pending work",
+    events: live(shellNotice(root, "msg_user_shell", "sh_user", { job: false }), succeeded(root)),
+    expected: { pending: false },
+  },
+  {
+    name: "keeps a finished child's background shell pending",
+    events: live(
+      childCreated("ses_child", root, "Explore"),
+      durableEvent("session.execution.started", { sessionID: "ses_child" }),
+      ...backgroundShell("ses_child", "sh_child"),
+      succeeded("ses_child"),
+      succeeded(root),
+    ),
+    expected: { terminal: "succeeded", pending: true },
   },
   {
     name: "replays reasoning with the same message IDs as live reasoning ordinals",
@@ -624,6 +679,7 @@ function translate(row: Row) {
     failure: ACPTranslate.failure(result.state)?._tag,
     context: result.state.usage?.last,
     abandoned: updates(ACPTranslate.abandon(result.state, context).outputs),
+    pending: ACPTranslate.pending(result.state),
   }
 }
 

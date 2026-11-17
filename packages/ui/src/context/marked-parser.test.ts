@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createMarkdownParser } from "./marked-parser"
 import { parseSmallMarkdown } from "./marked-base"
 
-const parser = createMarkdownParser((code, language) => `<pre data-language="${language}">${code}</pre>`)
+const parser = createMarkdownParser()
 
 test.each([
   ["OpenCode", "OpenCode"],
@@ -13,6 +13,14 @@ test.each([
 ])("renders link label %s with application attributes", async (label, html) => {
   const markdown = `[${label}](https://opencode.ai)`
   const expected = `<p><a href="https://opencode.ai" class="external-link" target="_blank" rel="noopener noreferrer">${html}</a></p>\n`
+
+  expect(await parser.parse(markdown)).toBe(expected)
+  expect(parseSmallMarkdown(markdown)).toBe(expected)
+})
+
+test("keeps fragment links in the page", async () => {
+  const markdown = "See [Host services](#host-services)"
+  const expected = '<p>See <a href="#host-services">Host services</a></p>\n'
 
   expect(await parser.parse(markdown)).toBe(expected)
   expect(parseSmallMarkdown(markdown)).toBe(expected)
@@ -84,12 +92,43 @@ test("lexes dollar-heavy paragraphs in near-linear time", () => {
   expect(performance.now() - startedAt).toBeLessThan(500)
 })
 
-test("uses the configured code highlighter", async () => {
-  expect(await parser.parse("```ts\nconst value = 1\n```\n")).toBe('<pre data-language="ts">const value = 1</pre>\n')
+test("highlights fenced code with the app theme variables", async () => {
+  const html = await parser.parse("```ts\nconst value = 1\n```\n")
+
+  expect(html).toStartWith('<pre class="highlights" style="background-color:var(--color-background-stronger)')
+  expect(html).toContain('<code class="language-ts">')
+  expect(html).toContain('<span style="color:var(--syntax-keyword)">const </span>')
+})
+
+test.each(["latex", "math", "LaTeX", "latex title=\"Score\""])("renders a %s fence as display math", async (lang) => {
+  const html = await parser.parse(
+    `\`\`\`${lang}\nS_{\\text{adj}} = \\min\\!\\left(10,\\; S \\cdot \\left(\\frac{T_0}{T}\\right)^{\\alpha}\\right)\n\`\`\`\n`,
+  )
+
+  expect(html).toStartWith('<span class="katex-display">')
+  expect(html).not.toContain("<pre")
+})
+
+test("renders a math fence inside a list item", async () => {
+  expect(await parser.parse("- Score:\n\n  ```latex\n  x^2\n  ```\n")).toContain('<span class="katex-display">')
+})
+
+test.each(["\\frac{1}{", "\\notacommand{x}", ""])("keeps a math fence KaTeX cannot parse as code: %p", async (source) => {
+  const html = await parser.parse(`\`\`\`latex\n${source}\n\`\`\`\n`)
+
+  expect(html).toContain('<code class="language-latex">')
+  expect(html).not.toContain("katex")
+})
+
+test("keeps the fence language for code without a lexer", async () => {
+  const html = await parser.parse("```mermaid\ngraph TD; A-->B\n```\n")
+
+  expect(html).toContain('<code class="language-mermaid">graph TD; A--&gt;B</code>')
 })
 
 test.each(["```", "~~~"])("recognizes an empty %s fence at EOF", async (fence) => {
-  expect(await parser.parse(`foo\n${fence}`)).toBe('<p>foo</p>\n<pre data-language=""></pre>\n')
+  expect(await parser.parse(`foo\n${fence}`)).toContain('<p>foo</p>\n<pre class="highlights"')
+  expect(await parser.parse(`foo\n${fence}`)).toContain('<code class="language-text"></code>')
 })
 
 test("preserves emphasis when rejecting an outer reference link", async () => {

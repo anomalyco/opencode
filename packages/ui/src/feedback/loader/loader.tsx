@@ -1,4 +1,5 @@
 import { splitProps, type ComponentProps } from "solid-js"
+import { syncSpinPhase } from "../../hooks/spin-phase"
 import "./loader.css"
 
 export function Loader(props: ComponentProps<"svg">) {
@@ -7,6 +8,7 @@ export function Loader(props: ComponentProps<"svg">) {
   return (
     <svg
       {...rest}
+      ref={syncSpinPhase}
       class={local.class}
       classList={local.classList}
       width={local.width ?? 16}

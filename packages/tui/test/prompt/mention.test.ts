@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test"
+import { measureEditText } from "@opentui/core"
 import type { PromptInput } from "@opencode/schema"
 import {
   expandPromptInputPastedText,
   realignPromptInputMentions,
   realignPromptMentions,
 } from "../../src/prompt/mention"
+
+const realign = (content: string, mentions: Parameters<typeof realignPromptMentions>[1]) =>
+  realignPromptMentions(content, mentions, "unicode")
 
 test("realigns reordered, duplicate, deleted, and prefix-related mentions", () => {
   const mentions = [
@@ -15,7 +19,7 @@ test("realigns reordered, duplicate, deleted, and prefix-related mentions", () =
     { start: 22, end: 27, text: "@gone" },
   ]
   const before = structuredClone(mentions)
-  expect(realignPromptMentions("@two @same @one @same", mentions)).toEqual([
+  expect(realign("@two @same @one @same", mentions)).toEqual([
     { start: 11, end: 15, text: "@one" },
     { start: 5, end: 10, text: "@same" },
     { start: 0, end: 4, text: "@two" },
@@ -24,7 +28,7 @@ test("realigns reordered, duplicate, deleted, and prefix-related mentions", () =
   ])
   expect(mentions).toEqual(before)
   expect(
-    realignPromptMentions("@foobar @foo", [
+    realign("@foobar @foo", [
       { start: 0, end: 4, text: "@foo" },
       { start: 5, end: 12, text: "@foobar" },
     ]),
@@ -33,13 +37,13 @@ test("realigns reordered, duplicate, deleted, and prefix-related mentions", () =
     { start: 0, end: 7, text: "@foobar" },
   ])
   expect(
-    realignPromptMentions("@foobar @foobar", [
+    realign("@foobar @foobar", [
       { start: 0, end: 4, text: "@foo" },
       { start: 13, end: 20, text: "@foobar" },
     ]),
   ).toEqual([undefined, { start: 8, end: 15, text: "@foobar" }])
   expect(
-    realignPromptMentions("@same @same", [
+    realign("@same @same", [
       { start: 100, end: 105, text: "@same" },
       { start: 4, end: 9, text: "@same" },
     ]),
@@ -60,7 +64,7 @@ test("realigns mixed prompt attachments without mutation", () => {
     agents: [{ name: "agent", mention: { start: 12, end: 18, text: "@agent" } }],
   } satisfies PromptInput.Prompt
   const before = structuredClone(input)
-  const output = realignPromptInputMentions("@agent then @file", input)
+  const output = realignPromptInputMentions("@agent then @file", input, "unicode")
   expect(output).toEqual({
     text: "@agent then @file",
     files: [
@@ -74,18 +78,22 @@ test("realigns mixed prompt attachments without mutation", () => {
   expect(output.agents).not.toBe(input.agents)
 })
 
-test("shifts mention hints when pasted placeholders expand", () => {
+test.each(["wcwidth", "unicode"] as const)("shifts mention hints past pasted text under %s", (widthMethod) => {
+  const measure = (text: string) => measureEditText(text, { widthMethod })
   const input = {
     text: "[Pasted text #1] @same @same",
     files: [{ uri: "file:///same", mention: { start: 23, end: 28, text: "@same" } }],
   } satisfies PromptInput.Prompt
-  const expanded = expandPromptInputPastedText(input, [
-    { text: "a much longer pasted value", source: { start: 0, end: 16 } },
-  ])
-  expect(expanded.files?.[0]?.mention).toEqual({ start: 33, end: 38, text: "@same" })
-  expect(realignPromptInputMentions(expanded.text, expanded).files?.[0]?.mention).toEqual({
-    start: 33,
-    end: 38,
+  const expanded = expandPromptInputPastedText(
+    input,
+    [{ text: "a\tmuch 中文👨‍👩‍👧 longer\fpasted\r\nvalue", source: { start: 0, end: 16 } }],
+    widthMethod,
+  )
+  const mention = {
+    start: measure(expanded.text.slice(0, -5)),
+    end: measure(expanded.text),
     text: "@same",
-  })
+  }
+  expect(expanded.files?.[0]?.mention).toEqual(mention)
+  expect(realignPromptInputMentions(expanded.text, expanded, widthMethod).files?.[0]?.mention).toEqual(mention)
 })

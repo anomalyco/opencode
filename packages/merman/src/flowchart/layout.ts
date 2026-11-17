@@ -14,7 +14,7 @@ import {
   flowchartVerticalBranchLabelGap,
 } from "./labels.js"
 import type { FlowchartDiagramRenderOptions } from "./options.js"
-import { avoidFlowchartFrameBorders, routeFlowchartEdges } from "./routing.js"
+import { avoidFlowchartFrameBorders, flowchartSourceConnector, routeFlowchartEdges } from "./routing.js"
 import type {
   FlowchartDiagram,
   FlowchartDirection,
@@ -24,6 +24,7 @@ import type {
   FlowchartNodeBounds,
   FlowchartNodeSize,
   FlowchartPoint,
+  FlowchartSubgraph,
   FlowchartSubgraphBounds,
 } from "./types.js"
 
@@ -37,6 +38,8 @@ export const COMPACT_MIN_VERTICAL_RANK_GAP = 2
 const SUBGRAPH_PADDING_X = 2
 const SUBGRAPH_PADDING_TOP = 1
 const SUBGRAPH_PADDING_BOTTOM = 1
+const MIN_SUBGRAPH_VERTICAL_EDGE_GAP = 3
+const MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP = 4
 
 export interface FlowchartLayout {
   diagram: FlowchartDiagram
@@ -49,6 +52,61 @@ export interface FlowchartLayout {
 
 type FlowchartBounds = Pick<FlowchartSubgraphBounds, "left" | "top" | "width" | "height" | "centerX" | "centerY">
 
+function endpointRankSpan(
+  diagram: FlowchartDiagram,
+  edge: FlowchartEdge,
+  normalizedRanks: ReadonlyMap<string, number>,
+  nodeIds: ReadonlySet<string>,
+):
+  | { startRank: number; endRank: number; hasSubgraphEndpoint: boolean; unsharedSubgraphs: FlowchartSubgraph[] }
+  | undefined {
+  const fromRanks = (nodeIds.has(edge.from) ? [edge.from] : [...collectSubgraphNodeIds(diagram, edge.from)]).flatMap(
+    (id) => {
+      const rank = normalizedRanks.get(id)
+      return rank === undefined ? [] : [rank]
+    },
+  )
+  const toRanks = (nodeIds.has(edge.to) ? [edge.to] : [...collectSubgraphNodeIds(diagram, edge.to)]).flatMap((id) => {
+    const rank = normalizedRanks.get(id)
+    return rank === undefined ? [] : [rank]
+  })
+  if (fromRanks.length === 0 || toRanks.length === 0) return undefined
+  const forwardStart = Math.max(...fromRanks)
+  const forwardEnd = Math.min(...toRanks)
+  const reverseStart = Math.max(...toRanks)
+  const reverseEnd = Math.min(...fromRanks)
+  const span =
+    forwardStart < forwardEnd
+      ? { startRank: forwardStart, endRank: forwardEnd }
+      : reverseStart < reverseEnd
+        ? { startRank: reverseStart, endRank: reverseEnd }
+        : undefined
+  if (!span) return undefined
+
+  const hasSubgraphEndpoint = !nodeIds.has(edge.from) || !nodeIds.has(edge.to)
+  const subgraphs = diagram.subgraphs ?? []
+  const unsharedSubgraphs = hasSubgraphEndpoint
+    ? subgraphs.filter((subgraph) => {
+        const containsFrom = subgraph.id === edge.from || subgraphContainsEndpoint(diagram, subgraph, edge.from)
+        const containsTo = subgraph.id === edge.to || subgraphContainsEndpoint(diagram, subgraph, edge.to)
+        return containsFrom !== containsTo
+      })
+    : []
+  return { ...span, hasSubgraphEndpoint, unsharedSubgraphs }
+}
+
+function ensureRankSpanGap(gaps: number[], startIndex: number, endIndex: number, required: number): void {
+  const low = Math.min(startIndex, endIndex)
+  const high = Math.max(startIndex, endIndex)
+  if (low === high) return
+  if (high - low === 1) {
+    gaps[low] = Math.max(gaps[low]!, required)
+    return
+  }
+  const current = gaps.slice(low, high).reduce((sum, gap) => sum + gap, 0)
+  if (current < required) gaps[high - 1] = gaps[high - 1]! + (required - current)
+}
+
 function horizontalRankGaps(
   diagram: FlowchartDiagram,
   normalizedRanks: ReadonlyMap<string, number>,
@@ -57,17 +115,37 @@ function horizontalRankGaps(
 ): number[] {
   const gaps = Array.from({ length: Math.max(0, rankKeys.length - 1) }, () => fallback)
   const rankIndexes = new Map(rankKeys.map((rank, index) => [rank, index]))
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
 
   for (const edge of diagram.edges) {
-    if (!edge.label) continue
-    const fromIndex = rankIndexes.get(normalizedRanks.get(edge.from) ?? -1)
-    const toIndex = rankIndexes.get(normalizedRanks.get(edge.to) ?? -1)
-    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue
+    if (edge.orderOnly) continue
+    const hasSubgraphEndpoint = !nodeIds.has(edge.from) || !nodeIds.has(edge.to)
+    if (!edge.label && !hasSubgraphEndpoint) continue
 
-    const labelGap = flowchartHorizontalLabelRankGap(flowchartLabelWidth(edge.label, visualLength))
-    for (let index = Math.min(fromIndex, toIndex); index < Math.max(fromIndex, toIndex); index++) {
-      gaps[index] = Math.max(gaps[index]!, labelGap)
+    if (!hasSubgraphEndpoint) {
+      const fromIndex = rankIndexes.get(normalizedRanks.get(edge.from) ?? -1)
+      const toIndex = rankIndexes.get(normalizedRanks.get(edge.to) ?? -1)
+      if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue
+      const labelGap = flowchartHorizontalLabelRankGap(flowchartLabelWidth(edge.label, visualLength))
+      for (let index = Math.min(fromIndex, toIndex); index < Math.max(fromIndex, toIndex); index++) {
+        gaps[index] = Math.max(gaps[index]!, labelGap)
+      }
+      continue
     }
+
+    const span = endpointRankSpan(diagram, edge, normalizedRanks, nodeIds)
+    if (!span) continue
+    const startIndex = rankIndexes.get(span.startRank)
+    const endIndex = rankIndexes.get(span.endRank)
+    if (startIndex === undefined || endIndex === undefined) continue
+    const padding = span.unsharedSubgraphs.length * SUBGRAPH_PADDING_X
+    const clearance = edge.label
+      ? Math.max(
+          MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP,
+          flowchartHorizontalLabelRankGap(flowchartLabelWidth(edge.label, visualLength)),
+        )
+      : MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP
+    ensureRankSpanGap(gaps, startIndex, endIndex, padding + clearance)
   }
 
   return gaps
@@ -81,17 +159,37 @@ function verticalRankGaps(
 ): number[] {
   const gaps = Array.from({ length: Math.max(0, rankKeys.length - 1) }, () => fallback)
   const rankIndexes = new Map(rankKeys.map((rank, index) => [rank, index]))
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
 
   for (const edge of diagram.edges) {
-    if (!edge.label) continue
-    const fromIndex = rankIndexes.get(normalizedRanks.get(edge.from) ?? -1)
-    const toIndex = rankIndexes.get(normalizedRanks.get(edge.to) ?? -1)
-    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue
+    if (edge.orderOnly) continue
+    const hasSubgraphEndpoint = !nodeIds.has(edge.from) || !nodeIds.has(edge.to)
+    if (!edge.label && !hasSubgraphEndpoint) continue
 
-    const labelHeight = splitDiagramLines(edge.label).length
-    for (let index = Math.min(fromIndex, toIndex); index < Math.max(fromIndex, toIndex); index++) {
-      gaps[index] = Math.max(gaps[index]!, labelHeight + 2)
+    if (!hasSubgraphEndpoint) {
+      const fromIndex = rankIndexes.get(normalizedRanks.get(edge.from) ?? -1)
+      const toIndex = rankIndexes.get(normalizedRanks.get(edge.to) ?? -1)
+      if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue
+      const labelHeight = splitDiagramLines(edge.label).length
+      for (let index = Math.min(fromIndex, toIndex); index < Math.max(fromIndex, toIndex); index++) {
+        gaps[index] = Math.max(gaps[index]!, labelHeight + 2)
+      }
+      continue
     }
+
+    const span = endpointRankSpan(diagram, edge, normalizedRanks, nodeIds)
+    if (!span) continue
+    const startIndex = rankIndexes.get(span.startRank)
+    const endIndex = rankIndexes.get(span.endRank)
+    if (startIndex === undefined || endIndex === undefined) continue
+    const padding = span.unsharedSubgraphs.reduce(
+      (sum, subgraph) => sum + Math.max(SUBGRAPH_PADDING_TOP, splitDiagramLines(subgraph.label).length),
+      0,
+    )
+    const clearance = edge.label
+      ? Math.max(MIN_SUBGRAPH_VERTICAL_EDGE_GAP, splitDiagramLines(edge.label).length + 2)
+      : MIN_SUBGRAPH_VERTICAL_EDGE_GAP
+    ensureRankSpanGap(gaps, startIndex, endIndex, padding + clearance)
   }
 
   return gaps
@@ -133,10 +231,40 @@ function rankNodes(diagram: FlowchartDiagram): Map<string, number> {
   const incomingCounts = new Map(diagram.nodes.map((node) => [node.id, 0]))
 
   const nodeIds = new Set(diagram.nodes.map((node) => node.id))
+  const subgraphs = diagram.subgraphs ?? []
+  const subgraphById = new Map(subgraphs.map((subgraph) => [subgraph.id, subgraph]))
+  const insideSubgraph = (endpointId: string, subgraphId: string): boolean => {
+    const subgraph = subgraphById.get(subgraphId)
+    return Boolean(subgraph && subgraphContainsEndpoint(diagram, subgraph, endpointId))
+  }
+  const subgraphExitNodes = (subgraphId: string): string[] => {
+    const members = collectSubgraphNodeIds(diagram, subgraphId)
+    const hasInternalOutgoing = new Set<string>()
+    for (const edge of diagram.edges) {
+      if (edge.from === edge.to || !insideSubgraph(edge.from, subgraphId) || !insideSubgraph(edge.to, subgraphId))
+        continue
+      const sources = nodeIds.has(edge.from) ? [edge.from] : [...collectSubgraphNodeIds(diagram, edge.from)]
+      for (const source of sources) hasInternalOutgoing.add(source)
+    }
+    const exits = [...members].filter((id) => !hasInternalOutgoing.has(id))
+    return exits.length > 0 ? exits : [...members]
+  }
+  const subgraphEntryNodes = (subgraphId: string): string[] => {
+    const members = collectSubgraphNodeIds(diagram, subgraphId)
+    const hasInternalIncoming = new Set<string>()
+    for (const edge of diagram.edges) {
+      if (edge.from === edge.to || !insideSubgraph(edge.from, subgraphId) || !insideSubgraph(edge.to, subgraphId))
+        continue
+      const targets = nodeIds.has(edge.to) ? [edge.to] : [...collectSubgraphNodeIds(diagram, edge.to)]
+      for (const target of targets) hasInternalIncoming.add(target)
+    }
+    const entries = [...members].filter((id) => !hasInternalIncoming.has(id))
+    return entries.length > 0 ? entries : [...members]
+  }
   const rankEdges = diagram.edges.flatMap((edge) => {
-    if (!edge.orderOnly) return [edge]
-    const fromIds = nodeIds.has(edge.from) ? [edge.from] : [...collectSubgraphNodeIds(diagram, edge.from)]
-    const toIds = nodeIds.has(edge.to) ? [edge.to] : [...collectSubgraphNodeIds(diagram, edge.to)]
+    if (nodeIds.has(edge.from) && nodeIds.has(edge.to)) return [edge]
+    const fromIds = nodeIds.has(edge.from) ? [edge.from] : subgraphExitNodes(edge.from)
+    const toIds = nodeIds.has(edge.to) ? [edge.to] : subgraphEntryNodes(edge.to)
     return fromIds.flatMap((from) => toIds.map((to) => ({ ...edge, from, to })))
   })
 
@@ -288,7 +416,23 @@ function segmentOverlapsSlot(
   )
 }
 
-function routeOverlapsSlot(route: FlowchartEdgeRoute, slot: FlowchartBounds): boolean {
+function routeOverlapsSlot(
+  route: FlowchartEdgeRoute,
+  bounds: FlowchartSubgraphBounds,
+  slot: FlowchartBounds,
+  nodeIds: ReadonlySet<string>,
+): boolean {
+  if (route.edge.from === bounds.id && !nodeIds.has(bounds.id) && route.points[0]) {
+    const connector = flowchartSourceConnector(bounds, route.points[0])
+    if (
+      connector.x >= slot.left &&
+      connector.x < slot.left + slot.width &&
+      connector.y >= slot.top &&
+      connector.y < slot.top + slot.height
+    ) {
+      return true
+    }
+  }
   for (let index = 1; index < route.points.length; index++) {
     if (segmentOverlapsSlot(route.points[index - 1]!, route.points[index]!, slot)) return true
   }
@@ -316,12 +460,13 @@ function routeOverlapsSlot(route: FlowchartEdgeRoute, slot: FlowchartBounds): bo
 function chooseSubgraphLabelSide(
   bounds: FlowchartSubgraphBounds,
   routes: readonly FlowchartEdgeRoute[],
+  nodeIds: ReadonlySet<string>,
 ): FlowchartSubgraphBounds["labelSide"] {
   const topSlot = labelSlot(bounds, "top")
-  if (!routes.some((route) => routeOverlapsSlot(route, topSlot))) return "top"
+  if (!routes.some((route) => routeOverlapsSlot(route, bounds, topSlot, nodeIds))) return "top"
 
   const bottomSlot = labelSlot(bounds, "bottom")
-  return routes.some((route) => routeOverlapsSlot(route, bottomSlot)) ? "top" : "bottom"
+  return routes.some((route) => routeOverlapsSlot(route, bounds, bottomSlot, nodeIds)) ? "top" : "bottom"
 }
 
 function pathBounds(points: readonly { x: number; y: number }[]): FlowchartBounds | undefined {
@@ -661,7 +806,12 @@ function layoutLocalSubgraphDirections(
     const itemByEndpoint = new Map<string, string>()
     for (const item of items) {
       for (const nodeId of item.nodeIds) itemByEndpoint.set(nodeId, item.id)
-      if (item.childId) itemByEndpoint.set(item.childId, item.id)
+      if (item.childId) {
+        itemByEndpoint.set(item.childId, item.id)
+        for (const nestedId of collectDescendantSubgraphIds(diagram, item.childId)) {
+          itemByEndpoint.set(nestedId, item.id)
+        }
+      }
     }
     const nodes = items.map((item): FlowchartNode => ({ id: item.id, label: item.id, shape: "box" }))
     const localDiagram: FlowchartDiagram = {
@@ -757,10 +907,28 @@ function layoutLocalSubgraphDirections(
   return wrapped
 }
 
+function collectDescendantSubgraphIds(diagram: FlowchartDiagram, subgraphId: string): Set<string> {
+  const ids = new Set<string>()
+  for (const child of diagram.subgraphs ?? []) {
+    if (child.parentId !== subgraphId) continue
+    ids.add(child.id)
+    for (const nested of collectDescendantSubgraphIds(diagram, child.id)) ids.add(nested)
+  }
+  return ids
+}
+
+function subgraphContainsEndpoint(diagram: FlowchartDiagram, subgraph: FlowchartSubgraph, endpointId: string): boolean {
+  return (
+    collectSubgraphNodeIds(diagram, subgraph.id).has(endpointId) ||
+    collectDescendantSubgraphIds(diagram, subgraph.id).has(endpointId)
+  )
+}
+
 function edgeDirection(diagram: FlowchartDiagram, edge: FlowchartEdge): FlowchartDirection {
   for (const subgraph of [...(diagram.subgraphs ?? [])].reverse()) {
     if (!subgraph.direction) continue
-    if (subgraph.nodeIds.includes(edge.from) && subgraph.nodeIds.includes(edge.to)) return subgraph.direction
+    if (subgraphContainsEndpoint(diagram, subgraph, edge.from) && subgraphContainsEndpoint(diagram, subgraph, edge.to))
+      return subgraph.direction
   }
   return diagram.direction
 }
@@ -896,6 +1064,29 @@ function separateTopLevelItems(
       if (bounds) translateBounds(bounds, dx, dy)
     }
   }
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
+  const minSubgraphEdgeGap = (fromItemId: string, toItemId: string): number => {
+    const matching = diagram.edges.filter(
+      (edge) =>
+        !edge.orderOnly &&
+        (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) &&
+        itemByEndpoint.get(edge.from) === fromItemId &&
+        itemByEndpoint.get(edge.to) === toItemId,
+    )
+    if (matching.length === 0) return gap
+    const labelRequirements = matching.map((edge) =>
+      !edge.label
+        ? 0
+        : horizontal
+          ? flowchartHorizontalLabelRankGap(flowchartLabelWidth(edge.label, visualLength))
+          : splitDiagramLines(edge.label).length + 2,
+    )
+    return Math.max(
+      gap,
+      horizontal ? MIN_SUBGRAPH_HORIZONTAL_EDGE_GAP : MIN_SUBGRAPH_VERTICAL_EDGE_GAP,
+      ...labelRequirements,
+    )
+  }
   if (hasLocalDirection) {
     const outgoing = new Map(items.map((item) => [item.id, new Set<string>()]))
     for (const edge of diagram.edges) {
@@ -913,24 +1104,63 @@ function separateTopLevelItems(
         (horizontal ? a.bounds.centerX - b.bounds.centerX : a.bounds.centerY - b.bounds.centerY),
     )
     let cursor: number | undefined
+    let previousId: string | undefined
     let moved = false
     for (const item of items) {
       const start = horizontal ? item.bounds.left : item.bounds.top
       const size = horizontal ? item.bounds.width : item.bounds.height
       if (cursor === undefined) {
-        cursor = start + size + gap
+        cursor = start + size
+        previousId = item.id
         continue
       }
-      const shift = cursor - start
+      const pairGap = previousId
+        ? Math.max(minSubgraphEdgeGap(previousId, item.id), minSubgraphEdgeGap(item.id, previousId))
+        : gap
+      const shift = cursor + pairGap - start
       moved ||= shift !== 0
       moveItem(item, horizontal ? shift : 0, horizontal ? 0 : shift)
-      cursor = start + shift + size + gap
+      cursor = start + shift + size
+      previousId = item.id
     }
     return moved
   }
 
   const rankedItems = items.filter((item) => topLevelIds.has(item.id))
-  if (rankedItems.length < 2) return false
+  const reversed = diagram.direction === "RL" || diagram.direction === "BT"
+  const primaryStart = (bound: FlowchartBounds): number => {
+    const start = horizontal ? bound.left : bound.top
+    const size = horizontal ? bound.width : bound.height
+    return reversed ? -(start + size) : start
+  }
+  const primaryEnd = (bound: FlowchartBounds): number => primaryStart(bound) + (horizontal ? bound.width : bound.height)
+  const ensureSubgraphEdgeItemClearance = (): boolean => {
+    const allItemById = new Map(items.map((item) => [item.id, item]))
+    const endpoints = new Map<string, FlowchartBounds>([...subgraphBounds, ...nodeBounds])
+    let adjusted = false
+    for (const edge of diagram.edges) {
+      if (edge.orderOnly || (nodeIds.has(edge.from) && nodeIds.has(edge.to))) continue
+      const fromItem = allItemById.get(itemByEndpoint.get(edge.from) ?? "")
+      const toItem = allItemById.get(itemByEndpoint.get(edge.to) ?? "")
+      const fromBound = endpoints.get(edge.from)
+      const toBound = endpoints.get(edge.to)
+      if (!fromItem || !toItem || fromItem === toItem || !fromBound || !toBound) continue
+      if (primaryStart(toBound) <= primaryStart(fromBound)) continue
+      const required = minSubgraphEdgeGap(fromItem.id, toItem.id)
+      const deficit = primaryEnd(fromBound) + required - primaryStart(toBound)
+      if (deficit <= 0) continue
+      adjusted = true
+      const toStart = primaryStart(toItem.bounds)
+      const offset = reversed ? -deficit : deficit
+      for (const candidate of items) {
+        if (candidate !== toItem && primaryStart(candidate.bounds) < toStart) continue
+        if (candidate === fromItem) continue
+        moveItem(candidate, horizontal ? offset : 0, horizontal ? 0 : offset)
+      }
+    }
+    return adjusted
+  }
+  if (rankedItems.length < 2) return ensureSubgraphEdgeItemClearance()
 
   const itemById = new Map(rankedItems.map((item) => [item.id, item]))
   const outgoing = new Map(rankedItems.map((item) => [item.id, new Set<string>()]))
@@ -947,27 +1177,25 @@ function separateTopLevelItems(
   )
   for (const item of rankedItems) item.rank = ranks.get(item.id)!
 
-  const reversed = diagram.direction === "RL" || diagram.direction === "BT"
-  const primaryStart = (item: (typeof items)[number]): number => {
-    const start = horizontal ? item.bounds.left : item.bounds.top
-    const size = horizontal ? item.bounds.width : item.bounds.height
-    return reversed ? -(start + size) : start
-  }
   const itemsByRank = Map.groupBy(rankedItems, (item) => item.rank)
   const rankKeys = [...itemsByRank.keys()].sort((a, b) => a - b)
-  let cursor: number | undefined
+  let previousEnd: number | undefined
+  let previousRankItems: (typeof items)[number][] = []
   let moved = false
   for (const rank of rankKeys) {
     const rankItems = itemsByRank.get(rank)!
-    const start = Math.min(...rankItems.map(primaryStart))
-    const end = Math.max(
-      ...rankItems.map((item) => primaryStart(item) + (horizontal ? item.bounds.width : item.bounds.height)),
-    )
-    if (cursor === undefined) {
-      cursor = end + gap
+    const start = Math.min(...rankItems.map((item) => primaryStart(item.bounds)))
+    const end = Math.max(...rankItems.map((item) => primaryEnd(item.bounds)))
+    if (previousEnd === undefined) {
+      previousEnd = end
+      previousRankItems = rankItems
       continue
     }
-    const shift = Math.max(0, cursor - start)
+    const rankGap = Math.max(
+      gap,
+      ...previousRankItems.flatMap((prev) => rankItems.map((curr) => minSubgraphEdgeGap(prev.id, curr.id))),
+    )
+    const shift = Math.max(0, previousEnd + rankGap - start)
     if (shift > 0) {
       moved = true
       for (const item of rankItems) {
@@ -975,7 +1203,8 @@ function separateTopLevelItems(
         moveItem(item, horizontal ? offset : 0, horizontal ? 0 : offset)
       }
     }
-    cursor = end + shift + gap
+    previousEnd = end + shift
+    previousRankItems = rankItems
   }
 
   for (const rank of rankKeys) {
@@ -1027,6 +1256,7 @@ function separateTopLevelItems(
       }
     }
   }
+  moved = ensureSubgraphEdgeItemClearance() || moved
   return moved
 }
 
@@ -1037,6 +1267,7 @@ function layoutSubgraphs(
 ): Map<string, FlowchartSubgraphBounds> {
   const subgraphBounds = new Map<string, FlowchartSubgraphBounds>()
   const subgraphs = diagram.subgraphs ?? []
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
 
   for (const subgraph of [...subgraphs].reverse()) {
     const children: FlowchartBounds[] = []
@@ -1052,7 +1283,7 @@ function layoutSubgraphs(
     }
     if (children.length > 0) {
       const bound = subgraphBoundFromChildren(subgraph.id, subgraph.label, children)
-      bound.labelSide = chooseSubgraphLabelSide(bound, routes)
+      bound.labelSide = chooseSubgraphLabelSide(bound, routes, nodeIds)
       subgraphBounds.set(subgraph.id, bound)
     }
   }
@@ -1088,14 +1319,33 @@ function layoutFlowchartWithDirection(
   const bounds = ranked.bounds
   const responsive = layoutLocalSubgraphDirections(diagram, bounds, minNodeGap, requestedMinRankGap, targetWidth)
   const directionAligned = responsiveFallback || responsive || ranked.wrapped
-  const route = (frames?: ReadonlyMap<string, FlowchartSubgraphBounds>) =>
-    routeFlowchartEdges(diagram, bounds, (edge) => edgeDirection(diagram, edge), frames, targetWidth, directionAligned)
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
+  const hasSubgraphEndpoints = diagram.edges.some(
+    (edge) => !edge.orderOnly && (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)),
+  )
+  const memberDiagram = hasSubgraphEndpoints
+    ? { ...diagram, edges: diagram.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to)) }
+    : diagram
+  const route = (
+    frames?: ReadonlyMap<string, FlowchartSubgraphBounds>,
+    targetDiagram: FlowchartDiagram = memberDiagram,
+    lockedRoutes?: ReadonlyMap<FlowchartEdge, FlowchartEdgeRoute>,
+  ) =>
+    routeFlowchartEdges(
+      targetDiagram,
+      bounds,
+      (edge) => edgeDirection(diagram, edge),
+      frames,
+      targetWidth,
+      directionAligned,
+      lockedRoutes,
+    )
 
   const subgraphs = diagram.subgraphs ?? []
   let subgraphBounds = new Map<string, FlowchartSubgraphBounds>()
   let routes: FlowchartEdgeRoute[]
   if (subgraphs.length === 0) {
-    routes = route()
+    routes = route(undefined, diagram)
   } else {
     routes = route()
     subgraphBounds = layoutSubgraphs(diagram, bounds, routes)
@@ -1122,6 +1372,31 @@ function layoutFlowchartWithDirection(
       targetWidth,
     )
     if (expanded) routes = route(subgraphBounds)
+    if (hasSubgraphEndpoints) {
+      const locked = new Map(routes.map((memberRoute) => [memberRoute.edge, memberRoute]))
+      for (const edge of diagram.edges) {
+        if (edge.orderOnly || nodeIds.has(edge.from)) continue
+        const sourceFrame = subgraphBounds.get(edge.from)
+        const targetBound = bounds.get(edge.to) ?? subgraphBounds.get(edge.to)
+        if (!sourceFrame || !targetBound || sourceFrame.labelSide !== "top") continue
+        if (!isHorizontalDirection(edgeDirection(diagram, edge)) && targetBound.centerY < sourceFrame.centerY) {
+          const bottomSlot = labelSlot(sourceFrame, "bottom")
+          if (!routes.some((route) => routeOverlapsSlot(route, sourceFrame, bottomSlot, nodeIds))) {
+            sourceFrame.labelSide = "bottom"
+          }
+        }
+      }
+      routes = route(subgraphBounds, diagram, locked)
+      let labelSideChanged = false
+      for (const bound of subgraphBounds.values()) {
+        const nextSide = chooseSubgraphLabelSide(bound, routes, nodeIds)
+        if (nextSide !== bound.labelSide) {
+          bound.labelSide = nextSide
+          labelSideChanged = true
+        }
+      }
+      if (labelSideChanged) routes = route(subgraphBounds, diagram, locked)
+    }
     avoidFlowchartFrameBorders(routes, bounds, subgraphBounds)
   }
   freezeRouteLabelPoints(routes)

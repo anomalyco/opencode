@@ -15,10 +15,10 @@ export function createComposerPrediction(input: {
   eligible: Accessor<boolean>
   sdk: Pick<ServerSDK, "api" | "event">
 }) {
-  const [state, setState] = createStore({
-    text: undefined as string | undefined,
+  const [state, setState] = createStore<{ text?: string; active: boolean }>({
     active: document.visibilityState === "visible" && document.hasFocus(),
   })
+
   const update = () => setState("active", document.visibilityState === "visible" && document.hasFocus())
   makeEventListener(window, "focus", update)
   makeEventListener(window, "blur", update)
@@ -47,9 +47,11 @@ export function createComposerPrediction(input: {
     request = current
     void input.sdk.api.session.generate({ sessionID: input.sessionID, prompt }, { signal: current.signal }).then(
       (result) => {
-        if (current.signal.aborted || !eligible()) return
+        if (current.signal.aborted) return
         request = undefined
-        if (result.text.trimStart().startsWith("```")) return
+
+        if (!eligible() || result.text.trimStart().startsWith("```")) return
+
         const text = result.text
           .trim()
           .split(/[\r\n\u2028\u2029]/u, 1)[0]!

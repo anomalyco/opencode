@@ -10,17 +10,15 @@ import { FileSystemSearch } from "./filesystem/search.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
-export const ReadInput = Schema.Struct({
-  path: RelativePath,
-})
-export type ReadInput = typeof ReadInput.Type
+export interface ReadInput {
+  readonly path: RelativePath
+}
 
-export const WriteInput = Schema.Struct({
+export interface WriteInput {
   /** Absolute, or relative to the location directory. */
-  path: Schema.String,
-  data: Schema.Uint8Array,
-})
-export type WriteInput = typeof WriteInput.Type
+  readonly path: string
+  readonly data: Uint8Array
+}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
   path: RelativePath,
@@ -59,10 +57,9 @@ export const Content = Schema.Struct({
 }).annotate({ identifier: "FileSystem.Content" })
 export type Content = typeof Content.Type
 
-export const ListInput = Schema.Struct({
-  path: Schema.String.pipe(Schema.optional),
-})
-export type ListInput = typeof ListInput.Type
+export interface ListInput {
+  readonly path?: string
+}
 
 export { FindInput, Write }
 
@@ -186,13 +183,14 @@ const baseLayer = Layer.effect(
           Effect.map((items) =>
             items
               .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
+                if (item.type !== "File" && item.type !== "Directory") return []
+                const type = item.type === "Directory" ? "directory" : "file"
                 const absolute = path.join(directory, item.name)
                 const relative = path.relative(location.directory, absolute) || "."
                 return [
                   Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                    type: item.type,
+                    path: RelativePath.make(relative + (type === "directory" ? path.sep : "")),
+                    type,
                   }),
                 ]
               })

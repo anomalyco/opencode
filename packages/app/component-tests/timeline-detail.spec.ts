@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("maps grouped and collapsed switches to the timeline settings", async ({ mount }) => {
   const component = await mount("settings-timeline-detail--interactive")
@@ -8,7 +8,7 @@ story("maps grouped and collapsed switches to the timeline settings", async ({ m
   const collapsed = shell.getByRole("switch", { name: "Shell collapsed", exact: true })
   const value = component.locator('[data-slot="timeline-detail-fixture-value"]')
 
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.getByText("Activity", { exact: true })).toHaveCount(0)
   await expect(grouped).toBeChecked()
   await expect(collapsed).toBeChecked()
@@ -103,9 +103,9 @@ story("only highlights the eye when hovering the icon, not its activity label", 
   for (const hidden of [false, true]) {
     if (hidden) await label.click()
     await visibility.hover()
-    await expect(visibility).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+    await expect(visibility).not.toHaveCSS("background-image", "none")
     await label.hover()
-    await expect(visibility).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+    await expect(visibility).toHaveCSS("background-image", "none")
   }
 })
 
@@ -138,7 +138,8 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.focus()
   await slider.press("Home")
   await expect(slider).toHaveAttribute("aria-valuetext", "Messages only")
-  await expect(component.getByRole("switch")).toHaveCount(0)
+  // Messages only hides every activity but keeps commentary, which is text.
+  await expect(component.getByRole("switch")).toHaveAccessibleName("Commentary grouped")
   await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(9)
   await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="false"]')).toHaveCount(6)
   await component.getByRole("button", { name: "Shell visibility" }).click()
@@ -147,9 +148,9 @@ story("keeps visibility and switches in sync with the preset slider", async ({ m
   await slider.focus()
   await slider.press("End")
   await expect(slider).toHaveAttribute("aria-valuetext", "Everything")
-  await expect(component.getByRole("switch")).toHaveCount(9)
+  await expect(component.getByRole("switch")).toHaveCount(10)
   await expect(component.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(0)
-  await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="true"]')).toHaveCount(6)
+  await expect(component.locator('[data-action="timeline-detail-visibility"][aria-pressed="true"]')).toHaveCount(7)
   await expect(component.getByRole("switch", { checked: true })).toHaveCount(0)
 })
 
@@ -158,7 +159,7 @@ for (const direction of ["ltr", "rtl"]) {
     story(`fits narrow and wide layouts in ${direction}, ${theme}`, async ({ mount, page }, testInfo) => {
       await page.setViewportSize({ width: 900, height: 900 })
       const component = await mount("settings-timeline-detail--interactive", { globals: { direction, theme } })
-      await expect(component.locator('[data-slot="timeline-detail-scale"]')).toHaveCSS("margin-top", "16px")
+      await expect(component.locator('[data-slot="timeline-detail-scale"]')).toHaveCSS("margin-top", "4px")
       const advanced = component.locator('[data-slot="timeline-detail-advanced"]')
       await expect(advanced).toHaveCSS("margin-top", "0px")
       await expect(advanced).toHaveCSS("padding-top", "8px")
@@ -175,23 +176,23 @@ for (const direction of ["ltr", "rtl"]) {
         await track.evaluate(
           (element, theme) =>
             getComputedStyle(element)
-              .getPropertyValue(theme === "light" ? "--v2-background-bg-layer-04" : "--v2-background-bg-layer-03")
+              .getPropertyValue(theme === "light" ? "--v2-background-bg-layer-04" : "--v2-background-bg-layer-02")
               .trim(),
           theme,
         ),
       )
 
-      if (theme === "light") {
-        await expect(track.locator("span").last()).toHaveCSS("background-image", "none")
-        await expect(track).toHaveCSS(
-          "--timeline-detail-marker-background",
-          await track.evaluate((element) => getComputedStyle(element).getPropertyValue("--v2-grey-500").trim()),
-        )
-      }
-
-      if (theme === "dark") {
-        await expect(track.locator("span").last()).not.toHaveCSS("background-image", "none")
-      }
+      await expect(track.locator("span").last()).toHaveCSS("background-image", "none")
+      await expect(track).toHaveCSS(
+        "--timeline-detail-marker-background",
+        await track.evaluate(
+          (element, theme) =>
+            getComputedStyle(element)
+              .getPropertyValue(theme === "light" ? "--v2-grey-500" : "--v2-grey-700")
+              .trim(),
+          theme,
+        ),
+      )
 
       await page.screenshot({ path: testInfo.outputPath(`timeline-${theme}-${direction}.png`) })
       const list = component.locator('[data-slot="timeline-detail-list"]')
@@ -242,7 +243,7 @@ for (const direction of ["ltr", "rtl"]) {
         expect(Math.abs(heading - toggle)).toBeLessThan(1)
       }
 
-      await expect(component.locator('[data-slot="timeline-detail-activity"]').first()).toHaveCSS("gap", "8px")
+      await expect(component.locator('[data-slot="timeline-detail-activity"]').first()).toHaveCSS("gap", "12px")
 
       for (const width of [900, 320]) {
         await page.setViewportSize({ width, height: 900 })

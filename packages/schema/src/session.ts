@@ -46,6 +46,9 @@ export const Info = Schema.Struct({
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
+    /** Start of the most recent execution. While it runs, `idle` still holds the previous execution's end. Resuming after a restart starts a new execution. */
+    busy: DateTimeUtcFromMillis.pipe(optional),
+    /** End of the most recent completed execution. */
     idle: DateTimeUtcFromMillis.pipe(optional),
     viewed: DateTimeUtcFromMillis.pipe(optional),
     archived: DateTimeUtcFromMillis.pipe(optional),
@@ -83,6 +86,18 @@ const ListFilterFields = {
     ),
   ])
     .annotate({ description: "Filter by parent session. Use null to return only root sessions." })
+    .pipe(Schema.optional),
+  archived: Schema.Literals(["true", "false"])
+    .pipe(
+      Schema.decodeTo(Schema.Boolean, {
+        decode: SchemaGetter.transform((value) => value === "true"),
+        encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
+      }),
+    )
+    .annotate({
+      description:
+        "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both.",
+    })
     .pipe(Schema.optional),
 }
 

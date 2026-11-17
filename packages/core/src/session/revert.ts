@@ -1,7 +1,7 @@
 export * as SessionRevert from "./revert.js"
 
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { Instance } from "../instance/service.js"
@@ -11,6 +11,7 @@ import { SessionEvent } from "./event.js"
 import { MessageNotFoundError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
+import { SessionHistory } from "./history.js"
 import { SessionMessageTable } from "./sql.js"
 
 interface BoundaryInput {
@@ -29,9 +30,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
 
   return yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
-    const original = input.session.revert?.snapshot
-      ? Snapshot.ID.make(input.session.revert.snapshot)
-      : yield* snapshot.capture()
+    const original = input.session.revert?.snapshot ?? (yield* snapshot.capture())
     const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
     const restore = new Map<RelativePath, Snapshot.ID>()
     if (original) {
@@ -62,7 +61,7 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
   yield* Effect.gen(function* () {
     const snapshot = yield* Snapshot.Service
     if (!session.revert) return
-    const original = session.revert.snapshot ? Snapshot.ID.make(session.revert.snapshot) : undefined
+    const original = session.revert.snapshot
     if (original)
       yield* snapshot.restore({
         files: new Map((session.revert.files ?? []).map((file) => [RelativePath.make(file.file), original])),
@@ -102,13 +101,12 @@ const plan = Effect.fn("SessionRevert.plan")(function* (db: Database.Interface["
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
   const files = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {
-    const message = yield* decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie)
+    const message = SessionHistory.decodeMessageRowSync(row)
     if (message.type !== "assistant" || !message.snapshot?.start) continue
     for (const file of message.snapshot.files ?? [])
-      if (!files.has(file)) files.set(file, Snapshot.ID.make(message.snapshot.start))
+      if (!files.has(file)) files.set(file, message.snapshot.start)
   }
   return files
 })

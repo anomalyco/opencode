@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/index.js"
+import { ai, LLMEvent, Media, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -25,16 +25,15 @@ recorded.effect.with(
   { protocol: "meta-images", tags: ["generation", "webp"] },
   () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: meta.image(modelID),
         prompt: "A flat black square centered on a plain white background. No text.",
         n: 1,
-        size: "256x256",
-        providerOptions: controls,
+        providerOptions: { ...controls, size: "256x256" },
       })
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("image/webp")
-      const bytes = yield* response.image.bytes()
+      expect(response.images[0].mediaType).toBe("image/webp")
+      const bytes = yield* response.images[0].bytes()
       expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF")
       expect(new TextDecoder().decode(bytes.slice(8, 12))).toBe("WEBP")
       expect(response.usage?.type === "tokens" ? response.usage.output : undefined).toBeGreaterThan(0)
@@ -47,7 +46,7 @@ recorded.effect.with(
   { protocol: "meta-images", tags: ["editing", "png"] },
   () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: meta.image(modelID),
         prompt: "Change the shape to bright purple. Keep the plain white background.",
         images: [
@@ -57,12 +56,10 @@ recorded.effect.with(
           ),
         ],
         n: 1,
-        size: "256x256",
-        format: "png",
-        providerOptions: controls,
+        providerOptions: { ...controls, size: "256x256", outputFormat: "png" },
       })
-      expect(response.image.mediaType).toBe("image/png")
-      expect(Array.from((yield* response.image.bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+      expect(response.images[0].mediaType).toBe("image/png")
+      expect(Array.from((yield* response.images[0].bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
     }),
   180_000,
 )
@@ -72,7 +69,7 @@ recorded.effect.with(
   { protocol: "meta-responses", tags: ["hosted", "continuation", "editing"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: meta.responses(modelID),
         prompt: "A simple flat black square centered on a plain white background. No text.",
         tools: [
@@ -84,7 +81,7 @@ recorded.effect.with(
             size: "1024x1024",
           }),
         ],
-        generation: { maxTokens: 4096 },
+        maxTokens: 4096,
       })
       const compiled = yield* compileRequest(request)
       expect(compiled.body.tools).toMatchObject([
@@ -97,13 +94,14 @@ recorded.effect.with(
         type: "content",
         value: [{ type: "file", mime: "image/webp", uri: expect.stringMatching(/^data:image\/webp;base64,/) }],
       })
-      const next = LLMRequest.update(request, {
+      const next = {
+        ...request,
         messages: [
           ...request.messages,
           first.message,
           Message.user("Change the square to blue. Keep the white background."),
         ],
-      })
+      }
       const replay = yield* compileRequest(next)
       expect(replay.body.input).toEqual(
         expect.arrayContaining([{ type: "image_generation_call", id: image?.id, status: "completed", result: null }]),

@@ -125,6 +125,33 @@ yield *
   )
 ```
 
+When a Session finishes model work with no pending input, the `experimental.idle` hook runs just before it goes idle.
+It is experimental: its name and shape may still change. It does not run after interruption, failure, or control-only
+work such as a manual compaction. Input the hook admits runs in the same execution instead of the Session going idle,
+so a plugin that always admits input must bound its own loop.
+
+`event.background` lists background shells and subagents still running for the Session or its descendants. When one of
+the Session's own shells or subagents finishes, its notice wakes the Session and the hook runs again, so a plugin that
+waits for that work can return. Work a descendant owns, such as a shell a subagent left running, wakes that
+descendant instead, so it is listed for information only. Notices admitted with `resume: false`, such as those
+recovered after a restart, wait for the next wake instead:
+
+```ts
+yield *
+  ctx.session.hook("experimental.idle", (event) =>
+    event.background.some((work) => work.kind === "subagent" && work.sessionID === event.sessionID)
+      ? Effect.void
+      : ctx.session
+          .synthetic({ sessionID: event.sessionID, text: "Run the tests and fix any failures." })
+          .pipe(Effect.ignore),
+  )
+```
+
+A continuation runs inside the same execution, so a loop that is still going when the server restarts is resumed by
+restart recovery and the hook keeps running. Persist your own state if the loop should come back paused. A hook that
+fails, fails the execution like any other session hook, so handle errors from slow or remote work such as a judge model
+call.
+
 ## Reloading A Domain
 
 When data captured by a transform changes, reload the affected domain:

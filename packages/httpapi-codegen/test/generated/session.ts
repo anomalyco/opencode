@@ -114,7 +114,7 @@ const mapEndpointInterruptError = (error: unknown) =>
 const EndpointInterrupt = (raw: RawGroup) => (input: EndpointInterruptInput) =>
   raw["interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapEndpointInterruptError))
 
-type EndpointConfigureRequest = Parameters<RawGroup["configure"]>[0]
+type EndpointConfigureRequest = Parameters<RawGroup["configure"]>[0] & { readonly responseMode?: "decoded-only" }
 type EndpointConfigureInput = {
   readonly sessionID: (typeof EndpointConfigureParams.Type)["sessionID"]
   readonly dryRun?: (typeof EndpointConfigureQuery.Type)["dryRun"]

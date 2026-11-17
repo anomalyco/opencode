@@ -1,0 +1,1069 @@
+import { abort } from "@opencode/util/abort"
+import {
+  batch,
+  catchError,
+  createContext,
+  createMemo,
+  createRenderEffect,
+  createResource,
+  createRoot,
+  createSignal,
+  ErrorBoundary,
+  getOwner,
+  on,
+  onCleanup,
+  onMount,
+  runWithOwner,
+  untrack,
+  useContext,
+  type Accessor,
+  type JSX,
+  type Owner,
+  type ParentProps,
+} from "solid-js"
+import { createStore } from "solid-js/store"
+import { LifetimeContext, liveAccessor, PluginContext, type Bridge, type Entry } from "@opencode/plugin/gui/host"
+import type { BuiltinCatalog, BuiltinContext } from "@opencode/plugin/gui/builtin"
+import { Predicate } from "effect"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { pluralCategory, resolveTemplate } from "@opencode/ui/context/i18n"
+import {
+  LinkHandler,
+  type BaseContext,
+  type Cleanup,
+  type Context,
+  type Contract,
+  type DialogHandle,
+  type Dialogs,
+  type Link,
+  type Links,
+  type Live,
+  type Messages,
+  type Persisted,
+  type PluginOptions,
+  type Registry,
+  type SelectOptions,
+  type Ipc,
+  type IpcClient,
+  type IpcSpec,
+  type SessionRef,
+  type SetupContext,
+  type Token,
+} from "@opencode/plugin/gui"
+import { OpenCode, type OpenCodeClient } from "@opencode/client/promise"
+import { useLanguage } from "@/runtime/i18n/language"
+import {
+  createPluginDialogState,
+  transitionPluginDialog,
+  type PluginDialogEffect,
+  type PluginDialogEvent,
+} from "./dialog-machine"
+import { PluginAlertDialog, PluginConfirmDialog, PluginPromptDialog, PluginSelectDialog } from "./dialogs"
+import { selectDisabled, selectHostReady, selectInstalled, selectMainFailed, selectServersReady } from "./machine"
+import {
+  createPluginHostState,
+  selectPluginDefinitions,
+  selectPluginFailure,
+  selectPluginInstance,
+  selectPluginInstances,
+  selectPluginSettled,
+  selectPluginStatus,
+  transitionPluginHost,
+  type PluginHostEffect,
+  type PluginHostEvent,
+} from "./instance-machine"
+import { createStartupGate } from "./startup"
+import { createSessionStore, whenLoaded } from "./stores"
+
+type Contribution = { key: string; registry: string; plugin: string; value: Accessor<unknown> }
+
+export type Item<T> = { readonly key: string; readonly plugin: string; readonly value: T }
+
+/**
+ * The context the host builds: every `Setup<D>` of the definition receives it, and contributions read it as `Context`.
+ * It has the members only built-ins use, which `builtinContext` reads.
+ */
+type InstanceContext = SetupContext<Entry> & BuiltinContext
+
+type Instance = {
+  definition: Entry
+  context: InstanceContext
+  /** The instance's root, which owns setup and every scope under it. */
+  root: Owner | null
+  dispose: () => void
+  /** Runs `fn` when the instance goes away, as a cleanup a setup returns. */
+  own(fn: Cleanup): Cleanup
+  /** Opens the declared stores. Settles once the global stores have loaded. */
+  prepare(): Promise<readonly void[]>
+  /** Starts loading the declared session stores for a mounted session. */
+  preload(session: SessionRef): void
+}
+
+/** What a plugin's GUI reads of its plugin: its options, and the client of the server that runs it, read each time. */
+export type PluginInput = { readonly options: PluginOptions; readonly client: () => OpenCodeClient | undefined }
+
+/** The APIs a window context exposes as properties. */
+type HostApis = Omit<BuiltinContext, keyof BaseContext | "provide" | "use" | "main">
+
+/**
+ * Creates one HostApi for a plugin instance, on the instance's first read of it. `register` withdraws what it is
+ * given with the caller's owner, else with the plugin. `builtin` is true for a plugin that ships with the app.
+ */
+type HostApiFactory<T> = (
+  plugin: string,
+  owner: Owner | null,
+  context: Context,
+  register: (fn: Cleanup) => Cleanup,
+  builtin: boolean,
+) => T
+
+/** The HostApis a window provides, by context property. The host itself provides `links` and `dialogs`. */
+export type HostApiFactories = {
+  readonly [K in Exclude<keyof HostApis, "links" | "dialogs">]: HostApiFactory<HostApis[K]>
+}
+
+type Absent = Exclude<Live<never>, { readonly status: "active" }>
+
+type HostState = {
+  entries: Record<string, Contribution[] | undefined>
+  contracts: Record<string, number | undefined>
+}
+
+// How long a plugin may load its window entry and global stores before it fails.
+const activationTimeout = 30_000
+
+type Stores = Record<string, Persisted<object> | ((session: SessionRef) => Persisted<object>)>
+
+const pending: Absent = { status: "pending" }
+
+const inactive = {
+  disabled: { status: "inactive", reason: "disabled" },
+  failed: { status: "inactive", reason: "failed" },
+} as const satisfies Record<string, Absent>
+
+const HostContext = createContext<ReturnType<typeof createHost>>()
+
+export function usePluginHost() {
+  const host = useContext(HostContext)
+
+  if (!host) throw new Error("Plugin host is unavailable")
+
+  return host
+}
+
+type HostInput = {
+  definitions: Accessor<readonly Entry[]>
+  /** The plugins that stay off. Omitted with a bridge, whose plugin manager holds the user's settings. */
+  disabled?: Accessor<ReadonlySet<string>>
+  /** Main's side of a desktop window: its plugin manager lists the plugins and their enable settings. */
+  bridge?: Bridge
+  /** The ids of the plugins that ship with the app, which always run. */
+  builtins?: ReadonlySet<string>
+  /** Startup also waits for the servers plugins contribute (`PluginServersProvider`). */
+  servers?: boolean
+  apis: HostApiFactories
+  /**
+   * Runs `run` once the app interface has mounted, behind the HostApis writes made before it, or now when it has.
+   * Returns a cancel for a run that still waits.
+   */
+  whenMounted: (run: () => void) => () => void
+  /** The renderer client of an Ipc while it is available; omitted where there is no main process. */
+  ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined
+  /** What a plugin's GUI reads of its plugin: its options, and the client of the server that runs it. */
+  plugin?: (id: string) => PluginInput | undefined
+  /** How many times an Ipc became available. Reactive. */
+  generation?: (token: Ipc) => number
+  /** Main did not answer the window's subscribe to an Ipc. Reactive. */
+  ipcFailed?: (token: Ipc) => boolean
+}
+
+export function PluginHostProvider(props: ParentProps<HostInput>) {
+  const host = createHost(props)
+
+  return <HostContext.Provider value={host}>{props.children}</HostContext.Provider>
+}
+
+function createHost(input: HostInput) {
+  const language = useLanguage()
+  const owner = getOwner()
+  const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
+  const generations = new Map<string, number>()
+
+  // Entries are indexed by registry and contracts versioned by token, so a change wakes only its own readers.
+  const [state, setState] = createStore<HostState>({ entries: {}, contracts: {} })
+
+  // A plain signal: instances and definitions must not become store proxies.
+  const [machine, setMachine] = createSignal(createPluginHostState<Instance>())
+  // Events a transition's own effects raise (an instance created, a setup that reloads) wait behind those effects.
+  const queue: PluginHostEvent<Instance>[] = []
+  // Each loading plugin's activation timer.
+  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  const memos = new Map<string, Accessor<readonly Item<unknown>[]>>()
+  const sequence = { value: 0 }
+
+  // The plugin that provides a token: the one whose id the token's id is, or prefixes.
+  const providers = new Map<string, string | undefined>()
+
+  const all = input.definitions
+
+  // The definitions the host starts with (the built-ins) hold the gate; plugins that join later never do.
+  const startup = createStartupGate({
+    bridge: input.bridge,
+    plugins: untrack(all).flatMap((definition) => (definition.windowEntry ? [definition.id] : [])),
+    servers: input.servers ?? false,
+  })
+
+  // Undefined while startup waits for the enable settings: nothing activates before then.
+  const disabled = createMemo(
+    () =>
+      input.disabled?.() ??
+      selectDisabled(
+        startup.state(),
+        all().map((definition) => definition.id),
+        input.builtins ?? new Set<string>(),
+      ),
+    undefined,
+    { equals: (a, b) => a === b || (!!a && !!b && a.size === b.size && [...a].every((id) => b.has(id))) },
+  )
+
+  const providerOf = (id: string) => {
+    const current = providers.get(id)
+
+    if (current) return current
+
+    // Tracked while unresolved: a plugin that joins later resolves its readers.
+    const definitions = all()
+
+    const found = definitions.find((definition) => owns(definition.id, id))
+
+    if (found) providers.set(id, found.id)
+
+    return found?.id
+  }
+
+  // Why a token has no active provider. Main-side providers report through the installed list.
+  const absent = (id: string, main: boolean): Absent => {
+    const plugin = providerOf(id)
+
+    if (!plugin) return inactive.disabled
+
+    if (main) {
+      if (disabled()?.has(plugin)) return inactive.disabled
+
+      return selectMainFailed(startup.state(), plugin) ? inactive.failed : pending
+    }
+
+    const status = selectPluginStatus(machine(), plugin)
+
+    if (status === "disabled") return inactive.disabled
+
+    if (status === "failed") return inactive.failed
+
+    // A renderer provider that is up but does not provide the token (e.g. on this platform) is not coming.
+    if (status === "active") return inactive.disabled
+
+    return pending
+  }
+
+  const contractLive = (token: Contract<unknown>): Live<unknown> => {
+    void state.contracts[token.id]
+
+    return provided.get(token.id)?.live ?? absent(token.id, false)
+  }
+
+  // Reuses each item object while its value is unchanged so keyed renders do not remount.
+  const createItems = (id: string) => {
+    const cache = new Map<string, Item<unknown>>()
+
+    const created = runWithOwner(owner, () =>
+      createMemo(() => {
+        const next = (state.entries[id] ?? []).flatMap((entry) => {
+          const value = entry.value()
+
+          if (value === undefined) return []
+
+          const previous = cache.get(entry.key)
+
+          if (previous?.value === value) return [previous]
+
+          const item = { key: entry.key, plugin: entry.plugin, value }
+
+          cache.set(entry.key, item)
+
+          return [item]
+        })
+
+        if (cache.size > next.length) {
+          const live = new Set(next.map((item) => item.key))
+
+          cache.forEach((_, key) => {
+            if (!live.has(key)) cache.delete(key)
+          })
+        }
+
+        return next
+      }),
+    )
+
+    const memo = created ?? (() => [])
+
+    memos.set(id, memo)
+
+    return memo
+  }
+
+  const items = <T,>(registry: Registry<T>) => {
+    const memo = memos.get(registry.id) ?? createItems(registry.id)
+
+    // SAFETY: only `add` stores entries, under the id of the typed registry it was given, so this registry's items
+    // are T.
+    return memo() as readonly Item<T>[]
+  }
+
+  const list = <T,>(registry: Registry<T>) => items(registry).map((item) => item.value)
+
+  const pickLinkHandler = (link: Link) =>
+    list(LinkHandler)
+      .filter((item) => item.match(link))
+      .reduce<LinkHandler | undefined>(
+        (best, item) => (!best || (item.priority ?? 0) > (best.priority ?? 0) ? item : best),
+        undefined,
+      )
+
+  const links: Links = {
+    open(link) {
+      const handler = untrack(() => pickLinkHandler(link))
+
+      if (!handler) return false
+
+      handler.open(link)
+
+      return true
+    },
+    // Markdown asks from inside its render effect; untracked so a session or screen switch never reruns it.
+    exists: (link) => untrack(() => pickLinkHandler(link)?.exists?.(link) ?? false),
+  }
+
+  const dialog = useDialog()
+
+  const factories = {
+    ...input.apis,
+    links: () => links,
+    // Bound to the instance that asked, so an older async call after a disable or reload opens and closes nothing.
+    dialogs: (plugin, _, context, register): Dialogs => {
+      // `ended` runs when the dialog closes, however it closes, and when it can no longer open.
+      const open = (
+        render: (dialog: DialogHandle) => JSX.Element,
+        options?: { readonly replace?: boolean },
+        ended?: () => void,
+      ): DialogHandle => {
+        const id = `plugin:${plugin}:${sequence.value++}`
+        // This open alone: once it aborts, a deferred open neither mounts nor replaces another dialog.
+        const opening = new AbortController()
+        const edge = { state: createPluginDialogState(), cancel: () => {}, release: () => {} }
+        // Events an effect raises synchronously (the interface already mounted, the stack closing) wait behind it.
+        const queue: PluginDialogEvent[] = []
+
+        const dispatch = (event: PluginDialogEvent) => {
+          queue.push(event)
+
+          if (queue.length === 1) drain()
+        }
+
+        const drain = () => {
+          const event = queue[0]
+
+          if (!event) return
+
+          const next = transitionPluginDialog(edge.state, event)
+
+          edge.state = next.state
+          next.effects.forEach(run)
+          queue.shift()
+          drain()
+        }
+
+        // Each handle names its own dialog, so it never closes one another plugin or instance opened.
+        const handle = { close: () => dispatch({ type: "close" }) }
+
+        const run = (effect: PluginDialogEffect) => {
+          // Closes this dialog, not whichever is on top, when the plugin or the scope that opened it goes away.
+          if (effect.type === "register") return void (edge.release = register(handle.close))
+
+          // A dialog opened before the app interface mounts, as during setup, shows after its first render: never
+          // behind the startup screen, and never before a route that focuses itself as it mounts.
+          if (effect.type === "wait") return void (edge.cancel = input.whenMounted(() => dispatch({ type: "mounted" })))
+
+          if (effect.type === "cancel") return edge.cancel()
+
+          if (effect.type === "release") return void edge.release()
+
+          if (effect.type === "abort") return abort(opening)
+
+          if (effect.type === "close") return dialog.close(id)
+
+          if (effect.type === "ended") return ended?.()
+
+          void dialog[options?.replace ? "show" : "push"](
+            () => {
+              // The dialog's root disposes when it closes, another dialog replaces it, or the stack goes away.
+              onCleanup(() => dispatch({ type: "dismissed" }))
+
+              return (
+                <ErrorBoundary
+                  fallback={(error) => {
+                    onMount(() => {
+                      handle.close()
+                      fail(plugin, error)
+                    })
+
+                    return null
+                  }}
+                >
+                  <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
+                </ErrorBoundary>
+              )
+            },
+            // Escape, a click outside, a replacing dialog, or an open the stack dropped.
+            () => dispatch({ type: "dismissed" }),
+            id,
+            // The stack mounts in a later transition. Its handle, its owner or the plugin ending before then keeps
+            // it closed.
+            AbortSignal.any([opening.signal, context.signal]),
+          )
+        }
+
+        dispatch({ type: "open", aborted: context.signal.aborted })
+
+        return handle
+      }
+
+      // Settles with the content's answer, or with `fallback` once the dialog ends without one; the first wins.
+      const ask = <T,>(fallback: T, content: (answer: (value: T) => void) => JSX.Element) =>
+        new Promise<T>((resolve) => {
+          open(
+            (handle) =>
+              content((value) => {
+                resolve(value)
+                handle.close()
+              }),
+            undefined,
+            () => resolve(fallback),
+          )
+        })
+
+      return {
+        open: (render, options) => open(render, options),
+        active: () => !!dialog.active,
+        confirm: (options) => ask(false, (answer) => <PluginConfirmDialog options={options} done={answer} />),
+        alert: (options) =>
+          ask(undefined, (answer) => <PluginAlertDialog options={options} done={() => answer(undefined)} />),
+        prompt: (options) =>
+          ask<string | undefined>(undefined, (answer) => <PluginPromptDialog options={options} done={answer} />),
+        select: <T,>(options: SelectOptions<T>) =>
+          ask<T | undefined>(undefined, (answer) => <PluginSelectDialog options={options} done={answer} />),
+      }
+    },
+  } satisfies { readonly [K in keyof HostApis]: HostApiFactory<HostApis[K]> }
+
+  const dispatch = (event: PluginHostEvent<Instance>) => {
+    queue.push(event)
+
+    if (queue.length === 1) untrack(drain)
+  }
+
+  const drain = () => {
+    const event = queue[0]
+
+    if (!event) return
+
+    const next = transitionPluginHost(machine(), event)
+
+    // A reader of the state or an effect that throws must not stop the queue or skip the other effects. Promise.try
+    // runs each synchronously and keeps its throw to itself.
+    void Promise.try(() => setMachine(next.state)).catch((cause: unknown) => console.error("[plugin] host", cause))
+    next.effects.forEach(
+      (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => crashed(effect, cause)),
+    )
+    queue.shift()
+    drain()
+  }
+
+  // An effect of a running attempt that throws fails that attempt; any other is only logged.
+  const crashed = (effect: PluginHostEffect<Instance>, cause: unknown) => {
+    if ("attempt" in effect) return dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+
+    console.error(`[plugin] ${"id" in effect ? effect.id : effect.instance.definition.id}`, cause)
+  }
+
+  const run = (effect: PluginHostEffect<Instance>) => {
+    if (effect.type === "load")
+      // The current language's catalog loads with the entry, so the first render is already translated.
+      return void Promise.all([
+        Promise.try(effect.load),
+        Promise.try(() => loadMessages(effect.definition.i18n, language.locale())),
+      ]).then(
+        ([module, messages]) =>
+          dispatch({ type: "loaded", id: effect.id, attempt: effect.attempt, setup: module.default, messages }),
+        (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
+      )
+
+    if (effect.type === "create")
+      return void runWithOwner(owner, () =>
+        createRoot((dispose) => {
+          const root = getOwner()
+
+          // Caught here: inside a root, Solid hands a throw to the nearest error boundary, the app's own, and never
+          // returns it to the caller.
+          try {
+            const instance = createInstance(effect.definition, dispose, root, effect.messages)
+
+            // Setup and every scope under it read the plugin's context, e.g. `createKeyed` with a token.
+            if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
+
+            dispatch({ type: "created", id: effect.id, attempt: effect.attempt, instance, setup: effect.setup })
+          } catch (cause) {
+            dispose()
+            dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+          }
+        }),
+      )
+
+    if (effect.type === "prepare")
+      // Global stores load in their storage namespace's one read before setup, so setup reads them as plain values.
+      return void Promise.try(effect.instance.prepare).then(
+        () => dispatch({ type: "prepared", id: effect.id, attempt: effect.attempt }),
+        (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause }),
+      )
+
+    if (effect.type === "start") return runWithOwner(effect.instance.root, () => start(effect))
+
+    if (effect.type === "dispose") return effect.instance.dispose()
+
+    if (effect.type === "timer.start") {
+      clearTimeout(timers.get(effect.id))
+      timers.set(
+        effect.id,
+        setTimeout(() => dispatch({ type: "timeout", id: effect.id, attempt: effect.attempt }), activationTimeout),
+      )
+
+      return
+    }
+
+    if (effect.type === "timer.stop") {
+      clearTimeout(timers.get(effect.id))
+      timers.delete(effect.id)
+
+      return
+    }
+
+    if (effect.type === "forget")
+      return providers.forEach((plugin, token) => {
+        if (plugin === effect.id) providers.delete(token)
+      })
+
+    console.error(`[plugin] ${effect.id}`, effect.cause)
+  }
+
+  // Setup runs synchronously inside the plugin root so its effects and memos are owned.
+  const start = (effect: Extract<PluginHostEffect<Instance>, { type: "start" }>) => {
+    const failed = (cause: unknown) => dispatch({ type: "failed", id: effect.id, attempt: effect.attempt, cause })
+    const sync = { running: true }
+    // SAFETY: the host context implements the parameter of every `Setup<D>` of this definition.
+    const setup = effect.setup as (ctx: InstanceContext) => Cleanup | void
+
+    // Errors from the plugin's own effects, at setup or later, fail the plugin and nothing else. One raised during
+    // setup fails it before it starts; a later one waits for the effect that threw to finish.
+    catchError(
+      () =>
+        untrack(() => {
+          const returned = setup(effect.instance.context)
+
+          // A returned cleanup runs when the plugin goes away, as server and TUI plugins' do.
+          if (Predicate.isFunction(returned)) return void effect.instance.own(returned)
+
+          if (!Predicate.isPromiseLike(returned)) return
+
+          // Do not await invalid setup, but consume its eventual rejection after the instance is aborted.
+          void Promise.resolve(returned).catch((cause: unknown) => console.error(`[plugin] ${effect.id}`, cause))
+          throw new Error("Window setup must be synchronous. Start async work with createKeyed or createLatest.")
+        }),
+      (cause) => (sync.running ? failed(cause) : queueMicrotask(() => failed(cause))),
+    )
+
+    sync.running = false
+    // A failure setup raised is queued ahead of this, so the machine ignores it.
+    dispatch({ type: "started", id: effect.id, attempt: effect.attempt })
+  }
+
+  const createInstance = (definition: Entry, dispose: () => void, root: Owner | null, initial: Messages): Instance => {
+    const plugin = definition.id
+    const controller = new AbortController()
+    const cleanups = new Set<Cleanup>()
+
+    const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
+      initialValue: initial,
+    })
+
+    const messages = () => catalog.latest
+
+    // Promise.try runs the cleanup synchronously and isolates a throw from the others.
+    const release = (fn: Cleanup) =>
+      void Promise.try(fn).catch((cause: unknown) => console.error(`[plugin] ${plugin}`, cause))
+
+    const own = (fn: Cleanup): Cleanup => {
+      // Work that outlives the plugin, e.g. a promise callback, is released as soon as it registers.
+      if (controller.signal.aborted) {
+        release(fn)
+
+        return () => {}
+      }
+
+      const cleanup = () => {
+        if (cleanups.delete(cleanup)) return fn()
+      }
+
+      cleanups.add(cleanup)
+
+      return cleanup
+    }
+
+    // The plugin went away, or the scope registering (e.g. through a captured owner) already ended.
+    const late = () => controller.signal.aborted || !!useContext(LifetimeContext)?.ended
+
+    // Withdrawn with the current owner, or with the plugin when there is none (after an await).
+    const register = (fn: Cleanup): Cleanup => {
+      if (late()) {
+        release(fn)
+
+        return () => {}
+      }
+
+      const cleanup = own(fn)
+      const scope = getOwner()
+
+      if (scope && scope !== root) onCleanup(() => void cleanup())
+
+      return cleanup
+    }
+
+    const clients = new Map<string, { client: IpcClient<IpcSpec>; live: Live<unknown> }>()
+
+    // One accessor per token, and one Live object per transition, so readers re-run only when the provider changes.
+    const ipcLive = (token: Ipc): Live<unknown> => {
+      if (!input.ipc) return inactive.disabled
+
+      const client = input.ipc(token)
+
+      if (!client) {
+        const reason = absent(token.id, true)
+
+        // A provider that may still start, but whose subscribe failed, is not coming until main provides it again.
+        return reason === pending && input.ipcFailed?.(token) ? inactive.failed : reason
+      }
+
+      const generation = input.generation?.(token) ?? 1
+      const cached = clients.get(token.id)
+
+      if (cached?.client === client && cached.live.status === "active" && cached.live.generation === generation)
+        return cached.live
+
+      const value = Object.assign({}, client, {
+        on: (name: string, listener: Parameters<typeof client.on>[1]) => register(client.on(name, listener)),
+      })
+
+      const live = { status: "active", value, generation } as const
+
+      clients.set(token.id, { client, live })
+
+      return live
+    }
+
+    const lives = new Map<string, Accessor<Live<unknown>>>()
+
+    const liveOf = (token: Token) => {
+      const existing = lives.get(token.id)
+
+      if (existing) return existing
+
+      const read = liveAccessor(token.kind === "contract" ? () => contractLive(token) : () => ipcLive(token))
+
+      lives.set(token.id, read)
+
+      return read
+    }
+
+    const mains = new Map<string, IpcClient<IpcSpec>>()
+
+    // The client of the plugin's own Ipc: calls wait while its main entry starts and reject once it cannot answer.
+    const mainClient = (token: Ipc): IpcClient<IpcSpec> => {
+      if (!owns(plugin, token.id)) throw new Error(`${plugin} calls only its own main entry, not Ipc "${token.id}"`)
+
+      const existing = mains.get(token.id)
+
+      if (existing) return existing
+
+      // SAFETY: an Ipc's active value is the client `ipcLive` builds for it.
+      const read = liveOf(token) as Accessor<Live<IpcClient<IpcSpec>>>
+
+      const unavailable = (reason: string) => new Error(`Ipc "${token.id}" is unavailable: ${reason}`)
+
+      const ready = (): Promise<IpcClient<IpcSpec>> => {
+        // A client kept past the plugin's instance never reaches main again, even while main still provides.
+        if (controller.signal.aborted) return Promise.reject(unavailable("the plugin went away"))
+
+        const current = untrack(read)
+
+        if (current.status === "active") return Promise.resolve(current.value)
+
+        if (current.status === "inactive") return Promise.reject(unavailable(current.reason))
+
+        return new Promise((resolve, reject) =>
+          runWithOwner(owner, () =>
+            createRoot((dispose) => {
+              const stop = () => {
+                controller.signal.removeEventListener("abort", aborted)
+                dispose()
+              }
+
+              const aborted = () => {
+                stop()
+                reject(unavailable("the plugin went away"))
+              }
+
+              controller.signal.addEventListener("abort", aborted)
+
+              createRenderEffect(
+                on(
+                  read,
+                  (live) => {
+                    if (live.status === "pending") return
+
+                    stop()
+
+                    if (live.status === "active") return resolve(live.value)
+
+                    reject(unavailable(live.reason))
+                  },
+                  { defer: true },
+                ),
+              )
+            }),
+          ),
+        )
+      }
+
+      const methods = Object.fromEntries(
+        Object.keys(token.spec.methods).map((name) => [
+          name,
+          (...args: readonly unknown[]) =>
+            ready().then((client) => {
+              const method = Predicate.hasProperty(client, name) ? client[name] : undefined
+
+              if (!isMethod(method)) throw unavailable(`no method "${name}"`)
+
+              return method(...args)
+            }),
+        ]),
+      )
+
+      const client = Object.assign(methods, {
+        state() {
+          const live = read()
+
+          return live.status === "active" ? live.value.state() : undefined
+        },
+        on(name: string, listener: Parameters<IpcClient<IpcSpec>["on"]>[1]) {
+          // Follows the main entry across restarts: each active client gets the listener, removed when it changes.
+          return register(
+            runWithOwner(root, () =>
+              createRoot((dispose) => {
+                createRenderEffect(() => {
+                  const live = read()
+
+                  if (live.status === "active") live.value.on(name, listener)
+                })
+
+                return dispose
+              }),
+            ) ?? (() => {}),
+          )
+        },
+      })
+
+      // SAFETY: `methods` has one function per method of the token's spec, as `IpcClient` types it.
+      const typed = client as IpcClient<IpcSpec>
+
+      mains.set(token.id, typed)
+
+      return typed
+    }
+
+    const stores: Stores = {}
+
+    const gui = input.plugin?.(plugin)
+
+    const context = {
+      id: plugin,
+      options: gui?.options ?? {},
+      get client() {
+        return gui?.client() ?? unavailableClient()
+      },
+      signal: controller.signal,
+      add<T>(registry: Registry<T>, item: T | (() => T | undefined)) {
+        if (late()) return () => {}
+
+        // Promise callbacks may have no owner; fall back to the plugin root.
+        const read =
+          // SAFETY: a function item is the SDK's reactive form; registries take no function values.
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
+          typeof item === "function"
+            ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => T | undefined))
+            : () => item
+
+        const key = `${plugin}/${++sequence.value}`
+
+        setState("entries", registry.id, (entries = []) => [
+          ...entries,
+          { key, registry: registry.id, plugin, value: read ?? (() => undefined) },
+        ])
+
+        return register(() =>
+          setState("entries", registry.id, (entries = []) => entries.filter((entry) => entry.key !== key)),
+        )
+      },
+      list,
+      provide<T>(token: Contract<T> | Ipc, impl: T) {
+        if (token.kind === "ipc") throw new Error("Ipcs are provided by a plugin's main entry")
+
+        if (!owns(plugin, token.id)) throw new Error(`${plugin} provides only its own contracts, not "${token.id}"`)
+
+        if (late()) return () => {}
+
+        const generation = (generations.get(token.id) ?? 0) + 1
+
+        generations.set(token.id, generation)
+
+        const entry = { live: { status: "active", value: impl, generation } as const }
+
+        provided.set(token.id, entry)
+        setState("contracts", token.id, (version = 0) => version + 1)
+
+        return register(() => {
+          if (provided.get(token.id) !== entry) return
+
+          provided.delete(token.id)
+          setState("contracts", token.id, (version = 0) => version + 1)
+        })
+      },
+      use: liveOf,
+      main: mainClient,
+      stores,
+      t(key: string, params?: Record<string, string | number | boolean>) {
+        const template = messages()[key]
+
+        if (template !== undefined) return resolveTemplate(template, params)
+
+        // SAFETY: a key the plugin's catalog lacks is one of the app's shared keys, such as `common.*`.
+        return language.t(key as Parameters<typeof language.t>[0], params)
+      },
+      plural(key: string, count: number, params?: Record<string, string | number | boolean>) {
+        const current = messages()
+        const template = current[`${key}.${pluralCategory(language.intl(), count)}`] ?? current[`${key}.other`]
+
+        if (template !== undefined) return resolveTemplate(template, { ...params, count })
+
+        // SAFETY: a key the plugin's catalog lacks is one of the app's shared keys, such as `common.*`.
+        return language.plural(key as Parameters<typeof language.plural>[0], count, params)
+      },
+    }
+
+    // Each HostApi is created on the instance's first read of it.
+    const created = new Map<string, HostApis[keyof HostApis]>()
+
+    Object.defineProperties(
+      context,
+      Object.fromEntries(
+        Object.entries(factories).map(([name, create]) => [
+          name,
+          {
+            enumerable: true,
+            get() {
+              if (!created.has(name)) created.set(name, create(plugin, root, typed, register, !gui))
+
+              return created.get(name)
+            },
+          },
+        ]),
+      ),
+    )
+
+    // SAFETY: one implementation serves `Context` and every `SetupContext`: the declarations' records are built from
+    // the definition, and every HostApi is a getter defined above.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const typed = context as unknown as InstanceContext
+
+    const sessions: ReturnType<typeof createSessionStore<object>>[] = []
+
+    return {
+      definition,
+      context: typed,
+      root,
+      own,
+      prepare() {
+        const storage = typed.storage
+
+        const loaded = windowStores(definition).flatMap(([name, declaration]) => {
+          const options = {
+            schema: declaration.schema,
+            initial: declaration.initial,
+            from: declaration.builtinFrom ?? declaration.from,
+          }
+
+          if (declaration.scope === "global") {
+            const handle = storage.store(name, { ...options, scope: "global" })
+
+            stores[name] = handle
+
+            return [whenLoaded(handle)]
+          }
+
+          const store = createSessionStore({
+            open: (session) => storage.store(name, { ...options, scope: { session } }),
+            owner: root,
+            sessions: typed.sessions,
+          })
+
+          stores[name] = store.get
+          sessions.push(store)
+
+          return []
+        })
+
+        if (sessions.length > 0) own(() => sessions.forEach((store) => store.dispose()))
+
+        return Promise.all(loaded)
+      },
+      preload: (session) => sessions.forEach((store) => store.get(session)),
+      dispose() {
+        abort(controller)
+        // One batch: every contribution and contract of the plugin disappears in the same frame.
+        batch(() => {
+          Array.from(cleanups).reverse().forEach(release)
+          cleanups.clear()
+          Object.entries(state.entries).forEach(([registry, entries]) => {
+            if (!entries?.some((entry) => entry.plugin === plugin)) return
+
+            setState("entries", registry, (list = []) => list.filter((entry) => entry.plugin !== plugin))
+          })
+        })
+        // A throwing onCleanup in the plugin's root must not stop the host disposing the rest.
+        release(dispose)
+      },
+    }
+  }
+
+  // A contribution that fails to render renders nothing; the plugin and its other contributions stay.
+  const fail = (id: string, cause: unknown) => dispatch({ type: "render.failed", id, cause })
+
+  // A memo, so every disabled status publishes before render effects read it.
+  createMemo(() => dispatch({ type: "reconcile", definitions: all(), disabled: disabled() }))
+
+  // Tells the startup gate as each plugin it waits for settles.
+  createRenderEffect(() => {
+    const gate = startup.state()
+
+    if (gate.status !== "activating") return
+
+    const current = machine()
+
+    gate.pending.forEach((id) => {
+      if (selectPluginSettled(current, id)) startup.dispatch({ type: "plugin.settled", id })
+    })
+  })
+
+  onCleanup(() => dispatch({ type: "disposed" }))
+
+  return {
+    state,
+    /** The app interface renders. Once open it stays open, so enabling or reloading a plugin never unmounts it. */
+    ready: createMemo(() => selectHostReady(startup.state())),
+    /** The contributed servers are known too, which the desktop app waits for. */
+    serversReady: createMemo(() => selectServersReady(startup.state())),
+    /** The plugins main lists; empty on the web and until main answers. */
+    installed: createMemo(() => selectInstalled(startup.state())),
+    /** A plugin's main entry cannot answer. Reactive. */
+    mainFailed: (id: string) => selectMainFailed(startup.state(), id),
+    /** Reports what the startup gate waits for. */
+    gate: startup.dispatch,
+    list,
+    items,
+    links,
+    definitions: () => selectPluginDefinitions(machine(), all()),
+    /** Undefined while the plugin waits for the enable settings. Reactive. */
+    status: (id: string) => selectPluginStatus(machine(), id),
+    /** The plugin's last error, while it failed or a contribution of its running instance did. Reactive. */
+    failure: (id: string) => selectPluginFailure(machine(), id),
+    context: (id: string): Context | undefined => selectPluginInstance(machine(), id)?.context,
+    fail,
+    /** Starts loading every active plugin's declared session stores for a session that mounts. */
+    preload(session: SessionRef) {
+      selectPluginInstances(untrack(machine)).forEach((instance) => instance.preload(session))
+    },
+    /** `next` replaces the definition, e.g. after a development hot update. */
+    reload: (id: string, next?: Entry) => dispatch({ type: "reload", id, next }),
+  }
+}
+
+/** The window's declared stores. */
+function windowStores(definition: Entry) {
+  return Object.entries(definition.stores ?? {})
+}
+
+/** The client `unavailableClient` made, once a plugin first read it. */
+type Unavailable = { client?: OpenCodeClient }
+
+const unavailable: Unavailable = {}
+
+/** The client a plugin reads while the server that runs it is unreachable: every call rejects. */
+function unavailableClient() {
+  return (unavailable.client ??= OpenCode.make({
+    baseUrl: "http://unavailable.invalid/",
+    fetch: Object.assign(() => Promise.reject(new Error("The server that runs this plugin is unavailable")), {
+      preconnect() {},
+    }),
+  }))
+}
+
+// An Ipc client from the bridge is plain JavaScript; check a method before calling it.
+// SAFETY: the method's output schema decodes its reply; the `IpcClient` the plugin holds types it.
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
+function isMethod(value: unknown): value is (...args: readonly unknown[]) => Promise<unknown> {
+  return Predicate.isFunction(value)
+}
+
+/** Whether a plugin owns a token: its id is the plugin's, or is under it (`<plugin>.<name>`). */
+function owns(plugin: string, id: string) {
+  return id === plugin || id.startsWith(`${plugin}.`)
+}
+
+/** English merged under the locale's messages. A catalog that fails to load leaves English. */
+async function loadMessages(catalog: BuiltinCatalog | undefined, locale: string): Promise<Messages> {
+  const english = catalog?.en ?? {}
+  const source = catalog?.[locale]
+
+  if (!source || locale === "en") return english
+
+  const loaded =
+    // SAFETY: a catalog entry is either inline messages or the loader of a locale module, as `BuiltinCatalog` types it.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
+    typeof source === "function"
+      ? await source().then(
+          (module) => module.default,
+          () => ({}),
+        )
+      : source
+
+  return { ...english, ...loaded }
+}

@@ -32,8 +32,10 @@ function migrateV1(input: unknown) {
 }
 const defaultPermissions = Agent.Info.default(Agent.ID.make("test")).permissions
 
-test("rejects named agent color tokens", () => {
-  expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
+test("ignores named agent color tokens", () => {
+  expect(decode({ agents: { reviewer: { description: "Reviews", color: "warning" } } }).agents?.reviewer).toEqual({
+    description: "Reviews",
+  })
 })
 
 test("keeps schema fields and name out of legacy agent options", () => {
@@ -440,6 +442,11 @@ permissions:
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(tmp.path, "agents", "team"), { recursive: true })
             await fs.mkdir(path.join(tmp.path, "modes"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, "agents", ".opencode", "node_modules", "probe"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", ".opencode", "node_modules", "probe", "README.md"),
+              "# Dependency README",
+            )
             await fs.writeFile(
               path.join(tmp.path, "agents", "reviewer.md"),
               `---
@@ -467,6 +474,10 @@ permissions:
     effect: deny
 ---
 Use native v2 fields.`,
+            )
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "themed.md"),
+              "---\ndescription: Themed\nmode: subagent\ncolor: accent\n---\nUse a theme color.",
             )
             await fs.writeFile(path.join(tmp.path, "agents", "disabled.md"), "---\ndisabled: true\n---\nDisabled")
             await fs.writeFile(path.join(tmp.path, "agents", "empty.md"), "")
@@ -498,9 +509,66 @@ Use native v2 fields.`,
             request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
             permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
+          const themed = yield* agents.get(Agent.ID.make("themed"))
+          expect(themed).toMatchObject({ system: "Use a theme color.", description: "Themed" })
+          expect(themed?.color).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("disabled"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("empty"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make(".opencode/node_modules/probe/README"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("plan"))).toMatchObject({ system: "Make a plan.", mode: "primary" })
+        }),
+      ),
+    ),
+  )
+
+  it.live("reads agent files that use V2 fields as V2", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "agents"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "named.md"),
+              `---
+name: named
+description: Named reviewer
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Review only.`,
+            )
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "mixed.md"),
+              `---
+tools:
+  shell: false
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Mixed fields.`,
+            )
+          })
+          const agents = yield* Agent.Service
+
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+            Effect.provide(Config.testLayer([directoryEntry(tmp.path)])),
+          )
+
+          const named = yield* agents.get(Agent.ID.make("named"))
+          expect(named).toMatchObject({
+            description: "Named reviewer",
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(named?.request.body).toEqual({})
+          const mixed = yield* agents.get(Agent.ID.make("mixed"))
+          expect(mixed).toMatchObject({
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect(mixed?.request.body).toEqual({})
         }),
       ),
     ),

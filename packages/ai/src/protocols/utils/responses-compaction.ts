@@ -4,14 +4,15 @@ import {
   InvalidProviderOutputError,
   CompactionPart,
   CompactionResponse,
-  HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   Message,
-  type ContentPart,
+  type MediaPart,
+  type TextPart,
   mergeJsonRecords,
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
 import { stripEffortUpdates } from "../../effort-updates.js"
+import { foldToolUpdates } from "../../tool-updates.js"
 import { Endpoint } from "../../route/endpoint.js"
 import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
@@ -86,10 +87,13 @@ export const make = (
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
-    // The standalone compaction endpoint rejects histories containing configuration updates.
-    const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
+    // The standalone compaction endpoint rejects effort updates (`configuration_update`). Every tool goes in
+    // top-level `tools`: after compacting a history whose tools were only in `additional_tools`, small models lost
+    // track of them more often.
+    const folded = foldToolUpdates(stripEffortUpdates(request))
+    const native = yield* OpenResponses.lowerConversation(folded, adapter)
     const generation = OpenResponses.lowerGeneration(request)
-    const tools = request.tools.length === 0 ? undefined : yield* lowerTools(request)
+    const tools = folded.tools.length === 0 ? undefined : yield* lowerTools(folded)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {
@@ -108,22 +112,23 @@ export const make = (
     const url = Endpoint.render(route.endpoint, { request, body: native })
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
-      request: LLMRequest.update(request, {
-        http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-      }),
+      request: {
+        ...request,
+        http: request.http === undefined ? undefined : { ...request.http, body: undefined },
+      },
       body,
       endpoint: Endpoint.path(url.toString()),
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
-    const response = yield* executor.execute(
+    const response = yield* RequestExecutor.withTls(executor.execute, request.http?.tls)(
       ProviderShared.jsonPost({
         url: parts.url,
         body: parts.bodyText,
         headers: parts.headers,
         encoding: request.http?.encoding,
       }),
-      options?.http,
+      RequestExecutor.withFetch(request.fetch, options?.http),
     )
     const text = yield* RequestExecutor.responseStream(response).pipe(
       Stream.decodeText(),
@@ -174,7 +179,7 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
   return Message.make({
     role: item.role,
     providerMetadata: { [key]: { itemId: item.id, type: item.type, status: item.status, phase: item.phase } },
-    content: item.content.map((part): ContentPart => {
+    content: item.content.map((part): TextPart | MediaPart => {
       if (part.type === "input_text" || part.type === "output_text") return { type: "text", text: part.text }
       if (part.type === "input_image")
         return {

@@ -1,10 +1,28 @@
+import { codeToHtml, isSupportedLanguage } from "@pierre/highlights"
 import katex from "katex"
 import type { MarkedExtension, Tokens } from "marked"
-import markedShiki from "marked-shiki"
 import { createMarkdownBase } from "./marked-base"
+import { OpenCodeTheme } from "./highlight-theme"
 
-export function createMarkdownParser(highlight: (code: string, language: string) => string | Promise<string>) {
-  return createMarkdownBase().use(markdownMath, markedShiki({ highlight }))
+export function createMarkdownParser() {
+  return createMarkdownBase().use(markdownCode, markdownMath)
+}
+
+const decoder = new TextDecoder()
+
+// The class keeps the fence's own language, even one without a lexer, so the viewer can label it and render Mermaid.
+const markdownCode: MarkedExtension = {
+  renderer: {
+    code(token) {
+      const language = (token.lang?.match(/^\S*/)?.[0] ?? "").toLowerCase().replace(/[^\w#+.-]/g, "") || "text"
+
+      const html = decoder.decode(
+        codeToHtml(token.text, { lang: isSupportedLanguage(language) ? language : "text", theme: OpenCodeTheme }),
+      )
+
+      return html.replace("<code>", `<code class="language-${language}">`) + "\n"
+    },
+  },
 }
 
 // `$$...$$` renders as display math anywhere in a line.
@@ -23,7 +41,26 @@ function renderMath(token: Tokens.Generic) {
   return katex.renderToString(token.text, { throwOnError: false, displayMode: token.displayMode })
 }
 
+const mathFenceLanguages = new Set(["latex", "math"])
+
+/** Whether a fence's info string names display math, as ```` ```latex ```` and ```` ```math ```` do in the TUI. */
+export function isMathFence(lang: string | undefined) {
+  return mathFenceLanguages.has(lang?.match(/^\S*/)?.[0].toLowerCase() ?? "")
+}
+
 export const markdownMath: MarkedExtension = {
+  renderer: {
+    // A math fence KaTeX cannot parse, such as one cut off mid-formula, stays highlighted code.
+    code(token) {
+      if (!isMathFence(token.lang) || !token.text.trim()) return false
+
+      try {
+        return katex.renderToString(token.text, { throwOnError: true, displayMode: true }) + "\n"
+      } catch {
+        return false
+      }
+    },
+  },
   extensions: [
     {
       name: "inlineDollarKatex",

@@ -5,12 +5,8 @@ import { statics } from "./schema.js"
 export const SessionID = Schema.String.check(Schema.isStartingWith("ses")).pipe(
   Schema.brand("SessionID"),
   Schema.annotate({ identifier: "Session.ID" }),
-  statics((schema) => {
-    const create = () => schema.make("ses_" + descending())
-    return {
-      create,
-      descending: (id?: string) => (id === undefined ? create() : schema.make(id)),
-    }
-  }),
+  statics((schema) => ({
+    create: () => schema.make("ses_" + descending()),
+  })),
 )
 export type SessionID = typeof SessionID.Type

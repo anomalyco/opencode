@@ -17,6 +17,8 @@ import {
   type MediaPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolMessage,
+  type UserMessage,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -102,28 +104,19 @@ const MistralTool = Schema.Struct({
 })
 type MistralTool = Schema.Schema.Type<typeof MistralTool>
 
+const ReasoningEffort = ProviderShared.knownString<"none" | "minimal" | "low" | "medium" | "high" | "xhigh">()
+export type ReasoningEffort = typeof ReasoningEffort.Type
+
 const MistralOptions = Schema.Struct({
   safePrompt: Schema.optional(Schema.Boolean),
   documentImageLimit: Schema.optional(Schema.Number),
   documentPageLimit: Schema.optional(Schema.Number),
   parallelToolCalls: Schema.optional(Schema.Boolean),
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: Schema.optional(ReasoningEffort),
   promptMode: Schema.optional(Schema.Literal("reasoning")),
   promptCacheKey: Schema.optional(Schema.String),
 })
-
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | (string & {})
-
-export type ProviderOptionsInput = {
-  readonly safePrompt?: boolean
-  readonly documentImageLimit?: number
-  readonly documentPageLimit?: number
-  readonly parallelToolCalls?: boolean
-  readonly reasoningEffort?: ReasoningEffort
-  readonly promptMode?: "reasoning"
-  readonly promptCacheKey?: string
-  readonly [key: string]: unknown
-}
+export type ProviderOptionsInput = typeof MistralOptions.Type & { readonly [key: string]: unknown }
 
 export const MistralBody = Schema.Struct({
   model: Schema.String,
@@ -236,7 +229,7 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
   return yield* ProviderShared.invalidRequest(`Mistral Chat does not support media type ${part.media.mediaType}`)
 })
 
-const lowerUser = Effect.fnUntraced(function* (message: LLMRequest["messages"][number]) {
+const lowerUser = Effect.fnUntraced(function* (message: UserMessage) {
   const content: MistralUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
@@ -247,7 +240,6 @@ const lowerUser = Effect.fnUntraced(function* (message: LLMRequest["messages"][n
       content.push(yield* lowerMedia(part))
       continue
     }
-    return yield* ProviderShared.unsupportedContent("Mistral Chat", "user", ["text", "media"])
   }
   if (content.every((part) => part.type === "text"))
     return { role: "user" as const, content: content.map((part) => part.text).join("") }
@@ -263,7 +255,6 @@ const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string):
 const lowerAssistant = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   normalizeID: (id: string) => string,
-  prefix: boolean,
 ) {
   const structured = message.content.some(
     (part) => part.type === "reasoning" && isMistralThinkingContent(part.providerMetadata?.mistral?.thinking),
@@ -280,8 +271,6 @@ const lowerAssistant = Effect.fnUntraced(function* (
     if (part.type === "reasoning") {
       const native = part.providerMetadata?.mistral?.thinking
       if (structured && isMistralThinkingContent(native)) content.push(native)
-      else if (structured) content.push({ type: "text", text: part.text })
-      else text.push(part.text)
       continue
     }
     if (part.type === "tool-call") {
@@ -294,18 +283,12 @@ const lowerAssistant = Effect.fnUntraced(function* (
     role: "assistant" as const,
     content: structured ? content : text.join(""),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-    ...(prefix ? { prefix: true as const } : {}),
   }
 })
 
-const lowerToolResults = Effect.fnUntraced(function* (
-  message: LLMRequest["messages"][number],
-  normalizeID: (id: string) => string,
-) {
+const lowerToolResults = Effect.fnUntraced(function* (message: ToolMessage, normalizeID: (id: string) => string) {
   const output: MistralMessage[] = []
   for (const part of message.content) {
-    if (part.type !== "tool-result")
-      return yield* ProviderShared.unsupportedContent("Mistral Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
       output.push({
         role: "tool",
@@ -367,14 +350,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       const hasNativeThinking = message.content.some(
         (part) => part.type === "reasoning" && isMistralThinkingContent(part.providerMetadata?.mistral?.thinking),
       )
-      const text = message.content
-        .flatMap((part) => (part.type === "text" || part.type === "reasoning" ? [part.text] : []))
-        .join("")
+      const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("")
       if (!hasToolCalls && !hasNativeThinking && text.trim() === "") continue
-      messages.push(yield* lowerAssistant(message, normalizeID, !hasToolCalls && message === request.messages.at(-1)))
+      messages.push(yield* lowerAssistant(message, normalizeID))
       continue
     }
     messages.push(...(yield* lowerToolResults(message, normalizeID)))
+  }
+  const trailing = messages.at(-1)
+  if (trailing?.role === "assistant" && !trailing.tool_calls) {
+    messages[messages.length - 1] = { ...trailing, prefix: true }
   }
   return messages
 })
@@ -388,9 +373,6 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MistralOptions))(
     request.providerOptions ?? {},
   )
-  const selected = request.toolChoice?.type === "tool" ? request.toolChoice.name : undefined
-  if (request.toolChoice?.type === "tool" && !selected)
-    return yield* ProviderShared.invalidRequest("Mistral Chat tool choice requires a tool name")
   if (options.reasoningEffort !== undefined && options.promptMode !== undefined)
     return yield* ProviderShared.invalidRequest(
       "Mistral Chat reasoningEffort and promptMode provider options are mutually exclusive",
@@ -410,13 +392,13 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
     tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: request.generation?.maxTokens,
-    random_seed: request.generation?.seed,
-    temperature: request.generation?.temperature,
-    top_p: request.generation?.topP,
-    frequency_penalty: request.generation?.frequencyPenalty,
-    presence_penalty: request.generation?.presencePenalty,
-    stop: request.generation?.stop,
+    max_tokens: request.maxTokens,
+    random_seed: request.seed,
+    temperature: request.temperature,
+    top_p: request.topP,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
+    stop: request.stop,
     prompt_cache_key: ProviderShared.sendsPromptCacheKey(request)
       ? (options.promptCacheKey ?? request.promptCacheKey)
       : undefined,
@@ -505,7 +487,7 @@ const thinkingUnits = (value: unknown): ReadonlyArray<MistralThinkingUnit> => {
 }
 
 const thinkingText = (thinking: ReadonlyArray<MistralThinkingUnit>) =>
-  thinking.flatMap((unit) => (typeof unit.text === "string" ? [unit.text] : [])).join("")
+  thinking.flatMap((unit) => (unit.text !== undefined ? [unit.text] : [])).join("")
 
 const thinkingMetadata = (thinking: MistralThinkingContent) => ({ mistral: { thinking } })
 

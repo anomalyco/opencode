@@ -121,7 +121,8 @@ export function createPathHelpers(scope: () => string) {
   }
 
   /** Whether a normalized path points outside the workspace root. */
-  const absolute = (path: string) => /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
+  const absolute = (path: string) =>
+    path.startsWith("skill://") || /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
 
   const normalizeDir = (input: string) => {
     const path = normalize(input)

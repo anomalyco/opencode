@@ -12,12 +12,15 @@ function isWindowsStoragePath(input: string) {
   return /^[A-Za-z]:\//.test(input) || input.startsWith("//")
 }
 
-function absolute(input: string) {
+export function storedAbsolutePath(input: string) {
   const result = storagePath(input)
   // Persisted projects and sessions can move between operating systems during migration.
-  if (!nodePath.posix.isAbsolute(result) && !isWindowsStoragePath(result)) {
-    throw new Error(`Path is not absolute: ${input}`)
-  }
+  if (nodePath.posix.isAbsolute(result) || isWindowsStoragePath(result)) return result
+}
+
+function absolute(input: string) {
+  const result = storedAbsolutePath(input)
+  if (result === undefined) throw new Error(`Path is not absolute: ${input}`)
   return result
 }
 

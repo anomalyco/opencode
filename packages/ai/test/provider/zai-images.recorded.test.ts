@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src/index.js"
+import { ai } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -16,17 +16,17 @@ const recorded = recordedTests({
 describe("Z.ai Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
-        size: "1024x1024",
+        aspect: "1:1",
         providerOptions: { quality: "standard", userID: "opencode-image-test" },
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("application/octet-stream")
-      expect(response.image.source.type).toBe("url")
-      expect(response.image.source.type === "url" && response.image.source.url).toStartWith("https://")
+      expect(response.images[0].mediaType).toBe("application/octet-stream")
+      expect(response.images[0].source.type).toBe("url")
+      expect(response.images[0].source.type === "url" && response.images[0].source.url).toStartWith("https://")
       expect(response.providerMetadata?.zai).toBeDefined()
     }),
   )

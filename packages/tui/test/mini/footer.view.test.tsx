@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { expect, test } from "bun:test"
+import { afterAll, expect, test } from "bun:test"
 import {
   BoxRenderable,
   ImageRenderable,
@@ -55,6 +55,11 @@ import { tmpdir } from "../fixture/fixture"
 import { diffImageFixture } from "../fixture/diff-image"
 
 const tuiConfig = createTuiResolvedConfig()
+const themeRenderer = await createTestRenderer({})
+afterAll(async () => {
+  themeRenderer.renderer.destroy()
+  await themeRenderer.renderer.closed
+})
 
 async function nativeLightTheme() {
   await using tmp = await tmpdir()
@@ -64,6 +69,7 @@ async function nativeLightTheme() {
   try {
     return await resolveRunTheme(
       {
+        nativeScene: themeRenderer.renderer.nativeScene,
         themeMode: "light",
         getPalette: async (): ReturnType<CliRenderer["getPalette"]> => {
           throw new Error("Palette unavailable")
@@ -231,7 +237,7 @@ async function renderFooter(
         <Harness />
       </box>
     ),
-    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true, exitOnCtrlC: false },
   )
 
   return {
@@ -414,6 +420,37 @@ test("mini retains ordinary paste ANSI stripping and newline normalization", asy
   }
 })
 
+test("mini places a mention and the cursor at measured offsets after wide text", async () => {
+  const sent = Promise.withResolvers<RunPrompt>()
+  const app = await renderFooter({
+    agents: ["helper", "助手"].map((id) => ({ id, name: id, mode: "subagent" as const, hidden: false })),
+    onSubmit: (prompt) => {
+      sent.resolve(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.pasteBracketedText("\t👨‍👩‍👧நி @助")
+    await app.waitForFrame((frame) => frame.includes("@助手") && !frame.includes("@helper"))
+    app.mockInput.pressEnter()
+    // Down on the last row moves the cursor to the end of the text.
+    app.mockInput.pressArrow("left")
+    app.mockInput.pressArrow("down")
+    await app.mockInput.typeText("x")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("\t👨‍👩‍👧நி @助手 x")
+    app.mockInput.pressEnter()
+    const buffer = app.renderer.currentFocusedEditor!.editBuffer
+    const [start, value] = [buffer.measureText("\t👨‍👩‍👧நி "), "@助手"]
+    expect(await sent.promise).toMatchObject({
+      text: "\t👨‍👩‍👧நி @助手 x",
+      parts: [{ type: "agent", name: "助手", source: { start, end: start + buffer.measureText(value), value } }],
+    })
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("a failed clipboard read cancels a waiting submit without losing the draft", async () => {
   const pending = Promise.withResolvers<ClipboardContent | undefined>()
   const submitted: RunPrompt[] = []
@@ -591,8 +628,8 @@ test("direct footer preserves a partial multi-field form draft across permission
     "api".split("").forEach((key) => app.mockInput.pressKey(key))
     app.mockInput.pressEnter()
     await app.renderOnce()
-    "keep this draft".split("").forEach((key) => app.mockInput.pressKey(key))
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this draft")
+    "keep this 草稿".split("").forEach((key) => app.mockInput.pressKey(key))
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this 草稿")
 
     app.setView({
       type: "permission",
@@ -609,7 +646,8 @@ test("direct footer preserves a partial multi-field form draft across permission
     app.setView({ type: "form", request })
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("2/2")
-    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this draft")
+    app.mockInput.pressKey("!")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("keep this 草稿!")
 
     app.setView({ type: "prompt" })
     await app.renderOnce()
@@ -1397,6 +1435,11 @@ test("undo retains mentioned files when the prompt is sent again", async () => {
       },
     ],
     onQueuedPromptAction: async () => {
+      // A permission can unmount the composer while the cancellation is in flight.
+      app.setView({
+        type: "permission",
+        request: { id: "per_undo", sessionID: "ses_child", action: "read", resources: ["src/index.ts"] },
+      })
       app.setQueuedPrompts([])
     },
     onSubmit: (prompt) => {
@@ -1406,17 +1449,22 @@ test("undo retains mentioned files when the prompt is sent again", async () => {
   })
   try {
     await app.renderOnce()
+    await app.mockInput.pasteBracketedText("\t👨‍👩‍👧நி\f")
+    await Bun.sleep(0)
     app.mockInput.pressKey("x", { ctrl: true })
     app.mockInput.pressKey("q")
     await app.renderOnce()
     app.mockInput.pressKey("u", { ctrl: true })
     await Bun.sleep(0)
+    app.setView({ type: "prompt" })
+    await Bun.sleep(0)
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("inspect @src/main.ts please")
+    await app.mockInput.typeText("!")
     app.mockInput.pressEnter()
     await Bun.sleep(0)
     expect(submitted).toMatchObject([
-      { text: "inspect @src/main.ts please", parts: [{ type: "file", url: "file:///src/main.ts" }] },
+      { text: "\t👨‍👩‍👧நி\f\n\ninspect @src/main.ts please!", parts: [{ type: "file", url: "file:///src/main.ts" }] },
     ])
     expect(submitted[0].messageID).toBeUndefined()
   } finally {
@@ -1712,7 +1760,7 @@ test("direct footer counts queued and steering work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("esc stop · ctrl+x q 2 pending · ↓ 1 subagent · ctrl+b background · Build")
+    expect(frame).toContain("ctrl+x q 2 pending · ↓ 1 subagent · Build")
     expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
@@ -1942,7 +1990,6 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
         "session.interrupt": "ctrl+i",
         "session.queued_prompts": queued,
         "session.child.first": "ctrl+j",
-        "session.background": "none",
         "command.palette.show": "ctrl+y",
       },
     }),
@@ -1986,7 +2033,7 @@ test("identity and context precede the provider and a non-fitting provider block
   }
 })
 
-test("direct footer keeps compact work, model detail, and context ahead of cost and rich labels", async () => {
+test("direct footer keeps work, model detail, context, and cost in priority order", async () => {
   const app = await renderFooter({
     currentAgent: "Plan",
     subagents: {
@@ -2007,7 +2054,7 @@ test("direct footer keeps compact work, model detail, and context ahead of cost 
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
     expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
-      "\u25aa esc stop · ↓ 1 sub · ctrl+b bg · Plan · a-model-name-long-enough… · 16% ctx",
+      "\u25aa esc stop · ↓ 1 sub · Plan · a-model-name-long-enough… · 159.6K (16%) · $4.23",
     )
   } finally {
     app.cleanup()
@@ -2077,6 +2124,22 @@ test.each(["Build", "Plan"])("working marker matches the %s label and prompt rai
   }
 })
 
+test("configured agent color paints the label, prompt rail, and working marker", async () => {
+  const app = await renderFooter({
+    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false, color: "#ff79c6" }],
+    state: { phase: "running" },
+  })
+  try {
+    await app.renderOnce()
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    for (const text of ["Build", "\u2503", "\u25aa"]) {
+      expect(spans.find((span) => span.text.includes(text))?.fg.toInts()).toEqual([255, 121, 198, 255])
+    }
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("spinner repaints keep the prompt instance, cursor state, and footer height stable", async () => {
   const app = await renderFooter({
     tuiConfig: createTuiResolvedConfig({ animations: true }),
@@ -2122,7 +2185,7 @@ test("direct footer reserves the working indicator beside complete status text",
   }
 })
 
-test("direct footer always offers backgrounding for a foreground subagent", async () => {
+test("direct footer never offers backgrounding for a subagent", async () => {
   const app = await renderFooter({
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
@@ -2137,7 +2200,8 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · ctrl+b background · Build · gpt-5 · ctrl+p menu")
+    expect(frame).toContain("↓ 1 subagent · Build · gpt-5 · ctrl+p menu")
+    expect(frame).not.toContain("ctrl+b")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()
@@ -2283,7 +2347,7 @@ test("direct permission rejection submits through keymap return binding", async 
       <Keymap.Provider config={tuiConfig}>
         <RejectField
           theme={RUN_THEME_FALLBACK.footer}
-          text=""
+          text={"中\t"}
           disabled={false}
           onChange={(input) => {
             text = input
@@ -2313,7 +2377,7 @@ test("direct permission rejection submits through keymap return binding", async 
     expect(app.captureCharFrame()).toContain("retry")
     app.mockInput.pressEnter()
     await app.renderOnce()
-    expect(submits).toEqual(["retry"])
+    expect(submits).toEqual(["中\tretry"])
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

@@ -1,16 +1,20 @@
 export * as GrepTool from "./grep.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import path from "path"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
+import { Flag } from "../../flag.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
+import { ToolSearch } from "../search.js"
 
 export const name = "grep"
 
@@ -69,9 +73,14 @@ export const Plugin = {
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
+    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        if (flags.resolve(loaded.entries).full_codemode.enabled) return
         editor.add({
           name,
           options: { codemode: false },
@@ -81,7 +90,6 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
               const target = yield* access.resolve({ path: input.path ?? "." })
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
@@ -96,53 +104,34 @@ export const Plugin = {
                   caseSensitive: input.caseSensitive,
                   limit: input.limit,
                 },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
+                ...Permission.invocation(context),
               })
               const root = target.absolute
-              const type = yield* Environment.typeFollowing(environment.files, root).pipe(
-                Effect.catchTag("Environment.NotFound", () =>
-                  Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
-                ),
-              )
+              const type = yield* ToolSearch.pathType(environment.files, root, input.path ?? ".")
               const cwd = type === "directory" ? root : path.dirname(root)
-              const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
-              const matches = yield* ripgrep
-                .grep({
+              const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
+                ripgrep.grep({
                   cwd,
                   pattern: input.pattern,
                   file: type === "file" ? path.basename(root) : undefined,
                   include: input.include,
                   literal: input.literal,
                   caseSensitive: input.caseSensitive,
-                  limit: limit + 1,
-                })
-                .pipe(
-                  Effect.timeoutOrElse({
-                    duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
-                    orElse: () =>
-                      Effect.fail(
-                        new ToolFailure({
-                          message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
-                        }),
-                      ),
+                  limit,
+                }),
+              )
+              return {
+                matches: result.items.map((match) =>
+                  FileSystem.Match.make({
+                    ...match,
+                    entry: FileSystem.Entry.make({
+                      ...match.entry,
+                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                    }),
                   }),
-                  Effect.map((result) =>
-                    result.map((match) =>
-                      FileSystem.Match.make({
-                        ...match,
-                        entry: FileSystem.Entry.make({
-                          ...match.entry,
-                          path: RelativePath.make(
-                            path.relative(location.directory, path.resolve(cwd, match.entry.path)),
-                          ),
-                        }),
-                      }),
-                    ),
-                  ),
-                )
-              return { matches: matches.slice(0, limit), truncated: matches.length > limit }
+                ),
+                truncated: result.truncated,
+              }
             }).pipe(
               Effect.map((result) => ({
                 output: result.matches,
@@ -155,16 +144,17 @@ export const Plugin = {
                 ),
                 metadata: { matches: result.matches.length, truncated: result.truncated },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : error instanceof Ripgrep.InvalidPatternError
-                    ? new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
-                    : new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error }),
-              ),
+              Effect.mapError((error) => {
+                if (error instanceof ToolFailure) return error
+                if (error instanceof Ripgrep.InvalidGlobError)
+                  return new ToolFailure({ message: `Invalid glob in include ${error.message}` })
+                if (error instanceof Ripgrep.InvalidPatternError)
+                  return new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
+                return new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error })
+              }),
             ),
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
   }),
 }

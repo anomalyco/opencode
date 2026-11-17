@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
-import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError, isRetryable } from "../src/index.js"
+import { ai, AIError, HttpContext, InvalidProviderOutputError, isRetryable, TransportError } from "../src/effect.js"
 import {
   LLMClient,
   RequestExecutor,
@@ -64,6 +64,37 @@ describe("RequestExecutor", () => {
       )
       expect(RequestExecutor.httpFailure({ message: "No response", url: request.url }).reason.http).toBeUndefined()
       expect(RequestExecutor.httpFailure({ message: "No URL", status: 500 }).reason.http).toBeUndefined()
+      expect(
+        RequestExecutor.httpFailure({
+          message: "Huge retry-after",
+          url: request.url,
+          status: 429,
+          responseHeaders: { "Retry-After": "1e20" },
+        }).reason,
+      ).toMatchObject({ _tag: "RateLimit", retryAfterMs: Number.MAX_SAFE_INTEGER })
+    }),
+  )
+
+  it.effect("classifies AWS modeled errors from every restJson1 identity location", () =>
+    Effect.sync(() => {
+      const cases = [
+        { body: { code: "ThrottlingException" } },
+        { body: { __type: "ThrottlingException" } },
+        { body: { code: "com.amazonaws.bedrock#ThrottlingException:http://internal.amazon.com/coral/" } },
+        { body: {}, headers: { "X-Amzn-Errortype": "ThrottlingException:http://internal.amazon.com/coral/" } },
+      ]
+      for (const item of cases) {
+        const body = JSON.stringify({ ...item.body, message: "Slow down" })
+        const error = RequestExecutor.httpFailure({
+          message: "Slow down",
+          url: request.url,
+          status: 400,
+          responseHeaders: item.headers,
+          responseBody: body,
+        })
+        expect(error.reason._tag).toBe("RateLimit")
+        expect(error.reason.body).toBe(body)
+      }
     }),
   )
 
@@ -270,6 +301,77 @@ describe("RequestExecutor", () => {
     }).pipe(
       Effect.provide(
         RequestExecutor.middleware((input, next) => record("outer").pipe(Effect.andThen(next(input))), base),
+      ),
+    )
+  })
+
+  it.effect("runs scoped middleware between shared and per-call middleware, outer scopes first", () => {
+    const calls: Array<string> = []
+    const record =
+      (name: string): HttpMiddleware =>
+      (input, next) =>
+        Effect.sync(() => calls.push(name)).pipe(Effect.andThen(next(input)))
+    const base = RequestExecutor.layer.pipe(
+      Layer.provide(
+        handlerLayer((input) => Effect.sync(() => calls.push("handler")).pipe(Effect.as(input.respond("ok")))),
+      ),
+    )
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      yield* executor
+        .execute(request, record("per-call"))
+        .pipe(RequestExecutor.withMiddleware(record("inner")), RequestExecutor.withMiddleware(record("outer")))
+      expect(calls).toEqual(["shared", "outer", "inner", "per-call", "handler"])
+      calls.length = 0
+      // Outside the scope, nothing scoped runs.
+      yield* executor.execute(request)
+      expect(calls).toEqual(["shared", "handler"])
+    }).pipe(Effect.provide(RequestExecutor.middleware(record("shared"), base)))
+  })
+
+  it.effect("applies scoped middleware to a stream and to requests sent through a per-request fetch", () => {
+    const seen: Array<string> = []
+    const scoped: HttpMiddleware = (input, next) =>
+      Effect.sync(() => seen.push(input.url)).pipe(Effect.andThen(next(input)))
+    const fetch: typeof globalThis.fetch = Object.assign(async () => new Response("from fetch"), {
+      preconnect: globalThis.fetch.preconnect,
+    })
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const body = yield* RequestExecutor.stream(executor, request).pipe(
+        Stream.decodeText(),
+        Stream.mkString,
+        RequestExecutor.withMiddleware(scoped),
+      )
+      expect(body).toBe("ok")
+      const fetched = yield* executor
+        .execute(sseRequest, RequestExecutor.withFetch(fetch))
+        .pipe(RequestExecutor.withMiddleware(scoped))
+      expect(yield* fetched.text).toBe("from fetch")
+      expect(seen).toEqual([request.url, sseRequest.url])
+    }).pipe(
+      Effect.provide(
+        RequestExecutor.layer.pipe(Layer.provide(handlerLayer((input) => Effect.succeed(input.respond("ok"))))),
+      ),
+    )
+  })
+
+  it.effect("doesn't wrap a request that scoped middleware sends itself", () => {
+    let wrapped = 0
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const scoped: HttpMiddleware = (input, next) =>
+        Effect.gen(function* () {
+          wrapped++
+          // Such as a token refresh made from inside an auth hook.
+          yield* executor.execute(sseRequest).pipe(Effect.orDie)
+          return yield* next(input)
+        })
+      yield* executor.execute(request).pipe(RequestExecutor.withMiddleware(scoped))
+      expect(wrapped).toBe(1)
+    }).pipe(
+      Effect.provide(
+        RequestExecutor.layer.pipe(Layer.provide(handlerLayer((input) => Effect.succeed(input.respond("ok"))))),
       ),
     )
   })
@@ -666,7 +768,7 @@ describe("RequestExecutor", () => {
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
       const model = route.with({ endpoint: { baseURL: "https://api.openai.test/v1" } }).model({ id: "gpt-4o-mini" })
-      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+      const error = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Ref.update(attempts, (value) => value + 1).pipe(
@@ -697,7 +799,7 @@ describe("RequestExecutor", () => {
 
 describe("WebSocket channel execution", () => {
   const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
-  const request = LLM.request({ model, prompt: "Say hello." })
+  const request = ai.request({ model, prompt: "Say hello." })
   const frames = [
     JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_1" } }),
     JSON.stringify({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),

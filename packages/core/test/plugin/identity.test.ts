@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { SystemPart } from "@opencode/ai"
+import { SystemPart } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { Plugin } from "@opencode/core/plugin"
@@ -42,7 +42,7 @@ it.effect("inserts the structured model block after the agent prompt", () =>
     const catalog = yield* Provider.Service
     const hooks = yield* PluginHooks.Service
     const plugins = yield* Plugin.Service
-    const pluginHost = yield* PluginHost.make(plugins)
+    const pluginHost = yield* PluginHost.make(plugins, "test")
     yield* catalog.transform((editor) => {
       editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
         model.name = "Muse Spark"

@@ -1,0 +1,49 @@
+[data-component="session-elicitation-dock"] {
+  [data-slot="elicitation-fields"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px;
+  }
+
+  [data-slot="elicitation-field"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-inline-size: 0;
+  }
+
+  [data-slot="elicitation-label"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  [data-slot="elicitation-title"] {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="elicitation-description"] {
+    font-size: 12px;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="elicitation-external"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-inline-size: 0;
+  }
+
+  [data-slot="elicitation-url"] {
+    flex: 1;
+    min-inline-size: 0;
+    font-family: var(--v2-font-family-mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    user-select: text;
+    color: var(--v2-text-text-base);
+  }
+}

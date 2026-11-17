@@ -2,7 +2,8 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClientRequest } from "effect/http"
-import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/index.js"
+import { Media } from "../src/effect.js"
+import { Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/experimental.js"
 import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
@@ -358,13 +359,14 @@ describe("Transcription", () => {
         const failed = JSON.stringify({ id: "tr_2", status: "error", error: "Audio file could not be decoded" })
         const program = Effect.gen(function* () {
           const started = yield* Transcription.start({ model: assemblyai, audio, diarize: true, speakers: 2 })
-          expect(started.status).toBe("queued")
+          expect(started.status).toBe("running")
           const resumed = yield* Transcription.resume(assemblyai, JSON.parse(JSON.stringify(started.token)))
           const response = yield* resumed.await({ poll: { interval: "1 second" } })
-          const failure = yield* Transcription.resume(assemblyai, { transcriptID: "tr_2" }).pipe(
-            Effect.flatMap((generation) => generation.await()),
-            Effect.flip,
-          )
+          const errored = yield* Transcription.resume(assemblyai, { transcriptID: "tr_2" })
+          const refreshed = yield* errored.refresh()
+          expect(refreshed.snapshot).toEqual({ id: "tr_2", status: "error", reason: "failed" })
+          expect(refreshed.terminal).toBe(true)
+          const failure = yield* errored.await().pipe(Effect.flip)
           return { response, failure }
         }).pipe(
           Effect.provide(
@@ -612,13 +614,7 @@ describe("Transcription", () => {
 
       expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
       expect(partial.text).toBe("Hello")
-      expect(partial.notices).toEqual([
-        {
-          type: "other",
-          message: "Google Transcription finished with MAX_TOKENS",
-          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
-        },
-      ])
+      expect(partial.providerMetadata?.google).toMatchObject({ finishReason: "MAX_TOKENS" })
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
     }),
   )

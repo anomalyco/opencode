@@ -1,27 +1,27 @@
-import { Effect } from "effect"
-import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
-import { rangeError } from "../interpreter/model.js"
-import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"
-import { toPrimitive, toPrimitiveNumber } from "../interpreter/callback.js"
-import type { Interpreter } from "../interpreter/interpreter.js"
+import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
+import { rangeError } from "../runtime/model.js"
+import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../runtime/objects.js"
+import { withPrimitives } from "../runtime/callback.js"
+import type { Interpreter } from "../runtime/interpreter.js"
 
-const constructDate = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
-  if (args.length === 0) return Effect.succeed(new DateObj(proto, Date.now()))
+const constructDate = (args: Array<Value>, proto: Obj) => {
+  if (args.length === 0) return new DateObj(proto, Date.now())
   if (args.length === 1) {
     const arg = args[0]
-    if (arg instanceof DateObj) return Effect.succeed(new DateObj(proto, arg.time))
-    return Effect.map(toPrimitive(ctx, arg, "default"), (value) =>
+    if (arg instanceof DateObj) return new DateObj(proto, arg.time)
+    return withPrimitives("default", [arg], ([value]) =>
       typeof value === "string"
         ? new DateObj(proto, Date.parse(value))
         : new DateObj(proto, new Date(coerceToNumber(value)).getTime()),
     )
   }
   // The spec converts at most seven components, in order, so extra arguments never run program code.
-  return Effect.map(
-    Effect.forEach(args.slice(0, 7), (arg) => toPrimitiveNumber(ctx, arg), { concurrency: 1 }),
-    (parts) => new DateObj(proto, new Date(...(parts as [number, number])).getTime()),
-  )
+  return toNumbers(args.slice(0, 7), (parts) => new DateObj(proto, new Date(...(parts as [number, number])).getTime()))
 }
+
+// ToNumber on each value in turn, so a symbol throws before any later value's conversion runs program code.
+const toNumbers = (values: Array<Value>, body: (numbers: Array<number>) => Value) =>
+  withPrimitives("number", values, (primitives) => body(primitives.map(coerceToNumber)), true)
 
 type Getter = keyof {
   [K in keyof Date as Date[K] extends () => number ? K : never]: never
@@ -72,12 +72,12 @@ const setters: ReadonlyArray<readonly [Setter, number]> = [
 export const dateGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Date
-  const date = constructor<R>(builtins, proto, {
+  const date = constructor(builtins, proto, {
     name: "Date",
     length: 7,
     // ISO instead of the host's locale string: date strings are deterministic and must not leak the host timezone.
-    call: () => Effect.sync(() => new Date().toISOString()),
-    construct: (args, newTarget) => constructDate(ctx, args, prototypeFrom(newTarget, proto)),
+    call: () => new Date().toISOString(),
+    construct: (args, newTarget) => constructDate(args, prototypeFrom(newTarget, proto)),
   })
   methods(builtins, date, [
     ["now", 0, () => Date.now()],
@@ -85,11 +85,7 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "UTC",
       7,
-      (_, args) =>
-        Effect.map(
-          Effect.forEach(args.slice(0, 7), (arg) => toPrimitiveNumber(ctx, arg), { concurrency: 1 }),
-          (parts) => Date.UTC(...(parts as Parameters<typeof Date.UTC>)),
-        ),
+      (_, args) => toNumbers(args.slice(0, 7), (parts) => Date.UTC(...(parts as Parameters<typeof Date.UTC>))),
     ],
   ])
 
@@ -130,18 +126,13 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
         (thisValue, args) => {
           const target = self(thisValue, name)
           // Native setters read the current time before argument coercion, whose callbacks may mutate the Date.
-          const hosted = new Date(target.time)
-          return Effect.map(
-            Effect.forEach(args.slice(0, length), (arg) => toPrimitiveNumber(ctx, arg), {
-              concurrency: 1,
-            }),
-            (values) => {
-              // Every setter but setTime and setFullYear leaves an invalid Date untouched and answers NaN.
-              if (Number.isNaN(hosted.getTime()) && name !== "setTime" && !name.endsWith("FullYear")) return NaN
-              target.time = hosted[name](...(values as [number, number, number, number]))
-              return target.time
-            },
-          )
+          return toNumbers([target.time, ...args.slice(0, length)], ([time, ...values]) => {
+            const hosted = new Date(time!)
+            // Every setter but setTime and setFullYear leaves an invalid Date untouched and answers NaN.
+            if (Number.isNaN(hosted.getTime()) && name !== "setTime" && !name.endsWith("FullYear")) return NaN
+            target.time = hosted[name](...(values as [number, number, number, number]))
+            return target.time
+          })
         },
       ],
     ),

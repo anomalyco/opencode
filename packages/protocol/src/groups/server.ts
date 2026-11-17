@@ -6,6 +6,8 @@ export const ServerInfo = Schema.Struct({
   version: Schema.String,
   // 0 means the runtime has no OS process identity (e.g. workerd).
   pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  // The machine's name, absent where the runtime has none (e.g. workerd).
+  hostname: Schema.optional(Schema.String),
   urls: Schema.Array(Schema.String),
   paths: Schema.Struct({
     tmp: Schema.String,

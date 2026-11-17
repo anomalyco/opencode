@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
+import { TestClock } from "effect/testing"
 import { Realtime } from "../src/experimental.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 
 describe("experimental Realtime", () => {
-  it.effect("connects OpenAI GPT-Live, OpenAI Realtime (WebRTC + WebSocket), and xAI Grok Voice", () =>
+  it.effect("connects OpenAI GPT-Live, OpenAI Realtime, xAI Grok Voice, and Google Gemini Live", () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(1760000000_000)
+
       expect(
         yield* Realtime.connect({
           model: "gpt-live-1",
@@ -53,6 +56,23 @@ describe("experimental Realtime", () => {
         token: "ek_2",
         expiresAt: 1760000120,
       })
+
+      expect(
+        yield* Realtime.connect({
+          model: "gemini-3.8-live",
+          apiKey: Redacted.make("gemini-key"),
+          session: {
+            generationConfig: { responseModalities: ["AUDIO"] },
+            systemInstruction: { parts: [{ text: "Brief." }] },
+          },
+          transport: { type: "websocket" },
+        }),
+      ).toEqual({
+        type: "websocket",
+        url: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
+        token: "auth_tokens/ek_3",
+        expiresAt: 1760000060,
+      })
     }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
@@ -87,10 +107,25 @@ describe("experimental Realtime", () => {
             if (req.url === "https://api.openai.com/v1/realtime/client_secrets") {
               expect(req.headers.get("authorization")).toBe("Bearer sk-openai")
               expect(JSON.parse(input.text)).toEqual({
-                expires_after: { seconds: 60 },
+                expires_after: { anchor: "created_at", seconds: 60 },
                 session: { type: "realtime", instructions: "Brief.", model: "gpt-realtime-2.1" },
               })
               return input.respond(JSON.stringify({ value: "ek_1", expires_at: 1760000060 }))
+            }
+            if (req.url === "https://generativelanguage.googleapis.com/v1beta/auth_tokens") {
+              expect(req.headers.get("x-goog-api-key")).toBe("gemini-key")
+              expect(req.headers.get("authorization")).toBeNull()
+              expect(JSON.parse(input.text)).toEqual({
+                uses: 1,
+                expireTime: "2025-10-09T09:23:20.000Z",
+                newSessionExpireTime: "2025-10-09T08:54:20.000Z",
+                bidiGenerateContentSetup: {
+                  generationConfig: { responseModalities: ["AUDIO"] },
+                  systemInstruction: { parts: [{ text: "Brief." }] },
+                  model: "models/gemini-3.8-live",
+                },
+              })
+              return input.respond(JSON.stringify({ name: "auth_tokens/ek_3" }))
             }
             expect(req.url).toBe("https://api.x.ai/v1/realtime/client_secrets")
             expect(req.headers.get("authorization")).toBe("Bearer xai-key")
@@ -103,10 +138,22 @@ describe("experimental Realtime", () => {
   )
 
   test("routes bare and versioned model names to their engine", () => {
+    expect(Realtime.engines.map((item) => Realtime.engine(item.model)?.id)).toEqual(
+      Realtime.engines.map((item) => item.id),
+    )
     expect(
-      ["gpt-realtime", "gpt-realtime-2.1", "gpt-live", "grok-voice-latest"].map((model) => Realtime.engine(model)?.id),
-    ).toEqual(["openai-realtime", "openai-realtime", "openai-live", "xai-realtime"])
+      [
+        "gpt-realtime",
+        "gpt-realtime-2.1",
+        "gpt-live",
+        "grok-voice-latest",
+        "gemini-3.8-live",
+        "gemini-3.8-live-extended-thinking",
+      ].map((model) => Realtime.engine(model)?.id),
+    ).toEqual(["openai-realtime", "openai-realtime", "openai-live", "xai-realtime", "gemini-live", "gemini-live"])
     expect(Realtime.engine("gpt-realtimex")).toBeUndefined()
+    expect(Realtime.engine("gemini-3.8-flash")).toBeUndefined()
+    expect(Realtime.engine("gemini-3.5-live")).toBeUndefined()
   })
 
   it.effect("rejects unsupported transports before network I/O", () =>
@@ -121,7 +168,16 @@ describe("experimental Realtime", () => {
         apiKey: Redacted.make("k"),
         transport: { type: "webrtc", sdp: "v=0" },
       }).pipe(Effect.flip)
-      expect([liveWs.reason._tag, grokRtc.reason._tag]).toEqual(["InvalidRequest", "InvalidRequest"])
+      const geminiRtc = yield* Realtime.connect({
+        model: "gemini-3.8-live",
+        apiKey: Redacted.make("k"),
+        transport: { type: "webrtc", sdp: "v=0" },
+      }).pipe(Effect.flip)
+      expect([liveWs.reason._tag, grokRtc.reason._tag, geminiRtc.reason._tag]).toEqual([
+        "InvalidRequest",
+        "InvalidRequest",
+        "InvalidRequest",
+      ])
     }).pipe(Effect.provide(dynamicResponse(() => Effect.die("unsupported transport reached the network")))),
   )
 })

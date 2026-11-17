@@ -1,18 +1,32 @@
 import { Agent } from "@opencode/core/agent"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
-import type { Permission } from "@opencode/core/permission"
+import { Config } from "@opencode/core/config"
+import { Image } from "@opencode/core/image"
+import { Permission } from "@opencode/core/permission"
 import { SessionMessage } from "@opencode/core/session/message"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import type { SessionError } from "@opencode/schema/session-error"
 import { Tool } from "@opencode/core/tool"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { Effect, type Scope } from "effect"
+import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Effect, type Layer, type Scope } from "effect"
 import { host } from "../plugin/host"
+import { imagePassthrough } from "./image"
+import { permissionLayer } from "./permission"
 
 export const toolIdentity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_tool_test"),
 }
+
+/** Replacements for tests that build `Tool.node` without a Location. */
+export const toolNodeReplacements = (
+  permission: Layer.Layer<Permission.Service> = permissionLayer(),
+): LayerNode.Replacements => [
+  Config.node.replace(Config.testLayer()),
+  Image.node.replace(imagePassthrough),
+  Permission.node.replace(permission),
+]
 
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
@@ -29,23 +43,6 @@ export function waitForTool(registry: Tool.Interface, name: string, remaining = 
     }
     yield* Effect.promise(() => Bun.sleep(1))
     yield* waitForTool(registry, name, remaining - 1)
-  })
-}
-
-export function waitForCodeModeTool(
-  registry: Tool.Interface,
-  path: string,
-  remaining = 1000,
-): Effect.Effect<Tool.Snapshot, Error> {
-  return Effect.gen(function* () {
-    const toolSet = yield* registry.snapshot()
-    if (toolSet.codeModeCatalog && codeModeListings(toolSet.codeModeCatalog).some((tool) => tool.path === path))
-      return toolSet
-    if (remaining === 0) {
-      return yield* Effect.fail(new Error(`Timed out waiting for Code Mode tool: ${path}`))
-    }
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* waitForCodeModeTool(registry, path, remaining - 1)
   })
 }
 

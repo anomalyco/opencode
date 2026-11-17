@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 for (const open of [true, false]) {
   story(`preserves ${open ? "expanded" : "collapsed"} tool choices when calls join the group`, async ({ mount }) => {

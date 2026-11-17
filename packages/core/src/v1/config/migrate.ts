@@ -1,7 +1,8 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
 import { ConfigAgent } from "@opencode/schema/config/agent"
-import { Schema } from "effect"
+import { ConfigModel } from "@opencode/schema/config/model"
+import { Option, Schema } from "effect"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigCommandV1 } from "./command.js"
 import { ConfigMCPV1 } from "./mcp.js"
@@ -13,7 +14,7 @@ import { Model } from "../../model.js"
 
 const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
-const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
+const decodeSelection = Schema.decodeUnknownOption(ConfigModel.Selection)
 
 function permissions(info?: ConfigPermissionV1.Info) {
   const rules = (info ?? []).flatMap(([key, rule]) => {
@@ -26,7 +27,7 @@ function permissions(info?: ConfigPermissionV1.Info) {
 
 // Map v1 permission/tool keys onto their renamed v2 tool actions so migrated rules keep matching.
 export function normalizeAction(action: string) {
-  if (action === "write" || action === "patch") return "edit"
+  if (action === "write" || action === "patch" || action === "apply_patch") return "edit"
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
   return action
@@ -38,21 +39,19 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
     ...(info.top_p === undefined ? {} : { top_p: info.top_p }),
   }
-  return encodeAgent(
-    decodeAgent(
-      JSON.stringify({
-        model: modelSelection(info.model, info.variant),
-        request: Object.keys(body).length ? { body } : undefined,
-        system: info.prompt,
-        description: info.description,
-        mode: info.mode,
-        hidden: info.hidden,
-        color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
-        steps: info.steps,
-        disabled: info.disable,
-        permissions: permissions(info.permission),
-      }),
-    ),
+  return decodeAgent(
+    JSON.stringify({
+      model: modelSelection(info.model, info.variant),
+      request: Object.keys(body).length ? { body } : undefined,
+      system: info.prompt,
+      description: info.description,
+      mode: info.mode,
+      hidden: info.hidden,
+      color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
+      steps: info.steps,
+      disabled: info.disable,
+      permissions: permissions(info.permission),
+    }),
   )
 }
 
@@ -67,12 +66,13 @@ export function migrateCommand(command: ConfigCommandV1.Info) {
 }
 
 export function modelSelection(input?: string, variant?: string) {
-  if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
-  const separator = input.indexOf("/")
+  const selection = Option.getOrUndefined(decodeSelection(input))
+  if (selection === undefined) return undefined
+  const selected = selection.variant ?? variant
   return {
-    providerID: providerID(input.slice(0, separator)),
-    model: input.slice(separator + 1),
-    ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
+    providerID: providerID(selection.providerID),
+    model: selection.model,
+    ...(selected === undefined || selected.length === 0 || selected.includes("#") ? {} : { variant: selected }),
   }
 }
 
@@ -90,6 +90,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
       cwd: info.cwd,
       environment: info.environment,
       disabled,
+      codemode: info.codemode,
       timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
     }
   return {
@@ -104,6 +105,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
       redirect_uri: info.oauth.redirectUri,
     },
     disabled,
+    codemode: info.codemode,
     timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
   }
 }
@@ -123,7 +125,11 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     env: info.env,
     package: info.npm ? packageSpecifier(info.npm) : undefined,
     compatibility: setCacheKey === undefined ? undefined : { supportsPromptCacheKey: setCacheKey },
-    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
+    settings: info.api
+      ? { ...options.settings, baseURL: options.settings.baseURL || info.api }
+      : info.options
+        ? options.settings
+        : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
@@ -224,14 +230,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
         ]
       : []),
   ]
-  const defaults = Model.Capabilities.default()
   const capabilities =
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
-      ? {
-          tools: info.tool_call ?? defaults.tools,
-          input: info.modalities?.input ?? defaults.input,
-          output: info.modalities?.output ?? defaults.output,
-        }
+      ? { tools: info.tool_call, input: info.modalities?.input, output: info.modalities?.output }
       : undefined
   return {
     modelID: info.id,
@@ -251,9 +252,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {
-      context: int(info.limit.context),
+      context: info.limit.context === undefined ? undefined : int(info.limit.context),
       input: info.limit.input === undefined ? undefined : int(info.limit.input),
-      output: int(info.limit.output),
+      output: info.limit.output === undefined ? undefined : int(info.limit.output),
     },
   }
 }

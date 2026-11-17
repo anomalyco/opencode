@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
@@ -45,6 +45,30 @@ describe("Credential", () => {
       expect(yield* credentials.list(integrationID)).toEqual([
         expect.objectContaining({ id: created.id, label: "Personal" }),
       ])
+    }),
+  )
+
+  it.effect("reads key form answers stored in configuration before v2.1 as metadata", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const db = (yield* Database.Service).db
+      const integrationID = Integration.ID.make("azure")
+      // A row from an earlier release, which the current schema would otherwise strip.
+      const legacy = {
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "older" },
+        configuration: { resourceName: "answered" },
+      }
+      yield* db.run(
+        sql`INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred_legacy', ${integrationID}, 'Legacy', ${JSON.stringify(legacy)}, 1, 0, 0)`,
+      )
+
+      expect((yield* credentials.get(Credential.ID.make("cred_legacy")))?.value).toEqual({
+        type: "key",
+        key: "secret",
+        metadata: { imported: true, resourceName: "answered" },
+      })
     }),
   )
 
@@ -95,18 +119,18 @@ describe("Credential", () => {
       expect(yield* credentials.list(integrationID)).toEqual([])
 
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newer.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newer.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: replacement.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: replacement.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: replacement.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: older.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: older.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: null } },
       ])
       expect(events.every((event) => !("location" in event))).toBeTrue()
@@ -154,8 +178,8 @@ describe("Credential", () => {
           .pipe(Effect.orDie),
       ).toEqual({ active: true })
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: oldest.id } },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: newest.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: newer.id } },
       ])
     }),
@@ -236,11 +260,11 @@ describe("Credential", () => {
 
       expect(yield* credentials.list(integrationID)).toEqual([first, imported, legacy])
       expect(events.map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: first.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: first.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: legacy.id } },
         { type: Credential.Event.Switched.type, data: { integrationID, credentialID: legacy.id } },
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: imported.id } },
       ])
     }),
   )

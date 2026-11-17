@@ -10,7 +10,7 @@
 //   /permission [kind] → triggers a permission request variant
 //   /form [kind]       → triggers a canonical Form request variant
 //   /fmt <kind>   → emits a specific tool/text type (text, reasoning, shell,
-//                   write, edit, patch, subagent, question, error, mix)
+//                   write, edit, patch, subagent, todo, question, error, mix)
 //
 // Demo mode handles permission and Form replies locally, completing or failing
 // the synthetic tool parts through the same callbacks used by the live footer.
@@ -42,6 +42,7 @@ const KINDS = [
   "edit",
   "patch",
   "subagent",
+  "todo",
   "question",
   "error",
   "mix",
@@ -503,19 +504,24 @@ function emitPatch(state: State): void {
   })
 }
 
+function subagentLaunch(sessionID: string) {
+  return {
+    output: [
+      `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
+      "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
+      "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+      "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
+    ].join("\n"),
+    metadata: { sessionID, status: "running" },
+  }
+}
+
 function emitTask(state: State): void {
   const ref = make(state, "subagent", {
     description: "Scan run/* for reducer touchpoints",
     agent: "explore",
   })
-  doneTool(state, ref, {
-    output: "",
-    metadata: {
-      sessionID: "ses_demo_child",
-      status: "completed",
-      output: "",
-    },
-  })
+  doneTool(state, ref, subagentLaunch("ses_demo_child"))
   const part = {
     type: "tool",
     id: "sub_demo_call_1",
@@ -563,6 +569,17 @@ function emitTask(state: State): void {
       },
     ],
   })
+}
+
+function emitTodo(state: State): void {
+  const todos = [
+    { content: "Trigger permission UI", status: "completed" },
+    { content: "Trigger question UI", status: "in_progress" },
+    { content: "Tune tool formatting", status: "pending" },
+    { content: "Rewrite the renderer", status: "cancelled" },
+  ]
+  const ref = make(state, "todowrite", { todos })
+  doneTool(state, ref, { output: "1 completed, 1 in progress, 1 pending, 1 cancelled", metadata: { todos } })
 }
 
 function emitQuestionTool(state: State): void {
@@ -654,14 +671,7 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       permission: "subagent",
       patterns: ["explore"],
       always: ["*"],
-      done: {
-        output: "",
-        metadata: {
-          sessionID: "sub_demo_perm_1",
-          status: "completed",
-          output: "",
-        },
-      },
+      done: subagentLaunch("sub_demo_perm_1"),
     })
     return
   }
@@ -701,10 +711,7 @@ function emitPermission(state: State, kind: PermissionKind = "edit"): void {
       permission: "doom_loop",
       patterns: ["*"],
       always: ["*"],
-      done: {
-        output: "Continuing after repeated failures.\n",
-        metadata: {},
-      },
+      done: subagentLaunch("sub_demo_doom_1"),
     })
     return
   }
@@ -872,6 +879,11 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     return true
   }
 
+  if (kind === "todo") {
+    emitTodo(state)
+    return true
+  }
+
   if (kind === "question") {
     emitQuestionTool(state)
     return true
@@ -892,6 +904,7 @@ async function emitFmt(state: State, kind: string, body: string, signal?: AbortS
     emitEdit(state)
     emitPatch(state)
     emitTask(state)
+    emitTodo(state)
     emitQuestionTool(state)
     emitError(state, "demo mixed scenario error")
     return true

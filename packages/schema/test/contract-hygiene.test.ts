@@ -6,6 +6,7 @@ import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
+import { Job } from "../src/job.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -177,6 +178,13 @@ describe("contract hygiene", () => {
       Form.Fields,
       Form.Info,
       Form.ExternalField,
+      Job.Kind,
+      Job.Status,
+      Job.Time,
+      Job.Shell,
+      Job.Subagent,
+      Job.Image,
+      Job.Info,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,
@@ -260,15 +268,15 @@ describe("contract hygiene", () => {
       text: "hello",
     })
     expect(
-      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", state: { id: "opaque" } }),
-    ).toEqual({ type: "reasoning", text: "thinking", state: { id: "opaque" } })
+      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", native: { id: "opaque" } }),
+    ).toEqual({ type: "reasoning", text: "thinking", native: { id: "opaque" } })
     expect(
       SessionMessage.AssistantTool.make({
         type: "tool",
         id: "call_1",
         name: "search",
         executed: true,
-        providerState: { itemId: "item_1" },
+        native: { itemId: "item_1" },
         state: { status: "streaming", input: "" },
         time: { created: DateTime.makeUnsafe(0) },
       }),
