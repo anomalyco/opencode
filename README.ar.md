@@ -74,7 +74,7 @@ nix run github:anomalyco/opencode  # Nix
 | Linux                 | `.deb` او `.rpm` او AppImage       |
 
 ```bash
-# macOS (Homebrew)
+# Linux و macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

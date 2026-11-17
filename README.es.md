@@ -74,7 +74,7 @@ OpenCode también está disponible como aplicación de escritorio. Descárgala d
 | Linux                 | `.deb`, `.rpm`, o AppImage         |
 
 ```bash
-# macOS (Homebrew)
+# Linux y macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

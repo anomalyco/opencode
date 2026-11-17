@@ -74,7 +74,7 @@ OpenCode також доступний як десктопний застосу�
 | Linux                 | `.deb`, `.rpm` або AppImage        |
 
 ```bash
-# macOS (Homebrew)
+# Linux i macOS (Homebrew)
 brew install --cask opencode-desktop
 ```
 

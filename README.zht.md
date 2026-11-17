@@ -74,7 +74,7 @@ OpenCode 也提供桌面版應用程式。您可以從 [opencode.ai/download](ht
 | Linux                 | `.deb`, `.rpm`, 或 AppImage        |
 
 ```bash
-# macOS (Homebrew Cask)
+# Linux 與 macOS (Homebrew Cask)
 brew install --cask opencode-desktop
 ```
 
