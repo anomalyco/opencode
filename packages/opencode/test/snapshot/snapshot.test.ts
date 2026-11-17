@@ -4,9 +4,13 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
 import { Snapshot } from "../../src/snapshot"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { existsSync } from "fs"
 import {
   disposeAllInstances,
   provideInstance,
@@ -14,7 +18,7 @@ import {
   TestInstance,
   tmpdirScoped,
 } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(
   Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
@@ -272,6 +276,160 @@ it.instance(
       const patch = yield* snapshot.patch("invalid-hash-12345")
       expect(patch.files).toEqual([])
       expect(patch.hash).toBe("invalid-hash-12345")
+    }),
+  ),
+  { git: true },
+)
+
+const snapshotStore = Effect.fn("SnapshotTest.snapshotStore")(function* (worktree: string) {
+  const root = path.join(Global.Path.data, "snapshot")
+  const projects = yield* Effect.promise(() => fs.readdir(root))
+  const gitdir = projects.map((project) => path.join(root, project, Hash.fast(worktree))).find((dir) => existsSync(dir))
+  if (!gitdir) throw new Error(`no snapshot store for ${worktree}`)
+  return gitdir
+})
+
+const storeGit = (gitdir: string, command: string[]) =>
+  Effect.promise(async () => {
+    const proc = Bun.spawn(["git", "--git-dir", gitdir, ...command], { stdout: "pipe", stderr: "pipe" })
+    const [code, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    return { code, stdout: stdout.trim(), stderr }
+  })
+
+const looseObject = Effect.fn("SnapshotTest.looseObject")(function* (gitdir: string, file: string) {
+  const hash = (yield* storeGit(gitdir, ["rev-parse", `:${file}`])).stdout
+  return path.join(gitdir, "objects", hash.slice(0, 2), hash.slice(2))
+})
+
+const cleanupPlan = (gitdir: string) =>
+  Effect.promise(
+    async () =>
+      JSON.parse(await fs.readFile(path.join(gitdir, "opencode-cleanup.json"), "utf8")) as Record<string, number>,
+  )
+
+const temporaryPacks = (gitdir: string) =>
+  Effect.promise(async () =>
+    (await fs.readdir(path.join(gitdir, "objects", "pack"))).filter((name) => name.startsWith("tmp_")),
+  )
+
+const overwrite = (file: string, content: string) =>
+  Effect.promise(async () => {
+    await fs.chmod(file, 0o644)
+    await fs.writeFile(file, content)
+  })
+
+it.instance(
+  "cleanup removes empty loose objects and then collects the store",
+  withTrackedSnapshot(({ tmp, snapshot }) =>
+    Effect.gen(function* () {
+      const gitdir = yield* snapshotStore(tmp.path)
+      const object = yield* looseObject(gitdir, "a.txt")
+      yield* overwrite(object, "")
+      expect((yield* storeGit(gitdir, ["gc", "--prune=7.days"])).stderr).toContain("is empty")
+
+      yield* snapshot.cleanup()
+
+      expect(existsSync(object)).toBe(false)
+      expect((yield* cleanupPlan(gitdir)).failures).toBe(0)
+      expect((yield* storeGit(gitdir, ["fsck", "--no-dangling"])).stderr).not.toContain("empty")
+      yield* write(`${tmp.path}/b.txt`, "changed")
+      expect(yield* snapshot.track()).toBeTruthy()
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "cleanup drops an alternate whose repository is gone and then collects the store",
+  withTrackedSnapshot(({ tmp, snapshot }) =>
+    Effect.gen(function* () {
+      const gitdir = yield* snapshotStore(tmp.path)
+      const alternates = path.join(gitdir, "objects", "info", "alternates")
+      const source = (yield* Effect.promise(() => fs.readFile(alternates, "utf8"))).trim()
+      const gone = path.join(tmp.path, "gone", ".git", "objects")
+      yield* Effect.promise(() => fs.writeFile(alternates, `${source}\n${gone}\n`))
+
+      yield* snapshot.cleanup()
+
+      expect((yield* Effect.promise(() => fs.readFile(alternates, "utf8"))).trim()).toBe(source)
+      expect((yield* cleanupPlan(gitdir)).failures).toBe(0)
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "a failed cleanup removes the partial pack it wrote and backs off",
+  withTrackedSnapshot(({ tmp, snapshot }) =>
+    Effect.gen(function* () {
+      const gitdir = yield* snapshotStore(tmp.path)
+      yield* overwrite(yield* looseObject(gitdir, "a.txt"), "not a zlib stream")
+      const before = Date.now()
+
+      yield* snapshot.cleanup()
+
+      expect(yield* temporaryPacks(gitdir)).toEqual([])
+      const plan = yield* cleanupPlan(gitdir)
+      expect(plan.failures).toBe(1)
+      expect(plan.next).toBeGreaterThanOrEqual(before + 2 * 60 * 60 * 1000)
+
+      yield* snapshot.cleanup()
+      expect(yield* cleanupPlan(gitdir)).toEqual(plan)
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "an interrupted cleanup removes the partial pack its killed gc wrote",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* Effect.forEach(
+      Array.from({ length: 80 }, (_, i) => i),
+      (i) => write(`${tmp.path}/blob-${i}.bin`, crypto.getRandomValues(new Uint8Array(1_500_000))),
+      { concurrency: 8, discard: true },
+    )
+    yield* snapshot.track()
+    const gitdir = yield* snapshotStore(tmp.path)
+
+    const fiber = yield* snapshot.cleanup().pipe(Effect.forkChild)
+    yield* pollWithTimeout(
+      temporaryPacks(gitdir).pipe(Effect.map((names) => (names.length ? true : undefined))),
+      "gc never started writing a pack",
+      "20 seconds",
+    )
+    yield* Fiber.interrupt(fiber)
+
+    expect(yield* temporaryPacks(gitdir)).toEqual([])
+  }),
+  { git: true },
+)
+
+it.instance(
+  "cleanup waits for its schedule and leaves a store another gc is collecting alone",
+  withTrackedSnapshot(({ tmp, snapshot }) =>
+    Effect.gen(function* () {
+      const gitdir = yield* snapshotStore(tmp.path)
+      yield* Effect.promise(() => fs.writeFile(path.join(gitdir, "gc.pid"), `${process.pid} ${os.hostname()}`))
+      yield* snapshot.cleanup()
+      expect(existsSync(path.join(gitdir, "opencode-cleanup.json"))).toBe(false)
+
+      yield* Effect.promise(() => fs.rm(path.join(gitdir, "gc.pid")))
+      yield* snapshot.cleanup()
+      const plan = yield* cleanupPlan(gitdir)
+      expect(plan).toMatchObject({ failures: 0 })
+
+      yield* write(`${tmp.path}/new.txt`, "NEW")
+      yield* snapshot.track()
+      const loose = yield* looseObject(gitdir, "new.txt")
+      yield* snapshot.cleanup()
+      expect(existsSync(loose)).toBe(true)
+      expect(yield* cleanupPlan(gitdir)).toEqual(plan)
     }),
   ),
   { git: true },
