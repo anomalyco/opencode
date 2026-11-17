@@ -2,7 +2,8 @@
 //!
 //! The composer takes the prompt's place under the transcript: a raised panel with the Subagents, Shell, and (while
 //! the server offers terminals) Terminals tabs. `session.child.first` (Down on an empty prompt) opens it on the
-//! Subagents tab, `terminal.select` on the Terminals tab, and a child session shows it instead of a prompt. While it is
+//! Subagents tab, `terminal.select` on the Terminals tab, and a child session shows it instead of a prompt. A prompted
+//! permission request hides it, whatever opened it. While it is
 //! open it pushes the `composer` input mode: Left and Right switch tabs, Escape and Ctrl+C close it (a child session
 //! goes to its parent instead), and each tab binds its `composer.*` commands.
 
@@ -67,6 +68,8 @@ struct Inner {
     /// The session is a child; it shows the composer instead of a prompt while it has no form.
     child: Cell<bool>,
     forms: Cell<bool>,
+    /// A permission request is prompted; the composer hides, whatever opened it (`composerVisible`).
+    permissions: Cell<bool>,
     /// The open state and tab list the last refresh applied.
     open: Cell<bool>,
     tabs: RefCell<Vec<Tab>>,
@@ -110,6 +113,7 @@ impl Composer {
             tab: Cell::new(None),
             child: Cell::new(false),
             forms: Cell::new(false),
+            permissions: Cell::new(false),
             open: Cell::new(false),
             tabs: RefCell::new(Vec::new()),
             default: Cell::new(None),
@@ -146,13 +150,15 @@ impl Composer {
         }
     }
 
-    /// Follows the session (`parentID`), its forms, its subagents and shells. `forms` is whether the session has a
-    /// form; `muted` is whether the right pane has focus, which closes the composer (`promptMuted`).
-    pub fn sync(&self, tui: &Tui, forms: bool, muted: bool) {
+    /// Follows the session (`parentID`), its forms, its permission requests, its subagents and shells. `forms` is
+    /// whether the session has a form; `permissions` whether a permission request is prompted; `muted` is whether
+    /// the right pane has focus, which closes the composer (`promptMuted`).
+    pub fn sync(&self, tui: &Tui, forms: bool, permissions: bool, muted: bool) {
         let inner = &self.0;
         let child = tui.data.read(|state| state.session(&inner.session).is_some_and(|info| info.parent_id.is_some()));
         inner.child.set(child);
         inner.forms.set(forms);
+        inner.permissions.set(permissions);
         if muted {
             inner.requested.set(false);
         }
@@ -286,7 +292,7 @@ impl Inner {
 
     /// Applies the open state and the tab list, updates each tab, and redraws.
     fn refresh(self: &Rc<Self>, tui: &Tui) {
-        let open = self.requested.get() || (self.child.get() && !self.forms.get());
+        let open = !self.permissions.get() && (self.requested.get() || (self.child.get() && !self.forms.get()));
         let mut tabs = vec![Tab::Subagents, Tab::Shell];
         if tui.terminals.available() {
             tabs.push(Tab::Terminals);

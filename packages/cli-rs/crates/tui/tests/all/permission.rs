@@ -32,7 +32,10 @@ fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
         ("GET", "/api/session/ses_root") => (200, json!({ "data": session("ses_root", None) })),
         // The root's children, which a child's arrival reads.
         ("GET", "/api/session") => (200, json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} })),
-        ("GET", "/api/session/ses_root/message") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_child") => (200, json!({ "data": session("ses_child", Some("ses_root")) })),
+        ("GET", "/api/session/ses_root/message" | "/api/session/ses_child/message") => {
+            (200, json!({ "data": [], "cursor": {} }))
+        }
         ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": fixture.root })),
         ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": fixture.child })),
         // The goal footer's RPC read (E.14); no goal is set.
@@ -61,12 +64,16 @@ struct Prompt {
 deref_harness!(Prompt);
 
 fn mount(fixture: Fixture, permissions: Permissions) -> Prompt {
+    mount_at("ses_root", fixture, permissions)
+}
+
+fn mount_at(viewed: &str, fixture: Fixture, permissions: Permissions) -> Prompt {
     let sent = Arc::default();
     let mut config = support::config(opencode_local::cli_config::Info::default());
     config.permissions = permissions;
     let deps = Deps {
         config,
-        route: support::session_route("ses_root"),
+        route: support::session_route(viewed),
         ..support::deps(Arc::new(fake(fixture, Arc::clone(&sent))))
     };
     Prompt { harness: support::mount(100, 30, deps), sent }
@@ -168,6 +175,25 @@ fn a_subagent_rejection_asks_what_to_do_differently() {
     harness.wait_for("use rg");
     harness.app.press("enter");
     assert_eq!(harness.replies(1), [reply("per_2", "ses_child", json!({ "decision": "reject", "message": "use rg" }))]);
+}
+
+/// A child session prompts for its own request, and the prompt hides the composer that shows in place of the
+/// child's prompt (`composerVisible`); once the request is answered the composer returns.
+#[test]
+fn a_child_session_prompts_for_its_own_request_and_hides_the_composer() {
+    let harness = mount_at(
+        "ses_child",
+        Fixture { child: vec![request("per_2", "ses_child", "grep", &["TODO"], &[])], ..Fixture::default() },
+        Permissions::Prompt,
+    );
+    let screen = harness.wait_for("Grep \"TODO\"");
+    assert!(screen.contains("Permission required"), "{screen}");
+    assert!(!screen.contains("Subagents"), "the composer hides:\n{screen}");
+
+    harness.app.press("enter");
+    assert_eq!(harness.replies(1), [reply("per_2", "ses_child", json!({ "decision": "once" }))]);
+    let screen = harness.wait_for("Subagents");
+    assert!(!screen.contains("Permission required"), "{screen}");
 }
 
 /// The rejection prompt restyles in place, keeping the reason typed so far: each cell equals the prompt mounted in
