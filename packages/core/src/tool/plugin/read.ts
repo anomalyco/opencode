@@ -5,6 +5,9 @@ import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
@@ -40,14 +43,27 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const environment = yield* Environment.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
-          options: { codemode: false },
-          description:
-            "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          options: { codemode: codeMode },
+          description: [
+            "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+            ...(codeMode
+              ? [
+                  "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference.",
+                ]
+              : [
+                  "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+                ]),
+            "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          ].join(" "),
           input: Input,
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
@@ -181,8 +197,8 @@ export const Plugin = {
               }),
             )
           },
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
