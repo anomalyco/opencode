@@ -191,7 +191,7 @@ export const Operations = [
   ),
   operation(
     "handoff",
-    "Move this tab's current page to the user's system browser when a login needs a passkey, security key, WebAuthn authenticator, or single sign-on (SSO) the in-app browser cannot service. Opens the page in the default browser and waits for the user to choose Done or Cancel in the Review pane. The pane never receives that session, its cookies, or its credentials and stays signed out; do not ask the user to paste, read, or repeat them. Use it for the credential step, then continue in the pane.",
+    "Move this tab's sign-in to the user's system browser when a login needs a passkey, security key, WebAuthn authenticator, or single sign-on (SSO) the in-app browser cannot service. Nothing opens until the user chooses Open in the Review pane; the tool then waits for their Done or Cancel, up to ten minutes. It resolves { state, host } - completed, cancelled, or timedOut - and the pane stays signed out: that session, its cookies, and its credentials never enter OpenCode, and work that needs the sign-in stays with the user in the system browser. Never ask the user to paste, read, or repeat credentials, cookies, or one-time codes.",
     tab,
     Schema.Struct({
       state: Schema.Literals(["completed", "cancelled", "timedOut"]),

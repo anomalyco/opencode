@@ -56,10 +56,13 @@ deviation from the original option B: **the pane does not inherit the authentica
 Returning the session would mean copying the system browser's cookies or credentials into the pane,
 which is exactly the credential transfer this feature must not perform. Instead:
 
-- The desktop opens the tab's current page in the user's default browser (`shell.openExternal`).
-- The pane shows a banner — "Finish signing in to {host}" — with **Done** and **Cancel**.
-- The tool waits for that answer (ten minutes in the desktop, a twelve-minute server backstop) and
-  resolves `{ state: "completed" | "cancelled" | "timedOut", host }`.
+- The pane shows a banner first — the page's URL, "Sign in to {host} in your system browser", with **Open** and
+  **Cancel**. Nothing opens on the agent's word alone: the desktop launches the user's default browser
+  (`shell.openExternal`) only on the user's **Open** click.
+- The banner then waits — "Finish signing in to {host}" — with **Done** and **Cancel**.
+- The tool waits for that answer (ten minutes in the desktop, a twelve-minute server backstop) and resolves
+  `{ state: "completed" | "cancelled" | "timedOut", host }`. A launch the user started that fails rejects with a
+  plain error instead.
 - The pane stays signed out by design. Work that needs the sign-in stays with the user in the system
   browser.
 
@@ -80,9 +83,11 @@ check.
 
 - Handoffs open only `http:`/`https:` URLs without embedded credentials (`destinationOrigin` in
   `packages/gui-plugins/src/browser/policy.ts`).
-- No URL, cookie, token, password, one-time code, page content, or other credential material appears in
-  tool inputs, pane events, tool results, or errors. Events carry `{ type, tabID, id, host, state }`;
-  results carry `{ state, host }`.
+- The system browser opens only on the user's **Open** click in the Review pane, never on the agent's request
+  alone. The banner shows the page's URL while asking — the same URL the pane's address bar already shows.
+- No URL, cookie, token, password, one-time code, page content, or other credential material appears in tool
+  inputs, tool results, or errors. Events carry `{ type, tabID, id, host, state }` plus that asking URL; results
+  carry `{ state, host }`.
 - The URL is passed once to `shell.openExternal` and dropped; launch errors never echo it.
 - The pane never claims to be authenticated after a handoff.
 - The tool contract is additive: one new `handoff` action; every existing operation is unchanged.

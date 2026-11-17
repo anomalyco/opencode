@@ -49,10 +49,11 @@ passkey, security key, WebAuthn device, or an SSO flow that ends in one cannot
 complete inside the Review pane. Password forms the user types into the pane
 work as usual. The full finding is recorded in [docs/passkeys.md](docs/passkeys.md).
 
-`browser.handoff({ tabID })` moves the tab's current page to the user's default
-browser: the desktop opens the URL there, the pane shows a waiting banner, and
-the tool waits for the user to choose **Done** or **Cancel** in the Review pane
-(ten minutes; the server's backstop is twelve). It returns
+`browser.handoff({ tabID })` asks the user to move the tab's current page to
+their default browser. Nothing opens on the agent's word alone: the pane shows a
+banner with the page's URL and an **Open** button, and the desktop launches the
+browser only when the user clicks it. The banner then waits for **Done** or
+**Cancel** (ten minutes; the server's backstop is twelve) and the tool resolves
 `{ state, host }` — a terminal `completed`, `cancelled`, or `timedOut` plus the
 site's host — and nothing else.
 

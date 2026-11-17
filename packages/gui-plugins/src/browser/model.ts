@@ -403,7 +403,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const handoffEvent = (sessionKey: string, event: HandoffEvent) => {
     const tabKey = `${sessionKey}\n${event.tabID}`
 
-    if (event.state === "pending") cancel(handoffTimers, tabKey)
+    if (event.state === "pending" || event.state === "opened") cancel(handoffTimers, tabKey)
     else
       schedule(handoffTimers, tabKey, HANDOFF_BANNER_MS, () => setState("handoffs", sessionKey, event.tabID, undefined))
     setState("handoffs", sessionKey, { [event.tabID]: event })
@@ -660,8 +660,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     /** The handoff waiting in this tab, or its outcome until its banner clears. */
     handoffFor: (session: Session, tabID: string) => state.handoffs[session.key]?.[tabID],
-    /** The user's answer to the handoff waiting in this tab; one the desktop no longer knows ends here. */
-    handoff(session: Session, tabID: string, id: string, action: "done" | "cancel") {
+    /** The user's Open, Done, or Cancel for the handoff waiting in this tab; one the desktop no longer knows ends here. */
+    handoff(session: Session, tabID: string, id: string, action: "open" | "done" | "cancel") {
       const answer = registration(session)?.handoff(id, action)
 
       if (answer)

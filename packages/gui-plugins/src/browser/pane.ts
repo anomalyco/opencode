@@ -361,8 +361,8 @@ export function createBrowserPane(input: {
       handoffs.cancelBinding(binding)
       dispatchBinding(binding, { type: "client.closed" })
     },
-    /** The user answered a handoff shown in this window. */
-    handoff(window: number, binding: string, id: string, action: "done" | "cancel") {
+    /** The user opened, finished, or abandoned a handoff shown in this window; only their Open launches the browser. */
+    handoff(window: number, binding: string, id: string, action: "open" | "done" | "cancel") {
       owned(window, binding)
 
       if (!handoffs.settle(binding, id, action)) throw new Error("browser.pane.handoff.unknown")

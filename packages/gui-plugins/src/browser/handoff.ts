@@ -2,22 +2,28 @@ import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { HandoffEvent } from "./ipc"
 import { destinationOrigin } from "./policy"
 
-export type HandoffState = Exclude<HandoffEvent["state"], "pending">
+/** The outcomes a handoff settles with; a launch the user started that failed rejects instead. */
+export type HandoffOutcome = Extract<HandoffEvent["state"], "completed" | "cancelled" | "timedOut">
 
-export type HandoffResult = { readonly state: HandoffState; readonly host: string }
+export type HandoffResult = { readonly state: HandoffOutcome; readonly host: string }
 
 type Pending = {
   readonly id: string
   readonly tabID: Browser.TabID
-  readonly finish: (state: HandoffState) => void
+  readonly url: string
+  opened: boolean
+  readonly launch: () => Promise<void>
+  readonly finish: (state: HandoffOutcome) => void
 }
 
 /**
- * Moves one page to the system browser and waits for the user to say they are done.
+ * Waits for the user to move one page to the system browser and say they are done.
  *
- * The pane cannot inherit the external browser's session: copying its cookies or credentials would be exactly the
- * transfer this feature exists to avoid. A handoff reports only whether the user finished, and the page here stays
- * signed out. The URL is used once to open the browser, then dropped; events and results carry the host only.
+ * Nothing opens until the user chooses Open in the Review pane: the pane never launches the user's browser on the
+ * agent's word alone. The pane also cannot inherit the external browser's session — copying its cookies or
+ * credentials would be exactly the transfer this feature exists to avoid — so a handoff reports only whether the
+ * user finished, and the page here stays signed out. The URL is used once, on the user's click, then dropped;
+ * events and results carry the host only, except the URL the banner shows while asking.
  */
 export function createHandoffs(input: {
   openExternal: (url: string) => Promise<void>
@@ -53,49 +59,78 @@ export function createHandoffs(input: {
     const url = new URL(request.url)
     const host = url.host
     const id = createID()
-
-    // The launch happens before the banner: a browser that never opened is a tool error, not a confirmation the user
-    // never saw. Electron's rejection can name the URL, so the error the agent reads is this one instead.
-    try {
-      await input.openExternal(url.href)
-    } catch {
-      throw new Error(
-        "Could not open the system browser. The page stayed in the Review pane; use its Open in system browser button, then finish sign-in there.",
-      )
-    }
-
-    if (request.signal.aborted) return { state: "cancelled", host }
-
     const result = Promise.withResolvers<HandoffResult>()
 
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    const finish = (state: HandoffState) => {
-      if (pending.get(request.binding)?.id !== id) return
+    // The user's Open click, not the agent's request, launches the browser. Electron's rejection can name the URL,
+    // so the error the agent reads is this one instead.
+    const launch = async () => {
+      try {
+        await input.openExternal(url.href)
+      } catch {
+        if (!close()) return
+
+        request.emit({ type: "handoff", tabID: request.tabID, id, host, state: "failed" })
+        result.reject(
+          new Error(
+            "Could not open the system browser. The page stayed in the Review pane; use its Open in system browser button, then finish sign-in there.",
+          ),
+        )
+
+        return
+      }
+
+      if (pending.get(request.binding)?.id === id)
+        request.emit({ type: "handoff", tabID: request.tabID, id, host, url: url.href, state: "opened" })
+    }
+
+    const close = () => {
+      if (pending.get(request.binding)?.id !== id) return false
 
       pending.delete(request.binding)
 
       if (timer) clearTimeout(timer)
 
       request.signal.removeEventListener("abort", abort)
+
+      return true
+    }
+
+    const finish = (state: HandoffOutcome) => {
+      if (!close()) return
+
       request.emit({ type: "handoff", tabID: request.tabID, id, host, state })
       result.resolve({ state, host })
     }
 
     const abort = () => finish("cancelled")
 
-    pending.set(request.binding, { id, tabID: request.tabID, finish })
+    pending.set(request.binding, { id, tabID: request.tabID, url: url.href, opened: false, launch, finish })
+
     timer = setTimeout(() => finish("timedOut"), timeoutMs)
+
     request.signal.addEventListener("abort", abort, { once: true })
-    request.emit({ type: "handoff", tabID: request.tabID, id, host, state: "pending" })
+    request.emit({ type: "handoff", tabID: request.tabID, id, host, url: url.href, state: "pending" })
 
     return result.promise
   }
 
-  function settle(binding: string, id: string, action: "done" | "cancel") {
+  function settle(binding: string, id: string, action: "open" | "done" | "cancel") {
     const current = pending.get(binding)
 
     if (!current || current.id !== id) return false
+
+    if (action === "open") {
+      // A second Open while the browser is starting must not launch it twice.
+      if (current.opened) return true
+      current.opened = true
+
+      void current.launch()
+
+      return true
+    }
+
     current.finish(action === "done" ? "completed" : "cancelled")
 
     return true

@@ -47,13 +47,15 @@ export type PaneElement = typeof PaneElement.Type
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
-  // The page moved to the system browser; the pane waits for the user's answer and never receives its session.
+  // The pane asks the user before opening the system browser, then waits for their answer; it never receives that
+  // session. The URL appears only while asking: it names the page the user's browser would open.
   Schema.Struct({
     type: Schema.Literal("handoff"),
     tabID: Browser.TabID,
     id: text(128),
     host: detail(2_048),
-    state: Schema.Literals(["pending", "completed", "cancelled", "timedOut"]),
+    url: Schema.optionalKey(detail(2_048)),
+    state: Schema.Literals(["pending", "opened", "completed", "cancelled", "timedOut", "failed"]),
   }),
   Schema.Struct({
     type: Schema.Literal("state"),
@@ -138,9 +140,9 @@ export const BrowserPane = Ipc.define({
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
-    // The user finished or abandoned a handoff in this window; the waiting tool call settles with the answer.
+    // The user opened, finished, or abandoned a handoff in this window; only their click opens the system browser.
     handoff: {
-      input: Schema.Struct({ binding, id: text(128), action: Schema.Literals(["done", "cancel"]) }),
+      input: Schema.Struct({ binding, id: text(128), action: Schema.Literals(["open", "done", "cancel"]) }),
     },
     // Starts or stops the page's element picker; the page reports picks and exits as inspect events.
     inspect: { input: Schema.Struct({ binding, tabID: Browser.TabID, enabled: Schema.Boolean }) },

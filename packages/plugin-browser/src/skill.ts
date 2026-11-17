@@ -68,7 +68,7 @@ export const info = Skill.Info.make({
     "## Sign-in and passkeys",
     "",
     "- The in-app browser has no platform authenticator: a passkey, security-key, or device-unlock step cannot complete in it. A login that needs one moves to the user's system browser instead.",
-    "- `tools.browser.handoff({ tabID })` opens the tab's page in the system browser and waits for the user to choose Done or Cancel in the Review pane. Its result is `{ state, host }` and nothing else.",
+    "- `tools.browser.handoff({ tabID })` asks the user to move the tab's page to their system browser. Nothing opens until they choose Open in the Review pane; the tool then waits for their Done or Cancel and resolves `{ state, host }` and nothing else.",
     "- The pane never receives that session: this tab stays signed out, and no cookie or credential crosses. Never ask the user to paste, read, or repeat credentials, cookies, or one-time codes. Work that needs the sign-in stays with the user in the system browser.",
     "",
     "## When something fails",

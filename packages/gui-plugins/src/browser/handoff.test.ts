@@ -40,58 +40,89 @@ function setup(options: { openExternal?: (url: string) => Promise<void>; timeout
   return { handoffs, opened, events, begin }
 }
 
-test("opens the page in the system browser once and settles with the user's answer", async () => {
+test("nothing opens until the user's Open, then the answer settles once", async () => {
   const { handoffs, opened, events, begin } = setup()
 
   const result = begin()
   await flush()
 
-  expect(opened).toEqual(["https://github.com/settings/tokens"])
-  expect(events).toEqual([{ type: "handoff", tabID: tab.first, id: "handoff-1", host: "github.com", state: "pending" }])
-
-  expect(handoffs.settle("binding", "handoff-2", "done")).toBe(false)
-  expect(handoffs.settle("other-binding", "handoff-1", "done")).toBe(false)
-  expect(handoffs.settle("binding", "handoff-1", "done")).toBe(true)
-  expect(handoffs.settle("binding", "handoff-1", "done")).toBe(false)
-  expect(await result).toEqual({ state: "completed", host: "github.com" })
+  expect(opened).toEqual([])
   expect(events).toEqual([
-    { type: "handoff", tabID: tab.first, id: "handoff-1", host: "github.com", state: "pending" },
-    { type: "handoff", tabID: tab.first, id: "handoff-1", host: "github.com", state: "completed" },
+    {
+      type: "handoff",
+      tabID: tab.first,
+      id: "handoff-1",
+      host: "github.com",
+      url: "https://github.com/settings/tokens",
+      state: "pending",
+    },
   ])
-})
 
-test("the user can abandon the handoff from the banner", async () => {
-  const { handoffs, events, begin } = setup()
-
-  const result = begin()
+  expect(handoffs.settle("binding", "handoff-2", "open")).toBe(false)
+  expect(handoffs.settle("other-binding", "handoff-1", "open")).toBe(false)
+  expect(handoffs.settle("binding", "handoff-1", "open")).toBe(true)
+  expect(handoffs.settle("binding", "handoff-1", "open")).toBe(true)
   await flush()
-  handoffs.settle("binding", "handoff-1", "cancel")
-  expect(await result).toEqual({ state: "cancelled", host: "github.com" })
+
+  expect(opened).toEqual(["https://github.com/settings/tokens"])
   expect(events.at(-1)).toEqual({
     type: "handoff",
     tabID: tab.first,
     id: "handoff-1",
     host: "github.com",
-    state: "cancelled",
+    url: "https://github.com/settings/tokens",
+    state: "opened",
+  })
+
+  expect(handoffs.settle("binding", "handoff-1", "done")).toBe(true)
+  expect(handoffs.settle("binding", "handoff-1", "done")).toBe(false)
+  expect(await result).toEqual({ state: "completed", host: "github.com" })
+  expect(events.at(-1)).toEqual({
+    type: "handoff",
+    tabID: tab.first,
+    id: "handoff-1",
+    host: "github.com",
+    state: "completed",
   })
 })
 
+test("the user can abandon the handoff before or after opening", async () => {
+  const { handoffs, opened, events, begin } = setup()
+
+  const result = begin()
+  await flush()
+  handoffs.settle("binding", "handoff-1", "cancel")
+  expect(await result).toEqual({ state: "cancelled", host: "github.com" })
+  expect(opened).toEqual([])
+  expect(events.at(-1)?.state).toBe("cancelled")
+
+  const second = begin()
+  await flush()
+  handoffs.settle("binding", "handoff-2", "open")
+  await flush()
+  handoffs.settle("binding", "handoff-2", "cancel")
+  expect(await second).toEqual({ state: "cancelled", host: "github.com" })
+  expect(opened).toEqual(["https://github.com/settings/tokens"])
+})
+
 test("a handoff nobody answers times out and frees the pane", async () => {
-  const { events, begin } = setup({ timeoutMs: 5 })
+  const { opened, events, begin } = setup({ timeoutMs: 5 })
 
   const result = begin()
   expect(await result).toEqual({ state: "timedOut", host: "github.com" })
+  expect(opened).toEqual([])
   expect(events.map((event) => event.state)).toEqual(["pending", "timedOut"])
 })
 
 test("cancelling the browser request ends a waiting handoff", async () => {
   const abort = new AbortController()
-  const { events, begin } = setup()
+  const { opened, events, begin } = setup()
 
   const result = begin({ signal: abort.signal })
   await flush()
   abort.abort()
   expect(await result).toEqual({ state: "cancelled", host: "github.com" })
+  expect(opened).toEqual([])
   expect(events.at(-1)?.state).toBe("cancelled")
 })
 
@@ -102,7 +133,7 @@ test("one pane waits on one handoff at a time", async () => {
   await flush()
   expect(() => begin()).toThrow("A handoff is already waiting")
   expect(() => begin({ tabID: tab.second })).toThrow("A handoff is already waiting")
-  expect(opened).toHaveLength(1)
+  expect(opened).toEqual([])
 
   handoffs.settle("binding", "handoff-1", "cancel")
   await first
@@ -118,22 +149,26 @@ test("only web pages without embedded credentials can move to the system browser
   expect(opened).toEqual([])
 })
 
-test("a launch failure is a tool error that never echoes the URL", async () => {
-  const { events, begin } = setup({
+test("a launch the user started but the system refused never echoes the URL", async () => {
+  const { handoffs, events, begin } = setup({
     openExternal: () => Promise.reject(new Error("LSOpenURLsWithRole() failed for https://github.com/settings/tokens")),
   })
+
+  const result = begin()
+  await flush()
+  handoffs.settle("binding", "handoff-1", "open")
 
   let message = ""
 
   try {
-    await begin()
+    await result
   } catch (error) {
     message = error instanceof Error ? error.message : String(error)
   }
 
   expect(message).toContain("Could not open the system browser")
   expect(message).not.toContain("github.com")
-  expect(events).toEqual([])
+  expect(events.at(-1)?.state).toBe("failed")
 })
 
 test("a closed tab or binding ends its waiting handoff", async () => {

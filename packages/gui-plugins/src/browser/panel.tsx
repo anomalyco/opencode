@@ -114,13 +114,11 @@ export default function SessionBrowserPane(props: {
     return tab ? props.model.handoffFor(props.session, tab.id) : undefined
   }
 
-  const answerHandoff = (current: HandoffEvent, action: "done" | "cancel") =>
+  const answerHandoff = (current: HandoffEvent, action: "open" | "done" | "cancel") =>
     props.model.handoff(props.session, current.tabID, current.id, action)
 
-  const handoffTitle = (current: HandoffEvent) =>
-    current.state === "pending"
-      ? plugin.t("handoff.title", { host: current.host })
-      : plugin.t(`handoff.${current.state}`)
+  // Every state names its copy by key: pending and opened interpolate the host, the endings do not.
+  const handoffTitle = (current: HandoffEvent) => plugin.t(`handoff.${current.state}.title`, { host: current.host })
 
   const [addressState, setAddressState] = createSignal(initialAddressState)
   const [available, setAvailable] = createSignal({ width: 0, height: 0 })
@@ -948,7 +946,7 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      {/* The pane waits out a sign-in it cannot service; the session it creates never enters this app. */}
+      {/* The pane asks before it opens the user's browser; the session it creates never enters this app. */}
       <Show when={handoff()} keyed>
         {(current) => (
           <div
@@ -959,17 +957,26 @@ export default function SessionBrowserPane(props: {
           >
             <div class="flex min-w-0 flex-1 flex-col gap-0.5">
               <span class="truncate text-12-medium text-v2-text-text-base">{handoffTitle(current)}</span>
-              <Show when={current.state === "pending"}>
-                <span class="text-12-regular text-v2-text-text-muted">{plugin.t("handoff.description")}</span>
+              <Show when={current.state === "pending" || current.state === "opened"}>
+                <span class="text-12-regular text-v2-text-text-muted">
+                  {plugin.t(current.state === "pending" ? "handoff.pending.description" : "handoff.opened.description")}
+                </span>
+              </Show>
+              <Show when={current.state === "pending" && current.url}>
+                <span class="truncate text-12-regular text-v2-text-text-subtle">{current.url}</span>
               </Show>
             </div>
-            <Show when={current.state === "pending"}>
+            <Show when={current.state === "pending" || current.state === "opened"}>
               <div class="flex shrink-0 items-center gap-2">
                 <Button size="small" variant="ghost-muted" onClick={() => answerHandoff(current, "cancel")}>
                   {plugin.t("handoff.cancel")}
                 </Button>
-                <Button size="small" variant="outline" onClick={() => answerHandoff(current, "done")}>
-                  {plugin.t("handoff.done")}
+                <Button
+                  size="small"
+                  variant="outline"
+                  onClick={() => answerHandoff(current, current.state === "pending" ? "open" : "done")}
+                >
+                  {plugin.t(current.state === "pending" ? "handoff.open" : "handoff.done")}
                 </Button>
               </div>
             </Show>

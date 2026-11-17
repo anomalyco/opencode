@@ -416,8 +416,11 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     const embed = (tab: (typeof tabs)[number]) =>
       emit(tab.owner, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
 
-    // The agent's browser.handoff tool: the desktop opened the system browser and the banner waits for the user.
+    // The agent's browser.handoff tool: the banner asks the user before anything opens in the system browser.
     let handoffs = 0
+
+    // The desktop reports the handoff's next state for each answer the banner offers.
+    const handoffAnswers = { open: "opened", done: "completed", cancel: "cancelled" } as const
 
     const startHandoff = (key = store.session) => {
       const tab = current(key)
@@ -427,6 +430,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         tabID: tab.id,
         id: `handoff-${++handoffs}`,
         host: new URL(tab.url).host,
+        url: tab.url,
         state: "pending",
       })
     }
@@ -500,7 +504,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           tabID: tab.id,
           id: value.id,
           host: new URL(tab.url).host,
-          state: value.action === "done" ? "completed" : "cancelled",
+          url: value.action === "open" ? tab.url : undefined,
+          state: handoffAnswers[value.action],
         })
       },
       // The desktop confirms each picker change, as the page does once inspect mode is armed.

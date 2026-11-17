@@ -98,12 +98,14 @@ test("highlights of picked elements reach the page", async () => {
   ])
 })
 
-test("the user's handoff answer reaches main with its id and choice", async () => {
+test("the user's handoff answers reach main with the id and the choice", async () => {
   const app = fixture()
+  app.registration.handoff("handoff-1", "open")
   app.registration.handoff("handoff-1", "done")
   app.registration.handoff("handoff-1", "cancel")
   await Bun.sleep(0)
   expect(app.handoffs).toEqual([
+    { binding: app.binding, id: "handoff-1", action: "open" },
     { binding: app.binding, id: "handoff-1", action: "done" },
     { binding: app.binding, id: "handoff-1", action: "cancel" },
   ])

@@ -673,7 +673,7 @@ function dispatchFailed(action: Browser.Method, error: unknown) {
 function timedOut(action: Browser.Method) {
   if (action === "handoff")
     return new Tool.Error({
-      message: `[browser.timeout] browser.handoff waited ${HANDOFF_TIMEOUT_MS / 1000} seconds for the user to finish in the system browser. The external browser may still be open; the pane did not receive its session and no credential material crossed. Do not retry until the user says whether they finished.`,
+      message: `[browser.timeout] browser.handoff waited ${HANDOFF_TIMEOUT_MS / 1000} seconds for the user to open or finish the sign-in in the system browser. The browser may still be open; the pane did not receive its session and no credential material crossed. Do not retry until the user says what happened.`,
     })
 
   return new Tool.Error({
