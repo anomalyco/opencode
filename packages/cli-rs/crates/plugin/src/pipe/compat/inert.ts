@@ -2,9 +2,10 @@
 // that can be imported, called, constructed, extended and read through without throwing, and does nothing. Its first
 // use warns once in the JS host's log, by the export's name: a plugin that imports a renderable class it never uses
 // loads, where a missing ESM export would fail its whole module at link time.
-import { core, solid } from "./opentui.gen"
+import { core, promises, solid } from "./opentui.gen"
 
 const warned = new Set<string>()
+const promised = new Set(promises)
 
 function warn(name: string) {
   if (warned.has(name)) return
@@ -36,9 +37,12 @@ export function inert(name: string): any {
       if (typeof key === "symbol" || key === "then") return undefined
       return inert(`${name}.${key}`)
     },
+    // A method OpenTUI declares async answers a resolved promise of an inert value (CT-16: a plugin chains
+    // `getTreeSitterClient().initialize().then(…)`); any other call an inert value.
     apply() {
       warn(name)
-      return inert(`${name}()`)
+      const called = inert(`${name}()`)
+      return promised.has(name.slice(name.lastIndexOf(".") + 1)) ? Promise.resolve(called) : called
     },
     construct(_, __, created) {
       warn(name)

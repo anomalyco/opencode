@@ -10,7 +10,7 @@ import { catchError, createComponent, createContext, createMemo, createRenderEff
 import { createTextAttributes, RGBA, TextAttributes } from "./core"
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
-const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", ...SPANS])
+const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", "spinner", ...SPANS])
 // The intrinsics of OpenTUI's catalogue the contract has no node for.
 const UNSUPPORTED = new Set(["select", "tab_select", "ascii_font", "diff", "line_number", "image", "video"])
 // The props whose setter turns a box's border on (OpenTUI's `initializeBorder`).
@@ -39,7 +39,7 @@ export class VNode {
   // A chunk of text, for a text node.
   text?: string
   // The mount a root node belongs to, which a change of its tree asks to view again, and which focuses its nodes.
-  owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls }
+  owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls; report?: (feature: string) => void }
   // It has the focus, as the layer last said ([`VNode.focusChanged`]).
   focused = false
   // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
@@ -159,8 +159,10 @@ export class VNode {
     return [...this.children]
   }
 
-  // OpenTUI's renderables take the props a plugin assigns to a ref as their own.
+  // OpenTUI's renderables take the props a plugin assigns to a ref as their own. A renderable the plugin built itself
+  // (`new BoxRenderable(…)`) is inert and draws nothing, so adding one adds nothing (CT-15: opencode-quick-quote).
   add(child: VNode, index?: number) {
+    if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("add() of a renderable built with new")
     insertNode(this, child, index === undefined ? undefined : this.children[index])
   }
 }
@@ -362,9 +364,10 @@ export function mount(
   crash: (error: unknown) => void,
   focus?: Focus,
   scrolls?: Scrolls,
+  report?: (feature: string) => void,
 ): Mounted {
   const root = new VNode("box")
-  root.owner = { invalidate, focus, scrolls }
+  root.owner = { invalidate, focus, scrolls, report }
   let dispose = () => {}
   const mounted: Mounted = { root, dispose: () => dispose(), keys: new Set() }
   const fail = (error: unknown) => {
@@ -478,6 +481,11 @@ function node(at: VNode, reading: Reading): Json {
       })
     case "markdown":
       return compact({ type: "markdown", source: { text: String(props.content ?? "") } })
+    // The TS TUI's `<spinner>` (CT-14) is the contract's, without a label: the host's frames, pace and color.
+    case "spinner":
+      for (const name of ["frames", "interval", "color", "backgroundColor", "autoplay"])
+        if (props[name] !== undefined) reading.dropped.add(`<spinner> ${name}`)
+      return { type: "spinner", label: "" }
     case "code":
       return compact({
         type: "code",

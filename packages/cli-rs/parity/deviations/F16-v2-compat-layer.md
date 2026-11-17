@@ -81,7 +81,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
   once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
   after `dialog.select` sizes the select as in TS; its `centered` is not mapped for a select, which the host places
-  as its own selects, where TS centers it. A select's `actions` and
+  as its own selects, where TS centers it (opencode-session-time's `/time`). It would need `abi::Select` to carry
+  `centered`, as `abi::Panel` does, and the host to place a centered select in the middle of the screen. A select's
+  `actions` and
   a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not
@@ -101,14 +103,28 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
   `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
+  A code block renderer (opencode-good-fences) would need two contract additions: the JS host to register a fence
+  claim whose rows it answers after the frame, the host's code view showing until they come (a claim answers within
+  the frame today, which the JS host cannot), and a node that stands for the host's own code view, which the
+  renderer's `defaultRender()` returns; its renderables built with `new` would also need to draw (below).
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
   and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
-  (`<id> crashed in slot <path>: …`).
+  (`<id> crashed in slot <path>: …`). The TS TUI's own `<spinner>` is the contract's spinner, in the host's frames,
+  pace and color; its `frames`, `interval`, `color`, `backgroundColor` and `autoplay` are reported (CT-14).
+  `renderer.root` takes nothing, and `renderer.currentFocusedEditor` and `currentFocusedRenderable` are undefined,
+  each reported as it is read, so a plugin that checks they exist starts (CT-17: opencode-dollar-skills). What such a
+  plugin then does with the composer's editor (opencode-vim-navigation's modal editing, dollar-skills' completion)
+  would need the composer as a renderable a plugin edits, where the contract has only `ComposerEdit`.
 - **OpenTUI's exports**: the layer exports every name the installed `@opentui/core` and `@opentui/solid` export, so a
   plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets) and Solid's renderer
   the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
   nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
-  plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing.
+  plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing, and adding one to a node
+  by its ref adds nothing and is reported (CT-15: opencode-quick-quote). A call of a method any of OpenTUI's
+  declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
+  `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
+  not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
+  among the modules the layer serves (CT-13), where TS's runtime provides it.
 - **Colors**: the context's `theme` leaves are colors that carry their token, so a node the plugin colors from the
   theme follows a theme change without a call, where an installed package's node keeps the color it read in TS. Its
   `hue` scales and `categorical` list are the page theme's, each step carrying the contract's token of it

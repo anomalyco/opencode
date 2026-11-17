@@ -441,6 +441,49 @@ test("data.listen hears every event", () => {
   expect(fake.toasts()).toEqual([])
 })
 
+// CT-14: the TS TUI's `<spinner>` is the contract's spinner, its own frames and color reported (opencode-auto-mode
+// crashed with "Unknown component type: spinner"). CT-16: an inert call of a method OpenTUI declares async answers a
+// resolved promise, so `getTreeSitterClient().initialize().then(…)` (shell-highlighting's setup) runs on.
+test("a spinner draws and an inert async method resolves", async () => {
+  const fake = host()
+  const ctx = plugin("t.spinner", fake)
+  ctx.ui.slot({ append: "home.footer", render: () => h("box", { children: h("spinner", { frames: ["a", "b"], interval: 120 }) }) })
+  expect(view(fake, 0, "a").draw().children[0].children).toEqual([{ type: "spinner", label: "" }])
+  expect(fake.toasts()).toEqual([
+    "t.spinner: <spinner> frames is not supported by opencode-native yet",
+    "t.spinner: <spinner> interval is not supported by opencode-native yet",
+  ])
+  const core = modules["@opentui/core"] as Json
+  const client = core.getTreeSitterClient()
+  let added = false
+  await client.initialize().then(() => (added = !!client.addFiletypeParser({ filetype: "bash" })))
+  expect(added).toBe(true)
+})
+
+// CT-15: a renderable the plugin built itself, added to a node by its ref, adds nothing and says so, where the render
+// crashed on `e.children.indexOf` (opencode-quick-quote). CT-17: the renderer has a root that takes nothing and the
+// focus members a plugin probes for (opencode-dollar-skills refused to start without them), each reported as read.
+test("a built renderable adds nothing and the renderer has a root", () => {
+  const fake = host()
+  const ctx = plugin("t.built", fake)
+  const core = modules["@opentui/core"] as Json
+  const refs: Json = {}
+  ctx.ui.slot({ append: "home.footer", render: () => h("box", { ref: (el: Json) => (refs.box = el) }) })
+  const mount = view(fake, 0, "a")
+  mount.draw()
+  refs.box.add(new core.BoxRenderable({}, {}))
+  expect(mount.draw().children[0].children ?? []).toEqual([])
+  const renderer = ctx.renderer
+  expect(["currentFocusedEditor" in renderer, "currentFocusedRenderable" in renderer]).toEqual([true, true])
+  expect(typeof renderer.root.add).toBe("function")
+  expect(renderer.currentFocusedEditor).toBeUndefined()
+  expect(fake.toasts()).toEqual([
+    "t.built: add() of a renderable built with new is not supported by opencode-native yet",
+    "t.built: renderer.root is not supported by opencode-native yet",
+    "t.built: renderer.currentFocusedEditor is not supported by opencode-native yet",
+  ])
+})
+
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
 test("theme.surface answers the page theme", () => {
   const fake = host()
