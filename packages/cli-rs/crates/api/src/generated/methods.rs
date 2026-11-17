@@ -1079,6 +1079,61 @@ impl Client {
         Ok(call)
     }
 
+    /// `POST /api/experimental/generate/video` (`video.create`)
+    pub async fn experimental_generate_video_create(
+        &self,
+        input: &ExperimentalGenerateVideoCreateInput,
+    ) -> Result<ExperimentalGenerateVideoCreateOutput, Error> {
+        self.data(Self::experimental_generate_video_create_call(input)?).await
+    }
+    pub fn experimental_generate_video_create_call(
+        input: &ExperimentalGenerateVideoCreateInput,
+    ) -> Result<Call, Error> {
+        let mut call =
+            Call::new("POST", "/api/experimental/generate/video".to_owned(), 200, &[400, 401, 403, 404, 422, 502, 503]);
+        call.object();
+        call.field("model", &input.model)?;
+        call.field("prompt", &input.prompt)?;
+        if let Some(value) = &input.start {
+            call.field("start", value)?;
+        }
+        if let Some(value) = &input.end {
+            call.field("end", value)?;
+        }
+        if let Some(value) = &input.references {
+            call.field("references", value)?;
+        }
+        if let Some(value) = &input.duration {
+            call.field("duration", value)?;
+        }
+        if let Some(value) = &input.aspect {
+            call.field("aspect", value)?;
+        }
+        if let Some(value) = &input.resolution {
+            call.field("resolution", value)?;
+        }
+        if let Some(value) = &input.sound {
+            call.field("sound", value)?;
+        }
+        Ok(call)
+    }
+
+    /// `GET /api/experimental/generate/video/:id` (`video.get`)
+    pub async fn experimental_generate_video_get(
+        &self,
+        input: &ExperimentalGenerateVideoGetInput,
+    ) -> Result<ExperimentalGenerateVideoGetOutput, Error> {
+        self.data(Self::experimental_generate_video_get_call(input)?).await
+    }
+    pub fn experimental_generate_video_get_call(input: &ExperimentalGenerateVideoGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
+            "GET",
+            format!("/api/experimental/generate/video/{}", crate::client::path_param(&input.id)?),
+            200,
+            &[400, 401, 403, 404],
+        ))
+    }
+
     /// `POST /api/experimental/generate/decisions` (`decisions`)
     pub async fn experimental_generate_decisions(
         &self,
@@ -2277,105 +2332,118 @@ impl Client {
         ))
     }
 
-    /// `POST /api/experimental/schedule` (`schedule.create`)
-    pub async fn experimental_schedule_create(
-        &self,
-        input: &ExperimentalScheduleCreateInput,
-    ) -> Result<ExperimentalScheduleCreateOutput, Error> {
-        self.data(Self::experimental_schedule_create_call(input)?).await
+    /// `GET /api/experimental/blob/:id` (`blob.get`)
+    pub async fn experimental_blob_get(&self, input: &ExperimentalBlobGetInput) -> Result<bytes::Bytes, Error> {
+        self.binary(Self::experimental_blob_get_call(input)?).await
     }
-    pub fn experimental_schedule_create_call(input: &ExperimentalScheduleCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
-        call.object();
-        call.field("sessionID", &input.session_id)?;
-        if let Some(value) = &input.name {
-            call.field("name", value)?;
-        }
-        if let Some(value) = &input.when {
-            call.field("when", value)?;
-        }
-        if let Some(value) = &input.r#if {
-            call.field("if", value)?;
-        }
-        if let Some(value) = &input.until {
-            call.field("until", value)?;
-        }
-        if let Some(value) = &input.ends {
-            call.field("ends", value)?;
-        }
-        call.field("prompt", &input.prompt)?;
-        Ok(call)
-    }
-
-    /// `GET /api/experimental/schedule` (`schedule.list`)
-    pub async fn experimental_schedule_list(
-        &self,
-        input: &ExperimentalScheduleListInput,
-    ) -> Result<ExperimentalScheduleListOutput, Error> {
-        self.data(Self::experimental_schedule_list_call(input)?).await
-    }
-    pub fn experimental_schedule_list_call(input: &ExperimentalScheduleListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/schedule".to_owned(), 200, &[400, 401, 403, 404]);
-        call.query("sessionID", &input.session_id)?;
-        Ok(call)
-    }
-
-    /// `GET /api/experimental/schedule/:scheduleID` (`schedule.get`)
-    pub async fn experimental_schedule_get(
-        &self,
-        input: &ExperimentalScheduleGetInput,
-    ) -> Result<ExperimentalScheduleGetOutput, Error> {
-        self.data(Self::experimental_schedule_get_call(input)?).await
-    }
-    pub fn experimental_schedule_get_call(input: &ExperimentalScheduleGetInput) -> Result<Call, Error> {
+    pub fn experimental_blob_get_call(input: &ExperimentalBlobGetInput) -> Result<Call, Error> {
         Ok(Call::new(
             "GET",
-            format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
+            format!("/api/experimental/blob/{}", crate::client::path_param(&input.id)?),
+            200,
+            &[400, 401, 404],
+        ))
+    }
+
+    /// `POST /api/experimental/automation` (`automation.create`)
+    pub async fn experimental_automation_create(
+        &self,
+        input: &ExperimentalAutomationCreateInput,
+    ) -> Result<ExperimentalAutomationCreateOutput, Error> {
+        self.data(Self::experimental_automation_create_call(input)?).await
+    }
+    pub fn experimental_automation_create_call(input: &ExperimentalAutomationCreateInput) -> Result<Call, Error> {
+        let mut call = Call::new("POST", "/api/experimental/automation".to_owned(), 200, &[400, 401, 403, 404]);
+        call.object();
+        if let Some(value) = &input.session_id {
+            call.field("sessionID", value)?;
+        }
+        if let Some(value) = &input.directory {
+            call.field("directory", value)?;
+        }
+        call.field("name", &input.name)?;
+        call.field("trigger", &input.trigger)?;
+        call.field("action", &input.action)?;
+        if let Some(value) = &input.expires {
+            call.field("expires", value)?;
+        }
+        Ok(call)
+    }
+
+    /// `GET /api/experimental/automation` (`automation.list`)
+    pub async fn experimental_automation_list(
+        &self,
+        input: &ExperimentalAutomationListInput,
+    ) -> Result<ExperimentalAutomationListOutput, Error> {
+        self.data(Self::experimental_automation_list_call(input)?).await
+    }
+    pub fn experimental_automation_list_call(input: &ExperimentalAutomationListInput) -> Result<Call, Error> {
+        let mut call = Call::new("GET", "/api/experimental/automation".to_owned(), 200, &[400, 401, 403, 404]);
+        if let Some(value) = &input.session_id {
+            call.query("sessionID", value)?;
+        }
+        if let Some(value) = &input.directory {
+            call.query("directory", value)?;
+        }
+        Ok(call)
+    }
+
+    /// `GET /api/experimental/automation/:automationID` (`automation.get`)
+    pub async fn experimental_automation_get(
+        &self,
+        input: &ExperimentalAutomationGetInput,
+    ) -> Result<ExperimentalAutomationGetOutput, Error> {
+        self.data(Self::experimental_automation_get_call(input)?).await
+    }
+    pub fn experimental_automation_get_call(input: &ExperimentalAutomationGetInput) -> Result<Call, Error> {
+        Ok(Call::new(
+            "GET",
+            format!("/api/experimental/automation/{}", crate::client::path_param(&input.automation_id)?),
             200,
             &[400, 401, 403, 404],
         ))
     }
 
-    /// `POST /api/experimental/schedule/:scheduleID/pause` (`schedule.pause`)
-    pub async fn experimental_schedule_pause(
+    /// `POST /api/experimental/automation/:automationID/pause` (`automation.pause`)
+    pub async fn experimental_automation_pause(
         &self,
-        input: &ExperimentalSchedulePauseInput,
-    ) -> Result<ExperimentalSchedulePauseOutput, Error> {
-        self.data(Self::experimental_schedule_pause_call(input)?).await
+        input: &ExperimentalAutomationPauseInput,
+    ) -> Result<ExperimentalAutomationPauseOutput, Error> {
+        self.data(Self::experimental_automation_pause_call(input)?).await
     }
-    pub fn experimental_schedule_pause_call(input: &ExperimentalSchedulePauseInput) -> Result<Call, Error> {
+    pub fn experimental_automation_pause_call(input: &ExperimentalAutomationPauseInput) -> Result<Call, Error> {
         Ok(Call::new(
             "POST",
-            format!("/api/experimental/schedule/{}/pause", crate::client::path_param(&input.schedule_id)?),
+            format!("/api/experimental/automation/{}/pause", crate::client::path_param(&input.automation_id)?),
             200,
             &[400, 401, 403, 404],
         ))
     }
 
-    /// `POST /api/experimental/schedule/:scheduleID/resume` (`schedule.resume`)
-    pub async fn experimental_schedule_resume(
+    /// `POST /api/experimental/automation/:automationID/resume` (`automation.resume`)
+    pub async fn experimental_automation_resume(
         &self,
-        input: &ExperimentalScheduleResumeInput,
-    ) -> Result<ExperimentalScheduleResumeOutput, Error> {
-        self.data(Self::experimental_schedule_resume_call(input)?).await
+        input: &ExperimentalAutomationResumeInput,
+    ) -> Result<ExperimentalAutomationResumeOutput, Error> {
+        self.data(Self::experimental_automation_resume_call(input)?).await
     }
-    pub fn experimental_schedule_resume_call(input: &ExperimentalScheduleResumeInput) -> Result<Call, Error> {
+    pub fn experimental_automation_resume_call(input: &ExperimentalAutomationResumeInput) -> Result<Call, Error> {
         Ok(Call::new(
             "POST",
-            format!("/api/experimental/schedule/{}/resume", crate::client::path_param(&input.schedule_id)?),
+            format!("/api/experimental/automation/{}/resume", crate::client::path_param(&input.automation_id)?),
             200,
             &[400, 401, 403, 404],
         ))
     }
 
-    /// `DELETE /api/experimental/schedule/:scheduleID` (`schedule.delete`)
-    pub async fn experimental_schedule_delete(&self, input: &ExperimentalScheduleDeleteInput) -> Result<(), Error> {
-        self.empty(Self::experimental_schedule_delete_call(input)?).await
+    /// `DELETE /api/experimental/automation/:automationID` (`automation.delete`)
+    pub async fn experimental_automation_delete(&self, input: &ExperimentalAutomationDeleteInput) -> Result<(), Error> {
+        self.empty(Self::experimental_automation_delete_call(input)?).await
     }
-    pub fn experimental_schedule_delete_call(input: &ExperimentalScheduleDeleteInput) -> Result<Call, Error> {
+    pub fn experimental_automation_delete_call(input: &ExperimentalAutomationDeleteInput) -> Result<Call, Error> {
         Ok(Call::new(
             "DELETE",
-            format!("/api/experimental/schedule/{}", crate::client::path_param(&input.schedule_id)?),
+            format!("/api/experimental/automation/{}", crate::client::path_param(&input.automation_id)?),
             204,
             &[400, 401, 403, 404],
         ))
