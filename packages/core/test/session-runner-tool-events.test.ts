@@ -509,6 +509,26 @@ test("authoritative end values replace accumulated deltas in the durable ended e
   })
 })
 
+test("malformed tool input excerpt does not split a surrogate pair", async () => {
+  const { published, publisher } = capture()
+  // The 2048th code unit is the high surrogate of this emoji, which `.slice` would keep alone.
+  const raw = `${"a".repeat(2047)}😀omitted-marker`
+  await Effect.runPromise(
+    publisher.publish(LLMEvent.toolInputError({ id: "call-malformed", name: "echo", raw })),
+  )
+  await Effect.runPromise(publisher.flush())
+
+  const message = (published.find((event) => event.type === "session.tool.failed.2")?.data as {
+    error: { message: string }
+  }).error.message
+  const excerpt = message.split("characters):\n")[1]?.replace("\n[truncated]", "")
+  expect(message).toContain(`Input excerpt (first 2047 of ${raw.length} characters):`)
+  expect(excerpt).toBe("a".repeat(2047))
+  expect(excerpt).toBe(excerpt?.toWellFormed())
+  expect(message).toBe(message.toWellFormed())
+  expect(message).not.toContain("omitted-marker")
+})
+
 test("tool input deltas are accumulated without being published", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(

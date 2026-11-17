@@ -492,6 +492,36 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("keeps a truncated miss hint from splitting a surrogate pair", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "long.ts")
+      // Index 199 is the emoji's high surrogate, one code unit inside the 200-unit hint.
+      const line = `${"a".repeat(199)}😀 tail`
+      const missed = "Could not find oldString in long.ts. It must match exactly, including whitespace and indentation."
+      return Effect.promise(() => fs.writeFile(target, `${line}\n`)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(registry, call({ path: "long.ts", oldString: line.replace(" tail", "  tail"), newString: "x" })),
+          ),
+        ),
+        Effect.andThen((result) => {
+          const message = result.error?.message ?? ""
+          expect(result).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `${missed}\n\nThe closest lines in the file:\n1: ${"a".repeat(199)}…`,
+            },
+          })
+          expect(message).toBe(message.toWellFormed())
+          expect(message.includes("\uD83D")).toBe(false)
+          return Effect.void
+        }),
+      )
+    }),
+  )
+
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()

@@ -7,6 +7,7 @@
 export * as EditTool from "./edit.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
@@ -234,7 +235,7 @@ const missHint = (source: string, oldString: string, newString: string) => {
       .slice(from, to)
       .map(
         (line, index) =>
-          `${from + index + 1}: ${line.length > hintLineLength ? `${line.slice(0, hintLineLength)}…` : line}`,
+          `${from + index + 1}: ${line.length > hintLineLength ? `${TextBoundary.head(line, hintLineLength)}…` : line}`,
       ),
   ].join("\n")
 }

@@ -3,6 +3,7 @@ export * as McpEventTools from "./mcp-events.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Hash } from "@opencode/util/hash"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Effect, Schedule, Schema, Scope, Stream } from "effect"
 import { Flag } from "../../flag.js"
 import { McpClient } from "../../mcp/client.js"
@@ -175,7 +176,7 @@ function wakeText(server: string, event: Extract<McpClient.EventMessage, { type:
     ...(data.length > DATA_LIMIT
       ? [`Its data is ${data.length} characters, truncated to the first ${DATA_LIMIT}.`]
       : []),
-    fence(data.slice(0, DATA_LIMIT)),
+    fence(TextBoundary.head(data, DATA_LIMIT)),
   ].join("\n")
 }
 

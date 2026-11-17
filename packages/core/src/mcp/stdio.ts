@@ -1,6 +1,7 @@
 export * as McpStdio from "./stdio.js"
 
 import { deserializeMessage, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
@@ -178,7 +179,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       const drain = yield* Effect.forkScoped(
         handle.stderr.pipe(
           Stream.decodeText(),
-          Stream.tap((output) => Effect.sync(() => (stderr = (stderr + output).slice(-STDERR_TAIL)))),
+          Stream.tap((output) => Effect.sync(() => (stderr = TextBoundary.tail(stderr + output, STDERR_TAIL)))),
           Stream.runForEach((output) =>
             output.trim() === ""
               ? Effect.void
