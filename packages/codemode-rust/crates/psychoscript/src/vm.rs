@@ -327,6 +327,14 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// The concatenation of strings, appending in place to the first one's buffer when it can.
+    pub fn concat_strs(&mut self, parts: &[StrId]) -> Value {
+        if self.atoms.bufs.len() >= MAX_STRINGS {
+            self.out_of_memory();
+        }
+        Value::Str(self.atoms.concat(parts))
+    }
+
     #[inline]
     pub fn str_val(&mut self, s: &str) -> Value {
         self.string_val(s.to_owned())
@@ -1605,24 +1613,18 @@ impl<'rt> Vm<'rt> {
                         self.push(s);
                     }
                     Op::Concat(n) => {
-                        let parts: Vec<Value> = self
-                            .stack
-                            .drain(self.stack.len() - n as usize..)
-                            .map(Slot::get)
+                        let start = self.stack.len() - n as usize;
+                        let parts: Vec<StrId> = self.stack[start..]
+                            .iter()
+                            .filter(|p| p.is_str())
+                            .map(|p| p.payload())
                             .collect();
-                        let mut len = 0;
-                        for p in &parts {
-                            if let Value::Str(s) = p {
-                                len += self.atoms.get(*s).len();
-                            }
+                        self.stack.truncate(start);
+                        let len: usize = parts.iter().map(|p| self.atoms.get(*p).len()).sum();
+                        if len > crate::ops::MAX_STRING_LEN {
+                            throw!(self.range_error("Invalid string length"));
                         }
-                        let mut out = String::with_capacity(len);
-                        for p in &parts {
-                            if let Value::Str(s) = p {
-                                out.push_str(self.atoms.get(*s));
-                            }
-                        }
-                        let v = self.string_val(out);
+                        let v = self.concat_strs(&parts);
                         self.push(v);
                     }
                     Op::AddLocal(i) => {
@@ -1638,12 +1640,7 @@ impl<'rt> Vm<'rt> {
                                 if self.atoms.get(sa).len() + added > crate::ops::MAX_STRING_LEN {
                                     throw!(self.range_error("Invalid string length"));
                                 }
-                                let mut buf = std::mem::take(&mut self.atoms.bufs[sa as usize].s);
-                                buf.to_mut().push_str(self.atoms.get(sb));
-                                let ascii = self.atoms.bufs[sb as usize].ascii;
-                                let entry = &mut self.atoms.bufs[sa as usize];
-                                entry.s = buf;
-                                entry.ascii &= ascii;
+                                self.atoms.push_in_place(sa, sb);
                                 a
                             }
                             (a, b) => {

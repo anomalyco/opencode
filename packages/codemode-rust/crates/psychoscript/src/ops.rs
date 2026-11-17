@@ -777,14 +777,10 @@ impl<'rt> Vm<'rt> {
     }
 
     fn concat_ids(&mut self, x: StrId, y: StrId) -> Res {
-        let (a, b) = (self.atoms.get(x), self.atoms.get(y));
-        if a.len() + b.len() > MAX_STRING_LEN {
+        if self.atoms.get(x).len() + self.atoms.get(y).len() > MAX_STRING_LEN {
             return Err(self.range_error("Invalid string length"));
         }
-        let mut s = String::with_capacity(a.len() + b.len());
-        s.push_str(a);
-        s.push_str(b);
-        Ok(self.string_val(s))
+        Ok(self.concat_strs(&[x, y]))
     }
 
     #[inline(never)]
@@ -793,9 +789,8 @@ impl<'rt> Vm<'rt> {
             (Value::Num(x), Value::Num(y)) => return Ok(Value::Num(x + y)),
             (Value::Str(x), Value::Str(y)) => return self.concat_ids(*x, *y),
             (Value::Str(x), Value::Num(y)) => {
-                let y = num_to_string(*y);
-                let x = self.atoms.get(*x).to_owned();
-                return self.concat(&x, &y);
+                let y = self.string_of(&Value::Num(*y))?;
+                return self.concat_ids(*x, y);
             }
             (Value::Num(x), Value::Str(y)) => {
                 let x = num_to_string(*x);

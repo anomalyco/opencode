@@ -2,6 +2,10 @@
 //!
 //! Strings live for the whole run, like objects, so `Value` can be `Copy`. They are immutable, except that a string
 //! built by `local += x` is held only by that local until the local is read, and grows in place meanwhile.
+//!
+//! Concatenation results of some size are prefixes of a shared growable buffer. Appending to the string that ends
+//! its buffer extends the buffer and makes a longer prefix, so `s = s + x` in a loop costs amortized linear time
+//! while every earlier `s` keeps its text.
 
 use std::borrow::Cow;
 
@@ -22,10 +26,18 @@ pub struct StrBuf {
     pub ascii: bool,
     /// Only one local slot holds this string, so `+=` may append in place.
     pub builder: bool,
+    /// When not `NO_GROW`, the text is the first `len` bytes of `Strings::grow[grow]` rather than `s`.
+    grow: u32,
+    len: u32,
 }
+
+const NO_GROW: u32 = u32::MAX;
+/// Concatenations shorter than this copy into a plain string.
+const GROW_MIN: usize = 64;
 
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
+    grow: Vec<String>,
     map: FxHashMap<Cow<'static, str>, Atom>,
     atom_str: Vec<StrId>,
     atom_index: Vec<u32>,
@@ -42,6 +54,7 @@ impl Strings {
     pub fn new() -> Self {
         let mut s = Strings {
             bufs: Vec::new(),
+            grow: Vec::new(),
             map: FxHashMap::default(),
             atom_str: Vec::new(),
             atom_index: Vec::new(),
@@ -55,34 +68,116 @@ impl Strings {
     #[inline]
     pub fn alloc(&mut self, s: String) -> StrId {
         let ascii = s.is_ascii();
-        self.bufs.push(StrBuf {
-            s: Cow::Owned(s),
-            ascii,
-            builder: false,
-        });
-        (self.bufs.len() - 1) as StrId
+        self.push(Cow::Owned(s), ascii)
     }
 
     pub fn alloc_static(&mut self, s: &'static str) -> StrId {
+        self.push(Cow::Borrowed(s), s.is_ascii())
+    }
+
+    fn push(&mut self, s: Cow<'static, str>, ascii: bool) -> StrId {
         self.bufs.push(StrBuf {
-            s: Cow::Borrowed(s),
-            ascii: s.is_ascii(),
+            s,
+            ascii,
             builder: false,
+            grow: NO_GROW,
+            len: 0,
         });
         (self.bufs.len() - 1) as StrId
     }
 
     #[inline]
     pub fn get(&self, id: StrId) -> &str {
-        &self.bufs[id as usize].s
+        let b = &self.bufs[id as usize];
+        if b.grow == NO_GROW {
+            return &b.s;
+        }
+        self.grow[b.grow as usize]
+            .get(..b.len as usize)
+            .unwrap_or_default()
+    }
+
+    /// The concatenation of `parts`, which must not be empty. Extends the first part's buffer when it ends there.
+    pub fn concat(&mut self, parts: &[StrId]) -> StrId {
+        let Some((&first, rest)) = parts.split_first() else {
+            return self.alloc_static("");
+        };
+        let total: usize = parts.iter().map(|p| self.get(*p).len()).sum();
+        let ascii = parts.iter().all(|p| self.bufs[*p as usize].ascii);
+        let f = &self.bufs[first as usize];
+        let g = if f.grow != NO_GROW && self.grow[f.grow as usize].len() == f.len as usize {
+            f.grow as usize
+        } else if total >= GROW_MIN {
+            let mut buf = String::with_capacity(total * 2);
+            buf.push_str(self.get(first));
+            self.grow.push(buf);
+            self.grow.len() - 1
+        } else {
+            let mut out = String::with_capacity(total);
+            for p in parts {
+                out.push_str(self.get(*p));
+            }
+            return self.push(Cow::Owned(out), ascii);
+        };
+        let mut buf = std::mem::take(&mut self.grow[g]);
+        for p in rest {
+            self.append_to(&mut buf, g, *p);
+        }
+        let len = buf.len() as u32;
+        self.grow[g] = buf;
+        self.bufs.push(StrBuf {
+            s: Cow::Borrowed(""),
+            ascii,
+            builder: false,
+            grow: g as u32,
+            len,
+        });
+        (self.bufs.len() - 1) as StrId
+    }
+
+    /// Appends `b` to `a` itself; only for a string that nothing else can observe.
+    pub fn push_in_place(&mut self, a: StrId, b: StrId) {
+        let ascii = self.bufs[b as usize].ascii;
+        let ab = &self.bufs[a as usize];
+        if ab.grow == NO_GROW {
+            let mut s = std::mem::take(&mut self.bufs[a as usize].s);
+            s.to_mut().push_str(self.get(b));
+            let entry = &mut self.bufs[a as usize];
+            entry.s = s;
+            entry.ascii &= ascii;
+            return;
+        }
+        let g = ab.grow as usize;
+        if self.grow[g].len() != ab.len as usize {
+            let mut s = String::with_capacity(ab.len as usize * 2);
+            s.push_str(self.get(a));
+            self.grow.push(s);
+            self.bufs[a as usize].grow = (self.grow.len() - 1) as u32;
+            return self.push_in_place(a, b);
+        }
+        let mut buf = std::mem::take(&mut self.grow[g]);
+        self.append_to(&mut buf, g, b);
+        let entry = &mut self.bufs[a as usize];
+        entry.len = buf.len() as u32;
+        entry.ascii &= ascii;
+        self.grow[g] = buf;
+    }
+
+    /// Appends the text of `p` to `buf`, which was taken out of `grow[g]`.
+    fn append_to(&self, buf: &mut String, g: usize, p: StrId) {
+        let pb = &self.bufs[p as usize];
+        if pb.grow as usize == g {
+            buf.extend_from_within(..pb.len as usize);
+        } else {
+            buf.push_str(self.get(p));
+        }
     }
 
     #[inline]
     pub fn sref(&self, id: StrId) -> StrRef<'_> {
-        let b = &self.bufs[id as usize];
         StrRef {
-            s: &b.s,
-            ascii: b.ascii,
+            s: self.get(id),
+            ascii: self.bufs[id as usize].ascii,
         }
     }
 
@@ -103,10 +198,15 @@ impl Strings {
     }
 
     pub fn intern_id(&mut self, id: StrId) -> Atom {
-        if let Some(a) = self.map.get(&*self.bufs[id as usize].s) {
+        if let Some(a) = self.map.get(self.get(id)) {
             return *a;
         }
-        let text = self.bufs[id as usize].s.clone();
+        let b = &self.bufs[id as usize];
+        let text = if b.grow == NO_GROW {
+            b.s.clone()
+        } else {
+            Cow::Owned(self.get(id).to_owned())
+        };
         self.insert_atom(text, id)
     }
 
