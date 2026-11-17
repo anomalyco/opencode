@@ -1439,6 +1439,7 @@ language/function-code/10.4.3-1-23gs.js  # TypeError: f cannot be constructed: u
 language/function-code/10.4.3-1-25-s.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/function-code/10.4.3-1-25gs.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/global-code/decl-lex-restricted-global.js  # expected SyntaxError but completed
+language/global-code/import.js  # expected SyntaxError but the program ran
 language/global-code/return.js  # expected SyntaxError but the program ran
 language/identifier-resolution/S11.1.2_A1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/identifier-resolution/S11.1.2_A1_T2.js  # #1.2: this.z; z === undefined throw ReferenceError. Actual: TypeError: Cannot read properties of und

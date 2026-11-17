@@ -980,7 +980,10 @@ impl<'a, 's> Compiler<'a, 's> {
             None => {
                 let a = self.atom(id.name.as_str());
                 self.emit(Op::Pop);
-                if self.global_of.contains_key(&a) || is_builtin_global(id.name.as_str()) {
+                if self.global_of.contains_key(&a)
+                    || is_builtin_global(id.name.as_str())
+                    || id.name == "undefined"
+                {
                     self.emit(Op::ThrowConst(a));
                 } else {
                     self.emit(Op::ThrowRef(a));

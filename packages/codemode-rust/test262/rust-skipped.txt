@@ -28,7 +28,5 @@ built-ins/String/prototype/codePointAt/return-single-code-unit.js  # wrong resul
 built-ins/String/prototype/isWellFormed/returns-boolean.js  # wrong result
 built-ins/String/prototype/localeCompare/15.5.4.9_CE.js  # wrong result
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
-built-ins/global/10.2.1.1.3-4-18-s.js  # missing global: undefined
 language/expressions/greater-than/S11.8.2_A4.12_T1.js  # wrong result
 language/expressions/less-than/S11.8.1_A4.12_T1.js  # wrong result
-language/global-code/import.js  # missing global: %import
