@@ -118,7 +118,8 @@ fn open_in(
 pub(crate) enum Carrier<'a> {
     Port(&'a str),
     Npm(&'a str),
-    /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), added to the TUI as it loads.
+    /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), in `<config>/plugins` as a user
+    /// installs one, which the loader loads with Luau plugins on.
     #[cfg(feature = "luau")]
     Luau(&'a str),
 }
@@ -189,7 +190,15 @@ pub(crate) fn open_with(
                 plugin
             }
             #[cfg(feature = "luau")]
-            Carrier::Luau(_) => continue,
+            Carrier::Luau(name) => {
+                opencode_plugin::luau::enable();
+                let plugin = config.join("plugins").join(format!("{name}.luau"));
+                crate::plugin_pipe::copy(
+                    &Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name),
+                    &plugin,
+                );
+                plugin
+            }
         };
         if let Some(options) = options {
             entries.push(json!({ "package": plugin.to_string_lossy(), "options": options }));
@@ -225,16 +234,6 @@ pub(crate) fn open_with(
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),
         None => opencode_tui::plugins::host::external(&harness.tui, external),
-    }
-    #[cfg(feature = "luau")]
-    for carrier in carriers {
-        if let Carrier::Luau(name) = *carrier {
-            let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name);
-            let sources = opencode_plugin::luau::Sources::read(&dir).unwrap();
-            let options = options.map(Value::to_string);
-            let definition = opencode_plugin::luau::define(&sources, options.as_deref()).unwrap().0;
-            opencode_tui::plugins::host::add(&harness.tui, definition);
-        }
     }
     Some(Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root })
 }

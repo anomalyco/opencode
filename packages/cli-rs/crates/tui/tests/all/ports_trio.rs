@@ -12,7 +12,7 @@
 use crate::ports::{Carrier, Port, open_with, session};
 use crate::support::{DIRECTORY, Reply, Seen};
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// The columns of a row: the published package `npm`, and the ports named `port`.
 fn columns<'a>(npm: &'a str, port: &'a str) -> Vec<Carrier<'a>> {
@@ -39,12 +39,18 @@ fn trio(npm: &str, port: &str, drive: impl Fn(Carrier<'_>) -> Option<Observed>) 
     if std::env::var_os("PORTS_TRIO_DUMP").is_some() {
         observed.iter().for_each(|(carrier, seen)| eprintln!("{carrier:?}: {seen:#?}"));
     }
-    let (first, expected) = &observed[0];
-    for (carrier, seen) in &observed[1..] {
-        for ((step, cells), (_, wanted)) in seen.steps.iter().zip(&expected.steps) {
-            assert_eq!(cells, wanted, "{carrier:?} draws step `{step}` unlike {first:?}");
+    // Each step against the first column that has it: a column leaves out a step only for a gap of its carrier that
+    // its row names.
+    for (index, (carrier, seen)) in observed.iter().enumerate().skip(1) {
+        for (step, cells) in &seen.steps {
+            let earlier = observed[..index].iter().find_map(|(at, other)| {
+                other.steps.iter().find(|(name, _)| name == step).map(|(_, wanted)| (at, wanted))
+            });
+            if let Some((first, wanted)) = earlier {
+                assert_eq!(cells, wanted, "{carrier:?} draws step `{step}` unlike {first:?}");
+            }
         }
-        assert_eq!(seen.steps.len(), expected.steps.len(), "{carrier:?} against {first:?}");
+        let (first, expected) = &observed[0];
         assert_eq!(seen.requests, expected.requests, "{carrier:?} sends unlike {first:?}");
     }
 }
@@ -82,7 +88,7 @@ fn requests(h: &Port, paths: &[&str]) -> Vec<String> {
     let (reads, mut writes): (Vec<_>, Vec<_>) = seen
         .map(|seen| match seen.method.as_str() {
             "GET" => (true, format!("GET {}", seen.url())),
-            method => (false, format!("{method} {} {}", seen.url(), seen.body)),
+            method => (false, format!("{method} {} {}", seen.url(), masked(&seen.body))),
         })
         .partition(|(read, _)| *read);
     let mut reads: Vec<(bool, String)> = reads;
@@ -90,6 +96,25 @@ fn requests(h: &Port, paths: &[&str]) -> Vec<String> {
     reads.dedup();
     writes.extend(reads);
     writes.into_iter().map(|(_, request)| request).collect()
+}
+
+/// `body` with each ID the client generates (`msg_…` and the like, after a prefix of three letters) as `<id>`: a prompt
+/// names its new message.
+fn masked(body: &Value) -> Value {
+    match body {
+        Value::String(text)
+            if text.len() > 12
+                && text.as_bytes().get(3) == Some(&b'_')
+                && text[..3].bytes().all(|b| b.is_ascii_lowercase()) =>
+        {
+            Value::String("<id>".to_owned())
+        }
+        Value::Array(items) => Value::Array(items.iter().map(masked).collect()),
+        Value::Object(fields) => {
+            Value::Object(fields.iter().map(|(key, value)| (key.clone(), masked(value))).collect())
+        }
+        other => other.clone(),
+    }
 }
 
 /// The sidebar's columns at width 170.
@@ -374,4 +399,126 @@ fn context_grid_draws_and_pages_alike_in_ts_rust_and_luau() {
         h.wait(&format!("{carrier:?}: escape goes home"), || h.tui.route() == opencode_tui::Route::Home);
         Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p", "/api/model"]) })
     });
+}
+
+// --- opencode-subagents-sidebar: a slot, a select, clicks, and storage
+
+// Expected: on each column, the sidebar lists the session's direct children newest first, ten of them and `+2 more`,
+// with green running dots; a click on the header folds the list and stores the fold, a second unfolds it; `/subagents`
+// lists all twelve, and the pick opens its child. On the JS host the package stores the fold but draws it only at the
+// sidebar's next mount, where TS draws it at once (`steps/ports-trio.md`): its column leaves out the folded list.
+#[test]
+fn subagents_sidebar_lists_folds_and_picks_alike_in_ts_rust_and_luau() {
+    use crate::ports::{by_update, subagents};
+
+    trio("opencode-subagents-sidebar", "subagents-sidebar", |carrier| {
+        let h = open_with(&[carrier], 170, subagents, true, None, None)?;
+        h.wait_for("+2 more");
+        h.wait("Child 03 runs", || {
+            h.sidebar(usize::from(SIDEBAR)).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
+        });
+        h.settle();
+        let mut steps = vec![("listed".to_owned(), cells(&h, SIDEBAR, block(&h, "Subagents", 13)))];
+        let storage = h.tui.storage().unwrap();
+        let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
+        let (x, y) = h.find("▼ Subagents");
+        h.app.click(x + 2, y);
+        h.wait(&format!("{carrier:?}: the fold reaches the disk"), || stored() == json!({ "open": false }));
+        if !matches!(carrier, Carrier::Npm(_)) {
+            h.wait(&format!("{carrier:?}: the list folds"), || h.app.text().contains("▶ Subagents (12, 2 running)"));
+            h.settle();
+            steps.push(("folded".to_owned(), cells(&h, SIDEBAR, block(&h, "Subagents", 3))));
+        }
+        h.settle();
+        let (x, y) = h.find("Subagents");
+        h.app.click(x, y);
+        h.wait("the unfold reaches the disk", || stored() == json!({ "open": true }));
+        h.wait_for("+2 more");
+        h.tui.keymap.dispatch("subagents-sidebar.pick", None);
+        h.wait_for("Child 12");
+        h.settle();
+        steps.push(("picker".to_owned(), screen(&h)));
+        let (last, title, _) = by_update().pop().unwrap();
+        h.app.type_text(&title);
+        h.wait("the filtered list", || h.app.text().lines().filter(|line| line.contains(&title)).count() >= 2);
+        h.app.press("return");
+        let child = opencode_tui::Route::Session { id: opencode_api::generated::SessionID(last) };
+        h.wait(&format!("{carrier:?}: the pick opens its child"), || h.tui.route() == child);
+        Some(Observed { steps, requests: requests(&h, &["/api/session"]) })
+    });
+}
+
+// --- @mynameistito/opencode-force-input: a key that interrupts and sends, and a prompt-footer hint
+
+// Expected: on each column, the hint reads as TS draws it while the session runs; ctrl+enter sends one interrupt and
+// then the prompt, with its text and no newline; shell mode hides the hint; an idle session's hint says enter sends.
+#[test]
+fn force_input_sends_and_hints_alike_in_ts_rust_and_luau() {
+    use crate::ports::running;
+
+    trio("@mynameistito/opencode-force-input", "force-input", |carrier| {
+        let h = open_with(&[carrier], 120, running, false, None, None)?;
+        h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+        h.settle();
+        let footer = |h: &Port| {
+            let (_, y) = h.find("⏎ ");
+            cells(h, 0, y..y + 1)
+        };
+        let mut steps = vec![("running".to_owned(), footer(&h))];
+        h.app.type_text("hello");
+        h.app.press("ctrl+return");
+        h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
+        h.settle();
+        h.app.type_text("!");
+        h.wait_gone("⏎ steer");
+        h.app.press("backspace");
+        h.wait_for("⏎ steer");
+        h.tui.navigate(crate::support::session_route("ses_q"));
+        h.wait_for("⏎ send");
+        h.settle();
+        steps.push(("idle".to_owned(), footer(&h)));
+        Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p/interrupt", "/api/session/ses_p/prompt"]) })
+    });
+}
+
+// --- opencode-session-usage: a slot over paged fetches of the session tree, the catalog, and usage events
+
+// Expected: on each column, the panel totals every message of the session and its child over both pages of the
+// parent's history ($1.50 reported, $1.00 at catalog prices), draws the three meters with their countdowns and bars in
+// their severities' colors, and follows the child's `session.usage.updated` to the new total; the fetches are the same.
+#[test]
+fn session_usage_totals_alike_in_ts_rust_and_luau() {
+    use std::sync::{Arc, Mutex};
+
+    trio("opencode-session-usage", "session-usage", |carrier| {
+        let grown = Arc::new(Mutex::new(false));
+        let h = open_with(&[carrier], 170, crate::ports::usage(grown.clone(), false), false, None, None)?;
+        h.wait(&format!("{carrier:?}: the total"), || h.app.text().contains("≈ $2.50 session total"));
+        h.wait_for("Monthly");
+        h.settle();
+        let mut steps = vec![("total".to_owned(), cells(&h, SIDEBAR, block(&h, "Usage", 12)))];
+        *grown.lock().unwrap() = true;
+        h.events.emit(&json!({
+            "id": "evt_usage", "created": 2, "type": "session.usage.updated",
+            "location": { "directory": DIRECTORY },
+            "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 2_000_000, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+        }));
+        h.wait(&format!("{carrier:?}: the total follows"), || h.app.text().contains("≈ $3.50 session total"));
+        h.settle();
+        steps.push(("followed".to_owned(), cells(&h, SIDEBAR, block(&h, "Usage", 12))));
+        let paths = ["/api/session/ses_p/message", "/api/session/ses_c/message", "/api/experimental/usage/limits"];
+        let mut requests = requests(&h, &paths);
+        requests.extend(requests_of(&h, |seen| seen.path == "/api/session" && seen.param("limit") == "100"));
+        Some(Observed { steps, requests })
+    });
+}
+
+/// The reads the server saw that `keep` keeps, each once, sorted.
+fn requests_of(h: &Port, keep: impl Fn(&Seen) -> bool) -> Vec<String> {
+    let log = h.log.lock().unwrap();
+    let mut seen: Vec<String> =
+        log.iter().filter(|seen| keep(seen)).map(|seen| format!("{} {}", seen.method, seen.url())).collect();
+    seen.sort();
+    seen.dedup();
+    seen
 }
