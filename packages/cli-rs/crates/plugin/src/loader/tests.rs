@@ -774,12 +774,12 @@ fn watch_dirs_cover_a_plugins_directory_made_later() {
     assert!(dirs.contains(&cwd.join(".opencode/plugins")) && !dirs.contains(&cwd), "{dirs:?}");
 }
 
-/// The warnings logged in this process.
-fn warnings() -> &'static std::sync::Mutex<Vec<String>> {
+/// The records of level info and above logged in this process, once this was first called.
+pub(crate) fn logged() -> &'static std::sync::Mutex<Vec<String>> {
     struct Capture(std::sync::Mutex<Vec<String>>);
     impl log::Log for Capture {
         fn enabled(&self, metadata: &log::Metadata) -> bool {
-            metadata.level() <= log::Level::Warn
+            metadata.level() <= log::Level::Info
         }
         fn log(&self, record: &log::Record) {
             if self.enabled(record.metadata()) {
@@ -792,7 +792,7 @@ fn warnings() -> &'static std::sync::Mutex<Vec<String>> {
     let capture = CAPTURE.get_or_init(|| {
         let capture: &'static Capture = Box::leak(Box::new(Capture(std::sync::Mutex::default())));
         let _ = log::set_logger(capture);
-        log::set_max_level(log::LevelFilter::Warn);
+        log::set_max_level(log::LevelFilter::Info);
         capture
     });
     &capture.0
@@ -801,7 +801,7 @@ fn warnings() -> &'static std::sync::Mutex<Vec<String>> {
 // Expected (D6): a configured native library is not logged as a skipped TypeScript plugin; a TypeScript target is.
 #[test]
 fn only_a_target_without_a_native_build_is_logged_as_skipped() {
-    let warnings = warnings();
+    let warnings = logged();
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
     let file = config.join(format!("native.{}", std::env::consts::DLL_EXTENSION));
@@ -816,7 +816,7 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
         .lock()
         .unwrap()
         .iter()
-        .filter(|line| line.contains(&*root.path().to_string_lossy()))
+        .filter(|line| line.contains(&*root.path().to_string_lossy()) && line.contains("skipped"))
         .cloned()
         .collect();
     assert_eq!(skipped, [format!("plugin {typescript} skipped: {SKIPPED}")]);

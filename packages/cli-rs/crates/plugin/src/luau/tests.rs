@@ -308,6 +308,33 @@ fn a_sparse_table_move_returns_at_once() {
     assert_eq!(message, "true nil", "the move returns its empty destination");
 }
 
+// Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
+// one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
+#[test]
+fn print_writes_one_escaped_line_to_the_log() {
+    let logged = crate::loader::tests::logged();
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "print" }, function(host)
+                print("\27]0;title\7\27[2J", 1, nil, true)
+                print(string.rep("x", 16 * 1024 * 1024))
+            end)
+        end)
+    "#;
+    let sources = Sources::from_files([("plugin.toml", "id = \"test.print\""), ("init.luau", init)]);
+    let registry = running(&host, define(&sources, None).unwrap().0);
+    keymap(&host).dispatch("print", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.print"), None);
+    let printed: Vec<String> =
+        logged.lock().unwrap().iter().filter(|line| line.starts_with("plugin test.print ")).cloned().collect();
+    let [escaped, cut] = printed.as_slice() else { panic!("{printed:?}") };
+    assert_eq!(escaped, r"plugin test.print printed: \u{1b}]0;title\u{7}\u{1b}[2J\t1\tnil\ttrue");
+    assert_eq!(*cut, format!("plugin test.print printed: {}... ({} bytes, cut at 4096)", "x".repeat(4096), 16 << 20));
+}
+
 // Expected (luau-spike 1.4): no file system, no process, no `require` outside the plugin, no `loadstring`, frozen
 // globals; one plugin's VM shares nothing with another's.
 #[test]

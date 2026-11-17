@@ -9,12 +9,15 @@ use std::time::{Duration, Instant};
 
 use mlua::chunk::ChunkMode;
 use mlua::luau::{NavigateError, Require};
-use mlua::{Function, Lua, Table, Value, VmState};
+use mlua::{Function, Lua, MultiValue, Table, Value, VmState};
 
 use super::Sources;
 
 /// The heap a VM may hold: the content a plugin may hold (O-147).
 pub const MEMORY: usize = 32 << 20;
+
+/// The most of one `print` the log keeps, in bytes of the plugin's text.
+pub(crate) const PRINT: usize = 4 << 10;
 
 /// How many interrupts pass between two reads of the clock, as rune-luau's watchdog does.
 const TICKS: u32 = 256;
@@ -158,6 +161,9 @@ impl Vm {
         // `require`, and `loadstring`, which would compile code the sandbox never saw.
         globals.raw_set("loadstring", Value::Nil)?;
         globals.raw_set("require", lua.create_require_function(files)?)?;
+        // Luau's `print` writes to the process's stdout, the terminal under the TUI: escape sequences would reach it, and
+        // a big print blocks on it without using CPU time, so the budget never ends it.
+        globals.raw_set("print", print(&lua, &compiled.id)?)?;
         Ok(Self { lua, budget, loading, id: compiled.id.clone() })
     }
 
@@ -226,6 +232,41 @@ pub(crate) fn refuse(lua: &Lua, reason: &str) {
     if let Some(budget) = lua.app_data_ref::<Rc<Budget>>() {
         budget.stopped.borrow_mut().get_or_insert_with(|| reason.to_owned());
     }
+}
+
+/// The plugin's `print`: its arguments as `tostring` gives them, separated by tabs, as one line of the client's log
+/// naming the plugin. At most [`PRINT`] bytes of them, with control characters (the tabs too) escaped.
+fn print(lua: &Lua, id: &str) -> mlua::Result<Function> {
+    let id = id.to_owned();
+    lua.create_function(move |_, values: MultiValue| {
+        let (mut kept, mut total) = (Vec::new(), 0);
+        let mut keep = |part: &[u8]| {
+            kept.extend_from_slice(&part[..part.len().min(PRINT - kept.len())]);
+            total += part.len();
+        };
+        for (index, value) in values.iter().enumerate() {
+            if index > 0 {
+                keep(b"\t");
+            }
+            match value {
+                // Only what is kept is copied: a print of 16 MiB costs what one of 4 KiB does.
+                Value::String(text) => keep(&text.as_bytes()),
+                value => keep(value.to_string()?.as_bytes()),
+            }
+        }
+        let line: String = String::from_utf8_lossy(&kept)
+            .chars()
+            .flat_map(|char| match char.is_control() {
+                true => char.escape_default().collect::<Vec<_>>(),
+                false => vec![char],
+            })
+            .collect();
+        match total > PRINT {
+            true => log::info!("plugin {id} printed: {line}... ({total} bytes, cut at {PRINT})"),
+            false => log::info!("plugin {id} printed: {line}"),
+        }
+        Ok(())
+    })
 }
 
 /// The plugin's files as Luau's require-by-string sees them (mlua's [`Require`]), from the bytes read at load: the
