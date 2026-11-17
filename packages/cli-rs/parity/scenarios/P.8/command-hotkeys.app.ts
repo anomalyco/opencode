@@ -1,5 +1,5 @@
-// Ports trio: `opencode-command-hotkeys@0.1.1`, unmodified from npm, with two bindings in its options: alt+r runs the
-// server's `review` command with `--all` in the session in view, and the palette's "Run the review" runs it again.
+// Ports trio: `opencode-command-hotkeys@0.1.1`, unmodified from npm, with two bindings in its options: the palette's
+// "Run the review" runs the server's `review` command with `--all` in the session in view, and alt+r runs it again.
 // TS loads the package from node_modules; the Rust client runs the same files on the JS host through the V2
 // compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
 import { assistant, defineApp, session, user } from "../../lib/app"
@@ -34,8 +34,8 @@ export default defineApp({
   ],
   steps: [
     { checkpoint: "ready", until: "Review it" },
-    { keys: ["alt+r"] },
-    { wait: 300 },
+    // The palette runs it first: its search finding the plugin's command shows the plugin has registered its
+    // commands, alt+r among them, which it does after the session settles (file-browser-flake).
     { keys: ["ctrl+p"] },
     // Waited for before the search is typed. The palette's own list is not the plugin's to compare: its search is.
     {
@@ -46,6 +46,8 @@ export default defineApp({
     { type: "Run the review" },
     { checkpoint: "found", until: "Run the review" },
     { keys: ["enter"] },
+    { wait: 300 },
+    { keys: ["alt+r"] },
     { wait: 300 },
     { checkpoint: "ran" },
   ],
