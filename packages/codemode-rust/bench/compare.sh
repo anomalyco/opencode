@@ -2,7 +2,8 @@
 # Measures PsychoScript against the reference CodeMode and writes bench/RESULTS.md.
 # Usage: bash bench/compare.sh. The reference CodeMode package is ../codemode relative to this workspace; set
 # CODEMODE_REF to another package directory to override it.
-# Needs bun, cargo, jq, strip and /usr/bin/time. Rust columns read "n/a" while the core cannot run a case.
+# Needs bun, cargo, jq, strip and /usr/bin/time; runs on Linux and macOS. Rust columns read "n/a" while the core cannot
+# run a case.
 # ITERATIONS (11), COLD_RUNS (20) and PLUGIN_RUNS (2000) scale the run; CI uses smaller values.
 set -uo pipefail
 [ -n "${CODEMODE_REF:-}" ] && CODEMODE_REF=$(cd "$CODEMODE_REF" && pwd)
@@ -22,6 +23,7 @@ BENCH=target/release/psychoscript-bench
 EMBED=target/release/examples/embed
 
 median() { sort -g | awk '{ v[NR] = $1 } END { print v[int(NR / 2) + 1] }'; }
+bytes() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1"; }
 fmt() { [ -n "$1" ] && printf '%.1f' "$1" || printf 'n/a'; }
 ratio() { # numerator, denominator, [printf format]
   [ -n "$1" ] && [ -n "$2" ] && awk -v a="$1" -v b="$2" -v f="${3:-%.2f}" 'BEGIN { printf f, a / b }' || printf 'n/a'
@@ -93,12 +95,19 @@ for source in "${PLUGIN_SOURCES[@]}"; do
   field() { jq -r ".$2 // empty" <<<"$1"; }
   r_med=$(field "$ref_line" median_us) s_med=$(field "$rust_line" median_us)
   TABLE_F+="
-| \`$source\` | $(stat -c %s "$source") | $(fmt "$r_med") | $(fmt "$(field "$ref_line" min_us)") | $(fmt "$(field "$ref_line" mean_us)") | $(fmt "$s_med") | $(fmt "$(field "$rust_line" min_us)") | $(fmt "$(field "$rust_line" mean_us)") | $(ratio "$r_med" "$s_med" '%.1fx') |"
+| \`$source\` | $(bytes "$source") | $(fmt "$r_med") | $(fmt "$(field "$ref_line" min_us)") | $(fmt "$(field "$ref_line" mean_us)") | $(fmt "$s_med") | $(fmt "$(field "$rust_line" min_us)") | $(fmt "$(field "$rust_line" mean_us)") | $(ratio "$r_med" "$s_med" '%.1fx') |"
 done
 
-# (b) Cold start: process start to a printed result for `return 1`, median of COLD_RUNS processes.
+# (b) Cold start: process start to a printed result for `return 1`, median of COLD_RUNS processes. Without bash 5's
+# $EPOCHREALTIME (macOS ships bash 3.2), perl's clock times each run around the command it starts.
 cold() { # command...
   "$@" >/dev/null 2>&1 || return 1
+  if [ -z "${EPOCHREALTIME:-}" ]; then
+    perl -MTime::HiRes=time -e 'open(my $out, ">&", \*STDOUT); open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null");
+      my $n = shift; for (1 .. $n) { my $s = time; system(@ARGV) == 0 or exit 1; printf $out "%.3f\n", (time - $s) * 1000 }' \
+      "$COLD_RUNS" "$@"
+    return
+  fi
   for _ in $(seq "$COLD_RUNS"); do
     local start=$EPOCHREALTIME
     "$@" >/dev/null 2>&1 || return 1
@@ -114,8 +123,13 @@ TABLE_B="| Implementation | Median wall ms ($COLD_RUNS runs) |
 | Reference (bun bench/ref/embed.ts) | $(fmt "$ref_cold") |
 | Rust (embed example) | $(fmt "$rust_cold") |"
 
-# (c) Peak RSS per case, each case once in a fresh process.
+# (c) Peak RSS per case, each case once in a fresh process: GNU time reports KiB, the BSD time on macOS bytes.
 rss() { # command... -> MiB
+  if [ "$(uname -s)" = Darwin ]; then
+    /usr/bin/time -l "$@" 2>"$TMP/time.txt" >/dev/null || return 1
+    awk '/maximum resident set size/ { printf "%.1f\n", $1 / 1048576 }' "$TMP/time.txt"
+    return
+  fi
   /usr/bin/time -v "$@" 2>"$TMP/time.txt" >/dev/null || return 1
   awk -F': ' '/Maximum resident set size/ { printf "%.1f\n", $2 / 1024 }' "$TMP/time.txt"
 }
@@ -133,12 +147,12 @@ done
 
 # (d) Shipped size, once the embed example runs.
 BUN_BIN=$(readlink -f "$(command -v bun)")
-bun_size=$(stat -c %s "$BUN_BIN")
+bun_size=$(bytes "$BUN_BIN")
 mib() { awk -v b="$1" 'BEGIN { printf "%.2f", b / 1048576 }'; }
 embed_row="| Rust embed example, release, stripped | n/a | n/a |"
 if [ -x "$EMBED" ] && "$EMBED" >/dev/null 2>&1; then
   strip -o "$TMP/embed" "$EMBED"
-  embed_size=$(stat -c %s "$TMP/embed")
+  embed_size=$(bytes "$TMP/embed")
   embed_row="| Rust embed example, release, stripped | $embed_size | $(mib "$embed_size") |"
 fi
 TABLE_D="| Artifact | Bytes | MiB |
@@ -146,8 +160,15 @@ TABLE_D="| Artifact | Bytes | MiB |
 $embed_row
 | bun executable (what you ship otherwise) | $bun_size | $(mib "$bun_size") |"
 
-CPU=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
-MEM=$(awk '/MemTotal/ { printf "%.0f GiB", $2 / 1048576 }' /proc/meminfo)
+if [ -r /proc/cpuinfo ]; then
+  CPU=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')
+  MEM=$(awk '/MemTotal/ { printf "%.0f GiB", $2 / 1048576 }' /proc/meminfo)
+  CORES=$(nproc) OS="Linux $(uname -r)"
+else
+  CPU=$(sysctl -n machdep.cpu.brand_string)
+  MEM=$(sysctl -n hw.memsize | awk '{ printf "%.0f GiB", $1 / 1073741824 }')
+  CORES=$(sysctl -n hw.ncpu) OS="macOS $(sw_vers -productVersion) $(uname -m)"
+fi
 cat >"$OUT" <<EOF
 # Benchmark results
 
@@ -158,7 +179,7 @@ mins and means are shown for spread, never compared.
 
 ## Environment
 
-- CPU: $CPU, $(nproc) cores, $MEM RAM, Linux $(uname -r)
+- CPU: $CPU, $CORES cores, $MEM RAM, $OS
 - Reference: anomalyco/opencode $(git -C "$REF_PKG" rev-parse HEAD), \`packages/codemode\`
 - PsychoScript: $(git rev-parse HEAD)$(git diff --quiet HEAD -- crates bench conformance ':!bench/RESULTS.md' || echo " (with uncommitted changes)")
 - bun $(bun --version); $(rustc --version); $(cargo --version)
@@ -208,13 +229,13 @@ cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --
 # (a)
 (cd ../codemode && bun run script/bench.ts --iterations $ITERATIONS)
 target/release/psychoscript-bench --filter <slug> --iterations $ITERATIONS --json
-# (b) $COLD_RUNS timed runs each after one untimed run, wall time from bash \$EPOCHREALTIME
+# (b) $COLD_RUNS timed runs each after one untimed run, wall time from bash \$EPOCHREALTIME (perl's clock without it)
 bun bench/ref/embed.ts
 target/release/examples/embed
-# (c)
+# (c) -l instead of -v on macOS
 /usr/bin/time -v bun bench/ref/run-case.ts <slug>
 /usr/bin/time -v target/release/psychoscript-bench --filter <slug> --iterations 0
-# (d)
+# (d) stat -f %z on macOS
 strip -o embed target/release/examples/embed && stat -c %s embed
 stat -c %s "\$(readlink -f "\$(command -v bun)")"
 # (e) values must match their originals, on both sides
