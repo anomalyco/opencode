@@ -233,11 +233,9 @@ export default {
   "menu.languages": "Spellcheck languages",
   "refused.popup": "Pop-up blocked",
   "refused.open": "Open",
-  "refused.passkey":
-    "Passkeys and security keys don't work in this browser yet. Use another way to sign in to this site, or sign in with your own browser and import the sign-in.",
-  "refused.passkey.agent":
-    "The agent drives this tab, so passkeys and security keys are refused here. Sign in to this site in a new tab, or use another way to sign in.",
-  "refused.passkey.import": "Import sign-ins",
+  "refused.passkey": "Passkeys and security keys don't work here yet. Use another method, or import your sign-in.",
+  "refused.passkey.agent": "Passkeys are refused in tabs the agent drives. Use another method, or import your sign-in.",
+  "refused.passkey.import": "Import sign-in",
   "preview.source": "View source",
   "preview.verificationUnavailable": FileVerificationError.description,
   "preview.workspace": "Server workspace file",

@@ -641,9 +641,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
-      // Its action brings the sign-in from the user's own browser, in Settings.
+      // Its action brings the site's sign-in from the user's own browser; the pane opens the import for it.
       if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
-        return { token: notice.token, text: ctx.t(notice.reason === "browser.passkey" ? "refused.passkey" : "refused.passkey.agent"), label: ctx.t("refused.passkey.import") }
+        return {
+          token: notice.token,
+          text: ctx.t(notice.reason === "browser.passkey" ? "refused.passkey" : "refused.passkey.agent"),
+          label: ctx.t("refused.passkey.import"),
+          passkey: true,
+        }
 
       return { token: notice.token, text: describe(notice.reason) }
     },
@@ -653,8 +658,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (!notice) return
       setState("chrome", session.key, tabID, "notice", undefined)
       const target = registration(session)
-
-      if (!dismiss && (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")) ctx.layout.settings("browser")
 
       if (!target) throw new Error("browser.pane.unavailable")
       await target.notice(tabID, notice.token, dismiss)

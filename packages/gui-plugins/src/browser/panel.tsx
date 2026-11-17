@@ -13,7 +13,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, Index, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, getOwner, Index, onCleanup, runWithOwner, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -41,6 +41,7 @@ import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
 import { bare, highlight, type Visit } from "./history"
 import { SignInOffer } from "./import-prompt"
+import { SiteChooserDialog } from "./site-chooser"
 import type definition from "./index"
 import type { Model } from "./model"
 import {
@@ -364,6 +365,26 @@ export default function SessionBrowserPane(props: {
     setConfirming(true)
 
     if (tab && address()) command({ type: "reload", tabID: tab.id })
+  }
+
+  // A passkey sign-in this browser cannot do: the import opens on the page's site, and a clean one loads the page again.
+  const owner = getOwner()
+
+  const importSignIn = () => {
+    const site = URL.parse(address())?.hostname
+    const tab = state()
+
+    runWithOwner(owner, () =>
+      plugin.dialogs.open((dialog) => (
+        <SiteChooserDialog
+          query={site}
+          imported={() => {
+            if (tab) command({ type: "reload", tabID: tab.id })
+          }}
+          close={() => dialog.close()}
+        />
+      )),
+    )
   }
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
@@ -953,7 +974,14 @@ export default function SessionBrowserPane(props: {
           <>
             <Show when={props.model.notice(props.session, id)}>
               {(notice) => (
-                <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
+                <RefusalBar
+                  notice={notice()}
+                  answer={(dismiss) => {
+                    if (!dismiss && notice().passkey) importSignIn()
+
+                    return props.model.answerNotice(props.session, id, dismiss || !!notice().passkey)
+                  }}
+                />
               )}
             </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>
