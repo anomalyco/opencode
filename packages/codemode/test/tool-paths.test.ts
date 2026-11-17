@@ -369,6 +369,46 @@ describe("tools.search alias", () => {
   })
 })
 
+describe("search with a plain string query", () => {
+  const runtime = CodeMode.make({
+    tools: { api: { list: echo("List things", "listed") }, notes: { add: echo("Add a note", "added") } },
+  })
+
+  test("search(query) returns what search({ query }) returns, however search is reached", async () => {
+    const expected = await value(runtime, `return search({ query: "notes" })`)
+    expect(expected).toMatchObject({ items: [{ path: "tools.notes.add" }] })
+    expect(await value(runtime, `return search("notes")`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await search("notes")`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await search("notes").then((result) => result)`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await tools.search("notes")`)).toStrictEqual(expected)
+  })
+
+  test("an empty string browses like an empty query", async () => {
+    expect(await value(runtime, `return search("")`)).toStrictEqual(
+      await value(runtime, `return search({ query: "" })`),
+    )
+  })
+
+  test("the object form is unchanged", async () => {
+    expect(await value(runtime, `return search({ query: "", namespace: "api", limit: 1, offset: 0 })`)).toStrictEqual({
+      items: [{ path: "tools.api.list", description: "List things", signature: "tools.api.list(): Promise<string>" }],
+      remaining: 0,
+      next: null,
+    })
+  })
+
+  test("other inputs still fail with a clear error", async () => {
+    for (const input of ["42", "null", "true", `["notes"]`, `"notes", {}`]) {
+      const diagnostic = await failure(runtime, `return search(${input})`)
+      expect(diagnostic.kind).toBe("InvalidToolInput")
+      expect(diagnostic.message).toContain("'search'")
+    }
+    expect((await failure(runtime, `return search(42)`)).suggestions).toEqual([
+      'Pass search a query string or an object, such as search("issues") or search({ namespace: "github" }).',
+    ])
+  })
+})
+
 describe("search results used like a Promise", () => {
   const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
 
