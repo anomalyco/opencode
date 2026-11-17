@@ -277,7 +277,7 @@ export const layer = Layer.effect(
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
       const session = input.session
       const model = input.model
-      const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind, assistantMessageID: input.assistantMessageID }
+      const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind }
       const tools = input.tools ?? {
         definitions: [],
         execute: () => new Tool.Error({ message: "Tools are not available for this request" }),
@@ -362,6 +362,7 @@ export const layer = Layer.effect(
       const baseURL = base.model.route.endpoint.baseURL
       const modelHook = yield* hooks.trigger("session", "model.request", {
         ...scope,
+        assistantMessageID: input.assistantMessageID,
         baseURL,
         headers: { ...base.headers },
       })
