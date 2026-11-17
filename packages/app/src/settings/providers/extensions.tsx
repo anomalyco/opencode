@@ -93,11 +93,9 @@ export const SettingsExtensions: Component<{
     task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }).then((result) => result.data),
   })
 
-  onCleanup(
-    serverSdk.event.on("plugin.updated", (event) => {
-      if (!event.location) plugins.invalidate()
-    }),
-  )
+  // Plugin registries are per Location, so every `plugin.updated` names one; the default Location's names its resolved
+  // directory rather than none, and a filter on a missing location never matched. Listing again is cheap and coalesced.
+  onCleanup(serverSdk.event.on("plugin.updated", () => plugins.invalidate()))
 
   const pluginList = createMemo(() => {
     const current = plugins.view()
