@@ -248,6 +248,105 @@ fn a_long_pattern_match_is_stopped() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "nil"));
 }
 
+/// The CPU time this thread spends in `f`, and what `f` returned.
+fn cpu<R>(f: impl FnOnce() -> R) -> (Duration, R) {
+    let start = crate::contain::thread_cpu().expect("this OS gives a thread's CPU time");
+    let result = f();
+    (crate::contain::thread_cpu().unwrap().saturating_sub(start), result)
+}
+
+// Expected (luau-calls, the Luau coordinator's reproducers): a loop of expensive built-in calls, each a long stretch with
+// few safepoints, is stopped by about 200 ms of CPU, at most 100 ms past the 100 ms budget (luau L-8), not past the 2 s
+// watchdog. Each stretch is sized to stay well under 100 ms in a debug build of Luau.
+#[test]
+fn a_loop_of_expensive_built_ins_is_stopped_within_the_budget() {
+    let loops = [
+        ("utf8", "local s = string.rep('\\u{e9}', 512 * 1024) local n = 0 while true do n += utf8.len(s) end"),
+        (
+            "sort",
+            "local t = table.create(100000, 0) for i = 1, #t do t[i] = (i * 7919) % 1000003 end \
+             while true do table.sort(t) t[1], t[#t] = t[#t], t[1] end",
+        ),
+        ("rep", "while true do local s = string.rep('a', 4 * 1024 * 1024) end"),
+        (
+            "pack",
+            "local fmt, args = string.rep('i4', 20000), table.create(20000, 7) local n = 0 \
+             while true do n += #string.pack(fmt, table.unpack(args)) end",
+        ),
+    ];
+    for (name, body) in loops {
+        let host = host();
+        let init = format!(
+            r#"
+            local plugin = require("@opencode/plugin")
+            return plugin.define(function(setup)
+                setup:command({{ name = "spin" }}, function() {body} end)
+            end)
+        "#
+        );
+        let registry = running(&host, define(&sources(&init), None).unwrap().0);
+        let (used, _) = cpu(|| keymap(&host).dispatch("spin", None));
+        host.app.advance(Duration::from_millis(1));
+        let error = failure(&registry, "test.luau").unwrap_or_else(|| panic!("{name} was not stopped"));
+        assert!(error.contains("Luau budget"), "{name}: {error}");
+        assert!(used <= Duration::from_millis(200), "{name} ran {used:?} of CPU on a 100 ms budget");
+    }
+}
+
+// Expected (luau-calls, carbon li-1): a call that was descheduled before its wall-time deadline, so it has CPU time
+// left when the deadline thread first arms its interrupt, is read again when that time could have passed, not after a
+// count of safepoints: a loop of host calls of 2 ms each stops near its 20 ms limit, not at 13 times it.
+#[test]
+fn a_call_with_cpu_time_left_at_its_deadline_is_read_again_in_time() {
+    let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
+    let vm = vm::Vm::new(&compiled, Duration::from_millis(20), MEMORY).unwrap();
+    vm.start(&compiled).unwrap();
+    let pause = vm
+        .lua
+        .create_function(|_, ()| {
+            std::thread::sleep(Duration::from_millis(6));
+            Ok(())
+        })
+        .unwrap();
+    let step = vm
+        .lua
+        .create_function(|_, ()| {
+            let (start, mut spun) = (crate::contain::thread_cpu().unwrap(), 0u64);
+            while crate::contain::thread_cpu().unwrap().saturating_sub(start) < Duration::from_millis(2) {
+                spun = std::hint::black_box(spun + 1);
+            }
+            Ok(spun)
+        })
+        .unwrap();
+    let spin = vm.lua.load("local pause, step = ... pause() while true do step() end").into_function().unwrap();
+    let (used, result) = cpu(|| vm.call(|| spin.call::<()>((pause.clone(), step.clone()))));
+    let error = result.unwrap_err();
+    assert!(error.contains("Luau budget"), "{error}");
+    assert!(used <= Duration::from_millis(60), "ran {used:?} of CPU on a 20 ms limit");
+}
+
+// Expected (luau-calls, carbon li-2): a call that unwinds with a Rust panic leaves the budget as a call that returned
+// does: the next call is the outermost again, watched, and stopped at its limit. A call that starts with its interrupt
+// armed from before runs no interrupt until its deadline.
+#[test]
+fn a_call_after_a_panic_or_a_stale_arm_has_its_whole_budget() {
+    let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
+    let vm = vm::Vm::new(&compiled, Duration::from_millis(50), MEMORY).unwrap();
+    vm.start(&compiled).unwrap();
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        vm.call(|| -> mlua::Result<()> { std::panic::resume_unwind(Box::new("a host panic")) })
+    }));
+    assert!(panicked.is_err());
+    let spin = vm.lua.load("while true do end").into_function().unwrap();
+    let error = vm.call(|| spin.call::<()>(())).unwrap_err();
+    assert!(error.contains("Luau budget"), "{error}");
+    let short = vm.lua.load("local n = 0 for i = 1, 1e4 do n += i end return n").into_function().unwrap();
+    vm.arm_interrupt();
+    let before = vm.interrupts();
+    assert_eq!(vm.call(|| short.call::<f64>(())), Ok(50_005_000.0));
+    assert_eq!(vm.interrupts(), before, "the interrupt ran in a call well within its limit");
+}
+
 // Expected (luau-calls): an interrupt armed for one call, as the deadline thread arms it, never stops a later call of
 // the same VM, nor a call of another plugin's VM; nor does a call that was stopped leave its latch to the next one.
 #[test]

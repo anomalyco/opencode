@@ -31,8 +31,9 @@ pub(crate) const GOAL: i32 = 125;
 /// memory and caught the error, and every binding would fail at random from then on.
 const MARGIN: usize = 1 << 20;
 
-/// How many interrupts pass between two reads of the clock, as rune-luau's watchdog does.
-const TICKS: u32 = 256;
+/// The shortest wait before the budget reads a call's CPU time again: a call within a millisecond of its limit is read
+/// again a millisecond later, not at once.
+const GRAIN: Duration = Duration::from_millis(1);
 
 /// The modules of plugin `id`'s build, compiled once: bytecode by module name (`init`, `lib/util`, `x/init`), the
 /// plugin's `.luaurc` files by their directory (`""` is the plugin's root), every directory that holds either, and the
@@ -102,19 +103,24 @@ impl Compiled {
 ///
 /// The interrupt is installed only when armed ([`Lua::set_interrupt_oneshot`]): a safepoint costs nothing until the
 /// call has run for its limit in wall time, as CPU time cannot pass wall time on one thread. Then the deadline thread
-/// ([`Deadlines`]) arms it, and from there it arms itself again at each safepoint until the call ends: it reads the
-/// thread's CPU time every [`TICKS`] safepoints, and once the call is stopped it raises at every one.
+/// ([`Deadlines`]) arms it, and the next safepoint reads the thread's CPU time. Under the limit, the call is due again
+/// when the CPU time it has left could have passed in wall time; at it, the call is stopped, and the interrupt raises at
+/// every safepoint until the call ends. Every read is a time apart, never a count of safepoints apart, so a call
+/// overruns its limit by at most the stretch from one safepoint to the next.
 pub(crate) struct Budget {
     limit: Duration,
     /// When the outermost call began, and the thread's CPU time then.
     armed: Cell<Option<(Instant, Option<Duration>)>>,
-    ticks: Cell<u32>,
     /// Why the interrupt stopped this call: the call fails with it, also when the plugin caught the error.
     stopped: RefCell<Option<String>>,
     /// Arms this VM's interrupt, from any thread. A handle reaches only its own VM's interrupt, never another's.
     handle: OnceCell<InterruptHandle>,
-    /// Whether the running call has no deadline thread watching it: then the interrupt is armed at every safepoint.
-    unwatched: Cell<bool>,
+    /// The running call's place on the deadline thread. `None` with no thread to watch it: then the interrupt is armed
+    /// at every safepoint.
+    watch: RefCell<Option<Watch>>,
+    /// How often the interrupt ran.
+    #[cfg(test)]
+    fired: Cell<u32>,
 }
 
 impl Budget {
@@ -132,16 +138,14 @@ impl Budget {
             self.arm();
             return Err(mlua::Error::runtime(stopped));
         }
+        #[cfg(test)]
+        self.fired.set(self.fired.get() + 1);
         // Armed with no call running: nothing to judge, and nothing to arm again.
         let Some((start, cpu)) = self.armed.get() else { return Ok(VmState::Continue) };
-        self.arm();
-        let ticks = self.ticks.get();
-        self.ticks.set(ticks.wrapping_add(1));
-        if !ticks.is_multiple_of(TICKS) {
-            return Ok(VmState::Continue);
-        }
-        // Unwatched, the cheap clock gates the dear one; watched, the call is past its limit in wall time already.
-        if self.unwatched.get() && start.elapsed() < self.limit {
+        let watch = self.watch.borrow();
+        // Unwatched, every safepoint comes here, and the cheap clock gates the dear one.
+        if watch.is_none() && start.elapsed() < self.limit {
+            self.arm();
             return Ok(VmState::Continue);
         }
         let used = match (crate::contain::thread_cpu(), cpu) {
@@ -150,6 +154,10 @@ impl Budget {
             _ => start.elapsed(),
         };
         if used < self.limit {
+            match &*watch {
+                Some(watch) => watch.due(Instant::now().checked_add((self.limit - used).max(GRAIN))),
+                None => self.arm(),
+            }
             return Ok(VmState::Continue);
         }
         let stopped = format!(
@@ -158,6 +166,7 @@ impl Budget {
             self.limit.as_millis()
         );
         *self.stopped.borrow_mut() = Some(stopped.clone());
+        self.arm();
         Err(mlua::Error::runtime(stopped))
     }
 }
@@ -184,10 +193,11 @@ impl Vm {
         let budget = Rc::new(Budget {
             limit,
             armed: Cell::new(None),
-            ticks: Cell::new(0),
             stopped: RefCell::new(None),
             handle: OnceCell::new(),
-            unwatched: Cell::new(false),
+            watch: RefCell::new(None),
+            #[cfg(test)]
+            fired: Cell::new(0),
         });
         let interrupt = budget.clone();
         let _ = budget.handle.set(lua.set_interrupt_oneshot(move |_| interrupt.interrupt()));
@@ -230,25 +240,10 @@ impl Vm {
         if !outer {
             return f().map_err(|error| error.to_string());
         }
-        // The monitor's reading as the call began, when it took one: one CPU clock read a call.
-        let cpu = crate::contain::call_cpu().or_else(crate::contain::thread_cpu);
-        let start = Instant::now();
-        self.budget.armed.set(Some((start, cpu)));
-        self.budget.stopped.take();
-        self.budget.ticks.set(0);
-        let handle = self.budget.handle.get();
-        let watch = handle.and_then(|handle| Watch::new(start.checked_add(self.budget.limit), handle));
-        self.budget.unwatched.set(watch.is_none());
-        if watch.is_none() {
-            self.budget.arm();
-        }
-        let result = f();
-        drop(watch);
-        self.budget.armed.set(None);
-        // An interrupt still armed for this call never fires in a later one.
-        if let Some(handle) = handle {
-            handle.disarm();
-        }
+        let result = {
+            let _outer = Outer::new(&self.budget);
+            f()
+        };
         if let Some(stopped) = self.budget.stopped.take() {
             return Err(format!("{}: {stopped}", self.id));
         }
@@ -278,6 +273,47 @@ impl Vm {
     pub(crate) fn arm_interrupt(&self) {
         self.budget.arm();
     }
+
+    /// How often the interrupt ran.
+    #[cfg(test)]
+    pub(crate) fn interrupts(&self) -> u32 {
+        self.budget.fired.get()
+    }
+}
+
+/// The outermost call of a VM, from its start until it drops, also by unwinding: the budget armed, the call watched by
+/// the deadline thread, and the interrupt disarmed at both ends, so an arm meant for another call never reaches it.
+struct Outer<'a>(&'a Budget);
+
+impl<'a> Outer<'a> {
+    fn new(budget: &'a Budget) -> Self {
+        let handle = budget.handle.get();
+        if let Some(handle) = handle {
+            handle.disarm();
+        }
+        // The monitor's reading as the call began, when it took one: one CPU clock read a call.
+        let cpu = crate::contain::call_cpu().or_else(crate::contain::thread_cpu);
+        let start = Instant::now();
+        budget.armed.set(Some((start, cpu)));
+        budget.stopped.take();
+        let watch = handle.and_then(|handle| Watch::new(start.checked_add(budget.limit), handle));
+        if watch.is_none() {
+            budget.arm();
+        }
+        *budget.watch.borrow_mut() = watch;
+        Self(budget)
+    }
+}
+
+impl Drop for Outer<'_> {
+    fn drop(&mut self) {
+        // Leaving the deadline thread first: it arms no more for this call.
+        self.0.watch.borrow_mut().take();
+        self.0.armed.set(None);
+        if let Some(handle) = self.0.handle.get() {
+            handle.disarm();
+        }
+    }
 }
 
 /// What an author reads for Luau error `error` of plugin `id`: `<id>: <file>.luau:<line>: <message>`, then the
@@ -306,10 +342,11 @@ pub(crate) fn refuse(lua: &Lua, reason: &str) {
     }
 }
 
-/// The process's deadline thread: it arms a call's interrupt once the call has run for its limit in wall time. A call
-/// is watched from its start ([`Watch::new`]) until it returns, and its interrupt is armed only while it is watched: the
-/// thread arms under the lock the call's end takes to leave. The thread sleeps until the nearest deadline, or until a
-/// call comes while none is watched; a call is woken for only when its deadline is nearer than the thread's.
+/// The process's deadline thread: it arms a call's interrupt when the call is due, first once it has run for its limit
+/// in wall time, then each time the interrupt found it under the limit and named when to look again ([`Watch::due`]). A
+/// call is watched from its start ([`Watch::new`]) until it returns, and its interrupt is armed only while it is
+/// watched: the thread arms under the lock the call's end takes to leave. The thread sleeps until the nearest deadline,
+/// or until a call comes while none is watched; a call is woken for only when its deadline is nearer than the thread's.
 struct Deadlines {
     watched: Mutex<Watched>,
     wake: Condvar,
@@ -340,6 +377,15 @@ impl Deadlines {
         self.watched.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Arms `handle` for call `ticket` at `deadline`.
+    fn queue(&self, watched: &mut Watched, ticket: u64, deadline: Instant, handle: &InterruptHandle) {
+        watched.calls.push((ticket, deadline, handle.clone()));
+        if watched.until.is_none_or(|until| deadline < until) {
+            watched.until = Some(deadline);
+            self.wake.notify_one();
+        }
+    }
+
     fn run(&self) {
         let mut watched = self.lock();
         loop {
@@ -367,6 +413,7 @@ impl Deadlines {
 struct Watch {
     deadlines: &'static Deadlines,
     ticket: u64,
+    handle: InterruptHandle,
 }
 
 impl Watch {
@@ -377,22 +424,22 @@ impl Watch {
         let ticket = watched.next;
         watched.next += 1;
         if let Some(deadline) = deadline {
-            watched.calls.push((ticket, deadline, handle.clone()));
-            if watched.until.is_none_or(|until| deadline < until) {
-                watched.until = Some(deadline);
-                deadlines.wake.notify_one();
-            }
+            deadlines.queue(&mut watched, ticket, deadline, handle);
         }
-        Some(Self { deadlines, ticket })
+        Some(Self { deadlines, ticket, handle: handle.clone() })
+    }
+
+    /// Makes the call due again at `deadline` (`None`: never), once the thread armed it for the last one.
+    fn due(&self, deadline: Option<Instant>) {
+        if let Some(deadline) = deadline {
+            self.deadlines.queue(&mut self.deadlines.lock(), self.ticket, deadline, &self.handle);
+        }
     }
 }
 
 impl Drop for Watch {
     fn drop(&mut self) {
-        let mut watched = self.deadlines.lock();
-        if let Some(at) = watched.calls.iter().position(|(ticket, _, _)| *ticket == self.ticket) {
-            watched.calls.swap_remove(at);
-        }
+        self.deadlines.lock().calls.retain(|(ticket, _, _)| *ticket != self.ticket);
     }
 }
 
