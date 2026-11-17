@@ -15,5 +15,6 @@
   "@joe-broadhead__opencode-tavily.tgz": "sha512-+KmDCMP9j085+FRX7gYbGIRe474M2hDU9YUT/8E2roHg2yELugsMNR1Ta/1rc2eeJ9yn+vcheJnnq7sPntj8Xw==",
   "@jasonencode__opencode-context.tgz": "sha512-NJ4x4ca7HxncU3OmagqVm0O9okkC2eykd/6IkYHnBEdx7hgZIcFThWg1z1S3OEWBgVtba//IRqoaum9QAFkwHw==",
   "opencode-skills-tui.tgz": "sha512-RQ2Zt0fc8Ipsi0pQ643TJLxQpiakZ+PP1tMIZyGvakfPBxuTFz9StLn+C1eqjjgGfRfeQWKwJ+UpbGJLDncIeQ==",
-  "@juliuskb__opencode-voice.tgz": "sha512-1d6/b2/mJ/ZndXqUWy2I/xDCGAEZUsoXn7jiyReFPT33esRGGVNtwG7XySZiwgeTvB2cCHGNJokB7H5Okli7dQ=="
+  "@juliuskb__opencode-voice.tgz": "sha512-1d6/b2/mJ/ZndXqUWy2I/xDCGAEZUsoXn7jiyReFPT33esRGGVNtwG7XySZiwgeTvB2cCHGNJokB7H5Okli7dQ==",
+  "opencode-tui-context.tgz": "sha512-Tmxdrsq+k0us0dN+YlumpLyf/7W4alm2ffnRGC8DCKMO9XR8Zzww49ofRr0B++qb2QGhd0w8RnLJw8+l3JwBmg=="
 }
