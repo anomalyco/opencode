@@ -14,11 +14,12 @@ mod vm;
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{DefaultHasher, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 pub use vm::MEMORY;
 
@@ -34,8 +35,12 @@ pub const MANIFEST: &str = "plugin.toml";
 /// The configuration file of Luau's require-by-string (aliases), which a plugin's `require` reads inside the plugin.
 pub const LUAURC: &str = ".luaurc";
 
-/// The most a plugin's sources may hold.
-pub const SOURCES: u64 = 4 << 20;
+/// The most a plugin's sources may hold. Compiling takes about 110 times the source in memory, for a moment, outside
+/// the VM's cap (`luau/steps/safety-audit.md` #7): a 1 MiB plugin about 120 MB.
+pub const SOURCES: u64 = 1 << 20;
+
+/// The stack a build compiles on. Luau's parser stops at 1000 levels of nesting, which needs less than 2 MiB.
+const STACK: usize = 8 << 20;
 
 /// How deep a plugin's modules may nest in directories.
 const DEPTH: usize = 8;
@@ -220,23 +225,110 @@ impl Manifest {
     }
 }
 
-/// The definition of the Luau plugin `sources` hold, not yet active: its modules compiled once here, so a syntax error
-/// is the build's; each activation starts a new VM from that bytecode and runs its setup with `options` (JSON text).
+/// A Luau plugin's build: its manifest and its modules compiled, made on any thread ([`Builds`]).
+pub struct Built {
+    manifest: Manifest,
+    compiled: vm::Compiled,
+}
+
+impl Built {
+    /// Compiles the plugin `sources` hold: a syntax error is the build's, before any setup.
+    pub fn new(sources: &Sources) -> Result<Self, String> {
+        let manifest = Manifest::parse(sources.text(MANIFEST)?)?;
+        let compiled = vm::Compiled::new(sources, &manifest.id, &manifest.entry)?;
+        Ok(Self { manifest, compiled })
+    }
+
+    /// The definition of this plugin, not yet active: each activation starts a new VM from its bytecode and runs its
+    /// setup with `options` (JSON text), the heap capped at `memory` bytes.
+    pub fn define(self, options: Option<&str>, memory: usize) -> Result<(Definition, ErrorFn), String> {
+        let compiled = Rc::new(self.compiled);
+        let options = options.map(str::to_owned);
+        let run: crate::LinkedSetup = Rc::new(move |setup, limits| {
+            bind::setup(&compiled, setup, limits.overrun, memory, options.as_deref()).map(drop)
+        });
+        let definition = crate::linked(self.manifest.id, run, true);
+        let error = definition.error.clone().ok_or("a linked definition reports its failure")?;
+        Ok((definition, error))
+    }
+}
+
+/// The definition of the Luau plugin `sources` hold, compiled here ([`Built`]), with `options`.
 pub fn define(sources: &Sources, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
     define_with(sources, options, MEMORY)
 }
 
 /// [`define`] with a heap cap of `memory` bytes a VM.
 pub fn define_with(sources: &Sources, options: Option<&str>, memory: usize) -> Result<(Definition, ErrorFn), String> {
-    let manifest = Manifest::parse(sources.text(MANIFEST)?)?;
-    let compiled = Rc::new(vm::Compiled::new(sources, &manifest.id, &manifest.entry)?);
-    let options = options.map(str::to_owned);
-    let run: crate::LinkedSetup = Rc::new(move |setup, limits| {
-        bind::setup(&compiled, setup, limits.overrun, memory, options.as_deref()).map(drop)
-    });
-    let definition = crate::linked(manifest.id, run, true);
-    let error = definition.error.clone().ok_or("a linked definition reports its failure")?;
-    Ok((definition, error))
+    Built::new(sources)?.define(options, memory)
+}
+
+/// Luau plugins read and compiled on threads of their own, so no frame waits on a big plugin
+/// (`luau/steps/safety-audit.md` #7). A question answers at once: the build of a directory once it is ready, taken by
+/// the asker, or `None` while it is made. A build that ends wakes the UI thread, which asks again.
+pub(crate) struct Builds {
+    state: Arc<Mutex<HashMap<PathBuf, Build>>>,
+    wake: Arc<dyn Fn() + Send + Sync>,
+    /// Builds being made, or made and not yet woken for.
+    running: Arc<AtomicUsize>,
+}
+
+/// The build of a directory asked for last, by its key, and its result once made.
+type Build = (u64, Option<Result<Built, String>>);
+
+impl Builds {
+    pub(crate) fn new(wake: Arc<dyn Fn() + Send + Sync>) -> Self {
+        Self { state: Arc::default(), wake, running: Arc::default() }
+    }
+
+    /// The build of the plugin in `dir` whose files are `key`, or `None` until a thread read and compiled them. A
+    /// build of another key made since is dropped.
+    pub(crate) fn built(&self, dir: &Path, key: u64) -> Option<Result<Built, String>> {
+        let mut state = lock(&self.state);
+        match state.get(dir) {
+            Some((known, Some(_))) if *known == key => return state.remove(dir).and_then(|(_, built)| built),
+            Some((known, None)) if *known == key => return None,
+            _ => {}
+        }
+        state.insert(dir.to_owned(), (key, None));
+        drop(state);
+        let (state, wake, running, owned) =
+            (self.state.clone(), self.wake.clone(), self.running.clone(), dir.to_owned());
+        running.fetch_add(1, Ordering::SeqCst);
+        let spawned = std::thread::Builder::new().name("luau-compile".to_owned()).stack_size(STACK).spawn(move || {
+            let built = Sources::read(&owned).and_then(|sources| Built::new(&sources));
+            if let Some((known, slot)) = lock(&state).get_mut(&owned)
+                && *known == key
+            {
+                *slot = Some(built);
+            }
+            wake();
+            running.fetch_sub(1, Ordering::SeqCst);
+        });
+        // Without a thread (the system has none to give), the build is made here.
+        if spawned.is_err() {
+            self.running.fetch_sub(1, Ordering::SeqCst);
+            lock(&self.state).remove(dir);
+            return Some(Sources::read(dir).and_then(|sources| Built::new(&sources)));
+        }
+        None
+    }
+
+    /// Whether a build is being made.
+    #[cfg(test)]
+    pub(crate) fn running(&self) -> bool {
+        self.running.load(Ordering::SeqCst) > 0
+    }
+
+    /// Whether a build is made and waits for its asker.
+    #[cfg(test)]
+    pub(crate) fn ready(&self) -> bool {
+        lock(&self.state).values().any(|(_, built)| built.is_some())
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// The heap an idle VM of `sources` holds once its setup ran: what a plugin costs at rest (the spike's measure).

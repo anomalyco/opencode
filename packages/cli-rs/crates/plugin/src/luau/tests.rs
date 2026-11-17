@@ -69,8 +69,9 @@ fn loader(config: &Path, cwd: &Path) -> Loader {
     Loader::new(native, config.to_path_buf(), cwd.to_path_buf(), Vec::<Configured>::new()).with_luau(|| {})
 }
 
-/// Reconciles until a reconcile after a finished walk changes nothing, as the host does on each walk's wake: whether
-/// anything changed. A Luau plugin's files are walked and staged on threads of their own.
+/// Reconciles until a reconcile after a finished walk changes nothing and leaves no compiled build waiting, as the host
+/// does on each walk's wake: whether anything changed. A Luau plugin's files are walked, staged and compiled on threads
+/// of their own.
 fn settle(loader: &Loader, host: &Rc<TestHost>, registry: &Registry) -> bool {
     let mut changed = false;
     for round in 0..200 {
@@ -79,7 +80,7 @@ fn settle(loader: &Loader, host: &Rc<TestHost>, registry: &Registry) -> bool {
         while loader.luau_walking() {
             std::thread::sleep(Duration::from_millis(1));
         }
-        if round > 0 && !now {
+        if round > 0 && !now && !loader.luau_ready() {
             return changed;
         }
     }
@@ -306,6 +307,62 @@ fn a_sparse_table_move_returns_at_once() {
     assert!(took < Duration::from_millis(1500), "the move held the thread {took:?}");
     let message = host.toasts.borrow().last().unwrap().message.clone();
     assert_eq!(message, "true nil", "the move returns its empty destination");
+}
+
+/// A plugin in `dir` whose `init.luau` holds a table literal of `items` numbers: about `2 * items` bytes.
+fn big_plugin(dir: &Path, items: usize) {
+    fs::create_dir_all(dir).unwrap();
+    fs::write(dir.join(MANIFEST), "id = \"test.big\"\n").unwrap();
+    let init = format!(
+        "local plugin = require('@opencode/plugin')\nlocal big = {{{}}}\nreturn plugin.define(function(setup) end)\n",
+        "1,".repeat(items)
+    );
+    fs::write(dir.join("init.luau"), init).unwrap();
+}
+
+// Expected (luau-safety 2, safety-audit #7): a big plugin is read and compiled on a thread of its own: the reconcile
+// that finds it returns with the plugin starting while the compilation runs, and a later one makes it active.
+#[test]
+fn a_big_plugin_compiles_off_the_ui_thread() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    let dir = config.join("plugins").join("big");
+    big_plugin(&dir, (SOURCES as usize - 200) / 2);
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    let loader = loader(&config, temp.path());
+    loader.reconcile(&dynamic(&host), &registry);
+    // The walk of its files: until it ends, nothing compiles.
+    while loader.luau_walking() {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let start = Instant::now();
+    loader.reconcile(&dynamic(&host), &registry);
+    let reconciled = start.elapsed();
+    assert_eq!(entry(&registry.entries(), &dir.to_string_lossy()).status, Status::Skipped(STARTING.to_owned()));
+    assert!(loader.luau_walking(), "the compilation runs after the reconcile returned");
+    while loader.luau_walking() {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    println!("luau: a reconcile {reconciled:?} beside a compilation of {:?}", start.elapsed());
+    settle(&loader, &host, &registry);
+    let big = entry(&registry.entries(), &dir.to_string_lossy()).clone();
+    assert_eq!((big.id.as_str(), big.status), ("test.big", Status::Active));
+}
+
+// Expected (luau-safety 2, safety-audit #7): a plugin whose sources pass the limit is refused, with why, before
+// anything of it compiles.
+#[test]
+fn a_plugin_past_the_source_limit_is_refused() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    let dir = config.join("plugins").join("big");
+    big_plugin(&dir, SOURCES as usize / 2 + 1);
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    let loader = loader(&config, temp.path());
+    settle(&loader, &host, &registry);
+    let entries = registry.entries();
+    let Status::Failed(error) = &entry(&entries, &dir.to_string_lossy()).status else { panic!("{entries:?}") };
+    assert!(error.contains("sources larger than 1 MiB"), "{error}");
 }
 
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:

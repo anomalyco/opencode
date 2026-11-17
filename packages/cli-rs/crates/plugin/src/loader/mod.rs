@@ -187,6 +187,9 @@ pub struct Loader {
     /// hashed and staged on threads of their own, as a TypeScript plugin's are (FT-2).
     #[cfg(feature = "luau")]
     luau: Option<crate::pipe::tree::Trees>,
+    /// A Luau plugin's sources, read and compiled on threads of their own.
+    #[cfg(feature = "luau")]
+    luau_builds: Option<crate::luau::Builds>,
 }
 
 /// The path `realpath` gives (carbon recheck-3): `canonicalize`, without the verbatim prefix it gives on Windows
@@ -245,14 +248,23 @@ impl Loader {
             packages: RefCell::default(),
             #[cfg(feature = "luau")]
             luau: None,
+            #[cfg(feature = "luau")]
+            luau_builds: None,
         }
     }
 
     /// Runs the directories with a `plugin.toml` and no native build as Luau plugins. `walked` runs on a walk's thread
-    /// when a walk of a plugin's files found something new, or a copy of approved files ended: the host reconciles.
+    /// when a walk of a plugin's files found something new, a copy of approved files ended, or a build was compiled:
+    /// the host reconciles.
     #[cfg(feature = "luau")]
     pub fn with_luau(self, walked: impl Fn() + Send + Sync + 'static) -> Self {
-        Self { luau: Some(crate::pipe::tree::Trees::new(walked)), ..self }
+        let walked: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(walked);
+        let wake = walked.clone();
+        Self {
+            luau: Some(crate::pipe::tree::Trees::new(move || wake())),
+            luau_builds: Some(crate::luau::Builds::new(walked)),
+            ..self
+        }
     }
 
     /// Whether `target` runs as a Luau plugin: it is a directory with a `plugin.toml` and no native build.
@@ -263,10 +275,17 @@ impl Loader {
             && target.local.as_deref().is_some_and(|dir| dir.is_dir() && crate::luau::is_plugin(dir))
     }
 
-    /// Whether a walk or a copy of a Luau plugin's files runs.
+    /// Whether a walk, a copy or a compilation of a Luau plugin's files runs.
     #[cfg(all(test, feature = "luau"))]
     pub(crate) fn luau_walking(&self) -> bool {
         self.luau.as_ref().is_some_and(crate::pipe::tree::Trees::walking)
+            || self.luau_builds.as_ref().is_some_and(crate::luau::Builds::running)
+    }
+
+    /// Whether a compiled Luau build waits for the next reconcile.
+    #[cfg(all(test, feature = "luau"))]
+    pub(crate) fn luau_ready(&self) -> bool {
+        self.luau_builds.as_ref().is_some_and(crate::luau::Builds::ready)
     }
 
     #[cfg(not(feature = "luau"))]
@@ -866,9 +885,9 @@ impl Loader {
     }
 
     /// Brings the Luau plugin of `target`, the directory `dir`, in line with its files: loaded when new or changed,
-    /// in process ([`crate::luau`]). A running build keeps running while the next fails to compile or set up. The UI
-    /// thread reads a plugin's sources only once a walk on a thread of its own found them changed; until the first walk
-    /// ends the plugin is starting. A project's plugin runs only once the user approved its directory as a Luau plugin
+    /// in process ([`crate::luau`]). A running build keeps running while the next fails to compile or set up. A walk on a
+    /// thread of its own finds a plugin's files changed, and another thread reads and compiles them; until the first
+    /// build is compiled the plugin is starting. A project's plugin runs only once the user approved its directory as a Luau plugin
     /// ([`crate::luau::artifact`]), from the staged copy of the approved bytes, made off the UI thread too. It is
     /// admitted as a native build is ([`Registry::admit`]): a build the crash list names, safe mode and a client no
     /// parent guards hold it.
@@ -882,7 +901,7 @@ impl Loader {
         listed: &Option<Status>,
     ) -> bool {
         let name = target.target.as_str();
-        let Some(trees) = &self.luau else { return false };
+        let (Some(trees), Some(builds)) = (&self.luau, &self.luau_builds) else { return false };
         let walking = || !registry.loaded(name) && luau_starting(registry, name, listed);
         let (from, build) = match target.project {
             true => {
@@ -926,12 +945,13 @@ impl Loader {
             }
             return !was_held;
         }
-        let sources = match crate::luau::Sources::read(&from) {
-            Ok(sources) => sources,
-            Err(error) => return self.fail(&**host, registry, listed, name, digest, error),
+        let built = match builds.built(&from, build) {
+            None => return walking(),
+            Some(Ok(built)) => built,
+            Some(Err(error)) => return self.fail(&**host, registry, listed, name, digest, error),
         };
         self.waiting.borrow_mut().remove(name);
-        let loaded = crate::luau::define(&sources, target.options.as_deref()).and_then(|loaded| {
+        let loaded = built.define(target.options.as_deref(), crate::luau::MEMORY).and_then(|loaded| {
             if !registry.id_taken(&loaded.0.id, name) {
                 return Ok(loaded);
             }
