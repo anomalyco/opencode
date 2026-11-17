@@ -31,12 +31,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     // The sessions of the mounted sidebars, latest last: TS registers `/subagents` in the sidebar component, so it
     // picks from the session that sidebar shows.
     let mounted: Rc<RefCell<Vec<String>>> = Rc::default();
-    let pick = Command::default()
-        .with_name("subagents-sidebar.pick".to_owned())
-        .with_title("Subagents: open one".to_owned())
-        .with_group(Some("Session".to_owned()))
-        .with_slash(Some("subagents".to_owned()))
-        .with_palette(true);
+    let pick = Command::new("subagents-sidebar.pick")
+        .title("Subagents: open one")
+        .group("Session")
+        .slash("subagents")
+        .palette();
     let shown = mounted.clone();
     setup.command(pick, move |host, _| {
         let Some(session) = shown.borrow().last().cloned() else { return };
@@ -50,16 +49,16 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
                 SelectOption::new(child.title, child.id).description(if child.running { "running" } else { "done" })
             })
             .collect();
-        let action = Action::Command { name: OPEN.to_owned(), input: None };
+        let action = Action::command(OPEN);
         host.dialog(Dialog::Select(Select::new("Subagents", options, action)));
     });
     // Route navigation, as the TS plugin does: the built-in session list navigates this way too.
-    setup.command(Command::default().with_name(OPEN.to_owned()), |host, input| {
+    setup.command(Command::new(OPEN), |host, input| {
         if let Some(id) = input {
             host.navigate(Route::Session { id: id.to_owned() });
         }
     });
-    setup.command(Command::default().with_name(TOGGLE.to_owned()), |host, _| {
+    setup.command(Command::new(TOGGLE), |host, _| {
         let open = open(host);
         host.storage_merge("view", json!({ "open": !open }).as_object().cloned().unwrap_or_default());
     });
@@ -127,7 +126,7 @@ fn sidebar(children: &[Child], open: bool) -> Node {
         Node::text(title).fg("text.base"),
     ])
     .gap(1)
-    .on_click(Click::command(TOGGLE, None).on_down());
+    .on_click(Click::command(TOGGLE).on_down());
     let mut rows = vec![header];
     if open {
         rows.extend(children.iter().take(VISIBLE).map(row));
@@ -153,7 +152,7 @@ fn row(child: &Child) -> Node {
     ])
     .gap(1)
     .layout(Layout::default().min_width_zero())
-    .on_click(Click::command(OPEN, Some(child.id.clone())).on_down())
+    .on_click(Click::command(OPEN).input(child.id.clone()).on_down())
 }
 
 plugin!(id = "subagents-sidebar", setup);

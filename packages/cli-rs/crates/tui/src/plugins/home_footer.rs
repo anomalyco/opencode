@@ -50,7 +50,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 mcp.push(Node::text([Span::new("/mcps")]).fg("text.muted"));
             }
             let fixed = Layout::default().shrink(false);
-            row.push(Node::row(mcp).gap(1).layout(fixed).on_click(Click::command("mcp.list", None)));
+            row.push(Node::row(mcp).gap(1).layout(fixed).on_click(Click::command("mcp.list")));
         }
         if info.failed_plugins > 0 {
             let failed = info.failed_plugins;
@@ -64,7 +64,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 plugins.push(Node::text([Span::new("/plugins")]).fg("text.muted"));
             }
             let fixed = Layout::default().shrink(false);
-            row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list", None)));
+            row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list")));
         }
         row.push(Node::slot(slot::HOME_FOOTER_STATUS));
         row.push(Node::column(Vec::new()).layout(Layout::default().grow()));

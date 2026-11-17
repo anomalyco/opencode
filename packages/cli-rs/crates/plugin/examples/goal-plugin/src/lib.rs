@@ -52,16 +52,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         drawn.borrow_mut().sidebar(read, id)
     });
     let t = i18n::messages(locale);
-    let show = Command::default()
-        .with_name("goal.show".to_owned())
-        .with_title(t.title.to_owned())
-        .with_description(Some(t.command_description.to_owned()))
-        .with_group(Some(t.title.to_owned()))
-        .with_palette(true);
+    let show = Command::new("goal.show").title(t.title).description(t.command_description).group(t.title).palette();
     let shown = state.clone();
     setup.command(show, move |host, _| shown.borrow_mut().show(host));
     let picked = state.clone();
-    setup.command(Command::default().with_name(PICKED.to_owned()), move |host, input| {
+    setup.command(Command::new(PICKED), move |host, input| {
         picked.borrow_mut().picked(host, input.unwrap_or_default());
     });
     setup.on_reply(move |host, _, reply| {
@@ -171,9 +166,8 @@ impl State {
             options.push(SelectOption::new(t.clear, "clear").description(t.clear_description));
         }
         self.session = id;
-        let action = Action::Command { name: PICKED.to_owned(), input: None };
-        let select =
-            Select::new(t.title, options, action).with_placeholder(Some(summary(goal.as_ref(), t, self.locale)));
+        let action = Action::command(PICKED);
+        let select = Select::new(t.title, options, action).placeholder(summary(goal.as_ref(), t, self.locale));
         host.dialog(Dialog::Select(select));
     }
 
@@ -188,10 +182,7 @@ impl State {
             "clear" => t.clear_prompt,
             _ => return,
         };
-        let fetch = Fetch::default()
-            .with_method("POST".to_owned())
-            .with_path(format!("/api/session/{}/prompt", self.session))
-            .with_body(Some(json!({ "text": prompt })));
+        let fetch = Fetch::new("POST", format!("/api/session/{}/prompt", self.session)).body(json!({ "text": prompt }));
         if let Err(error) = host.try_fetch(fetch) {
             toast(host, t, &error, Variant::Error);
         }

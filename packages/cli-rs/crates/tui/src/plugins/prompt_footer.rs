@@ -175,7 +175,7 @@ fn view(model: &Model, session: &str) -> Node {
                 text(spans)
                     .fg("text.muted")
                     .hover_fg("text.base")
-                    .on_click(Click::command("session.child.first", Some(tab.to_owned()))),
+                    .on_click(Click::command("session.child.first").input(tab)),
             );
         }
         if let Some(goal) = &model.goal {

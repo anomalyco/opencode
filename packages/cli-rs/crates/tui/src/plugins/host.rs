@@ -541,10 +541,13 @@ impl Host for Tui {
         let session = crate::frame::panel_state(self, &target)?;
         Some(
             abi::interact::PanelInput::default()
-                .with_width(session.0)
-                .with_fullscreen(self.panels.presentation() == crate::panel::Presentation::Fullscreen)
-                .with_focused(session.1)
-                .with_forced(!self.panels.can_split()),
+                .width(session.0)
+                .when(
+                    self.panels.presentation() == crate::panel::Presentation::Fullscreen,
+                    abi::interact::PanelInput::fullscreen,
+                )
+                .when(session.1, abi::interact::PanelInput::focused)
+                .when(!self.panels.can_split(), abi::interact::PanelInput::forced),
         )
     }
 

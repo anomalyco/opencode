@@ -10,11 +10,12 @@ use serde_json::Value;
 /// built-in uses sets them.
 pub fn fetch_of(call: Call) -> abi::Fetch {
     debug_assert!(call.headers.is_empty(), "a plugin fetch carries no headers");
-    abi::Fetch::default().with_method(call.method.to_owned()).with_path(call.path).with_query(call.query).with_body(
+    abi::Fetch::new(call.method, call.path).query(call.query).maybe(
         match call.body {
             Some(Body::Json(value)) => Some(value),
             _ => None,
         },
+        abi::Fetch::body,
     )
 }
 
@@ -72,8 +73,8 @@ mod tests {
             let (want, got) = (client.prepare(call()).unwrap(), client.prepare(call_of(fetch).unwrap()).unwrap());
             assert_eq!((want.method, want.url, want.headers, want.body), (got.method, got.url, got.headers, got.body));
         }
-        assert!(call_of(abi::Fetch::default().with_method("TRACE".into()).with_path("/x".into())).is_err());
-        let elsewhere = abi::Fetch::default().with_method("GET".into()).with_path("/https://outside.invalid/x".into());
+        assert!(call_of(abi::Fetch::new("TRACE", "/x")).is_err());
+        let elsewhere = abi::Fetch::new("GET", "/https://outside.invalid/x");
         assert!(client.auth(Auth::password("secret")).prepare(call_of(elsewhere).unwrap()).is_err());
     }
 }

@@ -33,10 +33,10 @@ pub fn open(host: &dyn Host, viewer: &Viewer) {
     let height = (rows as i64 - 1).min(i64::from(host.info().size.1) - 6).max(1);
     host.dialog(Dialog::Panel(
         Panel::new(KEY.to_owned(), vec![Span::new("Diff shortcuts")], Node::column(body).gap(1))
-            .with_size(PanelSize::Medium)
-            .with_centered(true)
-            .with_close(Some("esc close".to_owned()))
-            .with_height(Some(height as u16)),
+            .size(PanelSize::Medium)
+            .centered()
+            .close("esc close")
+            .height(height as u16),
     ));
 }
 

@@ -33,13 +33,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     // The session the page was opened from: what it shows, and where escape goes back to.
     let origin: Rc<RefCell<Option<String>>> = Rc::default();
     let opened = origin.clone();
-    let open = Command::default()
-        .with_name("oc-context-grid.open".to_owned())
-        .with_title("Context Grid".to_owned())
-        .with_group(Some("Plugin".to_owned()))
-        .with_description(Some("Show context usage as a grid of squares".to_owned()))
-        .with_palette(true)
-        .with_slash(Some(ROUTE.to_owned()));
+    let open = Command::new("oc-context-grid.open")
+        .title("Context Grid")
+        .group("Plugin")
+        .description("Show context usage as a grid of squares")
+        .palette()
+        .slash(ROUTE);
     setup.command(open, move |host, _| {
         *opened.borrow_mut() = match host.route() {
             Route::Session { id } => Some(id),
@@ -61,9 +60,9 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     setup.surface(page);
     let close = Layer::default()
-        .with_scope(LayerScope::Global)
-        .with_mode(Some(MODE.to_owned()))
-        .with_keys(vec![Bind::new("escape", "close").with_title(Some("Close context grid".to_owned()))]);
+        .scope(LayerScope::Global)
+        .mode(MODE)
+        .keys([Bind::new("escape", "close").title("Close context grid")]);
     setup.layer(close, move |host, _| {
         back(host, origin.borrow().clone());
         Handled::Consume

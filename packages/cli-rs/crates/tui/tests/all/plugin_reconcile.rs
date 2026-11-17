@@ -424,7 +424,7 @@ impl Generator<'_> {
     }
 
     fn click(&mut self) -> Option<abi::Click> {
-        self.chance(20).then(|| abi::Click::command(*self.rng.pick(&["x.one", "x.two"]), None))
+        self.chance(20).then(|| abi::Click::command(*self.rng.pick(&["x.one", "x.two"])))
     }
 
     fn node(&mut self, depth: usize) -> v2::Node {
@@ -480,8 +480,8 @@ impl Generator<'_> {
                     None => node,
                 }
             }
-            .with_view(*self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]))
-            .with_filetype(self.chance(70).then(|| "rust".to_owned())),
+            .view(*self.rng.pick(&[v2::DiffView::Unified, v2::DiffView::Split]))
+            .maybe(self.chance(70).then_some("rust"), v2::Node::filetype),
             8 => v2::Node::Canvas {
                 id: self.id().or_else(|| self.scrolls.pop().map(str::to_owned)),
                 layout: self.layout(),
@@ -1085,8 +1085,8 @@ fn a_theme_change_rebuilds_nothing() {
         children.push(
             v2::Node::diff(v2::Source::Text("@@ -1,2 +1,2 @@\n-a\n+b\n c\n".into()))
                 .with_id("diff")
-                .with_view(v2::DiffView::Unified)
-                .with_filetype(Some("rust".into())),
+                .view(v2::DiffView::Unified)
+                .filetype("rust"),
         );
         children.push(v2::Node::Spinner { id: None, label: "wait".into() });
     }
@@ -1189,7 +1189,7 @@ fn a_changed_click_runs_the_new_action() {
         })
     };
     let nodes = |name: &str| {
-        let click = abi::Click::command(name, None);
+        let click = abi::Click::command(name);
         vec![v2::Node::column(vec![
             v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("box")])]).on_click(click.clone()),
             v2::Node::text(vec![abi::Span::new("text")]).on_click(click),
@@ -1250,7 +1250,7 @@ fn a_tree_with_unknown_content_is_refused() {
     let mut tree = Tree::default();
     apply(&host, &mut tree, &parent, &cards(2, &[], false)).unwrap();
     let frame = host.app.render();
-    let diff = v2::Node::diff(v2::Source::Content(v2::ContentRef(7))).with_view(v2::DiffView::Unified);
+    let diff = v2::Node::diff(v2::Source::Content(v2::ContentRef(7))).view(v2::DiffView::Unified);
     assert_eq!(
         apply(&host, &mut tree, &parent, &[v2::Node::column(vec![diff])]),
         Err(Refused::Content(v2::ContentRef(7)))
@@ -1477,7 +1477,7 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
 // setter; one whose view changes is set once and parses nothing.
 #[test]
 fn an_unchanged_patch_is_not_touched() {
-    let diff = |view| vec![v2::Node::diff(v2::Source::Text(PATCHES[0].into())).with_id("d").with_view(view)];
+    let diff = |view| vec![v2::Node::diff(v2::Source::Text(PATCHES[0].into())).with_id("d").view(view)];
     let host = host(0);
     let parent = root(&host);
     let mut tree = Tree::default();

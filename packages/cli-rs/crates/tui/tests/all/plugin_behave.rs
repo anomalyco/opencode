@@ -80,8 +80,7 @@ fn patch(card: usize) -> String {
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("board".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("board".into()));
     setup.command(command("board.step"), |host, input| {
         let by = input.and_then(|by| by.parse().ok()).unwrap_or(1);
         host.scroll(files(), v2::Scroll::Step { group: "hunk".into(), by, inset: INSET });
@@ -160,8 +159,7 @@ fn board_layout(geometry: &v2::Geometry) -> v2::LayoutReply {
 /// The board as a scroll of every card, whatever the board's `list`: the eager reference a windowed list must show
 /// the same as. Its commands show the board's state and move it to an offset.
 fn eager_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("eager".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("eager".into()));
     setup.command(command("eager.view"), |_, _| {});
     setup.command(command("eager.at"), |host, input| {
         let offset = input.and_then(|offset| offset.parse().ok()).unwrap_or(0);
@@ -191,8 +189,8 @@ fn card(cx: &mut v2::View<'_>, card: usize, reviewed: bool) -> v2::Node {
             children.push(
                 v2::Node::diff(v2::Source::Text(patch(card)))
                     .with_id(format!("diff-{card}"))
-                    .with_view(v2::DiffView::Unified)
-                    .with_hunks(Some("hunk".into())),
+                    .view(v2::DiffView::Unified)
+                    .hunks("hunk"),
             );
         }
         v2::Node::column(children).anchor("file", if reviewed { "reviewed" } else { "" })
@@ -1125,8 +1123,7 @@ const PNG: &[u8] = &[
 ];
 
 fn kinds_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("kinds".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("kinds".into()));
     setup.command(command("kinds.value"), |_, input| kinds(|kinds| kinds.value = input.unwrap_or("").into()));
     setup.command(command("kinds.code"), |_, input| kinds(|kinds| kinds.code = input.unwrap_or("").into()));
     setup.command(command("kinds.image"), |_, input| {
@@ -1289,7 +1286,7 @@ thread_local! {
 
 fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     WAKER.with(|waker| *waker.borrow_mut() = setup.waker());
-    let command = |name: &str| abi::Command::default().with_name(name.into());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("tx.by"), |host, _| {
         READ.with(|read| read.borrow_mut().extend(host.transcript().map(|view| view.offset)));
         host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -3 });
@@ -1307,8 +1304,8 @@ fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     // A key a layer of the plugin takes is (P2's handler, folded with P3's). With a modifier: a printable global key is
     // the composer's while it has the focus (FT-14).
     let layer = abi::interact::Layer::default()
-        .with_scope(abi::interact::LayerScope::Global)
-        .with_keys(vec![abi::interact::Bind::new("alt+z", "up")]);
+        .scope(abi::interact::LayerScope::Global)
+        .keys(vec![abi::interact::Bind::new("alt+z", "up")]);
     setup.layer(layer, |host, _| {
         host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -4 });
         Handled::Consume
@@ -1445,8 +1442,7 @@ fn a_list_refuses_what_crosses_its_items() {
 // A large added file.
 
 fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("big".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("big".into()));
     let target = || v2::Target::node("big", "files");
     setup
         .command(command("big.end"), move |host, _| host.scroll(target(), v2::Scroll::Edge { edge: v2::Edge::Bottom }));
@@ -1457,10 +1453,7 @@ fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("big", v2::Place::Route("big".into()), |_| {
         let lines: String = (0..5000).map(|line| format!("+line_{line}\n")).collect();
         let patch = format!("--- /dev/null\n+++ b/big.txt\n@@ -0,0 +1,5000 @@\n{lines}");
-        let diff = v2::Node::diff(v2::Source::Text(patch))
-            .with_id("big")
-            .with_view(v2::DiffView::Unified)
-            .with_hunks(Some("hunk".into()));
+        let diff = v2::Node::diff(v2::Source::Text(patch)).with_id("big").view(v2::DiffView::Unified).hunks("hunk");
         v2::Node::column(vec![v2::Node::scroll(vec![diff]).with_id("files").layout(abi::Layout::default().grow())])
             .layout(abi::Layout::default().grow())
     }));
@@ -1610,8 +1603,7 @@ fn probe_target() -> v2::Target {
 }
 
 fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("probe".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("probe".into()));
     let input = |input: Option<&str>| input.unwrap_or_default().to_owned();
     setup.command(command("p.go"), move |host, node| {
         host.scroll(probe_target(), v2::Scroll::To { node: input(node), align: v2::ScrollAlign::Start });
@@ -1679,8 +1671,8 @@ fn probe_card(scroll: &str, index: usize, rows: u16, shape: &Shape) -> v2::Node 
         lines.push(
             v2::Node::diff(v2::Source::Text(hunky(index, hunks, size)))
                 .with_id(format!("{prefix}d{index}"))
-                .with_view(v2::DiffView::Unified)
-                .with_hunks(Some("h".into())),
+                .view(v2::DiffView::Unified)
+                .hunks("h"),
         );
     }
     if shape.input && index == 0 {
@@ -2393,7 +2385,7 @@ fn big_more_setup(setup: &mut abi::Setup) -> Result<(), String> {
             let lines: String = (0..5000).map(|line| format!("+line_{line}\n")).collect();
             v2::Node::diff(v2::Source::Text(format!("--- /dev/null\n+++ b/big.txt\n@@ -0,0 +1,5000 @@\n{lines}")))
                 .with_id("big")
-                .with_view(v2::DiffView::Unified)
+                .view(v2::DiffView::Unified)
         };
         let diff = if BIG_KEPT.get() { cx.memo("big", (), |_| diff()) } else { diff() };
         let grow = abi::Layout::default().grow();
@@ -2537,8 +2529,7 @@ thread_local! {
 }
 
 fn input_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("input".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("input".into()));
     setup.command(command("in.view"), |_, _| {});
     setup.surface(v2::Surface::new("input", v2::Place::Route("input".into()), |_| {
         let (width, many) = INPUT_SHAPE.get();

@@ -61,9 +61,8 @@ pub const COMMANDS: [(&str, &str, Action); 21] = [
 
 /// The viewer's layer: in the base mode, so a dialog takes the keys, above the host's layers of its scope.
 pub fn layer() -> Layer {
-    let keys =
-        COMMANDS.iter().map(|&(name, title, _)| Bind::command(name, name).with_title(Some(title.to_owned()))).collect();
-    Layer::default().with_scope(LayerScope::Surface).with_priority(1).with_keys(keys)
+    let keys = COMMANDS.iter().map(|&(name, title, _)| Bind::command(name, name).title(title));
+    Layer::default().scope(LayerScope::Surface).priority(1).keys(keys)
 }
 
 /// The action a bind of [`layer`] names.

@@ -109,7 +109,7 @@ impl Viewer {
             self.previews.insert(file.clone(), Preview::Loading);
             let input = FileReadInput { location: self.location_query(), path: file.clone() };
             let call = Client::file_read_call(&input).expect("the read input encodes");
-            let fetch = fetch_of(call).with_bytes(true);
+            let fetch = fetch_of(call).bytes();
             self.fetch(host, diffs, fetch, Asked::Image { viewer: self.id, load: self.loads, file });
         }
     }

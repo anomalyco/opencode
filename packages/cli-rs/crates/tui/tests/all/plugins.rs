@@ -414,7 +414,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 #[cfg(unix)]
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(abi::Command::default().with_name("boom.boom".to_owned()), |_, _| panic!("boom"));
+        setup.command(abi::Command::new("boom.boom"), |_, _| panic!("boom"));
         Ok(())
     }
     abi::Plugin { id: "test.boom", setup }
@@ -500,7 +500,7 @@ fn print_excerpt(title: &str, screen: &str) {
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("seen");
     setup.storage_key("step");
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("probe.act"), |host, _| {
         host.dispatch("probe.first", None);
         host.storage_set("seen", json!({ "tick": 1 }));
@@ -561,7 +561,7 @@ thread_local! {
 
 /// `chain.self` dispatches itself; `chain.fan` dispatches itself twice, and copies with itself as the `then`.
 pub(crate) fn chain(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("chain.self"), |host, _| {
         CHAINED.set((CHAINED.get().0 + 1, CHAINED.get().1));
         host.dispatch("chain.self", None);
@@ -570,7 +570,7 @@ pub(crate) fn chain(setup: &mut abi::Setup) -> Result<(), String> {
         CHAINED.set((CHAINED.get().0, CHAINED.get().1 + 1));
         host.dispatch("chain.fan", None);
         host.dispatch("chain.fan", None);
-        host.copy("x", Some(abi::Action::Command { name: "chain.fan".to_owned(), input: None }));
+        host.copy("x", Some(abi::Action::command("chain.fan")));
     });
     setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new("chain ready")]))
@@ -630,8 +630,8 @@ type Fetches = (Vec<Result<abi::RequestId, String>>, Vec<abi::RequestId>);
 
 /// `fetcher.go` fetches the session list; each reply is kept by its ID.
 fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("fetcher.go".to_owned()), |host, _| {
-        let fetch = abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
+    setup.command(abi::Command::new("fetcher.go"), |host, _| {
+        let fetch = abi::Fetch::new("GET", "/api/session");
         let id = host.try_fetch(fetch);
         FETCHES.with_borrow_mut(|fetches| fetches.0.push(id));
     });
@@ -699,7 +699,7 @@ thread_local! {
 /// pad opens it again each time it hears one closed: each open replaces the one before, which tells the pad it closed.
 fn burst(setup: &mut abi::Setup) -> Result<(), String> {
     use abi::interact::{Anchor, Event, Handled, Interact, Overlay, PointerKind};
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     let ring = || Overlay { surface: "ring".into(), anchor: Anchor::Point { x: 2, y: 2 }, width: 10, height: 1 };
     setup.command(command("burst.go"), |host, _| (0..3000).for_each(|_| host.dispatch("burst.hit", None)));
     setup.command(command("burst.hit"), |_, _| BURST.set((BURST.get().0 + 1, BURST.get().1)));
@@ -860,7 +860,7 @@ thread_local! {
 
 /// `x.run` asks for `true` in the foreground; the reply goes to [`RAN`].
 fn running(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("x.run".into()), |host, _| {
+    setup.command(abi::Command::new("x.run"), |host, _| {
         let _ = host.try_foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     });
     setup.on_reply(|_, _, result| RAN.set(Some(result)));
@@ -997,10 +997,10 @@ thread_local! {
 
 /// `trap.panel` opens a panel that binds the dialog's close keys, an empty key, and `ctrl+e`, each to `trap.hit`.
 fn trap(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("trap.hit"), |_, _| TRAPPED.set(TRAPPED.get() + 1));
     setup.command(command("trap.panel"), |host, _| {
-        let hit = || abi::Action::Command { name: "trap.hit".to_owned(), input: None };
+        let hit = || abi::Action::command("trap.hit");
         let binds =
             ["escape", "Ctrl+C", "ESC", "", "g esc", "x, ctrl+c", "esc<", "esc<leader>", "<leader>esc", "ctrl+e"]
                 .map(|key| abi::PanelBind { key: key.to_owned(), title: format!("bind {key}"), action: hit() });
@@ -1010,7 +1010,7 @@ fn trap(setup: &mut abi::Setup) -> Result<(), String> {
                 vec![abi::Span::new("trap panel")],
                 abi::Node::text([abi::Span::new("")]),
             )
-            .with_binds(binds.into()),
+            .binds(binds),
         ));
     });
     Ok(())
@@ -1040,7 +1040,7 @@ fn a_panel_cannot_take_the_keys_that_close_it() {
 fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_plugins(|host| host.toast(abi::Toast::new(abi::Variant::Info, "plugins changed")));
     // Six toasts in one call: `chat 0` to `chat 5`.
-    setup.command(abi::Command::default().with_name("chatty.burst".to_owned()), |host, _| {
+    setup.command(abi::Command::new("chatty.burst"), |host, _| {
         (0..6).for_each(|index| host.toast(abi::Toast::new(abi::Variant::Info, format!("chat {index}"))));
     });
     Ok(())
@@ -1048,13 +1048,13 @@ fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
 
 /// `boomer.panic` panics.
 fn boomer(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("boomer.panic".to_owned()), |_, _| panic!("boom"));
+    setup.command(abi::Command::new("boomer.panic"), |_, _| panic!("boom"));
     Ok(())
 }
 
 /// `second.panic` panics.
 fn second(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("second.panic".to_owned()), |_, _| panic!("boom"));
+    setup.command(abi::Command::new("second.panic"), |_, _| panic!("boom"));
     Ok(())
 }
 
@@ -1117,7 +1117,7 @@ fn a_plugin_toast_never_hides_the_report_of_a_failure() {
 /// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
 fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     let id = if SUB { "owner/sub" } else { "owner" };
-    let command = |name: String| abi::Command::default().with_name(name);
+    let command = |name: String| abi::Command::new(name);
     setup.command(command(format!("{id}.panel")), move |host, _| {
         host.dialog(abi::Dialog::Panel(
             abi::Panel::new(
@@ -1125,7 +1125,7 @@ fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
                 vec![abi::Span::new(format!("{id} panel"))],
                 abi::Node::text([abi::Span::new("body")]),
             )
-            .with_size(abi::PanelSize::Medium),
+            .size(abi::PanelSize::Medium),
         ));
     });
     setup
@@ -1164,24 +1164,24 @@ thread_local! {
 
 /// A command that shows the panel `panel`, of a set height, as [`SHIFT`] says.
 fn shifting(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("shifting.panel".to_owned()), |host, _| {
+    setup.command(abi::Command::new("shifting.panel"), |host, _| {
         let stage = SHIFT.get();
         let action = abi::PanelAction {
             title: "Apply".to_owned(),
             key: Some("a".to_owned()),
             color: None,
             close: false,
-            action: abi::Action::Command { name: "shifting.panel".to_owned(), input: None },
+            action: abi::Action::command("shifting.panel"),
         };
         let panel = abi::Panel::new(
             "panel".to_owned(),
             vec![abi::Span::new("Shifting title")],
             abi::Node::text([abi::Span::new("shifting body")]),
         )
-        .with_size(abi::PanelSize::Medium)
-        .with_height(Some(4))
-        .with_actions(if stage >= 1 { vec![action] } else { Vec::new() })
-        .with_bare(stage >= 2);
+        .size(abi::PanelSize::Medium)
+        .height(4)
+        .actions(if stage >= 1 { vec![action] } else { Vec::new() })
+        .when(stage >= 2, abi::Panel::bare);
         host.dialog(abi::Dialog::Panel(panel));
     });
     Ok(())
@@ -1293,7 +1293,7 @@ thread_local! {
 }
 
 fn named(name: &str) -> abi::Command {
-    abi::Command::default().with_name(name.to_owned())
+    abi::Command::new(name)
 }
 
 /// The plugin `acme`, with the dotted key `cloud.token`.

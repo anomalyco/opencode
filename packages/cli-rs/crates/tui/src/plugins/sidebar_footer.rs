@@ -21,7 +21,7 @@ const ROOT: &str = "footer";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key(KEY);
-    setup.command(Command::default().with_name(DISMISS.to_owned()), |host, _| {
+    setup.command(Command::new(DISMISS), |host, _| {
         host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
     });
     setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::SIDEBAR_FOOTER)), |cx| {
@@ -61,7 +61,7 @@ fn view(read: &dyn abi::Read, session: &str) -> Node {
         .hover_fg("text.base")
         .wrap(Wrap::None)
         .truncate()
-        .on_click(Click::command("workspace.directory", Some(location.directory)));
+        .on_click(Click::command("workspace.directory").input(location.directory));
     children.push(Node::column(vec![path]));
     Node::column(children).gap(1)
 }
@@ -72,7 +72,7 @@ fn card() -> Node {
     let body = Node::column(vec![
         Node::row(vec![
             Node::text([Span::new("Getting started").fg("text.base").bold()]),
-            Node::text([Span::new("✕")]).fg("text.muted").on_click(Click::command(DISMISS, None)),
+            Node::text([Span::new("✕")]).fg("text.muted").on_click(Click::command(DISMISS)),
         ])
         .justify(Justify::SpaceBetween),
         muted("OpenCode includes free models so you can start immediately."),
@@ -83,7 +83,7 @@ fn card() -> Node {
         ])
         .gap(1)
         .justify(Justify::SpaceBetween)
-        .on_click(Click::command("provider.connect", None)),
+        .on_click(Click::command("provider.connect")),
     ])
     .gap(1)
     .layout(Layout::default().grow());

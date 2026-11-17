@@ -279,11 +279,8 @@ impl State {
             self.last_forced = now;
         }
         let location = self.location(host);
-        let query = vec![("location[directory]".to_owned(), location.directory)];
-        let fetch = Fetch::default()
-            .with_method("GET".to_owned())
-            .with_path("/api/experimental/usage/limits".to_owned())
-            .with_query(query);
+        let fetch =
+            Fetch::new("GET", "/api/experimental/usage/limits").query([("location[directory]", location.directory)]);
         match host.try_fetch(fetch) {
             Ok(id) => self.limits = Some(id),
             // As a failed read: it hides the meters.
@@ -686,20 +683,16 @@ fn ask(host: &dyn Host, waiting: &mut Vec<(RequestId, Want)>, fetch: Fetch, want
 }
 
 fn children(parent: &str, cursor: Option<&str>) -> Fetch {
-    let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string()), ("parentID".to_owned(), parent.to_owned())];
-    query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
-    Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned()).with_query(query)
+    let query = [("limit", PAGE_SIZE.to_string()), ("parentID", parent.to_owned())];
+    Fetch::new("GET", "/api/session").query(query.into_iter().chain(cursor.map(|cursor| ("cursor", cursor.to_owned()))))
 }
 
 /// A page of `session`'s messages (TS `client.message.list`), as its bytes, which the decoder reads.
 fn messages(session: &str, cursor: Option<&str>) -> Fetch {
-    let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string())];
-    query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
-    Fetch::default()
-        .with_method("GET".to_owned())
-        .with_path(format!("/api/session/{session}/message"))
-        .with_query(query)
-        .with_bytes(true)
+    let query = [("limit", PAGE_SIZE.to_string())];
+    Fetch::new("GET", format!("/api/session/{session}/message"))
+        .query(query.into_iter().chain(cursor.map(|cursor| ("cursor", cursor.to_owned()))))
+        .bytes()
 }
 
 /// `Date.now()`.

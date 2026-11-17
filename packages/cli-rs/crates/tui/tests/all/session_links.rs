@@ -191,9 +191,9 @@ fn only_the_btw_answer_links_sessions_among_plugin_markdown() {
                 vec![opencode_plugin::abi::Span::new("Panel")],
                 opencode_plugin::abi::Node::Markdown { text: format!("See {known} here") },
             )
-            .with_size(opencode_plugin::abi::PanelSize::Large)
-            .with_bleed(true)
-            .with_centered(true),
+            .size(opencode_plugin::abi::PanelSize::Large)
+            .bleed()
+            .centered(),
         )
     };
     opencode_tui::plugins::panel::show(&h.tui, "test.other", 0, panel("other"));

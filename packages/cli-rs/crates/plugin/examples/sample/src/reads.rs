@@ -26,34 +26,31 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             };
         }
     });
-    setup.command(
-        Command::default().with_name("sample.verbs".to_owned()).with_title("Sample verbs".to_owned()),
-        move |host, _| {
-            let answers = [
-                host.set_variant(Some("high")),
-                host.set_variant(Some("none")),
-                host.edit_tab(TabEdit::Focus { session: "ses_1".to_owned() }),
-                host.edit_tab(TabEdit::Close { session: None }),
-                host.set_theme("nord"),
-                host.set_theme("none"),
-            ];
-            host.set_model("opencode", "small");
-            host.clear_selection();
-            host.set_title("sample title");
-            host.install_theme("sample", json!({ "theme": {} }));
-            program.set(host.try_foreground(Foreground::new("true").with_args(vec!["a".to_owned()])).ok());
-            let answers: Vec<String> = answers.iter().map(bool::to_string).collect();
-            host.toast(Toast::new(Variant::Info, format!("sample verbs: {}", answers.join(" "))));
-            host.dialog(Dialog::Panel(
-                Panel::new(
-                    "wide".to_owned(),
-                    vec![Span::new("Wide")],
-                    Node::text([Span::new("docs").link("https://opencode.ai/docs")]),
-                )
-                .with_size(PanelSize::XLarge),
-            ));
-        },
-    );
+    setup.command(Command::new("sample.verbs").title("Sample verbs"), move |host, _| {
+        let answers = [
+            host.set_variant(Some("high")),
+            host.set_variant(Some("none")),
+            host.edit_tab(TabEdit::Focus { session: "ses_1".to_owned() }),
+            host.edit_tab(TabEdit::Close { session: None }),
+            host.set_theme("nord"),
+            host.set_theme("none"),
+        ];
+        host.set_model("opencode", "small");
+        host.clear_selection();
+        host.set_title("sample title");
+        host.install_theme("sample", json!({ "theme": {} }));
+        program.set(host.try_foreground(Foreground::new("true").args(vec!["a".to_owned()])).ok());
+        let answers: Vec<String> = answers.iter().map(bool::to_string).collect();
+        host.toast(Toast::new(Variant::Info, format!("sample verbs: {}", answers.join(" "))));
+        host.dialog(Dialog::Panel(
+            Panel::new(
+                "wide".to_owned(),
+                vec![Span::new("Wide")],
+                Node::text([Span::new("docs").link("https://opencode.ai/docs")]),
+            )
+            .size(PanelSize::XLarge),
+        ));
+    });
     setup.slot(Placement::append("home.footer"), move |read, input, changed| {
         let tabs: Vec<String> =
             read.tabs().iter().map(|tab| format!("{}{}", tab.session_id, if tab.active { "*" } else { "" })).collect();

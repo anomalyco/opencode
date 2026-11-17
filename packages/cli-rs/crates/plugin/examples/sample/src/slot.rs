@@ -9,7 +9,7 @@ use serde_json::json;
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.storage_key("clicks");
-    setup.command(Command::default().with_name("sample.clicked".to_owned()), |host, input| {
+    setup.command(Command::new("sample.clicked"), |host, input| {
         let count = clicks(host) + 1;
         host.storage_set("clicks", json!({ "count": count, "input": input }));
     });
@@ -28,7 +28,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             Node::text([Span::new(format!("{} clicks", clicks(read)))])
                 .fg("text.muted")
                 .hover_fg("text.base")
-                .on_click(Click::command("sample.clicked", Some(session.to_owned()))),
+                .on_click(Click::command("sample.clicked").input(session)),
         ]))
     });
     Ok(())

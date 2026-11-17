@@ -160,9 +160,7 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
         return Err(format!("probe build {B} fails its setup"));
     }
     let count = Rc::new(Cell::new(0));
-    let command = |name: &str, title: &str| {
-        abi::Command::default().with_name(name.to_owned()).with_title(title.to_owned()).with_palette(true)
-    };
+    let command = |name: &str, title: &str| abi::Command::new(name).title(title).palette();
     let (held, counted) = (token.clone(), count.clone());
     setup.command(command("probe.run", "Probe run"), move |_, _| {
         let _ = &held;
@@ -179,7 +177,7 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
                 vec![abi::Span::new("Probe panel")],
                 abi::Node::text([abi::Span::new(format!("probe panel b{B}"))]),
             )
-            .with_size(abi::PanelSize::Medium),
+            .size(abi::PanelSize::Medium),
         ));
     });
     let held = token.clone();
@@ -239,11 +237,7 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_dispose(move |host| {
         let _ = &token;
         called(activation, B, Kind::Dispose);
-        host.dialog(abi::Dialog::Prompt {
-            title: format!("Probe disposed b{B}"),
-            placeholder: None,
-            action: confirmed(),
-        });
+        host.dialog(abi::Dialog::Prompt(abi::Prompt::new(format!("Probe disposed b{B}"), confirmed())));
     });
     if B == PROMPTING {
         setup.host().dialog(prompt(B));
@@ -253,11 +247,11 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
 
 /// What a confirmed prompt, select or confirm, and a closed alert, run.
 fn confirmed() -> abi::Action {
-    abi::Action::Command { name: "probe.run".to_owned(), input: None }
+    abi::Action::command("probe.run")
 }
 
 fn prompt(build: u8) -> abi::Dialog {
-    abi::Dialog::Prompt { title: format!("Probe prompt b{build}"), placeholder: None, action: confirmed() }
+    abi::Dialog::Prompt(abi::Prompt::new(format!("Probe prompt b{build}"), confirmed()))
 }
 
 /// Logs a call, then panics if its fault is armed; the fault is spent.

@@ -259,9 +259,7 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
         );
     }
     let header = v2::Node::row(vec![
-        v2::Node::row(switch)
-            .layout(Layout::default().grow().min_width_zero())
-            .on_click(Click::command(super::SOURCE, None)),
+        v2::Node::row(switch).layout(Layout::default().grow().min_width_zero()).on_click(Click::command(super::SOURCE)),
         v2::Node::text([Span::new(format!("{reviewed_count}/{}", input.files.len()))])
             .fg("text.muted")
             .wrap(Wrap::None)
@@ -328,7 +326,7 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
             v2::Node::column(vec![
                 v2::Node::text([Span::new(help.clone()).fg("text.base"), Span::new(" help").fg("text.muted")])
                     .wrap(Wrap::None)
-                    .on_click(Click::command(super::HELP, None)),
+                    .on_click(Click::command(super::HELP)),
             ])
             .padding_sides(Edges { top: 1, bottom: 1, ..Edges::default() })
             .layout(Layout::default().shrink(false)),

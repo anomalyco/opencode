@@ -85,9 +85,7 @@ fn segv() {
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let (name, title, line) = BUILD;
     let waker = setup.waker();
-    let command = |name: String, title: String, slash: String| {
-        Command::default().with_name(name).with_title(title).with_slash(Some(slash)).with_palette(true)
-    };
+    let command = |name: String, title: String, slash: String| Command::new(name).title(title).slash(slash).palette();
     for (index, kind) in KINDS.into_iter().enumerate() {
         setup.command(
             command(format!("{name}.{kind}"), format!("{title}: {kind}"), format!("{name}-{kind}")),

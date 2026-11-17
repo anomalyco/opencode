@@ -67,16 +67,13 @@ fn update(plugin: usize) -> impl Fn(&dyn abi::Host, u32) {
 fn setup_a(setup: &mut abi::Setup) -> Result<(), String> {
     let sender = setup.messages(update(0))?;
     SENDERS.with(|senders| senders.borrow_mut()[0] = Some(sender));
-    let key = abi::Command::default()
-        .with_name("flood.key".into())
-        .with_keybind(Some("k".into()))
-        .with_scope(abi::Scope::Route("flood".into()));
+    let key = abi::Command::new("flood.key").keybind("k").scope(abi::Scope::Route("flood".into()));
     setup.command(key, |_, _| {
         log(Event::Key);
         CLOCK.with(|clock| clock.set(clock.get() + KEY_COST));
     });
     // A key on every route, for the rows that time a key beside a canvas; the model never presses it.
-    let anywhere = abi::Command::default().with_name("flood.anywhere".into()).with_keybind(Some("j".into()));
+    let anywhere = abi::Command::new("flood.anywhere").keybind("j");
     setup.command(anywhere, |_, _| CLOCK.with(|clock| clock.set(clock.get() + KEY_COST)));
     setup.surface(v2::Surface::new("flood", v2::Place::Route("flood".into()), |_| {
         v2::Node::text(vec![abi::Span::new("flood")])

@@ -54,18 +54,13 @@ use opencode_plugin_abi::{Click, Command, Node, Placement, Render, Setup, Span, 
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     // A command in the palette and as `/hello`.
-    setup.command(
-        Command::default()
-            .with_name("hello.greet".to_owned())
-            .with_title("Say hello".to_owned())
-            .with_slash(Some("hello".to_owned()))
-            .with_palette(true),
-        |host, _input| host.toast(Toast::new(Variant::Success, "Hello from a plugin")),
-    );
+    setup.command(Command::new("hello.greet").title("Say hello").slash("hello").palette(), |host, _input| {
+        host.toast(Toast::new(Variant::Success, "Hello from a plugin"))
+    });
     // A line at the end of the home screen's footer; a click runs the command.
     setup.slot(Placement::append("home.footer"), |_read, _input, _changed| {
         let text = Node::text([Span::new("hello").fg("text.muted")]);
-        Render::Show(text.on_click(Click::command("hello.greet", None)))
+        Render::Show(text.on_click(Click::command("hello.greet")))
     });
     Ok(())
 }
@@ -149,10 +144,15 @@ A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carb
 the contract that a later 2.x may extend is `#[non_exhaustive]` from 2.0 on, to the plugin's crate:
 
 - A struct literal of one does not compile, also with `..Default::default()`. Build it from its constructor or
-  `Default`, and set what it needs with its builders and `with_` setters, one a field:
-  `Command::default().with_name("hello.greet".to_owned()).with_palette(true)`, `Toast::new(..).title(..)`,
-  `Attention::new(..).with_sound(..)`, `PanelAction::new(title, action).with_key(..)`, `OpenPanel::new("notes")`,
-  `Overlay::new(..)`, `Foreground::new("sh").with_args(..)`, `Interact::default().with_focusable(true)`,
+  `Default`, and set what it needs with its setters, one a field and named for it: a value takes what converts into
+  the field (`.title("Say hello")`), an optional field takes the value itself (`.slash("hello")`, no `Some`), a flag
+  takes nothing (`.palette()`), and a list takes anything that iterates (`.keys([..])`). For a value that is already
+  an `Option` or a `bool`, `.maybe(focus, Select::focus)` and `.when(centered, Panel::centered)`:
+  `Command::new("hello.greet").palette()`, `Toast::new(..).title(..)`, `Confirm::new(..).labels("Clear", "Cancel")`,
+  `Prompt::new(title, action).placeholder(..)`, `Fetch::new("GET", path).query([("limit", "20")])`,
+  `Layout::default().absolute(Absolute::new().top(0).right(1).z(10))`,
+  `Attention::new(..).sound(..)`, `PanelAction::new(title, action).key(..)`, `OpenPanel::new("notes")`,
+  `Overlay::new(..)`, `Foreground::new("sh").args(..)`, `Interact::default().focusable()`,
   `Layout::default().width(..).grow()`, `LayoutReply::default().paint(..).again()`.
 - A node of `v2::Node` is built with its constructors (`Node::column`, `row`, `text`, `scroll`, `list`, `input`,
   `diff`, `code`, `image`, `markdown`, `spinner`, `canvas`, `slot`, `keep`, `fence`) and its setters (`with_id`, `bg`,
@@ -194,7 +194,7 @@ below.
   fence claim's tree may hold it, once: a surface's view that holds it fails the plugin, and a claim's tree that holds
   it twice shows the host's row. For a host without the feature, lower it: `view.or(Node::fence(), |view| ...)`, as
   `View::or` lowers a kind of a later minor; the SDK refuses a tree that still holds it before it crosses.
-- **Where a dialog sits.** `Select::with_centered`, and `with_size` and `with_centered` on `Alert` and `Confirm`: in
+- **Where a dialog sits.** `Select::centered`, and `size` and `centered` on `Alert` and `Confirm`: in
   the middle of the screen, not a quarter of the way down, and medium, large or extra large (TS `dialog.set({ size,
   centered })`). A host that does not know them places the dialog as before. A keyed select shown again with another
   `centered` moves and keeps its filter and its selected row.

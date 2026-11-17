@@ -485,7 +485,7 @@ thread_local! {
 
 fn recorder() -> opencode_plugin::Builtin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        let command = abi::Command::default().with_name("recorder.note".into()).with_title("note".into());
+        let command = abi::Command::new("recorder.note").title("note");
         setup.command(command, |_, input| NOTED.with(|noted| noted.borrow_mut().push(input.unwrap_or("").to_owned())));
         Ok(())
     }

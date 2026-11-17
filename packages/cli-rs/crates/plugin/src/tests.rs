@@ -532,7 +532,7 @@ fn a_replaced_hover_text_drops_its_handlers() {
         Render::Show(
             Node::text([Span::new(format!("hover {}", counter.get()))])
                 .hover_fg("text.muted")
-                .on_click(Click::command("test.run", None)),
+                .on_click(Click::command("test.run")),
         )
     });
     let registry = Registry::define(vec![text], []);

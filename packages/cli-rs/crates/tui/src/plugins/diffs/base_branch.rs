@@ -78,14 +78,14 @@ fn select(picker: &Picker) -> Select {
         }
         Branches::Ready(_) => Span::new("No branches found").fg("text.muted"),
     };
-    Select::new("Base branch", options, Action::Command { name: PICK_BASE.to_owned(), input: None })
-        .with_key(Some(KEY.to_owned()))
-        .with_placeholder(Some("Search local and remote branches".to_owned()))
-        .with_current(picker.current.clone())
-        .with_query(Some(Action::Command { name: QUERY_BASE.to_owned(), input: None }))
-        .with_query_delay(SEARCH_DEBOUNCE_MS)
-        .with_empty(Some(empty))
-        .with_note(Some(Span::new("Remembered until the TUI exits").fg("text.muted")))
+    Select::new("Base branch", options, Action::command(PICK_BASE))
+        .key(KEY)
+        .placeholder("Search local and remote branches")
+        .maybe(picker.current.clone(), Select::current)
+        .query(Action::command(QUERY_BASE))
+        .query_delay(SEARCH_DEBOUNCE_MS)
+        .empty(empty)
+        .note(Span::new("Remembered until the TUI exits").fg("text.muted"))
 }
 
 /// `branches`: a resource of the debounced search, read again only when the search changes.

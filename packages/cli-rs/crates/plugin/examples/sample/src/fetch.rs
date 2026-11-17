@@ -16,7 +16,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let reply = Rc::new(RefCell::new("none".to_owned()));
     let asked = request.clone();
     setup.command(hidden("sample.fetch"), move |host, _| {
-        let fetch = Fetch::default().with_method("GET".to_owned()).with_path("/api/sample".to_owned());
+        let fetch = Fetch::new("GET", "/api/sample");
         asked.set(host.try_fetch(fetch).ok());
     });
     let answered = reply.clone();
@@ -35,22 +35,22 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let shown = Rc::new(Cell::new(0u64));
     setup.command(hidden("sample.panel"), move |host, _| {
         shown.set(shown.get() + 1);
-        let again = Action::Command { name: "sample.panel".to_owned(), input: None };
+        let again = Action::command("sample.panel");
         host.dialog(Dialog::Panel(
             Panel::new(
                 "live".to_owned(),
                 vec![Span::new("Sample panel").bold()],
                 Node::text([Span::new(format!("shown {} times", shown.get()))]),
             )
-            .with_size(PanelSize::Medium)
-            .with_actions(vec![PanelAction::new("again", again.clone()).with_key(Some("a".to_owned()))])
-            .with_binds(vec![PanelBind::new("a", "Show again", again)])
-            .with_centered(true),
+            .size(PanelSize::Medium)
+            .actions(vec![PanelAction::new("again", again.clone()).key("a")])
+            .binds(vec![PanelBind::new("a", "Show again", again)])
+            .centered(),
         ));
     });
     Ok(())
 }
 
 fn hidden(name: &str) -> Command {
-    Command::default().with_name(name.to_owned())
+    Command::new(name)
 }

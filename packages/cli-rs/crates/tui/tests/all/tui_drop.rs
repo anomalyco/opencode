@@ -39,10 +39,10 @@ thread_local! {
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let token = Rc::new(());
     TOKEN.set(Rc::downgrade(&token));
-    let action = || abi::Action::Command { name: "drop.run".to_owned(), input: None };
+    let action = || abi::Action::command("drop.run");
     let title = |text: &str| vec![abi::Span::new(text)];
     let dialogs = [
-        ("drop.prompt", abi::Dialog::Prompt { title: "Drop prompt".to_owned(), placeholder: None, action: action() }),
+        ("drop.prompt", abi::Dialog::Prompt(abi::Prompt::new("Drop prompt", action()))),
         (
             "drop.select",
             abi::Dialog::Select(abi::Select::new(
@@ -76,8 +76,8 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
             "drop.panel",
             abi::Dialog::Panel(
                 abi::Panel::new("panel".to_owned(), title("Drop panel"), abi::Node::text(title("body")))
-                    .with_size(abi::PanelSize::Medium)
-                    .with_actions(vec![abi::PanelAction {
+                    .size(abi::PanelSize::Medium)
+                    .actions(vec![abi::PanelAction {
                         title: "Run".to_owned(),
                         key: Some("r".to_owned()),
                         color: None,
@@ -87,7 +87,7 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
             ),
         ),
     ];
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     let held = token.clone();
     setup.command(command("drop.run"), move |_, _| {
         let _ = &held;

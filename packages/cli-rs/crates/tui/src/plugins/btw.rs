@@ -8,8 +8,8 @@ use opencode_api::client::Client;
 use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput};
 use opencode_plugin::abi::v2::{self, Place, Surface};
 use opencode_plugin::abi::{
-    self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, RequestId,
-    Span, Toast, Variant,
+    self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, Prompt,
+    RequestId, Span, Toast, Variant,
 };
 use opencode_plugin::slot;
 
@@ -67,16 +67,13 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.surface(spinner);
     let aside = state.clone();
-    let command = Command::default()
-        .with_name("session.aside".to_owned())
-        .with_title("Ask a side question".to_owned())
-        .with_description(Some(
-            "One-shot answer from the session's context without adding to the conversation".to_owned(),
-        ))
-        .with_group(Some("Session".to_owned()))
-        .with_palette(true)
-        .with_slash(Some("btw".to_owned()))
-        .with_arguments(true);
+    let command = Command::new("session.aside")
+        .title("Ask a side question")
+        .description("One-shot answer from the session's context without adding to the conversation".to_owned())
+        .group("Session")
+        .palette()
+        .slash("btw")
+        .arguments();
     setup.command(command, move |host, input| {
         let abi::Route::Session { id } = host.route() else {
             host.toast(Toast::new(Variant::Warning, "Open a session first"));
@@ -87,8 +84,8 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             return ask(host, &aside, id, question.to_owned());
         }
         *aside.prompted.borrow_mut() = Some(id);
-        let action = Action::Command { name: "btw.ask".to_owned(), input: None };
-        host.dialog(Dialog::Prompt { title: "/btw".to_owned(), placeholder: Some("Ask anything".to_owned()), action });
+        let action = Action::command("btw.ask");
+        host.dialog(Dialog::Prompt(Prompt::new("/btw", action).placeholder("Ask anything")));
     });
     let prompted = state.clone();
     setup.command(hidden("btw.ask"), move |host, input| {
@@ -100,7 +97,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let copy = state.clone();
     setup.command(hidden("btw.copy"), move |host, _| {
         if let Some(answer) = copy.shown.borrow().as_ref() {
-            host.copy(&answer.text, Some(Action::Command { name: "btw.copied".to_owned(), input: None }));
+            host.copy(&answer.text, Some(Action::command("btw.copied")));
         }
     });
     let copied = state.clone();
@@ -128,7 +125,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn hidden(name: &str) -> Command {
-    Command::default().with_name(name.to_owned())
+    Command::new(name)
 }
 
 fn ask(host: &dyn Host, state: &State, session: String, question: String) {
@@ -145,7 +142,7 @@ fn ask(host: &dyn Host, state: &State, session: String, question: String) {
 /// `Answer`: the question in the header, the answer as Markdown in a body at most 60% of the screen high, and
 /// `copy response` (`c`), which becomes `✓ copied` once copied.
 fn panel(answer: &Answer, copied: bool) -> Panel {
-    let copy = Action::Command { name: "btw.copy".to_owned(), input: None };
+    let copy = Action::command("btw.copy");
     let action = match copied {
         true => PanelAction {
             title: "✓ copied".to_owned(),
@@ -163,10 +160,10 @@ fn panel(answer: &Answer, copied: bool) -> Panel {
         },
     };
     Panel::new(answer.key.clone(), vec![Span::new("/btw").bold()], Node::Markdown { text: answer.text.clone() })
-        .with_size(PanelSize::Large)
-        .with_subtitle(Some(answer.question.clone()))
-        .with_actions(vec![action])
-        .with_binds(vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }])
-        .with_bleed(true)
-        .with_centered(true)
+        .size(PanelSize::Large)
+        .subtitle(answer.question.clone())
+        .actions(vec![action])
+        .binds(vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }])
+        .bleed()
+        .centered()
 }

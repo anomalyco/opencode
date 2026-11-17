@@ -25,11 +25,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .and_then(|options| serde_json::from_str::<serde_json::Value>(options).ok())
         .is_none_or(|options| options.get("hint") != Some(&serde_json::Value::Bool(false)));
     for (bind, name) in BINDS {
-        let command = Command::default()
-            .with_name(name.to_owned())
-            .with_title("Force submit prompt".to_owned())
-            .with_group(Some("Prompt".to_owned()))
-            .with_keybind(Some(bind.to_owned()));
+        let command = Command::new(name).title("Force submit prompt").group("Prompt").keybind(bind);
         setup.command(command, |host, _| force_submit(host));
     }
     setup.slot(Placement::append("prompt.footer.status"), move |read, input, changed| {
@@ -60,19 +56,10 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 /// A layout out of the flow, `top` and `right` cells from its parent's edges and painted at `z`; filling the parent when
-/// `fill`. The SDK has no setter of it, so it is set field by field.
+/// `fill`.
 fn absolute(top: i16, right: i16, z: i32, fill: bool) -> Layout {
-    let mut at = Absolute::default();
-    (at.top, at.right, at.z) = (Some(top), Some(right), z);
-    if fill {
-        (at.bottom, at.left) = (Some(0), Some(0));
-    }
-    let mut layout = Layout::default();
-    if !fill {
-        layout = layout.shrink(false);
-    }
-    layout.absolute = Some(at);
-    layout
+    let at = Absolute::new().top(top).right(right).z(z).when(fill, |at| at.bottom(0).left(0));
+    Layout::default().when(!fill, |layout| layout.shrink(false)).absolute(at)
 }
 
 /// Interrupts the running session and submits the prompt, in this order.

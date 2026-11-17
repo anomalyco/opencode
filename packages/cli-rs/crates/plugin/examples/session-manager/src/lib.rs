@@ -23,8 +23,8 @@ use i18n::{LOCALES, Locale, Messages};
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::v2::{self, Scroll, ScrollAlign, Target};
 use opencode_plugin_abi::{
-    Action, Click, Command, Dialog, Edges, Fetch, Host, Layout, Read, RequestId, Route, Setup, Span, TabEdit, Toast,
-    Variant, Waker, Wrap, plugin,
+    Action, Click, Command, Confirm, Dialog, Edges, Fetch, Host, Layout, Prompt, Read, RequestId, Route, Setup, Span,
+    TabEdit, Toast, Variant, Waker, Wrap, plugin,
 };
 use serde_json::{Value, json};
 
@@ -75,13 +75,12 @@ const SEARCH_KEYS: [(&str, &str); 7] = [
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let state = Rc::new(RefCell::new(State::default()));
     // The session `/session-manager` was opened from (TS's route data `from`).
-    let open = Command::default()
-        .with_name("session-manager.open".to_owned())
-        .with_title("Session Manager".to_owned())
-        .with_description(Some("Browse, rename and delete sessions grouped by directory, project or time".to_owned()))
-        .with_group(Some("Session".to_owned()))
-        .with_palette(true)
-        .with_slash(Some("session-manager".to_owned()));
+    let open = Command::new("session-manager.open")
+        .title("Session Manager")
+        .description("Browse, rename and delete sessions grouped by directory, project or time")
+        .group("Session")
+        .palette()
+        .slash("session-manager");
     let opened = state.clone();
     setup.command(open, move |host, _| {
         if let Route::Plugin { name, .. } = host.route()
@@ -114,13 +113,13 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         ("session-manager.group-removed", State::confirmed_group),
     ] {
         let state = state.clone();
-        setup.command(Command::default().with_name(name.to_owned()), move |host, input| {
+        setup.command(Command::new(name), move |host, input| {
             run(&mut state.borrow_mut(), host, input.unwrap_or_default());
         });
     }
     let layer = |keys: &[(&str, &str)], prefix: &str| {
-        let binds = keys.iter().map(|(key, name)| Bind::new(*key, format!("{prefix}{name}"))).collect();
-        Layer::default().with_scope(LayerScope::Surface).with_priority(100).with_keys(binds)
+        let binds = keys.iter().map(|(key, name)| Bind::new(*key, format!("{prefix}{name}")));
+        Layer::default().scope(LayerScope::Surface).priority(100).keys(binds)
     };
     let (viewed, heard) = (state.clone(), state.clone());
     let page = v2::Surface::new(ROUTE, v2::Place::Route(ROUTE.to_owned()), move |view| viewed.borrow().view(view.read))
@@ -270,11 +269,7 @@ impl State {
         self.waiting.retain(|_, want| !matches!(want, Want::Page | Want::Projects));
         self.pages.clear();
         self.ask(host, page(None), Want::Page);
-        self.ask(
-            host,
-            Fetch::default().with_method("GET".to_owned()).with_path("/api/project".to_owned()),
-            Want::Projects,
-        );
+        self.ask(host, Fetch::new("GET", "/api/project"), Want::Projects);
     }
 
     fn schedule_refresh(&mut self) {
@@ -614,15 +609,11 @@ impl State {
         let Some(Row::Session { session, .. }) = self.index(listed).map(|index| &listed.rows[index]) else { return };
         let session = &self.sessions[*session];
         self.busy = true;
-        let prompt = Dialog::Prompt {
-            title: self.t().rename_title.to_owned(),
-            placeholder: Some(session.title.clone().unwrap_or_default()),
-            action: Action::Command { name: "session-manager.renamed".to_owned(), input: None },
-        };
-        let dismissed =
-            Action::Command { name: "session-manager.rename-closed".to_owned(), input: Some(session.id.clone()) };
+        let prompt = Prompt::new(self.t().rename_title, Action::command("session-manager.renamed"))
+            .placeholder(session.title.clone().unwrap_or_default());
+        let dismissed = Action::command("session-manager.rename-closed").input(session.id.clone());
         self.renaming = Some(session.id.clone());
-        host.dialog(Dialog::Dismissable { dialog: Box::new(prompt), dismissed });
+        host.dialog(Dialog::Dismissable { dialog: Box::new(Dialog::Prompt(prompt)), dismissed });
     }
 
     fn renamed(&mut self, host: &dyn Host, text: &str) {
@@ -633,10 +624,7 @@ impl State {
             self.busy = false;
             return;
         }
-        let fetch = Fetch::default()
-            .with_method("PATCH".to_owned())
-            .with_path(format!("/api/session/{id}"))
-            .with_body(Some(json!({ "title": title })));
+        let fetch = Fetch::new("PATCH", format!("/api/session/{id}")).body(json!({ "title": title }));
         self.ask(host, fetch, Want::Rename { id, title: title.to_owned() });
     }
 
@@ -740,7 +728,7 @@ impl State {
         if let Some(next) = removal.left.first().cloned() {
             removal.left.remove(0);
             removal.current = next.clone();
-            let fetch = Fetch::default().with_method("DELETE".to_owned()).with_path(format!("/api/session/{next}"));
+            let fetch = Fetch::new("DELETE", format!("/api/session/{next}"));
             return self.ask(host, fetch, Want::Remove(removal));
         }
         self.forget(host, &removal.done);
@@ -808,7 +796,7 @@ impl State {
                     .fg(color)
                     .wrap(Wrap::None)
                     .layout(Layout::default().shrink(false))
-                    .on_click(Click::command("session-manager.mode", Some(mode.name().to_owned())))
+                    .on_click(Click::command("session-manager.mode").input(mode.name()))
             })
             .collect();
         let locales = LOCALES
@@ -828,7 +816,7 @@ impl State {
                     .fg(color)
                     .wrap(Wrap::None)
                     .layout(Layout::default().shrink(false))
-                    .on_click(Click::command("session-manager.locale", Some(locale.code().to_owned())))
+                    .on_click(Click::command("session-manager.locale").input(locale.code()))
             })
             .collect();
         v2::Node::row(vec![
@@ -842,7 +830,7 @@ impl State {
                 .fg("text.muted")
                 .wrap(Wrap::None)
                 .layout(Layout::default().shrink(false))
-                .on_click(Click::command("session-manager.children", None)),
+                .on_click(Click::command("session-manager.children")),
             v2::Node::row(locales).layout(Layout::default().shrink(false)),
         ])
         .gap(2)
@@ -850,11 +838,10 @@ impl State {
     }
 
     fn search_row(&self, t: &Messages, count: usize, filtered: bool) -> v2::Node {
-        let mut input = v2::Node::input(self.query.clone()).with_id(SEARCH).layout(Layout::default().grow());
-        // The SDK has no setter of a field's placeholder.
-        if let v2::Node::Input { placeholder, .. } = &mut input {
-            *placeholder = t.placeholder.to_owned();
-        }
+        let input = v2::Node::input(self.query.clone())
+            .with_id(SEARCH)
+            .placeholder(t.placeholder)
+            .layout(Layout::default().grow());
         let mut row = vec![
             v2::Node::text([Span::new("/")])
                 .fg(if self.searching { "text.action.primary.base" } else { "text.muted" })
@@ -895,7 +882,7 @@ impl State {
     }
 
     fn row(&self, t: &Messages, listed: &Listed, index: usize, row: &Row, selected: bool) -> v2::Node {
-        let click = Click::command("session-manager.row", Some(index.to_string()));
+        let click = Click::command("session-manager.row").input(index.to_string());
         let bg = |node: v2::Node| if selected { node.bg("background.raised.high") } else { node };
         match row {
             Row::Group { group, collapsed } => {
@@ -989,22 +976,12 @@ fn hints(t: &Messages) -> v2::Node {
             .layout(Layout::default().shrink(false))
         })
         .collect();
-    let mut row = v2::Node::row(hints).gap(2).layout(Layout::default().shrink(false));
-    // The SDK has no setter of a box's wrap.
-    if let v2::Node::Box { wrap, .. } = &mut row {
-        *wrap = true;
-    }
-    row
+    v2::Node::row(hints).gap(2).flex_wrap().layout(Layout::default().shrink(false))
 }
 
-/// A confirm with its own labels, whose answer runs command `answer`. The SDK has no constructor of a `Confirm`, which
-/// is `#[non_exhaustive]`: it is built from its JSON.
+/// A confirm with its own labels, whose answer runs command `answer`.
 fn confirm(title: &str, lines: Vec<String>, yes: &str, no: &str, answer: &str) -> Dialog {
-    let confirm = json!({
-        "title": title, "message": lines.join("\n"), "label": { "confirm": yes, "cancel": no },
-        "action": { "type": "command", "name": answer },
-    });
-    serde_json::from_value(confirm).map_or_else(|_| Dialog::Close { key: String::new() }, Dialog::Confirm)
+    Dialog::Confirm(Confirm::new(title, lines.join("\n"), Action::command(answer)).labels(yes, no))
 }
 
 fn group_of(row: &Row) -> usize {
@@ -1025,9 +1002,8 @@ fn scroll_to(host: &dyn Host, index: usize) {
 
 /// A page of the session list, newest first.
 fn page(cursor: Option<&str>) -> Fetch {
-    let mut query = vec![("limit".to_owned(), PAGE_SIZE.to_string()), ("order".to_owned(), "desc".to_owned())];
-    query.extend(cursor.map(|cursor| ("cursor".to_owned(), cursor.to_owned())));
-    Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned()).with_query(query)
+    let query = [("limit", PAGE_SIZE.to_string()), ("order", "desc".to_owned())];
+    Fetch::new("GET", "/api/session").query(query.into_iter().chain(cursor.map(|cursor| ("cursor", cursor.to_owned()))))
 }
 
 /// TS `isNotFound`.

@@ -124,7 +124,7 @@ fn header(viewer: &Viewer, docked: bool, compact: bool, help: bool) -> Node {
     let reviewed = files.iter().filter(|file| viewer.reviewed.contains(&file.file)).count();
     let shortcut = !compact && help;
     let mut row = vec![
-        Node::row(switch).layout(Layout::default().grow().min_width_zero()).on_click(Click::command(SOURCE, None)),
+        Node::row(switch).layout(Layout::default().grow().min_width_zero()).on_click(Click::command(SOURCE)),
         Node::text([Span::new(format!("{reviewed}/{}", files.len()))])
             .fg("text.muted")
             .wrap(Wrap::None)
@@ -134,7 +134,7 @@ fn header(viewer: &Viewer, docked: bool, compact: bool, help: bool) -> Node {
     if shortcut {
         row.push(
             Node::column(vec![
-                Node::text([Span::new("?")]).fg("text.base").wrap(Wrap::None).on_click(Click::command(HELP, None)),
+                Node::text([Span::new("?")]).fg("text.base").wrap(Wrap::None).on_click(Click::command(HELP)),
             ])
             .layout(Layout::default().width(Width::Cells(1)).height(Width::Cells(1)).shrink(false)),
         );
@@ -335,11 +335,11 @@ fn body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, file: usi
         let view = if entry.status == tree::Status::Modified { shape.view } else { DiffView::Unified };
         return Node::diff(Source::Content(handle))
             .with_id(format!("d:{}", entry.file))
-            .with_view(view)
-            .with_filetype(opentui::syntax::filetype_for_path(&entry.file).map(str::to_owned))
-            .with_hunks(Some("hunk".to_owned()))
-            .with_diff_wrap(Wrap::Char)
-            .with_diff_padding(u16::from(shape.compact));
+            .view(view)
+            .maybe(opentui::syntax::filetype_for_path(&entry.file), Node::filetype)
+            .hunks("hunk")
+            .wrap(Wrap::Char)
+            .diff_padding(u16::from(shape.compact));
     }
     let text = match () {
         _ if shape.mode == Mode::Committed && image => {
@@ -366,7 +366,7 @@ fn image_body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, ent
         Some(Preview::Ready(bytes, (width, tall))) => {
             let handle: ContentRef =
                 *contents.images.entry(entry.file.clone()).or_insert_with(|| cx.content(bytes.to_vec()));
-            let open = Click::command(PREVIEW, Some(entry.file.clone()));
+            let open = Click::command(PREVIEW).input(entry.file.clone());
             let picture = Node::Image {
                 id: Some(format!("i:{}", entry.file)),
                 content: Source::Content(handle),
@@ -436,7 +436,7 @@ fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>
         .fg(if focused { "background.action.primary.focused" } else { "text.action.primary.disabled" })
         .wrap(Wrap::None)
         .truncate()
-        .on_click(Click::command(LEAVE, None))
+        .on_click(Click::command(LEAVE))
         .layout(Layout::default().grow().min_width_zero());
     let mut row = vec![leave];
     if let Some(help) = help {
@@ -445,7 +445,7 @@ fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>
         let text = Node::text([Span { dim: muted, ..Span::new(help) }, Span { dim: muted, ..see }])
             .fg(if muted { "text.action.primary.disabled" } else { "text.base" })
             .wrap(Wrap::None)
-            .on_click(Click::command(HELP, None))
+            .on_click(Click::command(HELP))
             .layout(Layout::default().shrink(false));
         row.push(Node::column(vec![text]).layout(Layout::default().shrink(false)));
     }

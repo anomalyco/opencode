@@ -536,10 +536,8 @@ fn fence_plugin() -> abi::Plugin {
 /// the probe's styled box is appended to `home.footer`.
 fn p0a_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        let command = |name: &str, key: Option<&str>| {
-            abi::Command::default().with_name(name.to_owned()).with_keybind(key.map(str::to_owned))
-        };
-        let then = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
+        let command = |name: &str, key: Option<&str>| abi::Command::new(name).maybe(key, abi::Command::keybind);
+        let then = |name: &str| abi::Action::command(name);
         setup.command(command("parity.p0a.confirm", Some("f6")), move |host, _| {
             host.dialog(abi::Dialog::Confirm(abi::Confirm {
                 size: None,

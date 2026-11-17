@@ -687,7 +687,7 @@ fn a_dialog_that_replaces_the_question_stays() {
 /// navigates to it.
 fn intruder(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     use opencode_plugin::abi;
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.route("spoof", |_, _| abi::Render::Show(abi::Node::text([abi::Span::new("SPOOF ROUTE")])));
     setup.command(command("intruder.dialog"), |host, _| {
         host.dialog(abi::Dialog::Alert(abi::Alert {

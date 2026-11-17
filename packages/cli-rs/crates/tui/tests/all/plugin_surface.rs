@@ -60,7 +60,7 @@ fn board<T>(f: impl FnOnce(&mut Board) -> T) -> T {
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     board(|board| board.waker = setup.waker());
-    setup.command(abi::Command::default().with_name("board.bump".into()), |_, input| {
+    setup.command(abi::Command::new("board.bump"), |_, input| {
         let index: usize = input.and_then(|input| input.parse().ok()).unwrap_or(0);
         board(|board| board.values[index % ITEMS] += 1);
     });
@@ -95,7 +95,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
                 }
                 v2::Node::column(vec![
                     v2::Node::text(vec![abi::Span::new(format!("card {index}: {value}"))]).fg("text.muted"),
-                    v2::Node::diff(v2::Source::Content(handle)).with_view(v2::DiffView::Unified),
+                    v2::Node::diff(v2::Source::Content(handle)).view(v2::DiffView::Unified),
                 ])
             })
         })
@@ -794,9 +794,9 @@ fn a_content_handle_names_nothing_in_another_mount() {
 /// A route with a command of its own and a global one, each of which fetches `/api/hold`; the replies are logged.
 fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     let fetch = |host: &dyn abi::Host, _: Option<&str>| {
-        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/hold".into()));
+        let _ = host.try_fetch(abi::Fetch::new("GET", "/api/hold"));
     };
-    let command = |name: &str, scope| abi::Command::default().with_name(name.into()).with_scope(scope);
+    let command = |name: &str, scope| abi::Command::new(name).scope(scope);
     setup.command(command("owned.route", abi::Scope::Route("owned".into())), fetch);
     setup.command(command("owned.global", abi::Scope::Global), fetch);
     setup.on_reply(|_, _, result| REPLIES.with(|replies| replies.borrow_mut().push(format!("{result:?}"))));
@@ -953,7 +953,7 @@ thread_local! {
 /// return a tree the host refuses; the whole tree asked for after that shows the refused view's content (1) or keeps
 /// the body the last accepted tree holds (2). Mode 3 memoizes, gives content and panics.
 fn retry(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("retry.go".into()), |_, input| {
+    setup.command(abi::Command::new("retry.go"), |_, input| {
         RETRY.set((input.and_then(|input| input.parse().ok()).unwrap_or(0), None));
     });
     setup.surface(v2::Surface::new("retry", v2::Place::Route("retry".into()), |cx| {
@@ -1035,7 +1035,7 @@ fn restyling(setup: &mut abi::Setup) -> Result<(), String> {
             PAL_MODES.with(|modes| modes.borrow_mut().push(mode.clone()));
             v2::Node::row(vec![v2::Node::text(vec![abi::Span::new("pal box")])])
                 .bg("background.raised.base")
-                .on_click(abi::Click::command("restyle.mode", Some(mode)))
+                .on_click(abi::Click::command("restyle.mode").input(mode))
         })
         .palette(),
     );
@@ -1128,7 +1128,7 @@ thread_local! {
 
 /// A surface that replaces the home footer's status row and, once armed, returns trees the host refuses.
 fn replacing(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("replacing.break".into()), |_, _| {
+    setup.command(abi::Command::new("replacing.break"), |_, _| {
         REPLACING.set(0);
     });
     setup.surface(v2::Surface::new(
@@ -1268,7 +1268,7 @@ thread_local! {
 
 /// A route of cards, each memoized on its value; a command bumps the first card, another changes nothing.
 fn cards(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.into());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("cards.bump"), |_, _| CARDS.with(|cards| cards.set((cards.get().0, cards.get().1 + 1))));
     setup.command(command("cards.same"), |_, _| {});
     setup.surface(v2::Surface::new("cards", v2::Place::Route("cards".into()), |cx| {
@@ -1337,7 +1337,7 @@ thread_local! {
 
 /// A route of three memoized cards, one of which a command hides and shows again, unchanged.
 fn hiding(setup: &mut abi::Setup) -> Result<(), String> {
-    let hide = abi::Command::default().with_name("hide.toggle".into());
+    let hide = abi::Command::new("hide.toggle");
     setup.command(hide, |_, input| {
         let card = input.and_then(|input| input.parse().ok());
         HIDE.with(|hide| hide.borrow_mut().0 = card);
@@ -1388,7 +1388,7 @@ thread_local! {
 
 /// A route of two texts, which a command makes share one id.
 fn duplicating(setup: &mut abi::Setup) -> Result<(), String> {
-    let arm = abi::Command::default().with_name("dup.arm".into());
+    let arm = abi::Command::new("dup.arm");
     setup.command(arm, |_, _| DUP.with(|dup| dup.borrow_mut().0 = true));
     setup.surface(v2::Surface::new("dup", v2::Place::Route("dup".into()), |cx| {
         let repeat = DUP.with(|dup| {
@@ -1432,7 +1432,7 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
 
 /// A route of one text, with a command of its own: leaving it takes that command's keymap layer away.
 fn page(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command::default().with_name("page.go".into()).with_scope(abi::Scope::Route("page".into()));
+    let command = abi::Command::new("page.go").scope(abi::Scope::Route("page".into()));
     setup.command(command, |_, _| {});
     setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |_| {
         v2::Node::text(vec![abi::Span::new("a page")])
@@ -1482,12 +1482,11 @@ thread_local! {
 
 /// A route with a palette command of its own, `tally.bump` on key `1`.
 fn tally(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command::default()
-        .with_name("tally.bump".into())
-        .with_title("Bump the tally".into())
-        .with_keybind(Some("1".into()))
-        .with_palette(true)
-        .with_scope(abi::Scope::Route("tally".into()));
+    let command = abi::Command::new("tally.bump")
+        .title("Bump the tally")
+        .keybind("1")
+        .palette()
+        .scope(abi::Scope::Route("tally".into()));
     setup.command(command, |_, _| TALLIED.set(TALLIED.get() + 1));
     setup.surface(v2::Surface::new("tally", v2::Place::Route("tally".into()), |_| {
         v2::Node::text(vec![abi::Span::new("a tally")])
@@ -1540,7 +1539,7 @@ fn a_routes_commands_are_in_the_palette() {
 
 /// A route whose command panics.
 fn doomed(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command::default().with_name("doomed.panic".into()).with_scope(abi::Scope::Route("page".into()));
+    let command = abi::Command::new("doomed.panic").scope(abi::Scope::Route("page".into()));
     setup.command(command, |_, _| panic!("doomed"));
     setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |_| {
         v2::Node::text(vec![abi::Span::new("a doomed page")])
@@ -1612,9 +1611,7 @@ thread_local! {
 
 /// A route whose body is a memo holding a memo, under a line a command changes; no other node has an id.
 fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("nest.bump".into()), |_, _| {
-        NESTED.with(|nested| nested.set(nested.get() + 1))
-    });
+    setup.command(abi::Command::new("nest.bump"), |_, _| NESTED.with(|nested| nested.set(nested.get() + 1)));
     setup.surface(v2::Surface::new("nest", v2::Place::Route("nest".into()), |cx| {
         let head = v2::Node::text(vec![abi::Span::new(format!("bumped {}", NESTED.with(std::cell::Cell::get)))]);
         let body = cx.memo("outer", 1u8, |cx| {

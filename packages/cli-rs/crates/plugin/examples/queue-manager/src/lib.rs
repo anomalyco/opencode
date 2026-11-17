@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use opencode_plugin_abi::{
-    Action, Command, Dialog, Fetch, Host, RequestId, Route, Select, SelectOption, Setup, Toast, Variant, plugin,
+    Action, Alert, Command, Confirm, Dialog, Fetch, Host, Prompt, RequestId, Route, Select, SelectOption, Setup, Toast,
+    Variant, plugin,
 };
 use serde_json::{Value, json};
 
@@ -26,16 +27,11 @@ const CLOSED: &str = "queue.manager.closed";
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let state = Rc::new(RefCell::new(State::default()));
     setup.storage_key(DRAFTS);
-    let open = Command::default()
-        .with_name("queue.manager.open".to_owned())
-        .with_title("Queue Manager".to_owned())
-        .with_group(Some("Queue Manager".to_owned()))
-        .with_palette(true)
-        .with_slash(Some("qm".to_owned()));
+    let open = Command::new("queue.manager.open").title("Queue Manager").group("Queue Manager").palette().slash("qm");
     let opened = state.clone();
     setup.command(open, move |host, _| opened.borrow_mut().open(host));
     let answered = state.clone();
-    setup.command(Command::default().with_name(ANSWER.to_owned()), move |host, input| {
+    setup.command(Command::new(ANSWER), move |host, input| {
         let mut state = answered.borrow_mut();
         if let Some((_, ask)) = state.asking.take() {
             state.answer(host, ask, Some(input.unwrap_or_default().to_owned()));
@@ -43,7 +39,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     // Each dialog's close names its generation: it is an escape only while that dialog still waits for its answer.
     let closed = state.clone();
-    setup.command(Command::default().with_name(CLOSED.to_owned()), move |host, input| {
+    setup.command(Command::new(CLOSED), move |host, input| {
         let mut state = closed.borrow_mut();
         let generation = input.and_then(|input| input.parse::<u32>().ok());
         if state.asking.as_ref().is_some_and(|(at, _)| Some(*at) == generation) {
@@ -296,9 +292,7 @@ impl State {
             }
             Ask::Item { .. } => self.inbox(host),
             Ask::Cancel { id } if value == "true" => {
-                let fetch = Fetch::default()
-                    .with_method("DELETE".to_owned())
-                    .with_path(format!("/api/session/{}/inbox/{id}", self.session));
+                let fetch = Fetch::new("DELETE", format!("/api/session/{}/inbox/{id}", self.session));
                 self.ask(host, fetch, Want::Cancel, Then::Inbox);
             }
             Ask::Cancel { .. } => self.inbox(host),
@@ -465,10 +459,8 @@ impl State {
             self.toast(host, "Published", &format!("{sent} messages admitted to the native queue."));
             return self.menu(host);
         };
-        let fetch = Fetch::default()
-            .with_method("POST".to_owned())
-            .with_path(format!("/api/session/{}/prompt", self.session))
-            .with_body(Some(json!({ "text": text, "delivery": "queue" })));
+        let fetch = Fetch::new("POST", format!("/api/session/{}/prompt", self.session))
+            .body(json!({ "text": text, "delivery": "queue" }));
         self.ask(host, fetch, Want::Publish { text, sent, count }, Then::Menu);
     }
 
@@ -478,8 +470,7 @@ impl State {
     }
 
     fn inbox_list(&mut self, host: &dyn Host, want: Want) {
-        let fetch =
-            Fetch::default().with_method("GET".to_owned()).with_path(format!("/api/session/{}/inbox", self.session));
+        let fetch = Fetch::new("GET", format!("/api/session/{}/inbox", self.session));
         // A list that fails ends the manager, as TS's outer `try` does.
         self.ask(host, fetch, want, Then::Close);
     }
@@ -490,9 +481,7 @@ impl State {
             return self.menu(host);
         }
         let id = left.remove(0);
-        let fetch = Fetch::default()
-            .with_method("DELETE".to_owned())
-            .with_path(format!("/api/session/{}/inbox/{id}", self.session));
+        let fetch = Fetch::new("DELETE", format!("/api/session/{}/inbox/{id}", self.session));
         self.ask(host, fetch, Want::CancelEach { left, done }, Then::Menu);
     }
 
@@ -615,11 +604,7 @@ impl State {
     }
 
     fn alert(&mut self, host: &dyn Host, title: &str, message: &str, then: Then) {
-        // The SDK has no constructor of an `Alert`, which is `#[non_exhaustive]`: it is built from its JSON.
-        let alert = json!({ "title": title, "message": message });
-        if let Ok(alert) = serde_json::from_value(alert) {
-            self.show(host, Dialog::Alert(alert), Ask::Alert { then });
-        }
+        self.show(host, Dialog::Alert(Alert::new(title, message)), Ask::Alert { then });
     }
 
     fn choose(&mut self, host: &dyn Host, title: &str, options: Vec<SelectOption>, ask: Ask) {
@@ -627,34 +612,25 @@ impl State {
     }
 
     fn prompt(&mut self, host: &dyn Host, title: &str, placeholder: &str, ask: Ask) {
-        let prompt =
-            Dialog::Prompt { title: title.to_owned(), placeholder: Some(placeholder.to_owned()), action: answer() };
-        self.show(host, prompt, ask);
+        self.show(host, Dialog::Prompt(Prompt::new(title, answer()).placeholder(placeholder)), ask);
     }
 
     /// A confirm with its own labels; its answer is `true` or `false`.
     fn confirm(&mut self, host: &dyn Host, title: &str, message: &str, (yes, no): (&str, &str), ask: Ask) {
-        // As `Alert`, `Confirm` has no constructor.
-        let confirm = json!({
-            "title": title, "message": message, "label": { "confirm": yes, "cancel": no },
-            "action": { "type": "command", "name": ANSWER },
-        });
-        if let Ok(confirm) = serde_json::from_value(confirm) {
-            self.show(host, Dialog::Confirm(confirm), ask);
-        }
+        self.show(host, Dialog::Confirm(Confirm::new(title, message, answer()).labels(yes, no)), ask);
     }
 
     /// Opens `dialog` for `ask`, with a close that names its generation.
     fn show(&mut self, host: &dyn Host, dialog: Dialog, ask: Ask) {
         self.generation += 1;
         self.asking = Some((self.generation, ask));
-        let dismissed = Action::Command { name: CLOSED.to_owned(), input: Some(self.generation.to_string()) };
+        let dismissed = Action::command(CLOSED).input(self.generation.to_string());
         host.dialog(Dialog::Dismissable { dialog: Box::new(dialog), dismissed });
     }
 }
 
 fn answer() -> Action {
-    Action::Command { name: ANSWER.to_owned(), input: None }
+    Action::command(ANSWER)
 }
 
 /// TS `getText`: the trimmed text, unless it is blank.

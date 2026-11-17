@@ -44,9 +44,7 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
         return Err("life setup armed to throw".to_owned());
     }
     let side = Rc::new(Cell::new('A'));
-    let command = |name: &str, title: &str| {
-        abi::Command::default().with_name(name.to_owned()).with_title(title.to_owned()).with_palette(true)
-    };
+    let command = |name: &str, title: &str| abi::Command::new(name).title(title).palette();
     let flip = |side: &Cell<char>| side.set(if side.get() == 'A' { 'B' } else { 'A' });
     let flipped = side.clone();
     setup.command(command("life.flip", "Life flip"), move |_, _| flip(&flipped));
@@ -61,12 +59,12 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("life.arm", "Life arm"), |_, _| ARMED.set(true));
     setup.command(command("life.dialog", "Life dialog"), |host, _| {
         // TS's prompt has no action; this one names a command nobody registers.
-        let action = abi::Action::Command { name: "life.prompted".to_owned(), input: None };
-        host.dialog(abi::Dialog::Prompt { title: "Life prompt".to_owned(), placeholder: None, action });
+        let action = abi::Action::command("life.prompted");
+        host.dialog(abi::Dialog::Prompt(abi::Prompt::new("Life prompt", action)));
     });
     // TS's confirm and alert resolve a promise that flips the line; here they name a command that does. A build that
     // replaced this one registers the same names, so an answer that reached it would flip its line.
-    let answer = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
+    let answer = |name: &str| abi::Action::command(name);
     setup.command(command("life.confirm", "Life confirm"), move |host, _| {
         host.dialog(abi::Dialog::Confirm(abi::Confirm {
             size: None,
@@ -86,7 +84,7 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
             action: Some(answer("life.closed")),
         }));
     });
-    let hidden = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let hidden = |name: &str| abi::Command::new(name);
     let answered = side.clone();
     setup.command(hidden("life.answered"), move |_, input| {
         if input == Some("true") {

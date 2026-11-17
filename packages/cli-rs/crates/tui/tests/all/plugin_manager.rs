@@ -174,7 +174,7 @@ thread_local! {
 fn watcher() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.on_plugins(|host| HEARD.with_borrow_mut(|heard| heard.push(listed(&host.plugins()))));
-        let command = Command::default().with_name("watch.boom".to_owned());
+        let command = Command::new("watch.boom");
         setup.command(command, |_, _| panic!("the watcher's command panics"));
         Ok(())
     }
@@ -184,7 +184,7 @@ fn watcher() -> abi::Plugin {
 /// A plugin that panics on its command, which the delivery steps fail.
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("boom.boom".to_owned()), |_, _| panic!("boom"));
+        setup.command(Command::new("boom.boom"), |_, _| panic!("boom"));
         Ok(())
     }
     abi::Plugin { id: "test.boom", setup }
@@ -301,8 +301,8 @@ impl Backend for Shadow {
             if SHADOW_FAILS.get() {
                 return Err("the manager's setup fails".to_owned());
             }
-            setup.command(Command::default().with_name("shadow.boom".to_owned()), |_, _| panic!("the manager panics"));
-            setup.command(Command::default().with_name("plugins.list".to_owned()), |host, _| {
+            setup.command(Command::new("shadow.boom"), |_, _| panic!("the manager panics"));
+            setup.command(Command::new("plugins.list"), |host, _| {
                 let message = "the replacement serves /plugins".to_owned();
                 host.dialog(abi::Dialog::Alert(abi::Alert {
                     size: None,
@@ -459,7 +459,7 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
 /// A built-in whose command panics.
 fn crash() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("crash.boom".to_owned()), |_, _| panic!("crash"));
+        setup.command(Command::new("crash.boom"), |_, _| panic!("crash"));
         Ok(())
     }
     abi::Plugin { id: "test.crash", setup }
@@ -634,7 +634,7 @@ fn reader() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let read = |host: &dyn abi::Read| READ.set(serde_json::to_string(&host.plugins()).unwrap());
         setup.on_plugins(move |host| read(host));
-        setup.command(Command::default().with_name("reader.read".to_owned()), move |host, _| read(host));
+        setup.command(Command::new("reader.read"), move |host, _| read(host));
         Ok(())
     }
     abi::Plugin { id: "test.reader", setup }
@@ -646,7 +646,7 @@ fn secrets() -> [abi::Plugin; 2] {
         Err("SECRET-setup /home/user/.token".to_owned())
     }
     fn run(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("secret.run".to_owned()), |_, _| panic!("SECRET-run"));
+        setup.command(Command::new("secret.run"), |_, _| panic!("SECRET-run"));
         Ok(())
     }
     [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]
@@ -879,12 +879,12 @@ thread_local! {
 /// keys the host cannot bind or must not let it take.
 fn picker() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("picker.picked".to_owned()), |_, _| {
+        setup.command(Command::new("picker.picked"), |_, _| {
             PICKED.set(PICKED.get() + 1);
         });
-        setup.command(Command::default().with_name("picker.open".to_owned()), |host, input| {
-            let picked = abi::Action::Command { name: "picker.picked".to_owned(), input: None };
-            let row = abi::SelectOption::new("other row", "r").with_toggle(input.map(str::to_owned));
+        setup.command(Command::new("picker.open"), |host, input| {
+            let picked = abi::Action::command("picker.picked");
+            let row = abi::SelectOption::new("other row", "r").maybe(input, abi::SelectOption::toggle);
             let bad = |command: Option<&str>, key: Option<&str>| abi::SelectAction {
                 title: "bad".to_owned(),
                 key: key.map(str::to_owned),
@@ -1205,7 +1205,7 @@ thread_local! {
 /// A plugin whose command takes [`COST`] on [`CLOCK`].
 fn slowly() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("slowly.work".to_owned()), |_, _| {
+        setup.command(Command::new("slowly.work"), |_, _| {
             CLOCK.set(CLOCK.get() + COST.get());
         });
         Ok(())
@@ -1265,8 +1265,8 @@ fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on() {
 /// A plugin whose keyed select takes its title from its command's input.
 fn titled() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("titled.show".to_owned()), |host, input| {
-            let action = abi::Action::Command { name: "titled.show".to_owned(), input: None };
+        setup.command(Command::new("titled.show"), |host, input| {
+            let action = abi::Action::command("titled.show");
             let mut select =
                 abi::Select::new(input.unwrap_or_default(), vec![abi::SelectOption::new("row", "r")], action);
             select.key = Some("t".to_owned());
@@ -1292,22 +1292,21 @@ fn a_keyed_select_shown_again_takes_its_new_title() {
 /// large and centered (contract 2.x additions).
 fn presented() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::default().with_name("presented.select".to_owned()), |host, input| {
-            let action = abi::Action::Command { name: "presented.select".to_owned(), input: None };
+        setup.command(Command::new("presented.select"), |host, input| {
+            let action = abi::Action::command("presented.select");
             let rows = ["alpha", "beta", "gamma"].map(|row| abi::SelectOption::new(row, row)).to_vec();
-            let select = abi::Select::new("Presented", rows, action)
-                .with_key(Some("p".to_owned()))
-                .with_centered(input == Some("on"));
+            let select =
+                abi::Select::new("Presented", rows, action).key("p").when(input == Some("on"), abi::Select::centered);
             host.dialog(abi::Dialog::Select(select));
         });
-        setup.command(Command::default().with_name("presented.alert".to_owned()), |host, _| {
-            let alert = abi::Alert::new("Told", "said").with_size(Some(abi::PanelSize::XLarge)).with_centered(true);
+        setup.command(Command::new("presented.alert"), |host, _| {
+            let alert = abi::Alert::new("Told", "said").size(abi::PanelSize::XLarge).centered();
             host.dialog(abi::Dialog::Alert(alert));
         });
-        setup.command(Command::default().with_name("presented.confirm".to_owned()), |host, _| {
-            let action = abi::Action::Command { name: "presented.alert".to_owned(), input: None };
-            let confirm = abi::Confirm::new("Asked", "sure?", action).with_size(Some(abi::PanelSize::Large));
-            host.dialog(abi::Dialog::Confirm(confirm.with_centered(true)));
+        setup.command(Command::new("presented.confirm"), |host, _| {
+            let action = abi::Action::command("presented.alert");
+            let confirm = abi::Confirm::new("Asked", "sure?", action).size(abi::PanelSize::Large);
+            host.dialog(abi::Dialog::Confirm(confirm.centered()));
         });
         Ok(())
     }
