@@ -1191,8 +1191,14 @@ export function createBrowserPage(
       const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
 
       try {
+        const intercepting = choosers.update()
+
+        // Turning the file chooser intercept back on after the grace period is a renderer call, which an open
+        // dialog blocks until it is answered.
+        if (command.action.type === "dialog") void intercepting.catch(() => undefined)
+
         return await Promise.race([
-          choosers.update().then(() => {
+          (command.action.type === "dialog" ? Promise.resolve() : intercepting).then(() => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)
