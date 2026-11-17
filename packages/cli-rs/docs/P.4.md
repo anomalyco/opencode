@@ -6,7 +6,7 @@ they load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). There is no s
 chose to run on their own machine. No cargo feature gates it.
 
 To write one, start with the quick start in [`crates/plugin-abi/README.md`](../crates/plugin-abi/README.md). It also
-lists which old binaries load and what changed from the 1.3 and 1.4 SDKs. This document is the reference.
+lists which binaries load. This document is the reference.
 
 ## The ABI
 
@@ -15,81 +15,57 @@ lists which old binaries load and what changed from the 1.3 and 1.4 SDKs. This d
 table, `PluginApi`; a plugin in C uses `crates/plugin-abi/include/opencode_plugin.h`, which declares the same tables
 and describes the messages (`crates/plugin/examples/c` is one, which the loader's tests build and load):
 
-| Entry | Since | Purpose |
-| --- | --- | --- |
-| `size`, `major`, `minor` | 1.0 | Read first, before anything else |
-| `requires_minor` | 1.0 | The oldest host minor version the plugin works with |
-| `create(host, options, &instance, &out)` | 1.0 | Runs the setup; writes the manifest JSON |
-| `call(instance, request, &out)` | 1.0 | Handles a request; writes the result JSON |
-| `destroy(instance)`, `free(buffer)` | 1.0 | Ends an instance; frees a buffer the plugin wrote |
-| `describe(&out)` | 1.1 | Optional (nullable): the plugin's ID and version, read before any setup |
+| Entry | Purpose |
+| --- | --- |
+| `size`, `major`, `minor` | Read first, before anything else |
+| `requires_minor` | The oldest host minor version the plugin works with |
+| `create(host, options, &instance, &out)` | Runs the setup; writes the manifest JSON |
+| `call(instance, request, &out)` | Handles a request; writes the result JSON |
+| `destroy(instance)`, `free(buffer)` | Ends an instance (optional); frees a buffer the plugin wrote |
+| `describe(&out)` | The plugin's ID and version, read before any setup |
 
-The host passes a `HostApi` table of the same shape: `size`, `major`, `minor`, `ctx`, `call`, `free`, since 1.2 the
-nullable `theme_mode(ctx)` (dark or light), since 1.3 the nullable `wake(ctx)`, and since 2.0 `send(ctx, key,
-message)`, `report(ctx, message)`, `stopped(ctx)` and `features`. `wake`, `send`, `report` and `stopped` are callable
-from any thread until `destroy` returns. Past the tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the
-host, and a `HostRequest` from the plugin. Each side frees the buffers it allocated, so each keeps its own allocator.
-The rustdoc of `Request` and `HostRequest` lists every request and what it answers; a plugin in another language
-implements the same structs and JSON.
+The host passes a `HostApi` table of the same shape: `size`, `major`, `minor`, `ctx`, `call`, `free`, the nullable
+`theme_mode(ctx)` (dark or light) and `wake(ctx)`, `send(ctx, key, message)`, `report(ctx, message)`, `stopped(ctx)`
+and `features`. `wake`, `send`, `report` and `stopped` are callable from any thread until `destroy` returns. Past the
+tables, everything crosses as JSON in byte buffers: the `Manifest`, a `Request` from the host, and a `HostRequest` from
+the plugin. Each side frees the buffers it allocated, so each keeps its own allocator. The rustdoc of `Request` and
+`HostRequest` lists every request and what it answers; a plugin in another language implements the same structs and
+JSON.
 
 Versions only grow by appending:
 
-- A new entry goes at the end of a table and is optional. A reader treats entries past the other side's `size` as
-  absent, so a plugin built against ABI 1.0 loads on a 1.5 host.
+- A table shorter than 2.0's is refused. A new entry of a later minor goes at the end of a table and is optional; a
+  reader treats entries past the other side's `size` as absent, so a plugin built against 2.0 loads on a later host.
 - JSON payloads only gain optional fields; readers ignore fields they do not know.
 - A plugin built against a newer minor version loads on an older host and uses what the host offers: the host
   answers a request it does not know with an error, and so does a library (the conformance suite holds both sides to
-  it, below). The host sends a library no request newer than the minor its table states. A plugin that cannot work without a newer host sets
-  `requires_minor`, and the host refuses it: "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update
-  opencode-native". `export_plugin!` sets `requires_minor` to 4, because only a 1.4 host sends the render requests the
-  SDK answers; `export_plugin!(id, setup, requires_minor = 5)` asks for a newer host, and `Read::abi_minor()` reads the
-  host's minor. So a 1.5 plugin loads on a 1.4 host, which answers the 1.5 requests with an error: there `composer()`
-  reads `None`, and an `edit_composer`, a `Confirm` and an `Alert` do nothing. A 1.4 host draws a 1.5 box without its
-  1.5 properties, which it does not read.
-- On the 2.0 SDK `export_plugin!(id, setup, requires_minor = N)` still exports ABI 1.x, as it did, until 3.0 (O-125),
-  and warns as deprecated. A 2.x plugin asks for a newer 2.x host with `plugin!(id = id, requires_minor = N, setup)`,
-  which exports `opencode_plugin_v2`; a host older than 2.N refuses it at load, naming both versions.
-- 1.4 renders are opt-in on the wire. `Setup` sets `Manifest::render` to 2 (`RENDER`), and a 1.4 claim sets
-  `SlotClaim::render`. The host sends `RenderFence`, `Render` and `RenderRoute` only to such a plugin and claim; every
-  other plugin, and a `slot_lines` claim or `route_lines` route, gets the 1.3 requests `Fence`, `Slot` and `Route`,
-  and answers with rows.
-- 1.5 adds data, not tables: the dialogs `Confirm` and `Alert`, the box properties (`Border`, `padding_sides`, `wrap`,
-  `overflow`, and `Layout`'s `height`, `min_height`, `max_height` and `margin`), and the composer's `HostRequest::Composer`
-  and `HostRequest::ComposerEdit`. Each new field is left out of the JSON while unset, so 1.4 JSON reads as before and
-  a 1.4 plugin's requests are unchanged.
-- The host serves two majors. A library that exports `opencode_plugin_v2` is served 2.0; one that exports only
-  `opencode_plugin_v1` (every 1.x build) loads as before and is served 1.6, with no surfaces and no mailbox. 2.0 has
-  every 1.6 entry and request, so a 1.x plugin rebuilt against this crate needs no change: `Host::fetch` and
-  `Host::foreground` keep their 1.x `RequestId` and warn as deprecated, naming `try_fetch` and `try_foreground`
-  (Fetch, below). Any other major is
-  refused, and the plugin manager shows why: "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x
-  plugins (up to 2.0) and ABI 1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2".
-- Nothing is removed from the ABI inside a major; an alias stays until 3.0 (O-125 (6)). A plugin that needs an
-  optional host feature lists it in `Metadata::requires` (`plugin!(id = .., requires = ["feature"], setup)`); a host
-  without it refuses the plugin at load and names it. A 2.0 host has three (`HostApi::features`, `Read::abi`):
-  `image-bounds` (the bounds of the images it decodes), `focus-input` (`Host::focus` of a field) and `fence-node` (the
-  host's code view of a claimed fence in a claim's tree, `Node::Fence`). The last two came after 2.0's first release
-  candidate, with no new minor (O-168): what they add is optional on the wire, a plugin built before them loads and
-  behaves as it did, and one built after them lowers a `fence` node for a host without `fence-node` with `View::or`
-  (Contract 2.0 surfaces, below).
+  it, below). The host sends a library no request newer than the minor its table states. A plugin that cannot work
+  without a newer host asks for it with `plugin!(id = id, requires_minor = N, setup)`, and a host older than 2.N
+  refuses it at load: "plugin needs host ABI 2.1 or newer, this opencode-native has 2.0; update opencode-native".
+- The host serves one major. Any other is refused, and the plugin manager shows why: "plugin ABI 3.0 is not supported:
+  this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild the plugin against opencode-plugin-abi 2". A
+  library of ABI 1.x, the versions of this branch's development that exports `opencode_plugin_v1`, is refused the same
+  way, as "plugin ABI 1.x" (decision O-169).
+- Nothing is removed from the ABI inside a major; an alias stays until 3.0. A plugin that needs an optional host
+  feature lists it in `Metadata::requires` (`plugin!(id = .., requires = ["feature"], setup)`); a host without it
+  refuses the plugin at load and names it. A 2.0 host has three (`HostApi::features`, `Read::abi`): `image-bounds`
+  (the bounds of the images it decodes), `focus-input` (`Host::focus` of a field) and `fence-node` (the host's code
+  view of a claimed fence in a claim's tree, `Node::Fence`). The last two came after 2.0's first release candidate,
+  with no new minor (O-168): what they add is optional on the wire, a plugin built before them loads and behaves as it
+  did, and one built after them lowers a `fence` node for a host without `fence-node` with `View::or` (Contract 2.0
+  surfaces, below).
 - What the host takes from a plugin is decoded before anything of the call applies. An answer it cannot decode (cut
   short, not JSON, a node kind it does not know) fails the plugin and leaves no effect, as a panic does.
 - The host opens a copy of each build. On macOS the copy keeps the file's quarantine, so the system checks it as it
   would the file; when the system refuses a library, the plugin manager names the file, the cause (another team's
   signature, the quarantine of a download, a missing or invalid signature) and what to do.
-- 1.5 is P0a's (dialogs, box styling, the composer). 1.6 adds the small reads and verbs (below), as new
-  `HostRequest`s, one `Request` (`Deltas`) and optional fields, and no table entry. A 1.x plugin
-  (`export_plugin!(.., requires_minor = N)`) requires 1.4: on an older host a 1.6 read returns its default (`None`,
-  empty, `false`), a verb does nothing and answers `false`, `Setup::sized` gives 0, `on_deltas` is never called, a
-  span's link is dropped, and an `xlarge` panel is sent again as `large`.
 
 A Rust-ABI `dylib` was rejected because it breaks with every compiler or crate version.
 
 ## Writing a plugin
 
 A Rust plugin is a `cdylib` that calls `plugin!(setup)` (the crate's package name is the plugin's ID) or
-`plugin!(id = "my.plugin", setup)`, with `fn setup(setup: &mut Setup) -> Result<(), String>`. `export_plugin!("my.plugin",
-setup)` is the same. The macro generates the table, `describe` (the ID and the crate's version) and the shims, and holds
+`plugin!(id = "my.plugin", setup)`, with `fn setup(setup: &mut Setup) -> Result<(), String>`. The macro generates the table, `describe` (the ID and the crate's version) and the shims, and holds
 every `unsafe`; a plugin built with `panic = "abort"` does not compile. Setup
 registers the P.1 surface as data, because widgets and closures cannot cross the boundary:
 
@@ -97,35 +73,34 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 | --- | --- |
 | `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` |
-| `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)`; the 1.3 form is `slot_lines(SlotKind, path, render(session_id) -> Vec<Line>)` |
+| `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` |
 | a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` for the claim registered last there: `true` before a mount's first render, `false` as it unmounts |
-| `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)`, drawn centered in a scroll box on the page background; the 1.3 form is `route_lines(name, render() -> Vec<Line>)` |
+| `route(name, render)` | `route(name, render(&dyn Read, &Changed) -> Render)`, drawn centered in a scroll box on the page background |
 | a route page's `onMount` | `on_route_mount(name, run(&dyn Host, mounted))`, however the route was opened |
 | `storage_key(key)` | `storage_key(key)`; `Read::storage_get`, `Host::storage_set` and `Host::storage_merge` on `plugin.<id>.<key>` |
 | event subscriptions (`api.event.on`) | `on_event(types, run(&dyn Host, &V2Event))`, with the HTTP API's own event |
-| `api.client` | `Host::try_fetch(Fetch { method, path, query, body }) -> Result<RequestId, String>` (1.x: `Host::fetch(..) -> RequestId`) and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` |
+| `api.client` | `Host::try_fetch(Fetch { method, path, query, body }) -> Result<RequestId, String>` and `on_reply(run(&dyn Host, RequestId, Result<Value, String>))` |
 | a timer's tick | `Setup::waker()` on the plugin's thread, and `on_wake(run(&dyn Host))` on the UI thread |
 | a fence's cleanup | `on_fence_gone(run(key))` |
 | `on_dispose` | `on_dispose(run(&dyn Host))` |
 | `api.themeMode` | `Read::theme_mode()` |
-| the composer (`renderer.currentFocusedEditor`, the composer's `ref`) | `Read::composer()` and `Host::edit_composer(ComposerEdit)` (1.5) |
-| `onSizeChange` and `this.width` in a slot (1.6) | `sized(Placement)` for the claim registered last there: `SlotInput::width` and `height`, and a render with `Changed::size` when they change |
-| `data.on("session.*.delta")` (1.6) | `on_deltas(run(&dyn Host, &[V2Event]))`, at most once a frame |
-| `ui.model.current`, `ui.model.variant.list/set` (1.6) | `Read::model`, `Read::variants`, `Host::set_variant(Option<&str>) -> bool`; and `Host::set_model(provider, model)` |
-| `ui.tabs.enabled/list/open/focus/move/close` (1.6) | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
-| `keymap.pending/active/commands/shortcuts` (1.6) | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
-| `renderer.getSelection()`, `clearSelection()` (1.6) | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range. The selection is the widgets' live state, as in TS: it goes when its anchor widget goes (a transcript row scrolled out of its window, a claim whose node changed), and a key press clears it before the keymap runs, as TS's selection key handler does |
-| `renderer.suspend()`, a program, `resume()` (1.6) | `Host::try_foreground(Foreground { command, args, cwd }) -> Result<RequestId, String>` (1.x: `Host::foreground(..) -> RequestId`); the exit code comes to `on_reply` |
-| `renderer.setTerminalTitle` (1.6) | `Host::set_title(title)` |
-| 1.x `api.theme.selected/has/set/install` (1.6) | `Read::theme`, `Read::themes`, `Host::set_theme(name) -> bool`, `Host::install_theme(name, json)` |
-| `<a href>` in a text (1.6) | `Span::link(url)`, an OSC 8 link |
-| `dialog.set({ size: "xlarge" })` (1.6) | `PanelSize::XLarge` |
+| the composer (`renderer.currentFocusedEditor`, the composer's `ref`) | `Read::composer()` and `Host::edit_composer(ComposerEdit)` |
+| `onSizeChange` and `this.width` in a slot | `sized(Placement)` for the claim registered last there: `SlotInput::width` and `height`, and a render with `Changed::size` when they change |
+| `data.on("session.*.delta")` | `on_deltas(run(&dyn Host, &[V2Event]))`, at most once a frame |
+| `ui.model.current`, `ui.model.variant.list/set` | `Read::model`, `Read::variants`, `Host::set_variant(Option<&str>) -> bool`; and `Host::set_model(provider, model)` |
+| `ui.tabs.enabled/list/open/focus/move/close` | `Read::tabs_enabled`, `Read::tabs`, `Host::edit_tab(TabEdit) -> bool` |
+| `keymap.pending/active/commands/shortcuts` | `Read::keymap_pending`, `keymap_active`, `keymap_commands`, `shortcuts(name)` |
+| `renderer.getSelection()`, `clearSelection()` | `Read::selection`, `Host::clear_selection`; a plugin cannot set the range. The selection is the widgets' live state, as in TS: it goes when its anchor widget goes (a transcript row scrolled out of its window, a claim whose node changed), and a key press clears it before the keymap runs, as TS's selection key handler does |
+| `renderer.suspend()`, a program, `resume()` | `Host::try_foreground(Foreground { command, args, cwd }) -> Result<RequestId, String>`; the exit code comes to `on_reply` |
+| `renderer.setTerminalTitle` | `Host::set_title(title)` |
+| TS 1.x `api.theme.selected/has/set/install` | `Read::theme`, `Read::themes`, `Host::set_theme(name) -> bool`, `Host::install_theme(name, json)` |
+| `<a href>` in a text | `Span::link(url)`, an OSC 8 link |
+| `dialog.set({ size: "xlarge" })` | `PanelSize::XLarge` |
 
 `Setup::options()` holds the `options` of the plugin's `plugins` entry as JSON text. `Setup::host()` is the host
 while setup runs; no callback can keep it (a compile error).
 
-A `Line` is a list of spans with text, colors, bold, italic, underline, dim and strikethrough, and since 1.6 an OSC
-8 `link` (a terminal without OSC 8 shows the text alone). A color is a theme
+A `Line` is a list of spans with text, colors, bold, italic, underline, dim and strikethrough, and an OSC 8 `link` (a terminal without OSC 8 shows the text alone). A color is a theme
 token path (`text.muted`, `markdown.heading`), a scale step (`categorical.3.300`), `#rrggbb`, or an `Rgba`, sent as
 `#rrggbbaa`, so plugins follow the theme; `Read::color(token)` resolves one to an `Rgba`. The host draws rows without
 wrapping. A fence returns `Fenced::{Code, Keep, Lines { lines, fg, drag }}`, with `Fence::key` naming the block across
@@ -134,9 +109,9 @@ sideways on a horizontal wheel, as LaTeX's formulas do; with `drag` it scrolls u
 horizontal wheel, as Mermaid's diagrams do.
 
 A slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap, padding,
-justification, alignment and background, and since 1.5 a `Border`, padding per side, wrapping children and overflow)
+justification, alignment and background, a `Border`, padding per side, wrapping children and overflow)
 or a `Text` of spans (with wrapping, truncation and a hover color), each with a `Layout` (width, grow, shrink, minimum
-width 0, and since 1.5 a height with a minimum and a maximum, and margins) and an optional `Click`: on the press or the release of the
+width 0, a height with a minimum and a maximum, and margins) and an optional `Click`: on the press or the release of the
 left button, the host shows the hand and, once the event is handled, runs the click's `Action::Command { name, input
 }`, a command of the plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden
 `workspace.directory` with a directory). `Markdown { text }` draws Markdown with the active fence renderers, and
@@ -172,8 +147,8 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   `Changed::locations`. The reads are `session`, `family`, `messages`, `models`, `mcp_servers`, `integrations` and
   `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the terminal size, where the TUI works,
   how many plugins failed), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
-  `shortcut(name)` (a command's first key), `dialog_open(key)`, `composer` (1.5), `storage_get`, `color` and
-  `theme_mode`; since 1.6
+  `shortcut(name)` (a command's first key), `dialog_open(key)`, `composer`, `storage_get`, `color`,
+  `theme_mode`,
   `variants` (of the model the next prompt uses), `tabs_enabled` and `tabs` (each tab's root session, title, and
   whether it is on screen, busy, waits on the user or has unread activity or an error), `keymap_pending`,
   `keymap_active`, `keymap_commands` and `shortcuts(name)` as the TUI shows keys, `selection` (the text the mouse
@@ -186,17 +161,17 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   asked for, on the same queue as the built-ins' effects, so a plugin never reenters itself through the host. The
   host runs that queue before it routes its next message, so a store signal never overtakes an effect asked for
   while the one before it was handled. Over the ABI, a request into a plugin that is already running is dropped and
-  logged; during a render request of 1.4 on (`RenderFence`, `Render`, `RenderRoute`) every effect request is refused
-  with an error (the 1.6 verbs too), and a result the host cannot decode leaves no effect and puts back the storage it wrote. What a
-  dispose callback that panics asked for is dropped (1.5 `Checkpoint` and `Rollback`, which the SDK sends around
+  logged; during a render request (`RenderFence`, `Render`, `RenderRoute`) every effect request is refused
+  with an error (the small verbs too), and a result the host cannot decode leaves no effect and puts back the storage it wrote. What a
+  dispose callback that panics asked for is dropped (`Checkpoint` and `Rollback`, which the SDK sends around
   each); the other callbacks keep theirs.
 - The effects: `storage_set` and `storage_merge`; `dispatch(name, input)`, which runs any registered command, palette
   or not; `toast(Toast { variant, title, message, session })`, which with a `session` offers "Open" unless that
   session's family is on screen (a toast without a title takes the session's); `attention(Attention { title, message,
   notify, sound })`, a notification and a sound as the user's `attention` settings allow; `open_route(name)` and
   `navigate(Route)` (home, a session, or a plugin's route); `dialog(Dialog)`; `copy(text, then)`, which copies and
-  runs `then` once copied; `edit_composer(ComposerEdit)` (1.5); and `fetch`.
-- The verbs of 1.6. Three answer at once whether they will act, as their TS counterparts return a boolean, and act
+  runs `then` once copied; `edit_composer(ComposerEdit)`; and `try_fetch`.
+- The small verbs. Three answer at once whether they will act, as their TS counterparts return a boolean, and act
   once the call returns: `set_variant(variant)` (`false` without a model, or for a variant it lacks; `None` is the
   default), `edit_tab(TabEdit::{Open, Focus, Move, Close})` (`false` while tabs are off, `Move` of a tab that is not
   open, `Close` with no tab matched; `Open` adds a tab without showing it, `Focus` shows it; `Move` takes any session
@@ -232,9 +207,9 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
 - A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
   size, title, subtitle, body, actions, binds, bleed, centered, bare }`, which changes in place while its key is open and
-  keeps where its body is scrolled (`size` is `medium`, `large`, or since 1.6 `xlarge`, as TS's dialog
+  keeps where its body is scrolled (`size` is `medium`, `large` or `xlarge`, as TS's dialog
   sizes; since P8 a `bare` one is only the dialog's frame around its body, as TS draws a plugin's `ui.dialog.show`);
-  or `Close { key }`, which closes that panel. Since 1.5 it may also be a `Confirm
+  or `Close { key }`, which closes that panel. It may also be a `Confirm
   { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
   and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
   or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
@@ -246,7 +221,7 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   activation that showed it: it closes when that activation ends (disable, failure, a reload that passed), and an
   answer reaches nobody once the activation is not live, not even a command of the host or another plugin that the
   action names. A reload that fails keeps the running activation and its dialog.
-- The composer (1.5): `composer()` reads the composer on screen, on home or in a session: its text as it shows it (a
+- The composer: `composer()` reads the composer on screen, on home or in a session: its text as it shows it (a
   compact paste is its label), the cursor as a byte offset into that text, and whether it has focus; `None` without a
   composer, and while a session hides it for a permission, a form, a missing location or the drawer, where TS
   unmounts it. `edit_composer` takes `Set { text }` (TS `ref.set`: the text and its attachments are replaced, the cursor
@@ -266,7 +241,7 @@ A claim's first render gets `Changed::all`. After that, a mounted claim or route
 - with each change batch of the store: `sessions` whose info or status changed, `lists` whose message list changed,
   `messages` that changed in place, and `locations` whose catalogs changed;
 - with `local` when the host's own state changes: the selected model, the usage limits, the settings, the plugins'
-  storage (also another client's write), the count of failed plugins, and since 1.6 the open tabs, the pending keys
+  storage (also another client's write), the count of failed plugins, the open tabs, the pending keys
   and the themes;
 - with `size` on a resize, and with `all` when `interactive` changes; a claim of `sized` also with `size` when its own
   size changes, in the frame that laid it out, which then shows the new node (at most twice a frame, then after it,
@@ -313,7 +288,7 @@ the content handle to number from; the plugin answers the tree, the content it g
 memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
 the palette, on either carrier.
 
-A view hears what changed since the mount's last view (`SurfaceInput::changed`, P6a), as a 1.x render hears
+A view hears what changed since the mount's last view (`SurfaceInput::changed`, P6a), as a render hears
 `Changed`: `all` on the first view and on a whole tree, the change batch that called it, `local` or `size` for a change
 of the host's own state or of the surface's room, and `woken` after the plugin's own handlers, a wake, or a `layout`
 that asked to draw again. A view that reads the host's state and finds nothing it shows changed returns `Node::Keep` of
@@ -321,11 +296,11 @@ its last tree's root (so its root needs an id); the host then keeps the mount as
 unless the tree shows a tool call's output (`PartOutput`, which the host reads again each revision) or is not in the
 theme of the moment: then the keep is adopted as any tree is. A box with `visible: false` takes no room, not even a
 gap, as TS's `visible`; a change of it shows or hides the box's widget in place, so what a nested slot put in it
-stays. A slot surface whose root box is hidden shows nothing in its slot, as a 1.x render's `Render::Hide`. A slot
-surface's view gets its slot's input as a 1.x claim does (`SurfaceInput::slot`: the session, the prompt's state). A
+stays. A slot surface whose root box is hidden shows nothing in its slot, as a render's `Render::Hide`. A slot
+surface's view gets its slot's input as a slot claim does (`SurfaceInput::slot`: the session, the prompt's state). A
 change of the host's own state since the last view is `local`, also when the view runs for another cause first. A
 surface that asks (`Surface::mounts`) hears each mount begin, before its first view, and end, as `Event::Mount` with
-the mount's id and the slot's input, as a 1.x `on_mount` or `on_route_mount`; a new mount may begin before the one it
+the mount's id and the slot's input, as an `on_mount` or `on_route_mount`; a new mount may begin before the one it
 replaces ends, also with equal input, and the id tells them apart. The plugin hears it, not the mount, so what its
 handler starts (a fetch) is the plugin's and outlives that mount. `Read::message(session, id)` reads one message: over
 the C ABI only that message crosses, where `Read::messages` copies the session's list, so a view that hears a message
@@ -489,8 +464,8 @@ deliberate break of the unreleased 2.0 SDK, which closes the requests a plugin b
 and the variant `Node::Diff` are `#[non_exhaustive]`, so a field a later 2.x adds breaks no plugin's source. A literal
 of one does not compile; a plugin builds it from its constructor (`Type::default()`, `Select::new`, `Panel::new`,
 `Node::diff`, ...) and its `with_` setters, one a field, as the examples do. A `match` over `Dialog` needs an arm for
-`Dialog::Images`, or a `_` arm. The crate's README lists the move and the types to close next (O-125(6) protects the
-wire, which these keep).
+`Dialog::Images`, or a `_` arm. The crate's README lists the move and the types to close next (the wire is unchanged by
+these).
 
 ### Storage
 
@@ -519,9 +494,7 @@ the effects that wait fill it (a plugin that fans out without end), or a chain o
 does not take a fetch or a `foreground`, and no reply comes for it. In the 2.x Rust SDK `try_fetch` and
 `try_foreground` return an `Err` with why; over the C ABI the request answers `OPENCODE_ERROR`; over the pipe, the
 TypeScript fetch resolves as a failed reply. A fetch the host takes is admitted past the bound, so every ID it gives
-gets its one reply. The 1.x calls are unchanged, in a 1.x binary and in 1.x source rebuilt on this SDK: `fetch` and
-`foreground` return `RequestId`, and `RequestId(0)` for any request the host refuses, as on a host without fetch;
-no reply carries that ID.
+gets its one reply.
 
 A fetch or a `foreground` belongs to what asked for it, the same in process, over the C ABI and over the pipe. One a
 mount's call asks for, a command of the route the mount shows or a handler of the mount's input, is that mount's:
@@ -552,7 +525,7 @@ is active. The streaming deltas (`session.text.delta`, `session.reasoning.delta`
 `session.compaction.delta`) never arrive there. If the UI thread falls more than 1024 events behind, the oldest are
 skipped.
 
-`on_deltas(run)` (1.6) gets them instead: every delta the store applied since the last call, or since the handler
+`on_deltas(run)` gets them instead: every delta the store applied since the last call, or since the handler
 was registered, never one from before, oldest first. It is called at most once a frame, before the frame, and never
 with none; the deltas of one store batch come in one call. That holds also for a session whose messages the TUI has
 not loaded. While a plugin has such a handler the store keeps at most 4096 it has not taken and drops the oldest past
@@ -579,10 +552,10 @@ message that waits under `key`, so a flood of progress holds one entry. `Setup::
 the plugin and says so once. A thread cannot be killed. Over the C ABI messages are JSON; in process they are the
 values. `crate::mailbox::stats` reports what a mailbox held at most and how many sends were refused.
 
-The 1.3 waker stays:
+The waker:
 
 Slow work, such as a timer or network I/O, runs on the plugin's own thread, which calls `Waker::wake` (from
-`Setup::waker()`; `None` from a host older than 1.3) when it has something to show. A wake is a redraw hint, not a
+`Setup::waker()`) when it has something to show. A wake is a redraw hint, not a
 message. The host posts it to the UI thread; wakes before it handles one count once, and the last is never lost,
 even when the queue is full. On the UI thread the host runs the plugin's `on_wake` handlers, then renders its mounted
 claims and routes with `woken`; a render shows every result that is ready, not one per wake. `Waker` is `Clone` and
@@ -782,8 +755,7 @@ to it): a project cannot write them.
 
 - Loading a build reads its ID from `describe` and runs no setup. Setup (`create`) runs on each activation, and
   deactivation, unloading, a reload and the TUI's exit destroy that instance, so a plugin that `cli.json` disables
-  starts nothing. A plugin without `describe` (ABI 1.0) tells its ID only from setup, so its setup runs once at load
-  and that instance is destroyed at once; what it asks for, including storage writes, is dropped.
+  starts nothing. A library whose `describe` is null or names no ID is refused at load.
 - Destroying an instance revokes its waker, then runs its `on_dispose` callbacks, last registered first, each even when
   another panics, while the host is still valid. Their effects run, except a fetch, which is not sent, and a dialog,
   which belongs to an activation that is no longer live and shows nowhere.
@@ -828,18 +800,17 @@ to it): a project cannot write them.
 
 `crates/plugin/examples/sample` is a small `cdylib` with its own workspace and `Cargo.lock`, so it is not a member of
 the client's workspace and the other crates build as before. Its features select variants: `v2` draws differently
-and `setup-fails` fails (the reload tests); `abi-1-0`, `minor-newer`, `major-3`, `requires-future` and `requires-feature`
-pretend to target other ABI versions or features; `abi-1-6` exports this crate's plugin as one of ABI 1.6; `abi-1-3`
-is a plugin on the frozen 1.3 SDK (`sample/abi-1-3`), and `abi-1-0-wire` is that plugin behind the 1.0 table;
-`abi-1-4` is a plugin on the frozen 1.4 SDK (`sample/abi-1-4`), whose types the loader's tests also use as a 1.4
-host's decoder of the 1.5 sample; `requires-1-5` and `requires-1-6` ask for a 1.5 and a 1.6 host. `p0a` adds the 1.5 probe (`src/p0a.rs`): a confirm, an alert, the
-composer's read and edits, and a styled box. The tests build each variant once per test run into
+and `setup-fails` fails (the reload tests); `minor-newer`, `major-3`, `requires-future` and `requires-feature`
+pretend to target other ABI versions or features; `abi-2-0`, without the default `current`, builds this source on a
+frozen copy of the 2.0 SDK of before the contract 2.x additions (`sample/abi-2-0`). `p0a` adds the P0a probe
+(`src/p0a.rs`): a confirm, an alert, the composer's read and edits, and a styled box. A library of ABI 1.x is
+`examples/c` built with `-DOPENCODE_AS_V1`, which the host refuses. The tests build each variant once per test run into
 `target/sample-plugin`: the loader's unit tests in `crates/plugin/src/loader/native/tests.rs`, and the TUI tests in
 `crates/tui/tests/all/plugins.rs`. `crates/tui/tests/all/plugin_p0a.rs` runs the same probe linked, through the C
 ABI's byte shims, and as the library, and the P-APP scenarios `P.1/p0a-dialogs` and `P.1/p0a-composer` check its
 dialogs, its box and a composer edit against TS (`parity/plugins/p0a`).
-With the option `"reads": true` the sample also uses the reads and verbs of 1.6
-(`sample/src/reads.rs`), which the loader test `the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library`
+With the option `"reads": true` the sample also uses the small reads and verbs
+(`sample/src/reads.rs`), which the loader test `the_small_reads_and_verbs_are_the_same_in_process_and_through_the_library`
 runs in process and from the library; `crates/tui/tests/all/plugin_reads.rs` runs them in the TUI on both paths.
 The `title` feature adds `/p0btitle`, which sets the terminal title: the P-PTY scenarios `P.0b/title` and
 `P.0b/title-off` install that build beside its TS twin (`parity/plugins/title/tui.ts`) in one `plugins` directory and
@@ -874,7 +845,7 @@ fence on a host that states no `fence-node` shows the library lowering it), a `F
 fails the plugin, a centered select, alert and confirm, the built-ins'
 contract (P6a: a surface that hears its mount begin and end, a view told what changed that keeps its root, a hidden
 box, a read of one message), a panic, a refused tree, a setup that
-fails, an overrun, and the same plugin as a 1.x library. Each is recorded from `crates/plugin/examples/conformance`
+fails, and an overrun. Each is recorded from `crates/plugin/examples/conformance`
 (the reference, linked into the loader's tests and called through the SDK's byte shims) into
 `crates/plugin/conformance/transcripts.jsonl`: every request and reply that cross the C ABI on the UI thread, with
 what the user sees at each `observe` step. `CONFORMANCE_WRITE=1` on the loader's `conformance::` tests writes it, and
@@ -907,7 +878,7 @@ words in `versions.jsonl`.
 
 The tap that records transcripts also feeds a protocol machine written from `opencode_plugin.h`
 (`conformance::Protocol`): one call at a time, host requests only inside a call, no call into an instance that failed
-or is destroyed, nothing of 2.0 to a 1.x library, renders read only, and only requests the contract names. Every seeded
+or is destroyed, renders read only, and only requests the contract names. Every seeded
 model of the TUI's tests runs under it, so a model run that breaks a rule fails as `abi-protocol`.
 
 `opencode-native plugin test <library, crate or plugin dir> --conformance` replays the transcripts against a library

@@ -10,7 +10,7 @@ the focus: the composer, or a dialog's input while a dialog is open, and nothing
 
 ## Rust
 
-ABI 1.5 has `Read::composer()` and `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`. They act on the
+The ABI has `Read::composer()` and `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`. They act on the
 composer on screen, on home or in a session, whether or not it has the focus, and never on another editor: with a
 dialog open an insert still goes into the composer. Without a composer on screen (a plugin's route, or a session that
 hides it for a permission, a form or the drawer, where TS unmounts it) the read is `None` and an edit does nothing. An

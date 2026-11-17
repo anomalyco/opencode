@@ -42,7 +42,7 @@ pub(crate) struct View {
 }
 
 impl View {
-    /// The route of a render of ABI 1.x; also returns its mount, which its activation draws again.
+    /// The route of a render; also returns its mount, which its activation draws again.
     pub fn new(
         host: &dyn Host,
         owner: Weak<dyn Host>,
@@ -55,7 +55,7 @@ impl View {
         (Self::wrap(host, Box::new(mount.clone()), commands), mount)
     }
 
-    /// The route that shows `content` centered in a scroll box, as TS's `StatsPage` does: the route of ABI 1.x.
+    /// The route that shows `content` centered in a scroll box, as TS's `StatsPage` does: the route of a render.
     pub fn wrap(host: &dyn Host, content: Box<dyn Claimed>, commands: Vec<TuiCommand>) -> Self {
         let scroll = ScrollBox::new(host.app()).scrollbars(false).grow(1.0);
         scroll.content_view().align_items(Align::Center).justify(Justify::Center).padding_y(1);
@@ -84,7 +84,7 @@ impl View {
 /// The keymap layers of a route's `commands`, as the host's own routes make theirs: the commands in a global layer, so
 /// the palette, which opens in the dialog's mode, lists them as TS does, and runs them there (PL-3); their keys in a
 /// base-mode layer, so a key runs one only while no dialog is over the route. A surface's route makes them before its
-/// first view, which may read the keymap (ABI 1.6), so their arrival does not call the view again (review bigboi-7).
+/// first view, which may read the keymap, so their arrival does not call the view again (review bigboi-7).
 pub(crate) fn layer(host: &dyn Host, commands: Vec<TuiCommand>) -> Option<Disposer> {
     if commands.is_empty() {
         return None;

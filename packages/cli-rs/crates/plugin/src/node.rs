@@ -51,7 +51,7 @@ pub(crate) struct Mount {
     charge: Charge,
 }
 
-/// The plugin a mount of ABI 1.x is charged to, and what times the host's work for its nodes as the plugin's.
+/// The plugin a render's mount is charged to, and what times the host's work for its nodes as the plugin's.
 pub(crate) type Charge = (Rc<str>, crate::surface::HostTime);
 
 /// The renders for a new size a claim gets within one frame; OpenTUI lays a frame out at most 8 times.
@@ -228,7 +228,7 @@ impl Mount {
                     item: false,
                     fence: None,
                 };
-                // A tree of ABI 1.x has no ids and no keeps, so nothing in it can be refused.
+                // A render's tree has no ids and no keeps, so nothing in it can be refused.
                 let mut applied = Ok(());
                 (self.charge.1)(&mut || applied = tree.apply(&env, &self.root, &[v2::Node::from(inner.clone())]));
                 if let Err(refused) = applied {
@@ -306,7 +306,7 @@ impl Claimed for Rc<Mount> {
         self.tree.borrow().each_slot(&mut |slots| slots.sync(host, Some(changed)));
     }
 
-    /// A render of ABI 1.x reads its colors from the host, so it renders again, and its widgets take the new theme in
+    /// A render reads its colors from the host, so it renders again, and its widgets take the new theme in
     /// place.
     fn restyle(&self, host: &dyn Host) -> bool {
         self.sync(host, &abi::Changed::everything());
@@ -500,7 +500,7 @@ fn admits_lines(lines: &[Line]) -> Result<(), crate::limits::Over> {
     Ok(())
 }
 
-/// Whether a node of ABI 1.x the host draws without a [`reconcile::Tree`] (a panel's body) is within a tree's nodes
+/// Whether a node of a render the host draws without a [`reconcile::Tree`] (a panel's body) is within a tree's nodes
 /// and rows and each node within its text ([`crate::limits`]); past them it shows the placeholder (review carbon 2.4).
 pub fn admits(node: &abi::Node) -> Result<(), crate::limits::Over> {
     fn walk(
@@ -923,7 +923,7 @@ mod tests {
     use opencode_ui::theme::{Catalog, ThemeMode};
     use opentui::testing::TestApp;
 
-    // Expected: what the 1.5 properties of a box do, read from a fresh layout's rects and cells: a border without a
+    // Expected: what the styling properties of a box do, read from a fresh layout's rects and cells: a border without a
     // color is white and takes a cell on each side it draws; a negative padding counts as 0; a negative margin moves
     // the box over its neighbor; a height, its minimum and its maximum bound the height its children ask for; and a
     // box that hides its overflow does not draw what is past its height.

@@ -224,7 +224,7 @@ pub struct Env<'a> {
     pub draw: Option<&'a Rc<Drawer>>,
     /// The mount whose handler a box's pointer and hover events reach ([`crate::interact`]).
     pub owner: Option<&'a Weak<crate::interact::Owner>>,
-    /// The plugin the tree's nodes are charged to; `None` for a 1.x claim, which the tree's own limits hold.
+    /// The plugin the tree's nodes are charged to; `None` for a render claim, which the tree's own limits hold.
     pub plugin: Option<&'a str>,
     /// The tree is a list item's: the list's tree counted its nodes, so it counts only the rows it builds.
     pub item: bool,

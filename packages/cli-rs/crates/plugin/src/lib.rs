@@ -1969,7 +1969,7 @@ impl Setup<'_> {
         });
     }
 
-    /// The plugin a mount of ABI 1.x is charged to, and what times the host's work for it (review carbon 2.4).
+    /// The plugin a render's mount is charged to, and what times the host's work for it (review carbon 2.4).
     fn charge(&self) -> node::Charge {
         let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
         (Rc::from(self.id), Rc::new(move |work| monitor.host(slot, work)))

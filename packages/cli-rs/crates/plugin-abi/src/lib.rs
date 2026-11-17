@@ -588,7 +588,7 @@ pub enum Scope {
     Global,
     Route(String),
     /// P8: everywhere, while the keyboard is in its base mode (TS's keymap layer without `mode: "global"`): not while
-    /// a dialog or a mode a plugin pushed has it. An older host refuses the manifest.
+    /// a dialog or a mode a plugin pushed has it.
     Base,
 }
 
@@ -1335,8 +1335,7 @@ pub struct Layout {
     /// Cells outside each edge; a negative margin moves the node over its neighbors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub margin: Option<Edges>,
-    /// 2.0 (P8): out of its parent's flow, placed against its edges (TS `position: "absolute"`). An older host lays it
-    /// out in the flow.
+    /// 2.0 (P8): out of its parent's flow, placed against its edges (TS `position: "absolute"`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub absolute: Option<Absolute>,
 }
@@ -2656,7 +2655,7 @@ pub enum Dialog {
     ErrorDetails(ErrorDetails),
     /// P8: `dialog`, whose `dismissed` runs once as it closes, after its own action if that ran as it closed: so a
     /// plugin that waits for an answer hears of each close, also escape, the backdrop, another plugin's dialog that
-    /// replaces it, or its unload (TS settles the dialog's promise in each case). An older host shows nothing.
+    /// replaces it, or its unload (TS settles the dialog's promise in each case).
     Dismissable {
         dialog: Box<Dialog>,
         dismissed: Action,
@@ -3175,8 +3174,7 @@ pub struct Panel {
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
     /// P8: only the dialog's frame around the body, as TS draws a plugin's own view (`ui.dialog.show`): no header,
-    /// footer, inset or scroll, and the body lays itself out. The title, actions and keys go unused. An older host
-    /// shows the panel whole.
+    /// footer, inset or scroll, and the body lays itself out. The title, actions and keys go unused.
     #[serde(default, skip_serializing_if = "is_false")]
     pub bare: bool,
     /// 2.0 (P6c): the header's close label; `esc` when unset.

@@ -43,7 +43,7 @@ pub(crate) struct TestHost {
     pub interactive: Cell<bool>,
     /// The composer edits applied.
     pub edits: RefCell<Vec<abi::ComposerEdit>>,
-    /// The verbs of ABI 1.6 the plugins asked for, as text, in the order the host ran them.
+    /// The small verbs the plugins asked for, as text, in the order the host ran them.
     pub verbs: RefCell<Vec<String>>,
     /// The handlers of [`Host::on_deltas`], which [`TestHost::emit_deltas`] calls.
     pub deltas: Rc<RefCell<Vec<crate::Deltas>>>,
