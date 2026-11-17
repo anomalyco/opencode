@@ -122,10 +122,12 @@ describe("model dialog flyout", () => {
 
   test("a held arrow key hides the flyout until the highlight rests", () => {
     const open = keyboardOpened("a")
+
     const down = flyoutReplay(open, [
       { type: "keyboard", id: "a", repeat: true },
       { type: "highlighted", id: "b" },
     ])
+
     expect(down.state).toMatchObject({ status: "opening", id: "b" })
     expect(selectFlyoutOpenId(down.state)).toBeUndefined()
     const first = down.state.status === "opening" ? down.state.attempt : -1
@@ -224,6 +226,7 @@ describe("model dialog flyout", () => {
       { type: "keyboard", id: "a", repeat: true },
       { type: "highlighted", id: "b" },
     ])
+
     const entered = transitionDialogFlyout(waiting.state, { type: "menu.entered", id: "b", index: 0 })
 
     expect(selectFlyoutMenuKeys(entered.state)).toBe(0)

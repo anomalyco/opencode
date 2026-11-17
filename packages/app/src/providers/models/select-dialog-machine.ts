@@ -201,6 +201,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
 
       return same({ ...state, menu: event.index === undefined ? undefined : { index: event.index, input: event.input } })
     }
+
     case "wheel":
       if (!keyboardDriven(state)) return same(state)
 
