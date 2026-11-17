@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, Queue, RcMap, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -12,12 +12,16 @@ import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Session } from "@opencode/schema/session"
+import { SessionTable } from "@opencode/core/session/sql"
 import { Worktree } from "@opencode/core/worktree"
 import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { WorktreeDirectory } from "@opencode/core/worktree/directory"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeGit } from "@opencode/core/worktree/git"
+import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-services"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "@opencode/core/config"
@@ -28,6 +32,8 @@ import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
+import { offlineModels } from "./fixture/models"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -74,6 +80,42 @@ function worktreeLayer(
           }),
         ),
       ),
+    ],
+  ).pipe(Layer.fresh)
+}
+
+function ptyWorktreeLayer(
+  input: Effect.Success<ReturnType<typeof makeFixture>>,
+  database: Database.Interface,
+  bus: Bus.Interface,
+  pty: PersistentPty.Options,
+) {
+  return AppNodeBuilder.build(
+    LayerNode.group([
+      Worktree.node,
+      WorktreeStrategies.node,
+      Git.node,
+      FSUtil.node,
+      Location.node,
+      Global.node,
+      PersistentPty.node,
+      LocationServiceMap.node,
+    ]),
+    [
+      Database.node.replace(Layer.succeed(Database.Service, database)),
+      Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+      Global.node.replace(Global.layerWith({ data: input.root.path })),
+      Location.node.replace(
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of({
+            directory: input.sourceDirectory,
+            project: { id: input.projectID, directory: input.sourceDirectory, canonical: input.sourceDirectory },
+          }),
+        ),
+      ),
+      PersistentPty.node.replace(PersistentPty.configured(pty)),
+      offlineModels,
     ],
   ).pipe(Layer.fresh)
 }
@@ -241,6 +283,145 @@ describe("Worktree", () => {
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("releases worktree terminals, running pipes, and locations before removing", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const daemon = yield* fakeDaemon()
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-release"))
+      const sibling = abs(path.join(parent, "worktree-other"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(input.sourceDirectory, "sub"), { recursive: true })
+        await fs.writeFile(path.join(input.sourceDirectory, "sub", "tracked.txt"), "ok\n")
+        await $`git add sub/tracked.txt`.cwd(input.sourceDirectory).quiet()
+        await $`git commit -m "add sub"`.cwd(input.sourceDirectory).quiet()
+        await fs.mkdir(sibling, { recursive: true })
+      })
+
+      yield* Effect.gen(function* () {
+        const service = yield* Worktree.Service
+        const strategies = yield* WorktreeStrategies.Service
+        const pty = yield* PersistentPty.Service
+        const locations = yield* LocationServiceMap.Service
+
+        const created = yield* service.create({ projectID: input.projectID, directory: parent, name: "worktree" }, strategies)
+        const sub = abs(path.join(created.directory, "sub"))
+
+        const sesWt = Session.ID.make("ses_wt")
+        const sesSub = Session.ID.make("ses_sub")
+        const sesSibling = Session.ID.make("ses_sibling")
+        const sesMain = Session.ID.make("ses_main")
+        yield* input.db
+          .insert(SessionTable)
+          .values([
+            { id: sesWt, project_id: input.projectID, slug: "s1", directory: created.directory, version: "1", time_created: 1, time_updated: 1 },
+            { id: sesSub, project_id: input.projectID, slug: "s2", directory: sub, version: "1", time_created: 1, time_updated: 1 },
+            { id: sesSibling, project_id: input.projectID, slug: "s3", directory: sibling, version: "1", time_created: 1, time_updated: 1 },
+            { id: sesMain, project_id: input.projectID, slug: "s4", directory: input.sourceDirectory, version: "1", time_created: 1, time_updated: 1 },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        const setDaemonCwd = (id: string, cwd: string) => {
+          const found = daemon.processes.find((item) => `pty_persistent_${item.id}` === id)
+          if (found) found.cwd = cwd
+        }
+        const spawnTerm = (sessionID: Session.ID, cwd: string, title: string) =>
+          pty.create(sessionID, { args: [], cwd, title, env: {} }).pipe(
+            Effect.tap((term) => Effect.sync(() => setDaemonCwd(term.id, cwd))),
+          )
+
+        yield* spawnTerm(sesWt, input.sourceDirectory, "wt")
+        yield* spawnTerm(sesSub, input.sourceDirectory, "sub")
+        yield* spawnTerm(sesMain, sub, "moved")
+        const termSibling = yield* spawnTerm(sesSibling, sibling, "sibling")
+        const termMain = yield* spawnTerm(sesMain, input.sourceDirectory, "main")
+
+        const spawnPipe = (cwd: string, output: string) =>
+          pty.createPipe({
+            program: process.execPath,
+            args: [],
+            cwd,
+            env: {},
+            groupID: input.projectID,
+            outputPath: path.join(input.root.path, output),
+            metadata: {},
+          })
+
+        const pipeRunningWt = yield* spawnPipe(sub, "wt.out")
+        const pipeExitedWt = yield* spawnPipe(created.directory, "wt-exited.out")
+        daemon.exit(pipeExitedWt.id, 0)
+        const pipeRunningMain = yield* spawnPipe(input.sourceDirectory, "main.out")
+
+        yield* Effect.scoped(locations.contextEffect(Location.Ref.make({ directory: created.directory })))
+        yield* Effect.scoped(locations.contextEffect(Location.Ref.make({ directory: sub })))
+        yield* Effect.scoped(locations.contextEffect(Location.Ref.make({ directory: sibling })))
+        yield* Effect.scoped(locations.contextEffect(Location.Ref.make({ directory: input.sourceDirectory })))
+
+        yield* service.remove({ projectID: input.projectID, directory: created.directory, force: false }, strategies)
+
+        expect((yield* pty.list()).map((item) => item.id).toSorted()).toEqual([termMain.id, termSibling.id].toSorted())
+        expect((yield* pty.listPipes()).map((item) => item.id).toSorted((a, b) => a - b)).toEqual(
+          [pipeExitedWt.id, pipeRunningMain.id].toSorted((a, b) => a - b),
+        )
+        const terminatedIds = daemon.requests.flatMap((req) => (req.op === "terminate" ? [req.id] : []))
+        expect(terminatedIds).toContain(pipeRunningWt.id)
+        expect(terminatedIds).not.toContain(pipeExitedWt.id)
+        expect(terminatedIds).not.toContain(pipeRunningMain.id)
+
+        const loadedDirs = Array.from(yield* RcMap.keys(locations.rcMap)).map((ref) => ref.directory)
+        expect(loadedDirs).not.toContain(created.directory)
+        expect(loadedDirs).not.toContain(sub)
+        expect(loadedDirs).toContain(sibling)
+        expect(loadedDirs).toContain(input.sourceDirectory)
+
+        expect(yield* Effect.promise(() => fs.stat(created.directory).catch(() => undefined))).toBeUndefined()
+        expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+      }).pipe(Effect.provide(ptyWorktreeLayer(input, database, bus, daemon.options)))
+    }),
+  )
+
+  it.live("does not release terminals or pipes when removal is rejected", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const daemon = yield* fakeDaemon()
+
+      yield* Effect.gen(function* () {
+        const service = yield* Worktree.Service
+        const strategies = yield* WorktreeStrategies.Service
+        const pty = yield* PersistentPty.Service
+        const terminal = yield* pty.create(Session.ID.make("ses_keep"), {
+          args: [],
+          cwd: input.sourceDirectory,
+          title: "keep",
+          env: {},
+        })
+        const pipe = yield* pty.createPipe({
+          program: process.execPath,
+          args: [],
+          cwd: input.sourceDirectory,
+          env: {},
+          groupID: input.projectID,
+          outputPath: path.join(input.root.path, "keep.out"),
+          metadata: {},
+        })
+
+        const error = yield* service
+          .remove({ projectID: input.projectID, directory: input.sourceDirectory, force: false }, strategies)
+          .pipe(Effect.flip)
+        expect(error).toBeInstanceOf(Worktree.InvalidDirectoryError)
+        expect((yield* pty.list()).map((item) => item.id)).toEqual([terminal.id])
+        expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([pipe.id])
+      }).pipe(Effect.provide(ptyWorktreeLayer(input, database, bus, daemon.options)))
     }),
   )
 
