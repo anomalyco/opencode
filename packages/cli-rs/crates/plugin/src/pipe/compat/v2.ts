@@ -747,11 +747,16 @@ export function context(base: Base, carrier: Carrier) {
   }
   // The nodes whose layout the plugin asked for, by their read: one with `onSizeChange` hears each new layout (CT-24).
   const measuring = new Map<string, VNode>()
+  const sizes = new WeakMap<VNode, string>()
   carrier.listen((key) => {
     const node = measuring.get(key)
     if (!node) return
     if (!node.parent) return void measuring.delete(key)
-    // As OpenTUI calls it: on the renderable, whose `width` it may read as `this.width`.
+    // As OpenTUI calls it: as the laid-out size changes, on the renderable, whose `width` it may read as `this.width`.
+    const rect = node.measure()
+    const size = rect && `${rect.width}x${rect.height}`
+    if (!size || sizes.get(node) === size) return
+    sizes.set(node, size)
     // A plugin may set it on the renderable by its ref rather than as a prop (CT-26: opencode-voice's panel title).
     const handler = node.props.onSizeChange ?? (node as Json).onSizeChange
     if (typeof handler === "function") handler.call(node)

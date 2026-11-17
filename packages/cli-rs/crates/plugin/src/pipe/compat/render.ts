@@ -167,7 +167,10 @@ export class VNode {
       this.measured = true
       touch(this)
     }
-    return rootOf(this).owner?.scrolls?.rect?.(this)
+    // A node the host has not laid out yet reads 0×0 for a frame, which OpenTUI never reports: not yet. A plugin that
+    // sizes itself by it kept the empty size (navigator cut its section header's "Refresh" to nothing, then to ".").
+    const rect = rootOf(this).owner?.scrolls?.rect?.(this)
+    return rect && (rect.width > 0 || rect.height > 0) ? rect : undefined
   }
 
   getLayout() {
