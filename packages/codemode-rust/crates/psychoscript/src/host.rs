@@ -123,7 +123,7 @@ pub struct FnEntry {
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
     /// Names the run's host calls; made on first use when the host gave none.
-    run_id: Option<Arc<str>>,
+    run_id: crate::tool::RunId,
     next_call: u64,
     /// The context handed to synchronous tools, its call id set for each call.
     ctx: Option<ToolContext>,
@@ -141,7 +141,7 @@ impl<'rt> RunHost<'rt> {
         Self {
             setup,
             ctx: None,
-            run_id: run_id.map(Arc::from),
+            run_id: Arc::new(run_id.map(std::sync::OnceLock::from).unwrap_or_default()),
             next_call: 0,
             tasks: Tasks::default(),
             functions: Vec::new(),
@@ -163,10 +163,8 @@ impl<'rt> RunHost<'rt> {
         id
     }
 
-    pub fn run_id(&mut self) -> Arc<str> {
-        self.run_id
-            .get_or_insert_with(|| Arc::from(crate::run::random_run_id()))
-            .clone()
+    pub fn run_id(&mut self) -> crate::tool::RunId {
+        self.run_id.clone()
     }
 
     fn context(&mut self) -> ToolContext {
@@ -187,22 +185,38 @@ impl<'rt> RunHost<'rt> {
 
 // ---------- setup ----------
 
-/// Defines `search`, `require`, the import hook and the extensions' globals.
-pub fn install(vm: &mut Vm) {
-    let search = native(vm, "search", 0, search_native, Value::Undef);
-    global(vm, "search", search);
-    let require = native(vm, "require", 1, require_native, Value::Undef);
-    global(vm, "require", require);
-    let import = native(vm, "import", 2, import_native, Value::Undef);
-    global(vm, IMPORT_GLOBAL, import);
-    let setup = vm.host.setup;
-    for extension in &setup.extensions {
-        for (name, value) in extension.globals() {
-            let v = from_host(vm, value, name, Some((extension.name(), true)), 0)
-                .unwrap_or(Value::Undef);
-            global(vm, name, v);
-        }
+/// Defines the host globals the program refers to: `search`, `require`, the import hook, and extension globals.
+/// The rest are made only if a module import asks for them, so a run pays only for the globals it uses.
+pub fn install(vm: &mut Vm, referenced: &[Atom]) {
+    for &a in referenced {
+        let name = vm.atoms.text(a).to_owned();
+        define_host_global(vm, &name);
     }
+}
+
+/// Defines one host global by name; false when there is none.
+fn define_host_global(vm: &mut Vm, name: &str) -> bool {
+    let v = match name {
+        "search" => native(vm, "search", 0, search_native, Value::Undef),
+        "require" => native(vm, "require", 1, require_native, Value::Undef),
+        IMPORT_GLOBAL => native(vm, "import", 2, import_native, Value::Undef),
+        _ => {
+            let setup = vm.host.setup;
+            let found = setup.extensions.iter().find_map(|extension| {
+                extension
+                    .globals()
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, value)| (extension.name(), value))
+            });
+            let Some((extension, value)) = found else {
+                return false;
+            };
+            from_host(vm, value, name, Some((extension, true)), 0).unwrap_or(Value::Undef)
+        }
+    };
+    global(vm, name, v);
+    true
 }
 
 fn global(vm: &mut Vm, name: &str, v: Value) {
@@ -1056,6 +1070,9 @@ fn module_name(specifier: &str) -> &str {
 
 fn global_value(vm: &mut Vm, name: &str) -> Option<Value> {
     let a = vm.atoms.intern(name);
+    if !vm.global_map.contains_key(&a) {
+        define_host_global(vm, name);
+    }
     match vm.global_map.get(&a) {
         Some(Value::Undef) | None => None,
         Some(v) => Some(*v),

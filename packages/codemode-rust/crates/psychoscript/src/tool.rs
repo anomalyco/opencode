@@ -13,20 +13,27 @@ use crate::schema::{self, Schema};
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// What a tool call knows about itself: its stable idempotency key, `<runId>:<callId>`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct ToolContext {
-    run_id: Arc<str>,
+    run_id: RunId,
     pub(crate) call: u64,
 }
 
+/// A run's id, shared by its calls and made the first time a key is read, when the host gave none.
+pub(crate) type RunId = Arc<OnceLock<String>>;
+
 impl ToolContext {
-    pub(crate) fn new(run_id: Arc<str>, call: u64) -> Self {
+    pub(crate) fn new(run_id: RunId, call: u64) -> Self {
         Self { run_id, call }
     }
 
     /// `<runId>:<callId>`, the same at every hook.
     pub fn key(&self) -> String {
-        format!("{}:{}", self.run_id, self.call)
+        format!(
+            "{}:{}",
+            self.run_id.get_or_init(crate::run::random_run_id),
+            self.call
+        )
     }
 }
 

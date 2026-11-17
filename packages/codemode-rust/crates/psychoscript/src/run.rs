@@ -127,7 +127,7 @@ pub fn start<'a>(
     let setup = rt.setup();
     let mut vm = Vm::new(RunHost::new(setup, run_id), setup.limits, atoms);
     vm.setup();
-    host::install(&mut vm);
+    host::install(&mut vm, &program.globals);
     for (k, v) in bindings {
         let val = convert::from_json(&mut vm, v);
         let a = vm.atoms.intern(k);
