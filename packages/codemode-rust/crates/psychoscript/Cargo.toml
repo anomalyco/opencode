@@ -22,3 +22,4 @@ oxc_syntax = "0.159"
 regress = { version = "0.12.0", default-features = false, features = ["std", "utf16"] }
 rustc-hash = "2"
 serde_json = { version = "1", features = ["preserve_order"] }
+unicode-normalization = "0.1"

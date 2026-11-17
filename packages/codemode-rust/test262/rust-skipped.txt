@@ -840,19 +840,11 @@ built-ins/String/prototype/codePointAt/return-first-code-unit.js  # wrong result
 built-ins/String/prototype/codePointAt/return-single-code-unit.js  # wrong result
 built-ins/String/prototype/concat/S15.5.4.6_A9.js  # wrong result
 built-ins/String/prototype/indexOf/S15.5.4.7_A9.js  # wrong result
-built-ins/String/prototype/isWellFormed/return-abrupt-from-this.js  # wrong result
 built-ins/String/prototype/isWellFormed/returns-boolean.js  # wrong result
-built-ins/String/prototype/isWellFormed/to-string.js  # wrong error type: TypeError instead of Test262Error
 built-ins/String/prototype/lastIndexOf/S15.5.4.8_A9.js  # wrong result
 built-ins/String/prototype/localeCompare/15.5.4.9_CE.js  # wrong result
 built-ins/String/prototype/localeCompare/S15.5.4.9_A9.js  # wrong result
 built-ins/String/prototype/match/S15.5.4.10_A9.js  # wrong result
-built-ins/String/prototype/normalize/form-is-not-valid-throws.js  # error not thrown: RangeError
-built-ins/String/prototype/normalize/return-abrupt-from-form.js  # error not thrown: Test262Error
-built-ins/String/prototype/normalize/return-abrupt-from-this.js  # wrong error type: TypeError instead of Test262Error
-built-ins/String/prototype/normalize/return-normalized-string-from-coerced-form.js  # wrong result
-built-ins/String/prototype/normalize/return-normalized-string-using-default-parameter.js  # wrong result
-built-ins/String/prototype/normalize/return-normalized-string.js  # wrong result
 built-ins/String/prototype/search/S15.5.4.12_A9.js  # wrong result
 built-ins/String/prototype/slice/S15.5.4.13_A9.js  # wrong result
 built-ins/String/prototype/split/checking-if-deleting-the-string-prototype-split-length-property-fails.js  # wrong result
@@ -861,25 +853,8 @@ built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A9.js  # wrong result
 built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A9.js  # wrong result
 built-ins/String/prototype/toLowerCase/S15.5.4.16_A9.js  # wrong result
 built-ins/String/prototype/toUpperCase/S15.5.4.18_A9.js  # wrong result
-built-ins/String/prototype/toWellFormed/return-abrupt-from-this.js  # wrong result
-built-ins/String/prototype/toWellFormed/returns-well-formed-string.js  # wrong result
-built-ins/String/prototype/toWellFormed/to-string.js  # wrong error type: TypeError instead of Test262Error
-built-ins/String/raw/return-empty-string-from-empty-array-length.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-negative-infinity.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-not-defined.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-undefined.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-zero-NaN.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-zero-boolean.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-zero-null.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-number.js  # call of a missing method
-built-ins/String/raw/return-empty-string-if-length-is-zero-or-less-string.js  # call of a missing method
 built-ins/String/raw/return-the-string-value-from-template.js  # unsupported syntax: tagged templates
-built-ins/String/raw/return-the-string-value.js  # call of a missing method
-built-ins/String/raw/returns-abrupt-from-next-key-toString.js  # wrong error type: TypeError instead of Test262Error
-built-ins/String/raw/returns-abrupt-from-substitution.js  # wrong error type: TypeError instead of Test262Error
 built-ins/String/raw/special-characters.js  # unsupported syntax: tagged templates
-built-ins/String/raw/substitutions-are-appended-on-same-index.js  # call of a missing method
-built-ins/String/raw/substitutions-are-limited-to-template-raw-length.js  # call of a missing method
 built-ins/String/raw/template-substitutions-are-appended-on-same-index.js  # unsupported syntax: tagged templates
 built-ins/String/raw/zero-literal-segments.js  # unsupported syntax: tagged templates
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result

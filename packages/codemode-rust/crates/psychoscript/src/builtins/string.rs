@@ -17,6 +17,7 @@ pub fn setup(vm: &mut Vm) {
         &[
             ("fromCharCode", 1, string_from_char_code),
             ("fromCodePoint", 1, string_from_code_point),
+            ("raw", 1, string_raw),
         ],
     );
     vm.methods(
@@ -53,10 +54,12 @@ pub fn setup(vm: &mut Vm) {
             ("toString", 0, s_to_string),
             ("valueOf", 0, s_to_string),
             ("localeCompare", 1, s_locale_compare),
-            ("normalize", 0, s_to_string),
+            ("normalize", 0, s_normalize),
             ("match", 1, s_match),
             ("matchAll", 1, s_match_all),
             ("search", 1, s_search),
+            ("isWellFormed", 0, s_is_well_formed),
+            ("toWellFormed", 0, s_to_well_formed),
         ],
     );
     let iter = vm.native_fn("[Symbol.iterator]", 0, s_iterator, Value::Undef);
@@ -196,6 +199,47 @@ fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Re
         units.push((to_uint32(vm.number_of(a)?) & 0xffff) as u16);
     }
     Ok(vm.string_val(String::from_utf16_lossy(&units)))
+}
+
+fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let template = arg(args, 0);
+    let raw = match template {
+        Value::Obj(id) => {
+            let k = vm.atoms.intern_static("raw");
+            vm.get_obj(id, k)
+        }
+        _ => Value::Undef,
+    };
+    if !matches!(raw, Value::Obj(_)) {
+        return Err(vm.type_error("String.raw expects a template object with a raw array."));
+    }
+    let lk = vm.names.length;
+    let len = vm.get(&raw, lk)?;
+    let count = to_integer(vm.number_of(&len)?).max(0.0);
+    if count > crate::ops::MAX_ARRAY_LEN as f64 {
+        return Err(vm.range_error("Invalid array length"));
+    }
+    let count = count as usize;
+    let mut parts = Vec::with_capacity(count * 2);
+    for i in 0..count {
+        parts.push(vm.get_elem(&raw, &Value::Num(i as f64))?);
+        if i + 1 < count && i + 1 < args.len() {
+            parts.push(args[i + 1]);
+        }
+    }
+    let mut prims = Vec::with_capacity(parts.len());
+    for p in &parts {
+        prims.push(vm.primitive_of(p, crate::ops::Hint::String)?);
+    }
+    let mut out = String::new();
+    for p in &prims {
+        let t = vm.string_of(p)?;
+        out.push_str(vm.text(t));
+    }
+    if out.encode_utf16().count() > MAX_STRING_LEN {
+        return Err(vm.range_error("Invalid string length"));
+    }
+    Ok(vm.string_val(out))
 }
 
 fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -459,12 +503,12 @@ fn pad(vm: &mut Vm, this: Value, args: &[Value], at_start: bool) -> Res {
             vm.text(f).to_owned()
         }
     };
+    if target > MAX_STRING_LEN as f64 {
+        return Err(vm.range_error("Invalid string length"));
+    }
     let len = vm.atoms.sref(s).len16();
     if target <= len as f64 || fill.is_empty() {
         return Ok(Value::Str(s));
-    }
-    if target > MAX_STRING_LEN as f64 {
-        return Err(vm.range_error("Invalid string length"));
     }
     let need = target as usize - len;
     let padding: Vec<u16> = fill.encode_utf16().cycle().take(need).collect();
@@ -489,7 +533,7 @@ fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
     let n = to_integer(vm.number_of(&arg(args, 0))?);
     if n < 0.0 || n.is_infinite() {
-        return Err(vm.range_error(&format!("Invalid count value: {}", num_to_string(n))));
+        return Err(vm.range_error("String.repeat expects a finite non-negative count."));
     }
     if vm.text(s).len() as f64 * n > MAX_STRING_LEN as f64 {
         return Err(vm.range_error("Invalid string length"));
@@ -690,6 +734,46 @@ fn s_search(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
     let p = pattern_value(vm, args)?;
     regexp::string_search(vm, s, &p)
+}
+
+fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    use unicode_normalization::UnicodeNormalization;
+    let s = this_str(vm, &this)?;
+    let form = match arg(args, 0) {
+        Value::Undef => "NFC".to_owned(),
+        v => {
+            let f = vm.string_of(&v)?;
+            vm.text(f).to_owned()
+        }
+    };
+    let text = vm.text(s);
+    let out: String = match form.as_str() {
+        "NFC" => text.nfc().collect(),
+        "NFD" => text.nfd().collect(),
+        "NFKC" => text.nfkc().collect(),
+        "NFKD" => text.nfkd().collect(),
+        _ => {
+            let mut q = String::new();
+            crate::convert::quote(&mut q, &form);
+            return Err(vm.range_error(&format!(
+                "String.normalize expects the form \"NFC\", \"NFD\", \"NFKC\", or \"NFKD\" (got {q})."
+            )));
+        }
+    };
+    if out == text {
+        return Ok(Value::Str(s));
+    }
+    Ok(vm.string_val(out))
+}
+
+// Program strings are stored as UTF-8, which cannot hold a lone surrogate, so every string is well formed.
+fn s_is_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    this_str(vm, &this)?;
+    Ok(Value::Bool(true))
+}
+
+fn s_to_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    Ok(Value::Str(this_str(vm, &this)?))
 }
 
 fn s_iterator(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
