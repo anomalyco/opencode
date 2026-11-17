@@ -223,6 +223,16 @@ function $vmAsyncFromSyncClose(iter) {
   if (ret !== undefined && ret !== null) $Call(ret, iter)
 }
 
+// A host call whose arguments hold promises that haven't fulfilled: waits for each, then calls again.
+async function $vmHostWait(promises, callee, args) {
+  let i = 0
+  while (i < promises.length) {
+    await promises[i]
+    i++
+  }
+  return $Apply(callee, undefined, args)
+}
+
 async function $vmResult(value) {
   const root = $IsThenable(value) ? await value : value
   const walk = $vmJsonVisitor(true, undefined, null)({ "": root }, "", 0)

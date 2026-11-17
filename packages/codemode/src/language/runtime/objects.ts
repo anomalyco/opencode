@@ -62,6 +62,9 @@ export const readonly: Attributes = { writable: false, enumerable: false, config
 /** Constants such as `Math.PI` and a constructor's `prototype`. */
 export const frozen: Attributes = { writable: false, enumerable: false, configurable: false }
 
+/** What a child converted by `toHost` gives to be left out: an object's key is skipped, an array's item is `null`. */
+export const OMITTED: unique symbol = Symbol("omitted")
+
 /**
  * An object owned by the program: own properties plus a prototype link. Subclasses answer, in one place, how a
  * built-in kind of object prints, coerces, iterates, and crosses to the host.
@@ -113,9 +116,11 @@ export class Obj {
   /** A copy the host can hold; `item` converts a child. A `__proto__` key never reaches host code. */
   toHost(item: (value: Value) => unknown): unknown {
     return Object.fromEntries(
-      entries(this)
-        .filter(([key]) => key !== "__proto__")
-        .map(([key, value]) => [key, item(value)]),
+      entries(this).flatMap(([key, value]) => {
+        if (key === "__proto__") return []
+        const copied = item(value)
+        return copied === OMITTED ? [] : [[key, copied]]
+      }),
     )
   }
 
@@ -145,7 +150,10 @@ export class Arr extends Obj {
     return `[${this.items.map(item).join(",")}]`
   }
   override toHost(item: (value: Value) => unknown) {
-    return this.items.map(item)
+    return this.items.map((value) => {
+      const copied = item(value)
+      return copied === OMITTED ? null : copied
+    })
   }
   override iterator(builtins: Builtins) {
     return new Position(this, "values", builtins.Array)

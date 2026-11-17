@@ -92,8 +92,11 @@ export type HostOrigin = {
 export type HostBridge = {
   /** What a saved state must find again on resume: the host functions with `snapshot` hooks, and the namespaces. */
   readonly shape: ReadonlyArray<string>
-  /** Program values as host values, for a call's arguments. */
-  readonly toHost: (values: ReadonlyArray<Value>, label: string) => ReadonlyArray<unknown>
+  /**
+   * Program values as host values, for a call's arguments. When the runtime awaits promises in arguments, one that
+   * hasn't fulfilled goes in `waiting` instead, and the arguments are to cross again once it settles.
+   */
+  readonly toHost: (values: ReadonlyArray<Value>, label: string, waiting: Array<PromiseObj>) => ReadonlyArray<unknown>
   /** A host value as a program value, for what a call returned; `owner`'s `snapshot` hooks can save it. */
   readonly fromHost: (value: unknown, label: string, owner: string | undefined) => Value
   /** What a call's failure is to the program. */

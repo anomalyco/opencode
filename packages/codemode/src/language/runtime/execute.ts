@@ -13,6 +13,7 @@ import { Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import type { Vm } from "../vm.js"
+import type { Translate } from "../runtime.js"
 
 /**
  * A suspend that failed, leaving the run running: `running` names each host call that blocked it by its key and its
@@ -70,6 +71,7 @@ type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value
 /** How a runtime runs programs: its limits and host globals, shared by every run it starts. */
 export type Setup<R> = {
   readonly limits: Limits
+  readonly translate?: Required<Translate> | undefined
   /** Each run's host globals (see `Host`): made when it starts, and again for a restored run. */
   readonly globals?: ((run: Run) => Readonly<Record<string, unknown>>) | undefined
   /** Globals made as program values (a test harness), made again the same way for a restored run. */
@@ -167,7 +169,7 @@ const instantiate = <R>(setup: Setup<R>, run: Run, bindings?: Readonly<Record<st
     logs: [],
     globals: (ctx) => [
       ...(setup.programGlobals?.(ctx) ?? []),
-      ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run))),
+      ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run), setup.translate)),
     ],
     bindings:
       bindings === undefined
