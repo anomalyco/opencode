@@ -1,5 +1,6 @@
 # The port of `@khaosoigai/oc-context-grid` (`examples/context-grid`) in Luau.
-id = "oc-context-grid.luau"
+# Its ID is the original's, as the native port's is, so it keeps what the original stored.
+id = "oc-context-grid"
 name = "Context grid"
 version = "0.3.2"
 contract = "2.0"

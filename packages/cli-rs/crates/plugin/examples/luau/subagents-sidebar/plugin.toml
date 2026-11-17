@@ -1,0 +1,7 @@
+# The port of `opencode-subagents-sidebar` (`examples/subagents-sidebar`) in Luau.
+# Its ID is the original's, as the native port's is, so it keeps what the original stored.
+id = "subagents-sidebar"
+name = "Subagents"
+version = "0.1.6"
+contract = "2.0"
+description = "the session's subagents in the sidebar, newest activity first, and /subagents to open one"
