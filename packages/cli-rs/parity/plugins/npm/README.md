@@ -26,6 +26,7 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `opencode-tui-context.tgz` | `opencode-tui-context@2.1.1` (catalog CT-28) | `sha512-Tmxdrsq+k0us0dN+YlumpLyf/7W4alm2ffnRGC8DCKMO9XR8Zzww49ofRr0B++qb2QGhd0w8RnLJw8+l3JwBmg==` |
 | `opencode-tokscope.tgz` | `opencode-tokscope@0.4.0` (contract 2.x, addition 1) | `sha512-smvfguaJ4N6uAuiwVtOYfGjZOkJL/Vm4D7bzAUg9abgWUVjrxeeiBGvT5/V0kAsmOmA8XhfND118JnLlvPL68w==` |
 | `opencode-usage-report.tgz` | `opencode-usage-report@0.6.4` (catalog CT-31) | `sha512-FYQFABgV0eF6t9aYMSPVruPIdSDDdKxS8PPBhq338N8Yp5dCeaUfkeVfjWpsVOjiKM1BnOEeiVGw5u1sORvIEA==` |
+| `@cleocode__goal.tgz` | `@cleocode/goal@0.13.0` (catalog CT-14) | `sha512-6IojHCDI9N+iWncfvFXT8BXUL+M6zWIzgh55Kkxgu2v1N0GSMtiadUS3leF4pBC43gFecdcPoNL8ZmVIqjeGQQ==` |
 | `opencode-navigator.tgz` | `opencode-navigator@0.27.7` (catalog CT-21) | `sha512-Rt5p1v24ssRdG4u2JBseomSmxcQ2c4YBfRwwebsWLNThCQNZogojd3oo8W7ZvTT/es9DeT9JLD0sLX23IVtREA==` |
 | `@joe-broadhead__opencode-linear.tgz` | `@joe-broadhead/opencode-linear@0.0.9` (catalog CT-8) | `sha512-JKi7qnHOXusxcPFb8jcrsKj/6zVMsWSLv0P3PWVTFOb+aGf3yaHUwR+8RL7wny8Unfbo6HzdqojEbT2L44K10g==` |
 

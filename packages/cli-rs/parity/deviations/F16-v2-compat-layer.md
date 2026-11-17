@@ -157,8 +157,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   renderer's `defaultRender()` returns; its renderables built with `new` would also need to draw (below).
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
-  The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
-  throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
+  A `<select>` draws as OpenTUI's renderable draws it, rows of the options that fit with the selected one marked
+  `▶ ` on its background (CT-14: @cleocode/goal's sidebar, `P.8/goal-select`); its keys, `onChange`, `font` and
+  scroll indicator are not mapped, as the contract's focus does not reach it. The intrinsics without a contract node
+  (`tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`) throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
   (`<id> crashed in slot <path>: …`). `<Portal>` draws its children in a box that fills the room of the mount that
   renders it, over the rest, which its `ref` gets as the container (CT-10): in the `app` slot that is the screen, as
   TS's renderer root (opencode-landstrip's pane); elsewhere it is the slot's room, not the screen, and its `mount` is
