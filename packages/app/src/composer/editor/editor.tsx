@@ -230,7 +230,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
           event.currentTarget.value = ""
         }}
       />
-      <Show when={!view.draftOnly && isComposerPopoverOpen(state)}>
+      {/* Directories list only once found, so a path typed past every match leaves the draft clear to send. */}
+      <Show
+        when={
+          !view.draftOnly &&
+          isComposerPopoverOpen(state) &&
+          (state.popover.type !== "directory" || props.controller.suggestions().length > 0)
+        }
+      >
         <ComposerEditorPopover
           id={suggestionsID}
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
@@ -1238,7 +1245,7 @@ function ComposerEditorSelect(props: {
 function ComposerEditorPopover(props: {
   id?: string
   emptyLabel: string
-  items: ComposerSuggestion[]
+  items: readonly ComposerSuggestion[]
   activeID?: string
   history?: ComposerMode
   /** A pointer or focus outside the list, at `target`. */
@@ -1729,7 +1736,10 @@ function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
 
   return (
     <FileIcon
-      node={{ path: props.item.path ?? props.item.label, type: props.item.kind === "reference" ? "directory" : "file" }}
+      node={{
+        path: props.item.path ?? props.item.label,
+        type: props.item.kind === "reference" || props.item.kind === "directory" ? "directory" : "file",
+      }}
       class="size-4 shrink-0"
     />
   )

@@ -345,7 +345,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     await serverSDK.api.session.move({ sessionID, directory }).catch((cause: unknown) =>
       showToast({
         variant: "error",
-        title: language.t("session.location.moveFailed"),
+        title: language.t("command.session.cd.failed"),
         description: formatServerError(cause, language.t, language.t("common.requestFailed")),
       }),
     )
@@ -558,6 +558,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.session.cd.description"),
       slash: "cd",
       slashArguments: true,
+      slashComplete: "directory",
       // Needs a directory argument, which only the composer can supply.
       hidden: true,
       disabled: !actions.session.identity.params.id,

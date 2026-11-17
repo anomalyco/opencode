@@ -47,7 +47,7 @@ export type ComposerOption = {
 
 export type ComposerSuggestion = {
   id: string
-  kind: "agent" | "command" | "file" | "reference" | "resource" | "skill" | "session" | "history"
+  kind: "agent" | "command" | "directory" | "file" | "reference" | "resource" | "skill" | "session" | "history"
   label: string
   title?: string
   trigger?: string

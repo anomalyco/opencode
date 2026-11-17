@@ -16,6 +16,14 @@ export type ComposerPopoverState =
   | { readonly type: "context"; readonly query: string; readonly activeID?: string; readonly chosen?: boolean }
   | { readonly type: "command-inline"; readonly query: string; readonly activeID?: string; readonly chosen?: boolean }
   | { readonly type: "command-menu"; readonly query: string; readonly activeID?: string; readonly chosen?: boolean }
+  /** Directories for the argument of a slash command such as `/cd`; `query` is the typed path. */
+  | {
+      readonly type: "directory"
+      readonly command: string
+      readonly query: string
+      readonly activeID?: string
+      readonly chosen?: boolean
+    }
   | {
       readonly type: "history"
       readonly query: string
@@ -37,7 +45,13 @@ export type ComposerInteractionState = {
 }
 
 export type ComposerInteractionEvent =
-  | { readonly type: "input.changed"; readonly value: string; readonly persist?: boolean }
+  | {
+      readonly type: "input.changed"
+      readonly value: string
+      readonly persist?: boolean
+      /** Slash commands whose argument completes as a directory. */
+      readonly directoryCommands?: readonly string[]
+    }
   /** The draft changed outside typing (an attachment or a comment); recalled history becomes the draft. */
   | { readonly type: "draft.edited" }
   | { readonly type: "commands.open" }
@@ -60,7 +74,8 @@ export type ComposerInteractionEvent =
   | { readonly type: "popover.close" }
   /** A pointer or focus outside the list; a history preview puts the draft back. */
   | { readonly type: "popover.dismiss" }
-  | { readonly type: "popover.select"; readonly item: ComposerSuggestion }
+  /** `complete` (Tab) fills a directory in and keeps listing inside it instead of closing. */
+  | { readonly type: "popover.select"; readonly item: ComposerSuggestion; readonly complete?: boolean }
   | {
       readonly type: "key.down"
       readonly key: string
@@ -86,7 +101,7 @@ export type ComposerInteractionCommand =
   | { readonly type: "draft.removeTextBefore"; readonly value: string }
   | { readonly type: "mention.add"; readonly item: ComposerSuggestion; readonly range?: { start: number; end: number } }
   | { readonly type: "popover.filter"; readonly popover: "command" | "context"; readonly query: string }
-  | { readonly type: "suggestion.select"; readonly id: string }
+  | { readonly type: "suggestion.select"; readonly id: string; readonly complete?: boolean }
   | { readonly type: "focus.editor" }
   | { readonly type: "focus.command-search" }
   | { readonly type: "history.preview"; readonly id: string }
@@ -135,7 +150,8 @@ export function transitionComposer(
   event: ComposerInteractionEvent,
   persisted: ComposerPersistedState,
 ): ComposerEditorTransition {
-  if (event.type === "input.changed") return inputChanged(state, event.value, event.persist !== false, persisted)
+  if (event.type === "input.changed")
+    return inputChanged(state, event.value, event.persist !== false, persisted, event.directoryCommands)
 
   if (event.type === "draft.edited")
     return state.popover.type === "browsing" ? changed({ ...state, popover: CLOSED }) : unchanged(state)
@@ -168,7 +184,7 @@ export function transitionComposer(
 
   if (event.type === "popover.active") return activeChanged(state, event.id)
 
-  if (event.type === "popover.select") return suggestionSelected(state, event.item, persisted)
+  if (event.type === "popover.select") return suggestionSelected(state, event.item, persisted, event.complete)
 
   if (event.type === "key.down") return keyDown(state, event, selectComposerMode(persisted))
 
@@ -206,6 +222,7 @@ function inputChanged(
   value: string,
   persist: boolean,
   persisted: ComposerPersistedState,
+  directoryCommands: readonly string[] | undefined,
 ): ComposerEditorTransition {
   if (selectComposerMode(persisted) === "normal" && value === "!") {
     return changed({ ...state, popover: CLOSED, focus: "editor" }, [SHELL, { type: "draft.setText", value: "" }])
@@ -225,6 +242,17 @@ function inputChanged(
       ...(persist ? [{ type: "draft.setText" as const, value }] : []),
       { type: "popover.filter", popover: "context", query },
     ])
+  }
+
+  const argument = value.startsWith("/") && directoryCommands?.length ? value.match(/^\/(\S+)\s+(.*)$/) : null
+
+  if (argument && directoryCommands?.includes(argument[1]!)) {
+    const commands = persist ? [{ type: "draft.setText" as const, value }] : NO_COMMANDS
+
+    return changed(
+      { ...state, popover: { type: "directory", command: argument[1]!, query: argument[2] ?? "" }, focus: "editor" },
+      commands,
+    )
   }
 
   const command = value.startsWith("/") ? value.match(/^\/(\S*)$/) : null
@@ -357,7 +385,7 @@ function stepHistory(
 function queryChanged(state: ComposerInteractionState, query: string): ComposerEditorTransition {
   if (!isComposerPopoverOpen(state)) return unchanged(state)
 
-  if (state.popover.type === "history")
+  if (state.popover.type === "history" || state.popover.type === "directory")
     return changed({ ...state, popover: { ...state.popover, query, activeID: undefined, chosen: undefined } })
 
   const popover = state.popover.type === "context" ? "context" : "command"
@@ -399,7 +427,22 @@ function suggestionSelected(
   state: ComposerInteractionState,
   item: ComposerSuggestion,
   persisted: ComposerPersistedState,
+  complete = false,
 ): ComposerEditorTransition {
+  if (item.kind === "directory") {
+    if (state.popover.type !== "directory" || !item.path) return unchanged(state)
+    const value = `/${state.popover.command} ${item.path}`
+
+    return changed(
+      {
+        ...state,
+        popover: complete ? { type: "directory", command: state.popover.command, query: item.path } : CLOSED,
+        focus: "editor",
+      },
+      [{ type: "draft.setText", value }, { type: "focus.editor" }],
+    )
+  }
+
   if (item.kind === "history") {
     if (state.popover.type !== "history" || !item.history) return unchanged(state)
 
@@ -476,9 +519,18 @@ function keyDown(
   }
 
   if (event.key === "Tab" || (event.key === "Enter" && !event.composing)) {
-    if (!state.popover.activeID) return unchanged(state, true)
+    // A path with no listed directory is still a command to send, so Enter passes through to submit. Tab stays in the
+    // editor while the next directories load.
+    if (!state.popover.activeID)
+      return unchanged(state, state.popover.type !== "directory" || event.key === "Tab")
 
-    return unchanged(state, true, [{ type: "suggestion.select", id: state.popover.activeID }])
+    const complete = state.popover.type === "directory" && event.key === "Tab"
+
+    return unchanged(state, true, [
+      complete
+        ? { type: "suggestion.select", id: state.popover.activeID, complete }
+        : { type: "suggestion.select", id: state.popover.activeID },
+    ])
   }
 
   const direction =

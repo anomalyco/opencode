@@ -121,6 +121,7 @@ export const dict = {
   "command.session.cd": "Change working directory",
   "command.session.cd.description": "Move the session to another directory",
   "command.session.cd.required": "Directory is required",
+  "command.session.cd.failed": "Failed to change directory",
   "command.session.import": "Import session",
   "command.session.copyID": "Copy Session ID",
   "command.session.rename": "Rename session",
