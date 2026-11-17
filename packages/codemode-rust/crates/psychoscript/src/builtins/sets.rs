@@ -1,7 +1,7 @@
 //! Map and Set additions (`getOrInsert`, `groupBy`, the Set composition methods), `Object.groupBy`, WeakMap and
 //! WeakSet.
 
-use super::{arg, describe_value, incompatible, require_callback};
+use super::{arg, describe_value, fuel, incompatible, require_callback};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Res, Vm};
@@ -101,8 +101,12 @@ fn get_or_insert_computed(vm: &mut Vm, id: Id, args: &[Value], name: &str) -> Re
     if let Some(v) = table(vm, id).get(key) {
         return Ok(v);
     }
-    let v = vm.call(&f, Value::Undef, &[k])?;
+    // A missing key is the reference's `insertComputed`: the callback, then `$Table("add")`.
+    fuel::handoff(vm);
+    let v = vm.call_counted(&f, Value::Undef, &[k])?;
     table(vm, id).set(key, k, v);
+    fuel::native(vm);
+    vm.bytecode_builtin();
     Ok(v)
 }
 
@@ -113,27 +117,34 @@ fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -
     get_or_insert_computed(vm, id, args, "Map.getOrInsertComputed")
 }
 
-/// Walks an iterable one step at a time, calling the grouping callback between steps.
+/// Walks an iterable one step at a time, calling the grouping callback between steps, with the fuel of the
+/// reference's `groupBy`: its `$Callback` and `$Table("groups")`, then for each item the callback, an object key's
+/// `$Table("groupKey")` and `String`, and `$Table("group")`.
 fn group_by(vm: &mut Vm, args: &[Value], kind: &str) -> Result<Vec<(Value, Value)>, Value> {
+    fuel::method(vm);
+    fuel::method(vm);
     let items = arg(args, 0);
     if items.is_nullish() {
         return Err(vm.type_error(&format!("{kind}.groupBy expects an iterable collection.")));
     }
     let f = require_callback(vm, &arg(args, 1), &format!("{kind}.groupBy"))?;
-    let it = vm.get_iterator(&items)?;
+    fuel::native(vm);
+    fuel::native(vm);
+    let object = kind == "Object";
     let mut out = Vec::new();
     let mut index = 0.0;
-    while let Some(item) = vm.iter_step(&it)? {
-        let key = match vm.call(&f, Value::Undef, &[item, Value::Num(index)]) {
-            Ok(k) => k,
-            Err(e) => {
-                let _ = vm.iter_close(&it);
-                return Err(e);
-            }
-        };
+    fuel::for_of(vm, &items, |vm, item| {
+        let key = vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)])?;
         index += 1.0;
+        if object {
+            fuel::native(vm);
+            fuel::native(vm);
+        }
+        fuel::native(vm);
         out.push((key, item));
-    }
+        Ok(true)
+    })?;
+    vm.bytecode_builtin();
     Ok(out)
 }
 
@@ -216,13 +227,25 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         _ => 0,
     };
     let name = SET_METHODS[which].0;
+    // The fuel is the reference's `setMethod`: its checks, then `$Table` and callback calls per item (see `fuel.rs`).
+    fuel::method(vm);
     let target = receiver(vm, &this, &format!("Set.prototype.{name}"), |k| {
         matches!(k, Kind::Set(_))
     })?;
+    fuel::receiver_then_loop(vm);
     let other = arg(args, 0);
+    fuel::native(vm);
     let Value::Obj(oid) = other else {
         return Err(vm.type_error(&format!("Set.{name} expects a Set-like object.")));
     };
+    let r = set_method_in(vm, target, other, oid, name);
+    if r.is_ok() {
+        vm.bytecode_builtin();
+    }
+    r
+}
+
+fn set_method_in(vm: &mut Vm, target: Id, other: Value, oid: Id, name: &str) -> Res {
     let sk = vm.names.size;
     let raw = vm.get(&other, sk)?;
     let size = vm.number_of(&raw)?;
@@ -241,12 +264,18 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let kk = vm.atoms.intern_static("keys");
     let has = vm.get_obj(oid, hk);
     let keys = vm.get_obj(oid, kk);
-    if !vm.is_callable(&has) || !vm.is_callable(&keys) {
+    fuel::native(vm);
+    let callable = vm.is_callable(&has);
+    if callable {
+        fuel::native(vm);
+    }
+    if !callable || !vm.is_callable(&keys) {
         return Err(vm.type_error(&format!(
             "Set.{name} expects callable 'has' and 'keys' methods."
         )));
     }
     let own = table(vm, target).live as f64;
+    fuel::native(vm);
     if name == "isSubsetOf" && own > size {
         return Ok(Value::Bool(false));
     }
@@ -256,6 +285,7 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let result = match name {
         "intersection" => Some(new_set(vm, Vec::new())),
         "union" | "difference" | "symmetricDifference" => {
+            fuel::native(vm);
             let vals = live_values(vm, target);
             Some(new_set(vm, vals))
         }
@@ -269,6 +299,7 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         } else {
             target
         };
+        fuel::native(vm);
         let mut i = 0;
         loop {
             let entry = {
@@ -280,19 +311,21 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
             };
             i += 1;
             let Some((item, _)) = entry else { continue };
-            let r = vm.call(&has, other, &[item])?;
+            let r = vm.call_counted(&has, other, &[item])?;
             let found = vm.truthy(&r);
             match (name, result) {
                 ("intersection", Some(res)) => {
                     if found {
                         let key = vm.map_key(&item);
                         table(vm, res).set(key, item, Value::Undef);
+                        fuel::native(vm);
                     }
                 }
                 ("difference", Some(res)) => {
                     if found {
                         let key = vm.map_key(&item);
                         table(vm, res).delete(key);
+                        fuel::native(vm);
                     }
                 }
                 _ => {
@@ -301,18 +334,21 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
                     }
                 }
             }
+            fuel::step(vm);
         }
         return Ok(match result {
             Some(r) => Value::Obj(r),
             None => Value::Bool(true),
         });
     }
-    let iterator = vm.call(&keys, other, &[])?;
+    let iterator = vm.call_counted(&keys, other, &[])?;
+    fuel::native(vm);
     let Value::Obj(iid) = iterator else {
         return Err(vm.type_error(&format!(
             "Set.{name} expects 'keys' to return an iterator object."
         )));
     };
+    fuel::native(vm);
     // An array from `keys()` is read like its values iterator.
     let array = matches!(vm.heap[iid as usize].kind, Kind::Array(_));
     let iterator = if array {
@@ -343,15 +379,21 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         let item = normalize(item);
         let key = vm.map_key(&item);
         let found = table(vm, target).has(key);
+        fuel::native(vm);
         match (name, result) {
-            ("union", Some(res)) => table(vm, res).set(key, item, Value::Undef),
+            ("union", Some(res)) => {
+                table(vm, res).set(key, item, Value::Undef);
+                fuel::native(vm);
+            }
             ("intersection", Some(res)) => {
                 if found {
                     table(vm, res).set(key, item, Value::Undef);
+                    fuel::native(vm);
                 }
             }
             ("difference", Some(res)) => {
                 table(vm, res).delete(key);
+                fuel::native(vm);
             }
             ("symmetricDifference", Some(res)) => {
                 if found {
@@ -359,6 +401,7 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
                 } else {
                     table(vm, res).set(key, item, Value::Undef);
                 }
+                fuel::native(vm);
             }
             _ => {
                 if found == (name == "isDisjointFrom") {
@@ -367,6 +410,7 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
                 }
             }
         }
+        fuel::step(vm);
     }
     Ok(match result {
         Some(r) => Value::Obj(r),
@@ -411,10 +455,15 @@ fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], name: &str, pairs: bool) 
     if src.is_nullish() {
         return Ok(Value::Obj(id));
     }
+    // The reference's `fillCollection`: `$IsObject` for a pair, then `$Table("add")`, for each item.
+    fuel::method(vm);
+    let open = vm.open_fuel(&src, crate::bytecode::ITER_FOR_OF);
     let it = vm.get_iterator(&src)?;
+    vm.fuel(open);
     while let Some(item) = vm.iter_step(&it)? {
         let r = (|| -> Result<(), Value> {
             if pairs {
+                fuel::native(vm);
                 if !matches!(item, Value::Obj(_)) {
                     return Err(vm.type_error(&format!(
                         "new {name}(...) expects [key, value] pairs as entry objects."
@@ -430,12 +479,16 @@ fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], name: &str, pairs: bool) 
                 let key = vm.map_key(&item);
                 table(vm, id).set(key, item, Value::Undef);
             }
+            fuel::native(vm);
             Ok(())
         })();
         if let Err(e) = r {
+            let close = vm.close_fuel(&it);
             let _ = vm.iter_close(&it);
+            vm.fuel(close);
             return Err(e);
         }
+        fuel::step(vm);
     }
     Ok(Value::Obj(id))
 }

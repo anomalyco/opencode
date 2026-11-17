@@ -1,6 +1,6 @@
 //! Array and Array.prototype.
 
-use super::{arg, to_index};
+use super::{arg, fuel, to_index};
 use crate::object::*;
 use crate::ops::{MAX_ARRAY_LEN, without_holes};
 use crate::strings::StrId;
@@ -243,29 +243,21 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     };
     let this_arg = arg(args, 2);
     if vm.is_iterable(&src) {
-        let Some(f) = mapper else {
-            let list = vm.iterate_to_vec(&src)?;
-            return Ok(vm.new_array(list));
-        };
-        // Each value is mapped as it is read, and a mapper that throws closes the iterator.
-        let it = vm.get_iterator(&src)?;
+        // The reference's `arrayFromIterable`: each value is mapped as it is read, and a mapper that throws closes
+        // the iterator.
+        fuel::handoff(vm);
         let mut out = Vec::new();
-        while let Some(x) = vm.iter_step(&it)? {
-            let mapped = if out.len() >= MAX_ARRAY_LEN {
-                Err(vm.range_error("Invalid array length."))
-            } else {
-                vm.call(&f, this_arg, &[x, Value::Num(out.len() as f64)])
-            };
-            match mapped {
-                Ok(v) => out.push(v),
-                Err(e) => {
-                    if vm.fatal.is_none() {
-                        let _ = vm.iter_close(&it);
-                    }
-                    return Err(e);
-                }
+        fuel::for_of(vm, &src, |vm, x| {
+            if out.len() >= MAX_ARRAY_LEN {
+                return Err(vm.range_error("Invalid array length."));
             }
-        }
+            out.push(match mapper {
+                Some(f) => vm.call_counted(&f, this_arg, &[x, Value::Num(out.len() as f64)])?,
+                None => x,
+            });
+            Ok(true)
+        })?;
+        vm.bytecode_builtin();
         return Ok(vm.new_array(out));
     }
     let id = match src {
@@ -290,6 +282,10 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         .iter()
         .any(|p| vm.atoms.index(p.key).is_some());
     let mut out = Vec::with_capacity(n);
+    // With a mapper, the reference's `arrayFromLike`.
+    if mapper.is_some() {
+        fuel::handoff(vm);
+    }
     for i in 0..n {
         let v = if has_indexes {
             vm.get_elem(&src, &Value::Num(i as f64))?
@@ -297,9 +293,16 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
             Value::Undef
         };
         out.push(match mapper {
-            Some(f) => vm.call(&f, this_arg, &[v, Value::Num(i as f64)])?,
+            Some(f) => {
+                let v = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64)])?;
+                fuel::step(vm);
+                v
+            }
             None => v,
         });
+    }
+    if mapper.is_some() {
+        vm.bytecode_builtin();
     }
     Ok(vm.new_array(out))
 }
@@ -513,7 +516,9 @@ fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let id = dense_id(vm, &this)?;
+    fuel::native(vm);
     let key = vm.atoms.intern_static("toLocaleString");
     let mut out = String::new();
     let mut i = 0;
@@ -524,15 +529,18 @@ fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
         let item = read(vm, id, i);
         if !item.is_nullish() {
             let f = vm.get(&item, key)?;
-            let r = vm.call(&f, item, &[])?;
+            let r = vm.call_counted(&f, item, &[])?;
             let s = vm.string_of(&r)?;
+            fuel::native(vm);
             out.push_str(vm.text(s));
             if out.len() > crate::ops::MAX_STRING_LEN {
                 return Err(vm.range_error("Invalid string length"));
             }
         }
         i += 1;
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(vm.string_val(out))
 }
 
@@ -660,8 +668,18 @@ fn includes_sparse(vm: &Vm, id: Id, x: &Value, from: usize, n: usize) -> bool {
     matches!(x, Value::Undef) && held < n.saturating_sub(from)
 }
 
+/// The back-edges the reference's loop spends on the holes from `walked` up to `to`, which a sparse array's visit
+/// skips here.
+fn holes(vm: &mut Vm, walked: &mut usize, to: usize) {
+    if to > *walked {
+        vm.fuel_steps(to - *walked);
+        *walked = to;
+    }
+}
+
 /// Calls `f(value, index, array)` for each index below the starting length while `visit` returns `None`, reading
-/// each element live, holes included; returns what stopped it. The find methods visit this way.
+/// each element live, holes included; returns what stopped it. The find methods visit this way. Spends the fuel
+/// of the reference's `findItem` (see `fuel.rs`).
 fn each<T>(
     vm: &mut Vm,
     this: &Value,
@@ -670,54 +688,84 @@ fn each<T>(
     reverse: bool,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
+    fuel::method(vm);
     let id = arr_id(vm, this)?;
+    fuel::receiver_then_loop(vm);
     let f = callback(vm, args, name)?;
+    fuel::native(vm);
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     for k in 0..n {
         let i = if reverse { n - 1 - k } else { k };
         let v = read(vm, id, i);
-        let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
+        let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
         if let Some(t) = visit(vm, i, v, r) {
+            vm.bytecode_builtin();
             return Ok(Some(t));
         }
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(None)
 }
 
-/// Like `each`, but skips the indexes not in the array when they come up, as the other callback methods do.
+/// Like `each`, but skips the indexes not in the array when they come up, as the other callback methods do, with
+/// the fuel of the reference's `forEachItem`, `mapItems`, `filterItems` and `testItems`.
 fn each_present<T>(
     vm: &mut Vm,
     this: &Value,
     args: &[Value],
     name: &str,
+    visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
+) -> Result<Option<T>, Value> {
+    fuel::method(vm);
+    let id = arr_id(vm, this)?;
+    each_present_in(vm, id, this, args, name, visit)
+}
+
+/// `each_present` once the receiver is known to be the array `id`.
+fn each_present_in<T>(
+    vm: &mut Vm,
+    id: Id,
+    this: &Value,
+    args: &[Value],
+    name: &str,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
-    let id = arr_id(vm, this)?;
+    fuel::receiver_then_loop(vm);
     let f = callback(vm, args, name)?;
+    fuel::native(vm);
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     if let Some(order) = visit_order(vm, id, n) {
+        let mut walked = 0;
         for i in order {
-            let Some(v) = present(vm, id, i) else {
-                continue;
-            };
-            let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
-            if let Some(t) = visit(vm, i, v, r) {
-                return Ok(Some(t));
+            holes(vm, &mut walked, i);
+            if let Some(v) = present(vm, id, i) {
+                let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
+                if let Some(t) = visit(vm, i, v, r) {
+                    vm.bytecode_builtin();
+                    return Ok(Some(t));
+                }
             }
+            fuel::step(vm);
+            walked = i + 1;
         }
+        holes(vm, &mut walked, n);
+        vm.bytecode_builtin();
         return Ok(None);
     }
     for i in 0..n {
-        let Some(v) = present(vm, id, i) else {
-            continue;
-        };
-        let r = vm.call(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
-        if let Some(t) = visit(vm, i, v, r) {
-            return Ok(Some(t));
+        if let Some(v) = present(vm, id, i) {
+            let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
+            if let Some(t) = visit(vm, i, v, r) {
+                vm.bytecode_builtin();
+                return Ok(Some(t));
+            }
         }
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(None)
 }
 
@@ -791,13 +839,14 @@ fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let id = arr_id(vm, &this)?;
     if len(vm, id) > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
     }
     // Skipped indexes stay holes.
     let mut out = vec![Value::Uninit; len(vm, id)];
-    each_present(vm, &this, args, "Array.map", |_, i, _, r| {
+    each_present_in(vm, id, &this, args, "Array.map", |_, i, _, r| {
         out[i] = r;
         None::<()>
     })?;
@@ -805,7 +854,9 @@ fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
+    fuel::method(vm);
     let id = arr_id(vm, &this)?;
+    fuel::receiver_then_loop(vm);
     let f = callback(
         vm,
         args,
@@ -815,9 +866,10 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
             "Array.reduce"
         },
     )?;
-    let n = len(vm, id);
-    let order = visit_order(vm, id, n);
-    let n = order.as_ref().map_or(n, Vec::len);
+    fuel::native(vm);
+    let full = len(vm, id);
+    let order = visit_order(vm, id, full);
+    let n = order.as_ref().map_or(full, Vec::len);
     let index = |k: usize| {
         let k = if reverse { n - 1 - k } else { k };
         match &order {
@@ -825,30 +877,44 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
             Some(o) => o[k],
         }
     };
+    // The reference's loops walk every index, holes a sparse array skips here included: `walked` counts the
+    // positions its loops have passed, from the end for `reduceRight`.
+    let at = |i: usize| if reverse { full - 1 - i } else { i };
+    let mut walked = 0;
     let mut k = 0;
     let mut acc = if args.len() >= 2 {
         args[1]
     } else {
         loop {
             if k >= n {
+                holes(vm, &mut walked, full);
                 let label = if reverse { "reduceRight" } else { "reduce" };
                 return Err(vm.type_error(&format!(
                     "Array.{label} of an empty array with no initial value."
                 )));
             }
             k += 1;
-            if let Some(v) = present(vm, id, index(k - 1)) {
+            let i = index(k - 1);
+            holes(vm, &mut walked, at(i));
+            walked = at(i) + 1;
+            if let Some(v) = present(vm, id, i) {
                 break v;
             }
+            fuel::step(vm);
         }
     };
     while k < n {
         let i = index(k);
         k += 1;
+        holes(vm, &mut walked, at(i));
         if let Some(v) = present(vm, id, i) {
-            acc = vm.call(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
+            acc = vm.call_counted(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
         }
+        fuel::step(vm);
+        walked = at(i) + 1;
     }
+    holes(vm, &mut walked, full);
+    vm.bytecode_builtin();
     Ok(acc)
 }
 
@@ -1021,25 +1087,49 @@ fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    // A returned array is read like the callback methods read theirs: live, skipping indexes not in it.
+    // A returned array is read like the callback methods read theirs: live, skipping indexes not in it. The fuel is
+    // the reference's `Array$prototype$flatMap`, which runs its loops itself.
+    fuel::method(vm);
+    let id = arr_id(vm, &this)?;
+    fuel::native(vm);
+    let f = callback(vm, args, "Array.flatMap")?;
+    fuel::native(vm);
+    let this_arg = arg(args, 1);
     let mut out = Vec::new();
-    each_present(vm, &this, args, "Array.flatMap", |vm, _, _, r| {
-        match r {
-            Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
-                let n = len(vm, inner);
-                let order = visit_order(vm, inner, n);
-                let mut k = 0;
-                while let Some(at) = visit_at(&order, len(vm, inner).min(n), k) {
-                    k += 1;
-                    if let Some(v) = present(vm, inner, at) {
-                        out.push(v);
+    let n = len(vm, id);
+    let order = visit_order(vm, id, n);
+    let mut walked = 0;
+    let mut k = 0;
+    while let Some(i) = visit_at(&order, n, k) {
+        k += 1;
+        holes(vm, &mut walked, i);
+        if let Some(v) = present(vm, id, i) {
+            match vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), this])? {
+                Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
+                    let m = len(vm, inner);
+                    let inner_order = visit_order(vm, inner, m);
+                    let mut inner_walked = 0;
+                    let mut j = 0;
+                    while let Some(at) = visit_at(&inner_order, len(vm, inner).min(m), j) {
+                        j += 1;
+                        holes(vm, &mut inner_walked, at);
+                        if let Some(v) = present(vm, inner, at) {
+                            out.push(v);
+                        }
+                        fuel::step(vm);
+                        inner_walked = at + 1;
                     }
+                    let end = len(vm, inner).min(m);
+                    holes(vm, &mut inner_walked, end);
                 }
+                r => out.push(r),
             }
-            r => out.push(r),
         }
-        None::<()>
-    })?;
+        fuel::step(vm);
+        walked = i + 1;
+    }
+    holes(vm, &mut walked, n);
+    vm.bytecode_builtin();
     Ok(vm.new_array(out))
 }
 

@@ -500,7 +500,16 @@ fn function_receiver(vm: &mut Vm, this: &Value, method: &str) -> Result<(), Valu
 fn function_call(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     function_receiver(vm, &this, "call")?;
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
-    vm.call(&this, arg(args, 0), rest)
+    invoke(vm, this, arg(args, 0), rest)
+}
+
+/// Calls `f` as the reference's `call` and `apply` do: they cost a native call before they hand on to `f`, which
+/// costs what a call of it from bytecode costs (see `fuel.rs`).
+fn invoke(vm: &mut Vm, f: Value, this: Value, args: &[Value]) -> Res {
+    super::fuel::native(vm);
+    let r = vm.call_counted(&f, this, args)?;
+    vm.bytecode_builtin();
+    Ok(r)
 }
 
 fn function_apply(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -510,7 +519,7 @@ fn function_apply(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         v @ Value::Obj(_) => array_like(vm, &v)?,
         _ => return Err(vm.type_error("CreateListFromArrayLike called on non-object")),
     };
-    vm.call(&this, arg(args, 0), &list)
+    invoke(vm, this, arg(args, 0), &list)
 }
 
 pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {

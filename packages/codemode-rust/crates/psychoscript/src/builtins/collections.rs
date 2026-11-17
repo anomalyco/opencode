@@ -1,6 +1,6 @@
 //! Map, Set, Promise, generators and built-in iterators.
 
-use super::arg;
+use super::{arg, fuel};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Reaction, Res, Vm};
@@ -116,7 +116,10 @@ fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));
     let src = arg(args, 0);
     if !src.is_nullish() {
-        vm.for_each_value(&src, |vm, entry| {
+        // The reference's `fillCollection`: `$IsObject`, then `$Table("add")`, for each entry.
+        fuel::method(vm);
+        fuel::for_of(vm, &src, |vm, entry| {
+            fuel::native(vm);
             if !matches!(entry, Value::Obj(_)) {
                 return Err(
                     vm.type_error("new Map(...) expects [key, value] pairs as entry objects.")
@@ -126,7 +129,8 @@ fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
             let v = vm.get_elem(&entry, &Value::Num(1.0))?;
             let key = vm.map_key(&k);
             table(vm, id).set(key, k, v);
-            Ok(())
+            fuel::native(vm);
+            Ok(true)
         })?;
     }
     Ok(Value::Obj(id))
@@ -140,10 +144,14 @@ fn set_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Set(Box::default())));
     let src = arg(args, 0);
     if !src.is_nullish() {
-        for v in vm.iterate_to_vec(&src)? {
+        // The reference's `fillCollection`: `$Table("add")` for each value.
+        fuel::method(vm);
+        fuel::for_of(vm, &src, |vm, v| {
             let key = vm.map_key(&v);
             table(vm, id).set(key, v, Value::Undef);
-        }
+            fuel::native(vm);
+            Ok(true)
+        })?;
     }
     Ok(Value::Obj(id))
 }
@@ -187,9 +195,14 @@ fn map_clear<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) 
 }
 
 fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    // The reference's `collectionForEach`, over `$Table("entries")`.
+    fuel::method(vm);
     let id = map_of::<SET>(vm, &this, "forEach")?;
+    fuel::receiver_then_loop(vm);
     let label = if SET { "Set.forEach" } else { "Map.forEach" };
     let f = super::require_callback(vm, &arg(args, 0), label)?;
+    fuel::native(vm);
+    fuel::native(vm);
     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
     let this_arg = arg(args, 1);
     let mut i = 0;
@@ -204,9 +217,11 @@ fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id
         i += 1;
         if let Some((k, v)) = entry {
             let v = if is_set { k } else { v };
-            vm.call(&f, this_arg, &[v, k, this])?;
+            vm.call_counted(&f, this_arg, &[v, k, this])?;
+            fuel::step(vm);
         }
     }
+    vm.bytecode_builtin();
     Ok(Value::Undef)
 }
 

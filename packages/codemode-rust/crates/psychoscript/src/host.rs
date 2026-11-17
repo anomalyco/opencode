@@ -211,6 +211,8 @@ pub(crate) struct Meter {
     pub start: i32,
     pub handover: i32,
     pub fuel: i32,
+    /// Set by a built-in the reference writes in bytecode as it returns: see `Vm::bytecode_builtin`.
+    pub bytecode: bool,
 }
 
 impl<'rt> RunHost<'rt> {
@@ -245,6 +247,7 @@ impl<'rt> RunHost<'rt> {
                 start: crate::vm::HANDOVER_FUEL,
                 handover: crate::vm::HANDOVER_FUEL,
                 fuel: crate::vm::FUEL,
+                bytecode: false,
             },
         }
     }

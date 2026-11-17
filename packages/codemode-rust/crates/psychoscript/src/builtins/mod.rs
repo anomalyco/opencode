@@ -6,6 +6,7 @@ pub mod bytes;
 mod collections;
 pub mod date;
 pub mod exotic;
+mod fuel;
 pub mod iterator;
 mod numfmt;
 mod object;

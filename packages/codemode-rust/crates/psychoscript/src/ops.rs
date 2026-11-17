@@ -1274,25 +1274,6 @@ impl<'rt> Vm<'rt> {
         Ok(out)
     }
 
-    /// Runs `f` on each value of `v` as iteration yields it; when `f` fails, the iterator is closed first, as a
-    /// `for...of` loop closes it.
-    pub fn for_each_value(
-        &mut self,
-        v: &Value,
-        mut f: impl FnMut(&mut Vm<'rt>, Value) -> Result<(), Value>,
-    ) -> Result<(), Value> {
-        let it = self.get_iterator(v)?;
-        while let Some(x) = self.iter_step(&it)? {
-            if let Err(e) = f(self, x) {
-                if self.fatal.is_none() {
-                    let _ = self.iter_close(&it);
-                }
-                return Err(e);
-            }
-        }
-        Ok(())
-    }
-
     /// Calls an iterator method that is present, which must be a function returning an object with a `next`
     /// method.
     fn open_with(&mut self, f: &Value, v: &Value) -> Res {

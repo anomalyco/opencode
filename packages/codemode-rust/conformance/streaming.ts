@@ -315,6 +315,59 @@ programs.push(
   busy("", "for (let j = 0; j < 3; j++) { const q = r.body.cancel(); for (let i = 0; i < 9000; i++) { if (flip < 0 && r.bodyUsed) flip = j * 100000 + i } await q.catch(() => 0) }", "Promise.resolve()", "r.bodyUsed"),
 )
 
+// Busy loops over the built-ins the reference writes in its bytecode prelude, which spend that bytecode's fuel.
+// `see(x)` counts its calls and records the count at the first that sees the body locked. `a` has 30,000 items with a
+// hole at every third index, `d` its 20,000 items without holes. `during` reads the body while the built-in runs;
+// `after` runs the built-in first, so the loop after it shows the fuel it left.
+const base = `const r = await fetch(${JSON.stringify(text)}); let flip = -1; let k = 0
+   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }
+   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true)`
+const during = (setup: string, loop: string) =>
+  `${base}; ${setup}
+   const p = r.text(); ${loop}
+   await p.catch(() => 0); return flip`
+const after = (setup: string, work: string) =>
+  `${base}; ${setup}
+   ${work}; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)
+   await p.catch(() => 0); return flip`
+const range = (from: number, to: number) => `Array.from({ length: ${to - from} }, (_, i) => i + ${from})`
+programs.push(
+  during("", "a.forEach(see)"),
+  during("", "a.map(see)"),
+  during("", "a.filter(see)"),
+  during("", "a.some((x) => !see(x))"),
+  during("", "a.every(see)"),
+  during("", "a.find((x) => !see(1))"),
+  during("", "a.findIndex((x) => !see(1))"),
+  during("", "a.findLast((x) => !see(1))"),
+  during("", "a.findLastIndex((x) => !see(1))"),
+  during("", "a.reduce((s, x) => see(s), 0)"),
+  during("", "a.reduce((s, x) => see(s))"),
+  during("", "a.reduceRight((s, x) => see(s))"),
+  during("", "a.flatMap((x) => x % 2 ? [see(x), , x] : see(x))"),
+  during("const b = a.slice(0, 100)", "for (let j = 0; j < 3000; j++) b.forEach(see)"),
+  during("const b = [1, , 3]", "for (let j = 0; j < 3000; j++) { b.map(see); b.some(see); b.reduce(see) }"),
+  during("const f = see.bind(null)", "a.filter(f)"),
+  during("", "a.forEach((x) => [x].forEach(see))"),
+  during("", "Array.prototype.forEach.call(a, see)"),
+  during("const b = a.slice(0, 50)", "for (let j = 0; j < 3000; j++) { b.map(String); see(j) }"),
+  after("const b = a.slice(0, 2000)", "b.toLocaleString(); [[], [1]].forEach((c) => c.reduce(see))"),
+  after("const pairs = d.slice(0, 1000).map((x) => [x, x])", "new Map(pairs)"),
+  after("", "new Set(a.slice(0, 3000))"),
+  after("const os = d.slice(0, 500).map((x) => ({ x }))", "new WeakSet(os); new WeakMap(os.map((o) => [o, 1]))"),
+  during("const m = new Map(d.slice(0, 9000).map((x) => [x, x]))", "m.forEach(see)"),
+  during("const s = new Set(a)", "s.forEach(see)"),
+  during("", "Object.groupBy(a, (x) => see(x) % 3)"),
+  during("", "Map.groupBy(a, (x) => see(x) % 3)"),
+  during("const m = new Map()", "for (let i = 0; i < 30000; i++) { m.getOrInsertComputed(i % 100, see); m.getOrInsert(i, 1) }"),
+  ...["union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf", "isDisjointFrom"].flatMap((name) => [
+    after(`const s1 = new Set(${range(0, 1000)}); const s2 = new Set(${range(500, 1500)}); const s3 = new Set(${range(0, 300)})`,
+      `s1.${name}(s2); s3.${name}(s1); s1.${name}(s3)`),
+    during(`const like = { size: 3, has: (x) => see(x) % 7 === 0, keys: () => [1, 2, 3].values() }; const s1 = new Set(${range(0, 2)})`,
+      `for (let j = 0; j < 3000; j++) { s1.${name}(like); see(j) }`),
+  ]),
+)
+
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.
 const suspensions: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)}); await tools.wait({}); return [r.status, r.bodyUsed]`,

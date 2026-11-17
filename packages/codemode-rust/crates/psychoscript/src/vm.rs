@@ -552,9 +552,77 @@ impl<'rt> Vm<'rt> {
         self.host.meter.start = b;
     }
 
+    /// A native call from bytecode costs fifty, unless the built-in is one the reference writes in its bytecode
+    /// prelude, which spent that bytecode's fuel itself (see `builtins/fuel.rs`).
+    #[inline]
+    fn native_spent(&mut self) {
+        if !std::mem::take(&mut self.host.meter.bytecode) {
+            self.spend(NATIVE_FUEL);
+        }
+    }
+
+    /// Fuel a built-in spends where the reference's bytecode for it would: see `builtins/fuel.rs`.
+    #[inline]
+    pub(crate) fn fuel(&mut self, n: i32) {
+        self.spend(n);
+    }
+
+    /// `n` back-edges at once, as one at a time would spend them, where no program code runs between them.
+    pub(crate) fn fuel_steps(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        self.settle_budget();
+        let left = self.host.meter.handover as u64;
+        let n = n as u64;
+        if n < left {
+            self.host.meter.handover = (left - n) as i32;
+        } else {
+            let past = ((n - left) % HANDOVER_FUEL as u64) as i32;
+            self.host.meter.handover = HANDOVER_FUEL - past;
+            self.host.next_epoch();
+        }
+        self.rebudget();
+    }
+
+    /// Ends a built-in the reference writes in bytecode: its call costs no native call's fifty.
+    #[inline]
+    pub(crate) fn bytecode_builtin(&mut self) {
+        self.host.meter.bytecode = true;
+    }
+
+    /// Calls `f` as the reference's bytecode calls a callback: a native costs fifty, unless it is itself written in
+    /// bytecode there.
+    pub(crate) fn call_counted(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
+        if let Value::Obj(id) = *f {
+            match &self.heap[id as usize].kind {
+                Kind::Native { f, .. } => {
+                    let f = *f;
+                    if self.native_depth >= MAX_NATIVE_DEPTH {
+                        return Err(self.range_error("Maximum call stack size exceeded"));
+                    }
+                    self.native_depth += 1;
+                    let r = f(self, this, args, id);
+                    self.native_depth -= 1;
+                    let r = r?;
+                    self.native_spent();
+                    return Ok(r);
+                }
+                Kind::Bound(b) => {
+                    let (target, bthis, bargs) = (b.0, b.1, b.2.clone());
+                    let mut all = bargs;
+                    all.extend_from_slice(args);
+                    return self.call_counted(&target, bthis, &all);
+                }
+                _ => {}
+            }
+        }
+        self.call(f, this, args)
+    }
+
     /// What opening `v` costs the reference: nothing for a value it walks itself, else the call of its
     /// `Symbol.iterator` method. `yield*` always calls it.
-    fn open_fuel(&mut self, v: &Value, ctx: u8) -> i32 {
+    pub(crate) fn open_fuel(&mut self, v: &Value, ctx: u8) -> i32 {
         let Value::Obj(id) = v else { return 0 };
         let walked = matches!(
             self.heap[*id as usize].kind,
@@ -584,7 +652,7 @@ impl<'rt> Vm<'rt> {
     }
 
     /// What closing `it` early costs the reference: the call of a generator's or custom iterator's native `return`.
-    fn close_fuel(&mut self, it: &Value) -> i32 {
+    pub(crate) fn close_fuel(&mut self, it: &Value) -> i32 {
         let Value::Obj(id) = it else { return 0 };
         match self.heap[*id as usize].kind {
             Kind::Generator(_) => NATIVE_FUEL,
@@ -747,6 +815,8 @@ impl<'rt> Vm<'rt> {
                 self.native_depth += 1;
                 let r = f(self, this, args, id);
                 self.native_depth -= 1;
+                // Only a call from bytecode stands for the reference's own call of the built-in.
+                self.host.meter.bytecode = false;
                 r
             }
             Kind::Bound(b) => {
@@ -883,7 +953,7 @@ impl<'rt> Vm<'rt> {
                 args.clear();
                 self.arg_pool.push(args);
                 self.push(r?);
-                self.spend(NATIVE_FUEL);
+                self.native_spent();
                 Ok(false)
             }
             Kind::Bound(b) => {
@@ -941,8 +1011,9 @@ impl<'rt> Vm<'rt> {
             && let Kind::Native { f, ctor: true, .. } = &self.heap[id as usize].kind
         {
             let f = *f;
-            let r = f(self, Value::Uninit, &args, id)?;
-            self.push(r);
+            let r = f(self, Value::Uninit, &args, id);
+            self.host.meter.bytecode = false;
+            self.push(r?);
             return Ok(());
         }
         Err(self.not_a_constructor(callee))
