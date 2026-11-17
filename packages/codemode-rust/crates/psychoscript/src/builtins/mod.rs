@@ -81,6 +81,7 @@ const LAZY: &[LazyGroup] = &[
 pub const LAZY_REGEXP: u8 = 1;
 pub const LAZY_DATE: u8 = 2;
 pub const LAZY_BYTES: u8 = 4;
+pub const LAZY_WEB: u8 = 32;
 
 fn setup_bytes(vm: &mut Vm) {
     bytes::setup(vm);

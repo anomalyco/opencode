@@ -147,7 +147,9 @@ fn parse_url(vm: &mut Vm, args: &[Value]) -> Result<Result<url::Url, ()>, Value>
     })
 }
 
-fn new_url(vm: &mut Vm, url: url::Url) -> Value {
+/// A URL value with its linked `searchParams`, for code that builds one from a parsed URL.
+pub fn new_url(vm: &mut Vm, url: url::Url) -> Value {
+    super::ensure(vm, super::LAZY_WEB);
     let pp = vm.realm.std.params;
     let list = query_pairs(&url);
     let params = vm.alloc(Obj::new(
@@ -726,11 +728,17 @@ fn headers_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         let v = header_value(vm, &k, &v)?;
         list.push((n, v));
     }
+    Ok(new_headers(vm, list))
+}
+
+/// A Headers value over lowercased names and normalized values, as `new Headers(...)` leaves them.
+pub fn new_headers(vm: &mut Vm, list: Vec<(String, String)>) -> Value {
+    super::ensure(vm, super::LAZY_WEB);
     let hp = vm.realm.std.headers;
-    Ok(Value::Obj(vm.alloc(Obj::new(
+    Value::Obj(vm.alloc(Obj::new(
         Some(hp),
         Kind::Headers(Box::new(HeaderList { list })),
-    ))))
+    )))
 }
 
 fn this_headers(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
