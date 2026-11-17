@@ -1240,8 +1240,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Преместване надолу",
   "settings.experimental.row.newIcons.title": "Нови икони",
   "settings.experimental.row.newIcons.description": "Предварителен преглед на обновения набор икони",
-  "settings.experimental.row.foldUserMessages.title": "Сгъване на дълги съобщения",
-  "settings.experimental.row.foldUserMessages.description": "Сгъване на съобщенията ви над 12 реда зад бутон „Още“",
   "settings.experimental.row.newTimeline.title": "Нова хронология",
   "settings.experimental.row.newTimeline.description":
     "Преработена хронология на сесията, която групира действията на агента, с един ред за състояние под хода",
@@ -1374,6 +1372,8 @@ export const dict = {
     "Показване на субагентите отделно. Групиране на другата активност със свити подробности.",
   "settings.timeline.description.quiet":
     "Показване на субагентите отделно и групиране на редакциите. Скриване на другата активност.",
+  "settings.timeline.row.foldUserMessages.title": "Сгъване на дълги съобщения",
+  "settings.timeline.row.foldUserMessages.description": "Сгъване на съобщенията ви над 12 реда зад бутон „Още“",
   "settings.timeline.row.turnDiffs.title": "Променени файлове",
   "settings.timeline.row.turnDiffs.description": "Списък с файловете, променени от всеки ход, след като приключи",
   "settings.timeline.category.commentary": "Коментари",

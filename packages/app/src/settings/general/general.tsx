@@ -348,6 +348,20 @@ export const SettingsGeneral: Component = () => {
             <TimelineWidthSetting />
             <BackgroundActivitySetting />
             <SettingsRow
+              title={language.t("settings.timeline.row.foldUserMessages.title")}
+              description={language.t("settings.timeline.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.timeline.row.foldUserMessages.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.timeline.row.turnDiffs.title")}
               description={language.t("settings.timeline.row.turnDiffs.description")}
             >

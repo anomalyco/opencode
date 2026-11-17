@@ -1229,9 +1229,6 @@ export const dict = {
   "sidebar.recent.moveDown": "तल सार्नुहोस्",
   "settings.experimental.row.newIcons.title": "नयाँ आइकनहरू",
   "settings.experimental.row.newIcons.description": "अद्यावधिक गरिएको आइकन सेटको पूर्वावलोकन गर्नुहोस्",
-  "settings.experimental.row.foldUserMessages.title": "लामा सन्देशहरू खुम्च्याउनुहोस्",
-  "settings.experimental.row.foldUserMessages.description":
-    "१२ लाइनभन्दा लामा तपाईंका सन्देशहरूलाई थप पढ्नुहोस् बटनपछाडि खुम्च्याउनुहोस्",
   "settings.experimental.row.newTimeline.title": "नयाँ समयरेखा",
   "settings.experimental.row.newTimeline.description":
     "एजेन्टले गरेका कामलाई समूहबद्ध गर्ने, पालोको तल एउटा स्थिति लाइनसहितको पुनः डिजाइन गरिएको सत्र समयरेखा",
@@ -1362,6 +1359,9 @@ export const dict = {
     "उप-एजेन्टहरू छुट्टै देखाउनुहोस्। अन्य गतिविधिलाई विवरण खुम्च्याएर समूहबद्ध गर्नुहोस्।",
   "settings.timeline.description.quiet":
     "उप-एजेन्टहरू छुट्टै देखाउनुहोस् र सम्पादनहरू समूहबद्ध गर्नुहोस्। अन्य गतिविधि लुकाउनुहोस्।",
+  "settings.timeline.row.foldUserMessages.title": "लामा सन्देशहरू खुम्च्याउनुहोस्",
+  "settings.timeline.row.foldUserMessages.description":
+    "१२ लाइनभन्दा लामा तपाईंका सन्देशहरूलाई थप पढ्नुहोस् बटनपछाडि खुम्च्याउनुहोस्",
   "settings.timeline.row.turnDiffs.title": "परिवर्तित फाइलहरू",
   "settings.timeline.row.turnDiffs.description":
     "प्रत्येक पालो सकिँदा त्यसले परिवर्तन गरेका फाइलहरू सूचीबद्ध गर्नुहोस्",

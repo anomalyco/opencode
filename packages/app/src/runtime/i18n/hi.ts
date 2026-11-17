@@ -1231,9 +1231,6 @@ export const dict = {
   "sidebar.recent.moveDown": "नीचे ले जाएँ",
   "settings.experimental.row.newIcons.title": "नए आइकन",
   "settings.experimental.row.newIcons.description": "अपडेट किए गए आइकन सेट का पूर्वावलोकन करें",
-  "settings.experimental.row.foldUserMessages.title": "लंबे संदेश समेटें",
-  "settings.experimental.row.foldUserMessages.description":
-    '12 पंक्तियों से लंबे अपने संदेशों को "और पढ़ें" बटन के पीछे समेटें',
   "settings.experimental.row.newTimeline.title": "नई टाइमलाइन",
   "settings.experimental.row.newTimeline.description":
     "नए डिज़ाइन वाली सेशन टाइमलाइन जो एजेंट के कार्यों को समूहित करती है, और टर्न के नीचे एक स्थिति पंक्ति दिखाती है",
@@ -1362,6 +1359,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "चौड़ा",
   "settings.timeline.description.compact": "सबएजेंट अलग दिखाएँ। अन्य गतिविधियों को विवरण संक्षिप्त करके समूहित करें।",
   "settings.timeline.description.quiet": "सबएजेंट अलग दिखाएँ और संपादनों को समूहित करें। अन्य गतिविधियाँ छिपाएँ।",
+  "settings.timeline.row.foldUserMessages.title": "लंबे संदेश समेटें",
+  "settings.timeline.row.foldUserMessages.description":
+    '12 पंक्तियों से लंबे अपने संदेशों को "और पढ़ें" बटन के पीछे समेटें',
   "settings.timeline.row.turnDiffs.title": "परिवर्तित फ़ाइलें",
   "settings.timeline.row.turnDiffs.description": "प्रत्येक टर्न पूरा होने पर उसके द्वारा बदली गई फ़ाइलें सूचीबद्ध करें",
   "settings.timeline.category.commentary": "टिप्पणी",

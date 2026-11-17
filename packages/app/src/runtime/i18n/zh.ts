@@ -1238,8 +1238,6 @@ export const dict = {
   "sidebar.recent.moveDown": "下移",
   "settings.experimental.row.newIcons.title": "新图标",
   "settings.experimental.row.newIcons.description": "预览更新后的图标集",
-  "settings.experimental.row.foldUserMessages.title": "折叠长消息",
-  "settings.experimental.row.foldUserMessages.description": "将你超过 12 行的消息折叠到“展开阅读”按钮后",
   "settings.experimental.row.newTimeline.title": "新版时间线",
   "settings.experimental.row.newTimeline.description":
     "重新设计的会话时间线，将智能体的操作分组显示，并在每轮下方显示一行状态",
@@ -1363,6 +1361,8 @@ export const dict = {
   "settings.timeline.row.width.wide": "宽",
   "settings.timeline.description.compact": "单独显示子智能体。将其他活动分组并折叠详情。",
   "settings.timeline.description.quiet": "单独显示子智能体，并将编辑分组。隐藏其他活动。",
+  "settings.timeline.row.foldUserMessages.title": "折叠长消息",
+  "settings.timeline.row.foldUserMessages.description": "将你超过 12 行的消息折叠到“展开阅读”按钮后",
   "settings.timeline.row.turnDiffs.title": "已更改的文件",
   "settings.timeline.row.turnDiffs.description": "每轮结束时列出该轮更改的文件",
   "settings.timeline.category.commentary": "说明",

@@ -1265,9 +1265,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Nach unten",
   "settings.experimental.row.newIcons.title": "Neue Symbole",
   "settings.experimental.row.newIcons.description": "Vorschau des aktualisierten Symbolsatzes",
-  "settings.experimental.row.foldUserMessages.title": "Lange Nachrichten einklappen",
-  "settings.experimental.row.foldUserMessages.description":
-    "Ihre Nachrichten ab 12 Zeilen hinter einer Schaltfläche „Mehr lesen“ einklappen",
   "settings.experimental.row.newTimeline.title": "Neue Timeline",
   "settings.experimental.row.newTimeline.description":
     "Eine neu gestaltete Sitzungs-Timeline, die die Aktionen des Agenten gruppiert, mit einer Statuszeile unter der Runde",
@@ -1399,6 +1396,9 @@ export const dict = {
     "Unteragenten separat anzeigen. Andere Aktivitäten mit eingeklappten Details gruppieren.",
   "settings.timeline.description.quiet":
     "Unteragenten separat anzeigen und Bearbeitungen gruppieren. Andere Aktivitäten ausblenden.",
+  "settings.timeline.row.foldUserMessages.title": "Lange Nachrichten einklappen",
+  "settings.timeline.row.foldUserMessages.description":
+    "Ihre Nachrichten ab 12 Zeilen hinter einer Schaltfläche „Mehr lesen“ einklappen",
   "settings.timeline.row.turnDiffs.title": "Geänderte Dateien",
   "settings.timeline.row.turnDiffs.description": "Die in einer Runde geänderten Dateien nach deren Abschluss auflisten",
   "settings.timeline.category.commentary": "Kommentare",

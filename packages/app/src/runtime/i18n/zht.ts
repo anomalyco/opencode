@@ -1234,8 +1234,6 @@ export const dict = {
   "sidebar.recent.moveDown": "下移",
   "settings.experimental.row.newIcons.title": "新圖示",
   "settings.experimental.row.newIcons.description": "預覽更新後的圖示集",
-  "settings.experimental.row.foldUserMessages.title": "摺疊長訊息",
-  "settings.experimental.row.foldUserMessages.description": "將超過 12 行的訊息摺疊至「閱讀更多」按鈕後",
   "settings.experimental.row.newTimeline.title": "新時間軸",
   "settings.experimental.row.newTimeline.description":
     "重新設計的工作階段時間軸，會將代理程式的動作分組，並在每一輪下方顯示一行狀態",
@@ -1359,6 +1357,8 @@ export const dict = {
   "settings.timeline.row.width.wide": "寬",
   "settings.timeline.description.compact": "單獨顯示子代理程式。將其他活動分組並摺疊詳細資料。",
   "settings.timeline.description.quiet": "單獨顯示子代理程式並將編輯分組。隱藏其他活動。",
+  "settings.timeline.row.foldUserMessages.title": "摺疊長訊息",
+  "settings.timeline.row.foldUserMessages.description": "將超過 12 行的訊息摺疊至「閱讀更多」按鈕後",
   "settings.timeline.row.turnDiffs.title": "已變更的檔案",
   "settings.timeline.row.turnDiffs.description": "每一輪結束時列出其變更的檔案",
   "settings.timeline.category.commentary": "說明",

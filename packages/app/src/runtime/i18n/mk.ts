@@ -1237,9 +1237,6 @@ export const dict = {
   "sidebar.recent.moveDown": "Помести надолу",
   "settings.experimental.row.newIcons.title": "Нови икони",
   "settings.experimental.row.newIcons.description": "Прегледајте го ажурираниот сет на икони",
-  "settings.experimental.row.foldUserMessages.title": "Собирај долги пораки",
-  "settings.experimental.row.foldUserMessages.description":
-    "Собирај ги вашите пораки подолги од 12 реда зад копчето Прочитај повеќе",
   "settings.experimental.row.newTimeline.title": "Нова временска линија",
   "settings.experimental.row.newTimeline.description":
     "Редизајнирана временска линија на сесијата што групира што направил агентот, со еден статусен ред под одговорот",
@@ -1371,6 +1368,9 @@ export const dict = {
     "Прикажи ги субагентите одделно. Групирај ја другата активност со скриени детали.",
   "settings.timeline.description.quiet":
     "Прикажи ги субагентите одделно и групирај ги уредувањата. Скриј ја другата активност.",
+  "settings.timeline.row.foldUserMessages.title": "Собирај долги пораки",
+  "settings.timeline.row.foldUserMessages.description":
+    "Собирај ги вашите пораки подолги од 12 реда зад копчето Прочитај повеќе",
   "settings.timeline.row.turnDiffs.title": "Променети датотеки",
   "settings.timeline.row.turnDiffs.description": "Наведи ги датотеките што ги променил секој одговор кога ќе заврши",
   "settings.timeline.category.commentary": "Коментари",
