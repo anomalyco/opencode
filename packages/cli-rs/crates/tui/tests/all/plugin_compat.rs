@@ -454,6 +454,92 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (the key hold's bound): a printable key a JS command binds globally, whose handler stalls the JS host for
+// 1.5 s. The keys after it wait no longer than the hold's limit (50 ms): then the bound key goes on as declined, first,
+// and the keys typed after it, in order. While the JS host is still stalled, the next bound key goes on at once, and its
+// command runs late. The late answers put nothing back, and once the JS host answered, a bound key holds again.
+#[test]
+fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let harness = &pipe.harness;
+    harness.tui.keymap.dispatch("v2probe.arm", Some("stall"));
+    pipe.settle();
+    harness.app.type_text("%ab");
+    assert_eq!(harness.text(), "", "the keys after the bound key wait for its command");
+    harness.app.advance(Duration::from_millis(49));
+    assert_eq!(harness.text(), "");
+    harness.app.advance(Duration::from_millis(2));
+    assert_eq!(harness.text(), "%ab", "at the limit the bound key goes on, then the keys after it");
+    harness.app.type_text("%c");
+    harness.app.advance(Duration::from_millis(1));
+    assert_eq!(harness.text(), "%ab%c", "a stalled JS host holds no key");
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "percent": "stall" }), json!({ "percent": "pass" })]);
+    pipe.settle();
+    assert_eq!(harness.text(), "%ab%c", "a late answer put its key back");
+    harness.app.type_text("%x");
+    assert_eq!(harness.text(), "%ab%c", "the JS host answered: a bound key holds again");
+    assert_eq!(logged(&pipe, &log, 3).len(), 3);
+    pipe.settle();
+    assert_eq!(harness.text(), "%ab%c%x");
+}
+
+// Measures how long a key a JS command binds and declines takes to reach the composer: the whole hold, a round trip to
+// the real JS host and the key routed on. Real time only, as the manual clock stands still, so the hold's limit never
+// cuts it short. `KEY_HOLD_PRESSES` sets the count (300).
+#[test]
+#[ignore = "a measurement: run with --ignored --nocapture"]
+fn measure_the_key_hold() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let harness = &pipe.harness;
+    let presses: usize = std::env::var("KEY_HOLD_PRESSES").ok().and_then(|count| count.parse().ok()).unwrap_or(300);
+    let mut took = Vec::with_capacity(presses);
+    for press in 0..presses {
+        let before = harness.text().len();
+        let begun = std::time::Instant::now();
+        harness.app.type_text("%");
+        assert!(harness.app.wait_until(Duration::from_secs(5), || harness.text().len() > before), "press {press} held");
+        took.push(begun.elapsed());
+    }
+    took.sort();
+    let at = |share: f64| took[((took.len() - 1) as f64 * share) as usize];
+    println!(
+        "key hold over {presses} presses: median {:?}, p95 {:?}, p99 {:?}, worst {:?}",
+        at(0.5),
+        at(0.95),
+        at(0.99),
+        took[took.len() - 1]
+    );
+}
+
+// Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
+// as declined, even under a hold limit far longer than the test; its command is not sent again.
+#[test]
+fn a_js_host_that_ends_while_keys_are_held_releases_them() {
+    let Some(mut config) = config() else { return };
+    config.hold = Duration::from_secs(60);
+    let (pipe, log) = probe(config);
+    let harness = &pipe.harness;
+    let pid = pipe.scripts().pid();
+    harness.tui.keymap.dispatch("v2probe.arm", Some("exit"));
+    pipe.settle();
+    harness.app.type_text("%ab");
+    assert_eq!(harness.text(), "", "the keys after the bound key wait for its command");
+    harness.wait("the ended JS host released the keys", || {
+        harness.app.advance(Duration::from_millis(1));
+        harness.text() == "%ab"
+    });
+    // The plugin whose command ended it fails, blamed, as any such does.
+    harness.wait("the end was noticed", || {
+        harness.app.advance(Duration::from_millis(1));
+        pipe.scripts().pid() != pid && matches!(pipe.status(PROBE), Some(Status::Failed(_)))
+    });
+    pipe.settle();
+    assert_eq!(harness.text(), "%ab");
+    assert!(!calls(&log).iter().any(|call| call.get("percent").is_some()), "{:?}", calls(&log));
+}
+
 // Expected (big-boi's catalog recheck): an activation a reload handed the JS host's activation to owns the dialogs of the
 // one before it (FT-4); a plugin disabled and enabled again runs a fresh setup, whose activation owns its own dialogs
 // alone, not those of the activations before it. It took on the reload's chain, and claimed them.

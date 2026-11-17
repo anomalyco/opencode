@@ -28,6 +28,7 @@ export default Plugin.define({
     const [items, setItems] = createSignal<string[]>([])
     const [mode, setMode] = createSignal("ok")
     const [shown, setShown] = createSignal(0)
+    let keyArm = "pass"
     const Commands = () => <text>{`v2probe commands ${context.keymap.commands().length > 0}`}</text>
     log({ setup: true })
     // A command of the base mode, as a layer without `mode` is: it does not run while a dialog has the keyboard.
@@ -43,6 +44,24 @@ export default Plugin.define({
             setItems((list) => [...list, String(input)])
           },
         },
+        // A printable key bound globally, which declines: what `v2probe.arm` set makes its next run stall the JS host
+        // for 1.5 s or end it 300 ms on, while keys are held after it.
+        {
+          id: "v2probe.percent",
+          bind: "%",
+          run: () => {
+            const armed = keyArm
+            keyArm = "pass"
+            if (armed === "stall") for (const until = Date.now() + 1500; Date.now() < until; ) {}
+            if (armed === "exit") {
+              for (const until = Date.now() + 300; Date.now() < until; ) {}
+              process.exit(7)
+            }
+            log({ percent: armed })
+            return false
+          },
+        },
+        { id: "v2probe.arm", run: (input?: string) => void (keyArm = String(input)) },
         { id: "v2probe.throw", run: () => void setMode("throw") },
         { id: "v2probe.loop", run: () => void setMode("loop") },
         { id: "v2probe.select", run: () => void setMode("select") },
