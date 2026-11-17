@@ -73,6 +73,7 @@ interface Registration {
   retired: boolean
   commands: Map<string, Json>
   target?: () => unknown
+  mode?: string
 }
 
 // Whether `node` is `target` or inside it.
@@ -1032,6 +1033,8 @@ export function context(base: Base, carrier: Carrier) {
     if (!command) return false
     const target = live.at(-1)?.target
     if (target && !within(target(), focusedNode)) return false
+    const mode = live.at(-1)?.mode
+    if (mode !== undefined && (read("input-mode", { type: "input-mode" }) ?? "base") !== mode) return false
     const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
     return enabled ? command.run(input) : false
   }
@@ -1177,7 +1180,8 @@ export function context(base: Base, carrier: Carrier) {
     },
     keymap: {
       // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change; a disabled
-      // layer registers nothing; a layer keeps to the base mode unless its `mode` is `global`; a command's own
+      // layer registers nothing; a layer keeps to the base mode unless its `mode` is `global`, or a mode of the plugin's
+      // own, whose commands decline unless it is the input mode; a command's own
       // `enabled` is asked as it runs. A layer a component made ends with it: from then on its commands run nothing,
       // though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline while that
       // node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
@@ -1186,7 +1190,11 @@ export function context(base: Base, carrier: Carrier) {
         let names: string[] = []
         const apply = (layer: Json) => {
           const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
-          const scope = layer?.mode === "global" ? undefined : "base"
+          // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31): its
+          // commands are bound everywhere and decline elsewhere, so the key goes on.
+          const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
+          const scope = layer?.mode === "global" || own ? undefined : "base"
+          registration.mode = own ? layer.mode : undefined
           registration.target = typeof layer?.target === "function" ? layer.target : undefined
           registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : [], scope))
           const next = commands(registration, scope)
