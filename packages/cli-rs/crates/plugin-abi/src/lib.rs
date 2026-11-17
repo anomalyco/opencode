@@ -362,6 +362,12 @@ pub struct PluginApi {
     pub describe: Option<unsafe extern "C" fn(out: *mut Owned) -> i32>,
 }
 
+// Each table is all of 2.0, so a reader takes one whose `size` covers the struct through a reference (the loader, the
+// conformance replay, `HostHandle::core`). An entry a later minor appends fails these: the readers then keep 2.0's size
+// as the least they take, and read the new entry only where `size` covers it.
+const _: () = assert!(size_of::<PluginApi>() == std::mem::offset_of!(PluginApi, describe) + size_of::<usize>());
+const _: () = assert!(size_of::<HostApi>() == std::mem::offset_of!(HostApi, features) + size_of::<Bytes>());
+
 /// What [`PluginApi::describe`] returns.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
