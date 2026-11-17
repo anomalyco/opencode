@@ -168,7 +168,13 @@ export interface Interface extends State.Transformable<Editor> {
    * `name` like any server's. Attaching a name again stacks the new connection on top: it serves the
    * name until it closes, then the most recent remaining connection takes over.
    */
-  readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
+  readonly attach: (
+    name: string,
+    transport: Transport,
+    owner?: Session.ID,
+  ) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
+  /** Only the client's tools owned by this session, never the Location catalog. */
+  readonly sessionTools: (owner: Session.ID) => Effect.Effect<Tool[]>
   readonly tools: () => Effect.Effect<Tool[]>
   /**
    * Waits for servers that are still connecting, each until it settles or until its startup grace
@@ -180,6 +186,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly name: string
     readonly args?: Record<string, unknown>
     readonly sessionID?: Session.ID
+    readonly owner?: Session.ID
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
@@ -279,6 +286,7 @@ export const layer = (options?: Options) =>
 
       const entries = new Map<ServerName, ServerEntry>()
       const attached = new Map<ServerName, AttachedEntry[]>()
+      const owned = new Map<Session.ID, Map<ServerName, AttachedEntry[]>>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -289,9 +297,8 @@ export const layer = (options?: Options) =>
       const transition = <E>(effect: Effect.Effect<void, E>) =>
         Effect.forkIn(effect, root, { startImmediately: true }).pipe(Effect.flatMap(Fiber.join))
       // Attached connections lock separately so a configured server of the same name never contends.
-      const attachedLocks = KeyedMutex.makeUnsafe<ServerName>()
+      const attachedLocks = KeyedMutex.makeUnsafe<string>()
       // Legacy era only: pending URL-mode elicitation forms, settled by notifications/elicitation/complete.
-      const urlElicitations = new Map<string, Form.ID>()
 
       // Experimental MCP Events subscriptions, by server. Each streams while its server is connected; the streams
       // run here, in this Location, not in a pooled connection's scope.
@@ -477,81 +484,85 @@ export const layer = (options?: Options) =>
         )
       })
 
-      const elicitation: McpClient.ElicitationHandler = {
-        create: (input: {
-          readonly server: string
-          readonly params: McpClient.ElicitationParams
-          readonly signal: AbortSignal
-        }) =>
-          Effect.gen(function* () {
-            if (input.params.mode === "url") {
-              const formID = Form.ID.create()
-              // Legacy only: 2026-07-28 has no elicitationId and no completion notification, so the form
-              // settles when the user confirms and the SDK retries the tool call itself.
-              const elicitationID = input.params.elicitationId
-              const key = elicitationID === undefined ? undefined : input.server + "\u0000" + elicitationID
-              if (key) urlElicitations.set(key, formID)
+      const makeElicitation = (sessionID = GLOBAL_ELICITATION_SESSION_ID): McpClient.ElicitationHandler => {
+        const urlElicitations = new Map<string, Form.ID>()
+        return {
+          create: (input: {
+            readonly server: string
+            readonly params: McpClient.ElicitationParams
+            readonly signal: AbortSignal
+          }) =>
+            Effect.gen(function* () {
+              if (input.params.mode === "url") {
+                const formID = Form.ID.create()
+                // Legacy only: 2026-07-28 has no elicitationId and no completion notification, so the form
+                // settles when the user confirms and the SDK retries the tool call itself.
+                const elicitationID = input.params.elicitationId
+                const key = elicitationID === undefined ? undefined : input.server + "\u0000" + elicitationID
+                if (key) urlElicitations.set(key, formID)
+                return yield* forms
+                  .ask({
+                    id: formID,
+                    sessionID,
+                    title: `${input.server} is requesting input`,
+                    metadata: {
+                      kind: "mcp-elicitation",
+                      server: input.server,
+                      ...(elicitationID === undefined ? {} : { elicitationID }),
+                      message: input.params.message,
+                    },
+                    fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
+                  })
+                  .pipe(
+                    Effect.raceFirst(waitForAbort(input.signal)),
+                    Effect.ensuring(Effect.sync(() => key && urlElicitations.delete(key))),
+                    Effect.map(
+                      (state): McpClient.ElicitationResult => ({
+                        action: state.status === "answered" ? "accept" : "cancel",
+                      }),
+                    ),
+                  )
+              }
+              const params = input.params
+              const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+                toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
+              )
+              if (!field) return { action: "accept" as const, content: {} }
               return yield* forms
                 .ask({
-                  id: formID,
-                  sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                  sessionID,
                   title: `${input.server} is requesting input`,
-                  metadata: {
-                    kind: "mcp-elicitation",
-                    server: input.server,
-                    ...(elicitationID === undefined ? {} : { elicitationID }),
-                    message: input.params.message,
-                  },
-                  fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
+                  metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
+                  fields: [field, ...fields],
                 })
                 .pipe(
                   Effect.raceFirst(waitForAbort(input.signal)),
-                  Effect.ensuring(Effect.sync(() => key && urlElicitations.delete(key))),
-                  Effect.map(
-                    (state): McpClient.ElicitationResult => ({
-                      action: state.status === "answered" ? "accept" : "cancel",
-                    }),
-                  ),
-                )
-            }
-            const params = input.params
-            const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
-              toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
-            )
-            if (!field) return { action: "accept" as const, content: {} }
-            return yield* forms
-              .ask({
-                sessionID: GLOBAL_ELICITATION_SESSION_ID,
-                title: `${input.server} is requesting input`,
-                metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
-                fields: [field, ...fields],
-              })
-              .pipe(
-                Effect.raceFirst(waitForAbort(input.signal)),
-                Effect.map((state): McpClient.ElicitationResult => {
-                  if (state.status !== "answered") return { action: "cancel" }
-                  return {
-                    action: "accept",
-                    content: Object.fromEntries(
-                      Object.entries(state.answer).map(
-                        ([key, value]): [string, NonNullable<McpClient.ElicitationResult["content"]>[string]] =>
-                          typeof value === "object" ? [key, Array.from(value)] : [key, value],
+                  Effect.map((state): McpClient.ElicitationResult => {
+                    if (state.status !== "answered") return { action: "cancel" }
+                    return {
+                      action: "accept",
+                      content: Object.fromEntries(
+                        Object.entries(state.answer).map(
+                          ([key, value]): [string, NonNullable<McpClient.ElicitationResult["content"]>[string]] =>
+                            typeof value === "object" ? [key, Array.from(value)] : [key, value],
+                        ),
                       ),
-                    ),
-                  }
-                }),
-              )
-          }).pipe(
-            // A shared connection runs its handlers outside this Location; forms must still belong to it.
-            Effect.provideService(Location.Service, location),
-          ),
-        complete: (input: { readonly server: string; readonly elicitationID: string }) =>
-          Effect.gen(function* () {
-            const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
-            if (!formID) return
-            yield* forms.reply({ id: formID, answer: { [URL_ELICITATION_FIELD_KEY]: true } }).pipe(Effect.ignore)
-          }),
+                    }
+                  }),
+                )
+            }).pipe(
+              // A shared connection runs its handlers outside this Location; forms must still belong to it.
+              Effect.provideService(Location.Service, location),
+            ),
+          complete: (input: { readonly server: string; readonly elicitationID: string }) =>
+            Effect.gen(function* () {
+              const formID = urlElicitations.get(input.server + "\u0000" + input.elicitationID)
+              if (!formID) return
+              yield* forms.reply({ id: formID, answer: { [URL_ELICITATION_FIELD_KEY]: true } }).pipe(Effect.ignore)
+            }),
+        }
       }
+      const elicitation = makeElicitation()
 
       const makeEntry = (name: ServerName, config: Mcp.ServerConfig, started: number): ServerEntry => {
         // Local servers run on this Location's execution plane, so only Locations on the host share them.
@@ -721,18 +732,25 @@ export const layer = (options?: Options) =>
       const toAttachedTools = (server: ServerName, tools: ReadonlyArray<McpClient.Tool>) =>
         tools.map((tool): Tool => ({ ...tool, server }))
 
-      const detach = Effect.fnUntraced(function* (name: ServerName, entry: AttachedEntry) {
-        const stack = attached.get(name) ?? []
+      // Session tools are read at step selection, never registered or announced Location-wide.
+      const changed = (name: ServerName, owner?: Session.ID) =>
+        owner ? Effect.void : bus.publish(McpEvent.ToolsChanged, { server: name })
+
+      const detach = Effect.fnUntraced(function* (name: ServerName, entry: AttachedEntry, owner?: Session.ID) {
+        const group = owner ? owned.get(owner) : attached
+        if (!group) return
+        const stack = group.get(name) ?? []
         if (!stack.includes(entry)) return
         const remaining = stack.filter((item) => item !== entry)
         const next = remaining.at(-1)
         if (!next) {
-          attached.delete(name)
+          group.delete(name)
+          if (owner && !group.size) owned.delete(owner)
           yield* Scope.close(entry.scope, Exit.void)
-          return yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+          return yield* changed(name, owner)
         }
         // Unlocked reads must never pick a closing connection, so update the stack before closing it.
-        attached.set(name, remaining)
+        group.set(name, remaining)
         yield* Scope.close(entry.scope, Exit.void)
         // Closing an idle connection changes nothing visible.
         if (stack.at(-1) !== entry) return
@@ -748,12 +766,12 @@ export const layer = (options?: Options) =>
         )
         // Readers may have seen the stored tools in the meantime, so compare against both.
         if (!isDeepStrictEqual(entry.tools, next.tools) || !isDeepStrictEqual(previous, next.tools))
-          yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+          yield* changed(name, owner)
       })
 
       // The handshake runs interruptibly and outside the lock, so a stalled client never blocks detach or
       // fallback for its name; the lock only guards adding the finished connection to the stack.
-      const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport) {
+      const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport, owner?: Session.ID) {
         const { McpClient } = yield* Effect.promise(() => import("./client.js"))
         const scope = yield* Effect.acquireRelease(Scope.fork(root), (scope) => Scope.close(scope, Exit.void))
         // The client registers its own close only once initialized; closing the scope mid-handshake (caller
@@ -764,7 +782,7 @@ export const layer = (options?: Options) =>
           server: name,
           config: { type: "attached", transport },
           directory: location.directory,
-          elicitation,
+          elicitation: owner ? makeElicitation(owner) : elicitation,
           clientInfo: options?.clientInfo,
         }).pipe(
           Effect.tap((connection) =>
@@ -784,33 +802,36 @@ export const layer = (options?: Options) =>
               : new McpClient.ConnectError({ server: name, message: error.message }),
           ),
         )
+        const key = owner ? `${owner}\0${name}` : name
         const register = Effect.gen(function* () {
           if (closed) {
             yield* Scope.close(scope, Exit.void)
             return yield* new McpClient.ConnectError({ server: name, message: "Connection closed" })
           }
           const entry: AttachedEntry = { scope, client: result.connection, tools: toAttachedTools(name, result.tools) }
-          attached.set(name, [...(attached.get(name) ?? []), entry])
+          const group = owner ? (owned.get(owner) ?? new Map<ServerName, AttachedEntry[]>()) : attached
+          if (owner) owned.set(owner, group)
+          group.set(name, [...(group.get(name) ?? []), entry])
           const locked = <E>(effect: Effect.Effect<void, E>) =>
-            fork(effect.pipe(attachedLocks.withLock(name), Effect.ignore))
-          result.connection.onClose(() => locked(detach(name, entry)))
+            fork(effect.pipe(attachedLocks.withLock(key), Effect.ignore))
+          result.connection.onClose(() => locked(detach(name, entry, owner)))
           // Bounded like fallback so a connection that stalls after announcing a change cannot hold the lock.
           const refresh = result.connection.tools().pipe(
             Effect.timeout(FALLBACK_LIST_TIMEOUT),
             Effect.map((tools) => {
               entry.tools = toAttachedTools(name, tools)
             }),
-            Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
+            Effect.andThen(changed(name, owner)),
           )
           result.connection.onToolsChanged(() =>
-            locked(Effect.suspend(() => (attached.get(name)?.at(-1) === entry ? refresh : Effect.void))),
+            locked(Effect.suspend(() => (group.get(name)?.at(-1) === entry ? refresh : Effect.void))),
           )
           yield* Effect.logInfo("mcp client attached", { server: name, tools: entry.tools.length })
-          yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+          yield* changed(name, owner)
           return entry
         })
-        yield* Effect.acquireRelease(register.pipe(attachedLocks.withLock(name)), (entry) =>
-          detach(name, entry).pipe(attachedLocks.withLock(name)),
+        yield* Effect.acquireRelease(register.pipe(attachedLocks.withLock(key)), (entry) =>
+          detach(name, entry, owner).pipe(attachedLocks.withLock(key)),
         )
       })
 
@@ -952,9 +973,11 @@ export const layer = (options?: Options) =>
           overrides.set(name, false)
           yield* state.reload()
         }),
-        attach: Effect.fn("MCP.attach")(function* (client, transport) {
-          yield* attach(ServerName.make(client), transport)
+        attach: Effect.fn("MCP.attach")(function* (client, transport, owner) {
+          yield* attach(ServerName.make(client), transport, owner)
         }),
+        sessionTools: (owner) =>
+          Effect.sync(() => Array.from(owned.get(owner)?.values() ?? []).flatMap((stack) => stack.at(-1)?.tools ?? [])),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
         tools: Effect.fn("MCP.tools")(function* () {
           const clients = Array.from(attached.values()).flatMap((stack) => stack.at(-1)?.tools ?? [])
@@ -991,6 +1014,12 @@ export const layer = (options?: Options) =>
                   message: `MCP tool "${input.name}" on ${owner} "${server}" failed: ${error.message}`,
                 }),
             )
+          if (input.owner) {
+            const client = owned.get(input.owner)?.get(server)?.at(-1)
+            if (input.sessionID !== input.owner || !client?.tools.some((tool) => tool.name === input.name))
+              return yield* new NotFoundError({ server })
+            return yield* call(client.client).pipe(failed("client"))
+          }
           // An attached client owns the tools it lists, even when a configured server shares its name, and
           // owns its name outright when no configured server has it.
           const client = attached.get(server)?.at(-1)

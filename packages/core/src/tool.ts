@@ -43,7 +43,7 @@ type Data = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  readonly snapshot: (permissions?: Permission.Ruleset, overlay?: ReadonlyArray<Tool.Info>) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -262,9 +262,16 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, overlay) =>
         Effect.sync(() => {
-          const data = state.get()
+          const base = state.get()
+          const data = overlay?.length
+            ? { ...base, tools: new Map(base.tools), definitions: new Map(base.definitions), errors: [] }
+            : base
+          for (const tool of overlay ?? []) {
+            const id = effectiveName(tool)
+            commit(data, id, { ...tool, id })
+          }
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
           for (const [name, tool] of data.tools) {
@@ -294,7 +301,7 @@ const layer = Layer.effect(
             ? undefined
             : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
           const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
-          if (codeModeCatalog && codeModeDefinition)
+          if (data === base && codeModeCatalog && codeModeDefinition)
             catalog = {
               data,
               names,

@@ -1,5 +1,6 @@
 export * as PtyTicket from "./ticket.js"
 
+import type { Session } from "@opencode/schema/session"
 import type { Workspace } from "@opencode/schema/workspace"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Pty } from "@opencode/schema/pty"
@@ -13,8 +14,8 @@ export const ConnectToken = PtyTicket.ConnectToken
 
 // A ticket authorizes one upgrade to one target: a PTY, or a client MCP connection by client name.
 export type Target =
-  | { readonly ptyID: Pty.ID; readonly mcpClient?: never }
-  | { readonly mcpClient: string; readonly ptyID?: never }
+  | { readonly ptyID: Pty.ID; readonly mcpClient?: never; readonly sessionID?: never }
+  | { readonly mcpClient: string; readonly sessionID?: Session.ID; readonly ptyID?: never }
 
 export type Scope = Target & {
   readonly directory?: string
@@ -23,6 +24,7 @@ export type Scope = Target & {
 
 type Stored = {
   readonly target: string
+  readonly sessionID?: Session.ID
   readonly directory?: string
   readonly workspaceID?: Workspace.ID
 }
@@ -37,6 +39,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pt
 function stored(scope: Scope): Stored {
   return {
     target: scope.ptyID !== undefined ? `pty:${scope.ptyID}` : `mcp:${scope.mcpClient}`,
+    sessionID: scope.sessionID,
     directory: scope.directory,
     workspaceID: scope.workspaceID,
   }
@@ -44,7 +47,10 @@ function stored(scope: Scope): Stored {
 
 function matches(record: Stored, input: Stored) {
   return (
-    record.target === input.target && record.directory === input.directory && record.workspaceID === input.workspaceID
+    record.target === input.target &&
+    record.sessionID === input.sessionID &&
+    record.directory === input.directory &&
+    record.workspaceID === input.workspaceID
   )
 }
 

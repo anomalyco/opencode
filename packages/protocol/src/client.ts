@@ -87,6 +87,7 @@ export const deprecatedClientPaths = new Set([
   "integration.wellknown.add",
   "mcp.add",
   "mcp.client.token",
+  "session.clientMcp.token",
   "mcp.connect",
   "mcp.disconnect",
   "mcp.remove",
@@ -109,6 +110,7 @@ export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "session.clientMcp",
   "generate.textLegacy",
 ])
 export const effectOmitEndpoints = new Set([
@@ -120,5 +122,6 @@ export const effectOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "session.clientMcp",
   "generate.textLegacy",
 ])
