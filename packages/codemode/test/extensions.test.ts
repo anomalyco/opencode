@@ -411,6 +411,79 @@ describe("host values with overridden methods still cross as copies", () => {
   })
 })
 
+describe("byte arrays passed to a writesBytes function", () => {
+  const fill = (bytes: Uint8Array) => {
+    bytes.fill(7, 0, 2)
+    return 2
+  }
+  const io = Extension.make({
+    name: "io",
+    globals: {
+      io: {
+        fillSync: Extension.writesBytes(fill),
+        fillEffect: Extension.writesBytes((bytes: Uint8Array) => Effect.sync(() => fill(bytes))),
+        fillAsync: Extension.writesBytes(Extension.async(async (bytes: Uint8Array) => fill(bytes))),
+        failAfterFill: Extension.writesBytes((bytes: Uint8Array) => {
+          bytes[0] = 9
+          throw new Error("failed")
+        }),
+        unmarked: (bytes: Uint8Array) => fill(bytes),
+      },
+    },
+  })
+
+  test("get the host's writes back when the call settles, however it settles", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [io] }).execute(
+        `const a = new Uint8Array(3), b = new Uint8Array(3), c = new Uint8Array(3), d = new Uint8Array(2)
+         const read = io.fillSync(a)
+         io.fillEffect(b)
+         await io.fillAsync(c)
+         try { io.failAfterFill(d) } catch {}
+         const e = new Uint8Array(2)
+         io.unmarked(e)
+         return [read, [...a], [...b], [...c], [...d], [...e]]`,
+      ),
+    )
+    // Only functions marked writesBytes write back; an unmarked one still can't change what it was passed.
+    expect(result).toMatchObject({ ok: true, value: [2, [7, 7, 0], [7, 7, 0], [7, 7, 0], [9, 0], [0, 0]] })
+  })
+})
+
+describe("concurrent writesBytes calls into one buffer", () => {
+  test("keep each other's bytes and what the program wrote meanwhile", async () => {
+    const io = Extension.make({
+      name: "io",
+      globals: {
+        readAt: Extension.writesBytes(
+          Extension.async(async (bytes: Uint8Array, offset: number, ms: number, value: number) => {
+            await new Promise((resolve) => setTimeout(resolve, ms))
+            bytes.fill(value, offset, offset + 2)
+          }),
+        ),
+      },
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [io] }).execute(
+        `const a = new Uint8Array(4)
+         await Promise.all([readAt(a, 0, 5, 1), readAt(a, 2, 20, 3)])
+         const b = new Uint8Array(4)
+         const pending = readAt(b, 0, 5, 1)
+         b[3] = 9
+         await pending
+         return [[...a], [...b]]`,
+      ),
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      value: [
+        [1, 1, 3, 3],
+        [1, 1, 0, 9],
+      ],
+    })
+  })
+})
+
 describe("Effect globals", () => {
   class Session extends Context.Service<Session, { readonly id: string }>()("test/Session") {}
   const sent: Array<string> = []

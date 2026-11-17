@@ -2,7 +2,7 @@ import type { Json } from "./data.js"
 import type { ExtensionInvocation } from "./tool-runtime.js"
 import { locate } from "./runtime/errors.js"
 import type { AstNode } from "./runtime/model.js"
-import type { Callable, Cursor, GeneratorObj, Obj, PromiseObj, Value } from "./runtime/objects.js"
+import type { Bytes, Callable, Cursor, GeneratorObj, Obj, PromiseObj, Value } from "./runtime/objects.js"
 import type { Completion } from "./runtime/signals.js"
 import type { Frame } from "./vm.js"
 
@@ -89,6 +89,12 @@ export type ExtensionRequest = {
   host: unknown
   args: ReadonlyArray<unknown>
   readonly threw: boolean
+  /**
+   * The program's byte arrays passed as arguments, each with the host copy it crossed as and the bytes it held then.
+   * When the call settles, only the bytes the host changed are written back, so a host function can fill a buffer it
+   * was given, as `fs.readSync` does, without undoing what the program or a concurrent call wrote meanwhile.
+   */
+  readonly writeBack?: ReadonlyArray<readonly [program: Bytes, host: unknown, before: Uint8Array]>
 }
 
 /**
