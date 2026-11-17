@@ -324,7 +324,7 @@ describe("tab-groups", () => {
     })
   })
 
-  test("splits ungrouped tabs into top (above), center (iOS folder combine with hysteresis), and bottom (below) zones", () => {
+  test("keeps fast drags as pure reorders across 79% stationary rows and arms Metro rail combine after 220ms dwell with 60px lock-on", () => {
     const t1 = sessionTab(SERVER_A, "ses_1")
     const t2 = sessionTab(SERVER_A, "ses_2")
     const t3 = sessionTab(SERVER_A, "ses_3")
@@ -339,39 +339,11 @@ describe("tab-groups", () => {
       manualId: undefined,
     }
 
-    // t1 occupies y = 0..28: top edge (< 7.5) places before t1; center (14) combines into a folder; bottom (> 20.5) places after t1.
-    const above = hitTestVerticalDrag(source, geometry, 60, 4, undefined)
-    expect(above.indicator?.kind).toBe("line")
-    expect(above.shifts.tabShiftY).toEqual({
-      [tabKey(t1)]: 31,
-      [tabKey(t2)]: 31,
-    })
-    expect(above.shifts.tucked).toBe(false)
-    expect(above.intent).toEqual({
-      type: "place-tab",
-      tabKey: tabKey(t3),
-      targetManualId: undefined,
-      anchorTabKey: tabKey(t1),
-      position: "before",
-    })
-
-    const center = hitTestVerticalDrag(source, geometry, 60, 14, above.intent)
-    expect(center.indicator).toEqual({ kind: "combine-tab", tabKey: tabKey(t1), color: "blue" })
-    expect(center.shifts.tabShiftY).toEqual({ [tabKey(t2)]: 31 })
-    expect(center.shifts.laneShift).toBe("in")
-    expect(center.intent).toEqual({
-      type: "combine-tabs",
-      sourceTabKey: tabKey(t3),
-      targetTabKey: tabKey(t1),
-    })
-
-    // Hysteresis keeps combine armed when the finger drifts slightly toward the edge (y = 22 is > 20.44 but < 22.96).
-    const drift = hitTestVerticalDrag(source, geometry, 60, 22, center.intent)
-    expect(drift.intent).toEqual(center.intent)
-
-    const below = hitTestVerticalDrag(source, geometry, 60, 25, center.intent)
-    expect(below.indicator?.kind).toBe("line")
-    expect(below.intent).toEqual({
+    // Before dwell elapses, hovering on t1 (y = 14) keeps t1 stationary (no jump away!) and records t1 as dwell candidate.
+    const preDwell = hitTestVerticalDrag(source, geometry, 60, 14, undefined)
+    expect(preDwell.dwellCandidateKey).toBe(tabKey(t1))
+    expect(preDwell.shifts.tabShiftY).toEqual({ [tabKey(t2)]: 31 })
+    expect(preDwell.intent).toEqual({
       type: "place-tab",
       tabKey: tabKey(t3),
       targetManualId: undefined,
@@ -379,19 +351,40 @@ describe("tab-groups", () => {
       position: "after",
     })
 
-    // Committing the center combine creates Group 1 at t1's position with [t1, t3, t2].
+    // Crossing the far top 6px edge (y = 4) immediately shifts t1 down +31px to reorder before t1.
+    const above = hitTestVerticalDrag(source, geometry, 60, 4, undefined)
+    expect(above.dwellCandidateKey).toBeUndefined()
+    expect(above.shifts.tabShiftY).toEqual({
+      [tabKey(t1)]: 31,
+      [tabKey(t2)]: 31,
+    })
+
+    // Once dwell arms t1, t1 slides down +31px so t3 (above) and t1 (below) never overlap, with 60px lock-on hysteresis.
+    const armed = hitTestVerticalDrag(source, geometry, 60, 14, tabKey(t1))
+    expect(armed.indicator).toEqual({
+      kind: "combine-tab",
+      tabKey: tabKey(t1),
+      color: "blue",
+      sourceOrder: "before",
+    })
+    expect(armed.shifts.tabShiftY).toEqual({
+      [tabKey(t1)]: 31,
+      [tabKey(t2)]: 31,
+    })
+    expect(armed.shifts.laneShift).toBe("in")
+
     const committed = applyVerticalDragCommit({
       allTabKeys: [tabKey(t1), tabKey(t2), tabKey(t3)],
       groups: undefined,
       blocks: geometry.blocks,
       state,
-      intent: center.intent!,
+      intent: armed.intent!,
       createGroupId: () => "g_folder",
       createGroupName: (n) => `Group ${n}`,
     })
 
     expect(committed.manualGroups).toEqual([{ id: "g_folder", name: "Group 1", color: "blue" }])
-    expect(committed.tabKeys).toEqual([tabKey(t1), tabKey(t3), tabKey(t2)])
+    expect(committed.tabKeys).toEqual([tabKey(t3), tabKey(t1), tabKey(t2)])
     expect(committed.manualAssignments).toEqual({
       [tabKey(t1)]: "g_folder",
       [tabKey(t3)]: "g_folder",
@@ -446,10 +439,13 @@ describe("tab-groups", () => {
     expect(committed.tabKeys).toEqual([...tallTabs.map(tabKey), tabKey(smallTab)])
   })
 
-  test("keeps VerticalDragState allocation-free on sub-threshold and unchanged pointer moves", () => {
+  test("keeps VerticalDragState allocation-free on unchanged moves and arms dwell only on current attempt", () => {
+    const t1 = sessionTab(SERVER_A, "ses_1")
+    const t2 = sessionTab(SERVER_A, "ses_2")
+
     const source: VerticalDragSource = {
       kind: "tab",
-      tabKey: "ses_1",
+      tabKey: tabKey(t1),
       label: "Alpha",
       groupKey: undefined,
       manualId: undefined,
@@ -460,51 +456,70 @@ describe("tab-groups", () => {
       pointerId: 1,
       pointerType: "mouse",
       x: 40,
-      y: 20,
+      y: 14,
       source,
     })
 
     expect(down.state.status).toBe("pending")
-    expect(selectNeedsDragMeasurement(down.state, 1, 41, 22)).toBe(false)
+    expect(selectNeedsDragMeasurement(down.state, 1, 41, 16)).toBe(false)
 
     const tinyMove = transitionVerticalDrag(down.state, {
       type: "pointer.move",
       pointerId: 1,
       x: 41,
-      y: 22,
-      contentY: 22,
+      y: 16,
+      contentY: 16,
     })
 
     expect(tinyMove.state).toBe(down.state)
-    expect(selectNeedsDragMeasurement(down.state, 1, 40, 45)).toBe(true)
+    expect(selectNeedsDragMeasurement(down.state, 1, 40, 42)).toBe(true)
 
-    const t1 = sessionTab(SERVER_A, "ses_1")
-    const t2 = sessionTab(SERVER_A, "ses_2")
     const geometry = layoutStripGeometry([t1, t2], undefined, { ...DEFAULT_TAB_GROUPS_STATE, mode: "none" }, true)
 
     const active = transitionVerticalDrag(down.state, {
       type: "pointer.move",
       pointerId: 1,
       x: 40,
-      y: 45,
-      contentY: 45,
+      y: 42,
+      contentY: 42,
       geometry,
     })
 
     expect(active.state.status).toBe("dragging")
-    expect(active.effects).toEqual([{ type: "capture-pointer", pointerId: 1 }])
+    expect(active.effects).toEqual([
+      { type: "capture-pointer", pointerId: 1 },
+      { type: "dwell.start", attempt: 1, delayMs: 220 },
+    ])
 
     const duplicateMove = transitionVerticalDrag(active.state, {
       type: "pointer.move",
       pointerId: 1,
       x: 40,
-      y: 45,
-      contentY: 45,
+      y: 42,
+      contentY: 42,
     })
 
     expect(duplicateMove.state).toBe(active.state)
 
-    const released = transitionVerticalDrag(active.state, { type: "pointer.up", pointerId: 1 })
+    // Stale dwell attempt is ignored; current attempt arms combine-tabs and locks onto a 60px hysteresis band.
+    const stale = transitionVerticalDrag(active.state, { type: "dwell.elapsed", attempt: 99 })
+    expect(stale.state).toBe(active.state)
+
+    const armed = transitionVerticalDrag(active.state, { type: "dwell.elapsed", attempt: 1 })
+    expect(armed.state.status === "dragging" && armed.state.intent?.type).toBe("combine-tabs")
+
+    // Finger drifting 12px past t2's bottom (y = 70 <= 59 + 16) stays locked onto combine-tabs.
+    const drifted = transitionVerticalDrag(armed.state, {
+      type: "pointer.move",
+      pointerId: 1,
+      x: 40,
+      y: 70,
+      contentY: 70,
+    })
+
+    expect(drifted.state.status === "dragging" && drifted.state.intent?.type).toBe("combine-tabs")
+
+    const released = transitionVerticalDrag(drifted.state, { type: "pointer.up", pointerId: 1 })
 
     expect(released.state).toBe(INITIAL_VERTICAL_DRAG_STATE)
     expect(released.effects[0]).toEqual({ type: "suppress-click" })
@@ -608,11 +623,9 @@ describe("tab-groups", () => {
     }
 
     let prevLineY = -Infinity
-    let prevIntent = undefined
 
     for (let py = -10; py <= maxBottom + 16; py += 1) {
-      const hit = hitTestVerticalDrag(source, geometry, 64, py, prevIntent)
-      prevIntent = hit.intent
+      const hit = hitTestVerticalDrag(source, geometry, 64, py, undefined)
 
       if (hit.indicator?.kind === "line") {
         expect(hit.indicator.y).toBeGreaterThanOrEqual(prevLineY)

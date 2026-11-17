@@ -96,9 +96,8 @@ function SessionTabSlot(
     dragSource?: boolean
     offsetY?: number
     laneShift?: "in" | "out"
-    dragTucked?: boolean
     combineColor?: string
-    combineBadgeLabel?: string
+    combineOrder?: "before" | "after"
     contextMenuExtra?: () => JSX.Element
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
@@ -136,8 +135,8 @@ function SessionTabSlot(
       data-active={props.active}
       data-drag-source={props.dragSource ? "true" : undefined}
       data-lane-shift={props.laneShift}
-      data-drag-tucked={props.dragTucked ? "true" : undefined}
       data-combine-target={props.combineColor ? "true" : undefined}
+      data-combine-order={props.combineOrder}
       data-group-color={props.combineColor}
       data-orientation={props.orientation}
       style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
@@ -174,11 +173,6 @@ function SessionTabSlot(
         orientation={props.orientation}
         contextMenuExtra={props.contextMenuExtra}
       />
-      <Show when={props.combineColor && props.combineBadgeLabel}>
-        <span data-slot="tab-combine-badge" aria-hidden="true">
-          {props.combineBadgeLabel}
-        </span>
-      </Show>
       {props.footer}
     </div>
   )
@@ -204,9 +198,8 @@ function SessionTabEntry(
     dragSource?: boolean
     offsetY?: number
     laneShift?: "in" | "out"
-    dragTucked?: boolean
     combineColor?: string
-    combineBadgeLabel?: string
+    combineOrder?: "before" | "after"
     contextMenuExtra?: () => JSX.Element
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
@@ -356,9 +349,8 @@ function SessionTabEntry(
         dragSource={props.dragSource}
         offsetY={props.offsetY}
         laneShift={props.laneShift}
-        dragTucked={props.dragTucked}
         combineColor={props.combineColor}
-        combineBadgeLabel={props.combineBadgeLabel}
+        combineOrder={props.combineOrder}
         contextMenuExtra={props.contextMenuExtra}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
@@ -541,9 +533,8 @@ function DraftTabSlot(
     dragSource?: boolean
     offsetY?: number
     laneShift?: "in" | "out"
-    dragTucked?: boolean
     combineColor?: string
-    combineBadgeLabel?: string
+    combineOrder?: "before" | "after"
     contextMenuExtra?: () => JSX.Element
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -580,8 +571,8 @@ function DraftTabSlot(
       data-active={props.active}
       data-drag-source={props.dragSource ? "true" : undefined}
       data-lane-shift={props.laneShift}
-      data-drag-tucked={props.dragTucked ? "true" : undefined}
       data-combine-target={props.combineColor ? "true" : undefined}
+      data-combine-order={props.combineOrder}
       data-group-color={props.combineColor}
       data-orientation={props.orientation}
       style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
@@ -609,11 +600,6 @@ function DraftTabSlot(
         orientation={props.orientation}
         contextMenuExtra={props.contextMenuExtra}
       />
-      <Show when={props.combineColor && props.combineBadgeLabel}>
-        <span data-slot="tab-combine-badge" aria-hidden="true">
-          {props.combineBadgeLabel}
-        </span>
-      </Show>
       {props.footer}
     </div>
   )
@@ -642,11 +628,9 @@ export type CustomVerticalDragBinding = {
   isDropInsideGroup: (groupKey: string) => boolean
   tabTransformY: (key: string) => number
   tabLaneShift: (key: string) => "in" | "out" | undefined
-  isTabTucked: (key: string) => boolean
   groupTransformY: (groupKey: string) => number
   groupRailAdjustment: (groupKey: string) => { top: number; bottom: number; empty: boolean } | undefined
-  combineColorOfTab: (key: string) => string | undefined
-  combineBadgeLabel: string
+  combineOfTab: (key: string) => { color: string; sourceOrder: "before" | "after" } | undefined
   onPointerDown: (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => void
   onScroll: (listEl: HTMLDivElement) => void
   overlay: () => JSX.Element
@@ -890,9 +874,8 @@ export function TitlebarTabStrip(props: {
           dragSource={customDrag()?.isDraggingTab(id)}
           offsetY={customDrag()?.tabTransformY(id)}
           laneShift={customDrag()?.tabLaneShift(id)}
-          dragTucked={customDrag()?.isTabTucked(id)}
-          combineColor={customDrag()?.combineColorOfTab(id)}
-          combineBadgeLabel={customDrag()?.combineBadgeLabel}
+          combineColor={customDrag()?.combineOfTab(id)?.color}
+          combineOrder={customDrag()?.combineOfTab(id)?.sourceOrder}
           contextMenuExtra={menuExtra}
           onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
@@ -922,9 +905,8 @@ export function TitlebarTabStrip(props: {
         dragSource={customDrag()?.isDraggingTab(id)}
         offsetY={customDrag()?.tabTransformY(id)}
         laneShift={customDrag()?.tabLaneShift(id)}
-        dragTucked={customDrag()?.isTabTucked(id)}
-        combineColor={customDrag()?.combineColorOfTab(id)}
-        combineBadgeLabel={customDrag()?.combineBadgeLabel}
+        combineColor={customDrag()?.combineOfTab(id)?.color}
+        combineOrder={customDrag()?.combineOfTab(id)?.sourceOrder}
         contextMenuExtra={menuExtra}
         onNavigate={(element) => {
           ref = element

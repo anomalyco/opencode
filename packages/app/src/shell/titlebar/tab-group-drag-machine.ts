@@ -9,6 +9,8 @@ import {
   type TabGroupsState,
 } from "./tab-groups"
 
+export const TAB_COMBINE_DWELL_MS = 220
+
 export type MeasuredTopBlock =
   | {
       readonly kind: "group"
@@ -88,6 +90,7 @@ export type VerticalDragIndicator =
       readonly kind: "combine-tab"
       readonly tabKey: string
       readonly color: TabGroupColor
+      readonly sourceOrder: "before" | "after"
     }
   | {
       readonly kind: "join-group"
@@ -119,6 +122,7 @@ export type VerticalDragIntent =
       readonly type: "combine-tabs"
       readonly sourceTabKey: string
       readonly targetTabKey: string
+      readonly sourceOrder: "before" | "after"
     }
 
 export type VerticalDragRailAdjustment = {
@@ -133,7 +137,6 @@ export type VerticalDragShifts = {
   readonly headerShiftY: Readonly<Record<string, number>>
   readonly railByGroup: Readonly<Record<string, VerticalDragRailAdjustment>>
   readonly laneShift: "in" | "out" | undefined
-  readonly tucked: boolean
 }
 
 export type VerticalDragState =
@@ -153,9 +156,13 @@ export type VerticalDragState =
       readonly startY: number
       readonly currentX: number
       readonly currentY: number
+      readonly contentY: number
       readonly dragOffsetY: number
       readonly source: VerticalDragSource
       readonly geometry: VerticalDragGeometry
+      readonly dwellAttempt: number
+      readonly dwellCandidateKey: string | undefined
+      readonly armedCombineKey: string | undefined
       readonly indicator: VerticalDragIndicator | undefined
       readonly intent: VerticalDragIntent | undefined
       readonly shifts: VerticalDragShifts
@@ -179,6 +186,10 @@ export type VerticalDragEvent =
       readonly geometry?: VerticalDragGeometry
     }
   | {
+      readonly type: "dwell.elapsed"
+      readonly attempt: number
+    }
+  | {
       readonly type: "scroll.changed"
       readonly contentY: number
     }
@@ -188,6 +199,8 @@ export type VerticalDragEvent =
 
 export type VerticalDragEffect =
   | { readonly type: "capture-pointer"; readonly pointerId: number }
+  | { readonly type: "dwell.start"; readonly attempt: number; readonly delayMs: number }
+  | { readonly type: "dwell.clear" }
   | { readonly type: "suppress-click" }
   | {
       readonly type: "commit"
@@ -204,6 +217,7 @@ export type VerticalDragHit = {
   readonly indicator: VerticalDragIndicator | undefined
   readonly intent: VerticalDragIntent | undefined
   readonly shifts: VerticalDragShifts
+  readonly dwellCandidateKey: string | undefined
 }
 
 export type VerticalDragCommitResult = {
@@ -223,10 +237,11 @@ const EMPTY_SHIFTS: VerticalDragShifts = Object.freeze({
   headerShiftY: Object.freeze({}),
   railByGroup: Object.freeze({}),
   laneShift: undefined,
-  tucked: false,
 })
 
 const NONE: readonly never[] = Object.freeze([])
+
+const CLEAR_DWELL: readonly VerticalDragEffect[] = Object.freeze([{ type: "dwell.clear" }])
 
 const SUPPRESS_CLICK: readonly VerticalDragEffect[] = Object.freeze([{ type: "suppress-click" }])
 
@@ -250,7 +265,7 @@ function sameIndicator(a: VerticalDragIndicator | undefined, b: VerticalDragIndi
   }
 
   if (a.kind === "combine-tab" && b.kind === "combine-tab") {
-    return a.tabKey === b.tabKey && a.color === b.color
+    return a.tabKey === b.tabKey && a.color === b.color && a.sourceOrder === b.sourceOrder
   }
 
   if (a.kind === "join-group" && b.kind === "join-group") {
@@ -288,7 +303,11 @@ function sameIntent(a: VerticalDragIntent | undefined, b: VerticalDragIntent | u
   }
 
   if (a.type === "combine-tabs" && b.type === "combine-tabs") {
-    return a.sourceTabKey === b.sourceTabKey && a.targetTabKey === b.targetTabKey
+    return (
+      a.sourceTabKey === b.sourceTabKey &&
+      a.targetTabKey === b.targetTabKey &&
+      a.sourceOrder === b.sourceOrder
+    )
   }
 
   return false
@@ -322,6 +341,21 @@ function computeClampedDragOffsetY(
   return Math.round(Math.max(minDelta, Math.min(maxDelta, rawDeltaY)))
 }
 
+function isArmedCombineLocked(
+  armedKey: string | undefined,
+  geometry: VerticalDragGeometry,
+  x: number,
+  contentY: number,
+) {
+  if (!armedKey || !geometry.freeform || x < geometry.listLeft + 12) return false
+  const target = geometry.rows.find((row) => row.kind === "tab" && row.tabKey === armedKey)
+
+  if (!target || target.kind !== "tab" || target.manualId) return false
+
+  // Generous 60px lock-on hysteresis band once dwell has armed grouping, so finger release never slips out.
+  return contentY >= target.tabTop - 16 && contentY <= target.tabBottom + 16
+}
+
 export function selectNeedsDragMeasurement(
   state: VerticalDragState,
   pointerId: number,
@@ -336,7 +370,12 @@ export function selectNeedsDragMeasurement(
 
 export function transitionVerticalDrag(state: VerticalDragState, event: VerticalDragEvent): VerticalDragTransition {
   if (event.type === "cancel" || event.type === "disposed") {
-    return state.status === "idle" ? unchanged(state) : { state: INITIAL_VERTICAL_DRAG_STATE, effects: NONE }
+    if (state.status === "idle") return unchanged(state)
+
+    return {
+      state: INITIAL_VERTICAL_DRAG_STATE,
+      effects: state.status === "dragging" && state.dwellCandidateKey ? CLEAR_DWELL : NONE,
+    }
   }
 
   if (event.type === "pointer.down") {
@@ -353,6 +392,31 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
     }
   }
 
+  if (event.type === "dwell.elapsed") {
+    if (
+      state.status !== "dragging" ||
+      state.dwellAttempt !== event.attempt ||
+      !state.dwellCandidateKey
+    ) {
+      return unchanged(state)
+    }
+
+    const armed = state.dwellCandidateKey
+    const hit = hitTestVerticalDrag(state.source, state.geometry, state.currentX, state.contentY, armed)
+
+    return {
+      state: {
+        ...state,
+        dwellCandidateKey: undefined,
+        armedCombineKey: armed,
+        indicator: hit.indicator,
+        intent: hit.intent,
+        shifts: hit.shifts,
+      },
+      effects: NONE,
+    }
+  }
+
   if (event.type === "pointer.move") {
     if (state.status === "pending" && state.pointerId === event.pointerId) {
       if (!selectNeedsDragMeasurement(state, event.pointerId, event.x, event.y) || !event.geometry) {
@@ -361,6 +425,14 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
 
       const hit = hitTestVerticalDrag(state.source, event.geometry, event.x, event.contentY, undefined)
       const dragOffsetY = computeClampedDragOffsetY(state.source, event.geometry, event.y - state.startY)
+      const attempt = hit.dwellCandidateKey ? 1 : 0
+
+      const effects: VerticalDragEffect[] = hit.dwellCandidateKey
+        ? [
+            { type: "capture-pointer", pointerId: state.pointerId },
+            { type: "dwell.start", attempt, delayMs: TAB_COMBINE_DWELL_MS },
+          ]
+        : [{ type: "capture-pointer", pointerId: state.pointerId }]
 
       return {
         state: {
@@ -370,37 +442,68 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
           startY: state.startY,
           currentX: event.x,
           currentY: event.y,
+          contentY: event.contentY,
           dragOffsetY,
           source: state.source,
           geometry: event.geometry,
+          dwellAttempt: attempt,
+          dwellCandidateKey: hit.dwellCandidateKey,
+          armedCombineKey: undefined,
           indicator: hit.indicator,
           intent: hit.intent,
           shifts: hit.shifts,
         },
-        effects: [{ type: "capture-pointer", pointerId: state.pointerId }],
+        effects,
       }
     }
 
     if (state.status === "dragging" && state.pointerId === event.pointerId) {
-      const hit = hitTestVerticalDrag(state.source, state.geometry, event.x, event.contentY, state.intent)
+      const nextArmed = isArmedCombineLocked(state.armedCombineKey, state.geometry, event.x, event.contentY)
+        ? state.armedCombineKey
+        : undefined
+
+      const hit = hitTestVerticalDrag(state.source, state.geometry, event.x, event.contentY, nextArmed)
       const dragOffsetY = computeClampedDragOffsetY(state.source, state.geometry, event.y - state.startY)
       const unchangedHit = sameIndicator(state.indicator, hit.indicator) && sameIntent(state.intent, hit.intent)
+      const sameCandidate = state.dwellCandidateKey === hit.dwellCandidateKey
 
-      if (state.currentX === event.x && state.currentY === event.y && state.dragOffsetY === dragOffsetY && unchangedHit) {
+      if (
+        state.currentX === event.x &&
+        state.currentY === event.y &&
+        state.contentY === event.contentY &&
+        state.dragOffsetY === dragOffsetY &&
+        state.armedCombineKey === nextArmed &&
+        sameCandidate &&
+        unchangedHit
+      ) {
         return unchanged(state)
       }
+
+      const nextAttempt = sameCandidate ? state.dwellAttempt : state.dwellAttempt + 1
+
+      const effects: readonly VerticalDragEffect[] = sameCandidate
+        ? NONE
+        : hit.dwellCandidateKey
+          ? [{ type: "dwell.start", attempt: nextAttempt, delayMs: TAB_COMBINE_DWELL_MS }]
+          : state.dwellCandidateKey
+            ? CLEAR_DWELL
+            : NONE
 
       return {
         state: {
           ...state,
           currentX: event.x,
           currentY: event.y,
+          contentY: event.contentY,
           dragOffsetY,
+          dwellAttempt: nextAttempt,
+          dwellCandidateKey: hit.dwellCandidateKey,
+          armedCombineKey: nextArmed,
           indicator: unchangedHit ? state.indicator : hit.indicator,
           intent: unchangedHit ? state.intent : hit.intent,
           shifts: unchangedHit ? state.shifts : hit.shifts,
         },
-        effects: NONE,
+        effects,
       }
     }
 
@@ -409,20 +512,46 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
 
   if (event.type === "scroll.changed") {
     if (state.status !== "dragging") return unchanged(state)
-    const hit = hitTestVerticalDrag(state.source, state.geometry, state.currentX, event.contentY, state.intent)
 
-    if (sameIndicator(state.indicator, hit.indicator) && sameIntent(state.intent, hit.intent)) {
+    const nextArmed = isArmedCombineLocked(state.armedCombineKey, state.geometry, state.currentX, event.contentY)
+      ? state.armedCombineKey
+      : undefined
+
+    const hit = hitTestVerticalDrag(state.source, state.geometry, state.currentX, event.contentY, nextArmed)
+    const sameCandidate = state.dwellCandidateKey === hit.dwellCandidateKey
+
+    if (
+      state.contentY === event.contentY &&
+      state.armedCombineKey === nextArmed &&
+      sameCandidate &&
+      sameIndicator(state.indicator, hit.indicator) &&
+      sameIntent(state.intent, hit.intent)
+    ) {
       return unchanged(state)
     }
+
+    const nextAttempt = sameCandidate ? state.dwellAttempt : state.dwellAttempt + 1
+
+    const effects: readonly VerticalDragEffect[] = sameCandidate
+      ? NONE
+      : hit.dwellCandidateKey
+        ? [{ type: "dwell.start", attempt: nextAttempt, delayMs: TAB_COMBINE_DWELL_MS }]
+        : state.dwellCandidateKey
+          ? CLEAR_DWELL
+          : NONE
 
     return {
       state: {
         ...state,
+        contentY: event.contentY,
+        dwellAttempt: nextAttempt,
+        dwellCandidateKey: hit.dwellCandidateKey,
+        armedCombineKey: nextArmed,
         indicator: hit.indicator,
         intent: hit.intent,
         shifts: hit.shifts,
       },
-      effects: NONE,
+      effects,
     }
   }
 
@@ -430,11 +559,18 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
     if (state.status === "idle" || state.pointerId !== event.pointerId) return unchanged(state)
 
     if (state.status === "dragging") {
+      const effects: VerticalDragEffect[] = []
+
+      if (state.dwellCandidateKey) effects.push({ type: "dwell.clear" })
+      effects.push({ type: "suppress-click" })
+
+      if (state.intent) {
+        effects.push({ type: "commit", blocks: state.geometry.blocks, intent: state.intent })
+      }
+
       return {
         state: INITIAL_VERTICAL_DRAG_STATE,
-        effects: state.intent
-          ? [{ type: "suppress-click" }, { type: "commit", blocks: state.geometry.blocks, intent: state.intent }]
-          : SUPPRESS_CLICK,
+        effects: effects.length === 1 && effects[0]?.type === "suppress-click" ? SUPPRESS_CLICK : effects,
       }
     }
 
@@ -464,10 +600,6 @@ export function selectDraggedLaneShift(state: VerticalDragState) {
   return state.status === "dragging" ? state.shifts.laneShift : undefined
 }
 
-export function selectDraggedTucked(state: VerticalDragState) {
-  return state.status === "dragging" && state.shifts.tucked
-}
-
 export function selectTabShiftY(state: VerticalDragState, tabKey: string) {
   return state.status === "dragging" ? (state.shifts.tabShiftY[tabKey] ?? 0) : 0
 }
@@ -484,10 +616,15 @@ export function selectGroupRailAdjustment(state: VerticalDragState, groupKey: st
   return state.status === "dragging" ? state.shifts.railByGroup[groupKey] : undefined
 }
 
-export function selectCombineColorOfTab(state: VerticalDragState, tabKey: string) {
+export function selectCombineOfTab(
+  state: VerticalDragState,
+  tabKey: string,
+): { readonly color: TabGroupColor; readonly sourceOrder: "before" | "after" } | undefined {
   if (state.status !== "dragging" || state.indicator?.kind !== "combine-tab") return undefined
 
-  return state.indicator.tabKey === tabKey ? state.indicator.color : undefined
+  return state.indicator.tabKey === tabKey
+    ? { color: state.indicator.color, sourceOrder: state.indicator.sourceOrder }
+    : undefined
 }
 
 export function selectJoinGroupKey(state: VerticalDragState) {
@@ -502,28 +639,22 @@ export function selectDropInsideGroupKey(state: VerticalDragState) {
   return state.indicator.groupKey
 }
 
-export function selectDropLine(state: VerticalDragState) {
-  if (state.status !== "dragging" || state.indicator?.kind !== "line") return undefined
-
-  return state.indicator
-}
-
 export function hitTestVerticalDrag(
   source: VerticalDragSource,
   geometry: VerticalDragGeometry,
   x: number,
   contentY: number,
-  previousIntent: VerticalDragIntent | undefined,
+  armedCombineKey: string | undefined,
 ): VerticalDragHit {
   if (source.kind === "group") {
     return hitTestGroupMove(source.groupKey, geometry.blocks, contentY)
   }
 
   const raw = geometry.freeform
-    ? hitTestFreeformTabMove(source, geometry, x, contentY, previousIntent)
+    ? hitTestFreeformTabMove(source, geometry, x, contentY, armedCombineKey)
     : hitTestIntraGroupTabMove(source, geometry.rows, contentY)
 
-  return attachTabSlideShifts(source, geometry, raw.indicator, raw.intent)
+  return attachTabSlideShifts(source, geometry, raw.indicator, raw.intent, raw.dwellCandidateKey)
 }
 
 function hitTestGroupMove(
@@ -531,19 +662,21 @@ function hitTestGroupMove(
   blocks: readonly MeasuredTopBlock[],
   y: number,
 ): VerticalDragHit {
-  if (blocks.length <= 1) return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+  if (blocks.length <= 1) {
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS, dwellCandidateKey: undefined }
+  }
 
   const selfIndex = blocks.findIndex((block) => block.kind === "group" && block.groupKey === groupKey)
 
-  if (selfIndex === -1) return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+  if (selfIndex === -1) {
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS, dwellCandidateKey: undefined }
+  }
 
   let beforeIndex = blocks.length
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]!
     const height = Math.max(1, block.bottom - block.top)
-    // Blocks below the dragged group flip as soon as the cursor crosses their header (~36px), so dragging a small group
-    // past a tall 10-tab group never requires traversing all 10 tabs. Blocks above flip at their midpoint.
     const pivot = i < selfIndex ? (block.top + block.bottom) / 2 : block.top + Math.min(height * 0.5, 36)
 
     if (y < pivot) {
@@ -553,7 +686,7 @@ function hitTestGroupMove(
   }
 
   if (beforeIndex === selfIndex || beforeIndex === selfIndex + 1) {
-    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS, dwellCandidateKey: undefined }
   }
 
   const selfBlock = blocks[selfIndex]!
@@ -603,13 +736,13 @@ function hitTestGroupMove(
   return {
     indicator: { kind: "line", y: lineY, visualY, indented: false, groupKey: undefined, color: undefined },
     intent: { type: "move-group", groupKey, beforeBlockIndex: beforeIndex },
+    dwellCandidateKey: undefined,
     shifts: {
       tabShiftY,
       groupShiftY,
       headerShiftY: EMPTY_SHIFTS.headerShiftY,
       railByGroup: EMPTY_SHIFTS.railByGroup,
       laneShift: undefined,
-      tucked: false,
     },
   }
 }
@@ -617,6 +750,7 @@ function hitTestGroupMove(
 type RawTabHit = {
   readonly indicator: VerticalDragIndicator | undefined
   readonly intent: VerticalDragIntent | undefined
+  readonly dwellCandidateKey?: string
 }
 
 function attachTabSlideShifts(
@@ -624,16 +758,17 @@ function attachTabSlideShifts(
   geometry: VerticalDragGeometry,
   indicator: VerticalDragIndicator | undefined,
   intent: VerticalDragIntent | undefined,
+  dwellCandidateKey: string | undefined,
 ): VerticalDragHit {
   if (!indicator || !intent) {
-    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS }
+    return { indicator: undefined, intent: undefined, shifts: EMPTY_SHIFTS, dwellCandidateKey }
   }
 
   const rows = geometry.rows
   const selfRowIdx = rows.findIndex((row) => row.kind === "tab" && row.tabKey === source.tabKey)
 
   if (selfRowIdx === -1) {
-    return { indicator, intent, shifts: EMPTY_SHIFTS }
+    return { indicator, intent, shifts: EMPTY_SHIFTS, dwellCandidateKey }
   }
 
   const sourceRow = rows[selfRowIdx]!
@@ -661,18 +796,24 @@ function attachTabSlideShifts(
 
     if (targetRow) {
       const sCenter = (sourceRow.top + sourceRow.bottom) / 2
-      const slotAfterTargetY = targetRow.bottom + 0.5
+
+      // Open the slot on the side the dragged tab arrived from (`before` target when dragging up, `after` target when
+      // dragging down) so the target row slides out of the cursor's way and the two tab labels never overlap.
+      const slotBoundaryY =
+        indicator.kind === "combine-tab" && indicator.sourceOrder === "before"
+          ? targetRow.top - 0.5
+          : targetRow.bottom + 0.5
 
       rows.forEach((row) => {
         if (row.kind === "tab" && row.tabKey === source.tabKey) return
         const rCenter = (row.top + row.bottom) / 2
 
         const shift =
-          slotAfterTargetY < sCenter
-            ? slotAfterTargetY < rCenter && rCenter < sCenter
+          slotBoundaryY < sCenter
+            ? slotBoundaryY < rCenter && rCenter < sCenter
               ? tabStride
               : 0
-            : sCenter < rCenter && rCenter < slotAfterTargetY
+            : sCenter < rCenter && rCenter < slotBoundaryY
               ? -tabStride
               : 0
 
@@ -687,13 +828,13 @@ function attachTabSlideShifts(
     return {
       indicator,
       intent,
+      dwellCandidateKey,
       shifts: {
         tabShiftY,
         groupShiftY: EMPTY_SHIFTS.groupShiftY,
         headerShiftY,
         railByGroup: EMPTY_SHIFTS.railByGroup,
         laneShift,
-        tucked: false,
       },
     }
   }
@@ -780,13 +921,13 @@ function attachTabSlideShifts(
   return {
     indicator: { ...indicator, visualY },
     intent,
+    dwellCandidateKey,
     shifts: {
       tabShiftY,
       groupShiftY: EMPTY_SHIFTS.groupShiftY,
       headerShiftY,
       railByGroup,
       laneShift,
-      tucked: false,
     },
   }
 }
@@ -909,13 +1050,38 @@ function hitTestFreeformTabMove(
   geometry: VerticalDragGeometry,
   x: number,
   y: number,
-  previousIntent: VerticalDragIntent | undefined,
+  armedCombineKey: string | undefined,
 ): RawTabHit {
   const rows = geometry.rows
 
   if (rows.length === 0) return { indicator: undefined, intent: undefined }
 
   const outdentLane = x < geometry.listLeft + 12
+  const sourceRow = rows.find((row) => row.kind === "tab" && row.tabKey === source.tabKey)
+  const sourceCenterY = sourceRow ? (sourceRow.top + sourceRow.bottom) / 2 : y
+
+  if (armedCombineKey && !outdentLane) {
+    const armedRow = rows.find((row) => row.kind === "tab" && row.tabKey === armedCombineKey)
+
+    if (armedRow && armedRow.kind === "tab" && !armedRow.manualId && armedRow.tabKey !== source.tabKey) {
+      const sourceOrder: "before" | "after" = armedRow.top < sourceCenterY ? "before" : "after"
+
+      return {
+        indicator: {
+          kind: "combine-tab",
+          tabKey: armedRow.tabKey,
+          color: geometry.nextGroupColor,
+          sourceOrder,
+        },
+        intent: {
+          type: "combine-tabs",
+          sourceTabKey: source.tabKey,
+          targetTabKey: armedRow.tabKey,
+          sourceOrder,
+        },
+      }
+    }
+  }
 
   const makePlace = (
     lineY: number,
@@ -924,9 +1090,10 @@ function hitTestFreeformTabMove(
     color: TabGroupColor | undefined,
     anchorTabKey: string | undefined,
     position: "before" | "after",
+    dwellCandidateKey?: string,
   ): RawTabHit => {
     if (isNoOpTabPlacement(source, rows, targetManualId, anchorTabKey, position)) {
-      return { indicator: undefined, intent: undefined }
+      return { indicator: undefined, intent: undefined, dwellCandidateKey }
     }
 
     const indented = targetManualId !== undefined
@@ -948,6 +1115,7 @@ function hitTestFreeformTabMove(
         anchorTabKey,
         position,
       },
+      dwellCandidateKey,
     }
   }
 
@@ -974,11 +1142,11 @@ function hitTestFreeformTabMove(
       const height = Math.max(1, row.bottom - row.top)
 
       if (row.kind === "header") {
-        if (y < row.top + height * 0.25) {
+        if (y < row.top + height * 0.22) {
           return makePlace(seamBeforeRow(rows, i), undefined, undefined, undefined, row.firstTabKey, "before")
         }
 
-        if (row.collapsed && y > row.bottom - height * 0.25) {
+        if (row.collapsed && y > row.bottom - height * 0.22) {
           return makePlace(seamAfterRow(rows, i), undefined, undefined, undefined, row.lastTabKey, "after")
         }
 
@@ -1049,26 +1217,24 @@ function hitTestFreeformTabMove(
         return makePlace(afterY, row.manualId, row.groupKey, row.color, row.tabKey, "after")
       }
 
-      // Ungrouped tab row: 3-zone iOS folder split (top = above, center = group together, bottom = below) with hysteresis.
-      const tabHeight = Math.max(1, row.tabBottom - row.tabTop)
+      // Ungrouped peer tab: keep 79% of the row stationary so holding anywhere on the row for 220ms easily arms grouping,
+      // while crossing the far 6px edge flips the row immediately for fast dev-style reordering.
+      const draggingUp = row.top < sourceCenterY
+      const candidate = outdentLane ? undefined : row.tabKey
 
-      const wasCombining =
-        previousIntent?.type === "combine-tabs" && previousIntent.targetTabKey === row.tabKey
+      if (draggingUp) {
+        if (y < row.tabTop + 6) {
+          return makePlace(seamBeforeRow(rows, i), undefined, undefined, undefined, row.tabKey, "before")
+        }
 
-      const edge = wasCombining ? 0.18 : 0.27
-
-      if (y < row.tabTop + tabHeight * edge) {
-        return makePlace(seamBeforeRow(rows, i), undefined, undefined, undefined, row.tabKey, "before")
+        return makePlace(seamAfterRow(rows, i), undefined, undefined, undefined, row.tabKey, "after", candidate)
       }
 
-      if (y > row.tabBottom - tabHeight * edge) {
+      if (y > row.tabBottom - 6) {
         return makePlace(seamAfterRow(rows, i), undefined, undefined, undefined, row.tabKey, "after")
       }
 
-      return {
-        indicator: { kind: "combine-tab", tabKey: row.tabKey, color: geometry.nextGroupColor },
-        intent: { type: "combine-tabs", sourceTabKey: source.tabKey, targetTabKey: row.tabKey },
-      }
+      return makePlace(seamBeforeRow(rows, i), undefined, undefined, undefined, row.tabKey, "before", candidate)
     }
 
     const next = rows[i + 1]
@@ -1213,9 +1379,13 @@ export function applyVerticalDragCommit(input: {
     nextManualGroups.push({ id, name, color })
     nextAssignments[intent.targetTabKey] = id
     nextAssignments[intent.sourceTabKey] = id
-    nextTabKeys = placeKeyRelativeTo(allTabKeys, intent.sourceTabKey, intent.targetTabKey, "after")
+    nextTabKeys = placeKeyRelativeTo(allTabKeys, intent.sourceTabKey, intent.targetTabKey, intent.sourceOrder)
     nextManualGroups = pruneEmptyManualGroups(nextManualGroups, nextAssignments)
-    nextTabKeys = canonicalizeManualTabOrder(nextTabKeys, nextAssignments, intent.targetTabKey)
+    nextTabKeys = canonicalizeManualTabOrder(
+      nextTabKeys,
+      nextAssignments,
+      intent.sourceOrder === "before" ? intent.sourceTabKey : intent.targetTabKey,
+    )
 
     return {
       tabKeys: nextTabKeys,

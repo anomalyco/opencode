@@ -24,10 +24,9 @@ import { sessionIDHasOpenTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tab
 import {
   applyVerticalDragCommit,
   INITIAL_VERTICAL_DRAG_STATE,
-  selectCombineColorOfTab,
+  selectCombineOfTab,
   selectDraggedLaneShift,
   selectDraggedOffsetY,
-  selectDraggedTucked,
   selectDraggingGroupKey,
   selectDraggingTabKey,
   selectDropInsideGroupKey,
@@ -414,12 +413,18 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       { equals: samePlans },
     )
 
-    // Thin pointer & scroll driver for `transitionVerticalDrag`.
+    // Thin pointer, dwell-timer & scroll driver for `transitionVerticalDrag`.
     let activeListEl: HTMLDivElement | undefined
     let activeScrollEl: HTMLDivElement | undefined
     let autoScrollFrame: number | undefined
     let autoScrollVelocity = 0
+    let dwellTimer: ReturnType<typeof setTimeout> | undefined
     let cleanupListeners: (() => void) | undefined
+
+    const clearDwellTimer = () => {
+      if (dwellTimer !== undefined) clearTimeout(dwellTimer)
+      dwellTimer = undefined
+    }
 
     const stopAutoScroll = () => {
       if (autoScrollFrame !== undefined) cancelAnimationFrame(autoScrollFrame)
@@ -431,6 +436,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       cleanupListeners?.()
       cleanupListeners = undefined
       stopAutoScroll()
+      clearDwellTimer()
     }
 
     const swallowTrailingClick = () => {
@@ -455,6 +461,20 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
           if (activeListEl && pointerButtons !== 0 && !activeListEl.hasPointerCapture(effect.pointerId)) {
             activeListEl.setPointerCapture(effect.pointerId)
           }
+
+          return
+        }
+
+        if (effect.type === "dwell.clear") {
+          clearDwellTimer()
+
+          return
+        }
+
+        if (effect.type === "dwell.start") {
+          clearDwellTimer()
+          const attempt = effect.attempt
+          dwellTimer = setTimeout(() => dispatchDrag({ type: "dwell.elapsed", attempt }), effect.delayMs)
 
           return
         }
@@ -835,11 +855,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
 
         return selectDraggingTabKey(current) === key ? selectDraggedLaneShift(current) : undefined
       },
-      isTabTucked: (key: string) => {
-        const current = drag()
-
-        return selectDraggingTabKey(current) === key && selectDraggedTucked(current)
-      },
       groupTransformY: (groupKey: string) => {
         const current = drag()
 
@@ -848,8 +863,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
           : selectGroupShiftY(current, groupKey)
       },
       groupRailAdjustment: (groupKey: string) => selectGroupRailAdjustment(drag(), groupKey),
-      combineColorOfTab: (key: string) => selectCombineColorOfTab(drag(), key),
-      combineBadgeLabel: "",
+      combineOfTab: (key: string) => selectCombineOfTab(drag(), key),
       onPointerDown,
       onScroll,
       overlay: () => undefined,

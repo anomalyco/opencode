@@ -238,6 +238,10 @@
   pointer-events: none;
 }
 
+[data-titlebar-tab-slot][data-combine-target="true"][data-combine-order="before"]::after {
+  top: -28px;
+}
+
 @keyframes tab-group-expand-v {
   from {
     opacity: 0;
