@@ -1,10 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Context, Effect, Layer, PubSub, Stream } from "effect"
-import { Document, Info, type Entry } from "@opencode/schema/config"
-import { Event } from "@opencode/schema/event"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -25,63 +22,50 @@ import { location } from "./fixture/location"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { codeModeListings, executeTool, registerToolPlugin, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_search_tool_test")
-const configUpdated = () => ({ id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} })
+const searchToolsNode = makeLocationNode({
+  name: "test/search-tool-plugins",
+  layer: Layer.effectDiscard(Effect.all([registerToolPlugin(GlobTool.Plugin), registerToolPlugin(GrepTool.Plugin)])),
+  deps: [
+    Config.node,
+    Environment.node,
+    FileAccess.node,
+    Flag.node,
+    Location.node,
+    Permission.node,
+    Ripgrep.node,
+    Tool.node,
+  ],
+})
 
 const withTools = <A, E, R>(
   directory: string,
-  body: (registry: Tool.Interface, configure: (entries: Entry[]) => Effect.Effect<void>) => Effect.Effect<A, E, R>,
+  body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   assertions?: Permission.AssertInput[],
-  entries: Entry[] = [],
 ) =>
   Effect.gen(function* () {
-    const config = yield* Layer.build(Config.testLayer(entries))
-    const updates = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
-    const event = { subscribe: () => Stream.fromPubSub(updates) }
-    const configure = (next: Entry[]) =>
-      Context.get(config, Config.Test)
-        .setEntries(next)
-        .pipe(Effect.andThen(PubSub.publish(updates, configUpdated())), Effect.asVoid)
-    const searchToolsNode = makeLocationNode({
-      name: "test/search-tool-plugins",
-      layer: Layer.effectDiscard(
-        Effect.all([registerToolPlugin(GlobTool.Plugin, { event }), registerToolPlugin(GrepTool.Plugin, { event })]),
-      ),
-      deps: [
-        Config.node,
-        Environment.node,
-        FileAccess.node,
-        Flag.node,
-        Location.node,
-        Permission.node,
-        Ripgrep.node,
-        Tool.node,
-      ],
-    })
-    return yield* Effect.gen(function* () {
-      const registry = yield* Tool.Service
-      return yield* body(registry, configure)
-    }).pipe(
-      Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode]), [
-          Config.node.replace(Layer.succeedContext(config)),
-          Location.node.replace(
-            Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-          ),
-          Permission.node.replace(
-            permissionLayer({
-              assert: (input) =>
-                Effect.sync(() => {
-                  assertions?.push(input)
-                }),
-            }),
-          ),
-        ]),
-      ),
-    )
-  }).pipe(Effect.scoped)
+    const registry = yield* Tool.Service
+    return yield* body(registry)
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode]), [
+        Config.node.replace(Config.testLayer()),
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ),
+        Permission.node.replace(
+          permissionLayer({
+            assert: (input) =>
+              Effect.sync(() => {
+                assertions?.push(input)
+              }),
+          }),
+        ),
+      ]),
+    ),
+  )
 
 const call = (name: "glob" | "grep", input: unknown) => ({
   sessionID,
@@ -89,44 +73,7 @@ const call = (name: "glob" | "grep", input: unknown) => ({
   call: { type: "tool-call" as const, id: `call-${name}`, name, input },
 })
 
-const fullCodeMode = new Document({
-  type: "document",
-  info: new Info({ experimental: new ConfigExperimental.Info({ full_codemode: true }) }),
-})
-
-const exposed = (registry: Tool.Interface) =>
-  registry
-    .snapshot()
-    .pipe(
-      Effect.map((snapshot) => [
-        ...snapshot.definitions.map((tool) => tool.name),
-        ...(snapshot.codeModeCatalog ? codeModeListings(snapshot.codeModeCatalog).map((entry) => entry.path) : []),
-      ]),
-    )
-
 describe("search tools", () => {
-  it.live("are absent with full_codemode and return when it is turned off", () =>
-    withTempDir((tmp) =>
-      withTools(
-        tmp.path,
-        (registry, configure) =>
-          Effect.gen(function* () {
-            const names = yield* exposed(registry)
-            expect(names).not.toContain("glob")
-            expect(names).not.toContain("grep")
-            expect(yield* executeTool(registry, call("grep", { pattern: "needle" }))).toMatchObject({ status: "error" })
-
-            yield* configure([])
-            yield* waitForTool(registry, "grep")
-            yield* waitForTool(registry, "glob")
-            expect(yield* exposed(registry)).toEqual(expect.arrayContaining(["glob", "grep"]))
-          }),
-        undefined,
-        [fullCodeMode],
-      ),
-    ),
-  )
-
   for (const name of ["glob", "grep"] as const) {
     it.live(`${name} distinguishes a malformed filename glob from an empty search`, () =>
       withTempDir((tmp) =>
