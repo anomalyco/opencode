@@ -199,6 +199,31 @@ describe("SessionSearchIndex", () => {
     }),
   )
 
+  it.effect("pins its SQL to Version, so changing it without a bump fails", () =>
+    Effect.gen(function* () {
+      // Existing indexes are only recreated when Version changes, so SQL changed without a bump never reaches them.
+      // Changing the tables, view or triggers fails this: bump SessionSearchIndex.Version, then update the hashes.
+      const db = yield* database()
+      const hash = (layout: SessionSearchIndex.Layout) =>
+        Effect.gen(function* () {
+          yield* index(db, layout)
+          const rows = yield* db.all<{ sql: string }>(
+            sql`SELECT sql FROM sqlite_master WHERE name GLOB 'session_search*' AND sql IS NOT NULL ORDER BY name`,
+          )
+          return new Bun.CryptoHasher("sha256").update(rows.map((row) => row.sql).join("\n")).digest("hex")
+        })
+      expect({
+        version: SessionSearchIndex.Version,
+        compact: yield* hash("compact"),
+        text: yield* hash("text"),
+      }).toEqual({
+        version: 2,
+        compact: "d305fe820628fd497f46601583077f9b7427ab6b7a1319ca39c7fe2460827547",
+        text: "99c6cdec16d9340ac006abcfe74e3dfcac93b23d7b13c9c7575321cffc7d6b42",
+      })
+    }),
+  )
+
   it.effect("indexes the title once, user text, finished assistant text and completed summaries only", () =>
     Effect.gen(function* () {
       const db = yield* database()
