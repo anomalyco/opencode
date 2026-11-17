@@ -238,7 +238,8 @@ pub fn mentions(text: &str) -> impl Iterator<Item = Mention> + '_ {
                 continue;
             }
             let start = match at.checked_sub(PREFIX.len()) {
-                Some(start) if &text[start..at] == PREFIX && before(start) => start,
+                // `at - PREFIX.len()` is a byte offset, not necessarily a char boundary when there is no prefix.
+                Some(start) if text.get(start..at) == Some(PREFIX) && before(start) => start,
                 _ if before(at) => at,
                 _ => continue,
             };
@@ -304,6 +305,12 @@ mod tests {
         assert_eq!(found(&format!("中文{KNOWN}.")), [KNOWN]);
         assert_eq!(found(&format!("{KNOWN} {KNOWN}")), [KNOWN, KNOWN]);
         assert_eq!(mentions(&prefixed).next().map(|mention| mention.id(&prefixed)), Some(KNOWN));
+    }
+
+    #[test]
+    fn a_multibyte_character_before_an_id_does_not_slice_inside_it() {
+        let text = format!("现abcd文{KNOWN}");
+        assert_eq!(found(&text), [KNOWN]);
     }
 
     #[test]
