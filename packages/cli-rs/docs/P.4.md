@@ -605,10 +605,15 @@ client cannot tell the server's binary, the first `opencode` in an absolute `PAT
 answers so (its real path, so a `mise` shim answers for `mise` and is passed over); else `bun` in an absolute `PATH`
 entry outside the project.
 Without any, TypeScript plugins are skipped and the log says why. Bun starts in the JS host's private directory, with
-`--no-env-file`, an empty `bunfig.toml` of its own and an allowlisted environment (what locates the user, the
-language, the proxy, what names the terminal, such as `TERM`, `TERM_PROGRAM`, `COLORTERM` and `TMUX`, and the
-client's own; no `BUN_*` or `NODE_*`), so nothing of the project the client works in loads as it starts; a project's plugin runs from a copy of the files the user approved, and imports nothing
-outside it. It loads the directory's TUI module as TS does (`package.json`
+`--no-env-file`, `--no-install`, a `bunfig.toml` of its own that holds only `[install] auto = "disable"`, and an
+allowlisted environment (what locates the user, the language, the proxy, what names the terminal, such as `TERM`,
+`TERM_PROGRAM`, `COLORTERM` and `TMUX`, and the client's own; no `BUN_*`, `NPM_*` or `NODE_*`), so nothing of the
+project the client works in loads as it starts; a project's plugin runs from a copy of the files the user approved,
+and imports nothing outside it. Bun installs nothing (js-no-install). Either switch alone turns its auto-install off,
+on Bun and on an opencode binary run as Bun, and the flag wins over a user's own bunfig. A plugin that imports a
+package its directory does not hold fails to load, as "it imports the package '<name>', which is not installed with
+the plugin, and opencode-native installs nothing", and no registry is asked: npm plugins load, nothing is
+installed. It loads the directory's TUI module as TS does (`package.json`
 `name` and `exports`, else `tui.ts` and its kin) by file URL and describes its V2 `{ id, setup }` default export; its
 setup runs only once the loader knows the plugin is enabled, so a plugin that `cli.json` disables runs nothing. Each
 load imports the plugin's modules afresh, its helpers included, and a reload's setup runs on a candidate: the running

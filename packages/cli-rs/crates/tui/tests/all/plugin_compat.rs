@@ -491,9 +491,8 @@ fn a_session_panel_stays_open_across_a_reload() {
 // with the one the JS host serves, as TS's runtime serves its own; it failed, "Cannot find package 'effect'".
 #[test]
 fn a_plugin_that_imports_effect_runs() {
-    let Some(mut config) = config() else { return };
-    // As an installed plugin, whose `node_modules` stops Bun installing a package it lacks from npm as it imports it.
-    config.args.push("--no-install".to_owned());
+    // The JS host installs nothing (js-no-install), so `effect` comes from the host alone.
+    let Some(config) = config() else { return };
     let log = log_file();
     let pipe = open(&[("effectprobe", Some(json!({ "log": log.to_string_lossy() })))], config, (80, 30));
     pipe.active("example.effectprobe");
@@ -1229,4 +1228,121 @@ fn approve(pipe: &Pipe, dir: &Path) {
     let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &target) else { panic!("nothing is held") };
     assert!(artifact.script, "{artifact:?}");
     assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, Decision::Approved), Ok(true));
+}
+
+/// A registry that answers nothing and counts the connections made to it: Bun pointed at it shows whether it asked
+/// npm for anything (js-no-install).
+struct Registry {
+    url: String,
+    asked: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Registry {
+    fn start() -> Self {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = asked.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                drop(stream);
+            }
+        });
+        Self { url, asked }
+    }
+
+    fn asked(&self) -> usize {
+        self.asked.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// `config` with Bun pointed at this registry.
+    fn point(&self, config: Config) -> Config {
+        let env = ["BUN_CONFIG_REGISTRY", "NPM_CONFIG_REGISTRY", "npm_config_registry"]
+            .map(|name| (name.to_owned(), self.url.clone()))
+            .to_vec();
+        Config { env, ..config }
+    }
+}
+
+/// A global plugin with no `node_modules` whose module imports a package nobody installed, loaded on a JS host that
+/// runs as `config` says, with Bun pointed at a registry that counts what it is asked; its status, the toast told, and
+/// how often the registry was asked.
+fn missing_package(config: Config) -> (Option<Status>, Option<String>, usize) {
+    let registry = Registry::start();
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config").join("plugins").join("needs");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("tui.ts"),
+        "import isNumber from \"is-number-js-no-install-probe\"\nexport default { id: \"example.needs\", setup() { void isNumber } }\n",
+    )
+    .unwrap();
+    let harness = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let work = root.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    external_with(&harness.tui, external, Some(registry.point(config)));
+    let pipe = Pipe { harness, root };
+    pipe.harness.wait("the plugin failed", || {
+        pipe.settle();
+        matches!(listed(&pipe, &dir, "example.needs"), Some(Status::Failed(_)))
+    });
+    let toast = pipe.harness.tui.toasts.current().and_then(|toast| toast.title);
+    (listed(&pipe, &dir, "example.needs"), toast, registry.asked())
+}
+
+/// What [`missing_package`] must find: the plugin failed, saying which package is missing and that nothing is
+/// installed, the user was told, and no registry was asked.
+fn assert_installs_nothing((status, toast, asked): (Option<Status>, Option<String>, usize)) {
+    let Some(Status::Failed(error)) = &status else { panic!("{status:?}") };
+    assert!(
+        error.contains("'is-number-js-no-install-probe'")
+            && error.contains("not installed")
+            && error.contains("opencode-native installs nothing"),
+        "{error}"
+    );
+    assert!(toast.as_deref().is_some_and(|title| title.starts_with("Plugin failed")), "{toast:?}");
+    assert_eq!(asked, 0, "Bun asked a registry for the missing package");
+}
+
+// Expected (js-no-install, Simon's rule: npm plugins load, nothing is installed): a plugin whose directory has no
+// `node_modules` and that imports a package nobody installed fails to load, saying which package and that
+// opencode-native installs nothing; the startup's failure toast and `/plugins` show it, and Bun asks no registry for
+// it, which it did with its auto-install on.
+#[test]
+fn a_plugin_importing_a_package_nobody_installed_fails_and_nothing_is_fetched() {
+    let Some(config) = config() else { return };
+    assert_installs_nothing(missing_package(config));
+}
+
+// Expected (js-no-install): the same on the JS host the bundled opencode binary gives, run as the Bun it embeds
+// (`BUN_BE_BUN=1`), which parses Bun's flags and bunfig itself: `Config::find`'s bundled path, with no `bun` on the
+// path.
+#[test]
+fn the_bundled_opencode_as_bun_installs_nothing_either() {
+    if config().is_none() {
+        return;
+    }
+    let Some(opencode) = opencode_plugin::pipe::find("opencode") else {
+        assert!(std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(), "OPENCODE_RS_REQUIRE_TS is set: needs opencode");
+        return;
+    };
+    let home = std::env::var_os("HOME");
+    let var = |name: &str| match name {
+        "HOME" => home.clone(),
+        _ => None,
+    };
+    let work = opencode_util::temp::tempdir().unwrap();
+    let Some(found) =
+        Config::find(var, work.path().to_path_buf(), &opencode_plugin::pipe::Server::Remote, Some(opencode.clone()))
+    else {
+        panic!("{} does not run as Bun", opencode.display())
+    };
+    assert!(found.opencode, "{found:?}");
+    let mut config = config().unwrap();
+    config.bun = found.bun;
+    config.opencode = true;
+    config.bun_version = found.bun_version;
+    assert_installs_nothing(missing_package(config));
 }
