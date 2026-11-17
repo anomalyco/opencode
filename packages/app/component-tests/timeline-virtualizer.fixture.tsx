@@ -1,5 +1,5 @@
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
-import { onCleanup } from "solid-js"
+import { createMemo, createResource, createSignal, onCleanup, startTransition, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
@@ -23,13 +23,25 @@ export function mountTimelineVirtualizer(input: {
     const [state, setState] = createStore({ ready: false, grown: false })
     const follow = createTimelineFollow(() => "cold-reveal-fixture")
 
-    const rows = Array.from(
-      { length: input.count },
-      (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
+    const [rows, setRows] = createSignal(
+      Array.from(
+        { length: input.count },
+        (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
+      ),
     )
 
-    const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))
-    const indexes = new Map(rows.map((row, index) => [row.userMessageID, index]))
+    const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row])))
+    const indexes = createMemo(() => new Map(rows().map((row, index) => [row.userMessageID, index])))
+
+    // Opening a session loads inside a transition, which holds the committed rows until its data arrives.
+    const [loads, setLoads] = createSignal<number | false>(false)
+    let finishLoad = () => {}
+
+    const [load] = createResource(
+      loads,
+      (count) => new Promise<number>((resolve) => (finishLoad = () => resolve(count))),
+    )
+
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
@@ -38,12 +50,12 @@ export function mountTimelineVirtualizer(input: {
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
       projection: {
-        rows: () => rows,
-        rowByKey: () => rowByKey,
+        rows,
+        rowByKey,
         activeMessageID: () => undefined,
         messageByID: () => new Map(),
-        messageRowIndex: () => indexes,
-        messageLastRowIndex: () => indexes,
+        messageRowIndex: indexes,
+        messageLastRowIndex: indexes,
       },
       showHeader: () => false,
       follow,
@@ -131,11 +143,32 @@ export function mountTimelineVirtualizer(input: {
         <button
           type="button"
           onClick={() =>
-            follow.dispatch({ type: "anchor", anchor: { key: TimelineRow.key(rows[0]!), partID: "prt_grouped" } })
+            follow.dispatch({ type: "anchor", anchor: { key: TimelineRow.key(rows()[0]!), partID: "prt_grouped" } })
           }
         >
           Anchor first row
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            void startTransition(() => {
+              setLoads((count) => (count || 0) + 1)
+              setRows((current) => [
+                ...current,
+                ...Array.from(
+                  { length: 20 },
+                  (_, index) => new TimelineRow.UserMessage({ userMessageID: `loaded-${index}` }),
+                ),
+              ])
+            })
+          }
+        >
+          Load more rows
+        </button>
+        <button type="button" onClick={() => finishLoad()}>
+          Finish loading
+        </button>
+        <div data-loaded={load()} />
         <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
@@ -161,7 +194,9 @@ export function mountTimelineVirtualizer(input: {
   render(
     () => (
       <LanguageProvider locale="en">
-        <Fixture />
+        <Suspense>
+          <Fixture />
+        </Suspense>
       </LanguageProvider>
     ),
     host,

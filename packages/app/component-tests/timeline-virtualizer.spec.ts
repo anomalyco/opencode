@@ -168,6 +168,27 @@ story("holds a revealed tool inside a group of several through a later resize", 
   await expect(controls).toHaveAttribute("data-anchored", "true")
 })
 
+story("waits for rows that arrive inside a transition", async ({ page }) => {
+  // The list's slots are a store, which a transition does not hold back. Slots for the new rows mounted while the rows
+  // were still the committed ones, found no row, and the renderer threw.
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await page.evaluate(async (fixture) => {
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 100, rowHeight: 60, immediate: true })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(content).toHaveCSS("visibility", "visible")
+  await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "true")
+
+  await root.getByRole("button", { name: "Load more rows", exact: true }).click()
+  await root.getByRole("button", { name: "Finish loading", exact: true }).click()
+  await expect(content.locator('[data-timeline-key="user-message:loaded-19"]')).toHaveText("loaded-19")
+  expect(errors).toEqual([])
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
