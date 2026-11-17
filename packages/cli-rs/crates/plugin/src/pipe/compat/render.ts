@@ -10,9 +10,9 @@ import { catchError, createComponent, createContext, createMemo, createRenderEff
 import { createTextAttributes, isStyledText, RGBA, TextAttributes } from "./core"
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
-const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", "spinner", ...SPANS])
+const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", "spinner", "select", ...SPANS])
 // The intrinsics of OpenTUI's catalogue the contract has no node for.
-const UNSUPPORTED = new Set(["select", "tab_select", "ascii_font", "diff", "line_number", "image", "video"])
+const UNSUPPORTED = new Set(["tab_select", "ascii_font", "diff", "line_number", "image", "video"])
 // The props whose setter turns a box's border on (OpenTUI's `initializeBorder`).
 const BORDER_ON = new Set(["borderStyle", "borderColor", "focusedBorderColor", "customBorderChars"])
 // The events of a field the layer maps (CT-11).
@@ -563,6 +563,8 @@ function node(at: VNode, reading: Reading): Json {
       for (const name of ["frames", "interval", "color", "backgroundColor", "autoplay"])
         if (props[name] !== undefined) reading.dropped.add(`<spinner> ${name}`)
       return { type: "spinner", label: "" }
+    case "select":
+      return selectOf(at, layout, click, reading)
     case "code":
       return compact({
         type: "code",
@@ -586,6 +588,47 @@ function node(at: VNode, reading: Reading): Json {
     default:
       return boxOf(at, layout, click, reading)
   }
+}
+
+// OpenTUI's `<select>` (CT-14), drawn as its renderable draws it: a row of each option that fits, the selected one on
+// its background with `▶ `, and the description under the name when shown, in OpenTUI's default colors. A click is the
+// select's own handler, as a box's. Its keys (up, down, Enter while focused) and `onChange` are not mapped, as the
+// contract's focus does not reach it; it shows the selection the plugin set.
+const SELECT = {
+  backgroundColor: "transparent",
+  textColor: "#FFFFFF",
+  selectedBackgroundColor: "#334455",
+  selectedTextColor: "#FFFF00",
+  descriptionColor: "#888888",
+  selectedDescriptionColor: "#CCCCCC",
+}
+function selectOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
+  const props = at.props
+  const options: Json[] = Array.isArray(props.options) ? props.options : []
+  const pick = (name: keyof typeof SELECT) => color(props[name] ?? SELECT[name])
+  const described = props.showDescription !== false
+  const indicator = props.showSelectionIndicator !== false
+  const lines = (described ? 2 : 1) + (Number(props.itemSpacing) || 0)
+  const room = typeof props.height === "number" ? Math.floor(props.height / lines) : options.length
+  const selected = clamp(Number(props.selectedIndex) || 0, 0, Math.max(0, options.length - 1))
+  const scroll = clamp(selected - room + 1, 0, Math.max(0, options.length - room))
+  for (const name of ["onChange", "keyBindings", "font", "showScrollIndicator"])
+    if (props[name] !== undefined) reading.dropped.add(`<select> ${name}`)
+  const row = (text: string, fg: string | undefined, pad: number) =>
+    compact({ type: "text", spans: [{ text }], fg, wrap: "none", layout: { margin: { left: pad, right: 0, top: 0, bottom: 0 } } })
+  const children = options.slice(scroll, scroll + room).map((option, index) => {
+    const chosen = scroll + index === selected
+    const mark = indicator ? (chosen ? "\u25B6 " : "  ") : ""
+    return compact({
+      type: "box",
+      bg: chosen ? pick("selectedBackgroundColor") : undefined,
+      children: [
+        row(`${mark}${String(option?.name ?? "")}`, pick(chosen ? "selectedTextColor" : "textColor"), 1),
+        ...(described ? [row(String(option?.description ?? ""), pick(chosen ? "selectedDescriptionColor" : "descriptionColor"), 1 + (indicator ? 2 : 0))] : []),
+      ],
+    })
+  })
+  return compact({ type: "box", id: idOf(at), bg: pick("backgroundColor"), layout, on_click: click, children })
 }
 
 // A node whose state the host keeps (a scroll's offset, a field's text) needs an id, stable while the node lives: the

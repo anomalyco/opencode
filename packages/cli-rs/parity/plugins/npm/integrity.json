@@ -18,5 +18,6 @@
   "@juliuskb__opencode-voice.tgz": "sha512-1d6/b2/mJ/ZndXqUWy2I/xDCGAEZUsoXn7jiyReFPT33esRGGVNtwG7XySZiwgeTvB2cCHGNJokB7H5Okli7dQ==",
   "opencode-tui-context.tgz": "sha512-Tmxdrsq+k0us0dN+YlumpLyf/7W4alm2ffnRGC8DCKMO9XR8Zzww49ofRr0B++qb2QGhd0w8RnLJw8+l3JwBmg==",
   "opencode-tokscope.tgz": "sha512-smvfguaJ4N6uAuiwVtOYfGjZOkJL/Vm4D7bzAUg9abgWUVjrxeeiBGvT5/V0kAsmOmA8XhfND118JnLlvPL68w==",
-  "opencode-usage-report.tgz": "sha512-FYQFABgV0eF6t9aYMSPVruPIdSDDdKxS8PPBhq338N8Yp5dCeaUfkeVfjWpsVOjiKM1BnOEeiVGw5u1sORvIEA=="
+  "opencode-usage-report.tgz": "sha512-FYQFABgV0eF6t9aYMSPVruPIdSDDdKxS8PPBhq338N8Yp5dCeaUfkeVfjWpsVOjiKM1BnOEeiVGw5u1sORvIEA==",
+  "@cleocode__goal.tgz": "sha512-6IojHCDI9N+iWncfvFXT8BXUL+M6zWIzgh55Kkxgu2v1N0GSMtiadUS3leF4pBC43gFecdcPoNL8ZmVIqjeGQQ=="
 }
