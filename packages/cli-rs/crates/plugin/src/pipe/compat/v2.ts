@@ -530,6 +530,7 @@ export function context(base: Base, carrier: Carrier) {
   let shows = 0
   let shown: { mounted: Mounted; key: string; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
   let presentation = { size: "medium", centered: false }
+  let uncarried = false
   let resend = false
   const unshow = () => {
     const was = shown
@@ -1344,6 +1345,12 @@ export function context(base: Base, carrier: Carrier) {
         set(options: Json) {
           presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
           if (shown) sendShown()
+          // An alert's or a confirm's size and centering are not the contract's (CT-35: the joe-broadhead status
+          // alerts at `large`): it would need them on `Alert` and `Confirm` (contract 2.x proposal, addition 4).
+          else if (answering && (presentation.size !== "medium" || presentation.centered) && !uncarried) {
+            uncarried = true
+            console.warn(`plugin ${id}: dialog.set of an alert or a confirm is not carried; it shows at its own size`)
+          }
         },
         clear() {
           const asking = !!answering
