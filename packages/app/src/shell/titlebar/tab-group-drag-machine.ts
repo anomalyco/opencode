@@ -158,7 +158,7 @@ export type VerticalDragEvent =
       readonly x: number
       readonly y: number
       readonly contentY: number
-      readonly measure: () => VerticalDragGeometry
+      readonly geometry?: VerticalDragGeometry
     }
   | {
       readonly type: "scroll.changed"
@@ -246,6 +246,18 @@ function sameIntent(a: VerticalDragIntent | undefined, b: VerticalDragIntent | u
   return false
 }
 
+export function selectNeedsDragMeasurement(
+  state: VerticalDragState,
+  pointerId: number,
+  x: number,
+  y: number,
+) {
+  if (state.status !== "pending" || state.pointerId !== pointerId) return false
+  const threshold = state.pointerType === "touch" ? 8 : 4
+
+  return Math.hypot(x - state.startX, y - state.startY) >= threshold
+}
+
 export function transitionVerticalDrag(state: VerticalDragState, event: VerticalDragEvent): VerticalDragTransition {
   if (event.type === "cancel" || event.type === "disposed") {
     return state.status === "idle" ? unchanged(state) : { state: INITIAL_VERTICAL_DRAG_STATE, effects: NONE }
@@ -267,11 +279,11 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
 
   if (event.type === "pointer.move") {
     if (state.status === "pending" && state.pointerId === event.pointerId) {
-      const threshold = state.pointerType === "touch" ? 8 : 4
+      if (!selectNeedsDragMeasurement(state, event.pointerId, event.x, event.y) || !event.geometry) {
+        return unchanged(state)
+      }
 
-      if (Math.hypot(event.x - state.startX, event.y - state.startY) < threshold) return unchanged(state)
-      const geometry = event.measure()
-      const hit = hitTestVerticalDrag(state.source, geometry, event.x, event.contentY, undefined)
+      const hit = hitTestVerticalDrag(state.source, event.geometry, event.x, event.contentY, undefined)
 
       return {
         state: {
@@ -282,7 +294,7 @@ export function transitionVerticalDrag(state: VerticalDragState, event: Vertical
           currentX: event.x,
           currentY: event.y,
           source: state.source,
-          geometry,
+          geometry: event.geometry,
           indicator: hit.indicator,
           intent: hit.intent,
         },
@@ -391,6 +403,10 @@ export function selectDropLine(state: VerticalDragState) {
 
 export function selectDragGhost(state: VerticalDragState) {
   return state.status === "dragging" ? state : undefined
+}
+
+export function selectDragGhostGroupCount(state: VerticalDragState) {
+  return state.status === "dragging" && state.source.kind === "group" ? state.source.count : undefined
 }
 
 export function selectGhostTargetColor(state: VerticalDragState): TabGroupColor | undefined {

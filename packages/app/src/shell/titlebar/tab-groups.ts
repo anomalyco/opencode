@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { tabKey, type Tab } from "@/shell/tabs/tabs"
+import type { Tab } from "@/shell/tabs/tabs"
 
 export const TAB_GROUP_MODES = ["none", "server", "project"] as const
 

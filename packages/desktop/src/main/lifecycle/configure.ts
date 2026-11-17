@@ -43,8 +43,8 @@ export function configureApplication() {
   if (debugBuild(build) && memoryLogInterval(process.env.OPENCODE_DESKTOP_MEMORY_LOG) !== undefined)
     app.commandLine.appendSwitch("enable-precise-memory-info")
 
-  const customUserData = process.env.OPENCODE_DESKTOP_USER_DATA
   const testRoot = createTestRoot()
+  const customUserData = debugBuild(build) && !testRoot ? process.env.OPENCODE_DESKTOP_USER_DATA : undefined
   app.setPath(
     "userData",
     customUserData ?? (testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID)),
@@ -54,7 +54,7 @@ export function configureApplication() {
     app.setPath("sessionData", path.join(customUserData, "session"))
   }
 
-  if (!customUserData && testRoot) {
+  if (testRoot) {
     app.setPath("sessionData", path.join(testRoot, "session"))
 
     if (testOnboarding) app.setPath("documents", path.join(testRoot, "documents"))

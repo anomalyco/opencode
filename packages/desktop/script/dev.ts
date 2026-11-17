@@ -1,8 +1,19 @@
 import { $ } from "bun"
 import { Database } from "bun:sqlite"
+import { Option, Schema } from "effect"
 import { createHash } from "node:crypto"
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, rmSync } from "node:fs"
-import { constants, homedir, setPriority, tmpdir } from "node:os"
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+} from "node:fs"
+import { constants, homedir, hostname, setPriority, tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareDevElectron } from "./dev-electron"
@@ -22,9 +33,7 @@ async function main() {
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
   cloneLockedDevProfile()
   await prepareDesktop()
-  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
-
-  if (process.env.OPENCODE_DESKTOP_REUSE_SERVER !== "1") await prepareServer(options.server)
+  await prepareDevServer(options.server)
   await startDesktop(options.electron)
 }
 
@@ -53,6 +62,16 @@ function selectOptions(): DevOptions {
     server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
     electron: args.filter((_, index) => !consumed.has(index)),
   }
+}
+
+async function prepareDevServer(source: ServerSource) {
+  if (process.env.OPENCODE_DESKTOP_REUSE_SERVER !== "1") return prepareServer(source)
+
+  if (source.type === "download") {
+    return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+  }
+
+  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
 }
 
 async function prepareServer(source: ServerSource) {
@@ -101,20 +120,66 @@ function defaultDevUserData() {
   return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "ai.opencode.desktop.dev")
 }
 
-function isProfileLocked(userData: string) {
-  const lockfile = join(userData, process.platform === "win32" ? "lockfile" : "SingletonLock")
-
-  if (!existsSync(lockfile)) return false
-
-  if (process.platform !== "win32") return true
+function isPidAlive(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
 
   try {
-    const fd = openSync(lockfile, "r+")
-    closeSync(fd)
+    process.kill(pid, 0)
 
-    return false
-  } catch {
     return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}
+
+function isProfileLocked(userData: string) {
+  if (process.platform === "win32") {
+    const lockfile = join(userData, "lockfile")
+
+    if (!existsSync(lockfile)) return false
+
+    try {
+      const fd = openSync(lockfile, "r+")
+      closeSync(fd)
+
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  // On macOS and Linux, Chromium's SingletonLock is a dangling symlink targeting `<hostname>-<pid>`.
+  const singleton = join(userData, "SingletonLock")
+  let target: string
+
+  try {
+    target = readlinkSync(singleton)
+  } catch {
+    return false
+  }
+
+  const dash = target.lastIndexOf("-")
+
+  if (dash <= 0) return true
+  const lockHost = target.slice(0, dash)
+  const pid = Number(target.slice(dash + 1))
+
+  if (lockHost && lockHost !== hostname()) return true
+
+  return isPidAlive(pid)
+}
+
+const RegisteredServicePid = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number }))
+
+function hasLiveRegisteredService(serviceFile: string) {
+  if (!existsSync(serviceFile)) return false
+
+  try {
+    const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(RegisteredServicePid)(readFileSync(serviceFile, "utf8")))
+
+    return decoded ? isPidAlive(decoded.pid) : false
+  } catch {
+    return false
   }
 }
 
@@ -148,6 +213,13 @@ function cloneLockedDevProfile() {
     ) {
       copyFileSync(join(sourceDir, entry), join(cloneDir, entry))
     }
+  }
+
+  const isolatedServiceFile = join(sourceDir, "opencode", "service-local.json")
+
+  if (hasLiveRegisteredService(isolatedServiceFile)) {
+    process.env.XDG_STATE_HOME = sourceDir
+    process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE = isolatedServiceFile
   }
 
   process.env.OPENCODE_DESKTOP_USER_DATA = cloneDir

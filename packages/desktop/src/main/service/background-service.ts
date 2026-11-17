@@ -109,8 +109,11 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file =
-    !reuse && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+  const reuseFile = reuse ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || undefined : undefined
+
+  const file = reuse
+    ? reuseFile
+    : process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
       ? path.join(
           process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
           "opencode",

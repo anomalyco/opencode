@@ -27,6 +27,7 @@ import {
   INITIAL_VERTICAL_DRAG_STATE,
   selectCombineColorOfTab,
   selectDragGhost,
+  selectDragGhostGroupCount,
   selectDraggingGroupKey,
   selectDraggingTabKey,
   selectDropInsideGroupKey,
@@ -34,6 +35,7 @@ import {
   selectGhostTargetColor,
   selectIsDraggingStrip,
   selectJoinGroupKey,
+  selectNeedsDragMeasurement,
   transitionVerticalDrag,
   type MeasuredStripRow,
   type MeasuredTopBlock,
@@ -102,7 +104,12 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     const language = useLanguage()
     const tabs = useTabs()
 
-    const [state, setState] = persisted(Persist.global("tabs.groups"), TabGroupsStateSchema, DEFAULT_TAB_GROUPS_STATE)
+    const [state, setState, , stateReady] = persisted(
+      Persist.window("tabs.groups"),
+      TabGroupsStateSchema,
+      DEFAULT_TAB_GROUPS_STATE,
+    )
+
     const [local, setLocal] = createStore({ query: "" })
     const [drag, setDrag] = createSignal(INITIAL_VERTICAL_DRAG_STATE)
 
@@ -115,7 +122,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     // Migrate manual group membership when a draft promotes to a session, prune closed keys, and keep manual groups contiguous.
     let previousTabKeys: string[] = []
     createEffect(() => {
-      if (!tabs.ready()) return
+      if (!tabs.ready() || !stateReady()) return
       const nextKeys = tabs.store.map(tabKey)
       const isFreeform = effectiveMode() === "none"
 
@@ -746,6 +753,15 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         if (!activeListEl) return
         const contentY = moveEvent.clientY - activeListEl.getBoundingClientRect().top
 
+        const geometry = selectNeedsDragMeasurement(
+          untrack(drag),
+          moveEvent.pointerId,
+          moveEvent.clientX,
+          moveEvent.clientY,
+        )
+          ? measureGeometry(activeListEl)
+          : undefined
+
         const nextState = dispatchDrag(
           {
             type: "pointer.move",
@@ -753,7 +769,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             x: moveEvent.clientX,
             y: moveEvent.clientY,
             contentY,
-            measure: () => measureGeometry(activeListEl!),
+            geometry,
           },
           moveEvent.buttons,
         )
@@ -841,8 +857,8 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
                   <span class="min-w-0 truncate" dir="auto">
                     {active().source.label}
                   </span>
-                  <Show when={active().source.kind === "group" ? active().source : undefined}>
-                    {(groupSource) => <span class="shrink-0 text-[11px] opacity-75">{groupSource().count}</span>}
+                  <Show when={selectDragGhostGroupCount(drag())}>
+                    {(count) => <span class="shrink-0 text-[11px] opacity-75">{count()}</span>}
                   </Show>
                 </div>
               </Portal>

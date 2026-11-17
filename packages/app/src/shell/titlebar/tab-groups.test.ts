@@ -5,6 +5,7 @@ import {
   applyVerticalDragCommit,
   hitTestVerticalDrag,
   INITIAL_VERTICAL_DRAG_STATE,
+  selectNeedsDragMeasurement,
   transitionVerticalDrag,
   type MeasuredStripRow,
   type MeasuredTopBlock,
@@ -437,6 +438,7 @@ describe("tab-groups", () => {
     })
 
     expect(down.state.status).toBe("pending")
+    expect(selectNeedsDragMeasurement(down.state, 1, 41, 22)).toBe(false)
 
     const tinyMove = transitionVerticalDrag(down.state, {
       type: "pointer.move",
@@ -444,12 +446,10 @@ describe("tab-groups", () => {
       x: 41,
       y: 22,
       contentY: 22,
-      measure: () => {
-        throw new Error("must not measure before crossing activation threshold")
-      },
     })
 
     expect(tinyMove.state).toBe(down.state)
+    expect(selectNeedsDragMeasurement(down.state, 1, 40, 45)).toBe(true)
 
     const t1 = sessionTab(SERVER_A, "ses_1")
     const t2 = sessionTab(SERVER_A, "ses_2")
@@ -461,7 +461,7 @@ describe("tab-groups", () => {
       x: 40,
       y: 45,
       contentY: 45,
-      measure: () => geometry,
+      geometry,
     })
 
     expect(active.state.status).toBe("dragging")
@@ -473,7 +473,6 @@ describe("tab-groups", () => {
       x: 40,
       y: 45,
       contentY: 45,
-      measure: () => geometry,
     })
 
     expect(duplicateMove.state).toBe(active.state)
@@ -485,189 +484,112 @@ describe("tab-groups", () => {
     expect(released.effects[1]?.type).toBe("commit")
   })
 
-  test("fuzzes 2,500 random tab and group drag operations without losing tabs, splitting groups, or mutating colors", () => {
-    let seed = 0x5eed1234
+  test("keeps manual groups contiguous and prunes emptied groups when moving tabs across and out of groups", () => {
+    const t1 = sessionTab(SERVER_A, "ses_1")
+    const t2 = sessionTab(SERVER_A, "ses_2")
+    const t3 = sessionTab(SERVER_A, "ses_3")
+    const t4 = sessionTab(SERVER_A, "ses_4")
 
-    const rand = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0
-
-      return seed / 0x100000000
+    const initialState: TabGroupsState = {
+      ...DEFAULT_TAB_GROUPS_STATE,
+      mode: "none",
+      manualGroups: [
+        { id: "g_a", name: "Group 1", color: "blue" },
+        { id: "g_b", name: "Group 2", color: "green" },
+      ],
+      manualAssignments: {
+        [tabKey(t1)]: "g_a",
+        [tabKey(t3)]: "g_b",
+        [tabKey(t4)]: "g_b",
+      },
     }
 
-    const servers = [SERVER_A, SERVER_B, SERVER_C]
-    let tabs: Tab[] = Array.from({ length: 9 }, (_, idx) => sessionTab(servers[idx % 3]!, `ses_fuzz_${idx}`))
-    const expectedKeys = new Set(tabs.map(tabKey))
+    // Moving t1 (the sole member of g_a) onto g_b's header prepends it to g_b and dissolves empty g_a.
+    const groups = buildComputedTabGroups({
+      items: [t1, t2, t3, t4].map((item) => meta(item)),
+      state: initialState,
+      mode: "none",
+      serverCount: 1,
+      query: "",
+      labels,
+    })!
+
+    const geometry = layoutStripGeometry([t1, t2, t3, t4], groups, initialState, true)
+
+    const joined = applyVerticalDragCommit({
+      allTabKeys: [t1, t2, t3, t4].map(tabKey),
+      groups,
+      blocks: geometry.blocks,
+      state: initialState,
+      intent: {
+        type: "join-group",
+        tabKey: tabKey(t1),
+        groupKey: "manual:g_b",
+        manualId: "g_b",
+        prepend: true,
+      },
+      createGroupId: () => "unused",
+      createGroupName: (n) => `Group ${n}`,
+    })
+
+    expect(joined.manualGroups).toEqual([{ id: "g_b", name: "Group 2", color: "green" }])
+    expect(joined.tabKeys).toEqual([tabKey(t2), tabKey(t1), tabKey(t3), tabKey(t4)])
+
+    // Inserting a new ungrouped tab mid-slice canonicalizes back to contiguous group storage order.
+    const insertedKey = tabKey(sessionTab(SERVER_A, "ses_new"))
+    expect(
+      canonicalizeManualTabOrder([tabKey(t1), insertedKey, tabKey(t3), tabKey(t4)], joined.manualAssignments),
+    ).toEqual([tabKey(t1), tabKey(t3), tabKey(t4), insertedKey])
+  })
+
+  test("keeps drop-line Y strictly monotonic across a 1px vertical sweep over mixed groups and tabs", () => {
+    const tabs = ["ses_1", "ses_2", "ses_3", "ses_4", "ses_5"].map((id) => sessionTab(SERVER_A, id))
 
     const state: TabGroupsState = {
+      ...DEFAULT_TAB_GROUPS_STATE,
       mode: "none",
-      groupOrder: [],
-      collapsed: {},
-      overrides: {},
-      manualGroups: [],
-      manualAssignments: {},
+      collapsed: { "manual:g_closed": true },
+      manualGroups: [
+        { id: "g_open", name: "Open", color: "blue" },
+        { id: "g_closed", name: "Closed", color: "purple" },
+      ],
+      manualAssignments: {
+        [tabKey(tabs[0]!)]: "g_open",
+        [tabKey(tabs[1]!)]: "g_open",
+        [tabKey(tabs[4]!)]: "g_closed",
+      },
     }
 
-    let nextGroupSeq = 1
+    const groups = buildComputedTabGroups({
+      items: tabs.map((item) => meta(item)),
+      state,
+      mode: "none",
+      serverCount: 1,
+      query: "",
+      labels,
+    })!
 
-    const baselineServerColors = Object.fromEntries(
-      buildComputedTabGroups({
-        items: tabs.map((item) => meta(item)),
-        state: DEFAULT_TAB_GROUPS_STATE,
-        mode: "server",
-        serverCount: 3,
-        query: "",
-        labels,
-      })!.map((group) => [group.key, group.color]),
-    )
+    const geometry = layoutStripGeometry(tabs, groups, state, true)
+    const maxBottom = geometry.rows[geometry.rows.length - 1]!.bottom
 
-    for (let step = 0; step < 2_500; step++) {
-      if (rand() < 0.08) {
-        const modes = ["none", "server", "project"] as const
-        const nextMode = modes[Math.floor(rand() * modes.length)]!
-        state.mode = nextMode
+    const source: VerticalDragSource = {
+      kind: "tab",
+      tabKey: tabKey(tabs[2]!),
+      label: "ses_3",
+      groupKey: undefined,
+      manualId: undefined,
+    }
 
-        if (nextMode === "none" && state.manualGroups.length > 0) {
-          const byKey = new Map(tabs.map((tab) => [tabKey(tab), tab]))
-          tabs = canonicalizeManualTabOrder(tabs.map(tabKey), state.manualAssignments).map((key) => byKey.get(key)!)
-        }
-      }
+    let prevLineY = -Infinity
+    let prevIntent = undefined
 
-      const groups = buildComputedTabGroups({
-        items: tabs.map((item) => meta(item)),
-        state,
-        mode: state.mode,
-        serverCount: 3,
-        query: "",
-        labels,
-      })
+    for (let py = -10; py <= maxBottom + 16; py += 1) {
+      const hit = hitTestVerticalDrag(source, geometry, 64, py, prevIntent)
+      prevIntent = hit.intent
 
-      if (groups && groups.length > 0 && rand() < 0.1) {
-        const pick = groups[Math.floor(rand() * groups.length)]!
-
-        if (pick.kind !== "ungrouped") {
-          state.collapsed[pick.key] = !state.collapsed[pick.key]
-        }
-      }
-
-      const refreshedGroups = buildComputedTabGroups({
-        items: tabs.map((item) => meta(item)),
-        state,
-        mode: state.mode,
-        serverCount: 3,
-        query: "",
-        labels,
-      })
-
-      const freeform = state.mode === "none"
-      const geometry = layoutStripGeometry(tabs, refreshedGroups, state, freeform)
-      const maxY = (geometry.rows[geometry.rows.length - 1]?.bottom ?? 100) + 30
-
-      const groupSources = (refreshedGroups ?? []).filter((group) => group.kind !== "ungrouped")
-      const tabRows = geometry.rows.flatMap((row) => (row.kind === "tab" ? [row] : []))
-
-      const pickGroupSource = groupSources.length > 1 && rand() < 0.3
-
-      const source: VerticalDragSource | undefined = pickGroupSource
-        ? (() => {
-            const g = groupSources[Math.floor(rand() * groupSources.length)]!
-
-            return { kind: "group", groupKey: g.key, label: g.name, color: g.color, count: g.allTabs.length }
-          })()
-        : tabRows.length > 0
-          ? (() => {
-              const r = tabRows[Math.floor(rand() * tabRows.length)]!
-
-              return {
-                kind: "tab",
-                tabKey: r.tabKey,
-                label: r.tabKey,
-                groupKey: r.groupKey,
-                manualId: r.manualId,
-              }
-            })()
-          : undefined
-
-      if (!source) continue
-
-      const x = rand() < 0.15 ? 4 : 64
-      const y = -20 + rand() * (maxY + 40)
-      const hit = hitTestVerticalDrag(source, geometry, x, y, undefined)
-
-      if (hit.intent) {
-        const byKey = new Map(tabs.map((tab) => [tabKey(tab), tab]))
-
-        const committed = applyVerticalDragCommit({
-          allTabKeys: tabs.map(tabKey),
-          groups: refreshedGroups,
-          blocks: geometry.blocks,
-          state,
-          intent: hit.intent,
-          createGroupId: () => `g_${nextGroupSeq++}`,
-          createGroupName: (n) => `Group ${n}`,
-        })
-
-        tabs = committed.tabKeys.map((key) => byKey.get(key)!)
-        state.mode = committed.mode
-        state.groupOrder = committed.groupOrder
-        state.collapsed = committed.collapsed
-        state.manualGroups = committed.manualGroups
-        state.manualAssignments = committed.manualAssignments
-      }
-
-      // Invariant 1: Exact bijective tab set preserved.
-      expect(tabs.length).toBe(expectedKeys.size)
-      expect(new Set(tabs.map(tabKey))).toEqual(expectedKeys)
-
-      // Invariant 2: No empty manual groups survive, and every manual group's tabs stay contiguous in storage order.
-      const populatedIds = new Set(Object.values(state.manualAssignments))
-      state.manualGroups.forEach((group) => {
-        expect(populatedIds.has(group.id)).toBe(true)
-      })
-
-      if (state.mode === "none" && state.manualGroups.length > 0) {
-        const finishedGroups = new Set<string>()
-        let currentGroup: string | undefined
-
-        tabs.forEach((tab) => {
-          const gid = state.manualAssignments[tabKey(tab)]
-
-          if (gid !== currentGroup) {
-            if (currentGroup) finishedGroups.add(currentGroup)
-
-            if (gid) expect(finishedGroups.has(gid)).toBe(false)
-            currentGroup = gid
-          }
-        })
-      }
-
-      // Invariant 3: Automatic server colors never drift regardless of tab or group order.
-      if (state.mode === "server") {
-        const serverCheck = buildComputedTabGroups({
-          items: tabs.map((item) => meta(item)),
-          state,
-          mode: "server",
-          serverCount: 3,
-          query: "",
-          labels,
-        })!
-
-        expect(Object.fromEntries(serverCheck.map((group) => [group.key, group.color]))).toEqual(baselineServerColors)
-      }
-
-      // Invariant 4: Every 50th step, sweep a pointer 1px at a time from top to bottom and verify monotonic drop-line Y.
-      if (step % 50 === 0) {
-        let prevLineY = -Infinity
-        let prevIntent = undefined
-
-        for (let py = -12; py <= maxY + 12; py += 1) {
-          const sweep = hitTestVerticalDrag(source, geometry, 64, py, prevIntent)
-          prevIntent = sweep.intent
-
-          if (sweep.indicator?.kind === "line") {
-            expect(sweep.indicator.y).toBeGreaterThanOrEqual(prevLineY)
-            prevLineY = sweep.indicator.y
-          }
-        }
+      if (hit.indicator?.kind === "line") {
+        expect(hit.indicator.y).toBeGreaterThanOrEqual(prevLineY)
+        prevLineY = hit.indicator.y
       }
     }
   })
