@@ -302,6 +302,12 @@ function createClip(entry: Entry) {
         })
       : undefined
 
+  // macOS can make the owned window key again without focusing its page, as after leaving fullscreen, and typing
+  // then needs a click. The window holds only the page, so it takes focus when the window does.
+  window?.on("focus", () => {
+    if (!entry.view.webContents.isDestroyed() && !entry.view.webContents.isFocused()) entry.view.webContents.focus()
+  })
+
   const root = window?.contentView ?? new View()
 
   if (!window) entry.window.contentView.addChildView(root)
