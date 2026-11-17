@@ -13,6 +13,7 @@ import {
   type MediaPart,
   Message,
   SystemPart,
+  ToolDefinition,
   ToolMessage,
   type ToolResultPart,
   UserMessage,
@@ -44,6 +45,7 @@ import { SessionModelTransport } from "./model-transport.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
+import { SessionToolChanges } from "./tool-changes.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
 
@@ -72,7 +74,9 @@ export interface Prepared<Event = SessionRequest> {
   readonly request: LLMRequest
   readonly options: StreamOptions
   readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
-  /** Runs a tool call against the tools this request advertised. */
+  /** A change to the offered tools the durable runner records before sending this request. */
+  readonly toolChange?: SessionToolChanges.Plan["record"]
+  /** Runs a tool call against the tools offered now, which may differ from the request's top-level `tools`. */
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
@@ -83,6 +87,8 @@ export interface Input {
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
+  /** The tool epoch the history continues, from `baseTranscript`. */
+  readonly toolEpoch?: SessionToolChanges.Epoch
   readonly system: Array<SystemPart>
   readonly messages: Array<SessionRequestMessage>
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
@@ -111,8 +117,10 @@ export const baseTranscript = (input: {
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  const toolEpoch = SessionToolChanges.epoch(input.messages, input.model)
   return {
     providerMetadataKey,
+    toolEpoch,
     system: [
       SystemPart.make(
         input.agent.system
@@ -125,14 +133,14 @@ export const baseTranscript = (input: {
       },
     ].filter((part) => part.text.length > 0),
     // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
-    messages: input.messages.flatMap((message) =>
-      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+    messages: input.messages.flatMap((message, index): Array<SessionRequestMessage> => {
+      const tools = SessionToolChanges.replay(message, index, toolEpoch)
+      if (tools) return [tools]
+      return toLLMMessages([message], input.model.ref, providerMetadataKey).map(
         (item): SessionRequestMessage =>
-          message.metadata === undefined || item.id !== message.id
-            ? item
-            : { ...item, metadata: message.metadata },
-      ),
-    ),
+          message.metadata === undefined || item.id !== message.id ? item : { ...item, metadata: message.metadata },
+      )
+    }),
   }
 }
 
@@ -318,6 +326,30 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
+      const toolPlan = SessionToolChanges.plan({
+        model,
+        epoch: input.toolEpoch,
+        offered: Array.from(hooked, ([name, t]) =>
+          ToolDefinition.make({
+            ...t,
+            name,
+            freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
+          }),
+        ),
+      })
+      // Stored metadata is stripped so it never reaches the provider.
+      const messages = boundImages(
+        unsupportedParts(
+          shaped.messages.map((message) => {
+            const { metadata, ...rest } = message
+            return metadata === undefined ? message : Message.make(rest)
+          }),
+          model.capabilities,
+          model.model.provider,
+        ),
+      )
+      // A change sits where the history ends, which is where it replays once recorded, before any assistant prefill.
+      const at = messages.findLastIndex((message) => message.role !== "assistant") + 1
       const affinity = SessionAffinity.get(session)
       const base = ai.request({
         model: model.model,
@@ -336,22 +368,8 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        // Strip the stored metadata hooks could read, so it never reaches the provider.
-        messages: boundImages(
-          unsupportedParts(
-            shaped.messages.map((message) => {
-              const { metadata, ...rest } = message
-              return metadata === undefined ? message : Message.make(rest)
-            }),
-            model.capabilities,
-            model.model.provider,
-          ),
-        ),
-        tools: Array.from(hooked, ([name, t]) => ({
-          ...t,
-          name,
-          freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
-        })),
+        messages: toolPlan.marker ? [...messages.slice(0, at), toolPlan.marker, ...messages.slice(at)] : messages,
+        tools: toolPlan.tools,
         toolChoice: input.toolChoice,
         ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
@@ -436,6 +454,7 @@ export const layer = Layer.effect(
         event: shaped,
         request,
         options: { ...(http ? { http } : {}), ...(webSocket ? { webSocket } : {}) },
+        toolChange: toolPlan.record,
         retry: (event: Parameters<Prepared["retry"]>[0]) =>
           hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
         // Permission.assert and the question tool throw declines as defects so tools cannot

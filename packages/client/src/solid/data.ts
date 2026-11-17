@@ -210,6 +210,9 @@ function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
   }
 }
 
+// Tool changes are model context the server keeps with the history; transcripts don't show them.
+const transcript = (message: SessionMessageInfo) => message.type !== "system" || message.tools === undefined
+
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
   if (sessionID !== "global" || !ref) return undefined
   return {
@@ -1888,7 +1891,7 @@ export function createData(config: CreateDataInput) {
               })
               .catch(evictMissing)
             if ((deletedAt.get(sessionID) ?? 0) > started) return
-            const fetched = response.data.toReversed().map(stored)
+            const fetched = response.data.filter(transcript).toReversed().map(stored)
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))
@@ -1963,7 +1966,7 @@ export function createData(config: CreateDataInput) {
                 { signal },
               )
               if (signal?.aborted) return
-              fetched.push(...response.data.map(stored))
+              fetched.push(...response.data.filter(transcript).map(stored))
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)

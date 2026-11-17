@@ -99,6 +99,8 @@ export type SessionInboxSyntheticPayload = { text: string; description?: string;
 
 export type SessionInboxCompactionPayload = {}
 
+export type ToolFreeform = { type: "text" } | { type: "regex"; pattern: string } | { type: "lark"; grammar: string }
+
 export type ShellID = string
 
 export type SessionMessageNative = { [x: string]: JsonValue }
@@ -185,6 +187,8 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
 export type ModelCacheFormat = "anthropic" | "alibaba"
+
+export type ModelToolUpdate = "add" | "remove" | "replace"
 
 export type ModelMediaInput = "assets" | "state" | "root"
 
@@ -441,15 +445,6 @@ export type SessionMessageSynthetic = {
   type: "synthetic"
 }
 
-export type SessionMessageSystem = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "system"
-  text: string
-  description?: string
-}
-
 export type SessionMessageCompactionRunning = {
   type: "compaction"
   id: SessionMessageID
@@ -523,6 +518,24 @@ export type SessionInboxCompaction = {
   type: "compaction"
   payload: SessionInboxCompactionPayload
   delivery: SessionInboxDelivery
+}
+
+export type ToolDefinition = {
+  name: string
+  description: string
+  inputSchema: { [x: string]: JsonValue }
+  outputSchema?: { [x: string]: JsonValue }
+  freeform?: ToolFreeform
+  native?: { [x: string]: JsonValue }
+}
+
+export type ToolDefinition1 = {
+  name: string
+  description: string
+  inputSchema: { [x: string]: any }
+  outputSchema?: { [x: string]: any }
+  freeform?: ToolFreeform
+  native?: { [x: string]: any }
 }
 
 export type SessionMessageShell = {
@@ -706,6 +719,7 @@ export type ModelCompatibility = {
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
   supportsEffortUpdates?: boolean
+  supportsToolUpdates?: Array<ModelToolUpdate>
   mediaInput?: ModelMediaInput
 }
 
@@ -1179,6 +1193,16 @@ export type SessionInboxUserPayload1 = {
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
   metadata?: { [x: string]: any }
+}
+
+export type SessionMessageSystem = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "system"
+  text: string
+  description?: string
+  tools?: { add: Array<ToolDefinition>; remove: Array<string>; model?: ModelRef }
 }
 
 export type SessionMessageToolStateCompleted = {
@@ -1707,6 +1731,16 @@ export type SessionUsageRecorded = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
+}
+
+export type SessionToolsUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.tools.updated"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; add: Array<ToolDefinition1>; remove: Array<string>; model?: ModelRef }
 }
 
 export type LocationShutdown = {
@@ -2947,6 +2981,7 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionUsageRecorded
   | SessionMessageContentUpdated
+  | SessionToolsUpdated
 
 export type V2Event =
   | LocationShutdown

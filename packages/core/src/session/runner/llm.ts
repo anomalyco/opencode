@@ -272,6 +272,7 @@ const layer = Layer.effect(
             agent: loaded.agent.id,
             model: loaded.model,
             tools: loaded.tools,
+            toolEpoch: transcript.toolEpoch,
             system: transcript.system,
             messages: stepLimitReached
               ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
@@ -282,6 +283,12 @@ const layer = Layer.effect(
             inputTokens: estimate,
           })
           .pipe(
+            // Recorded before the request is sent, so later steps replay the change where this one sent it.
+            Effect.tap((prepared) =>
+              prepared.toolChange
+                ? bus.publish(SessionEvent.ToolsUpdated, { sessionID, ...prepared.toolChange })
+                : Effect.void,
+            ),
             // The hook event holds every message from before images are bounded, screenshots included, and is a separate
             // copy once a plugin hook has rewritten it. The step and its tool callbacks live as long as the slowest tool,
             // so they keep only what they use.

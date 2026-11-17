@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { FinishReason } from "./llm.js"
-import { Content } from "./tool.js"
+import { Changes, Content } from "./tool.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { SessionID } from "./session-id.js"
@@ -168,6 +168,21 @@ export const UsageRecorded = Event.durable({
   },
 })
 export type UsageRecorded = typeof UsageRecorded.Type
+
+/**
+ * The tools offered to the model changed before a step. With `model`, `add` is the whole set offered to that model
+ * from here on, which later changes build on. Recorded only for models that take tool changes in place.
+ */
+export const ToolsUpdated = Event.durable({
+  type: "session.tools.updated",
+  ...options,
+  schema: {
+    ...Base,
+    ...Changes.fields,
+    model: Model.Ref.pipe(optional),
+  },
+})
+export type ToolsUpdated = typeof ToolsUpdated.Type
 
 export const UsageUpdated = Event.ephemeral({
   type: "session.usage.updated",
@@ -722,6 +737,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  ToolsUpdated,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

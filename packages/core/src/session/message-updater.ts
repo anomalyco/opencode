@@ -164,6 +164,17 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
+      "session.tools.updated": (event) =>
+        adapter.appendMessage(
+          SessionMessage.System.make({
+            id: SessionMessage.ID.fromEvent(event.id),
+            type: "system",
+            text: "",
+            tools: { add: event.data.add, remove: event.data.remove, model: event.data.model },
+            metadata: event.metadata,
+            time: { created },
+          }),
+        ),
       "session.synthetic": (event) => {
         return adapter.appendMessage(
           SessionMessage.Synthetic.make({

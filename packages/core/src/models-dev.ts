@@ -1,7 +1,7 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
+import { MaxTokensField, MediaInput, ToolUpdate } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { FreeformFormat } from "@opencode/schema/tool"
@@ -72,8 +72,14 @@ const SourceApi = Schema.Struct({
   base_url: Schema.optional(Schema.String),
   capabilities: Schema.optional(
     Schema.Struct({
-      // Format names this version doesn't know are skipped when the route is built.
-      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+      // Format and update names this version doesn't know are skipped when the route is built.
+      tools: Schema.optional(
+        Schema.Struct({
+          freeform: Schema.optional(Schema.Array(Schema.String)),
+          // Older catalogs published a boolean here, which counts as no updates.
+          updates: Schema.optional(Schema.Unknown),
+        }),
+      ),
     }),
   ),
   sdk: Schema.optional(
@@ -144,6 +150,7 @@ const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
 const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const knownFreeformFormat = Schema.is(FreeformFormat)
+const knownToolUpdate = Schema.is(ToolUpdate)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -274,7 +281,10 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
   if (!packageName) return undefined
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
   const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
+  const updates = api.capabilities?.tools?.updates
+  const toolUpdates = Array.isArray(updates) ? updates.filter(knownToolUpdate) : []
   const compatibility = {
+    ...(toolUpdates.length > 0 ? { supportsToolUpdates: toolUpdates } : {}),
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
     ...(mediaInput ? { mediaInput } : {}),

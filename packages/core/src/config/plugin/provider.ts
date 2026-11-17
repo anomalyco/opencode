@@ -7,6 +7,7 @@ import { Document, type Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Money } from "@opencode/schema/money"
 import { Effect } from "effect"
+import { castDraft } from "immer"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
@@ -225,7 +226,8 @@ function overlay(
     if (config.name) model.name = config.name
     if (config.modelID !== undefined) model.modelID = config.modelID
     if (config.releaseDate !== undefined) model.time = { released: Date.parse(config.releaseDate) }
-    if (config.compatibility !== undefined) model.compatibility = { ...model.compatibility, ...config.compatibility }
+    if (config.compatibility !== undefined)
+      model.compatibility = castDraft({ ...model.compatibility, ...config.compatibility })
     if (config.package !== undefined) model.package = config.package
     if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
     if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)
