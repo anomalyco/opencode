@@ -10,7 +10,3 @@ built-ins/Promise/allSettled/reject-element-function-nonconstructor.js  # accide
 built-ins/Promise/allSettled/resolve-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
 built-ins/Promise/any/reject-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
 built-ins/Promise/race/S25.4.4.3_A5.1_T1.js  # accident: Promise.race([]) never settles; the reference rejects it on purpose with a hint
-language/identifiers/part-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
-language/identifiers/part-unicode-17.0.0.js  # real: Unicode 17 identifiers (parser Unicode tables)
-language/identifiers/start-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
-language/identifiers/start-unicode-17.0.0.js  # real: Unicode 17 identifiers (parser Unicode tables)

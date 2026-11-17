@@ -1475,10 +1475,6 @@ language/global-code/decl-lex-restricted-global.js  # expected SyntaxError but c
 language/global-code/return.js  # expected SyntaxError but the program ran
 language/identifier-resolution/S11.1.2_A1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/identifier-resolution/S11.1.2_A1_T2.js  # #1.2: this.z; z === undefined throw ReferenceError. Actual: TypeError: Cannot read properties of und
-language/identifiers/part-unicode-17.0.0-escaped.js  # Invalid Unicode escape (17:5)
-language/identifiers/part-unicode-17.0.0.js  # Unexpected character '…' (15:5)
-language/identifiers/start-unicode-17.0.0-escaped.js  # Invalid Unicode escape (17:4)
-language/identifiers/start-unicode-17.0.0.js  # Unexpected character '…' (15:4)
 language/punctuators/S7.7_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/statements/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
