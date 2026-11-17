@@ -24,5 +24,6 @@
   "@khaosoigai__oc-context-grid.tgz": "sha512-gKUXa1JTMIYjiY/1tHLv+HIEMa2jqOLcn5zS45CXgK6PooDjjvDRxx2IkSMbY8da8spj4NYRAFYOwFmw7nrutw==",
   "@0xuwui__opencode-session-manager.tgz": "sha512-04lz0UKrAtU7eA4WrjZAhQD3qhDH0QbJzHDTGhkCTQvOcs91U4niovOeTxkMf2RFjBeo2mdDJbm8vQi5THiiZg==",
   "@bybrawe__opencode-queue-manager.tgz": "sha512-rrRhrULk2R35EU4hpklzLfXxC0TA6SPPWGVfmDAcftjVF2TIsqpEswgEaW051+Z3X0n+9zzUYWsATbT6Lijj4w==",
-  "@prevalentware__opencode-goal-plugin.tgz": "sha512-XjpdkZYOo4RHYgLOC6OW6mod4j5BtO6I0YATgpwDJATx+p9+Dvj/Mam6/DS/X1SjNPYt8Sk5/9lQG/EFCHmFgQ=="
+  "@prevalentware__opencode-goal-plugin.tgz": "sha512-XjpdkZYOo4RHYgLOC6OW6mod4j5BtO6I0YATgpwDJATx+p9+Dvj/Mam6/DS/X1SjNPYt8Sk5/9lQG/EFCHmFgQ==",
+  "opencode-session-time.tgz": "sha512-3dqk6Ok8TkvyMkN1qh8MMsw47v+XsNv20cdbaMtzc1OMZHKi5sMHp5NQuAGRviKU5pULEKz3iqCYXYX5U8bP2w=="
 }

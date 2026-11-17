@@ -206,6 +206,9 @@ fn run(
         let config = opencode_plugin::pipe::Config {
             version: "test".to_owned(),
             channel: "test".to_owned(),
+            // TS's recorder runs in UTC (`parity/app/scenarios.test.tsx`), so a time a plugin writes in local time
+            // (`opencode-session-time`'s) reads the same on both sides on any machine.
+            env: vec![("TZ".to_owned(), "UTC".to_owned())],
             ..opencode_plugin::pipe::Config::new(bun)
         };
         let root = opencode_util::temp::tempdir().expect("plugin root");

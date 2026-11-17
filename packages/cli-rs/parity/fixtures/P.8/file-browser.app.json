@@ -26,7 +26,9 @@
   {"checkpoint":"moved","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/moved"},
   {"keys":["ctrl+f"]},
   {"keys":["down"]},
-  {"checkpoint":"searching","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/searching"}
+  {"checkpoint":"searching","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/searching"},
+  {"type":"src"},
+  {"checkpoint":"typed","until":"2 matches","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/typed"}
  ],
  "requests": {
   "writes": [],
@@ -36,6 +38,7 @@
    {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
    {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
    {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/find","query":{"limit":["200"],"location[directory]":["/tmp/opencode/packages/tui"],"query":["src"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src/package.ts","type":"file"},{"path":"package.json","type":"file"}]}},
    {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src","type":"directory"},{"path":"test","type":"directory"},{"path":"README.md","type":"file"},{"path":"package.json","type":"file"},{"path":"tsconfig.json","type":"file"}]}},
    {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src","type":"directory"},{"path":"test","type":"directory"},{"path":"README.md","type":"file"},{"path":"package.json","type":"file"},{"path":"tsconfig.json","type":"file"}]}},
    {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
