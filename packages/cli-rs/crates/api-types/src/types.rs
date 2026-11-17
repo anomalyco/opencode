@@ -7062,6 +7062,238 @@ pub struct GenerateImageResult {
 pub type ExperimentalGenerateImageOutput = GenerateImageResult;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct GenerateImageFile {
+    pub data: PromptBase64,
+    pub mime: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Input of `Client::experimental_generate_video_create`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalGenerateVideoCreateInput {
+    pub model: ModelRef,
+    pub prompt: String,
+    pub start: Option<GenerateImageFile>,
+    pub end: Option<GenerateImageFile>,
+    pub references: Option<Vec<GenerateFile>>,
+    pub duration: Option<i64>,
+    pub aspect: Option<String>,
+    pub resolution: Option<String>,
+    pub sound: Option<bool>,
+}
+
+/// `Generate.VideoID`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GenerateVideoID(pub String);
+
+impl GenerateVideoID {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for GenerateVideoID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for GenerateVideoID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for GenerateVideoID {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for GenerateVideoID {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct GenerateVideoRunning {
+    pub id: GenerateVideoID,
+    pub status: String,
+}
+
+/// Output of `Client::experimental_generate_video_create`.
+pub type ExperimentalGenerateVideoCreateOutput = GenerateVideoRunning;
+
+/// Input of `Client::experimental_generate_video_get`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalGenerateVideoGetInput {
+    pub id: GenerateVideoID,
+}
+
+/// `Blob.ID`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlobID(pub String);
+
+impl BlobID {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for BlobID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for BlobID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for BlobID {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for BlobID {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct BlobInfo {
+    pub id: BlobID,
+    pub mime: String,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub bytes: f64,
+    #[serde(rename = "expiresAt", serialize_with = "crate::ser::number")]
+    pub expires_at: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct GenerateVideoCompleted {
+    pub id: GenerateVideoID,
+    pub status: String,
+    pub blobs: Vec<BlobInfo>,
+}
+
+/// `Generate.VideoErrorReason`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GenerateVideoErrorReason {
+    Failed,
+    Cancelled,
+    Expired,
+    Unknown2,
+    Unknown(String),
+}
+
+impl GenerateVideoErrorReason {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Expired => "expired",
+            Self::Unknown2 => "unknown",
+            Self::Unknown(value) => value,
+        }
+    }
+}
+
+impl From<&str> for GenerateVideoErrorReason {
+    fn from(value: &str) -> Self {
+        match value {
+            "failed" => Self::Failed,
+            "cancelled" => Self::Cancelled,
+            "expired" => Self::Expired,
+            "unknown" => Self::Unknown2,
+            _ => Self::Unknown(value.to_owned()),
+        }
+    }
+}
+
+impl Serialize for GenerateVideoErrorReason {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for GenerateVideoErrorReason {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from(value.as_str()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GenerateVideoError {
+    pub id: GenerateVideoID,
+    pub status: String,
+    pub error: String,
+    pub reason: GenerateVideoErrorReason,
+}
+
+/// `Generate.VideoJob`, tagged by `status`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum GenerateVideoJob {
+    Running(GenerateVideoRunning),
+    Completed(GenerateVideoCompleted),
+    Error(GenerateVideoError),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for GenerateVideoJob {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl GenerateVideoJob {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("status").as_str() {
+            Some("running") => raw.variant().map(Self::Running),
+            Some("completed") => raw.variant().map(Self::Completed),
+            Some("error") => raw.variant().map(Self::Error),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl GenerateVideoJob {
+    /// The `status` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Running(value) => value.status.as_str(),
+            Self::Completed(value) => value.status.as_str(),
+            Self::Error(value) => value.status.as_str(),
+            Self::Unknown(value) => value.get("status").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Running(value) => value.id.as_str(),
+            Self::Completed(value) => value.id.as_str(),
+            Self::Error(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+}
+
+/// Output of `Client::experimental_generate_video_get`.
+pub type ExperimentalGenerateVideoGetOutput = GenerateVideoJob;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateDecisionTextPart {
     pub r#type: String,
     pub text: String,
@@ -12051,276 +12283,118 @@ pub struct ExperimentalMediaGetInput {
     pub hash: MediaHash,
 }
 
-/// `Schedule.Duration`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ScheduleDuration(pub String);
-
-impl ScheduleDuration {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ScheduleDuration {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ScheduleDuration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ScheduleDuration {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ScheduleDuration {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenInputObject {
-    pub r#in: ScheduleDuration,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tz: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenInputObject2 {
-    pub at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tz: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenInputObject3 {
-    pub every: ScheduleDuration,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tz: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenInputObject4 {
-    pub cron: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tz: Option<String>,
-}
-
-/// `Schedule.WhenInput`
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum ScheduleWhenInput {
-    Object(ScheduleWhenInputObject),
-    Object2(ScheduleWhenInputObject2),
-    Object3(ScheduleWhenInputObject3),
-    Object4(ScheduleWhenInputObject4),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-impl<'de> Deserialize<'de> for ScheduleWhenInput {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        crate::de::union(deserializer, Self::from_raw)
-    }
-}
-
-impl ScheduleWhenInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object(member));
-        }
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object2(member));
-        }
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object3(member));
-        }
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object4(member));
-        }
-        raw.unknown().map(Self::Unknown)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleConditionInputObject {
-    pub run: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub is: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub matches: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub changes: Option<bool>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleConditionInputObject2 {
-    pub code: String,
-}
-
-/// `Schedule.ConditionInput`
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum ScheduleConditionInput {
-    Object(ScheduleConditionInputObject),
-    Object2(ScheduleConditionInputObject2),
-    /// A shape this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-impl<'de> Deserialize<'de> for ScheduleConditionInput {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        crate::de::union(deserializer, Self::from_raw)
-    }
-}
-
-impl ScheduleConditionInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object(member));
-        }
-        if let Ok(member) = raw.decode() {
-            return Ok(Self::Object2(member));
-        }
-        raw.unknown().map(Self::Unknown)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleEnds {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after: Option<ScheduleDuration>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub times: Option<i64>,
-}
-
-/// Input of `Client::experimental_schedule_create`.
+/// Input of `Client::experimental_blob_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalScheduleCreateInput {
-    pub session_id: SessionID,
-    pub name: Option<String>,
-    pub when: Option<ScheduleWhenInput>,
-    pub r#if: Option<ScheduleConditionInput>,
-    pub until: Option<ScheduleConditionInput>,
-    pub ends: Option<ScheduleEnds>,
-    pub prompt: String,
-}
-
-/// `Schedule.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ScheduleID(pub String);
-
-impl ScheduleID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ScheduleID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ScheduleID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ScheduleID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ScheduleID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
+pub struct ExperimentalBlobGetInput {
+    pub id: BlobID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenIn {
-    pub r#type: String,
-    pub r#in: ScheduleDuration,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tz: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenAt {
+pub struct AutomationTriggerAt {
     pub r#type: String,
     pub at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
 }
 
+/// `Automation.Duration`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AutomationDuration(pub String);
+
+impl AutomationDuration {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for AutomationDuration {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for AutomationDuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for AutomationDuration {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for AutomationDuration {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenEvery {
+pub struct AutomationTriggerEvery {
     pub r#type: String,
-    pub every: ScheduleDuration,
+    pub every: AutomationDuration,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleWhenCron {
+pub struct AutomationTriggerCron {
     pub r#type: String,
     pub cron: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tz: Option<String>,
 }
 
-/// `Schedule.When`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationTriggerEvent {
+    pub r#type: String,
+    pub server: String,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<IndexMap<String, serde_json::Value>>,
+}
+
+/// `Automation.Trigger`, tagged by `type`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum ScheduleWhen {
-    In(ScheduleWhenIn),
-    At(ScheduleWhenAt),
-    Every(ScheduleWhenEvery),
-    Cron(ScheduleWhenCron),
+pub enum AutomationTrigger {
+    At(AutomationTriggerAt),
+    Every(AutomationTriggerEvery),
+    Cron(AutomationTriggerCron),
+    Event(AutomationTriggerEvent),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
 
-impl<'de> Deserialize<'de> for ScheduleWhen {
+impl<'de> Deserialize<'de> for AutomationTrigger {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         crate::de::union(deserializer, Self::from_raw)
     }
 }
 
-impl ScheduleWhen {
+impl AutomationTrigger {
     fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
-            Some("in") => raw.variant().map(Self::In),
             Some("at") => raw.variant().map(Self::At),
             Some("every") => raw.variant().map(Self::Every),
             Some("cron") => raw.variant().map(Self::Cron),
+            Some("event") => raw.variant().map(Self::Event),
             _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
 
-impl ScheduleWhen {
+impl AutomationTrigger {
     /// The `type` tag, also of an unknown member.
     pub fn tag(&self) -> &str {
         match self {
-            Self::In(value) => value.r#type.as_str(),
             Self::At(value) => value.r#type.as_str(),
             Self::Every(value) => value.r#type.as_str(),
             Self::Cron(value) => value.r#type.as_str(),
+            Self::Event(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
@@ -12328,86 +12402,213 @@ impl ScheduleWhen {
     /// The `tz` field, of the members that have it.
     pub fn tz(&self) -> Option<&str> {
         match self {
-            Self::In(value) => value.tz.as_deref(),
             Self::At(value) => value.tz.as_deref(),
             Self::Every(value) => value.tz.as_deref(),
             Self::Cron(value) => value.tz.as_deref(),
-            Self::Unknown(_) => None,
+            Self::Event(_) | Self::Unknown(_) => None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleConditionShell {
-    pub r#type: String,
-    pub run: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub is: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub matches: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub changes: Option<bool>,
+pub struct AutomationTargetObject {
+    pub session: SessionID,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleConditionCode {
-    pub r#type: String,
-    pub code: String,
+pub struct AutomationTargetObject2 {
+    pub subagent: AgentID,
 }
 
-/// `Schedule.Condition`, tagged by `type`.
+/// `Automation.Target`
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum ScheduleCondition {
-    Shell(ScheduleConditionShell),
-    Code(ScheduleConditionCode),
-    /// A member this client does not know, kept as it arrived.
+pub enum AutomationTarget {
+    Object(AutomationTargetObject),
+    Object2(AutomationTargetObject2),
+    /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
 
-impl<'de> Deserialize<'de> for ScheduleCondition {
+impl<'de> Deserialize<'de> for AutomationTarget {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         crate::de::union(deserializer, Self::from_raw)
     }
 }
 
-impl ScheduleCondition {
+impl AutomationTarget {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::Object(member));
+        }
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::Object2(member));
+        }
+        raw.unknown().map(Self::Unknown)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationPromptActionInput {
+    pub r#type: String,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<AutomationTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationCodeActionInput {
+    pub r#type: String,
+    pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<serde_json::Value>,
+}
+
+/// `Automation.ActionInput`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AutomationActionInput {
+    Prompt(AutomationPromptActionInput),
+    Code(AutomationCodeActionInput),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for AutomationActionInput {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl AutomationActionInput {
     fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
-            Some("shell") => raw.variant().map(Self::Shell),
+            Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
             _ => raw.unknown().map(Self::Unknown),
         }
     }
 }
 
-impl ScheduleCondition {
+impl AutomationActionInput {
     /// The `type` tag, also of an unknown member.
     pub fn tag(&self) -> &str {
         match self {
-            Self::Shell(value) => value.r#type.as_str(),
+            Self::Prompt(value) => value.r#type.as_str(),
             Self::Code(value) => value.r#type.as_str(),
             Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleActionPrompt {
-    pub r#type: String,
-    pub prompt: String,
+/// Input of `Client::experimental_automation_create`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalAutomationCreateInput {
+    pub session_id: Option<SessionID>,
+    pub directory: Option<String>,
+    pub name: String,
+    pub trigger: AutomationTrigger,
+    pub action: AutomationActionInput,
+    pub expires: Option<String>,
 }
 
-/// `Schedule.Status`
+/// `Automation.ID`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AutomationID(pub String);
+
+impl AutomationID {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for AutomationID {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for AutomationID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for AutomationID {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for AutomationID {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AutomationActionPrompt {
+    pub r#type: String,
+    pub prompt: String,
+    pub to: AutomationTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationActionCode {
+    pub r#type: String,
+    pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<serde_json::Value>,
+}
+
+/// `Automation.Action`, tagged by `type`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AutomationAction {
+    Prompt(AutomationActionPrompt),
+    Code(AutomationActionCode),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for AutomationAction {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl AutomationAction {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("type").as_str() {
+            Some("prompt") => raw.variant().map(Self::Prompt),
+            Some("code") => raw.variant().map(Self::Code),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl AutomationAction {
+    /// The `type` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Prompt(value) => value.r#type.as_str(),
+            Self::Code(value) => value.r#type.as_str(),
+            Self::Unknown(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+}
+
+/// `Automation.Status`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ScheduleStatus {
+pub enum AutomationStatus {
     Active,
     Paused,
     Done,
     Unknown(String),
 }
 
-impl ScheduleStatus {
+impl AutomationStatus {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Active => "active",
@@ -12418,7 +12619,7 @@ impl ScheduleStatus {
     }
 }
 
-impl From<&str> for ScheduleStatus {
+impl From<&str> for AutomationStatus {
     fn from(value: &str) -> Self {
         match value {
             "active" => Self::Active,
@@ -12429,69 +12630,66 @@ impl From<&str> for ScheduleStatus {
     }
 }
 
-impl Serialize for ScheduleStatus {
+impl Serialize for AutomationStatus {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.as_str())
     }
 }
 
-impl<'de> Deserialize<'de> for ScheduleStatus {
+impl<'de> Deserialize<'de> for AutomationStatus {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Ok(Self::from(value.as_str()))
     }
 }
 
-/// `Schedule.Outcome`
+/// `Automation.Outcome`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ScheduleOutcome {
+pub enum AutomationOutcome {
     Fired,
     Late,
-    Checked,
-    Expired,
     Skipped,
     Disabled,
     Failed,
+    Expired,
     Unknown(String),
 }
 
-impl ScheduleOutcome {
+impl AutomationOutcome {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Fired => "fired",
             Self::Late => "late",
-            Self::Checked => "checked",
-            Self::Expired => "expired",
             Self::Skipped => "skipped",
             Self::Disabled => "disabled",
             Self::Failed => "failed",
+            Self::Expired => "expired",
             Self::Unknown(value) => value,
         }
     }
 }
 
-impl From<&str> for ScheduleOutcome {
+impl From<&str> for AutomationOutcome {
     fn from(value: &str) -> Self {
         match value {
             "fired" => Self::Fired,
             "late" => Self::Late,
-            "checked" => Self::Checked,
-            "expired" => Self::Expired,
             "skipped" => Self::Skipped,
             "disabled" => Self::Disabled,
             "failed" => Self::Failed,
+            "expired" => Self::Expired,
             _ => Self::Unknown(value.to_owned()),
         }
     }
 }
 
-impl Serialize for ScheduleOutcome {
+impl Serialize for AutomationOutcome {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.as_str())
     }
 }
 
-impl<'de> Deserialize<'de> for ScheduleOutcome {
+impl<'de> Deserialize<'de> for AutomationOutcome {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Ok(Self::from(value.as_str()))
@@ -12499,20 +12697,20 @@ impl<'de> Deserialize<'de> for ScheduleOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ScheduleInfo {
-    pub id: ScheduleID,
+pub struct AutomationInfo {
+    pub id: AutomationID,
+    pub name: String,
+    #[serde(rename = "projectID")]
+    pub project_id: ProjectID,
     #[serde(rename = "sessionID", default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<SessionID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    pub when: ScheduleWhen,
+    pub directory: String,
+    pub trigger: AutomationTrigger,
     pub tz: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#if: Option<ScheduleCondition>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub until: Option<ScheduleCondition>,
-    pub action: ScheduleActionPrompt,
-    pub status: ScheduleStatus,
+    pub action: AutomationAction,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub expires: Option<f64>,
+    pub status: AutomationStatus,
     #[serde(
         rename = "nextDueAt",
         default,
@@ -12520,74 +12718,68 @@ pub struct ScheduleInfo {
         skip_serializing_if = "Option::is_none"
     )]
     pub next_due_at: Option<f64>,
-    #[serde(
-        rename = "endsAt",
-        default,
-        serialize_with = "crate::ser::option_number",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub ends_at: Option<f64>,
-    #[serde(rename = "remainingRuns", default, skip_serializing_if = "Option::is_none")]
-    pub remaining_runs: Option<i64>,
     #[serde(rename = "runCount")]
     pub run_count: i64,
     #[serde(
-        rename = "lastFiredAt",
+        rename = "lastRunAt",
         default,
         serialize_with = "crate::ser::option_number",
         skip_serializing_if = "Option::is_none"
     )]
-    pub last_fired_at: Option<f64>,
+    pub last_run_at: Option<f64>,
     #[serde(rename = "lastOutcome", default, skip_serializing_if = "Option::is_none")]
-    pub last_outcome: Option<ScheduleOutcome>,
+    pub last_outcome: Option<AutomationOutcome>,
     #[serde(rename = "lastOutput", default, skip_serializing_if = "Option::is_none")]
     pub last_output: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<serde_json::Value>,
     pub time: PermissionSavedInfoTime,
 }
 
-/// Output of `Client::experimental_schedule_create`.
-pub type ExperimentalScheduleCreateOutput = ScheduleInfo;
+/// Output of `Client::experimental_automation_create`.
+pub type ExperimentalAutomationCreateOutput = AutomationInfo;
 
-/// Input of `Client::experimental_schedule_list`.
+/// Input of `Client::experimental_automation_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalScheduleListInput {
-    pub session_id: SessionID,
+pub struct ExperimentalAutomationListInput {
+    pub session_id: Option<SessionID>,
+    pub directory: Option<String>,
 }
 
-/// Output of `Client::experimental_schedule_list`.
-pub type ExperimentalScheduleListOutput = Vec<ScheduleInfo>;
+/// Output of `Client::experimental_automation_list`.
+pub type ExperimentalAutomationListOutput = Vec<AutomationInfo>;
 
-/// Input of `Client::experimental_schedule_get`.
+/// Input of `Client::experimental_automation_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalScheduleGetInput {
-    pub schedule_id: ScheduleID,
+pub struct ExperimentalAutomationGetInput {
+    pub automation_id: AutomationID,
 }
 
-/// Output of `Client::experimental_schedule_get`.
-pub type ExperimentalScheduleGetOutput = ScheduleInfo;
+/// Output of `Client::experimental_automation_get`.
+pub type ExperimentalAutomationGetOutput = AutomationInfo;
 
-/// Input of `Client::experimental_schedule_pause`.
+/// Input of `Client::experimental_automation_pause`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalSchedulePauseInput {
-    pub schedule_id: ScheduleID,
+pub struct ExperimentalAutomationPauseInput {
+    pub automation_id: AutomationID,
 }
 
-/// Output of `Client::experimental_schedule_pause`.
-pub type ExperimentalSchedulePauseOutput = ScheduleInfo;
+/// Output of `Client::experimental_automation_pause`.
+pub type ExperimentalAutomationPauseOutput = AutomationInfo;
 
-/// Input of `Client::experimental_schedule_resume`.
+/// Input of `Client::experimental_automation_resume`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalScheduleResumeInput {
-    pub schedule_id: ScheduleID,
+pub struct ExperimentalAutomationResumeInput {
+    pub automation_id: AutomationID,
 }
 
-/// Output of `Client::experimental_schedule_resume`.
-pub type ExperimentalScheduleResumeOutput = ScheduleInfo;
+/// Output of `Client::experimental_automation_resume`.
+pub type ExperimentalAutomationResumeOutput = AutomationInfo;
 
-/// Input of `Client::experimental_schedule_delete`.
+/// Input of `Client::experimental_automation_delete`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalScheduleDeleteInput {
-    pub schedule_id: ScheduleID,
+pub struct ExperimentalAutomationDeleteInput {
+    pub automation_id: AutomationID,
 }
 
 /// Input of `Client::experimental_artifacts_providers`.
@@ -14911,15 +15103,19 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_blob: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub schedules: Option<bool>,
+    pub automations: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_generate: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_events: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedules: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -15423,6 +15619,30 @@ impl crate::TaggedError for ProviderRequestError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ForbiddenError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for ForbiddenError {
+    const TAG: &'static str = "ForbiddenError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct VideoNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    #[serde(rename = "videoID")]
+    pub video_id: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for VideoNotFoundError {
+    const TAG: &'static str = "VideoNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -15475,17 +15695,6 @@ pub struct McpServerNotFoundError {
 
 impl crate::TaggedError for McpServerNotFoundError {
     const TAG: &'static str = "McpServerNotFoundError";
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ForbiddenError {
-    #[serde(rename = "_tag")]
-    pub tag: String,
-    pub message: String,
-}
-
-impl crate::TaggedError for ForbiddenError {
-    const TAG: &'static str = "ForbiddenError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -15632,16 +15841,29 @@ impl crate::TaggedError for PtyFeatureUnsupportedError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ScheduleNotFoundError {
+pub struct BlobNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
-    #[serde(rename = "scheduleID")]
-    pub schedule_id: String,
+    #[serde(rename = "blobID")]
+    pub blob_id: String,
     pub message: String,
 }
 
-impl crate::TaggedError for ScheduleNotFoundError {
-    const TAG: &'static str = "ScheduleNotFoundError";
+impl crate::TaggedError for BlobNotFoundError {
+    const TAG: &'static str = "BlobNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AutomationNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    #[serde(rename = "automationID")]
+    pub automation_id: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for AutomationNotFoundError {
+    const TAG: &'static str = "AutomationNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
