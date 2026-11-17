@@ -200,6 +200,21 @@ fn screen(h: &Port) -> Vec<String> {
     cells(h, 0, 0..40)
 }
 
+/// The whole screen's cells once two looks a settle apart agree. A step's text can show while the dialog stack is
+/// still changing (a confirm closed and the plugin's alert not yet open, the backdrop missing from a frame).
+fn steady_screen(h: &Port) -> Vec<String> {
+    let mut last = screen(h);
+    for _ in 0..20 {
+        h.settle();
+        let now = screen(h);
+        if now == last {
+            return now;
+        }
+        last = now;
+    }
+    panic!("the screen never held still:\n{}", last.join("\n"))
+}
+
 // Expected: on each column, the sidebar shows the newest prompt and the link: with a newer prompt queued in the inbox,
 // that one (the host lists a queued prompt among the session's messages, as TS's frame for it reads, so it has no
 // `Queued` mark); `/lastprompt` and a click on the link show the whole prompt in a large centered dialog
@@ -674,8 +689,10 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
                 h.app.press("return");
             }
             h.wait_for(until);
+            // Every step shows one of the host's dialogs, the menu or one the plugin opened from it.
+            h.wait(&format!("{name}: a dialog is open"), || h.tui.dialogs.is_open());
             h.settle();
-            steps.push((name.to_owned(), screen(&h)));
+            steps.push((name.to_owned(), steady_screen(&h)));
         };
         h.app.type_text("/qm");
         h.wait_for("Queue Manager");
