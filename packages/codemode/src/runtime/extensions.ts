@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { type Extension, isAsync, StreamingResponse } from "../extension.js"
+import { BufferObj } from "../stdlib/buffer.js"
 import { hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
@@ -164,6 +165,8 @@ export const extensionGlobals = <R>(
         return result
       }
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
+      if (typeof Buffer !== "undefined" && Buffer.isBuffer(value))
+        return new BufferObj(builtins.Buffer, new Uint8Array(value))
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
       if (value instanceof ArrayBuffer) {
         const view = new Uint8Array(value)

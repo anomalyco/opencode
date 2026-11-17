@@ -38,6 +38,7 @@ import { Convert, Interruption, Invoke } from "../runtime/signals.js"
 import { deleted, OrderedTable } from "../runtime/table.js"
 import { AsyncFromSyncIterator } from "../generators.js"
 import { HostCall, Resolving } from "../scheduler.js"
+import { BufferObj } from "../stdlib/buffer.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
 import { ToolError, toolError } from "../tool-error.js"
 import { ToolReference, ToolRuntimeError } from "../tool-runtime.js"
@@ -225,6 +226,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "HeadersObj", ctor: HeadersObj, fields: ["headers"], obj: true, constants: { tag: "Headers" } },
   { name: "URLObj", ctor: URLObj, fields: ["searchParams", "url"], obj: true, constants: { tag: "URL" } },
   { name: "Bytes", ctor: Bytes, fields: ["bytes"], obj: true, constants: { tag: "Uint8Array" } },
+  { name: "BufferObj", ctor: BufferObj, fields: ["bytes"], obj: true, constants: { tag: "Uint8Array" } },
   {
     name: "TextDecoderObj",
     ctor: TextDecoderObj,
