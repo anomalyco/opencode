@@ -5,6 +5,7 @@ import { mockServers } from "../utils/mock-server"
 import { mockWorkspace } from "../utils/workspace"
 
 test("inspects event and timer automations and manages the selected row", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/Atlas"
   const now = Date.UTC(2026, 10, 17, 9, 10)
   const base = {
@@ -24,11 +25,11 @@ test("inspects event and timer automations and manages the selected row", async 
       trigger: { type: "event", server: "deployments", event: "deployment.finished", args: { environment: "staging" } },
       action: {
         type: "code",
-        code: 'if (event.data.status !== "failed") return\nreturn { send: { prompt: "Review the failed deployment." } }',
+        code: 'console.log(`Deployment status: ${event.data.status}`)\nif (event.data.status === "failed")\n  return { send: { prompt: "Review the failed deployment." } }',
       },
       lastRunAt: now,
       lastOutcome: "fired",
-      lastOutput: "Staging deployment succeeded. No message sent.",
+      lastOutput: "Deployment status: succeeded",
     },
     {
       ...base,
@@ -50,6 +51,8 @@ test("inspects event and timer automations and manages the selected row", async 
   await mockWorkspace(page, {
     name: "Atlas",
     directory,
+    project: { name: "Atlas (sample)" },
+    hostname: "release-runner-03",
     commands: [{ name: "automation" }],
     sessions: [
       { id: "ses_release", title: "Release planning" },
@@ -68,11 +71,24 @@ test("inspects event and timer automations and manages the selected row", async 
   await page.getByRole("button", { name: /Release health watch/ }).click()
   await expect(detail.getByRole("heading", { name: "Release health watch" })).toBeVisible()
   await expect(detail.getByText("deployment.finished", { exact: true })).toBeVisible()
+  await expect(
+    detail
+      .getByRole("term")
+      .filter({ hasText: /^Runs on$/ })
+      .locator("+ dd"),
+  ).toHaveText("release-runner-03")
+  await expect(
+    detail
+      .getByRole("term")
+      .filter({ hasText: /^MCP source$/ })
+      .locator("+ dd"),
+  ).toHaveText("deployments")
   await expect(detail.getByText('"staging"', { exact: false })).toBeVisible()
   await expect(detail.getByText("Next run")).toHaveCount(0)
   await expect(detail.getByText("Only if the code returns send", { exact: false })).toBeVisible()
   await expect(detail.getByText(`${directory}/release`, { exact: true })).toBeVisible()
-  await expect(detail.getByText("Staging deployment succeeded. No message sent.")).toBeVisible()
+  await expect(detail.getByText("Deployment status: succeeded", { exact: true })).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath("automation-inspector.png"), animations: "disabled" })
   await detail.getByRole("button", { name: "Pause", exact: true }).click()
   await expect(nav).toContainText("1")
   await detail.getByRole("button", { name: "Resume", exact: true }).click()
@@ -106,6 +122,59 @@ test("discovers an enabled empty project and withdraws the entry when the server
   await expect(page.getByText("Automations aren’t available in your open projects.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Automations", exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "New automation" })).toHaveCount(0)
+})
+
+test("manages a watch outside open locations and opens the recipient instead of its last viewed child", async ({
+  page,
+}) => {
+  const directory = "/projects/repo"
+  const docs = `${directory}/docs`
+  await mockWorkspace(page, {
+    name: "Repo",
+    directory,
+    commands: (dir) => (dir === docs ? [{ name: "automation" }] : []),
+    automations: [
+      {
+        id: "aut_docs",
+        projectID: "proj_repo",
+        directory: docs,
+        name: "Review docs",
+        tz: "UTC",
+        trigger: { type: "every", every: "1 day" },
+        action: { type: "prompt", prompt: "Review new documentation.", to: { session: "ses_parent" } },
+        status: "active",
+        runCount: 0,
+        time: { created: 1, updated: 1 },
+      },
+    ],
+    sessions: [
+      { id: "ses_parent", title: "Docs planning" },
+      { id: "ses_child", title: "Research notes", parentID: "ses_parent" },
+    ],
+    seed: {
+      storage: {
+        "opencode.window.browser.dat:tabs": [
+          {
+            type: "session",
+            sessionId: "ses_parent",
+            server: SERVER,
+            routeSessionId: "ses_child",
+            routeParentId: "ses_parent",
+          },
+        ],
+      },
+    },
+  })
+  await page.goto(sessionHref("ses_child"))
+  await expect(page.getByRole("heading", { name: "Research notes", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Automations", exact: true }).click()
+  const detail = page.getByRole("article")
+  await expect(detail.getByRole("heading", { name: "Review docs" })).toBeVisible()
+  await expect(detail.getByText(docs, { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "New automation" })).toBeVisible()
+  await detail.getByRole("button", { name: /Docs planning|ses_parent/ }).click()
+  await expect(page).toHaveURL(sessionHref("ses_parent"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
 })
 
 test("keeps identically keyed automations on separate servers and starts the draft in the row’s saved directory", async ({

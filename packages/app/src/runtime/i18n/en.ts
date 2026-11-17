@@ -20,6 +20,8 @@ export const dict = {
   "automations.action.pause": "Pause",
   "automations.action.resume": "Resume",
   "automations.creator": "Created by",
+  "automations.runsOn": "Runs on",
+  "automations.eventSource": "MCP source",
   "automations.recipient": "Recipient",
   "automations.conditional": "Only if the code returns send: the creating session, or a new quiet child if send names a subagent.",
   "automations.child": "New quiet child · {{agent}}",

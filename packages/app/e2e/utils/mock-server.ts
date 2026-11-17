@@ -151,7 +151,7 @@ export interface MockServerConfig {
   // Title of created sessions (default: the request's title, else "New session").
   createdSessionTitle?: string
   // Slash commands served by `/api/command`.
-  commands?: Resolvable<unknown[]>
+  commands?: unknown[] | ((directory: string) => unknown[])
   // Records POST /api/session/:id/command (204). Without it, commands answer 501 MockUnsupported.
   onCommand?: (input: { sessionID: string; body: unknown }) => void
   fileList?: (path: string) => unknown[] | Promise<unknown[]>
@@ -906,10 +906,10 @@ function mockHandlers(
           ),
         credentialRemove: () => noContent,
         command: (ctx) =>
-          Effect.sync(() => ({
-            location: location(config, requestDirectory(config, ctx.request)),
-            data: resolve(config.commands ?? []),
-          })),
+          Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            return { location: location(config, directory), data: typeof config.commands === "function" ? config.commands(directory) : config.commands ?? [] }
+          }),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
         mcp: (ctx) =>

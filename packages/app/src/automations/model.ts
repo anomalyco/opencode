@@ -83,6 +83,22 @@ export function createAutomationsController() {
   const selected = createMemo(() => filtered().find((item) => item.key === state.key) ?? filtered()[0])
   // Pin even the default selection: pausing it may reorder the list, but must not move its inspector.
   createEffect(() => set("key", selected()?.key))
+  createEffect(() => {
+    const entry = selected()
+    if (entry) void entry.ctx.data.location.command.sync({ directory: entry.row.directory }).catch(() => undefined)
+  })
+  const draftTarget = createMemo(() => {
+    const entry = selected()
+    if (entry) {
+      const directory = entry.row.directory
+      if (entry.ctx.data.location.command.list({ directory })?.some((command) => command.name === "automation"))
+        return { server: entry.server, directory }
+      return
+    }
+    const preferred = layout.home.selection().server ?? tabs.lastTarget()?.server
+    const target = source.enabled().find((entry) => entry.server === preferred) ?? source.enabled()[0]
+    if (target) return { server: target.server, directory: target.directories[0]! }
+  })
   const change = useMutation(() => ({
     mutationFn: async (input: { entry: AutomationEntry; operation: "pause" | "resume" | "delete" }) => {
       await input.entry.ctx.sdk.api.experimental.automation[input.operation]({ automationID: input.entry.row.id })
@@ -103,6 +119,7 @@ export function createAutomationsController() {
     counts,
     filtered,
     selected,
+    draftTarget,
     language,
     state,
     setFilter: (filter: AutomationFilter) => set("filter", filter),
@@ -113,20 +130,13 @@ export function createAutomationsController() {
       if (!change.isPending) change.mutate({ entry, operation })
     },
     openSession(entry: AutomationEntry, sessionId: string) {
-      void startTransition(() => tabs.select(tabs.addSessionTab({ server: entry.server, sessionId })))
+      const tab = tabs.addSessionTab({ server: entry.server, sessionId })
+      tabs.rememberSessionRoute(tab, sessionId)
+      void startTransition(() => tabs.select(tab))
     },
     openNewAutomation(prompt = "/automation ") {
-      const row = selected()
-      if (row)
-        return void tabs.newDraft(
-          { server: row.server, directory: row.row.directory, worktree: row.row.directory },
-          prompt,
-        )
-      const preferred = layout.home.selection().server ?? tabs.lastTarget()?.server
-      const target = source.enabled().find((entry) => entry.server === preferred) ?? source.enabled()[0]
-      if (!target) return
-      const directory = target.directories[0]!
-      void tabs.newDraft({ server: target.server, directory, worktree: directory }, prompt)
+      const target = draftTarget()
+      if (target) void tabs.newDraft({ ...target, worktree: target.directory }, prompt)
     },
   }
 }

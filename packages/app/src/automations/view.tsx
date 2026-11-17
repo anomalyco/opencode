@@ -90,7 +90,6 @@ function Block(props: { label: string; children: JSX.Element; code?: boolean }) 
 
 export function AutomationInspector(props: {
   entry: AutomationItem
-  multiServer: boolean
   busy: boolean
   onTogglePause: () => void
   onOpenSession: (id: string) => void
@@ -131,10 +130,6 @@ export function AutomationInspector(props: {
           <div class="flex items-center gap-2 text-[12px] leading-4 text-v2-text-text-muted">
             <StatusDot item={props.entry} />
             {statusLabel(row(), t)} · <bdi>{props.entry.projectName}</bdi>
-            <Show when={props.multiServer}>
-              {" "}
-              · <bdi>{props.entry.serverLabel}</bdi>
-            </Show>
           </div>
           <h2 dir="auto" class="text-[16px] leading-6 font-semibold text-v2-text-text-base">
             {row().name}
@@ -163,12 +158,24 @@ export function AutomationInspector(props: {
         </div>
       </header>
       <dl class="flex flex-wrap gap-x-8 gap-y-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3">
+        <Fact label={t("automations.runsOn")}>
+          <bdi>{props.entry.serverLabel}</bdi>
+        </Fact>
         <Fact label={t(event() ? "automations.kind.event" : "automations.section.trigger")}>
           <bdi>{props.entry.trigger}</bdi>
-          <div class="text-[12px] text-v2-text-text-faint">
-            <bdi>{event()?.server ?? row().tz}</bdi>
-          </div>
+          <Show when={!event()}>
+            <div class="text-[12px] text-v2-text-text-faint">
+              <bdi>{row().tz}</bdi>
+            </div>
+          </Show>
         </Fact>
+        <Show when={event()}>
+          {(trigger) => (
+            <Fact label={t("automations.eventSource")}>
+              <bdi>{trigger().server}</bdi>
+            </Fact>
+          )}
+        </Show>
         <Show when={!event() && row().status === "active" ? row().nextDueAt : undefined}>
           {(at) => <Fact label={t("automations.section.nextRun")}>{date(at())}</Fact>}
         </Show>

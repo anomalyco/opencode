@@ -125,7 +125,7 @@ export function AutomationsScreen() {
             />
           </Tooltip>
 
-          <Show when={controller.available()}>
+          <Show when={controller.draftTarget()}>
             <Button
               type="button"
               variant="contrast"
@@ -156,7 +156,7 @@ export function AutomationsScreen() {
                       : "automations.empty.title",
               )}
             </h2>
-            <Show when={controller.available() && !controller.loading() && !controller.failed()}>
+            <Show when={controller.draftTarget() && !controller.loading() && !controller.failed()}>
               <p class="text-13-regular text-v2-text-text-muted">{language.t("automations.empty.description")}</p>
               <Button
                 size="small"
@@ -198,7 +198,6 @@ export function AutomationsScreen() {
               {(entry) => (
                 <AutomationInspector
                   entry={entry()}
-                  multiServer={controller.multiServer()}
                   busy={controller.busy()}
                   onTogglePause={() => controller.update(entry(), entry().row.status === "paused" ? "resume" : "pause")}
                   onOpenSession={(id) => controller.openSession(entry(), id)}

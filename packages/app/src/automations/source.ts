@@ -73,17 +73,22 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     // The server filters this list using each row's saved directory. Fetch it once per server,
     // not once per project, and never use an empty list as a capability signal.
     const queries = useQueries(() => ({
-      queries: enabled().map((item) => ({
-        queryKey: [item.ctx.sdk.scope, "automations"] as const,
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          item.ctx.sdk.api.experimental.automation.list(undefined, { signal }),
-        select: (rows: AutomationInfo[]) => () => rows,
-        retry: false,
-        refetchInterval: layout.route().type === "automations" ? 5_000 : 30_000,
-      })),
+      queries: connections().map((item) => {
+        const offered = enabled().some((target) => target.server === item.server)
+        const interval = layout.route().type === "automations" ? 5_000 : 30_000
+        return {
+          queryKey: [item.ctx.sdk.scope, "automations"] as const,
+          queryFn: ({ signal }: { signal: AbortSignal }) =>
+            item.ctx.sdk.api.experimental.automation.list(undefined, { signal }),
+          select: (rows: AutomationInfo[]) => () => rows,
+          retry: false,
+          refetchInterval: (query: { state: { data?: AutomationInfo[] } }) =>
+            query.state.data?.length || offered ? interval : false,
+        }
+      }),
     }))
     const entries = createMemo(() =>
-      enabled().flatMap((item, index) => {
+      connections().flatMap((item, index) => {
         const query = queries[index]
         if (!query?.isSuccess) return []
         return (query.data?.() ?? []).map((row) => ({ ...item, row, key: `${item.server}\0${row.id}` }))
@@ -92,10 +97,13 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     return {
       enabled,
       entries,
-      available: () => enabled().length > 0,
+      available: () => entries().length > 0 || enabled().length > 0,
       multiServer: () => connections().length > 1,
       loading: () => queries.some((query) => query.isPending),
-      failed: () => queries.some((query) => query.isError),
+      failed: () =>
+        queries.some(
+          (query, index) => query.isError && enabled().some((target) => target.server === connections()[index]?.server),
+        ),
       active: createMemo(() => entries().filter((entry) => entry.row.status === "active").length),
       refresh: () => Promise.all(queries.map((query) => query.refetch())),
     }
