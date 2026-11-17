@@ -11,9 +11,6 @@ publish = false
 crate-type = ["cdylib"]
 
 [features]
-# The plugin on the current SDK, which every build but `abi-2-0` has.
-default = ["current"]
-current = ["dep:opencode-plugin-abi"]
 # Draws "v2" instead of "v1", for the reload tests.
 v2 = []
 # A build whose setup fails, for the reload tests.
@@ -35,13 +32,9 @@ minor-newer = []
 major-3 = []
 requires-future = []
 requires-feature = []
-# This plugin as it is, on the frozen 2.0 SDK crate of before the contract 2.x additions, built without `current`
-# (`--no-default-features`): a plugin built against the 2.0 of then.
-abi-2-0 = ["dep:abi-2-0"]
 
 [dependencies]
-opencode-plugin-abi = { path = "../../../plugin-abi", optional = true }
+opencode-plugin-abi = { path = "../../../plugin-abi" }
 serde_json = "1"
-abi-2-0 = { package = "opencode-plugin-abi-2-0", path = "abi-2-0", optional = true }
 
 [workspace]

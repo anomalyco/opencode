@@ -6,13 +6,7 @@
 //! The fences ([`fence`]), the sidebar claim ([`slot`]), the home claims with their event handler ([`home`]), a
 //! server request with a live panel ([`fetch`]), and a prompt footer claim whose mounts fetch ([`prompt`]) are on
 //! the one API; with the `reads` option, the small reads and verbs ([`reads`]). Callbacks reach the host only
-//! through the host they are called with. The `abi-2-0` feature, without the default `current`, builds this source as
-//! it is on a frozen copy of the 2.0 crate of before the contract 2.x additions.
-
-// The `abi-2-0` build: the same source on the frozen 2.0 SDK crate of before the contract 2.x additions, under the name
-// the source uses, with no current SDK beside it.
-#[cfg(all(feature = "abi-2-0", not(feature = "current")))]
-extern crate abi_2_0 as opencode_plugin_abi;
+//! through the host they are called with.
 
 /// The `witness` feature's static constructor: the platform loader runs it as it maps the library.
 #[cfg(feature = "witness")]
