@@ -120,9 +120,6 @@ export function createTimelineCache(
                 get agents() {
                   return agents()
                 },
-                get copyAlwaysVisible() {
-                  return data.copyAlwaysVisible
-                },
                 navigateToSession: data.navigateToSession,
                 sessionHref: data.sessionHref,
                 readMedia: data.readMedia,
