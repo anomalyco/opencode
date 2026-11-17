@@ -919,11 +919,12 @@ describe("coercion parity: String method arguments coerce like native JS", () =>
     expect(await value(`try { "abc".endsWith(/a/) } catch (e) { return e.name }`)).toBe("TypeError")
   })
 
-  test("opaque runtime references still reject as data errors", async () => {
-    const err = await error(`const f = () => 1; return "abc".includes(f)`)
-    expect(err.message).toContain("data value")
-    const replacerErr = await error(`const f = () => 1; return "a".replace(f, () => "x")`)
-    expect(replacerErr.message).toContain("data value")
+  test("functions convert like other objects, while promises and tool references still reject", async () => {
+    expect(
+      await value(`const f = () => 1; f.toString = () => "b"; return ["abc".includes(f), "a".replace(f, "x")]`),
+    ).toEqual([true, "a"])
+    expect((await error(`return "abc".includes(Promise.resolve("b"))`)).message).toContain("data value")
+    expect((await error(`return "a".replace(tools.nowhere, () => "x")`)).message).toContain("data value")
   })
 })
 
@@ -953,8 +954,9 @@ describe("coercion parity: ++ and -- use CodeMode numeric coercion", () => {
     expect(await value(`const o = { a: {} }; o.a++; return Number.isNaN(o.a)`)).toBe(true)
   })
 
-  test("opaque runtime references reject with a clear error", async () => {
-    const err = await error(`let f = () => 1; f++`)
+  test("functions become NaN, and promises reject with a clear error", async () => {
+    expect(await value(`let f = () => 1; f++; return Number.isNaN(f)`)).toBe(true)
+    const err = await error(`let p = Promise.resolve(1); p++`)
     expect(err.message).toContain("data value")
   })
 })
@@ -1199,15 +1201,23 @@ describe("loose equality and operator gates on opaque references", () => {
     ).toEqual([false, true, false, true, false, false, false, false, false, true])
   })
 
-  test("coercing an opaque reference against a non-nullish primitive still rejects", async () => {
-    expect((await error(`const fn = () => 1; return fn == 1`)).message).toContain(
+  test("a function facing a primitive converts; a promise or tool reference still rejects", async () => {
+    expect(
+      await value(`
+        const fn = () => 1
+        const one = () => 2
+        one.valueOf = () => 1
+        let inc = fn
+        inc++
+        return [fn == 1, fn + "", -fn, Number.isNaN(inc), one == 1, fn == "[object Function]"]
+      `),
+    ).toEqual([false, "[object Function]", null, true, true, true])
+    expect((await error(`const p = Promise.resolve(1); return p == 1`)).message).toContain(
       "Binary operators require data values",
     )
-    expect((await error(`const fn = () => 1; return fn + ""`)).message).toContain(
-      "Binary operators require data values",
-    )
-    expect((await error(`const fn = () => 1; return -fn`)).message).toContain("Unary operators require data values")
-    expect((await error(`let fn = () => 1; fn++`)).message).toContain("'++' requires a data value")
+    expect((await error(`return tools.nowhere + ""`)).message).toContain("Binary operators require data values")
+    expect((await error(`return -Promise.resolve(1)`)).message).toContain("Unary operators require data values")
+    expect((await error(`let p = Promise.resolve(1); p++`)).message).toContain("'++' requires a data value")
   })
 
   test("switch and Object.is match opaque references by identity", async () => {
@@ -1573,15 +1583,15 @@ describe("this, arguments, and Function.prototype.call/apply/bind", () => {
 })
 
 describe("ToPrimitive: operators and conversions honor program valueOf and toString", () => {
-  test("program-installed valueOf and toString on opaque values are ignored at every site", async () => {
+  test("program-installed valueOf and toString on functions are honored at every site", async () => {
     expect(
       await value(`
         const f = () => 1
         f.toString = () => "custom"
         f.valueOf = () => 5
-        return [String(f), \`\${f}\`, [f].join(), new Error(f).message, isNaN(Number(f)), isNaN(Math.abs(f))]
+        return [String(f), \`\${f}\`, [f].join(), new Error(f).message, Number(f), Math.abs(f), f + 1, ({ custom: 2 })[f]]
       `),
-    ).toEqual(["[object Function]", "[object Function]", "[object Function]", "[object Function]", true, true])
+    ).toEqual(["custom", "custom", "custom", "custom", 5, 5, 6, 2])
   })
 
   test("== converts an object facing a non-nullish primitive through its own valueOf", async () => {
@@ -1591,7 +1601,7 @@ describe("ToPrimitive: operators and conversions honor program valueOf and toStr
         return [one == 1, 1 == one, one == true, one == "1", one == null, one == one, one == { valueOf() { return 1 } }, [1] == 1]
       `),
     ).toEqual([true, true, true, true, false, true, false, true])
-    expect((await error(`(() => 1) == 1`)).message).toContain("Binary operators require data values")
+    expect((await error(`Promise.resolve(1) == 1`)).message).toContain("Binary operators require data values")
   })
 
   test("operators, unary, template literals, and conversion functions use the object's own methods", async () => {
@@ -1681,9 +1691,10 @@ describe("ToPrimitive: operators and conversions honor program valueOf and toStr
     ).toEqual([5, 6, 6, 6])
   })
 
-  test("functions and other opaque values still reject arithmetic, and an object without a primitive form throws", async () => {
-    expect((await error(`const f = () => 1; return f + 1`)).message).toContain("Binary operators require data values")
-    expect((await error(`return -(() => 1)`)).message).toContain("Unary operators require data values")
+  test("promises and tool references still reject arithmetic, and an object without a primitive form throws", async () => {
+    expect(await value(`const f = () => 1; return [f + 1, -(() => 1)]`)).toEqual(["[object Function]1", null])
+    expect((await error(`return Promise.resolve(1) + 1`)).message).toContain("Binary operators require data values")
+    expect((await error(`return -tools.nowhere`)).message).toContain("Unary operators require data values")
     const failure = await error(`return { valueOf() { return {} }, toString() { return [] } } + 1`)
     expect(failure.message).toContain("Cannot convert object to primitive value")
   })

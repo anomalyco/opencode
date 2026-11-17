@@ -115,7 +115,7 @@ export const applyBinaryOperator = (operator: string, lhs: Value, rhs: Value, no
   if (operator === "!==") return lhs !== rhs
   if (operator === "==") return looselyEqual(lhs, rhs, node)
   if (operator === "!=") return !looselyEqual(lhs, rhs, node)
-  if (operator === "in" && rhs instanceof Obj && !isOpaque(lhs)) return has(rhs, propertyKey(lhs))
+  if (operator === "in" && rhs instanceof Obj && !(lhs instanceof HostNamespace)) return has(rhs, propertyKey(lhs))
   if (isOpaque(lhs) || isOpaque(rhs)) {
     throw invalidData("Binary operators require data values.", node)
   }
@@ -185,7 +185,7 @@ export const operatorConversion = (
   rhs: Value,
 ): { readonly kind: "key" } | { readonly kind: "primitive"; readonly hint: "default" | "number" } | undefined => {
   // `in` checks the right operand before ToPropertyKey on the left, so a bad right side wins over a bad key.
-  if (operator === "in" && lhs instanceof Obj && !isOpaque(lhs) && rhs instanceof Obj) return { kind: "key" }
+  if (operator === "in" && lhs instanceof Obj && rhs instanceof Obj) return { kind: "key" }
   // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including namespace
   // references, which are not Obj) compare by identity.
   const equality = operator === "==" || operator === "!="

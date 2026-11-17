@@ -1484,7 +1484,7 @@ export class Vm {
   }
 
   private execToKey(frame: Frame, v: Value, pc: number, sp: number): boolean {
-    if (!(v instanceof Obj) || isOpaque(v)) {
+    if (!(v instanceof Obj)) {
       frame.regs[sp - 1] = coerceToString(v)
       return false
     }
@@ -1603,7 +1603,7 @@ export class Vm {
     const fcode = frame.code
     frame.pc = pc
     frame.sp = sp
-    if (v instanceof Obj && !isOpaque(v)) {
+    if (v instanceof Obj) {
       frame.sp = sp - 1
       this.pushInternalCall(helper, [flag, v], fcode.siteAt(pc) ?? frame.origin)
       return true
@@ -1623,7 +1623,7 @@ export class Vm {
   }
 
   private execToStringSlow(frame: Frame, flag: number, v: Value, pc: number, sp: number): boolean {
-    if (flag === 1 || !(v instanceof Obj) || isOpaque(v)) {
+    if (flag === 1 || !(v instanceof Obj)) {
       frame.regs[sp - 1] = coerceToString(v)
       return false
     }
@@ -2032,7 +2032,7 @@ export class Vm {
     const site = frame.code.siteAt(pc)!
     const memberNode = site as MemberExpression
     if (mode !== 2) requireMemberBase(memberNode, o, keyVal)
-    if (keyVal instanceof Obj && !isOpaque(keyVal)) {
+    if (keyVal instanceof Obj) {
       frame.sp = sp - 2
       this.pushInternalCall("$vmGetElem", [o, keyVal], memberNode.property ?? site)
       return true
@@ -2099,7 +2099,7 @@ export class Vm {
   private execDeleteElem(frame: Frame, o: Value, keyVal: Value, pc: number, sp: number): boolean {
     const site = frame.code.siteAt(pc)!
     requireMemberBase(site as MemberExpression, o, keyVal)
-    if (keyVal instanceof Obj && !isOpaque(keyVal)) {
+    if (keyVal instanceof Obj) {
       frame.sp = sp - 1
       this.pushInternalCall("$vmDeleteElem", [o, keyVal], site)
       return true
@@ -2154,7 +2154,7 @@ export class Vm {
     }
     const fcode = frame.code
     const site = fcode.siteAt(pc) ?? frame.origin
-    if (v instanceof Obj && !isOpaque(v)) {
+    if (v instanceof Obj) {
       frame.sp = sp - 1
       this.pushInternalCall("$vmUnary", [sub, v], site)
       return true

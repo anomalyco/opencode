@@ -235,7 +235,8 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
       non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
 - [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
-      `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
+      `"[object Function]"` rather than the source text (unless the function has its own `toString` or `valueOf`),
+      `isNaN(fn)` is `true`.
 - [x] `==` and `!=` follow IsLooselyEqual: objects (including functions and tool references) compare by identity, a
       nullish operand never coerces the other side, and a data object facing a primitive converts through its own
       `valueOf`/`toString` (default hint) (`fn == null` is `false`, `fn == fn` is `true`, `[1] == 1` and `[1, 2] == "1,2"` are `true`).
@@ -243,9 +244,11 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       values. Operators inspect only their direct operands, so `rows == null` on a large array costs the same as
       `rows === null`, and an object merely holding a function inside (`[fn] + ""`, `-[fn]`) coerces like any other
       data object (`"[object Function]"`, `NaN`).
-- [ ] Coercing a function, promise, generator, or tool reference itself: `fn + ""`, `-fn`, `fn++`, and `fn == 1`
-      throw `TypeError: Binary operators require data values.` (or the unary/update form) where JavaScript would use
-      the source text or `NaN`.
+- [x] Functions, generators, and iterators convert through ToPrimitive like any other object, in operators and in
+      built-in arguments: `fn + ""` is `"[object Function]"` (not the source text), `-fn` and `fn++` give `NaN`,
+      `fn == 1` is `false`, and an own `valueOf` or `toString` is used. A promise or tool reference is never
+      converted, so a missing `await` cannot hide: `promise + 1`, `-promise`, and `promise == 1` throw
+      `TypeError: Binary operators require data values.` (or the unary/update form).
 - [x] ToPrimitive on program objects: `+ - * / % **`, the relational and bitwise operators, unary `+ - ~`, `++`/`--`,
       compound assignment, `${x}`, `Number`/`String`/`isNaN`/`isFinite`, `parseInt`/`parseFloat` (text and radix),
       `Math.*` arguments, `Error(message)`, and `Array.prototype.join`/`toString` elements call the object's own
@@ -265,7 +268,7 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
       compound assignment, `++`, `delete`, `in`, object literals, and destructuring:
       `o[{ toString() { return "id" } }] += 1` updates `o.id`. A nullish base throws before the key converts, as
-      in JS. Opaque values (functions, promises, tool references) keep their built-in string form.
+      in JS. Promises and tool references keep their built-in string form.
 
 ## Promises and tools
 
@@ -424,7 +427,7 @@ reject }` object.
 - [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
       expressions with a native-style `TypeError`. Data objects convert through their own `toString`/`valueOf` (see
-      ToPrimitive above). Opaque runtime references still reject as data errors, and `repeat` still requires a finite
+      ToPrimitive above). Promises and tool references still reject as data errors, and `repeat` still requires a finite
       non-negative count.
 - [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern.
 - [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
@@ -451,7 +454,7 @@ reject }` object.
 - [x] Native zero-argument behavior for `Number()` and `String()`: they produce `0` and `""`, while
       `Number(undefined)` stays `NaN` and `String(undefined)` stays `"undefined"`.
 - [x] `++` and `--` use CodeMode numeric coercion (numeric strings increment, plain data objects become `NaN`, Dates
-      use their epoch time) and reject opaque runtime references as data errors.
+      use their epoch time, functions become `NaN`) and reject promises and tool references as data errors.
 - [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
       example `Math.sum is not a function.` or `search(...).catch is not a function.` Unknown `Promise` statics keep

@@ -1324,7 +1324,6 @@ built-ins/String/prototype/S15.5.4_A1.js  # #1: delete String.prototype.toString
 built-ins/String/prototype/S15.5.4_A2.js  # #1: String.prototype =="". Actual: String.prototype ==[object Object]
 built-ins/String/prototype/S15.5.4_A3.js  # #2: delete String.prototype.toString; String.prototype.toString() == "[object "+"String"+"]". Actual
 built-ins/String/prototype/Symbol.iterator/this-val-to-str-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-built-ins/String/prototype/at/index-non-numeric-argument-tointeger.js  # TypeError: String.at expects argument 1 to be a data value.
 built-ins/String/prototype/charAt/S15.5.4.4_A2.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/String/prototype/charCodeAt/S15.5.4.5_A2.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/String/prototype/constructor/S15.5.4.1_A1_T2.js  # TypeError: new __constr(...) is not supported; call __constr(...) without new instead.
@@ -1354,8 +1353,6 @@ language/arguments-object/10.6-2gs.js  # Expected a TypeError to be thrown but n
 language/arguments-object/S10.6_A3_T1.js  # #1: arguments object doesn't exists
 language/comments/S7.4_A1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/comments/S7.4_A2_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/addition/S11.6.1_A2.2_T3.js  # TypeError: Binary operators require data values.
-language/expressions/addition/S11.6.1_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/arrow-function/ArrowFunction_restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/arrow-function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
@@ -1395,10 +1392,6 @@ language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-iter-val-a
 language/expressions/await/await-in-global.js  # Unexpected token (13:22)
 language/expressions/await/await-in-nested-function.js  # Unexpected token (21:22)
 language/expressions/await/await-in-nested-generator.js  # Unexpected token (22:22)
-language/expressions/bitwise-and/S11.10.1_A3_T1.5.js  # TypeError: Binary operators require data values.
-language/expressions/bitwise-not/S11.4.8_A3_T5.js  # TypeError: Unary operators require data values.
-language/expressions/bitwise-or/S11.10.3_A3_T1.5.js  # TypeError: Binary operators require data values.
-language/expressions/bitwise-xor/S11.10.2_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/compound-assignment/S11.13.2_A7.10_T1.js  # Expected a DummyError but got a TypeError
 language/expressions/compound-assignment/S11.13.2_A7.10_T2.js  # Expected a DummyError but got a TypeError
 language/expressions/compound-assignment/S11.13.2_A7.10_T3.js  # Expected a DummyError but got a Test262Error
@@ -1439,7 +1432,6 @@ language/expressions/delete/S11.4.1_A3.3_T3.js  # TypeError: MyFunction cannot b
 language/expressions/delete/S8.12.7_A2_T2.js  # TypeError: Palette cannot be constructed: user-defined constructors and classes are not supported. C
 language/expressions/delete/non-reference-return-true.js  # TypeError: Only data fields may be deleted.
 language/expressions/delete/super-property-topropertykey.js  # Expected a ReferenceError but got a SyntaxError
-language/expressions/division/S11.5.2_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -1450,17 +1442,10 @@ language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.j
 language/expressions/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/generators/prototype-relation-to-function.js  # Expected SameValue(«object», «») to be true
-language/expressions/greater-than-or-equal/S11.8.4_A3.2_T1.2.js  # TypeError: Binary operators require data values.
-language/expressions/greater-than/S11.8.2_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/in/S8.12.6_A2_T2.js  # TypeError: Robin cannot be constructed: user-defined constructors and classes are not supported. Cal
-language/expressions/left-shift/S11.7.1_A3_T1.5.js  # TypeError: Binary operators require data values.
-language/expressions/less-than-or-equal/S11.8.3_A3.2_T1.2.js  # TypeError: Binary operators require data values.
-language/expressions/less-than/S11.8.1_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/logical-assignment/lgcl-and-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
 language/expressions/logical-assignment/lgcl-nullish-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
 language/expressions/logical-assignment/lgcl-or-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
-language/expressions/modulus/S11.5.3_A3_T1.5.js  # TypeError: Binary operators require data values.
-language/expressions/multiplication/S11.5.1_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/new/ctorExpr-fn-ref-before-args-eval-fn-wrapup.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
 language/expressions/new/ctorExpr-fn-ref-before-args-eval.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
 language/expressions/new/ctorExpr-isCtor-after-args-eval-fn-wrapup.js  # arguments evaluated before checking valid ctor Expected SameValue(«undefined», «39») to be true
@@ -1506,29 +1491,19 @@ language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-iter-val-array-proto
 language/expressions/object/method-definition/generator-super-prop-body.js  # unsupported syntax Super
 language/expressions/optional-chaining/optional-call-preserves-this.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/expressions/postfix-decrement/S11.3.2_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/postfix-decrement/S11.3.2_A3_T5.js  # TypeError: '…' requires a data value.
-language/expressions/postfix-decrement/S11.3.2_A4_T5.js  # TypeError: '…' requires a data value.
 language/expressions/postfix-decrement/S11.3.2_A6_T1.js  # Expected a DummyError but got a TypeError
 language/expressions/postfix-decrement/S11.3.2_A6_T2.js  # Expected a DummyError but got a TypeError
 language/expressions/postfix-increment/S11.3.1_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/postfix-increment/S11.3.1_A3_T5.js  # TypeError: '…' requires a data value.
-language/expressions/postfix-increment/S11.3.1_A4_T5.js  # TypeError: '…' requires a data value.
 language/expressions/postfix-increment/S11.3.1_A6_T1.js  # Expected a DummyError but got a TypeError
 language/expressions/postfix-increment/S11.3.1_A6_T2.js  # Expected a DummyError but got a TypeError
 language/expressions/prefix-decrement/S11.4.5_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/prefix-decrement/S11.4.5_A3_T5.js  # TypeError: '…' requires a data value.
-language/expressions/prefix-decrement/S11.4.5_A4_T5.js  # TypeError: '…' requires a data value.
 language/expressions/prefix-decrement/S11.4.5_A6_T1.js  # Expected a DummyError but got a TypeError
 language/expressions/prefix-decrement/S11.4.5_A6_T2.js  # Expected a DummyError but got a TypeError
 language/expressions/prefix-increment/S11.4.4_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/prefix-increment/S11.4.4_A3_T5.js  # TypeError: '…' requires a data value.
-language/expressions/prefix-increment/S11.4.4_A4_T5.js  # TypeError: '…' requires a data value.
 language/expressions/prefix-increment/S11.4.4_A6_T1.js  # Expected a DummyError but got a TypeError
 language/expressions/prefix-increment/S11.4.4_A6_T2.js  # Expected a DummyError but got a TypeError
 language/expressions/property-accessors/S11.2.1_A4_T5.js  # #27: typeof String.prototype.length === "number". Actual: undefined
 language/expressions/property-accessors/S8.12.3_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
-language/expressions/right-shift/S11.7.2_A3_T1.5.js  # TypeError: Binary operators require data values.
-language/expressions/subtraction/S11.6.2_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/super/prop-dot-obj-ref-strict.js  # unsupported syntax Super
 language/expressions/super/prop-expr-obj-err.js  # unsupported syntax Super
 language/expressions/super/prop-expr-obj-key-err.js  # unsupported syntax Super
@@ -1537,9 +1512,6 @@ language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(�
 language/expressions/tagged-template/constructor-invocation.js  # The called value cannot be constructed: user-defined constructors and classes are not supported.
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/this/11.1.1-1.js  # Expected SameValue(«undefined», «undefined») to be false
-language/expressions/unary-minus/S11.4.7_A3_T5.js  # TypeError: Unary operators require data values.
-language/expressions/unary-plus/S11.4.6_A3_T5.js  # TypeError: Unary operators require data values.
-language/expressions/unsigned-right-shift/S11.7.3_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/yield/star-in-rltn-expr.js  # TypeError: yield* requires a compatible iterable value.
 language/expressions/yield/star-iterable.js  # First result `done` flag Expected SameValue(«false», «undefined») to be true
 language/function-code/10.4.3-1-21-s.js  # TypeError: f cannot be constructed: user-defined constructors and classes are not supported. Call it

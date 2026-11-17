@@ -43,25 +43,10 @@ built-ins/String/fromCharCode/S9.7_A3.1_T4.js  # real: ToPrimitive and ToInteger
 built-ins/String/fromCharCode/touint16-tonumber-throws-valueof.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/String/fromCodePoint/to-number-conversions.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/String/prototype/Symbol.iterator/this-val-to-str-err.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
-built-ins/String/prototype/at/index-non-numeric-argument-tointeger.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
 built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
-language/expressions/addition/S11.6.1_A2.2_T3.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/addition/S11.6.1_A3.2_T1.2.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
 language/expressions/assignment/target-member-identifier-reference-null.js  # real: assignment to a member of null or undefined evaluates the right side first
 language/expressions/assignment/target-member-identifier-reference-undefined.js  # real: assignment to a member of null or undefined evaluates the right side first
-language/expressions/bitwise-and/S11.10.1_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/bitwise-not/S11.4.8_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/bitwise-or/S11.10.3_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/bitwise-xor/S11.10.2_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
 language/expressions/delete/non-reference-return-true.js  # real: delete of a non-reference unary chain is true
-language/expressions/division/S11.5.2_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/greater-than-or-equal/S11.8.4_A3.2_T1.2.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/greater-than/S11.8.2_A3.2_T1.2.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/left-shift/S11.7.1_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/less-than-or-equal/S11.8.3_A3.2_T1.2.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/less-than/S11.8.1_A3.2_T1.2.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/modulus/S11.5.3_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/multiplication/S11.5.1_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
 language/expressions/new/ctorExpr-isCtor-after-args-eval-fn-wrapup.js  # real: new evaluates its arguments before the constructor check
 language/expressions/new/ctorExpr-isCtor-after-args-eval.js  # real: new evaluates its arguments before the constructor check
 language/expressions/new/spread-err-mult-err-expr-throws.js  # real: new evaluates its arguments before the constructor check
@@ -74,19 +59,6 @@ language/expressions/new/spread-err-sngl-err-itr-get-call.js  # real: new evalua
 language/expressions/new/spread-err-sngl-err-itr-step.js  # real: new evaluates its arguments before the constructor check
 language/expressions/new/spread-err-sngl-err-obj-unresolvable.js  # real: new evaluates its arguments before the constructor check
 language/expressions/new/spread-err-sngl-err-unresolvable.js  # real: new evaluates its arguments before the constructor check
-language/expressions/postfix-decrement/S11.3.2_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/postfix-decrement/S11.3.2_A4_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/postfix-increment/S11.3.1_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/postfix-increment/S11.3.1_A4_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/prefix-decrement/S11.4.5_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/prefix-decrement/S11.4.5_A4_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/prefix-increment/S11.4.4_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/prefix-increment/S11.4.4_A4_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/right-shift/S11.7.2_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/subtraction/S11.6.2_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/unary-minus/S11.4.7_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/unary-plus/S11.4.6_A3_T5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
-language/expressions/unsigned-right-shift/S11.7.3_A3_T1.5.js  # real: coercing a function or other non-data value in an operator or argument (TS gap, interpreter-support.md)
 language/identifiers/part-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
 language/identifiers/part-unicode-17.0.0.js  # real: Unicode 17 identifiers (parser Unicode tables)
 language/identifiers/start-unicode-17.0.0-escaped.js  # real: Unicode 17 identifiers (parser Unicode tables)
