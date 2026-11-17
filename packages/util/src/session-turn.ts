@@ -12,6 +12,7 @@ export interface Message {
     readonly completed?: number
   }
   readonly tokens?: { readonly output: number; readonly reasoning: number }
+  readonly content?: readonly { readonly type: string; readonly text?: string }[]
 }
 
 export interface Options {
@@ -34,25 +35,32 @@ export function duration(messages: readonly Message[], message: Message, options
 }
 
 /**
- * The fastest rate a step's first-token window is trusted to show. Providers can generate tokens before their first
- * output event, such as hidden reasoning or a buffered tool call, and then deliver them in a burst; dividing those
- * tokens by the burst alone reports rates no provider decodes at.
+ * The fastest rate a step's first-token window is trusted to show. Providers can deliver tokens they generated before
+ * their first output event, such as a buffered tool call, in one burst; dividing those tokens by the burst alone
+ * reports rates no provider decodes at.
  */
 const MAX_DECODE_TOKENS_PER_SECOND = 3_000
+
+/**
+ * Streamed reasoning text shorter than this per reported reasoning token means the provider reasoned out of view, as
+ * with hidden or summarized thinking. Full reasoning streams at roughly 1.5 to 4 characters per token.
+ */
+const MIN_REASONING_CHARACTERS_PER_TOKEN = 1
 
 /**
  * Output and reasoning tokens per second while the provider streamed them, or undefined until every step has streamed.
  *
  * Each step counts from its first streamed token to the end of the response body, so the wait for that first token
- * (time to first token) is not divided into the output rate. A step whose tokens could not have been decoded in that
- * window, and steps recorded before `time.firstToken` existed, count from request dispatch instead.
+ * (time to first token) is not divided into the output rate. A step counts from request dispatch instead when some of
+ * its tokens were generated before its first output event, because it reasoned out of view or its tokens could not
+ * have been decoded in that window, and so do steps recorded before `time.firstToken` existed.
  */
 export function tokensPerSecond(messages: readonly Message[], message: Message, options: Options = {}) {
   const steps = turnSteps(messages, message, options)
   const durations = steps.flatMap((step) => {
     if (step.time.streamed === undefined) return []
     const request = Math.max(0, step.time.streamed - step.time.created)
-    if (step.time.firstToken === undefined) return [request]
+    if (step.time.firstToken === undefined || hiddenReasoning(step)) return [request]
     const decode = Math.max(0, step.time.streamed - step.time.firstToken)
     return [stepTokens(step) > (decode / 1_000) * MAX_DECODE_TOKENS_PER_SECOND ? request : decode]
   })
@@ -62,6 +70,16 @@ export function tokensPerSecond(messages: readonly Message[], message: Message, 
   if (output <= 0 || total <= 0) return
   // Aggregate before dividing so each step is weighted by its provider-active duration.
   return output / (total / 1_000)
+}
+
+function hiddenReasoning(step: Message) {
+  const reasoning = step.tokens?.reasoning ?? 0
+  if (reasoning <= 0 || step.content === undefined) return false
+  const streamed = step.content.reduce(
+    (total, part) => total + (part.type === "reasoning" ? (part.text?.length ?? 0) : 0),
+    0,
+  )
+  return streamed < reasoning * MIN_REASONING_CHARACTERS_PER_TOKEN
 }
 
 function stepTokens(step: Message) {
