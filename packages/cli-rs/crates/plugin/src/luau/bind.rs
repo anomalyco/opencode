@@ -199,6 +199,17 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         });
         Ok(())
     })?;
+    register("onMount", |plugin, setup, lua, args| {
+        let (at, run): (Value, Function) = lua.unpack_multi(args)?;
+        let at: Placement = input(lua, at)?;
+        let plugin = plugin.clone();
+        setup.on_mount(abi::Placement::new(at.kind, at.path), move |host, slot, mounted| {
+            plugin.run(Current::acting(host), |lua| {
+                plugin.inputs.lend(lua, |inputs| run.call::<()>((plugin.host.clone(), inputs.slot(slot)?, mounted)))
+            });
+        });
+        Ok(())
+    })?;
     register("route", |plugin, setup, lua, args| {
         let (name, render): (String, Function) = lua.unpack_multi(args)?;
         let plugin = plugin.clone();
@@ -385,6 +396,10 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
             r.messages(&id, &mut |messages| list = serde_json::to_value(messages));
             list.map_err(|error| mlua::Error::runtime(error.to_string()))?
         };
+        "pending" => |r, _lua, id: String| r.pending(&id);
+        "models" => |r, lua, location: Value| r.models(optional::<abi::LocationRef>(lua, location)?.as_ref());
+        "providers" => |r, _lua| r.providers();
+        "limits" => |r, _lua| r.limits();
         "model" => |r, _lua| r.model();
         "info" => |r, _lua| r.info();
         "route" => |r, _lua| r.route();
