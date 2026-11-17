@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
-import { AbsolutePath } from "@opencode/core/schema"
+import { Environment } from "@opencode/core/environment/index"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -9,9 +11,10 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { Context, Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { location } from "./fixture/location"
+import { codeModeServices } from "./fixture/codemode"
+import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
 
@@ -25,8 +28,11 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+const createCodeMode = (
+  tools: ReadonlyMap<string, Info>,
+  permission = allowAll,
+  services?: Context.Context<CodeModeTool.Services>,
+) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services)
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -156,14 +162,8 @@ test("execute rejects filesystem fetches", async () => {
 })
 
 describe("path", () => {
-  const directory = AbsolutePath.make(path.resolve("/session/dir"))
-  const withPath = () =>
-    CodeModeTool.create(
-      { tools: new Map() },
-      (_, tool, input, context) => execute(tool, input, context),
-      allowAll,
-      location({ directory }),
-    )
+  const directory = path.resolve("/session/dir")
+  const withPath = () => createCodeMode(new Map(), allowAll, codeModeServices(directory))
   const run = async (code: string, codeMode = withPath()) =>
     JSON.parse((await Effect.runPromise(codeMode.execute({ code }, context))).output.output)
 
@@ -192,6 +192,478 @@ describe("path", () => {
         const posix = require("path").posix
         return [join("a", "b"), posix.dirname("a/b")]`),
     ).toEqual([path.join("a", "b"), "a"])
+  })
+})
+
+describe("Bun", () => {
+  const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
+  const run = async (directory: string, code: string, permission = allowAll, services = codeModeServices(directory)) =>
+    JSON.parse(
+      (await Effect.runPromise(createCodeMode(new Map(), permission, services).execute({ code }, context))).output
+        .output,
+    )
+  const deny = (action: string) => ({
+    assert: (input: Permission.AssertInput) =>
+      input.action === action
+        ? Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }))
+        : Effect.void,
+  })
+  // Every permission request, from the execute call's own service and from the session's file services alike.
+  const recorded = () => {
+    const asked: Array<Permission.AssertInput> = []
+    return { asked, assert: (input: Permission.AssertInput) => Effect.sync(() => void asked.push(input)) }
+  }
+
+  // The session's services, recording each call the program's file operations make to the environment's files.
+  const spied = (directory: string) => {
+    const services = codeModeServices(directory)
+    const environment = Context.get(services, Environment.Service)
+    const calls: Array<ReadonlyArray<unknown>> = []
+    const spy = <Args extends ReadonlyArray<unknown>, A>(name: string, run: (...args: Args) => A) => {
+      return (...args: Args) => {
+        calls.push([name, ...args.map((arg) => (typeof arg === "string" ? path.relative(directory, arg) : arg))])
+        return run(...args)
+      }
+    }
+    return {
+      calls,
+      services: Context.add(
+        services,
+        Environment.Service,
+        Environment.Service.of({
+          ...environment,
+          files: {
+            ...environment.files,
+            read: spy("read", environment.files.read),
+            list: spy("list", environment.files.list),
+            write: spy("write", (file: string, _: Uint8Array) => environment.files.write(file, _)),
+            append: spy("append", (file: string, _: Uint8Array) => environment.files.append(file, _)),
+          },
+        }),
+      ),
+    }
+  }
+
+  test("without the experimental flag there is no Bun", async () => {
+    const result = await Effect.runPromise(createCodeMode(new Map()).execute({ code: "return [typeof Bun]" }, context))
+    expect(JSON.parse(result.output.output)).toEqual(["undefined"])
+  })
+
+  test("Bun.file reads text, JSON and bytes, and knows a file's size, type and whether it exists", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello world")
+    await Bun.write(path.join(tmp.path, "data.json"), '\uFEFF{"a":1}')
+    await Bun.write(path.join(tmp.path, "sub", "image.PNG"), new Uint8Array([0xff, 0x00]))
+    expect(
+      await run(
+        tmp.path,
+        `const notes = Bun.file("notes.txt")
+        const image = Bun.file("sub/image.PNG")
+        const bytes = await image.bytes()
+        const stat = await notes.stat()
+        return [await notes.text(), await Bun.file("data.json").json(), [...bytes], [...await image.arrayBuffer()],
+          bytes instanceof Uint8Array, Buffer.isBuffer(bytes), [notes.name, notes.size, notes.type], image.type,
+          Bun.file("data.json").type, Bun.file("Makefile").type, Bun.file("Makefile", { type: "text/x-make" }).type,
+          notes.lastModified === Math.trunc(stat.mtimeMs), [stat.size, stat.isFile(), stat.isDirectory()],
+          await notes.exists(), await Bun.file("sub").exists(), Bun.file("sub").type,
+          await Bun.file(${JSON.stringify(pathToFileURL(path.join(tmp.path, "notes.txt")).href)}).text()]`,
+      ),
+    ).toEqual([
+      "hello world",
+      { a: 1 },
+      [255, 0],
+      [255, 0],
+      true,
+      false,
+      ["notes.txt", 11, "text/plain;charset=utf-8"],
+      "image/png",
+      "application/json;charset=utf-8",
+      "application/octet-stream",
+      "text/x-make",
+      true,
+      [11, true, false],
+      true,
+      false,
+      "application/octet-stream",
+      "hello world",
+    ])
+  })
+
+  test("a slice reads only its own bytes, counting negative indexes from the end", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello world")
+    const files = spied(tmp.path)
+    expect(
+      await run(
+        tmp.path,
+        `const notes = Bun.file("notes.txt")
+        const tail = notes.slice(-5)
+        return [await notes.slice(0, 5).text(), await tail.text(), await notes.slice(6).text(),
+          await notes.slice(2).slice(1, 3).text(), [...await notes.slice(4, 6).bytes()], await notes.slice(20).text(),
+          [tail.size, notes.slice(5, 2).size, notes.slice(-50, 50).size], [tail.name, tail.type],
+          notes.slice(0, 5, "text/x-part").type, notes.slice("text/x-all").size]`,
+        allowAll,
+        files.services,
+      ),
+    ).toEqual([
+      "hello",
+      "world",
+      "world",
+      "lo",
+      [111, 32],
+      "",
+      [5, 0, 11],
+      ["notes.txt", "text/plain;charset=utf-8"],
+      "text/x-part",
+      11,
+    ])
+    expect(files.calls.filter(([name]) => name === "read")).toEqual([
+      ["read", "notes.txt", { offset: 0, length: 5 }],
+      ["read", "notes.txt", { offset: 6, length: 5 }],
+      ["read", "notes.txt", { offset: 6, length: 5 }],
+      ["read", "notes.txt", { offset: 3, length: 2 }],
+      ["read", "notes.txt", { offset: 4, length: 2 }],
+      ["read", "notes.txt", { offset: 11, length: 0 }],
+    ])
+  })
+
+  test("a missing file has no size, doesn't exist, and fails to read with a Node-shaped ENOENT", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "bad.json"), "{")
+    await fs.mkdir(path.join(tmp.path, "folder"))
+    expect(
+      await run(
+        tmp.path,
+        `const missing = Bun.file("missing.txt")
+        const failure = async (run) => { try { await run() } catch (e) { return [e.name, e.code, e.syscall, e.path] } }
+        let text
+        try { await missing.text() } catch (e) { text = [e instanceof Error, e.message, typeof e.errno] }
+        return [missing.size, missing.lastModified, await missing.exists(), text,
+          await failure(() => missing.json()), await failure(() => missing.slice(0, 2).bytes()),
+          await failure(() => missing.stat()), await failure(() => missing.delete()),
+          await failure(() => Bun.write("copy.txt", missing)), (await failure(() => Bun.file("bad.json").json()))[0],
+          await failure(() => Bun.file("folder").text()), await failure(() => Bun.file("folder").delete()),
+          await missing.text().catch((e) => e.code), await Bun.file("bad.json").text().then((text) => text.length)]`,
+      ),
+    ).toEqual([
+      0,
+      2 ** 52 - 1,
+      false,
+      [true, "ENOENT: no such file or directory, open 'missing.txt'", "number"],
+      ["Error", "ENOENT", "open", "missing.txt"],
+      ["Error", "ENOENT", "open", "missing.txt"],
+      ["Error", "ENOENT", "stat", "missing.txt"],
+      ["Error", "ENOENT", "unlink", "missing.txt"],
+      ["Error", "ENOENT", "open", "missing.txt"],
+      "SyntaxError",
+      ["Error", "EISDIR", "open", "folder"],
+      ["Error", "EISDIR", "unlink", "folder"],
+      "ENOENT",
+      1,
+    ])
+    expect((await fs.readdir(tmp.path)).toSorted()).toEqual(["bad.json", "folder"])
+  })
+
+  test("Bun.write writes text, bytes, a copy of a file and a response, creating parent directories", async () => {
+    await using tmp = await tmpdir()
+    await using server = Bun.serve({ port: 0, fetch: () => new Response("downloaded") })
+    await Bun.write(path.join(tmp.path, "notes.txt"), "héllo world")
+    await Bun.write(path.join(tmp.path, "bom.txt"), "\uFEFFold")
+    // A formatter that rewrites every file it's given, so a write that ran it would read back "formatted".
+    const formatter = (file: string) => Effect.promise(() => fs.writeFile(file, "formatted")).pipe(Effect.as(true))
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, codeModeServices(tmp.path, undefined, formatter)).execute(
+        {
+          code: `const failure = async (run) => { try { await run() } catch (e) { return [e.name, e.code ?? e.message] } }
+            const notes = Bun.file("notes.txt")
+            return [
+              await Bun.write("deep/er/text.ts", "const   x   =1"),
+              await Bun.write("bom.txt", "new"),
+              await Bun.write("bytes.bin", new Uint8Array([0xff, 0xfe, 0x00])),
+              await Bun.write("deep/copy.txt", notes),
+              await Bun.write(Bun.file("into.txt"), notes.slice(0, 6)),
+              await Bun.file("own.txt").write("own"),
+              await Bun.write("page.txt", await fetch(${JSON.stringify(server.url.href)})),
+              await Bun.write("number.txt", 5),
+              await failure(() => Bun.write("object.txt", { text: "x" })),
+              await failure(() => Bun.write({ name: "object.txt" }, "x")),
+              await failure(() => Bun.write("deep", "x")),
+              await Bun.file("own.txt").delete() ?? null,
+              await Bun.file("own.txt").exists(),
+            ]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([
+      14,
+      3,
+      3,
+      12,
+      6,
+      3,
+      10,
+      1,
+      ["TypeError", "Bun.write expects a string, a Uint8Array, a BunFile, or a Response as the data to write."],
+      ["TypeError", "Bun.write expects a path or a BunFile to write to."],
+      ["Error", "EISDIR"],
+      null,
+      false,
+    ])
+    const written = (name: string) => fs.readFile(path.join(tmp.path, name))
+    expect((await written("deep/er/text.ts")).toString()).toBe("const   x   =1")
+    expect([...(await written("bom.txt"))]).toEqual([...Buffer.from("new")])
+    expect([...(await written("bytes.bin"))]).toEqual([0xff, 0xfe, 0x00])
+    expect((await written("deep/copy.txt")).toString()).toBe("héllo world")
+    expect((await written("into.txt")).toString()).toBe("héllo")
+    expect((await written("page.txt")).toString()).toBe("downloaded")
+    expect((await written("number.txt")).toString()).toBe("5")
+    expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
+      ["bom.txt", "bytes.bin", "deep", "into.txt", "notes.txt", "number.txt", "page.txt"].toSorted(),
+    )
+    expect(result.output.toolCalls.slice(0, 5)).toEqual([
+      { tool: "Bun", status: "completed", input: { method: "file", path: "notes.txt" } },
+      { tool: "Bun", status: "completed", input: { method: "write", path: "deep/er/text.ts" } },
+      { tool: "Bun", status: "completed", input: { method: "write", path: "bom.txt" } },
+      { tool: "Bun", status: "completed", input: { method: "write", path: "bytes.bin" } },
+      { tool: "Bun", status: "completed", input: { method: "write", path: "deep/copy.txt", from: "notes.txt" } },
+    ])
+  })
+
+  test("a writer collects chunks, replaces the file on its first flush and appends on later ones", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "log.txt"), "an older and longer log")
+    const files = spied(tmp.path)
+    expect(
+      await run(
+        tmp.path,
+        `const log = Bun.file("log.txt")
+        const writer = log.writer()
+        const counts = [writer.write("one\\n"), writer.write(new Uint8Array([116, 119, 111, 10]))]
+        const untouched = await log.text()
+        counts.push(writer.flush(), writer.flush(), writer.write("three\\n"), writer.write("four\\n"), await writer.end())
+        const eager = Bun.file("eager.txt").writer({ highWaterMark: 4 })
+        eager.write("ab")
+        const buffered = await Bun.file("eager.txt").exists()
+        eager.write("cd")
+        const flushed = await Bun.file("eager.txt").text()
+        let unsupported, missingParent
+        try { Bun.file("x.txt").writer({ closeAfter: true }) } catch (e) { unsupported = [e.name, e.message] }
+        try { const lost = Bun.file("none/x.txt").writer(); lost.write("x"); lost.end() } catch (e) { missingParent = e.code }
+        return [counts, untouched, [buffered, flushed, eager.end()], unsupported, missingParent]`,
+        allowAll,
+        files.services,
+      ),
+    ).toEqual([
+      [4, 4, 8, 0, 6, 5, 11],
+      "an older and longer log",
+      [false, "abcd", 0],
+      [
+        "TypeError",
+        'A file writer does not support the "closeAfter" option in Code Mode. Supported options: highWaterMark.',
+      ],
+      "ENOENT",
+    ])
+    expect(await fs.readFile(path.join(tmp.path, "log.txt"), "utf8")).toBe("one\ntwo\nthree\nfour\n")
+    expect((await fs.readdir(tmp.path)).toSorted()).toEqual(["eager.txt", "log.txt"])
+    expect(files.calls.filter(([name, file]) => (name === "write" || name === "append") && file === "log.txt")).toEqual(
+      [
+        ["write", "log.txt", Buffer.from("one\ntwo\n")],
+        ["append", "log.txt", Buffer.from("three\nfour\n")],
+      ],
+    )
+  })
+
+  test("Bun.Glob scans from a directory for files, with dot files, folders and absolute paths on request", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
+    await Bun.write(path.join(tmp.path, "src", "nested", "b.ts"), "b")
+    await Bun.write(path.join(tmp.path, "src", "nested", "c.md"), "c")
+    await Bun.write(path.join(tmp.path, "src", ".hidden", "d.ts"), "d")
+    const result = await run(
+      tmp.path,
+      `const scan = (pattern, options) => new Bun.Glob(pattern).scanSync(options).sort()
+      const awaited = []
+      for await (const file of new Bun.Glob("**/*.ts").scan({ cwd: "src" })) awaited.push(file)
+      let unsupported, missing
+      try { new Bun.Glob("*").scan({ cwd: "src", followSymlinks: true }) } catch (e) { unsupported = [e.name, e.message] }
+      try { new Bun.Glob("*.ts").scan("missing") } catch (e) { missing = [e.code, e.syscall, e.path] }
+      const glob = new Bun.Glob("*.ts")
+      return [
+        awaited.sort(), scan("**/*.ts", "src"), scan("**/*.ts", { cwd: "src", dot: true }), scan("src/*.ts"),
+        scan("./src/*.ts"), scan("*", { cwd: "src" }), scan("*", { cwd: "src", onlyFiles: false }),
+        scan("*/*.ts", { cwd: "src", absolute: true }), scan("src/**/*.md", { absolute: true }),
+        scan("src/a.ts"), scan("src/missing.ts"), scan("missing/*.ts"), scan("src/a.ts/*"), missing,
+        [...new Bun.Glob("src/*.ts").scan()],
+        scan("**/.hidden/*.ts", "src"), scan("{.hidden,nested}/*.ts", "src"),
+        [glob.match("a.ts"), glob.match("nested/a.ts"), glob.match("a.md")], unsupported,
+      ]`,
+    )
+    const nested = path.join("nested", "b.ts")
+    const hidden = path.join(".hidden", "d.ts")
+    expect(result).toEqual([
+      ["a.ts", nested],
+      ["a.ts", nested],
+      [hidden, "a.ts", nested],
+      [path.join("src", "a.ts")],
+      [path.join("src", "a.ts")],
+      ["a.ts"],
+      ["a.ts", "nested"],
+      [path.join(tmp.path, "src", "nested", "b.ts")],
+      [path.join(tmp.path, "src", "nested", "c.md")],
+      ["src/a.ts"],
+      [],
+      [],
+      [],
+      ["ENOENT", "scandir", "missing"],
+      [path.join("src", "a.ts")],
+      [hidden],
+      [hidden, nested],
+      [true, false, false],
+      [
+        "TypeError",
+        'A Bun.Glob scan does not support the "followSymlinks" option in Code Mode. Supported options: cwd, dot, absolute, onlyFiles.',
+      ],
+    ])
+  })
+
+  test("a scan lists only under the pattern's fixed part, as deep as the pattern reaches, skipping hidden folders", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
+    await Bun.write(path.join(tmp.path, "src", "nested", "deep", "b.ts"), "b")
+    await Bun.write(path.join(tmp.path, "src", ".cache", "c.ts"), "c")
+    await Bun.write(path.join(tmp.path, "other", "d.ts"), "d")
+    const listed = async (pattern: string, options = {}) => {
+      const files = spied(tmp.path)
+      await run(
+        tmp.path,
+        `return new Bun.Glob(${JSON.stringify(pattern)}).scanSync(${JSON.stringify(options)})`,
+        allowAll,
+        files.services,
+      )
+      return files.calls
+        .filter(([name]) => name === "list")
+        .map(([, directory]) => String(directory))
+        .toSorted()
+    }
+    const nested = [path.join("src", "nested"), path.join("src", "nested", "deep")]
+    expect(await listed("src/*.ts")).toEqual(["src"])
+    expect(await listed("src/*/*.ts")).toEqual(["src", path.join("src", "nested")])
+    expect(await listed("src/**/*.ts")).toEqual(["src", ...nested])
+    expect(await listed("src/**/.cache/*.ts")).toEqual([path.join("src", ".cache"), ...nested, "src"].toSorted())
+    expect(await listed("src/**/*.ts", { dot: true })).toEqual(
+      [path.join("src", ".cache"), ...nested, "src"].toSorted(),
+    )
+  })
+
+  test("a denied read surfaces core's permission error from Bun.file and from a scan", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "secret.txt"), "x")
+    expect(
+      await run(
+        tmp.path,
+        `const failure = (run) => { try { run() } catch (e) { return [e.name, e.message, e.code ?? null] } }
+        return [failure(() => Bun.file("secret.txt")), failure(() => new Bun.Glob("*.txt").scan())]`,
+        permissionService(deny("read")),
+        codeModeServices(tmp.path, deny("read")),
+      ),
+    ).toEqual([
+      ["Error", "Permission denied: read", null],
+      ["Error", "Permission denied: read", null],
+    ])
+  })
+
+  test("a file asks to be read once, a write asks edit with its diff, and a copy asks edit without one", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "old\n")
+    const record = recorded()
+    await run(
+      tmp.path,
+      `await Bun.write("notes.txt", "old\\nnew\\n")
+      await Bun.write("out/new.txt", "one\\ntwo\\n")
+      const notes = Bun.file("notes.txt")
+      await notes.text()
+      await notes.slice(0, 3).bytes()
+      await notes.exists()
+      await Bun.write("out/copy.txt", notes)
+      await notes.write("changed\\n")
+      const writer = notes.writer()
+      writer.write("first\\n")
+      writer.flush()
+      writer.write("second\\n")
+      writer.end()
+      await notes.delete()
+      new Bun.Glob("out/*.txt").scanSync()
+      return []`,
+      permissionService(record),
+      codeModeServices(tmp.path, record),
+    )
+    expect(record.asked.map((input) => [input.action, input.resources, input.sessionID, input.source])).toEqual([
+      ["edit", ["notes.txt"], context.sessionID, source],
+      ["edit", ["out/new.txt"], context.sessionID, source],
+      ["read", ["notes.txt"], context.sessionID, source],
+      ["edit", ["out/copy.txt"], context.sessionID, source],
+      ["edit", ["notes.txt"], context.sessionID, source],
+      ["edit", ["notes.txt"], context.sessionID, source],
+      ["edit", ["notes.txt"], context.sessionID, source],
+      ["edit", ["notes.txt"], context.sessionID, source],
+      ["read", ["out"], context.sessionID, source],
+    ])
+    const diffs = record.asked.map((input) => input.metadata?.files)
+    expect(diffs[0]).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1, deletions: 0 }])
+    expect(diffs[1]).toMatchObject([{ file: "out/new.txt", status: "added", additions: 2 }])
+    expect(diffs[3]).toBeUndefined()
+    expect(diffs[5]).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1, deletions: 1 }])
+    // An append shows only the lines it adds.
+    expect(diffs[6]).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1, deletions: 0 }])
+    expect(diffs[7]).toBeUndefined()
+  })
+
+  test("a file outside the project asks for its directory once, when Bun.file names it", async () => {
+    await using tmp = await tmpdir()
+    await using outside = await tmpdir()
+    const file = path.join(outside.path, "notes.txt")
+    await Bun.write(file, "outside")
+    const record = recorded()
+    expect(
+      await run(
+        tmp.path,
+        `const notes = Bun.file(${JSON.stringify(file)})
+        const text = await notes.text()
+        await notes.write(text + " again")
+        return [text, await notes.text()]`,
+        permissionService(record),
+        codeModeServices(tmp.path, record),
+      ),
+    ).toEqual(["outside", "outside again"])
+    const resource = file.replaceAll("\\", "/")
+    expect(record.asked.map((input) => [input.action, input.resources])).toEqual([
+      ["external_directory", [path.posix.join(path.posix.dirname(resource), "*")]],
+      ["read", [resource]],
+      ["edit", [resource]],
+    ])
+  })
+
+  test("a denied edit writes nothing: Bun.write and delete reject, and a writer's flush throws", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "keep.txt"), "keep")
+    expect(
+      await run(
+        tmp.path,
+        `const keep = Bun.file("keep.txt")
+        const settled = await Promise.allSettled([Bun.write("new/a.txt", "x"), Bun.write("copy.txt", keep),
+          keep.write("changed"), keep.delete()])
+        const writer = Bun.file("b.txt").writer()
+        writer.write("x")
+        let thrown
+        try { writer.end() } catch (e) { thrown = e.message }
+        return [settled.map((item) => item.reason?.message), thrown, await keep.text()]`,
+        permissionService(deny("edit")),
+        codeModeServices(tmp.path, deny("edit")),
+      ),
+    ).toEqual([Array(4).fill("Permission denied: edit"), "Permission denied: edit", "keep"])
+    expect(await fs.readdir(tmp.path)).toEqual(["keep.txt"])
   })
 })
 
