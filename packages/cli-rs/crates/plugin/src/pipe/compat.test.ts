@@ -536,6 +536,26 @@ test("a layer with a target declines while its node lacks the focus", () => {
   expect(close()).toBe(false)
 })
 
+// CT-21: a reload of the registrations ends a mount (`handover`) and begins it again: the new mount of the same surface
+// and key adopts the one that ended, so its component does not run again (navigator registered new names on each run
+// and reloaded without end). One that begins after the moment renders anew, and so does one another end ended.
+test("a mount a reload begins again adopts the one it ended", async () => {
+  const fake = host()
+  const ctx = plugin("t.remount", fake)
+  let runs = 0
+  ctx.ui.slot({ append: "sidebar.content", render: () => (runs++, h("text", { children: `run ${runs}` })) })
+  const cx = (generation: number) => ({ mount: { surface: "slot#0", key: "a", generation }, input: { width: 40, height: 10, slot: {} } })
+  const surface = fake.surfaces[0]
+  expect(text(surface.view(cx(1)))).toBe("run 1")
+  surface.options.unmount(cx(1).mount, true)
+  expect(text(surface.view(cx(2)))).toBe("run 1")
+  surface.options.unmount(cx(2).mount, true)
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  expect(text(surface.view(cx(3)))).toBe("run 2")
+  surface.options.unmount(cx(3).mount)
+  expect(text(surface.view(cx(4)))).toBe("run 3")
+})
+
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
 test("theme.surface answers the page theme", () => {
   const fake = host()

@@ -110,6 +110,9 @@ pub enum Down {
         /// The activation it is for: the load whose setup made it. Another one's never answers it.
         activation: u64,
         mount: v2::MountId,
+        /// It ends as a reload of the plugin's registrations mounts it again (CT-21): the new mount may take its state.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        handover: bool,
     },
     /// The host adopted revision `rev` of `mount`: the next one builds on it.
     Adopted { id: String, mount: v2::MountId, rev: u64 },

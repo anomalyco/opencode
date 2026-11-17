@@ -8,7 +8,7 @@
 
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 
@@ -113,6 +113,7 @@ export default Plugin.define({
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
         { id: "v2probe.inline", run: () => context.ui.router.navigate({ type: "plugin", name: "inline" }) },
         { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
+        { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         // A handler that rejects later, after a reload perhaps (carbon-5).
         {
           id: "v2probe.reject",
@@ -180,12 +181,26 @@ export default Plugin.define({
         return <text>inline page</text>
       },
     })
+    // A page that names its layer's command anew each time it mounts, as opencode-navigator does (CT-21).
     let churns = 0
     context.ui.router.register({
       name: "churn",
       render: () => {
         context.keymap.layer(() => ({ commands: [{ id: `v2probe.churn-${++churns}`, run() {} }] }))
         return <text>churn page</text>
+      },
+    })
+    // A page that registers a new command every 20 ms for as long as it shows: registrations that never settle.
+    let restless = 0
+    context.ui.router.register({
+      name: "restless",
+      render: () => {
+        const timer = setInterval(
+          () => context.keymap.layer(() => ({ commands: [{ id: `v2probe.restless-${++restless}`, run() {} }] })),
+          20,
+        )
+        onCleanup(() => clearInterval(timer))
+        return <text>restless page</text>
       },
     })
     context.ui.slot({

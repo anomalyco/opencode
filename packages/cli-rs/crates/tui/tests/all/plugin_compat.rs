@@ -417,13 +417,35 @@ fn a_page_whose_commands_have_no_id_draws_and_settles() {
     assert_eq!(logged(&pipe, &log, 1), [json!({ "inline": "j" })]);
 }
 
-// Expected (CT-1, containment): a plugin whose registrations change with each mount of its page, which each reload
-// mounts again, fails, named, rather than reload without end; the client goes on.
+// Expected (CT-21): a page that names its layer's command anew each time it mounts, as opencode-navigator does, draws
+// and settles: the reload its registration makes begins the page's mount again, which adopts the one that ended, so the
+// page does not run again and name another. Each reload mounted it again, and it failed at the 64-changes bound.
+#[test]
+fn a_page_that_names_its_commands_anew_each_mount_settles() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    pipe.harness.tui.keymap.dispatch("v2probe.churn", None);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    let quiet = opencode_plugin::pipe::crossed();
+    std::thread::sleep(Duration::from_millis(400));
+    for _ in 0..5 {
+        pipe.harness.app.advance(Duration::from_millis(16));
+    }
+    let after = opencode_plugin::pipe::crossed();
+    assert_eq!((after.received, after.trees), (quiet.received, quiet.trees), "the page did not settle");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    assert!(pipe.harness.app.text().contains("churn page"), "{}", pipe.harness.app.text());
+}
+
+// Expected (CT-1, containment): a plugin whose registrations change without end (its page registers a new command every
+// 20 ms) fails, named, rather than reload without end; the client goes on.
 #[test]
 fn a_plugin_whose_registrations_never_settle_fails() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
-    pipe.harness.tui.keymap.dispatch("v2probe.churn", None);
+    pipe.harness.tui.keymap.dispatch("v2probe.restless", None);
     pipe.harness.wait("the churn failed the plugin", || {
         pipe.harness.app.advance(Duration::from_millis(1));
         matches!(pipe.status(PROBE), Some(Status::Failed(_)))
