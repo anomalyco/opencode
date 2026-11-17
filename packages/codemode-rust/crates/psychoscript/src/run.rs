@@ -1,11 +1,13 @@
-//! One `execute`: compile, set up a fresh heap and built-ins, run to an outcome, and copy it out.
+//! Compiling a program, setting up its heap, built-ins and host globals, and copying its outcome out.
 
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
 
 use crate::compiler;
 use crate::convert;
+use crate::host::{self, RunHost};
 use crate::object::{Closure, Kind, Obj};
+use crate::program::Running;
 use crate::strings::Strings;
 use crate::value::Value;
 use crate::vm::Vm;
@@ -16,22 +18,27 @@ use crate::{Diagnostic, DiagnosticKind, Json, Outcome, Runtime};
 /// committed.
 const INLINE_SOURCE_BYTES: usize = 2048;
 const INLINE_BRACKET_DEPTH: usize = 64;
-const INLINE_STACK_BUDGET: usize = 512 << 10;
+pub const INLINE_STACK_BUDGET: usize = 512 << 10;
 const STACK_SIZE: usize = 256 << 20;
 const THREAD_STACK_BUDGET: usize = 64 << 20;
 
 pub fn execute(rt: &Runtime, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
     if code.len() <= INLINE_SOURCE_BYTES && bracket_depth(code) <= INLINE_BRACKET_DEPTH {
-        let run = AssertUnwindSafe(|| execute_here(rt, code, bindings, INLINE_STACK_BUDGET));
+        let program = rt.program(code, bindings, None);
+        let run = AssertUnwindSafe(|| program.run());
         return std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error());
     }
     std::thread::scope(|s| {
         let spawned = std::thread::Builder::new()
             .stack_size(STACK_SIZE)
-            .spawn_scoped(s, || execute_here(rt, code, bindings, THREAD_STACK_BUDGET));
+            .spawn_scoped(s, || {
+                let mut program = rt.program(code, bindings, None);
+                program.stack_budget = THREAD_STACK_BUDGET;
+                program.run()
+            });
         match spawned {
             Ok(handle) => handle.join().unwrap_or_else(|_| internal_error()),
-            Err(_) => execute_here(rt, code, bindings, INLINE_STACK_BUDGET),
+            Err(_) => rt.program(code, bindings, None).run(),
         }
     })
 }
@@ -54,51 +61,85 @@ fn bracket_depth(code: &str) -> usize {
 
 /// A defect in the interpreter, reported instead of unwinding into the host.
 fn internal_error() -> Outcome {
+    failed(Diagnostic {
+        kind: DiagnosticKind::ExecutionFailure,
+        message: "Internal interpreter error.".into(),
+        location: None,
+        suggestions: Vec::new(),
+    })
+}
+
+fn failed(error: Diagnostic) -> Outcome {
     Outcome {
-        result: Err(Diagnostic {
-            kind: DiagnosticKind::ExecutionFailure,
-            message: "Internal interpreter error.".into(),
-            location: None,
-        }),
+        result: Err(error),
+        warnings: Vec::new(),
         logs: Vec::new(),
+        truncated: false,
         tool_calls: Vec::new(),
     }
 }
 
-fn execute_here(
-    rt: &Runtime,
-    code: &str,
+/// A random run id, as the reference uses a random UUID.
+pub fn random_run_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+        ^ COUNTER.fetch_add(0x9e37_79b9_7f4a_7c15, Ordering::Relaxed);
+    let mix = |mut z: u64| {
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let (a, b) = (mix(seed), mix(seed.wrapping_add(0x9e37_79b9_7f4a_7c15)));
+    format!(
+        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+        a >> 32,
+        (a >> 16) & 0xffff,
+        a & 0x0fff,
+        ((b >> 48) & 0x3fff) | 0x8000,
+        b & 0xffff_ffff_ffff
+    )
+}
+
+/// Compiles a program and sets up its run, or the outcome when it does not compile.
+pub fn start<'rt>(
+    rt: &'rt Runtime,
+    code: String,
     bindings: &serde_json::Map<String, Json>,
-    budget: usize,
-) -> Outcome {
-    let probe = 0u8;
+    run_id: String,
+) -> Result<Box<Running<'rt>>, Box<Outcome>> {
     let mut atoms = Strings::new();
-    let program = match compiler::compile(code, &mut atoms) {
+    let program = match compiler::compile(&code, &mut atoms) {
         Ok(p) => p,
         Err(e) => {
-            let location = e.offset.map(|o| line_col(code, o));
+            let location = e.offset.map(|o| line_col(&code, o));
             let message = format!("{}{}", e.message, suffix(location));
-            return Outcome {
-                result: Err(Diagnostic {
-                    kind: e.kind,
-                    message,
-                    location,
-                }),
-                logs: Vec::new(),
-                tool_calls: Vec::new(),
-            };
+            return Err(Box::new(failed(Diagnostic {
+                kind: e.kind,
+                message,
+                location,
+                suggestions: Vec::new(),
+            })));
         }
     };
-    let mut vm = Vm::new(&rt.tools, rt.limits, atoms);
-    vm.stack_base = &probe as *const u8 as usize;
-    vm.stack_budget = budget;
+    let setup = rt.setup();
+    let mut vm = Vm::new(RunHost::new(setup, run_id), setup.limits, atoms);
     vm.setup();
+    host::install(&mut vm);
     for (k, v) in bindings {
         let val = convert::from_json(&mut vm, v);
         let a = vm.atoms.intern(k);
         vm.global_map.insert(a, val);
     }
     vm.load(program);
+    Ok(Box::new(Running::new(vm, code)))
+}
+
+/// Runs the program's body to its first suspension.
+pub fn call_main(vm: &mut Vm) {
     let proto = vm.protos[0].clone();
     let fp = vm.realm.function_proto;
     let main = Value::Obj(vm.alloc(Obj::new(
@@ -109,39 +150,33 @@ fn execute_here(
             this: Value::Undef,
         })),
     )));
-    match vm.call(&main, Value::Undef, &[]) {
-        Ok(_) => {
-            let _ = vm.drive();
-        }
-        Err(e) => {
-            if vm.outcome.is_none() {
-                vm.outcome = Some(Err(e));
-            }
-        }
+    if let Err(e) = vm.call(&main, Value::Undef, &[])
+        && vm.outcome.is_none()
+    {
+        vm.outcome = Some(Err(e));
     }
+}
+
+/// The outcome of a run that ended: host work it left running is interrupted, then the result is copied out.
+pub fn finish(r: Running<'_>) -> Outcome {
+    let Running { mut vm, code, .. } = r;
+    vm.host.tasks.clear();
+    let vm = &mut vm;
+    let code = code.as_str();
     let result = match (vm.fatal.clone(), vm.outcome.take()) {
-        (Some((kind, message)), _) => Err(Diagnostic {
-            kind,
-            message,
-            location: None,
-        }),
-        (None, Some(Ok(v))) => match convert::to_json(&mut vm, &v) {
+        (Some((kind, message)), _) => Err(diagnostic(kind, message)),
+        (None, Some(Ok(v))) => match convert::to_json(vm, &v) {
             Ok(j) => Ok(j),
-            Err(e) => Err(diagnose(&mut vm, &e, code)),
+            Err(e) => Err(diagnose(vm, &e, code)),
         },
-        (None, Some(Err(e))) => Err(diagnose(&mut vm, &e, code)),
-        (None, None) => Err(Diagnostic {
-            kind: DiagnosticKind::ExecutionFailure,
-            message: "The program did not finish.".into(),
-            location: None,
-        }),
+        (None, Some(Err(e))) => Err(diagnose(vm, &e, code)),
+        (None, None) => Err(diagnostic(
+            DiagnosticKind::ExecutionFailure,
+            "The program did not finish.".into(),
+        )),
     };
     let result = match (vm.fatal.clone(), result) {
-        (Some((kind, message)), Ok(_)) => Err(Diagnostic {
-            kind,
-            message,
-            location: None,
-        }),
+        (Some((kind, message)), Ok(_)) => Err(diagnostic(kind, message)),
         (_, r) => r,
     };
     let logs = std::mem::take(&mut vm.logs);
@@ -149,11 +184,22 @@ fn execute_here(
     bound_output(
         Outcome {
             result,
+            warnings: Vec::new(),
             logs,
+            truncated: false,
             tool_calls,
         },
-        rt.limits.max_output_bytes,
+        vm.limits.max_output_bytes,
     )
+}
+
+fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
+    Diagnostic {
+        kind,
+        message,
+        location: None,
+        suggestions: Vec::new(),
+    }
 }
 
 fn diagnose(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
@@ -174,21 +220,17 @@ fn diagnose(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
                 kind: f.kind,
                 message,
                 location,
+                suggestions: vm.host.suggestions.get(&id).cloned().unwrap_or_default(),
             };
         }
         let message = convert::error_to_string(vm, id);
-        return Diagnostic {
-            kind: DiagnosticKind::ExecutionFailure,
-            message,
-            location: None,
-        };
+        return diagnostic(DiagnosticKind::ExecutionFailure, message);
     }
     let text = convert::format_value(vm, e);
-    Diagnostic {
-        kind: DiagnosticKind::ExecutionFailure,
-        message: format!("Uncaught: {text}"),
-        location: None,
-    }
+    diagnostic(
+        DiagnosticKind::ExecutionFailure,
+        format!("Uncaught: {text}"),
+    )
 }
 
 fn suffix(location: Option<(u32, u32)>) -> String {
@@ -224,6 +266,7 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
                 "{} [result truncated: {value_bytes} bytes exceeds the {max}-byte output limit; return a smaller value]",
                 &text[..cut]
             )));
+            outcome.truncated = true;
         }
     }
     let budget = max.saturating_sub(value_bytes.min(max));
@@ -242,6 +285,7 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
         outcome
             .logs
             .push(format!("[logs truncated: showing {kept} of {total} lines]"));
+        outcome.truncated = true;
     }
     outcome
 }

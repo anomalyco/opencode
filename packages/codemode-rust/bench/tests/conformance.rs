@@ -4,31 +4,44 @@
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
 
-use psychoscript::{DiagnosticKind, Json, Limits, Runtime};
+use psychoscript::{Json, Limits, Runtime, Schema, Tool};
+use serde_json::json;
 
+/// The reference generator's tools, with the same schemas.
 fn runtime(limits: Limits) -> Runtime {
+    let empty = json!({ "type": "object", "properties": {}, "additionalProperties": false });
     Runtime::new()
-        .tool("echo", |input| {
-            Ok(input.get("id").cloned().unwrap_or(Json::Null))
-        })
-        .tool("fail", |_| Err("boom".to_owned()))
-        .tool("git.status", |_| {
-            Ok(serde_json::json!({ "branch": "main", "dirty": true }))
-        })
+        .with_tool(
+            "echo",
+            Tool::new("Echo an id", |input, _| Ok(input["id"].clone()))
+                .input(Schema::validated(json!({
+                    "type": "object",
+                    "properties": { "id": { "type": "number" } },
+                    "required": ["id"],
+                    "additionalProperties": false
+                })))
+                .output(Schema::validated(json!({ "type": "number" }))),
+        )
+        .with_tool(
+            "fail",
+            Tool::new("Always fails", |_, _| Err("boom".into()))
+                .input(Schema::validated(empty.clone()))
+                .output(Schema::validated(json!({ "type": "number" }))),
+        )
+        .with_tool(
+            "git.status",
+            Tool::new("Working tree status", |_, _| {
+                Ok(json!({ "branch": "main", "dirty": true }))
+            })
+            .input(Schema::validated(empty))
+            .output(Schema::validated(json!({
+                "type": "object",
+                "properties": { "branch": { "type": "string" }, "dirty": { "type": "boolean" } },
+                "required": ["branch", "dirty"],
+                "additionalProperties": false
+            }))),
+        )
         .limits(limits)
-}
-
-fn kind_name(kind: DiagnosticKind) -> &'static str {
-    match kind {
-        DiagnosticKind::ParseError => "ParseError",
-        DiagnosticKind::UnsupportedSyntax => "UnsupportedSyntax",
-        DiagnosticKind::UnknownTool => "UnknownTool",
-        DiagnosticKind::InvalidDataValue => "InvalidDataValue",
-        DiagnosticKind::ToolCallLimitExceeded => "ToolCallLimitExceeded",
-        DiagnosticKind::TimeoutExceeded => "TimeoutExceeded",
-        DiagnosticKind::ToolFailure => "ToolFailure",
-        DiagnosticKind::ExecutionFailure => "ExecutionFailure",
-    }
 }
 
 /// JSON equality where numbers compare by value, so `3` equals `3.0`.
@@ -81,11 +94,11 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
             }
         }
         (Err(d), Some(false)) => {
-            if kind_name(d.kind) != expected["kind"] {
+            if d.kind.name() != expected["kind"] {
                 problems.push(format!(
                     "kind: expected {}, got {} ({})",
                     expected["kind"],
-                    kind_name(d.kind),
+                    d.kind.name(),
                     d.message
                 ));
             }
@@ -97,7 +110,7 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
         (Err(d), _) => problems.push(format!(
             "expected ok {}, got {}: {}",
             expected["value"],
-            kind_name(d.kind),
+            d.kind.name(),
             d.message
         )),
     }

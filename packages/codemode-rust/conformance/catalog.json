@@ -1,0 +1,2097 @@
+{
+  "tools": [
+    {
+      "path": "orders.lookup",
+      "description": "Look up an order by ID",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "path": "orders.list",
+      "description": "List orders, newest first",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ],
+              "description": "Filter by status"
+            },
+            "limit": {
+              "type": "integer",
+              "maximum": 100,
+              "exclusiveMinimum": 0
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "total": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "total"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "path": "users.get",
+      "description": "Get a user and the users they follow",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "login": {
+              "type": "string",
+              "description": "GitHub login\n\nCase-insensitive."
+            }
+          },
+          "required": [
+            "login"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "$ref": "#/$defs/User"
+            },
+            "follows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/User"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "user",
+            "follows",
+            "tags"
+          ],
+          "additionalProperties": false,
+          "$defs": {
+            "User": {
+              "type": "object",
+              "properties": {
+                "login": {
+                  "type": "string"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "Infinity",
+                        "-Infinity",
+                        "NaN"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "login",
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "net.ping",
+      "description": "Ping a host",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "host"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "path": "util.now",
+      "description": "The current time",
+      "input": {
+        "validated": true,
+        "schema": {
+          "not": {
+            "type": "null"
+          }
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "path": "fetchPage",
+      "description": "Fetch a page",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Page URL"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "freeform": true
+    },
+    {
+      "path": "context7.resolve-library-id",
+      "description": "Resolve a library ID",
+      "input": {
+        "validated": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "libraryName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "libraryName"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "validated": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "adapter.call",
+      "description": "Call an adapter-described tool",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "count": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      }
+    },
+    {
+      "path": "files.upload",
+      "description": "Send a document to the workspace",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "attachment": {
+              "type": "string",
+              "description": "Local path of the payload to send"
+            }
+          },
+          "required": [
+            "attachment"
+          ]
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "sent": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sent"
+          ]
+        }
+      }
+    },
+    {
+      "path": "files.patch",
+      "description": "Apply a patch",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "patchText": {
+              "type": "string",
+              "description": "The full patch text, */ included",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "patchText"
+          ]
+        }
+      },
+      "freeform": true
+    },
+    {
+      "path": "search.advanced",
+      "description": "Every keyword the renderer knows",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "$defs": {
+            "Tag": {
+              "type": "string",
+              "enum": [
+                "a",
+                "b"
+              ],
+              "description": "A tag"
+            }
+          },
+          "properties": {
+            "when": {
+              "type": "string",
+              "format": "date-time",
+              "default": "now",
+              "deprecated": true
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "multipleOf": 2
+            },
+            "ratio": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z]+$"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Tag"
+              },
+              "minItems": 1,
+              "maxItems": 5,
+              "uniqueItems": true
+            },
+            "either": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "one": {
+              "oneOf": [
+                {
+                  "const": 1
+                },
+                {
+                  "const": "one"
+                }
+              ]
+            },
+            "both": {
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "b": {
+                      "type": "number"
+                    }
+                  }
+                }
+              ]
+            },
+            "multi": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "map": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number",
+                "description": "A count"
+              }
+            },
+            "mixed": {
+              "type": "object",
+              "properties": {
+                "k": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": {
+                "type": "boolean"
+              }
+            },
+            "kebab-key": {
+              "type": "boolean"
+            },
+            "nested": {
+              "type": "object",
+              "description": "A deeply nested value whose documentation is long enough that it cannot fit on the same line as its tags at all",
+              "properties": {
+                "deeper": {
+                  "type": "object",
+                  "properties": {
+                    "deepest": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "anything": {},
+            "missing": {
+              "$ref": "#/$defs/Missing"
+            }
+          },
+          "required": [
+            "count",
+            "kebab-key"
+          ]
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "$ref": "#/definitions/Out",
+          "definitions": {
+            "Out": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "issues",
+      "description": "All issues",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "issues.list",
+      "description": "List issues",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "issues.archive",
+      "description": "Archive an issue",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "issues.create",
+      "description": "Create an issue",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "issues.get",
+      "description": "Get one issue",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "issues.close",
+      "description": "Close an issue",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "gmail.list_labels",
+      "description": "List the labels in the mailbox",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "gmail.list_messages",
+      "description": "List messages",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "slack.list_channels",
+      "description": "List channels",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "slack.list_users",
+      "description": "List users",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "slack.list_user_groups",
+      "description": "List user groups",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "slack.get_schedules",
+      "description": "Get scheduled messages",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "slack.admin.users.list",
+      "description": "List workspace administrators",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "cloud.describe_vm",
+      "description": "Describe a virtual machine",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "cloud.list_all_issues",
+      "description": "List issues",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "cloudflare.get_timezones",
+      "description": "List timezones",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "cloudflare.get_zones",
+      "description": "List zones",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "tracker.fetch_all",
+      "description": "Fetch every open issue in the project",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "k8s.getCronJob",
+      "description": "Read a CronJob in the cluster",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "mail.send",
+      "description": "Send an email",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "mail.archive",
+      "description": "Archive a thread",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "thread.uploadFile",
+      "description": "Upload one readable local file to the current Discord thread",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "thread.generateImage",
+      "description": "Generate an image and upload it to the current Discord thread",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "path": "unicode.émoji",
+      "description": "Résumé café naïve 🎉 tools",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object"
+        }
+      },
+      "output": {
+        "validated": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "namespaces": [
+    {
+      "path": "orders",
+      "description": "Purchases, fulfillment, and shipment tracking"
+    },
+    {
+      "path": "slack.admin",
+      "description": "Directory and account administration"
+    }
+  ],
+  "catalog": [
+    {
+      "path": "adapter.call",
+      "description": "Call an adapter-described tool",
+      "signature": "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>"
+    },
+    {
+      "path": "cloud.describe_vm",
+      "description": "Describe a virtual machine",
+      "signature": "tools.cloud.describe_vm(): Promise<string>"
+    },
+    {
+      "path": "cloud.list_all_issues",
+      "description": "List issues",
+      "signature": "tools.cloud.list_all_issues(): Promise<string>"
+    },
+    {
+      "path": "cloudflare.get_timezones",
+      "description": "List timezones",
+      "signature": "tools.cloudflare.get_timezones(): Promise<string>"
+    },
+    {
+      "path": "cloudflare.get_zones",
+      "description": "List zones",
+      "signature": "tools.cloudflare.get_zones(): Promise<string>"
+    },
+    {
+      "path": "context7.resolve-library-id",
+      "description": "Resolve a library ID",
+      "signature": "tools.context7[\"resolve-library-id\"]({\n  libraryName: string,\n}): Promise<string>"
+    },
+    {
+      "path": "fetchPage",
+      "description": "Fetch a page",
+      "signature": "tools.fetchPage(/** Page URL */ url: string): Promise<string>"
+    },
+    {
+      "path": "files.patch",
+      "description": "Apply a patch",
+      "signature": "tools.files.patch(/** The full patch text, * / included. @minLength 1 */ patchText: string): Promise<void>"
+    },
+    {
+      "path": "files.upload",
+      "description": "Send a document to the workspace",
+      "signature": "tools.files.upload({\n  /** Local path of the payload to send */\n  attachment: string,\n}): Promise<{\n  sent: boolean,\n}>"
+    },
+    {
+      "path": "gmail.list_labels",
+      "description": "List the labels in the mailbox",
+      "signature": "tools.gmail.list_labels(): Promise<string>"
+    },
+    {
+      "path": "gmail.list_messages",
+      "description": "List messages",
+      "signature": "tools.gmail.list_messages(): Promise<string>"
+    },
+    {
+      "path": "issues",
+      "description": "All issues",
+      "signature": "tools.issues(): Promise<string>"
+    },
+    {
+      "path": "issues.archive",
+      "description": "Archive an issue",
+      "signature": "tools.issues.archive(): Promise<string>"
+    },
+    {
+      "path": "issues.close",
+      "description": "Close an issue",
+      "signature": "tools.issues.close(): Promise<string>"
+    },
+    {
+      "path": "issues.create",
+      "description": "Create an issue",
+      "signature": "tools.issues.create(): Promise<string>"
+    },
+    {
+      "path": "issues.get",
+      "description": "Get one issue",
+      "signature": "tools.issues.get(): Promise<string>"
+    },
+    {
+      "path": "issues.list",
+      "description": "List issues",
+      "signature": "tools.issues.list(): Promise<string>"
+    },
+    {
+      "path": "k8s.getCronJob",
+      "description": "Read a CronJob in the cluster",
+      "signature": "tools.k8s.getCronJob(): Promise<string>"
+    },
+    {
+      "path": "mail.archive",
+      "description": "Archive a thread",
+      "signature": "tools.mail.archive(): Promise<string>"
+    },
+    {
+      "path": "mail.send",
+      "description": "Send an email",
+      "signature": "tools.mail.send(): Promise<string>"
+    },
+    {
+      "path": "net.ping",
+      "description": "Ping a host",
+      "signature": "tools.net.ping({\n  host: string,\n}): Promise<void>"
+    },
+    {
+      "path": "orders.list",
+      "description": "List orders, newest first",
+      "signature": "tools.orders.list({\n  /** Filter by status */\n  status?: \"open\" | \"closed\",\n  /** @integer @maximum 100 @exclusiveMinimum 0 */\n  limit?: number,\n  cursor?: string | null,\n}): Promise<Array<{\n    id: string,\n    total: number,\n  }>>"
+    },
+    {
+      "path": "orders.lookup",
+      "description": "Look up an order by ID",
+      "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+    },
+    {
+      "path": "search.advanced",
+      "description": "Every keyword the renderer knows",
+      "signature": "tools.search.advanced({\n  /** @deprecated @default \"now\" @format date-time */\n  when?: string,\n  /** @integer @minimum 1 @maximum 10 @multipleOf 2 */\n  count: number,\n  /** @exclusiveMinimum 0 @exclusiveMaximum 1 */\n  ratio?: number,\n  /** @minLength 1 @maxLength 64 @pattern ^[a-z]+$ */\n  name?: string,\n  /** @minItems 1 @maxItems 5 @uniqueItems true */\n  tags?: Array<\"a\" | \"b\">,\n  either?: string | number | null,\n  one?: 1 | \"one\",\n  both?: {\n      a?: string,\n    } & {\n      b?: number,\n    },\n  multi?: string | null,\n  /** Each value: A count */\n  map?: {\n    [key: string]: number,\n  },\n  mixed?: {\n    k?: string,\n    [key: string]: boolean,\n  },\n  \"kebab-key\": boolean,\n  /** A deeply nested value whose documentation is long enough that it cannot fit on the same line as its tags at all */\n  nested?: {\n    deeper?: {\n      deepest?: Array<{\n          x?: number,\n        }>,\n    },\n  },\n  anything?: unknown,\n  missing?: unknown,\n}): Promise<{\n  ok?: boolean,\n}>"
+    },
+    {
+      "path": "slack.admin.users.list",
+      "description": "List workspace administrators",
+      "signature": "tools.slack.admin.users.list(): Promise<string>"
+    },
+    {
+      "path": "slack.get_schedules",
+      "description": "Get scheduled messages",
+      "signature": "tools.slack.get_schedules(): Promise<string>"
+    },
+    {
+      "path": "slack.list_channels",
+      "description": "List channels",
+      "signature": "tools.slack.list_channels(): Promise<string>"
+    },
+    {
+      "path": "slack.list_user_groups",
+      "description": "List user groups",
+      "signature": "tools.slack.list_user_groups(): Promise<string>"
+    },
+    {
+      "path": "slack.list_users",
+      "description": "List users",
+      "signature": "tools.slack.list_users(): Promise<string>"
+    },
+    {
+      "path": "thread.generateImage",
+      "description": "Generate an image and upload it to the current Discord thread",
+      "signature": "tools.thread.generateImage(): Promise<string>"
+    },
+    {
+      "path": "thread.uploadFile",
+      "description": "Upload one readable local file to the current Discord thread",
+      "signature": "tools.thread.uploadFile(): Promise<string>"
+    },
+    {
+      "path": "tracker.fetch_all",
+      "description": "Fetch every open issue in the project",
+      "signature": "tools.tracker.fetch_all(): Promise<string>"
+    },
+    {
+      "path": "unicode.émoji",
+      "description": "Résumé café naïve 🎉 tools",
+      "signature": "tools.unicode[\"émoji\"](): Promise<string>"
+    },
+    {
+      "path": "users.get",
+      "description": "Get a user and the users they follow",
+      "signature": "tools.users.get({\n  /**\n   * GitHub login\n   *\n   * Case-insensitive.\n   */\n  login: string,\n}): Promise<{\n  user: {\n    login: string,\n    id: number,\n  },\n  follows: Array<{\n      login: string,\n      id: number,\n    }>,\n  tags: {\n    [key: string]: number,\n  },\n}>"
+    },
+    {
+      "path": "util.now",
+      "description": "The current time",
+      "signature": "tools.util.now(): Promise<string | null>"
+    }
+  ],
+  "searchSignature": "search(query: string | {\n  query?: string,\n  namespace?: string,\n  /** @integer @exclusiveMinimum 0 */\n  limit?: number,\n  /** @integer @minimum 0 */\n  offset?: number,\n}): {\n  items: Array<{\n      path: string,\n      description: string,\n      signature: string,\n    }>,\n  /** @integer @minimum 0 */\n  remaining: number,\n  next: {\n      /** @integer @minimum 0 */\n      offset: number,\n    } | null,\n}",
+  "expressions": [
+    [
+      "a",
+      "tools.a"
+    ],
+    [
+      "a.b",
+      "tools.a.b"
+    ],
+    [
+      "context7.resolve-library-id",
+      "tools.context7[\"resolve-library-id\"]"
+    ],
+    [
+      "x.1st",
+      "tools.x[\"1st\"]"
+    ],
+    [
+      "$ok._fine",
+      "tools.$ok._fine"
+    ],
+    [
+      "naïve",
+      "tools[\"naïve\"]"
+    ]
+  ],
+  "programs": [
+    {
+      "code": "return search({})",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.adapter.call",
+            "description": "Call an adapter-described tool",
+            "signature": "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>"
+          },
+          {
+            "path": "tools.cloud.describe_vm",
+            "description": "Describe a virtual machine",
+            "signature": "tools.cloud.describe_vm(): Promise<string>"
+          },
+          {
+            "path": "tools.cloud.list_all_issues",
+            "description": "List issues",
+            "signature": "tools.cloud.list_all_issues(): Promise<string>"
+          },
+          {
+            "path": "tools.cloudflare.get_timezones",
+            "description": "List timezones",
+            "signature": "tools.cloudflare.get_timezones(): Promise<string>"
+          },
+          {
+            "path": "tools.cloudflare.get_zones",
+            "description": "List zones",
+            "signature": "tools.cloudflare.get_zones(): Promise<string>"
+          },
+          {
+            "path": "tools.context7[\"resolve-library-id\"]",
+            "description": "Resolve a library ID",
+            "signature": "tools.context7[\"resolve-library-id\"]({\n  libraryName: string,\n}): Promise<string>"
+          },
+          {
+            "path": "tools.fetchPage",
+            "description": "Fetch a page",
+            "signature": "tools.fetchPage(/** Page URL */ url: string): Promise<string>"
+          },
+          {
+            "path": "tools.files.patch",
+            "description": "Apply a patch",
+            "signature": "tools.files.patch(/** The full patch text, * / included. @minLength 1 */ patchText: string): Promise<void>"
+          },
+          {
+            "path": "tools.files.upload",
+            "description": "Send a document to the workspace",
+            "signature": "tools.files.upload({\n  /** Local path of the payload to send */\n  attachment: string,\n}): Promise<{\n  sent: boolean,\n}>"
+          },
+          {
+            "path": "tools.gmail.list_labels",
+            "description": "List the labels in the mailbox",
+            "signature": "tools.gmail.list_labels(): Promise<string>"
+          }
+        ],
+        "remaining": 25,
+        "next": {
+          "offset": 10
+        }
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ limit: 3 })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.adapter.call",
+            "description": "Call an adapter-described tool",
+            "signature": "tools.adapter.call({\n  id: string,\n  count?: number,\n}): Promise<void>"
+          },
+          {
+            "path": "tools.cloud.describe_vm",
+            "description": "Describe a virtual machine",
+            "signature": "tools.cloud.describe_vm(): Promise<string>"
+          },
+          {
+            "path": "tools.cloud.list_all_issues",
+            "description": "List issues",
+            "signature": "tools.cloud.list_all_issues(): Promise<string>"
+          }
+        ],
+        "remaining": 32,
+        "next": {
+          "offset": 3
+        }
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ limit: 2, offset: 4 })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.cloudflare.get_zones",
+            "description": "List zones",
+            "signature": "tools.cloudflare.get_zones(): Promise<string>"
+          },
+          {
+            "path": "tools.context7[\"resolve-library-id\"]",
+            "description": "Resolve a library ID",
+            "signature": "tools.context7[\"resolve-library-id\"]({\n  libraryName: string,\n}): Promise<string>"
+          }
+        ],
+        "remaining": 29,
+        "next": {
+          "offset": 6
+        }
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ offset: 100 })",
+      "ok": true,
+      "value": {
+        "items": [],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search(\"issues\")",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.issues",
+            "description": "All issues",
+            "signature": "tools.issues(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search(\"users\")",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.users.get",
+            "description": "Get a user and the users they follow",
+            "signature": "tools.users.get({\n  /**\n   * GitHub login\n   *\n   * Case-insensitive.\n   */\n  login: string,\n}): Promise<{\n  user: {\n    login: string,\n    id: number,\n  },\n  follows: Array<{\n      login: string,\n      id: number,\n    }>,\n  tags: {\n    [key: string]: number,\n  },\n}>"
+          },
+          {
+            "path": "tools.slack.list_users",
+            "description": "List users",
+            "signature": "tools.slack.list_users(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.list_user_groups",
+            "description": "List user groups",
+            "signature": "tools.slack.list_user_groups(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.admin.users.list",
+            "description": "List workspace administrators",
+            "signature": "tools.slack.admin.users.list(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"users\", namespace: \"slack\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.slack.list_users",
+            "description": "List users",
+            "signature": "tools.slack.list_users(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.list_user_groups",
+            "description": "List user groups",
+            "signature": "tools.slack.list_user_groups(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.admin.users.list",
+            "description": "List workspace administrators",
+            "signature": "tools.slack.admin.users.list(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"\", namespace: \"slack.admin\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.slack.admin.users.list",
+            "description": "List workspace administrators",
+            "signature": "tools.slack.admin.users.list(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"\", namespace: \"tools.issues\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.issues",
+            "description": "All issues",
+            "signature": "tools.issues(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.archive",
+            "description": "Archive an issue",
+            "signature": "tools.issues.archive(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.close",
+            "description": "Close an issue",
+            "signature": "tools.issues.close(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.create",
+            "description": "Create an issue",
+            "signature": "tools.issues.create(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.get",
+            "description": "Get one issue",
+            "signature": "tools.issues.get(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.list",
+            "description": "List issues",
+            "signature": "tools.issues.list(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"account administration\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.slack.admin.users.list",
+            "description": "List workspace administrators",
+            "signature": "tools.slack.admin.users.list(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"purchases\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.orders.list",
+            "description": "List orders, newest first",
+            "signature": "tools.orders.list({\n  /** Filter by status */\n  status?: \"open\" | \"closed\",\n  /** @integer @maximum 100 @exclusiveMinimum 0 */\n  limit?: number,\n  cursor?: string | null,\n}): Promise<Array<{\n    id: string,\n    total: number,\n  }>>"
+          },
+          {
+            "path": "tools.orders.lookup",
+            "description": "Look up an order by ID",
+            "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"list gmail labels\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.gmail.list_labels",
+            "description": "List the labels in the mailbox",
+            "signature": "tools.gmail.list_labels(): Promise<string>"
+          },
+          {
+            "path": "tools.gmail.list_messages",
+            "description": "List messages",
+            "signature": "tools.gmail.list_messages(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.list",
+            "description": "List issues",
+            "signature": "tools.issues.list(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.admin.users.list",
+            "description": "List workspace administrators",
+            "signature": "tools.slack.admin.users.list(): Promise<string>"
+          },
+          {
+            "path": "tools.orders.list",
+            "description": "List orders, newest first",
+            "signature": "tools.orders.list({\n  /** Filter by status */\n  status?: \"open\" | \"closed\",\n  /** @integer @maximum 100 @exclusiveMinimum 0 */\n  limit?: number,\n  cursor?: string | null,\n}): Promise<Array<{\n    id: string,\n    total: number,\n  }>>"
+          },
+          {
+            "path": "tools.slack.list_channels",
+            "description": "List channels",
+            "signature": "tools.slack.list_channels(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.list_users",
+            "description": "List users",
+            "signature": "tools.slack.list_users(): Promise<string>"
+          },
+          {
+            "path": "tools.cloud.list_all_issues",
+            "description": "List issues",
+            "signature": "tools.cloud.list_all_issues(): Promise<string>"
+          },
+          {
+            "path": "tools.slack.list_user_groups",
+            "description": "List user groups",
+            "signature": "tools.slack.list_user_groups(): Promise<string>"
+          },
+          {
+            "path": "tools.cloudflare.get_timezones",
+            "description": "List timezones",
+            "signature": "tools.cloudflare.get_timezones(): Promise<string>"
+          }
+        ],
+        "remaining": 1,
+        "next": {
+          "offset": 10
+        }
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"schedu\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.slack.get_schedules",
+            "description": "Get scheduled messages",
+            "signature": "tools.slack.get_schedules(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"vms\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.cloud.describe_vm",
+            "description": "Describe a virtual machine",
+            "signature": "tools.cloud.describe_vm(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"all\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.issues",
+            "description": "All issues",
+            "signature": "tools.issues(): Promise<string>"
+          },
+          {
+            "path": "tools.tracker.fetch_all",
+            "description": "Fetch every open issue in the project",
+            "signature": "tools.tracker.fetch_all(): Promise<string>"
+          },
+          {
+            "path": "tools.cloud.list_all_issues",
+            "description": "List issues",
+            "signature": "tools.cloud.list_all_issues(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"zones\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.cloudflare.get_zones",
+            "description": "List zones",
+            "signature": "tools.cloudflare.get_zones(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"cronjob\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.k8s.getCronJob",
+            "description": "Read a CronJob in the cluster",
+            "signature": "tools.k8s.getCronJob(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"attachment\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.files.upload",
+            "description": "Send a document to the workspace",
+            "signature": "tools.files.upload({\n  /** Local path of the payload to send */\n  attachment: string,\n}): Promise<{\n  sent: boolean,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"docum\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.files.upload",
+            "description": "Send a document to the workspace",
+            "signature": "tools.files.upload({\n  /** Local path of the payload to send */\n  attachment: string,\n}): Promise<{\n  sent: boolean,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"email\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.mail.send",
+            "description": "Send an email",
+            "signature": "tools.mail.send(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"archive thread\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.mail.archive",
+            "description": "Archive a thread",
+            "signature": "tools.mail.archive(): Promise<string>"
+          },
+          {
+            "path": "tools.issues.archive",
+            "description": "Archive an issue",
+            "signature": "tools.issues.archive(): Promise<string>"
+          },
+          {
+            "path": "tools.thread.uploadFile",
+            "description": "Upload one readable local file to the current Discord thread",
+            "signature": "tools.thread.uploadFile(): Promise<string>"
+          },
+          {
+            "path": "tools.thread.generateImage",
+            "description": "Generate an image and upload it to the current Discord thread",
+            "signature": "tools.thread.generateImage(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"send message attachment upload file to current Discord thread\", limit: 2 })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.files.upload",
+            "description": "Send a document to the workspace",
+            "signature": "tools.files.upload({\n  /** Local path of the payload to send */\n  attachment: string,\n}): Promise<{\n  sent: boolean,\n}>"
+          },
+          {
+            "path": "tools.thread.uploadFile",
+            "description": "Upload one readable local file to the current Discord thread",
+            "signature": "tools.thread.uploadFile(): Promise<string>"
+          }
+        ],
+        "remaining": 7,
+        "next": {
+          "offset": 2
+        }
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"resume cafe\" })",
+      "ok": true,
+      "value": {
+        "items": [],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"tools.orders.lookup\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.orders.lookup",
+            "description": "Look up an order by ID",
+            "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"orders.lookup\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.orders.lookup",
+            "description": "Look up an order by ID",
+            "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: 'tools.context7[\"resolve-library-id\"]' })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.context7[\"resolve-library-id\"]",
+            "description": "Resolve a library ID",
+            "signature": "tools.context7[\"resolve-library-id\"]({\n  libraryName: string,\n}): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"issues\", namespace: \"tracker\" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.tracker.fetch_all",
+            "description": "Fetch every open issue in the project",
+            "signature": "tools.tracker.fetch_all(): Promise<string>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"labels\", namespace: \"slack\" })",
+      "ok": true,
+      "value": {
+        "items": [],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"  order  \" })",
+      "ok": true,
+      "value": {
+        "items": [
+          {
+            "path": "tools.orders.list",
+            "description": "List orders, newest first",
+            "signature": "tools.orders.list({\n  /** Filter by status */\n  status?: \"open\" | \"closed\",\n  /** @integer @maximum 100 @exclusiveMinimum 0 */\n  limit?: number,\n  cursor?: string | null,\n}): Promise<Array<{\n    id: string,\n    total: number,\n  }>>"
+          },
+          {
+            "path": "tools.orders.lookup",
+            "description": "Look up an order by ID",
+            "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+          }
+        ],
+        "remaining": 0,
+        "next": null
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return search({ query: \"order\", limit: 0.5 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'search': SchemaError(Expected an integer\n  at [\"limit\"])",
+        "suggestions": [
+          "Pass search a query string or an object, such as search(\"issues\") or search({ namespace: \"github\" })."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return search({ query: \"order\", offset: -1 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'search': SchemaError(Expected a value greater than or equal to 0\n  at [\"offset\"])",
+        "suggestions": [
+          "Pass search a query string or an object, such as search(\"issues\") or search({ namespace: \"github\" })."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return search({ query: \"order\", namespace: 7 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'search': SchemaError(Expected string\n  at [\"namespace\"])",
+        "suggestions": [
+          "Pass search a query string or an object, such as search(\"issues\") or search({ namespace: \"github\" })."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return search(42)",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'search': SchemaError(Expected object)",
+        "suggestions": [
+          "Pass search a query string or an object, such as search(\"issues\") or search({ namespace: \"github\" })."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return search(\"notes\", {})",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Tool 'search' expects at most one input object."
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return tools.search({ query: \"order\" })",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Tool 'search' is not callable, it is a namespace. Did you mean tools.search.advanced?",
+        "suggestions": [
+          "Use search to find available tools."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.issues.missing({})",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Unknown tool 'issues.missing'.",
+        "suggestions": [
+          "Use search to find available tools."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.issues[\"get-list\"]({})",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Unknown tool 'issues.get-list'. Did you mean tools.issues.get?",
+        "suggestions": [
+          "Use search to find available tools."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders({})",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Tool 'orders' is not callable, it is a namespace. Did you mean tools.orders.list or tools.orders.lookup?",
+        "suggestions": [
+          "Use search to find available tools."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.slack({})",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Tool 'slack' is not callable, it is a namespace. Did you mean tools.slack.get_schedules, tools.slack.list_channels, or tools.slack.list_users?",
+        "suggestions": [
+          "2 more under 'slack'. Use search({ namespace: \"slack\" }) to list them."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.nothing.here({})",
+      "ok": false,
+      "error": {
+        "kind": "UnknownTool",
+        "message": "Unknown tool 'nothing.here'.",
+        "suggestions": [
+          "Use search to find available tools."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.lookup({ id: 1 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.lookup': SchemaError(Expected string\n  at [\"id\"])",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.lookup({})",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.lookup': SchemaError(Missing key\n  at [\"id\"])",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.lookup(\"o1\")",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.lookup': SchemaError(Expected object)",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.lookup({ id: \"o1\" }, {})",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Tool 'orders.lookup' expects at most one input object."
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.lookup({ id: \"o1\", extra: true })",
+      "ok": true,
+      "value": {
+        "id": "o1",
+        "status": "open"
+      },
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.orders.list({ status: \"pending\" })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.list': SchemaError(Expected \"open\" | \"closed\"\n  at [\"status\"])",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.list({ limit: 0 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.list': SchemaError(Expected a value greater than 0\n  at [\"limit\"])",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.list({ limit: 1.5 })",
+      "ok": false,
+      "error": {
+        "kind": "InvalidToolInput",
+        "message": "Invalid input for tool 'orders.list': SchemaError(Expected an integer\n  at [\"limit\"])",
+        "suggestions": [
+          "The signature may have changed. Use search to get the current signature."
+        ]
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "return await tools.orders.list({ status: \"open\", limit: 5, extra: 1 })",
+      "ok": true,
+      "value": [
+        {
+          "id": "o1",
+          "total": 3
+        }
+      ],
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.fetchPage(\"https://a.test/\")",
+      "ok": true,
+      "value": "page",
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.net.ping({ host: \"a\" })",
+      "ok": true,
+      "value": null,
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.util.now()",
+      "ok": true,
+      "value": null,
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.context7[\"resolve-library-id\"]({ libraryName: \"ts\" })",
+      "ok": true,
+      "value": "/lib",
+      "toolCalls": 1
+    },
+    {
+      "code": "return await tools.adapter.call({ id: 42 })",
+      "ok": true,
+      "value": null,
+      "toolCalls": 1
+    },
+    {
+      "code": "return [Object.keys(tools), Object.keys(tools.slack), Object.keys(tools.issues)]",
+      "ok": true,
+      "value": [
+        [
+          "orders",
+          "users",
+          "net",
+          "util",
+          "fetchPage",
+          "context7",
+          "adapter",
+          "files",
+          "search",
+          "issues",
+          "gmail",
+          "slack",
+          "cloud",
+          "cloudflare",
+          "tracker",
+          "k8s",
+          "mail",
+          "thread",
+          "unicode"
+        ],
+        [
+          "list_channels",
+          "list_users",
+          "list_user_groups",
+          "get_schedules",
+          "admin"
+        ],
+        [
+          "list",
+          "archive",
+          "create",
+          "get",
+          "close"
+        ]
+      ],
+      "toolCalls": 0
+    }
+  ]
+}

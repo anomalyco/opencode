@@ -1,6 +1,6 @@
 //! The stack machine: frames, calls, exceptions, suspension and the run loop.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -10,11 +10,11 @@ use crate::bytecode::{Arith, Capture, FuncProto, Op, Program};
 use crate::object::*;
 use crate::strings::{StrId, Strings};
 use crate::value::{Id, Slot, Value};
-use crate::{DiagnosticKind, Json, Limits, ToolCall, ToolFn};
+use crate::{DiagnosticKind, Limits, ToolCall};
 
 pub type Res = Result<Value, Value>;
-/// A tool call's result as it waits to settle its promise.
-pub type ToolOutcome = Result<Json, (DiagnosticKind, String)>;
+/// A host call's result as it waits to settle its promise.
+pub type ToolOutcome = crate::host::Settlement;
 pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
@@ -165,7 +165,7 @@ pub struct Vm<'rt> {
     pub coroutines: Vec<Coroutine>,
     pub logs: Vec<String>,
     pub tool_calls: Vec<ToolCall>,
-    pub tools: &'rt BTreeMap<String, ToolFn>,
+    pub host: Box<crate::host::RunHost<'rt>>,
     pub tool_refs: FxHashMap<Rc<str>, Id>,
     pub limits: Limits,
     pub start: Instant,
@@ -182,7 +182,7 @@ pub struct Vm<'rt> {
 }
 
 impl<'rt> Vm<'rt> {
-    pub fn new(tools: &'rt BTreeMap<String, ToolFn>, limits: Limits, atoms: Strings) -> Self {
+    pub fn new(host: crate::host::RunHost<'rt>, limits: Limits, atoms: Strings) -> Self {
         let mut atoms = atoms;
         let names = Names {
             length: atoms.intern_static("length"),
@@ -230,7 +230,7 @@ impl<'rt> Vm<'rt> {
             coroutines: Vec::new(),
             logs: Vec::new(),
             tool_calls: Vec::new(),
-            tools,
+            host: Box::new(host),
             tool_refs: FxHashMap::default(),
             limits,
             start: Instant::now(),
@@ -635,59 +635,7 @@ impl<'rt> Vm<'rt> {
     }
 
     pub fn call_tool(&mut self, path: &str, args: &[Value]) -> Res {
-        let p = self.new_promise();
-        let outcome = self.invoke_tool(path, args);
-        self.inbox.push_back((p, outcome));
-        Ok(Value::Obj(p))
-    }
-
-    fn invoke_tool(
-        &mut self,
-        path: &str,
-        args: &[Value],
-    ) -> Result<Json, (DiagnosticKind, String)> {
-        if args.len() > 1 {
-            return Err((
-                DiagnosticKind::InvalidDataValue,
-                format!("Tool '{path}' expects at most one input object."),
-            ));
-        }
-        let tools = self.tools;
-        let Some(tool) = tools.get(path) else {
-            let under = format!("{path}.");
-            let message = if tools.keys().any(|k| k.starts_with(&under)) {
-                format!("Tool '{path}' is not callable, it is a namespace.")
-            } else {
-                format!("Unknown tool '{path}'.")
-            };
-            return Err((DiagnosticKind::UnknownTool, message));
-        };
-        let input = match args.first() {
-            None => Json::Object(serde_json::Map::new()),
-            Some(v) => match crate::convert::to_json(self, v) {
-                Ok(j) => j,
-                Err(e) => {
-                    let msg = self.error_text(&e);
-                    return Err((
-                        DiagnosticKind::InvalidDataValue,
-                        format!("Invalid input for tool '{path}': {msg}"),
-                    ));
-                }
-            },
-        };
-        if let Some(max) = self.limits.max_tool_calls
-            && self.tool_calls.len() as u64 >= max
-        {
-            return Err((
-                DiagnosticKind::ToolCallLimitExceeded,
-                format!("Execution exceeded its tool-call limit of {max}."),
-            ));
-        }
-        self.tool_calls.push(ToolCall {
-            path: path.to_owned(),
-            input: input.clone(),
-        });
-        tool(&input).map_err(|m| (DiagnosticKind::ToolFailure, m))
+        crate::host::call_tool(self, path, args)
     }
 
     pub fn tool_ref(&mut self, path: &str) -> Value {
@@ -1860,25 +1808,11 @@ impl<'rt> Vm<'rt> {
             }
             if let Some((p, outcome)) = self.inbox.pop_front() {
                 self.check_time()?;
-                match outcome {
-                    Ok(json) => {
-                        let v = crate::convert::from_json(self, &json);
-                        self.fulfill(p, v);
-                    }
-                    Err((kind, message)) => {
-                        let proto = self.realm.error_proto;
-                        let e = self.make_error(proto, &message);
-                        if let Value::Obj(id) = e {
-                            self.heap[id as usize].kind = Kind::Error(Some(Box::new(Failure {
-                                kind,
-                                message,
-                                offset: None,
-                            })));
-                        }
-                        self.reject(p, e);
-                    }
-                }
+                crate::host::settle(self, p, outcome);
                 continue;
+            }
+            if self.host.waiting() {
+                return Ok(());
             }
             let e = self.make_error(
                 self.realm.error_proto,

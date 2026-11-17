@@ -501,6 +501,100 @@ impl<'a, 's> Compiler<'a, 's> {
         }
     }
 
+    /// Binds every `import` before the body runs, loading each module through the host's `%import(specifier,
+    /// kind, name)` global: kind 0 a default import, 1 a namespace, 2 a named export, 3 a bare import.
+    fn imports(&mut self, stmts: &'a [Statement<'a>]) -> R<()> {
+        for st in stmts {
+            let Statement::ImportDeclaration(d) = st else {
+                continue;
+            };
+            if d.import_kind.is_type() || d.phase.is_some() {
+                return Err(unsupported("This form of `import`", d.span));
+            }
+            let source = js_str(&d.source.value);
+            let source = source.as_str();
+            let Some(specifiers) = &d.specifiers else {
+                self.import_call(
+                    d.span.start,
+                    |c| {
+                        c.push_str(source);
+                        Ok(())
+                    },
+                    3,
+                    None,
+                )?;
+                self.emit(Op::Pop);
+                continue;
+            };
+            if specifiers.is_empty() {
+                self.import_call(
+                    d.span.start,
+                    |c| {
+                        c.push_str(source);
+                        Ok(())
+                    },
+                    3,
+                    None,
+                )?;
+                self.emit(Op::Pop);
+            }
+            for spec in specifiers {
+                let (kind, name, local, pos) = match spec {
+                    ImportDeclarationSpecifier::ImportDefaultSpecifier(x) => {
+                        (0, None, &x.local, x.span.start)
+                    }
+                    ImportDeclarationSpecifier::ImportNamespaceSpecifier(x) => {
+                        (1, None, &x.local, x.span.start)
+                    }
+                    ImportDeclarationSpecifier::ImportSpecifier(x) => {
+                        (2, Some(x.imported.name().as_str()), &x.local, x.span.start)
+                    }
+                };
+                self.import_call(
+                    pos,
+                    |c| {
+                        c.push_str(source);
+                        Ok(())
+                    },
+                    kind,
+                    name,
+                )?;
+                match local.symbol_id.get() {
+                    Some(s) => self.store_symbol(s, BindMode::Init, pos)?,
+                    None => {
+                        self.emit(Op::Pop);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `%import(<specifier>, kind, name)`, leaving its result on the stack.
+    fn import_call(
+        &mut self,
+        pos: u32,
+        specifier: impl FnOnce(&mut Self) -> R<()>,
+        kind: u8,
+        name: Option<&str>,
+    ) -> R<()> {
+        let g = self.global_slot(crate::host::IMPORT_GLOBAL);
+        self.emit(Op::GetGlobal(g));
+        self.emit(Op::Undef);
+        specifier(self)?;
+        self.push_num(f64::from(kind));
+        let argc = match name {
+            Some(name) => {
+                self.push_str(name);
+                3
+            }
+            None => 2,
+        };
+        self.pos = pos;
+        self.emit(Op::Call(argc));
+        Ok(())
+    }
+
     fn hoist_functions(&mut self, stmts: &'a [Statement<'a>]) -> R<()> {
         for st in stmts {
             if let Statement::FunctionDeclaration(f) = st {
@@ -670,6 +764,7 @@ impl<'a, 's> Compiler<'a, 's> {
             None => Vec::new(),
         };
         self.init_scope(&syms);
+        self.imports(&program.body)?;
         self.hoist_functions(&program.body)?;
         if program.body.is_empty()
             && let Some(d) = program.directives.last()
@@ -948,7 +1043,8 @@ impl<'a, 's> Compiler<'a, 's> {
             Statement::TryStatement(t) => self.try_stmt(t),
             Statement::ClassDeclaration(c) => Err(unsupported("Classes", c.span)),
             Statement::WithStatement(w) => Err(unsupported("`with`", w.span)),
-            Statement::ImportDeclaration(d) => Err(unsupported("`import`", d.span)),
+            // Bound before the body runs; see `imports`.
+            Statement::ImportDeclaration(_) => Ok(()),
             Statement::ExportAllDeclaration(d) => Err(unsupported("`export`", d.span)),
             Statement::ExportDefaultDeclaration(d) => Err(unsupported("`export`", d.span)),
             Statement::ExportNamedDeclaration(d) => Err(unsupported("`export`", d.span)),
@@ -1822,7 +1918,12 @@ impl<'a, 's> Compiler<'a, 's> {
                 return Err(unsupported("Tagged templates", t.span));
             }
             Expression::Super(s) => return Err(unsupported("`super`", s.span)),
-            Expression::ImportExpression(i) => return Err(unsupported("`import()`", i.span)),
+            Expression::ImportExpression(i) => {
+                if i.options.is_some() {
+                    return Err(unsupported("Import options", i.span));
+                }
+                self.import_call(i.span.start, |c| c.expr(&i.source), 4, None)?;
+            }
             Expression::ImportMeta(m) => return Err(unsupported("`import.meta`", m.span)),
             Expression::NewTarget(m) => return Err(unsupported("`new.target`", m.span)),
             Expression::PrivateFieldExpression(p) => {
