@@ -1480,3 +1480,319 @@ end)
     assert_eq!((alert.size, confirm.size), (Some(abi::PanelSize::XLarge), Some(abi::PanelSize::Large)));
     assert_eq!(failure(&registry, "test.luau"), None);
 }
+
+/// The messages of the toasts `host` showed.
+fn said(host: &TestHost) -> Vec<String> {
+    host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect()
+}
+
+/// Answers the fetch `host` got first with `reply`, as the server would.
+fn answer(host: &TestHost, reply: Result<serde_json::Value, String>) {
+    host.app.advance(Duration::from_millis(1));
+    let (_, deliver) = host.fetches.borrow_mut().remove(0);
+    deliver(reply);
+    host.app.advance(Duration::from_millis(1));
+}
+
+/// The dialog a task showed last, and the command its close runs, with its input.
+fn asked(host: &TestHost) -> (abi::Dialog, (String, Option<String>)) {
+    let dialogs = host.dialogs.borrow();
+    let Some((_, abi::Dialog::Dismissable { dialog, dismissed })) = dialogs.last() else { panic!("{dialogs:?}") };
+    let abi::Action::Command { name, input } = dismissed.clone();
+    ((**dialog).clone(), (name, input))
+}
+
+/// Runs command `name` of `host`'s keymap with `input`, and the frame after it.
+fn run(host: &TestHost, name: &str, input: Option<&str>) {
+    keymap(host).dispatch(name, input);
+    host.app.advance(Duration::from_millis(1));
+}
+
+/// A plugin `test.luau` whose setup body is `body`, active on `host`.
+fn tasking(host: &Rc<TestHost>, body: &str) -> Rc<Registry> {
+    let init =
+        format!("local plugin = require(\"@opencode/plugin\")\nreturn plugin.define(function(setup)\n{body}\nend)\n");
+    running(host, define(&sources(&init), None).unwrap().0)
+}
+
+const ANSWER: &str = "test.luau.task.answer";
+
+// Expected (await-luau): a command's handler is a task: `host:fetch` parks it and returns the reply as the reply's call
+// goes on with it, over two waits; a failed request returns `nil` and the error. Setup starts a task with
+// `plugin.spawn`, whose fetch goes on the same way.
+#[test]
+fn a_task_parks_on_a_fetch_and_goes_on_in_its_reply() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        plugin.spawn(function()
+            local value = setup.host:fetch({ method = "GET", path = "/setup" })
+            setup.host:toast({ variant = "info", message = "setup " .. value.name })
+        end)
+        setup:command({ name = "go" }, function(host)
+            host:toast({ variant = "info", message = "asked" })
+            local value, err = host:fetch({ method = "GET", path = "/one" })
+            host:toast({ variant = "info", message = value.name .. " " .. tostring(err) })
+            local again, failure = host:fetch({ method = "GET", path = "/two" })
+            host:toast({ variant = "info", message = tostring(again) .. " " .. failure })
+        end)
+        "#,
+    );
+    answer(&host, Ok(serde_json::json!({ "name": "/setup" })));
+    run(&host, "go", None);
+    assert_eq!(said(&host), ["setup /setup", "asked"]);
+    answer(&host, Ok(serde_json::json!({ "name": "/one" })));
+    assert_eq!(said(&host)[2..], ["/one nil"]);
+    answer(&host, Err("UnexpectedStatus: 404".to_owned()));
+    assert_eq!(said(&host)[3..], ["nil UnexpectedStatus: 404"]);
+    assert!(host.fetches.borrow().is_empty());
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau): `host:confirm`, `host:prompt`, `host:select` and `host:alert` show the contract's dialog and
+// return its answer; an escape returns `nil`, and so does a dialog another dialog replaced, once its close runs.
+#[test]
+fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        local function say(host, text) host:toast({ variant = "info", message = text }) end
+        setup:command({ name = "ask" }, function(host)
+            say(host, "confirm " .. tostring(host:confirm({ title = "Sure?", message = "Really", label = { confirm = "Yes", cancel = "No" } })))
+            say(host, "prompt " .. tostring(host:prompt({ title = "Name", placeholder = "a name" })))
+            host:alert({ title = "Told", message = "said" })
+            say(host, "alerted")
+        end)
+        setup:command({ name = "pick" }, function(host)
+            say(host, "pick " .. tostring(host:select({ title = "Pick", options = { { title = "One", value = "1" } } })))
+        end)
+        "#,
+    );
+    run(&host, "ask", None);
+    let (dialog, closed) = asked(&host);
+    let abi::Dialog::Confirm(confirm) = dialog else { panic!("{dialog:?}") };
+    assert_eq!((confirm.title.as_str(), confirm.message.as_str()), ("Sure?", "Really"));
+    // The host runs the answer, then the close.
+    run(&host, ANSWER, Some("true"));
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host), ["confirm true"]);
+    let (dialog, closed) = asked(&host);
+    assert!(matches!(dialog, abi::Dialog::Prompt { ref title, .. } if title == "Name"), "{dialog:?}");
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host)[1..], ["prompt nil"]);
+    let (dialog, closed) = asked(&host);
+    assert!(matches!(dialog, abi::Dialog::Alert(_)), "{dialog:?}");
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host)[2..], ["alerted"]);
+    // A select replaced by a confirm: the select's close answers its task `nil`, and the confirm's answer is its own.
+    run(&host, "pick", None);
+    let (_, replaced) = asked(&host);
+    run(&host, "ask", None);
+    let (_, closed) = asked(&host);
+    run(&host, &replaced.0, replaced.1.as_deref());
+    assert_eq!(said(&host)[3..], ["pick nil"]);
+    run(&host, ANSWER, Some("false"));
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host)[4..], ["confirm false"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau): `plugin.all` runs each function as a task and returns their values in order once all ended,
+// or `nil` and the first error.
+#[test]
+fn plugin_all_waits_for_each_of_its_tasks() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        local function get(host, path)
+            return function() return host:fetch({ method = "GET", path = path }) end
+        end
+        setup:command({ name = "all" }, function(host)
+            local values, err = plugin.all({ get(host, "/a"), get(host, "/b"), function() return 3 end })
+            local text = if values then values[1].name .. values[2].name .. values[3] else "failed " .. err
+            host:toast({ variant = "info", message = text })
+        end)
+        "#,
+    );
+    run(&host, "all", None);
+    assert_eq!(host.fetches.borrow().len(), 2);
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["/a/b3"]);
+    run(&host, "all", None);
+    answer(&host, Err("Transport: down".to_owned()));
+    assert!(said(&host).len() == 1, "{:?}", said(&host));
+    answer(&host, Ok(serde_json::json!({ "name": "/b" })));
+    assert_eq!(said(&host)[1..], ["failed Transport: down"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau): a waiting call outside a task (a render, setup) fails the call, and says where tasks are.
+#[test]
+fn a_wait_outside_a_task_is_refused() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        local host = setup.host
+        setup:slot({ path = "home.footer" }, function()
+            host:confirm({ title = "no", message = "no" })
+            return plugin.show(plugin.text("drawn"))
+        end)
+        "#,
+    );
+    let text = footer(&host, &registry);
+    let error = failure(&registry, "test.luau").expect("the render failed");
+    assert!(error.contains("init.luau:6: host:confirm waits, and only a task can"), "{error}");
+    assert!(!text.contains("drawn"), "{text}");
+    let failed = define(&sources(
+        "local plugin = require(\"@opencode/plugin\")\nreturn plugin.define(function(setup)\n    setup.host:fetch({ method = \"GET\", path = \"/x\" })\nend)\n",
+    ), None)
+    .unwrap()
+    .0;
+    let registry = running(&host, failed);
+    let error = failure(&registry, "test.luau").expect("setup failed");
+    assert!(error.contains("init.luau:3: host:fetch waits"), "{error}");
+}
+
+// Expected (await-luau): each stretch of a task between two waits runs within the CPU budget of the call that runs it:
+// two stretches of most of the budget each pass, and a task that spins after a resume is stopped in the reply's call,
+// failing the plugin with nothing of that stretch applied; an error after a resume fails it as well.
+#[test]
+fn the_cpu_budget_holds_for_each_stretch_of_a_task() {
+    let host = host();
+    let body = r#"
+        local function spin(seconds) local start = os.clock() while os.clock() - start < seconds do end end
+        setup:command({ name = "twice" }, function(host)
+            spin(0.06)
+            host:fetch({ method = "GET", path = "/x" })
+            spin(0.06)
+            host:toast({ variant = "info", message = "both" })
+        end)
+        setup:command({ name = "spin" }, function(host)
+            host:fetch({ method = "GET", path = "/x" })
+            host:toast({ variant = "info", message = "spun" })
+            while true do end
+        end)
+        setup:command({ name = "raise" }, function(host)
+            host:fetch({ method = "GET", path = "/x" })
+            error("after the reply")
+        end)
+    "#;
+    let registry = tasking(&host, body);
+    run(&host, "twice", None);
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["both"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+    run(&host, "spin", None);
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("the spin was stopped");
+    assert!(error.contains("Luau budget"), "{error}");
+    assert!(!said(&host).contains(&"spun".to_owned()), "{:?}", said(&host));
+    let registry = tasking(&host, body);
+    run(&host, "raise", None);
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("the error failed the plugin");
+    assert!(error.contains("init.luau:") && error.contains("after the reply"), "{error}");
+}
+
+// Expected (await-luau): a task parked when its plugin reloads or is disabled is dropped with its VM: its reply and its
+// dialog's close reach nothing, and the new activation runs on its own.
+#[test]
+fn a_parked_task_is_dropped_with_its_activation() {
+    let host = host();
+    let init = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:command({ name = "wait" }, function(host)
+        host:fetch({ method = "GET", path = "/x" })
+        host:toast({ variant = "info", message = "resumed" })
+    end)
+    setup:command({ name = "ask" }, function(host)
+        host:confirm({ title = "t", message = "m" })
+        host:toast({ variant = "info", message = "answered" })
+    end)
+end)
+"#;
+    let load = || {
+        let (definition, error) = define(&sources(init), None).unwrap();
+        definition.external("/plugins/test", error)
+    };
+    let registry = Rc::new(Registry::define(Vec::new(), []));
+    registry.load(&dynamic(&host), load());
+    registry.activate(&dynamic(&host));
+    run(&host, "wait", None);
+    // A reload: the new build sets up, the old one stops.
+    registry.load(&dynamic(&host), load());
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    assert!(said(&host).is_empty(), "{:?}", said(&host));
+    // The new activation's own task goes on.
+    run(&host, "wait", None);
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["resumed"]);
+    // Disabled while a fetch and a dialog wait.
+    run(&host, "wait", None);
+    run(&host, "ask", None);
+    let (_, closed) = asked(&host);
+    assert!(registry.set_active(&dynamic(&host), "test.luau", false));
+    host.reply();
+    run(&host, ANSWER, Some("true"));
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host), ["resumed"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau): a task started by `onMount` keeps the slot input it was handed, though the host fills that
+// table again for the next mount while the task waits.
+#[test]
+fn a_parked_tasks_mount_input_is_its_own() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        setup:slot({ path = "home.footer" }, function() return plugin.show(plugin.text("x")) end)
+        setup:onMount({ path = "home.footer" }, function(host, input, mounted)
+            if not mounted then return end
+            host:fetch({ method = "GET", path = "/x" })
+            host:toast({ variant = "info", message = tostring(input.session_id) })
+        end)
+        "#,
+    );
+    let parent = View::new(host.app());
+    let input = |id: &str| SlotInput { session_id: Some(id.to_owned()), ..SlotInput::default() };
+    let _first = registry.mount(&*host, &parent, slot::HOME_FOOTER, &input("ses_a"), |_| {});
+    let _second = registry.mount(&*host, &parent, slot::HOME_FOOTER, &input("ses_b"), |_| {});
+    host.app.advance(Duration::from_millis(1));
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["ses_a", "ses_b"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau): at most 256 tasks of a plugin wait at once; a waiting call past them fails the plugin.
+#[test]
+fn a_plugin_parks_at_most_256_tasks() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        setup:command({ name = "many" }, function(host, input)
+            for _ = 1, tonumber(input) :: number do
+                plugin.spawn(function() host:fetch({ method = "GET", path = "/x" }) end)
+            end
+        end)
+        "#,
+    );
+    run(&host, "many", Some("256"));
+    assert_eq!((host.fetches.borrow().len(), failure(&registry, "test.luau")), (256, None));
+    run(&host, "many", Some("1"));
+    let error = failure(&registry, "test.luau").expect("the 257th wait failed");
+    assert!(error.contains("host:fetch: more than 256 tasks of the plugin wait"), "{error}");
+}
