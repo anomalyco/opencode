@@ -952,8 +952,9 @@ impl FenceCode {
 
     /// The holder, showing `fence` in the last look.
     fn show(&self, fence: &FencePart) -> View {
-        let close = if fence.closed { "\n```" } else { "" };
-        let source = format!("```{}\n{}{close}", fence.info, fence.code);
+        let marker = delimiter(&fence.info, &fence.code);
+        let close = if fence.closed { format!("\n{marker}") } else { String::new() };
+        let source = format!("{marker}{}\n{}{close}", fence.info, fence.code);
         let look = self.look.borrow().clone();
         let mut code = self.code.borrow_mut();
         match code.as_mut() {
@@ -985,6 +986,16 @@ impl FenceCode {
             self.holder.clear();
         }
     }
+}
+
+/// A fence's delimiter that no line of `code` closes early, per CommonMark: backticks one longer than its longest run
+/// of them, at least three; tildes so for an `info` that holds a backtick, which a backtick fence's may not (carbon
+/// c2a-2). OpenTUI's block does not say which delimiter opened the fence; this is it whenever that was three backticks
+/// and the code holds no such run.
+fn delimiter(info: &str, code: &str) -> String {
+    let mark = if info.contains('`') { '~' } else { '`' };
+    let longest = code.split(|c| c != mark).map(str::len).max().unwrap_or(0);
+    mark.to_string().repeat((longest + 1).max(3))
 }
 
 impl Fence {
