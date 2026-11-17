@@ -1239,8 +1239,6 @@ export const dict = {
   "sidebar.recent.unpin": "Rögzítés feloldása",
   "sidebar.recent.moveUp": "Mozgatás felfelé",
   "sidebar.recent.moveDown": "Mozgatás lefelé",
-  "settings.experimental.row.newIcons.title": "Új ikonok",
-  "settings.experimental.row.newIcons.description": "A frissített ikonkészlet előnézete",
   "settings.experimental.row.newTimeline.title": "Új idővonal",
   "settings.experimental.row.newTimeline.description":
     "Újratervezett munkamenet-idővonal, amely csoportosítja az ügynök tevékenységét, a kör alatt egyetlen állapotsorral",

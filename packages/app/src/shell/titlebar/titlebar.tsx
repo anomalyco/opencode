@@ -762,7 +762,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
                                 onClick={() => dispatchMobileTabs({ type: "settings.requested" })}
                               >
-                                <Icon name="settings-gear" size="small" />
+                                <Icon name="settings-gear" />
                                 {language.t("sidebar.settings")}
                               </button>
                               <button
@@ -774,7 +774,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   platform.openExternal("https://opencode.ai/desktop-feedback")
                                 }}
                               >
-                                <Icon name="help" size="small" />
+                                <Icon name="help" />
                                 {language.t("sidebar.help")}
                               </button>
                             </div>

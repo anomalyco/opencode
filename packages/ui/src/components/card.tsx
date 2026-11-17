@@ -101,7 +101,7 @@ export function CardTitle(props: CardTitleProps) {
     >
       <Show when={show()}>
         <span data-slot="card-title-icon" data-placeholder={placeholder() || undefined}>
-          <Icon name={name() ?? "dash"} size="small" />
+          <Icon name={name() ?? "minus"} />
         </span>
       </Show>
       {split.children}

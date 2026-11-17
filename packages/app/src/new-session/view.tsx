@@ -228,7 +228,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
             <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
-              <Icon name="chevron-down" size="small" class="-rotate-90" />
+              <Icon name="chevron-down" class="-rotate-90" />
             </span>
           </button>
           <Tooltip
@@ -243,7 +243,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
               aria-label={language.t("common.dismiss")}
               onClick={dismiss}
             >
-              <Icon name="xmark-small" />
+              <Icon name="close" />
             </button>
           </Tooltip>
         </div>
@@ -386,7 +386,7 @@ function NewSessionLocation(props: {
                 generated={getProjectAvatarGenerated(props.project)}
               />
               <span class="min-w-0 truncate">{displayName(props.project)}</span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
             </button>
           </Tooltip>
           <Show when={props.onWorktree}>
@@ -403,7 +403,7 @@ function NewSessionLocation(props: {
                     <div class="flex flex-col gap-1 text-start">
                       <Show when={props.onboarding}>
                         <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
-                          <Icon name="outline-worktree" size="small" class="shrink-0 text-v2-text-text-accent" />
+                          <Icon name="outline-worktree" class="shrink-0 text-v2-text-text-accent" />
                           <span>{language.t("workspace.onboarding.title")}</span>
                         </div>
                         <span class="font-[440] text-v2-text-text-muted">

@@ -1260,8 +1260,6 @@ export const dict = {
   "sidebar.recent.unpin": "เลิกปักหมุด",
   "sidebar.recent.moveUp": "ย้ายขึ้น",
   "sidebar.recent.moveDown": "ย้ายลง",
-  "settings.experimental.row.newIcons.title": "ไอคอนใหม่",
-  "settings.experimental.row.newIcons.description": "ดูตัวอย่างชุดไอคอนที่อัปเดต",
   "settings.experimental.row.newTimeline.title": "ไทม์ไลน์ใหม่",
   "settings.experimental.row.newTimeline.description":
     "ไทม์ไลน์เซสชันที่ออกแบบใหม่ ซึ่งจัดกลุ่มสิ่งที่เอเจนต์ทำ พร้อมบรรทัดสถานะเดียวใต้เทิร์น",

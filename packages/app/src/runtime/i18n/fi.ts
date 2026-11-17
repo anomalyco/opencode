@@ -1225,8 +1225,6 @@ export const dict = {
   "sidebar.recent.unpin": "Poista kiinnitys",
   "sidebar.recent.moveUp": "Siirrä ylös",
   "sidebar.recent.moveDown": "Siirrä alas",
-  "settings.experimental.row.newIcons.title": "Uudet kuvakkeet",
-  "settings.experimental.row.newIcons.description": "Esikatsele päivitettyä kuvakesarjaa",
   "settings.experimental.row.newTimeline.title": "Uusi aikajana",
   "settings.experimental.row.newTimeline.description":
     "Uudistettu istunnon aikajana, joka ryhmittelee agentin toimet ja näyttää yhden tilarivin vuoron alla",

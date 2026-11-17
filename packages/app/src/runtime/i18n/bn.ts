@@ -1228,8 +1228,6 @@ export const dict = {
   "sidebar.recent.unpin": "আনপিন করুন",
   "sidebar.recent.moveUp": "উপরে সরান",
   "sidebar.recent.moveDown": "নিচে সরান",
-  "settings.experimental.row.newIcons.title": "নতুন আইকন",
-  "settings.experimental.row.newIcons.description": "আপডেট করা আইকন সেটের পূর্বরূপ দেখুন",
   "settings.experimental.row.newTimeline.title": "নতুন টাইমলাইন",
   "settings.experimental.row.newTimeline.description":
     "নতুনভাবে ডিজাইন করা সেশন টাইমলাইন, যা এজেন্টের কাজগুলোকে গোষ্ঠীবদ্ধ করে এবং টার্নের নিচে একটি স্থিতি লাইন দেখায়",

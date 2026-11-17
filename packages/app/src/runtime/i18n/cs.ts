@@ -1264,8 +1264,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odepnout",
   "sidebar.recent.moveUp": "Posunout nahoru",
   "sidebar.recent.moveDown": "Posunout dolů",
-  "settings.experimental.row.newIcons.title": "Nové ikony",
-  "settings.experimental.row.newIcons.description": "Vyzkoušejte aktualizovanou sadu ikon",
   "settings.experimental.row.newTimeline.title": "Nová časová osa",
   "settings.experimental.row.newTimeline.description":
     "Přepracovaná časová osa relace, která seskupuje činnost agenta a pod krokem zobrazuje jeden stavový řádek",

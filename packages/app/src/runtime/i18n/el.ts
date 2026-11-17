@@ -1255,8 +1255,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ξεκαρφίτσωμα",
   "sidebar.recent.moveUp": "Μετακίνηση πάνω",
   "sidebar.recent.moveDown": "Μετακίνηση κάτω",
-  "settings.experimental.row.newIcons.title": "Νέα εικονίδια",
-  "settings.experimental.row.newIcons.description": "Προεπισκόπηση του ανανεωμένου συνόλου εικονιδίων",
   "settings.experimental.row.newTimeline.title": "Νέο χρονολόγιο",
   "settings.experimental.row.newTimeline.description":
     "Ανασχεδιασμένο χρονολόγιο συνεδρίας που ομαδοποιεί όσα έκανε ο πράκτορας, με μία γραμμή κατάστασης κάτω από τον γύρο",

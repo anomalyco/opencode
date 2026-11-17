@@ -1213,8 +1213,6 @@ export const dict = {
   "sidebar.recent.unpin": "Vabasta",
   "sidebar.recent.moveUp": "Liiguta üles",
   "sidebar.recent.moveDown": "Liiguta alla",
-  "settings.experimental.row.newIcons.title": "Uued ikoonid",
-  "settings.experimental.row.newIcons.description": "Vaata uuendatud ikoonikomplekti eelvaadet",
   "settings.experimental.row.newTimeline.title": "Uus ajaskaala",
   "settings.experimental.row.newTimeline.description":
     "Ümber kujundatud seansi ajaskaala, mis rühmitab agendi tegevused ja näitab vooru all üht olekurida",

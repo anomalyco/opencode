@@ -1215,8 +1215,6 @@ export const dict = {
   "sidebar.recent.unpin": "ដោះខ្ទាស់",
   "sidebar.recent.moveUp": "ផ្លាស់ទីឡើងលើ",
   "sidebar.recent.moveDown": "ផ្លាស់ទីចុះក្រោម",
-  "settings.experimental.row.newIcons.title": "រូបតំណាងថ្មី",
-  "settings.experimental.row.newIcons.description": "មើលសំណុំរូបតំណាងដែលបានធ្វើបច្ចុប្បន្នភាពជាមុន",
   "settings.experimental.row.newTimeline.title": "បន្ទាត់ពេលវេលាថ្មី",
   "settings.experimental.row.newTimeline.description":
     "បន្ទាត់ពេលវេលាសម័យដែលបានរចនាឡើងវិញ ដែលដាក់ជាក្រុមនូវអ្វីដែលភ្នាក់ងារបានធ្វើ ជាមួយបន្ទាត់ស្ថានភាពមួយនៅខាងក្រោមវេន",

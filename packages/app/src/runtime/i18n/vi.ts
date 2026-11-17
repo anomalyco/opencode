@@ -1225,8 +1225,6 @@ export const dict = {
   "sidebar.recent.unpin": "Bỏ ghim",
   "sidebar.recent.moveUp": "Di chuyển lên",
   "sidebar.recent.moveDown": "Di chuyển xuống",
-  "settings.experimental.row.newIcons.title": "Biểu tượng mới",
-  "settings.experimental.row.newIcons.description": "Xem trước bộ biểu tượng cập nhật",
   "settings.experimental.row.newTimeline.title": "Dòng thời gian mới",
   "settings.experimental.row.newTimeline.description":
     "Dòng thời gian phiên được thiết kế lại, nhóm những gì tác nhân đã làm, với một dòng trạng thái bên dưới lượt",

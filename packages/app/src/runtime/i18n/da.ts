@@ -1280,8 +1280,6 @@ export const dict = {
   "sidebar.recent.unpin": "Frigør",
   "sidebar.recent.moveUp": "Flyt op",
   "sidebar.recent.moveDown": "Flyt ned",
-  "settings.experimental.row.newIcons.title": "Nye ikoner",
-  "settings.experimental.row.newIcons.description": "Prøv det opdaterede ikonsæt",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En nydesignet sessionstidslinje, der grupperer, hvad agenten gjorde, med én statuslinje under turen",

@@ -1242,8 +1242,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ҷудо кардан",
   "sidebar.recent.moveUp": "Ба боло гузоштан",
   "sidebar.recent.moveDown": "Ба поён гузоштан",
-  "settings.experimental.row.newIcons.title": "Нишонаҳои нав",
-  "settings.experimental.row.newIcons.description": "Пешнамоиши маҷмӯи навшудаи нишонаҳо",
   "settings.experimental.row.newTimeline.title": "Ҷадвали вақти нав",
   "settings.experimental.row.newTimeline.description":
     "Ҷадвали вақти аз нав тарҳрезишудаи сессия, ки корҳои агентро гурӯҳбандӣ мекунад ва дар зери давр як сатри ҳолат дорад",

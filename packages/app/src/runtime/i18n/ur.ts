@@ -1239,8 +1239,6 @@ export const dict = {
   "sidebar.recent.unpin": "پن ہٹائیں",
   "sidebar.recent.moveUp": "اوپر منتقل کریں",
   "sidebar.recent.moveDown": "نیچے منتقل کریں",
-  "settings.experimental.row.newIcons.title": "نئے آئیکنز",
-  "settings.experimental.row.newIcons.description": "آئیکنز کے تازہ سیٹ کا پیش منظر دیکھیں",
   "settings.experimental.row.newTimeline.title": "نئی ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "سیشن کی نئے انداز کی ٹائم لائن جو ایجنٹ کے کیے گئے کاموں کو گروپ کرتی ہے، اور باری کے نیچے ایک اسٹیٹس لائن دکھاتی ہے",

@@ -1227,8 +1227,6 @@ export const dict = {
   "sidebar.recent.unpin": "მიმაგრების მოხსნა",
   "sidebar.recent.moveUp": "ზემოთ გადატანა",
   "sidebar.recent.moveDown": "ქვემოთ გადატანა",
-  "settings.experimental.row.newIcons.title": "ახალი ხატულები",
-  "settings.experimental.row.newIcons.description": "განახლებული ხატულების ნაკრების წინასწარი ნახვა",
   "settings.experimental.row.newTimeline.title": "ახალი დროის ხაზი",
   "settings.experimental.row.newTimeline.description":
     "სესიის გადამუშავებული დროის ხაზი, რომელიც აჯგუფებს აგენტის ქმედებებს და სვლის ქვემოთ აჩვენებს ერთ სტატუსის ხაზს",

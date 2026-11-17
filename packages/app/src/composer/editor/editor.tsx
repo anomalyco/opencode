@@ -818,7 +818,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -847,7 +847,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -895,7 +895,7 @@ function ComposerAttachments(props: {
                     class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                     aria-label={props.removeLabel}
                   >
-                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                    <Icon name="close" class="text-v2-icon-icon-contrast" />
                   </button>
                 </div>
               )
@@ -918,7 +918,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -1370,7 +1370,7 @@ function ComposerEditorPopover(props: {
                       {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
                     </bdi>
                     <Show when={item.description}>
-                      <Icon name="file-document" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                      <Icon name="file-document" class="shrink-0 text-v2-icon-icon-muted" />
                     </Show>
                   </button>
                 )}
@@ -1539,7 +1539,7 @@ function ComposerEditorSubmitButton(props: {
           props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
-            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "enter" : "arrow-up"} />
           )
         }
         aria-busy={props.busy && !props.stopping}
@@ -1678,7 +1678,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             onMouseDown={keep}
             onClick={props.controller.stop}
           >
-            <Icon name="stop" size="small" />
+            <Icon name="stop" />
             {i18n.t("ui.promptInput.stop")}
           </Button>
         }
@@ -1708,7 +1708,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           {label()}
           <Show
             when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
           >
             <Loader class="size-4" />
           </Show>
@@ -1719,11 +1719,11 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
 }
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
-  if (props.item.kind === "session") return <Icon name="speech-bubble" size="small" class="shrink-0" />
+  if (props.item.kind === "session") return <Icon name="comment" class="shrink-0" />
 
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
-  if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+  if (props.item.kind === "skill") return <Icon name="post-skill" class="shrink-0" />
 
   if (props.item.kind === "command") return null
 

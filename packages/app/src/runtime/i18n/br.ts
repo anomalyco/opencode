@@ -1270,8 +1270,6 @@ export const dict = {
   "sidebar.recent.unpin": "Desafixar",
   "sidebar.recent.moveUp": "Mover para cima",
   "sidebar.recent.moveDown": "Mover para baixo",
-  "settings.experimental.row.newIcons.title": "Novos ícones",
-  "settings.experimental.row.newIcons.description": "Visualizar o conjunto de ícones atualizado",
   "settings.experimental.row.newTimeline.title": "Nova linha do tempo",
   "settings.experimental.row.newTimeline.description":
     "Uma linha do tempo da sessão redesenhada que agrupa o que o agente fez, com uma única linha de status abaixo do turno",

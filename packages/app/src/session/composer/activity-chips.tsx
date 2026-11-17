@@ -146,7 +146,7 @@ export function SessionActivityChips(props: {
         variant="ghost-muted"
         tabIndex={-1}
         data-slot="session-activity-stop"
-        icon={rowStopping(item) ? <Loader /> : <Icon name="outline-xmark" size="small" />}
+        icon={rowStopping(item) ? <Loader /> : <Icon name="close" />}
         aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
         aria-disabled={rowStopping(item) || undefined}
         aria-busy={rowStopping(item) || undefined}
@@ -221,7 +221,7 @@ export function SessionActivityChips(props: {
                     <For each={props.shells}>
                       {(item) => (
                         <Menu.Item {...row(item)} ref={(el: HTMLElement) => rows.set(item.key, el)}>
-                          <Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />
+                          <Icon name="terminal" class="shrink-0 text-v2-icon-icon-muted" />
                           <span
                             dir="ltr"
                             class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
@@ -245,7 +245,7 @@ export function SessionActivityChips(props: {
                         onSelect={panel.back}
                         ref={(el: HTMLElement) => (back = el)}
                       >
-                        <Icon name="arrow-left" size="small" />
+                        <Icon name="arrow-left" />
                       </Menu.Item>
                       <span dir="ltr" data-slot="session-activity-shell-command" class="min-w-0 flex-1 truncate">
                         {shell().label}

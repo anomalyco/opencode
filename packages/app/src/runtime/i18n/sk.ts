@@ -1270,8 +1270,6 @@ export const dict = {
   "sidebar.recent.unpin": "Zrušiť pripnutie",
   "sidebar.recent.moveUp": "Posunúť nahor",
   "sidebar.recent.moveDown": "Posunúť nadol",
-  "settings.experimental.row.newIcons.title": "Nové ikony",
-  "settings.experimental.row.newIcons.description": "Ukážka aktualizovanej sady ikon",
   "settings.experimental.row.newTimeline.title": "Nová časová os",
   "settings.experimental.row.newTimeline.description":
     "Prepracovaná časová os relácie, ktorá zoskupuje činnosť agenta, s jedným stavovým riadkom pod krokom",

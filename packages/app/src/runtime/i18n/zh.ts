@@ -1236,8 +1236,6 @@ export const dict = {
   "sidebar.recent.unpin": "取消置顶",
   "sidebar.recent.moveUp": "上移",
   "sidebar.recent.moveDown": "下移",
-  "settings.experimental.row.newIcons.title": "新图标",
-  "settings.experimental.row.newIcons.description": "预览更新后的图标集",
   "settings.experimental.row.newTimeline.title": "新版时间线",
   "settings.experimental.row.newTimeline.description":
     "重新设计的会话时间线，将智能体的操作分组显示，并在每轮下方显示一行状态",

@@ -1235,8 +1235,6 @@ export const dict = {
   "sidebar.recent.unpin": "Откачи",
   "sidebar.recent.moveUp": "Помести нагоре",
   "sidebar.recent.moveDown": "Помести надолу",
-  "settings.experimental.row.newIcons.title": "Нови икони",
-  "settings.experimental.row.newIcons.description": "Прегледајте го ажурираниот сет на икони",
   "settings.experimental.row.newTimeline.title": "Нова временска линија",
   "settings.experimental.row.newTimeline.description":
     "Редизајнирана временска линија на сесијата што групира што направил агентот, со еден статусен ред под одговорот",

@@ -1256,8 +1256,6 @@ export const dict = {
   "sidebar.recent.unpin": "Atspraust",
   "sidebar.recent.moveUp": "Pārvietot uz augšu",
   "sidebar.recent.moveDown": "Pārvietot uz leju",
-  "settings.experimental.row.newIcons.title": "Jaunas ikonas",
-  "settings.experimental.row.newIcons.description": "Priekšskatīt atjaunināto ikonu kopu",
   "settings.experimental.row.newTimeline.title": "Jauna laika skala",
   "settings.experimental.row.newTimeline.description":
     "Pārveidota sesijas laika skala, kas grupē aģenta paveikto, ar vienu statusa rindu zem gājiena",

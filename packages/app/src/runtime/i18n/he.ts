@@ -1210,8 +1210,6 @@ export const dict = {
   "sidebar.recent.unpin": "בטל הצמדה",
   "sidebar.recent.moveUp": "הזז למעלה",
   "sidebar.recent.moveDown": "הזז למטה",
-  "settings.experimental.row.newIcons.title": "סמלים חדשים",
-  "settings.experimental.row.newIcons.description": "תצוגה מקדימה של ערכת הסמלים המעודכנת",
   "settings.experimental.row.newTimeline.title": "ציר זמן חדש",
   "settings.experimental.row.newTimeline.description":
     "ציר זמן מעוצב מחדש להפעלה שמקבץ את מה שהסוכן עשה, עם שורת מצב אחת מתחת לכל תגובה",

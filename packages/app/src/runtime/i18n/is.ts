@@ -1220,8 +1220,6 @@ export const dict = {
   "sidebar.recent.unpin": "Losa",
   "sidebar.recent.moveUp": "Færa upp",
   "sidebar.recent.moveDown": "Færa niður",
-  "settings.experimental.row.newIcons.title": "Ný tákn",
-  "settings.experimental.row.newIcons.description": "Forskoða uppfært táknasafn",
   "settings.experimental.row.newTimeline.title": "Ný tímalína",
   "settings.experimental.row.newTimeline.description":
     "Endurhönnuð tímalína setu sem flokkar það sem fulltrúinn gerði, með einni stöðulínu fyrir neðan umferðina",

@@ -1236,8 +1236,6 @@ export const dict = {
   "sidebar.recent.unpin": "Тогтоолтыг цуцлах",
   "sidebar.recent.moveUp": "Дээш зөөх",
   "sidebar.recent.moveDown": "Доош зөөх",
-  "settings.experimental.row.newIcons.title": "Шинэ дүрс тэмдэгүүд",
-  "settings.experimental.row.newIcons.description": "Шинэчилсэн дүрс тэмдгийн багцыг урьдчилан үзэх",
   "settings.experimental.row.newTimeline.title": "Шинэ цагийн шугам",
   "settings.experimental.row.newTimeline.description":
     "Агентын хийсэн зүйлсийг бүлэглэж, ээлжийн доор нэг төлөвийн мөр харуулдаг шинэчилсэн сессийн цагийн шугам",

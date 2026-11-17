@@ -1220,8 +1220,6 @@ export const dict = {
   "sidebar.recent.unpin": "Loys",
   "sidebar.recent.moveUp": "Flyt upp",
   "sidebar.recent.moveDown": "Flyt niður",
-  "settings.experimental.row.newIcons.title": "Nýggj ikon",
-  "settings.experimental.row.newIcons.description": "Forskoða dagførda ikonsettið",
   "settings.experimental.row.newTimeline.title": "Nýggj tíðarlinja",
   "settings.experimental.row.newTimeline.description":
     "Ein umskipað setutíðarlinja, sum bólkar tað, agenturin gjørdi, við einari støðulinju undir umfarinum",

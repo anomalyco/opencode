@@ -1239,8 +1239,6 @@ export const dict = {
   "sidebar.recent.unpin": "Yechib olish",
   "sidebar.recent.moveUp": "Yuqoriga surish",
   "sidebar.recent.moveDown": "Pastga surish",
-  "settings.experimental.row.newIcons.title": "Yangi belgilar",
-  "settings.experimental.row.newIcons.description": "Yangilangan belgilar to‘plamini sinab ko‘ring",
   "settings.experimental.row.newTimeline.title": "Yangi vaqt jadvali",
   "settings.experimental.row.newTimeline.description":
     "Agent bajargan ishlarni guruhlaydigan, qadam ostida bitta holat qatori bo‘lgan qayta ishlangan sessiya vaqt jadvali",

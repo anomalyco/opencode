@@ -1,6 +1,6 @@
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
-import { Icon, newIcons } from "@opencode/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
@@ -604,7 +604,7 @@ export default function SessionBrowserPane(props: {
 
                     if (tab) command({ type: direction, tabID: tab.id })
                   }}
-                  icon={<Icon name={direction === "back" ? "outline-arrow-left" : "outline-arrow-right"} />}
+                  icon={<Icon name={direction === "back" ? "arrow-left" : "arrow-right"} />}
                 />
               </Tooltip>
             )}
@@ -800,7 +800,7 @@ export default function SessionBrowserPane(props: {
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={() => system.openExternal(address())}
-                    icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
+                    icon={<Icon name="outline-square-arrow" />}
                   />
                 </Tooltip>
               </div>
@@ -841,7 +841,7 @@ export default function SessionBrowserPane(props: {
               aria-pressed={picking()}
               aria-label={plugin.t("inspect")}
               onClick={toggleInspect}
-              icon={<Icon name="outline-browser-annotate" />}
+              icon={<Icon name="select-element" />}
             />
           </Tooltip>
           <Show when={viewportToolbarAvailable(plugin.app.channel)}>
@@ -994,7 +994,7 @@ export default function SessionBrowserPane(props: {
                 when={recent().length > 0}
                 fallback={
                   <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
-                    <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
+                    <Icon name="globe" size="large" class="text-v2-icon-icon-muted" />
                     <div class="flex flex-col gap-2">
                       <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
                         {plugin.t("home.title")}
@@ -1174,7 +1174,7 @@ export default function SessionBrowserPane(props: {
                     }}
                     selection={
                       <span class="flex min-w-0 items-center gap-1" dir="ltr">
-                        <Icon name="outline-globe" size="small" class="shrink-0" />
+                        <Icon name="globe" class="shrink-0" />
                         <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
                           {current().title || addressParts(current().url).host || current().url}
                         </span>
@@ -1366,7 +1366,7 @@ function SiteInformation(props: {
           variant="ghost-muted"
           size="small"
           aria-label={plugin.t("site.info")}
-          icon={<Icon name="outline-sliders" />}
+          icon={<Icon name="sliders" />}
         />
       </Tooltip>
       <Popover.Portal>
@@ -1392,7 +1392,7 @@ function SiteInformation(props: {
         >
           <div data-slot="browser-site-row">
             <span data-slot="browser-site-icon">
-              <Icon name="outline-globe" />
+              <Icon name="globe" />
             </span>
             <Popover.Title data-slot="browser-site-host" dir="ltr">
               {addressParts(props.url).host || props.url}

@@ -1283,8 +1283,6 @@ export const dict = {
   "sidebar.recent.unpin": "Désépingler",
   "sidebar.recent.moveUp": "Monter",
   "sidebar.recent.moveDown": "Descendre",
-  "settings.experimental.row.newIcons.title": "Nouvelles icônes",
-  "settings.experimental.row.newIcons.description": "Prévisualiser le nouveau jeu d’icônes",
   "settings.experimental.row.newTimeline.title": "Nouvelle chronologie",
   "settings.experimental.row.newTimeline.description":
     "Une chronologie de session repensée qui regroupe les actions de l’agent, avec une seule ligne d’état sous le tour",

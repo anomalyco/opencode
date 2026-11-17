@@ -135,7 +135,7 @@ export function Typeahead<T>(props: {
           aria-hidden="true"
           class="group grid size-3.5 shrink-0 place-items-center text-v2-icon-icon-muted *:[grid-area:1/1] *:transition-opacity *:duration-150 data-[pending]:*:delay-150"
         >
-          <Icon name="magnifying-glass" size="small" class="group-data-[pending]:opacity-0" />
+          <Icon name="magnifying-glass" class="group-data-[pending]:opacity-0" />
           <Loader class="size-3 opacity-0 group-data-[pending]:opacity-100" />
         </span>
         <input
@@ -166,7 +166,7 @@ export function Typeahead<T>(props: {
               input?.focus()
             }}
           >
-            <Icon name="circle-xmark" size="small" />
+            <Icon name="close" />
           </button>
         </Show>
       </div>
@@ -208,7 +208,7 @@ export function Typeahead<T>(props: {
                 >
                   {props.children(item)}
                   <Show when={props.selected === props.key(item)}>
-                    <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                    <Icon name="check" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
                   </Show>
                 </div>
               )}

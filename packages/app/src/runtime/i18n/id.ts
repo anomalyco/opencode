@@ -1291,8 +1291,6 @@ export const dict = {
   "sidebar.recent.unpin": "Lepas sematan",
   "sidebar.recent.moveUp": "Pindahkan ke atas",
   "sidebar.recent.moveDown": "Pindahkan ke bawah",
-  "settings.experimental.row.newIcons.title": "Ikon baru",
-  "settings.experimental.row.newIcons.description": "Pratinjau set ikon yang diperbarui",
   "settings.experimental.row.newTimeline.title": "Garis waktu baru",
   "settings.experimental.row.newTimeline.description":
     "Garis waktu sesi yang didesain ulang, mengelompokkan apa yang dilakukan agen, dengan satu baris status di bawah giliran",

@@ -1263,8 +1263,6 @@ export const dict = {
   "sidebar.recent.unpin": "Lösen",
   "sidebar.recent.moveUp": "Nach oben",
   "sidebar.recent.moveDown": "Nach unten",
-  "settings.experimental.row.newIcons.title": "Neue Symbole",
-  "settings.experimental.row.newIcons.description": "Vorschau des aktualisierten Symbolsatzes",
   "settings.experimental.row.newTimeline.title": "Neue Timeline",
   "settings.experimental.row.newTimeline.description":
     "Eine neu gestaltete Sitzungs-Timeline, die die Aktionen des Agenten gruppiert, mit einer Statuszeile unter der Runde",

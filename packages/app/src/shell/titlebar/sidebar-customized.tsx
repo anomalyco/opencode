@@ -614,7 +614,6 @@ export function SidebarCustomized(props: {
               fallback={
                 <Icon
                   name={group().kind === "server" ? "server" : "outline-dots"}
-                  size="small"
                   class="text-v2-icon-icon-muted"
                 />
               }

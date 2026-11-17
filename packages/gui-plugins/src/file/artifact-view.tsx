@@ -850,7 +850,7 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
                     data-slot="artifact-table-copy"
                     variant="ghost-muted"
                     size="small"
-                    icon={<Icon name="outline-copy" size="normal" />}
+                    icon={<Icon name="copy" size="normal" />}
                     aria-label={ctx.t("view.table.copyCell")}
                     title={ctx.t("view.table.copyCell")}
                     onClick={() => copy(cell)}
@@ -872,7 +872,7 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
                         data-slot="artifact-table-copy"
                         variant="ghost-muted"
                         size="small"
-                        icon={<Icon name="outline-copy" size="normal" />}
+                        icon={<Icon name="copy" size="normal" />}
                         aria-label={ctx.t("view.table.copyCell")}
                         title={ctx.t("view.table.copyCell")}
                         onClick={() => copy(row[column()] ?? "")}

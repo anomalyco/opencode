@@ -1224,8 +1224,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ապամրացնել",
   "sidebar.recent.moveUp": "Տեղափոխել վեր",
   "sidebar.recent.moveDown": "Տեղափոխել վար",
-  "settings.experimental.row.newIcons.title": "Նոր պատկերակներ",
-  "settings.experimental.row.newIcons.description": "Նախադիտել թարմացված պատկերակների հավաքածուն",
   "settings.experimental.row.newTimeline.title": "Նոր ժամանակագիծ",
   "settings.experimental.row.newTimeline.description":
     "Վերանախագծված նիստի ժամանակագիծ, որը խմբավորում է գործակալի արածը՝ մեկ կարգավիճակի տողով քայլի տակ",

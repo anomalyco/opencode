@@ -1308,8 +1308,6 @@ export const dict = {
   "sidebar.recent.unpin": "Otkači",
   "sidebar.recent.moveUp": "Pomjeri gore",
   "sidebar.recent.moveDown": "Pomjeri dolje",
-  "settings.experimental.row.newIcons.title": "Nove ikone",
-  "settings.experimental.row.newIcons.description": "Isprobajte ažurirani skup ikona",
   "settings.experimental.row.newTimeline.title": "Nova vremenska linija",
   "settings.experimental.row.newTimeline.description":
     "Redizajnirana vremenska linija sesije koja grupiše šta je agent uradio, s jednom statusnom linijom ispod poteza",

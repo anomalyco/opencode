@@ -1221,8 +1221,6 @@ export const dict = {
   "sidebar.recent.unpin": "Berkitmeden aýyr",
   "sidebar.recent.moveUp": "Ýokary süýşür",
   "sidebar.recent.moveDown": "Aşak süýşür",
-  "settings.experimental.row.newIcons.title": "Täze nyşanlar",
-  "settings.experimental.row.newIcons.description": "Täzelenen nyşanlar toplumyny synap görüň",
   "settings.experimental.row.newTimeline.title": "Täze wagt çyzgysy",
   "settings.experimental.row.newTimeline.description":
     "Agentiň eden işlerini toparlaýan we tapgyryň aşagynda bir ýagdaý setirini görkezýän täzeden işlenen sessiýa wagt çyzgysy",

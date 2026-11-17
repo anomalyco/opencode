@@ -1253,8 +1253,6 @@ export const dict = {
   "sidebar.recent.unpin": "Non fissare",
   "sidebar.recent.moveUp": "Sposta su",
   "sidebar.recent.moveDown": "Sposta giù",
-  "settings.experimental.row.newIcons.title": "Nuove icone",
-  "settings.experimental.row.newIcons.description": "Anteprima del set di icone aggiornato",
   "settings.experimental.row.newTimeline.title": "Nuova sequenza temporale",
   "settings.experimental.row.newTimeline.description":
     "Una sequenza temporale della sessione riprogettata che raggruppa ciò che ha fatto l'agente, con una riga di stato sotto il turno",

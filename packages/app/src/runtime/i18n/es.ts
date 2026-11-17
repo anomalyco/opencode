@@ -1318,8 +1318,6 @@ export const dict = {
   "sidebar.recent.unpin": "Desfijar",
   "sidebar.recent.moveUp": "Subir",
   "sidebar.recent.moveDown": "Bajar",
-  "settings.experimental.row.newIcons.title": "Nuevos iconos",
-  "settings.experimental.row.newIcons.description": "Prueba el conjunto de iconos actualizado",
   "settings.experimental.row.newTimeline.title": "Nueva cronología",
   "settings.experimental.row.newTimeline.description":
     "Una cronología de sesión rediseñada que agrupa lo que hizo el agente, con una línea de estado bajo el turno",

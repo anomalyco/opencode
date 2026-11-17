@@ -1227,8 +1227,6 @@ export const dict = {
   "sidebar.recent.unpin": "पिन हटाउनुहोस्",
   "sidebar.recent.moveUp": "माथि सार्नुहोस्",
   "sidebar.recent.moveDown": "तल सार्नुहोस्",
-  "settings.experimental.row.newIcons.title": "नयाँ आइकनहरू",
-  "settings.experimental.row.newIcons.description": "अद्यावधिक गरिएको आइकन सेटको पूर्वावलोकन गर्नुहोस्",
   "settings.experimental.row.newTimeline.title": "नयाँ समयरेखा",
   "settings.experimental.row.newTimeline.description":
     "एजेन्टले गरेका कामलाई समूहबद्ध गर्ने, पालोको तल एउटा स्थिति लाइनसहितको पुनः डिजाइन गरिएको सत्र समयरेखा",
