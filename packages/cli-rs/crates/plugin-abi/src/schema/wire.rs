@@ -10,8 +10,8 @@ use crate::{
     Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, ErrorDetails, Family,
     Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info, InputTo, KeymapActive,
     KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Member, Metadata, Panel, PanelAction, PanelBind,
-    PanelSize, PluginEntry, PluginOrigin, PluginStatus, Render, RenderFence, Request, RequestId, Route, Scope, Select,
-    SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName, SurfaceClaim,
+    PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence, Request, RequestId, Route, Scope,
+    Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName, SurfaceClaim,
     SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
@@ -378,8 +378,9 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         ),
         (
             "Dialog",
-            tagged!(Dialog, "A dialog the host shows.", {
-                Prompt { title: string(), action: reference("Action") } { placeholder: nullable(string()) },
+            tagged!(Dialog, "A dialog the host shows.", flat {
+                Prompt(Prompt) { title: string(), action: reference("Action") } { placeholder: nullable(string()) },
+            }, {
                 Close { key: string() } { },
                 Dismissable { dialog: reference("Dialog"), dismissed: reference("Action") } { },
             }, newtype {

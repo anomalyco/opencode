@@ -21,7 +21,7 @@ const ROOT: &str = "mcp";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
-    setup.command(Command::default().with_name(FOLD.to_owned()), |host, _| {
+    setup.command(Command::new(FOLD), |host, _| {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     setup.surface(Surface::new("mcp", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
@@ -72,7 +72,7 @@ fn view(list: &[McpServer], open: bool) -> Node {
     header.push(Node::text(title));
     let mut header = Node::row(header).gap(1);
     if foldable {
-        header = header.on_click(Click::command(FOLD, None).on_down());
+        header = header.on_click(Click::command(FOLD).on_down());
     }
     let mut children = vec![header];
     if !foldable || open {
@@ -110,5 +110,5 @@ fn row(item: &McpServer) -> Node {
     ])
     .gap(1)
     .layout(Layout::default().min_width_zero())
-    .on_click(Click::command("mcp.list", Some(item.name.clone())))
+    .on_click(Click::command("mcp.list").input(item.name.clone()))
 }

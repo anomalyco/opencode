@@ -53,13 +53,13 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         }
     })?;
     let abi = setup.abi();
-    let version = Command::default().with_name("pinned.version".to_owned()).with_palette(true);
+    let version = Command::new("pinned.version").palette();
     setup.command(version, move |host, _| {
         let later = model(|model| model.later);
         host.toast(Toast::new(Variant::Info, format!("ABI {}.{}, {later} later events", abi.major, abi.minor)));
     });
     let surface = Surface::new("pad", Place::Route("pad".to_owned()), view)
-        .layers(vec![Layer::default().with_keys(vec![Bind::new("k", "count")])])
+        .layers(vec![Layer::default().keys(vec![Bind::new("k", "count")])])
         .layout(vec![Notify::Node { id: "say".to_owned() }], |geometry| {
             if let (Some(mount), Some(rect)) = (&geometry.mount, geometry.rect("say")) {
                 model(|model| model.pads.entry(mount.generation).or_default().width = rect.width);

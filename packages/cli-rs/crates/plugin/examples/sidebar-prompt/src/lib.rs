@@ -32,12 +32,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .and_then(serde_json::Value::as_f64)
         .filter(|length| length.is_finite())
         .map_or(180, |length| length.trunc().clamp(40.0, 600.0) as usize);
-    let open = Command::default()
-        .with_name(OPEN.to_owned())
-        .with_title("Show full last prompt".to_owned())
-        .with_group(Some("Sidebar".to_owned()))
-        .with_palette(true)
-        .with_slash(Some("lastprompt".to_owned()));
+    let open = Command::new(OPEN).title("Show full last prompt").group("Sidebar").palette().slash("lastprompt");
     setup.command(open, |host, _| {
         // TS's command is enabled on a session's route only.
         let Route::Session { id } = host.route() else { return };
@@ -46,12 +41,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             None => host.toast(Toast::new(Variant::Info, "No prompt submitted in this session.")),
         }
     });
-    setup.command(Command::default().with_name(SHOW.to_owned()), |host, session| {
+    setup.command(Command::new(SHOW), |host, session| {
         if let Some(prompt) = session.and_then(|session| last_prompt(host, session)) {
             show(host, &prompt);
         }
     });
-    setup.command(Command::default().with_name(format!("{DIALOG}.close")), |host, _| {
+    setup.command(Command::new(format!("{DIALOG}.close")), |host, _| {
         host.dialog(Dialog::Close { key: DIALOG.to_owned() });
     });
     setup.slot(Placement::append("sidebar.content"), move |read, input, changed| {
@@ -71,7 +66,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
                 rows.push(
                     Node::text([Span::new("Open full prompt · /lastprompt")])
                         .fg("text.action.primary.base")
-                        .on_click(Click::command(SHOW, Some(id.to_owned()))),
+                        .on_click(Click::command(SHOW).input(id)),
                 );
             }
             None => rows.push(Node::text([Span::new("No prompt submitted")]).fg("text.muted")),
@@ -111,9 +106,7 @@ fn show(host: &dyn Host, prompt: &Prompt) {
     let height = host.info().size.1.saturating_sub(4).clamp(6, 30);
     let header = Node::row(vec![
         Node::text([Span::new("Last prompt").bold()]).fg("text.base"),
-        Node::text([Span::new("Esc · Close")])
-            .fg("text.muted")
-            .on_click(Click::command(format!("{DIALOG}.close"), None)),
+        Node::text([Span::new("Esc · Close")]).fg("text.muted").on_click(Click::command(format!("{DIALOG}.close"))),
     ])
     .justify(Justify::SpaceBetween)
     .gap(1)
@@ -127,7 +120,7 @@ fn show(host: &dyn Host, prompt: &Prompt) {
         .gap(1)
         .padding(1, 1)
         .layout(Layout::default().height(Width::Cells(height)));
-    let panel = Panel::new(DIALOG, Vec::new(), body).with_size(PanelSize::Large).with_centered(true).with_bare(true);
+    let panel = Panel::new(DIALOG, Vec::new(), body).size(PanelSize::Large).centered().bare();
     host.dialog(Dialog::Panel(panel));
 }
 

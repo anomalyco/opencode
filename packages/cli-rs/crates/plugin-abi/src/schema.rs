@@ -31,16 +31,28 @@ macro_rules! object {
     }};
 }
 
-/// An enum of `$ty` tagged by `type`, of struct variants as [`object!`]'s.
+/// An enum of `$ty` tagged by `type`, of struct variants as [`object!`]'s. A variant of `flat` holds a struct, written
+/// as a struct variant: its fields beside the tag.
 macro_rules! tagged {
-    ($ty:ident, $description:expr, {
+    ($ty:ident, $description:expr, $(flat {
+        $($flat:ident($struct:ident) { $($frequired:ident: $frs:expr),* $(,)? } { $($foptional:ident: $fos:expr),* $(,)? }),* $(,)?
+    },)? {
         $($(#[$meta:meta])* $variant:ident { $($required:ident: $rs:expr),* $(,)? } { $($optional:ident: $os:expr),* $(,)? }),* $(,)?
     } $(, newtype { $($new:ident: $inner:expr),* $(,)? })?) => {{
         let _ = |value: &$ty| match value {
+            $($($ty::$flat($struct { $($frequired: _,)* $($foptional: _,)* }) => (),)*)?
             $($(#[$meta])* $ty::$variant { $($required: _,)* $($optional: _,)* } => (),)*
             $($($ty::$new(_) => (),)*)?
         };
         let mut variants: Vec<Value> = Vec::new();
+        $($(
+            variants.push(object(
+                &[$((stringify!($frequired), $frs)),*],
+                &[$((stringify!($foptional), $fos)),*],
+                Some(&kebab(stringify!($flat))),
+                "",
+            ));
+        )*)?
         $(
             $(#[$meta])*
             variants.push(object(
@@ -882,7 +894,7 @@ mod tests {
             margin: Some(Edges { top: -1, right: 1, bottom: 2, left: 3 }),
             absolute: Some(crate::Absolute { top: Some(-2), right: Some(2), bottom: None, left: None, z: 1 }),
         };
-        let click = Click { action: Action::Command { name: "x".into(), input: Some("y".into()) }, on: Press::Down };
+        let click = Click { action: Action::command("x").input("y"), on: Press::Down };
         let border = Border {
             sides: Sides { top: true, right: false, bottom: true, left: false },
             style: BorderStyle::Heavy,

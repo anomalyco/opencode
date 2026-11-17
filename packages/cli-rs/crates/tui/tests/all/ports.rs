@@ -1005,7 +1005,7 @@ fn the_author_fixture_counts_and_toasts_a_finished_session() {
 // --- Dialog::Select on both paths
 
 fn picking(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("probe.pick"), |host, _| {
         let option = |title: &str, value: &str| abi::SelectOption::new(title, value);
         host.dialog(abi::Dialog::Select(
@@ -1013,13 +1013,13 @@ fn picking(setup: &mut abi::Setup) -> Result<(), String> {
                 "Pick one".to_owned(),
                 vec![
                     option("Alpha", "a").description("first"),
-                    option("Beta", "b").with_footer(Some("2nd".to_owned())),
+                    option("Beta", "b").footer("2nd"),
                     option("Gamma", "c"),
                 ],
-                abi::Action::Command { name: "probe.picked".to_owned(), input: None },
+                abi::Action::command("probe.picked"),
             )
-            .with_placeholder(Some("Search picks".to_owned()))
-            .with_current(Some("b".to_owned())),
+            .placeholder("Search picks")
+            .current("b"),
         ));
     });
     setup.command(command("probe.picked"), |host, input| {

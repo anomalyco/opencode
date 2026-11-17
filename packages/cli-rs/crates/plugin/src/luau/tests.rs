@@ -952,14 +952,11 @@ impl abi::Host for Nop {
 
 /// `examples/hello`'s Rust source: a command and a footer claim.
 fn hello(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command::default()
-        .with_name("hello.greet".to_owned())
-        .with_title("Say hello".to_owned())
-        .with_palette(true);
+    let command = abi::Command::new("hello.greet").title("Say hello").palette();
     setup.command(command, |host, _| host.toast(abi::Toast::new(abi::Variant::Success, "Hello from a plugin")));
     setup.slot(abi::Placement::append("home.footer"), |_, _, _| {
         let text = abi::Node::text([abi::Span::new("hello").fg("text.muted")]);
-        abi::Render::Show(text.on_click(abi::Click::command("hello.greet", None)))
+        abi::Render::Show(text.on_click(abi::Click::command("hello.greet")))
     });
     Ok(())
 }

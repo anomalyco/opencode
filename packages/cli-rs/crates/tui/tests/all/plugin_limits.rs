@@ -53,7 +53,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     };
     setup.surface(v2::Surface::new("side", v2::Place::Panel("side".into()), view));
     setup.surface(v2::Surface::new("pop", v2::Place::Overlay("pop".into()), view));
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("limits.panel"), |host, _| {
         host.open_panel(abi::interact::OpenPanel { surface: "side".into(), session: None, fullscreen: true });
     });
@@ -99,14 +99,13 @@ fn old(setup: &mut abi::Setup) -> Result<(), String> {
             (0..10).map(|index| abi::Node::text([abi::Span::new(format!("old {index}"))])).collect(),
         ))
     });
-    let panel = abi::Command::default().with_name("old.panel".into());
+    let panel = abi::Command::new("old.panel");
     setup.command(panel, |host, _| {
         let body = abi::Node::column(
             (0..3_001).map(|index| abi::Node::text([abi::Span::new(format!("body {index}"))])).collect(),
         );
         host.dialog(abi::Dialog::Panel(
-            abi::Panel::new("panel".to_owned(), vec![abi::Span::new("old panel")], body)
-                .with_size(abi::PanelSize::Medium),
+            abi::Panel::new("panel".to_owned(), vec![abi::Span::new("old panel")], body).size(abi::PanelSize::Medium),
         ));
     });
     Ok(())
@@ -879,9 +878,7 @@ fn probe() {
     }
     for lines in [500, 1_000, 2_000, 4_000, 8_000] {
         let patch = realistic(lines);
-        let diff = move || {
-            v2::Node::diff(source(patch.clone())).with_view(v2::DiffView::Unified).with_filetype(Some("rust".into()))
-        };
+        let diff = move || v2::Node::diff(source(patch.clone())).view(v2::DiffView::Unified).filetype("rust");
         measure("diff", lines, subject(move |_| diff()));
     }
     for lines in [1_000, 2_000, 4_000, 8_000] {
@@ -1175,7 +1172,7 @@ fn added(lines: usize, valid: bool) -> String {
 // contract says: the chunks, or the placeholder. On both carriers.
 #[test]
 fn a_patch_is_charged_as_the_renderer_draws_it() {
-    let patch = |text: String| v2::Node::diff(source(text)).with_view(v2::DiffView::Unified);
+    let patch = |text: String| v2::Node::diff(source(text)).view(v2::DiffView::Unified);
     for carrier in CARRIERS {
         let harness = open(carrier);
         for (lines, valid, fits) in
@@ -1607,8 +1604,8 @@ fn a_lists_anchors_respect_the_limits_of_a_patch() {
             .map(|index| {
                 let diff = v2::Node::diff(source(hunks(count)))
                     .with_id(format!("d{index}"))
-                    .with_view(v2::DiffView::Unified)
-                    .with_hunks(Some("h".into()));
+                    .view(v2::DiffView::Unified)
+                    .hunks("h");
                 v2::ListItem::new(diff, 1)
             })
             .collect();

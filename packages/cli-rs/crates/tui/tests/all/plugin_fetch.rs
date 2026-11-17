@@ -332,10 +332,10 @@ thread_local! {
 
 /// A plugin whose `probe.fetch` fetches the path it is given and keeps the reply in [`PROBED`].
 fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = abi::Command::default().with_name("probe.fetch".to_owned());
+    let command = abi::Command::new("probe.fetch");
     setup.command(command, |host, path| {
         let path = path.unwrap_or_default().to_owned();
-        let _ = host.try_fetch(abi::Fetch::default().with_method("GET".to_owned()).with_path(path));
+        let _ = host.try_fetch(abi::Fetch::new("GET", path));
     });
     setup.on_reply(|_, _, reply| PROBED.with_borrow_mut(|probed| probed.push(reply)));
     Ok(())

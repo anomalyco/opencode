@@ -907,46 +907,6 @@ impl Node {
         }
     }
 
-    /// Sets a [`Node::Diff`]'s view; anything else is unchanged.
-    pub fn with_view(mut self, value: DiffView) -> Self {
-        if let Node::Diff { view, .. } = &mut self {
-            *view = value;
-        }
-        self
-    }
-
-    /// Sets a [`Node::Diff`]'s filetype; anything else is unchanged.
-    pub fn with_filetype(mut self, value: Option<String>) -> Self {
-        if let Node::Diff { filetype, .. } = &mut self {
-            *filetype = value;
-        }
-        self
-    }
-
-    /// Sets a [`Node::Diff`]'s group of hunk anchors; anything else is unchanged.
-    pub fn with_hunks(mut self, value: Option<String>) -> Self {
-        if let Node::Diff { hunks, .. } = &mut self {
-            *hunks = value;
-        }
-        self
-    }
-
-    /// Sets how a [`Node::Diff`]'s lines wrap; anything else is unchanged.
-    pub fn with_diff_wrap(mut self, value: Wrap) -> Self {
-        if let Node::Diff { wrap, .. } = &mut self {
-            *wrap = value;
-        }
-        self
-    }
-
-    /// Sets a [`Node::Diff`]'s padding; anything else is unchanged.
-    pub fn with_diff_padding(mut self, value: u16) -> Self {
-        if let Node::Diff { padding, .. } = &mut self {
-            *padding = value;
-        }
-        self
-    }
-
     /// A one-line text field showing `value`.
     pub fn input(value: impl Into<String>) -> Self {
         Node::Input {
@@ -1187,9 +1147,9 @@ impl Node {
         self
     }
 
-    /// Text that wraps as `value` says; anything else is unchanged.
+    /// Text or a diff that wraps as `value` says; anything else is unchanged.
     pub fn wrap(mut self, value: Wrap) -> Self {
-        if let Node::Text { wrap, .. } = &mut self {
+        if let Node::Text { wrap, .. } | Node::Diff { wrap, .. } = &mut self {
             *wrap = value;
         }
         self

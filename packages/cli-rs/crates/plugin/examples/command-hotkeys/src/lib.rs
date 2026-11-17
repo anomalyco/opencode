@@ -63,10 +63,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     let bindings = Rc::new(bindings);
     let runs = Rc::new(RefCell::new(Runs::default()));
     for (index, binding) in bindings.iter().enumerate() {
-        let command = Command::default()
-            .with_name(format!("command-hotkeys.{}", binding.id))
-            .with_title(binding.title.clone())
-            .with_palette(true);
+        let command = Command::new(format!("command-hotkeys.{}", binding.id)).title(&binding.title).palette();
         let (bindings, runs) = (bindings.clone(), runs.clone());
         setup.command(command, move |host, _| {
             // The palette closed before the command runs, so the keyboard is in its base mode again.
@@ -76,19 +73,12 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         });
     }
     // The keys, each alternative of `a,b` a key of its own, named by its binding's place.
-    let keys = bindings
-        .iter()
-        .enumerate()
-        .flat_map(|(index, binding)| {
-            let title = binding.title.clone();
-            binding
-                .key
-                .split(',')
-                .map(move |key| Bind::new(key.trim(), index.to_string()).with_title(Some(title.clone())))
-        })
-        .collect();
+    let keys = bindings.iter().enumerate().flat_map(|(index, binding)| {
+        let title = binding.title.clone();
+        binding.key.split(',').map(move |key| Bind::new(key.trim(), index.to_string()).title(title.clone()))
+    });
     let (pressed, ran) = (bindings.clone(), runs.clone());
-    setup.layer(Layer::default().with_scope(LayerScope::Global).with_keys(keys), move |host, event| {
+    setup.layer(Layer::default().scope(LayerScope::Global).keys(keys), move |host, event| {
         let Event::Key(key) = event else { return Handled::Pass };
         let Some(binding) = key.bind.as_deref().and_then(|index| pressed.get(index.parse::<usize>().ok()?)) else {
             return Handled::Pass;
@@ -113,7 +103,7 @@ fn execute(host: &dyn Host, binding: &Binding, runs: &RefCell<Runs>) {
     let (fetch, step) = match &binding.action {
         Action::Command { command, text } => (command_fetch(&session, command, text), Step::Command),
         Action::GoalToggle => {
-            let fetch = Fetch::default().with_method("GET".to_owned()).with_path(format!("/api/session/{session}"));
+            let fetch = Fetch::new("GET", format!("/api/session/{session}"));
             (fetch, Step::Session)
         }
     };
@@ -135,11 +125,9 @@ fn answered(host: &dyn Host, runs: &RefCell<Runs>, id: RequestId, reply: Result<
                 body.pointer("/data/location/directory").and_then(Value::as_str).filter(|path| !path.trim().is_empty());
             match directory {
                 Some(directory) => {
-                    let fetch = Fetch::default()
-                        .with_method("POST".to_owned())
-                        .with_path("/api/rpc/opencode.goal/get".to_owned())
-                        .with_query(vec![("location[directory]".to_owned(), directory.to_owned())])
-                        .with_body(Some(json!({ "input": { "sessionID": session } })));
+                    let fetch = Fetch::new("POST", "/api/rpc/opencode.goal/get")
+                        .query([("location[directory]", directory)])
+                        .body(json!({ "input": { "sessionID": session } }));
                     Ok(Some((fetch, Step::Goal)))
                 }
                 None => Err(()),
@@ -187,10 +175,7 @@ fn send(host: &dyn Host, runs: &RefCell<Runs>, fetch: Fetch, step: Step, session
 
 /// TS `ctx.client.session.command`.
 fn command_fetch(session: &str, name: &str, text: &str) -> Fetch {
-    Fetch::default()
-        .with_method("POST".to_owned())
-        .with_path(format!("/api/session/{session}/command"))
-        .with_body(Some(json!({ "name": name, "text": text })))
+    Fetch::new("POST", format!("/api/session/{session}/command")).body(json!({ "name": name, "text": text }))
 }
 
 /// TS `parseBindings`: the whole configuration, or `Err` for any fault in it.

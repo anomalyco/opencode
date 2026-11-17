@@ -21,7 +21,7 @@ const ROOT: &str = "todo";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
-    setup.command(Command::default().with_name(FOLD.to_owned()), |host, _| {
+    setup.command(Command::new(FOLD), |host, _| {
         host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
     });
     let last: RefCell<Option<Last>> = RefCell::default();
@@ -125,7 +125,7 @@ fn view(list: &[Todo], open: bool) -> Node {
     header.push(Node::text(title));
     let mut header = Node::row(header).gap(1);
     if foldable {
-        header = header.on_click(Click::command(FOLD, None).on_down());
+        header = header.on_click(Click::command(FOLD).on_down());
     }
     let mut children = vec![header];
     if !foldable || open {

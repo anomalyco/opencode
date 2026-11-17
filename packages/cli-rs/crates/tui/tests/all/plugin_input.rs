@@ -132,7 +132,7 @@ fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
 }
 
 pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("input.panel"), |host, input| {
         host.open_panel(OpenPanel { surface: "side".into(), session: None, fullscreen: input == Some("full") });
     });
@@ -202,7 +202,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             error: "it broke".into(),
             source: Some("probe.rs".into()),
             context: Some("Status: failed".into()),
-            back: Some(abi::Action::Command { name: "input.picked".into(), input: Some("back".into()) }),
+            back: Some(abi::Action::command("input.picked").input("back")),
             reference: None,
             key: None,
             plugin: None,
@@ -224,7 +224,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 false => strip,
             }
         });
-        let layers = vec![Layer::default().with_scope(LayerScope::Surface).with_paste(true)];
+        let layers = vec![Layer::default().scope(LayerScope::Surface).paste()];
         setup.surface(strip.layers(layers).on(|host, event| {
             log("strip", host, event);
             Handled::Consume
@@ -232,7 +232,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     }
     if probe(|probe| probe.paste_global) {
         // Passes a paste that starts with `pass`.
-        setup.layer(Layer::default().with_scope(LayerScope::Global).with_paste(true), |host, event| {
+        setup.layer(Layer::default().scope(LayerScope::Global).paste(), |host, event| {
             log("pasted", host, event);
             match event {
                 Event::Paste { text } if text.starts_with("pass") => Handled::Pass,
@@ -242,7 +242,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     }
     if probe(|probe| probe.paste_rank) {
         for (name, priority) in [("high", 5), ("low", 0)] {
-            let layer = Layer::default().with_scope(LayerScope::Composer).with_priority(priority).with_paste(true);
+            let layer = Layer::default().scope(LayerScope::Composer).priority(priority).paste();
             setup.layer(layer, move |host, event| {
                 log(name, host, event);
                 Handled::Consume
@@ -261,10 +261,10 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     })
     .layers(vec![
         Layer::default()
-            .with_scope(LayerScope::Surface)
-            .with_priority(5)
-            .with_paste(true)
-            .with_keys(vec![Bind::new("k", "k"), Bind::new("w", "where")]),
+            .scope(LayerScope::Surface)
+            .priority(5)
+            .paste()
+            .keys(vec![Bind::new("k", "k"), Bind::new("w", "where")]),
     ])
     .on(|host, event| {
         log("route", host, event);
@@ -284,7 +284,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(route);
     let side = v2::Surface::new("side", v2::Place::Panel("side".into()), side)
         .layers(vec![
-            Layer::default().with_scope(LayerScope::Surface).with_priority(5).with_paste(true).with_keys(vec![
+            Layer::default().scope(LayerScope::Surface).priority(5).paste().keys(vec![
                 Bind::new("x", "x"),
                 Bind::new("m", "mode"),
                 Bind::new("o", "overlay"),
@@ -294,13 +294,10 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 Bind::new("ctrl+c x", "c"),
                 Bind::new("v,ctrl+t", "v"),
             ]),
-            Layer::default().with_scope(LayerScope::Node("a".into())).with_keys(vec![Bind::new("y", "y")]),
+            Layer::default().scope(LayerScope::Node("a".into())).keys(vec![Bind::new("y", "y")]),
             // A layer of the composer too: the panel's mode still holds where it was set.
-            Layer::default().with_scope(LayerScope::Composer).with_keys(vec![Bind::new("z", "z")]),
-            Layer::default()
-                .with_scope(LayerScope::Surface)
-                .with_mode(Some("menu".into()))
-                .with_keys(vec![Bind::new("j", "down")]),
+            Layer::default().scope(LayerScope::Composer).keys(vec![Bind::new("z", "z")]),
+            Layer::default().scope(LayerScope::Surface).mode("menu").keys(vec![Bind::new("j", "down")]),
         ])
         .on(|host, event| {
             assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
@@ -358,13 +355,8 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             ])
         })
         .layers(vec![
-            Layer::default()
-                .with_scope(LayerScope::Surface)
-                .with_keys(vec![Bind::new("k", "k"), Bind::new("n", "nav")]),
-            Layer::default()
-                .with_scope(LayerScope::Surface)
-                .with_mode(Some("nav".into()))
-                .with_keys(vec![Bind::new("k", "k")]),
+            Layer::default().scope(LayerScope::Surface).keys(vec![Bind::new("k", "k"), Bind::new("n", "nav")]),
+            Layer::default().scope(LayerScope::Surface).mode("nav").keys(vec![Bind::new("k", "k")]),
         ])
         .on(|host, event| {
             assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
@@ -380,35 +372,25 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     );
     // A modal composer: `escape` enters normal mode, where every key is taken, and `i` leaves it.
     setup.layer(
-        Layer::default()
-            .with_scope(LayerScope::Composer)
-            .with_priority(10)
-            .with_keys(vec![Bind::new("escape", "normal")]),
+        Layer::default().scope(LayerScope::Composer).priority(10).keys(vec![Bind::new("escape", "normal")]),
         |host, event| {
             log("setup", host, event);
             host.set_mode(Some("normal"));
             Handled::Consume
         },
     );
-    setup.layer(
-        Layer::default()
-            .with_scope(LayerScope::Composer)
-            .with_mode(Some("normal".into()))
-            .with_any(true)
-            .with_paste(true),
-        |host, event| {
-            log("setup", host, event);
-            match event {
-                Event::Key(key) if key.text.as_deref() == Some("i") => host.set_mode(None),
-                Event::Key(key) if key.text.as_deref() == Some("p") => {
-                    host.edit_composer(abi::ComposerEdit::Insert { text: "P".into() });
-                }
-                _ => {}
+    setup.layer(Layer::default().scope(LayerScope::Composer).mode("normal").any().paste(), |host, event| {
+        log("setup", host, event);
+        match event {
+            Event::Key(key) if key.text.as_deref() == Some("i") => host.set_mode(None),
+            Event::Key(key) if key.text.as_deref() == Some("p") => {
+                host.edit_composer(abi::ComposerEdit::Insert { text: "P".into() });
             }
-            Handled::Consume
-        },
-    );
-    setup.layer(Layer::default().with_scope(LayerScope::Global).with_any(true), |host, event| {
+            _ => {}
+        }
+        Handled::Consume
+    });
+    setup.layer(Layer::default().scope(LayerScope::Global).any(), |host, event| {
         if probe(|probe| probe.listen) {
             log("global", host, event);
         }
@@ -416,24 +398,18 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     // Two more global listeners: one newer at the same priority, one above it.
     for (name, priority) in [("newer", 0), ("above", 1)] {
-        setup.layer(
-            Layer::default().with_scope(LayerScope::Global).with_priority(priority).with_any(true),
-            move |host, event| {
-                if probe(|probe| probe.listen_more) {
-                    log(name, host, event);
-                }
-                Handled::Pass
-            },
-        );
+        setup.layer(Layer::default().scope(LayerScope::Global).priority(priority).any(), move |host, event| {
+            if probe(|probe| probe.listen_more) {
+                log(name, host, event);
+            }
+            Handled::Pass
+        });
     }
     // `x` in the composer: taken, or passed on to the composer, which types it.
-    setup.layer(
-        Layer::default().with_scope(LayerScope::Composer).with_keys(vec![Bind::new("x", "cx")]),
-        |host, event| {
-            log("setup", host, event);
-            if probe(|probe| probe.pass_x) { Handled::Pass } else { Handled::Consume }
-        },
-    );
+    setup.layer(Layer::default().scope(LayerScope::Composer).keys(vec![Bind::new("x", "cx")]), |host, event| {
+        log("setup", host, event);
+        if probe(|probe| probe.pass_x) { Handled::Pass } else { Handled::Consume }
+    });
     Ok(())
 }
 
@@ -443,14 +419,13 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 fn select(read: &dyn abi::Read) -> abi::Select {
     let other = read.plugins().into_iter().find(|entry| entry.id == "test.other").is_some_and(|entry| entry.active);
     let (rows, footer) = probe(|probe| (probe.rows.clone(), probe.footer.clone()));
-    let command = |name: &str| abi::Action::Command { name: name.into(), input: None };
+    let command = |name: &str| abi::Action::command(name);
     let options = rows
         .iter()
         .flat_map(|row| {
             // `dup`: a hidden disabled row of the same value toggles the other plugin; the shown one does not.
-            let hidden = (row == "dup").then(|| {
-                abi::SelectOption::new("row hidden", "dup").with_disabled(true).with_toggle(Some("test.other".into()))
-            });
+            let hidden =
+                (row == "dup").then(|| abi::SelectOption::new("row hidden", "dup").disabled().toggle("test.other"));
             let mut option = abi::SelectOption::new(format!("row {row}"), row.clone());
             option.footer = Some(format!("{footer} {row}"));
             option.footer_color = Some(abi::Color::from("text.muted"));
@@ -471,8 +446,8 @@ fn select(read: &dyn abi::Read) -> abi::Select {
         })
         .collect();
     abi::Select::new("Pick", options, command("input.picked"))
-        .with_key((!probe(|probe| probe.keyless)).then(|| "pick".into()))
-        .with_actions(match probe(|probe| probe.no_update) {
+        .maybe((!probe(|probe| probe.keyless)).then_some("pick"), abi::Select::key)
+        .actions(match probe(|probe| probe.no_update) {
             true => Vec::new(),
             false => probe(|probe| probe.launch)
                 .then(|| abi::SelectAction {
@@ -513,7 +488,7 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                     abi::SelectAction {
                         title: "new".into(),
                         key: Some("ctrl+y".into()),
-                        action: abi::Action::Command { name: "input.picked".into(), input: Some("new".into()) },
+                        action: abi::Action::command("input.picked").input("new"),
                         hidden: Vec::new(),
                         primary: None,
                         rowless: true,
@@ -524,11 +499,11 @@ fn select(read: &dyn abi::Read) -> abi::Select {
                 ])
                 .collect(),
         })
-        .with_binds(vec![
+        .binds(vec![
             abi::PanelBind { key: "ctrl+e".into(), title: "echo".into(), action: command("input.picked") },
             abi::PanelBind { key: "Ctrl+C".into(), title: "copy".into(), action: command("input.picked") },
         ])
-        .with_search(probe(|probe| probe.search).then(|| "probe".into()))
+        .maybe(probe(|probe| probe.search).then_some("probe"), abi::Select::search)
 }
 
 /// The other plugin a select's row toggles: a line in the composer top while it is active, and a node of its own with
@@ -549,25 +524,20 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
         })
         .on(|_, _| Handled::Consume),
     );
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     setup.command(command("other.pop"), |host, _| {
         host.overlay(Overlay { surface: "pop".into(), anchor: Anchor::Point { x: 40, y: 8 }, width: 10, height: 2 });
     });
     setup.command(command("other.release"), |host, _| host.release_keys());
     if probe(|probe| probe.other_escape) {
-        let layer = Layer::default()
-            .with_scope(LayerScope::Global)
-            .with_priority(5)
-            .with_keys(vec![Bind::new("escape", "esc")]);
+        let layer = Layer::default().scope(LayerScope::Global).priority(5).keys(vec![Bind::new("escape", "esc")]);
         setup.layer(layer, |host, event| {
             log("other", host, event);
             Handled::Consume
         });
     }
     if probe(|probe| probe.global_h) {
-        let layer = Layer::default()
-            .with_scope(LayerScope::Global)
-            .with_keys(vec![Bind::new("h", "gh"), Bind::new("f6", "gg")]);
+        let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("h", "gh"), Bind::new("f6", "gg")]);
         setup.layer(layer, |host, event| {
             log("other", host, event);
             Handled::Consume
@@ -575,13 +545,10 @@ pub fn other(setup: &mut abi::Setup) -> Result<(), String> {
     }
     // A mode of a plugin with only a global layer: in it, every key is the plugin's.
     setup.command(command("other.gmode"), |host, _| host.set_mode(Some("g")));
-    setup.layer(
-        Layer::default().with_scope(LayerScope::Global).with_mode(Some("g".into())).with_any(true),
-        |host, event| {
-            log("gmode", host, event);
-            Handled::Consume
-        },
-    );
+    setup.layer(Layer::default().scope(LayerScope::Global).mode("g").any(), |host, event| {
+        log("gmode", host, event);
+        Handled::Consume
+    });
     Ok(())
 }
 
@@ -626,7 +593,7 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         false => a,
     };
     let a = match probe(|probe| probe.click_a) {
-        true => a.on_click(abi::Click::command("input.row", Some("a".into())).on_down()),
+        true => a.on_click(abi::Click::command("input.row").input("a").on_down()),
         false => a,
     };
     // With pointer events, `b` takes no focus: a capture of it begins and ends with the focus elsewhere.

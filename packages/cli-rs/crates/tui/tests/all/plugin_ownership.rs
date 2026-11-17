@@ -736,10 +736,10 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
         host.navigate(abi::Route::Home);
     }
     let asked = match row.kind {
-        Kind::Fetch => host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/api/hold".into())),
+        Kind::Fetch => host.try_fetch(abi::Fetch::new("GET", "/api/hold")),
         Kind::Foreground => {
             let (command, args) = MARK.with_borrow(|mark| witness(mark));
-            host.try_foreground(abi::Foreground::new(command).with_args(args))
+            host.try_foreground(abi::Foreground::new(command).args(args))
         }
         // An effect gets no ID: the call asked.
         Kind::Overlay => {
@@ -760,9 +760,9 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             Err("asked".to_owned())
         }
         Kind::Dialog => {
-            let action = abi::Action::Command { name: "probe.global".into(), input: None };
+            let action = abi::Action::command("probe.global");
             let select = abi::Select::new("probe pick", vec![abi::SelectOption::new("one", "1")], action);
-            host.dialog(abi::Dialog::Select(select.with_centered(true)));
+            host.dialog(abi::Dialog::Select(select.centered()));
             Err("asked".to_owned())
         }
         Kind::Blur => {
@@ -791,14 +791,14 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
 /// of which may ask, as the row says; and an overlay, another mount, which a global command opens.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     ask(setup.host(), Origin::Setup);
-    let command = |name: &str, scope| abi::Command::default().with_name(name.into()).with_scope(scope);
+    let command = |name: &str, scope| abi::Command::new(name).scope(scope);
     setup.command(command("probe.global", abi::Scope::Global), |host, _| ask(host, Origin::Global));
     setup.command(command("probe.route", abi::Scope::Route("probe".into())), |host, _| ask(host, Origin::Route));
     setup.command(command("probe.overlay", abi::Scope::Global), |host, _| {
         host.overlay(Overlay { surface: "other".into(), anchor: Anchor::Point { x: 0, y: 0 }, width: 20, height: 1 });
     });
     setup.on_reply(|_, id, result| SEEN.with_borrow_mut(|seen| seen.1.push((id, format!("{result:?}")))));
-    let layer = Layer::default().with_scope(LayerScope::Global).with_keys(vec![Bind::new("x", "probe")]);
+    let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("x", "probe")]);
     let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page())
         .mounts()
         .layers(vec![layer])

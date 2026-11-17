@@ -77,7 +77,7 @@ impl Goals {
         setup.on_reply(move |host, id, result| goals.reply(host, id, result));
         for (name, text) in [(SHOW, None), (PAUSE, Some("pause")), (RESUME, Some("resume")), (CLEAR, Some("clear"))] {
             let goals = self.clone();
-            setup.command(Command::default().with_name(name.to_owned()), move |host, session| {
+            setup.command(Command::new(name), move |host, session| {
                 let Some(session) = session else { return };
                 match text {
                     None => goals.show(host, session),
@@ -253,12 +253,12 @@ pub fn status(session: &str, goal: &Goal) -> abi::v2::Node {
         .hover_fg("text.base")
         .wrap(Wrap::None)
         .layout(Layout::default().shrink(false))
-        .on_click(Click::command(SHOW, Some(session.to_owned())))
+        .on_click(Click::command(SHOW).input(session))
 }
 
 /// `GoalDialog`: the objective, the status and its reason, and pause, resume, and clear.
 fn panel(session: &str, goal: &Goal) -> Panel {
-    let run = |name: &str| Action::Command { name: name.to_owned(), input: Some(session.to_owned()) };
+    let run = |name: &str| Action::command(name).input(session);
     let mut keys = Vec::new();
     if goal.status == Status::Active {
         keys.push(("pause", "p", "Pause goal", PAUSE));
@@ -267,24 +267,18 @@ fn panel(session: &str, goal: &Goal) -> Panel {
         keys.push(("resume", "r", "Resume goal", RESUME));
     }
     keys.push(("clear", "x", "Clear goal", CLEAR));
-    let actions = keys
-        .iter()
-        .map(|(title, key, _, name)| PanelAction {
-            title: (*title).to_owned(),
-            key: Some((*key).to_owned()),
-            color: None,
-            close: false,
-            action: run(name),
-        })
-        .collect();
-    let binds = keys
-        .iter()
-        .map(|(_, key, title, name)| PanelBind {
-            key: (*key).to_owned(),
-            title: (*title).to_owned(),
-            action: run(name),
-        })
-        .collect();
+    let actions = keys.iter().map(|(title, key, _, name)| PanelAction {
+        title: (*title).to_owned(),
+        key: Some((*key).to_owned()),
+        color: None,
+        close: false,
+        action: run(name),
+    });
+    let binds = keys.iter().map(|(_, key, title, name)| PanelBind {
+        key: (*key).to_owned(),
+        title: (*title).to_owned(),
+        action: run(name),
+    });
     let state = match goal.status {
         Status::Active => "Active",
         Status::Paused => "Paused",
@@ -300,7 +294,7 @@ fn panel(session: &str, goal: &Goal) -> Panel {
         Node::column(vec![Node::text([Span::new(goal.objective.clone())]).fg("text.base"), Node::column(details)])
             .gap(1),
     )
-    .with_size(PanelSize::Medium)
-    .with_actions(actions)
-    .with_binds(binds)
+    .size(PanelSize::Medium)
+    .actions(actions)
+    .binds(binds)
 }

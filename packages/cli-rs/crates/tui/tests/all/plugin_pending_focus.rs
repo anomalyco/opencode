@@ -117,8 +117,7 @@ fn turns(h: &Harness, count: usize) {
 /// command `pf.show` ran; `pf.later` focuses `later` and changes nothing. The page is a memo of both, so a view that
 /// changes neither keeps it.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
-    let command =
-        |name: &str| abi::Command::default().with_name(name.into()).with_scope(abi::Scope::Route("pf".into()));
+    let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("pf".into()));
     setup.command(command("pf.later"), |host, _| host.focus("later"));
     setup.command(command("pf.show"), |host, _| {
         SHOW.set(true);

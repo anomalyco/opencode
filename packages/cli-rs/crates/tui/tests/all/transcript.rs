@@ -379,13 +379,13 @@ thread_local! {
 /// A plugin whose commands read the published transcript and move it to its top.
 fn minimap(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     use opencode_plugin::abi::{Command, v2};
-    setup.command(Command::default().with_name("mini.read".into()), |host, _| {
+    setup.command(Command::new("mini.read"), |host, _| {
         SEEN.with(|seen| seen.borrow_mut().extend(host.transcript()));
     });
-    setup.command(Command::default().with_name("mini.top".into()), |host, _| {
+    setup.command(Command::new("mini.top"), |host, _| {
         host.scroll(v2::Target::Transcript, v2::Scroll::Edge { edge: v2::Edge::Top });
     });
-    setup.command(Command::default().with_name("mini.up".into()), |host, _| {
+    setup.command(Command::new("mini.up"), |host, _| {
         host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: -5 });
     });
     if MAPPED.with(std::cell::Cell::get) {

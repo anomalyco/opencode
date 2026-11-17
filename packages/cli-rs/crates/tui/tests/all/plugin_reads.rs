@@ -37,7 +37,7 @@ fn aura() -> Value {
 
 /// Commands of one verb each, which toast what the verb answered, and a sized `app` claim that shows what it reads.
 fn reader(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::default().with_name(name.to_owned());
+    let command = |name: &str| abi::Command::new(name);
     let toast = |host: &dyn abi::Host, text: String| host.toast(abi::Toast::new(abi::Variant::Info, text));
     setup.command(command("p0b.open"), move |host, input| {
         let opened = host.edit_tab(abi::TabEdit::Open { session: input.unwrap_or_default().to_owned() });
@@ -121,7 +121,7 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
                 vec![abi::Span::new("Wide")],
                 abi::Node::text([abi::Span::new("p0b wide body")]),
             )
-            .with_size(abi::PanelSize::XLarge),
+            .size(abi::PanelSize::XLarge),
         ));
     });
     let program = Rc::new(Cell::new(None));

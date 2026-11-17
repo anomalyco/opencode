@@ -2324,16 +2324,12 @@ thread_local! {
 
 /// Claims `bump` calls with a card that shows how often its command ran, and runs the command on a click.
 fn plugin_bump(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("claim.bump".into()), |_, _| {
+    setup.command(abi::Command::new("claim.bump"), |_, _| {
         BUMPS.set(BUMPS.get() + 1);
     });
     setup.claim(Claim::tool("bump", |_, part| {
         let text = format!("{} bumped {}", key(part), BUMPS.get());
-        Some(
-            v2::Node::text(vec![abi::Span::new(text)])
-                .with_id("bump")
-                .on_click(abi::Click::command("claim.bump", None)),
-        )
+        Some(v2::Node::text(vec![abi::Span::new(text)]).with_id("bump").on_click(abi::Click::command("claim.bump")))
     }));
     Ok(())
 }
@@ -2924,7 +2920,7 @@ thread_local! {
 
 /// Claims `coalesce` calls with a line of how often its command ran and the input so far, which it logs.
 fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("claim.coalesce".into()), |_, _| BUMPS.set(BUMPS.get() + 1));
+    setup.command(abi::Command::new("claim.coalesce"), |_, _| BUMPS.set(BUMPS.get() + 1));
     setup.claim(Claim::tool("coalesce", |_, part| {
         let input = lines(part).get(1).cloned().unwrap_or_default();
         COALESCED.with_borrow_mut(|log| log.push((BUMPS.get(), input.clone())));

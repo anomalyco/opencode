@@ -7,8 +7,8 @@
 //! and tags what it hears with that number, so a test tells an old activation's answer from a new one's.
 
 use super::abi::{
-    Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, ConfirmLabel, Dialog, Edges, Host, Layout,
-    Node, Overflow, Placement, Read, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Waker, Width,
+    Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, Dialog, Edges, Host, Layout, Node, Overflow,
+    Placement, Read, Render, Setup, Sides, Span, TitleAlign, Toast, Variant, Waker, Width,
 };
 
 pub fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -19,7 +19,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         append(host, format!("setup {started}"));
         started
     };
-    let hidden = |name: &str| Command::default().with_name(name.to_owned());
+    let hidden = |name: &str| Command::new(name);
     setup.command(hidden("p0a.confirm"), |host, _| confirm(host));
     setup.command(hidden("p0a.alert"), |host, _| alert(host, "p0a.closed"));
     // An alert whose action is another plugin's command.
@@ -101,14 +101,15 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 fn confirm(host: &dyn Host) {
-    let label = ConfirmLabel::default().with_confirm(Some("delete".to_owned())).with_cancel(Some("keep".to_owned()));
-    let action = Action::Command { name: "p0a.answered".to_owned(), input: None };
-    host.dialog(Dialog::Confirm(Confirm::new("Delete the draft?", "It cannot be undone.", action).with_label(label)));
+    let action = Action::command("p0a.answered");
+    host.dialog(Dialog::Confirm(
+        Confirm::new("Delete the draft?", "It cannot be undone.", action).labels("delete", "keep"),
+    ));
 }
 
 fn alert(host: &dyn Host, then: &str) {
-    let action = Action::Command { name: then.to_owned(), input: None };
-    host.dialog(Dialog::Alert(Alert::new("Heads up", "The plugin says hello.").with_action(Some(action))));
+    let action = Action::command(then);
+    host.dialog(Dialog::Alert(Alert::new("Heads up", "The plugin says hello.").action(action)));
 }
 
 /// The probe's log.

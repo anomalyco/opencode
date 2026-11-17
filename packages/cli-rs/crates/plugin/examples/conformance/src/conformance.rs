@@ -75,7 +75,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         return Err("setup refused".to_owned());
     }
     let state = Rc::new(State::default());
-    let command = |name: &str| Command::default().with_name(name.to_owned()).with_title(name.to_owned());
+    let command = |name: &str| Command::new(name).title(name);
     setup.storage_key("count");
     setup.command(command("conf.toast"), |host, _| host.toast(Toast::new(Variant::Success, "hello")));
     setup.command(command("conf.store"), |host, _| {
@@ -152,9 +152,9 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.toast(Toast::new(Variant::Info, said));
     });
     let layer = interact::Layer::default()
-        .with_scope(LayerScope::Global)
-        .with_keys(vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")])
-        .with_paste(true);
+        .scope(LayerScope::Global)
+        .keys(vec![Bind::new("ctrl+g", "conf"), Bind::new("ctrl+o", "pass")])
+        .paste();
     setup.layer(layer, handle);
     setup.search("conf.find", |_, query, options| {
         options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
@@ -180,13 +180,13 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let fencing = state.clone();
     setup.command(command("conf.fence"), move |_, _| fencing.fenced.set(true));
     setup.command(command("conf.dialogs"), |host, _| {
-        let action = Action::Command { name: "conf.toast".to_owned(), input: None };
+        let action = Action::command("conf.toast");
         let option = SelectOption::new("one", "1");
-        let select = Select::new("pick", vec![option], action.clone()).with_size(Some(PanelSize::XLarge));
-        host.dialog(Dialog::Select(select.with_centered(true)));
-        let alert = Alert::new("told", "said").with_size(Some(PanelSize::XLarge)).with_centered(true);
+        let select = Select::new("pick", vec![option], action.clone()).size(PanelSize::XLarge);
+        host.dialog(Dialog::Select(select.centered()));
+        let alert = Alert::new("told", "said").size(PanelSize::XLarge).centered();
         host.dialog(Dialog::Alert(alert));
-        host.dialog(Dialog::Confirm(Confirm::new("asked", "sure?", action).with_centered(true)));
+        host.dialog(Dialog::Confirm(Confirm::new("asked", "sure?", action).centered()));
     });
     let claims = state.clone();
     setup.claim(claim::Claim::tool("conf-tool", move |view, _| {
@@ -260,7 +260,7 @@ fn rows() -> v2::Surface {
         }
         let button = v2::Node::column(vec![v2::Node::text(vec![Span::new("press")])])
             .with_id("button")
-            .interact(Interact::default().with_pointer(true));
+            .interact(Interact::default().pointer());
         let where_ = v2::Node::text(vec![Span::new("where")]).with_id("where");
         let field = v2::Node::input("").with_id("field");
         v2::Node::column(vec![where_, button, items, field]).with_id("rows-root")

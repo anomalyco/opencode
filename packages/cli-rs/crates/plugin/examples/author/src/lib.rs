@@ -10,14 +10,7 @@ const COUNT: &str = "count";
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.storage_key(COUNT);
-    setup.command(
-        Command::default()
-            .with_name("author.count".to_owned())
-            .with_title("Count".to_owned())
-            .with_slash(Some("count".to_owned()))
-            .with_palette(true),
-        |host, _| count(host),
-    );
+    setup.command(Command::new("author.count").title("Count").slash("count").palette(), |host, _| count(host));
     setup.slot(Placement::append("sidebar.content"), |read, _, changed| sidebar(read, changed));
     setup.on_event(&["session.execution.succeeded"], |host, _| {
         host.toast(Toast::new(Variant::Info, "A session finished").title("Author"));
@@ -40,7 +33,7 @@ fn sidebar(read: &dyn Read, changed: &Changed) -> Render {
         return Render::Keep;
     }
     let count = Node::text([Span::new(format!("Counted {}", stored(read))).fg("text.muted")]);
-    Render::Show(Node::column(vec![count]).on_click(Click::command("author.count", None)))
+    Render::Show(Node::column(vec![count]).on_click(Click::command("author.count")))
 }
 
 fn shout(fence: &Fence) -> Fenced {

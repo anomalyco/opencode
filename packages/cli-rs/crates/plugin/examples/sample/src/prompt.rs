@@ -30,7 +30,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         }
         mounts.set(mounts.get() + 1);
         let session = input.session_id.clone().unwrap_or_default();
-        let fetch = Fetch::default().with_method("GET".to_owned()).with_path(format!("/api/sample/{session}"));
+        let fetch = Fetch::new("GET", format!("/api/sample/{session}"));
         if let Ok(id) = host.try_fetch(fetch) {
             fetched.borrow_mut().insert(id, session);
         }

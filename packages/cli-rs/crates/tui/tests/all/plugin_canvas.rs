@@ -128,7 +128,7 @@ fn pad<T>(f: impl FnOnce(&mut Pad) -> T) -> T {
 }
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("pad.set".into()), |_, input| {
+    setup.command(abi::Command::new("pad.set"), |_, input| {
         let Some((key, value)) = input.and_then(|input| input.split_once('=')) else { return };
         pad(|pad| match key {
             "shown" => pad.shown = value == "1",
@@ -174,8 +174,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
     let (columns, cover) = cover;
     if cover > 0 {
         // An opaque box that takes the pointer, drawn over the canvas's last `cover` rows and the first `columns`.
-        let click =
-            abi::Click { action: abi::Action::Command { name: "pad.set".into(), input: None }, on: abi::Press::Down };
+        let click = abi::Click { action: abi::Action::command("pad.set"), on: abi::Press::Down };
         page.push(
             v2::Node::row(Vec::new())
                 .bg(abi::Color::Rgba(abi::Rgba::new(90, 0, 0, 255)))
@@ -1054,12 +1053,7 @@ fn chart<T>(f: impl FnOnce(&mut Chart) -> T) -> T {
 }
 
 fn chart_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let scoped = |name: &str, key: &str| {
-        abi::Command::default()
-            .with_name(name.into())
-            .with_keybind(Some(key.into()))
-            .with_scope(abi::Scope::Route("chart".into()))
-    };
+    let scoped = |name: &str, key: &str| abi::Command::new(name).keybind(key).scope(abi::Scope::Route("chart".into()));
     setup.command(scoped("chart.point", "n"), |_, _| chart(|chart| chart.points += 1));
     setup.command(scoped("chart.still", "s"), |_, _| chart(|chart| chart.still = !chart.still));
     let view = |_: &mut v2::View<'_>| {
@@ -1198,12 +1192,7 @@ fn snake<T>(f: impl FnOnce(&mut Snake) -> T) -> T {
 }
 
 fn snake_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let scoped = |name: &str, key: &str| {
-        abi::Command::default()
-            .with_name(name.into())
-            .with_keybind(Some(key.into()))
-            .with_scope(abi::Scope::Route("snake".into()))
-    };
+    let scoped = |name: &str, key: &str| abi::Command::new(name).keybind(key).scope(abi::Scope::Route("snake".into()));
     for (name, key, heading) in [
         ("snake.up", "up", (0, -1)),
         ("snake.down", "down", (0, 1)),
@@ -1364,10 +1353,7 @@ fn screen(seed: u64, width: u16, height: u16, stamped: bool) -> List {
 }
 
 fn full_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let key = abi::Command::default()
-        .with_name("full.next".into())
-        .with_keybind(Some("k".into()))
-        .with_scope(abi::Scope::Route("full".into()));
+    let key = abi::Command::new("full.next").keybind("k").scope(abi::Scope::Route("full".into()));
     setup.command(key, |_, _| FULL.with(|full| full.borrow_mut().keys += 1));
     let view = |_: &mut v2::View<'_>| {
         let (mode, keys, count) = FULL.with(|full| (full.borrow().mode, full.borrow().keys, full.borrow().canvases));
@@ -2174,7 +2160,7 @@ fn load_setup(setup: &mut abi::Setup) -> Result<(), String> {
             .collect();
         v2::Node::row(canvases)
     };
-    setup.command(abi::Command::default().with_name(format!("{}.bump", setup.id())), |_, _| {
+    setup.command(abi::Command::new(format!("{}.bump", setup.id())), |_, _| {
         LOAD_VERSION.set(LOAD_VERSION.get() + 1);
     });
     let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
@@ -2471,7 +2457,7 @@ fn deep_setup(setup: &mut abi::Setup) -> Result<(), String> {
         (0..depth).fold(canvas, |inner, _| v2::Node::column(vec![inner]))
     };
     setup.surface(v2::Surface::new("deep", v2::Place::Route("deep".into()), view).draw(|_| Some(List::new())));
-    setup.command(abi::Command::default().with_name("deep.redraw".into()), |_, _| {});
+    setup.command(abi::Command::new("deep.redraw"), |_, _| {});
     Ok(())
 }
 

@@ -527,64 +527,6 @@ pub struct Command {
     pub scope: Scope,
 }
 
-/// 2.0 (P6c): a setter of each field, since `Command` is `#[non_exhaustive]`: a plugin builds it from
-/// `Command::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl Command {
-    /// Sets [`Self::name`].
-    pub fn with_name(mut self, name: String) -> Self {
-        self.name = name;
-        self
-    }
-
-    /// Sets [`Self::title`].
-    pub fn with_title(mut self, title: String) -> Self {
-        self.title = title;
-        self
-    }
-
-    /// Sets [`Self::group`].
-    pub fn with_group(mut self, group: Option<String>) -> Self {
-        self.group = group;
-        self
-    }
-
-    /// Sets [`Self::slash`].
-    pub fn with_slash(mut self, slash: Option<String>) -> Self {
-        self.slash = slash;
-        self
-    }
-
-    /// Sets [`Self::keybind`].
-    pub fn with_keybind(mut self, keybind: Option<String>) -> Self {
-        self.keybind = keybind;
-        self
-    }
-
-    /// Sets [`Self::palette`].
-    pub fn with_palette(mut self, palette: bool) -> Self {
-        self.palette = palette;
-        self
-    }
-
-    /// Sets [`Self::description`].
-    pub fn with_description(mut self, description: Option<String>) -> Self {
-        self.description = description;
-        self
-    }
-
-    /// Sets [`Self::arguments`].
-    pub fn with_arguments(mut self, arguments: bool) -> Self {
-        self.arguments = arguments;
-        self
-    }
-
-    /// Sets [`Self::scope`].
-    pub fn with_scope(mut self, scope: Scope) -> Self {
-        self.scope = scope;
-        self
-    }
-}
-
 /// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -743,28 +685,6 @@ pub struct Span {
     /// (OpenTUI writes no such link).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
-}
-
-impl Span {
-    pub fn new(text: impl Into<String>) -> Self {
-        Self { text: text.into(), ..Self::default() }
-    }
-
-    pub fn fg(mut self, color: impl Into<Color>) -> Self {
-        self.fg = Some(color.into());
-        self
-    }
-
-    pub fn bold(mut self) -> Self {
-        self.bold = true;
-        self
-    }
-
-    /// The span as a hyperlink to `url`.
-    pub fn link(mut self, url: impl Into<String>) -> Self {
-        self.link = Some(url.into());
-        self
-    }
 }
 
 fn is_false(value: &bool) -> bool {
@@ -1099,34 +1019,6 @@ pub struct Border {
     pub title_align: TitleAlign,
 }
 
-impl Border {
-    /// A single white line on all four sides.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// The border on `sides` only.
-    pub fn sides(self, sides: Sides) -> Self {
-        Self { sides, ..self }
-    }
-
-    pub fn style(self, style: BorderStyle) -> Self {
-        Self { style, ..self }
-    }
-
-    pub fn color(self, color: impl Into<Color>) -> Self {
-        Self { color: Some(color.into()), ..self }
-    }
-
-    pub fn title(self, title: impl Into<String>) -> Self {
-        Self { title: Some(title.into()), ..self }
-    }
-
-    pub fn title_align(self, title_align: TitleAlign) -> Self {
-        Self { title_align, ..self }
-    }
-}
-
 /// Which sides of a [`Border`] draw.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sides {
@@ -1246,9 +1138,14 @@ pub struct Click {
 }
 
 impl Click {
-    /// Runs command `name` with `input` on the release of the left button.
-    pub fn command(name: impl Into<String>, input: Option<String>) -> Self {
-        Self { action: Action::Command { name: name.into(), input }, on: Press::Up }
+    /// Runs command `name`, with no input, on the release of the left button.
+    pub fn command(name: impl Into<String>) -> Self {
+        Self::new(Action::command(name))
+    }
+
+    /// The click whose command runs with `value` as its input.
+    pub fn input(self, value: impl Into<String>) -> Self {
+        Self { action: self.action.input(value), ..self }
     }
 
     /// The click on the press of the left button instead.
@@ -1370,46 +1267,6 @@ fn is_zero_i32(value: &i32) -> bool {
 impl Layout {
     fn is_default(&self) -> bool {
         *self == Self::default()
-    }
-
-    /// The layout `height` high.
-    pub fn height(self, height: Width) -> Self {
-        Self { height: Some(height), ..self }
-    }
-
-    /// The layout at least `height` high.
-    pub fn min_height(self, height: Width) -> Self {
-        Self { min_height: Some(height), ..self }
-    }
-
-    /// The layout at most `height` high.
-    pub fn max_height(self, height: Width) -> Self {
-        Self { max_height: Some(height), ..self }
-    }
-
-    /// The layout with `edges` cells outside each edge.
-    pub fn margin(self, edges: Edges) -> Self {
-        Self { margin: Some(edges), ..self }
-    }
-
-    /// The layout `width` wide.
-    pub fn width(self, width: Width) -> Self {
-        Self { width: Some(width), ..self }
-    }
-
-    /// The layout that grows into the room left over.
-    pub fn grow(self) -> Self {
-        Self { grow: true, ..self }
-    }
-
-    /// The layout that gives up room, or not, when its parent is too small.
-    pub fn shrink(self, shrink: bool) -> Self {
-        Self { shrink: Some(shrink), ..self }
-    }
-
-    /// The layout that may shrink below its content's width.
-    pub fn min_width_zero(self) -> Self {
-        Self { min_width_zero: true, ..self }
     }
 }
 
@@ -2472,21 +2329,6 @@ pub struct Toast {
     pub session: Option<String>,
 }
 
-impl Toast {
-    pub fn new(variant: Variant, message: impl Into<String>) -> Self {
-        Self { variant, title: None, message: message.into(), session: None }
-    }
-
-    pub fn title(self, title: impl Into<String>) -> Self {
-        Self { title: Some(title.into()), ..self }
-    }
-
-    /// The toast about session `id`.
-    pub fn session(self, id: impl Into<String>) -> Self {
-        Self { session: Some(id.into()), ..self }
-    }
-}
-
 /// A request for the user's attention, for [`Host::attention`]: a desktop notification through the terminal, a
 /// sound, or both, each when the user's `attention` settings allow it and its focus rule holds.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2581,51 +2423,6 @@ pub struct Fetch {
     pub bytes: bool,
 }
 
-/// 2.0 (P6c): a setter of each field, since `Fetch` is `#[non_exhaustive]`: a plugin builds it from
-/// `Fetch::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
-///
-/// ```
-/// let fetch = opencode_plugin_abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/x".to_owned());
-/// assert_eq!(fetch.path, "/api/x");
-/// ```
-///
-/// A literal, even one that takes the rest from the default, does not compile outside the SDK:
-///
-/// ```compile_fail,E0639
-/// let fetch = opencode_plugin_abi::Fetch { path: "/api/x".to_owned(), ..Default::default() };
-/// ```
-impl Fetch {
-    /// Sets [`Self::method`].
-    pub fn with_method(mut self, method: String) -> Self {
-        self.method = method;
-        self
-    }
-
-    /// Sets [`Self::path`].
-    pub fn with_path(mut self, path: String) -> Self {
-        self.path = path;
-        self
-    }
-
-    /// Sets [`Self::query`].
-    pub fn with_query(mut self, query: Vec<(String, String)>) -> Self {
-        self.query = query;
-        self
-    }
-
-    /// Sets [`Self::body`].
-    pub fn with_body(mut self, body: Option<serde_json::Value>) -> Self {
-        self.body = body;
-        self
-    }
-
-    /// Sets [`Self::bytes`].
-    pub fn with_bytes(mut self, bytes: bool) -> Self {
-        self.bytes = bytes;
-        self
-    }
-}
-
 /// What [`Host::try_fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -2636,13 +2433,7 @@ pub struct RequestId(pub u64);
 #[serde(tag = "type", rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Dialog {
-    /// A one-line text field. Enter closes it and runs `action` with the text as its input; escape closes it.
-    Prompt {
-        title: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        placeholder: Option<String>,
-        action: Action,
-    },
+    Prompt(Prompt),
     Panel(Panel),
     /// Closes the plugin's [`Panel`] `key` if it is open; since P8, with an empty `key`, whatever dialog of the plugin
     /// shows.
@@ -2670,6 +2461,17 @@ pub enum Dialog {
     Images(Images),
 }
 
+/// A [`Dialog::Prompt`]: a one-line text field. Enter closes it and runs `action` with the text as its input; escape
+/// closes it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
+pub struct Prompt {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    pub action: Action,
+}
+
 /// A [`Dialog::Images`].
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -2679,22 +2481,6 @@ pub struct Images {
     pub index: usize,
 }
 
-/// 2.0 (P6c): a setter of each field, since `Images` is `#[non_exhaustive]`: a plugin builds it from
-/// `Images::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl Images {
-    /// Sets [`Self::images`].
-    pub fn with_images(mut self, images: Vec<Image>) -> Self {
-        self.images = images;
-        self
-    }
-
-    /// Sets [`Self::index`].
-    pub fn with_index(mut self, index: usize) -> Self {
-        self.index = index;
-        self
-    }
-}
-
 /// An image of [`Images`]: its bytes in base64 ([`base64::encode`]), and the name the preview shows.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -2702,22 +2488,6 @@ pub struct Image {
     pub data: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-}
-
-/// 2.0 (P6c): a setter of each field, since `Image` is `#[non_exhaustive]`: a plugin builds it from
-/// `Image::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl Image {
-    /// Sets [`Self::data`].
-    pub fn with_data(mut self, data: String) -> Self {
-        self.data = data;
-        self
-    }
-
-    /// Sets [`Self::name`].
-    pub fn with_name(mut self, name: Option<String>) -> Self {
-        self.name = name;
-        self
-    }
 }
 
 /// A [`Dialog::ErrorDetails`].
@@ -2859,112 +2629,6 @@ pub struct Select {
     pub centered: bool,
 }
 
-/// 2.0 (P6c): a setter of each field, since `Select` is `#[non_exhaustive]`: a plugin builds it from
-/// [`Select::new`] and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl Select {
-    /// Sets [`Self::title`].
-    pub fn with_title(mut self, title: String) -> Self {
-        self.title = title;
-        self
-    }
-
-    /// Sets [`Self::placeholder`].
-    pub fn with_placeholder(mut self, placeholder: Option<String>) -> Self {
-        self.placeholder = placeholder;
-        self
-    }
-
-    /// Sets [`Self::options`].
-    pub fn with_options(mut self, options: Vec<SelectOption>) -> Self {
-        self.options = options;
-        self
-    }
-
-    /// Sets [`Self::current`].
-    pub fn with_current(mut self, current: Option<String>) -> Self {
-        self.current = current;
-        self
-    }
-
-    /// Sets [`Self::action`].
-    pub fn with_action(mut self, action: Action) -> Self {
-        self.action = action;
-        self
-    }
-
-    /// Sets [`Self::key`].
-    pub fn with_key(mut self, key: Option<String>) -> Self {
-        self.key = key;
-        self
-    }
-
-    /// Sets [`Self::actions`].
-    pub fn with_actions(mut self, actions: Vec<SelectAction>) -> Self {
-        self.actions = actions;
-        self
-    }
-
-    /// Sets [`Self::binds`].
-    pub fn with_binds(mut self, binds: Vec<PanelBind>) -> Self {
-        self.binds = binds;
-        self
-    }
-
-    /// Sets [`Self::search`].
-    pub fn with_search(mut self, search: Option<String>) -> Self {
-        self.search = search;
-        self
-    }
-
-    /// Sets [`Self::size`].
-    pub fn with_size(mut self, size: Option<PanelSize>) -> Self {
-        self.size = size;
-        self
-    }
-
-    /// Sets [`Self::focus`].
-    pub fn with_focus(mut self, focus: Option<String>) -> Self {
-        self.focus = focus;
-        self
-    }
-
-    /// Sets [`Self::query`].
-    pub fn with_query(mut self, query: Option<Action>) -> Self {
-        self.query = query;
-        self
-    }
-
-    /// Sets [`Self::query_delay`].
-    pub fn with_query_delay(mut self, query_delay: u16) -> Self {
-        self.query_delay = query_delay;
-        self
-    }
-
-    /// Sets [`Self::filterless`].
-    pub fn with_filterless(mut self, filterless: bool) -> Self {
-        self.filterless = filterless;
-        self
-    }
-
-    /// Sets [`Self::empty`].
-    pub fn with_empty(mut self, empty: Option<Span>) -> Self {
-        self.empty = empty;
-        self
-    }
-
-    /// Sets [`Self::note`].
-    pub fn with_note(mut self, note: Option<Span>) -> Self {
-        self.note = note;
-        self
-    }
-
-    /// Sets [`Self::centered`].
-    pub fn with_centered(mut self, centered: bool) -> Self {
-        self.centered = centered;
-        self
-    }
-}
-
 impl Select {
     /// A select of `options` titled `title`, whose pick runs `action` with the option's value; the fields this crate
     /// adds later default, so a plugin built with this constructor needs no change for them.
@@ -3031,76 +2695,6 @@ pub struct SelectOption {
     pub search_text: Option<String>,
 }
 
-/// 2.0 (P6c): a setter of each field, since `SelectOption` is `#[non_exhaustive]`: a plugin builds it from
-/// `SelectOption::default()` and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl SelectOption {
-    /// Sets [`Self::title`].
-    pub fn with_title(mut self, title: String) -> Self {
-        self.title = title;
-        self
-    }
-
-    /// Sets [`Self::value`].
-    pub fn with_value(mut self, value: String) -> Self {
-        self.value = value;
-        self
-    }
-
-    /// Sets [`Self::description`].
-    pub fn with_description(mut self, description: Option<String>) -> Self {
-        self.description = description;
-        self
-    }
-
-    /// Sets [`Self::footer`].
-    pub fn with_footer(mut self, footer: Option<String>) -> Self {
-        self.footer = footer;
-        self
-    }
-
-    /// Sets [`Self::category`].
-    pub fn with_category(mut self, category: Option<String>) -> Self {
-        self.category = category;
-        self
-    }
-
-    /// Sets [`Self::disabled`].
-    pub fn with_disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    /// Sets [`Self::footer_color`].
-    pub fn with_footer_color(mut self, footer_color: Option<Color>) -> Self {
-        self.footer_color = footer_color;
-        self
-    }
-
-    /// Sets [`Self::gutter`].
-    pub fn with_gutter(mut self, gutter: Option<Gutter>) -> Self {
-        self.gutter = gutter;
-        self
-    }
-
-    /// Sets [`Self::action`].
-    pub fn with_action(mut self, action: Option<Action>) -> Self {
-        self.action = action;
-        self
-    }
-
-    /// Sets [`Self::toggle`].
-    pub fn with_toggle(mut self, toggle: Option<String>) -> Self {
-        self.toggle = toggle;
-        self
-    }
-
-    /// Sets [`Self::search_text`].
-    pub fn with_search_text(mut self, search_text: Option<String>) -> Self {
-        self.search_text = search_text;
-        self
-    }
-}
-
 /// 2.0: a mark left of a [`SelectOption`]'s title.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -3142,16 +2736,6 @@ pub struct SelectAction {
     pub hidden_all: bool,
 }
 
-impl SelectOption {
-    pub fn new(title: impl Into<String>, value: impl Into<String>) -> Self {
-        Self { title: title.into(), value: value.into(), ..Self::default() }
-    }
-
-    pub fn description(self, description: impl Into<String>) -> Self {
-        Self { description: Some(description.into()), ..self }
-    }
-}
-
 /// A dialog that shows a node, live: a panel shown again while its `key` is open changes in place and keeps where its
 /// body is scrolled. The host scrolls the body with the arrows, `j`/`k`, page up and down, home and end.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -3190,101 +2774,6 @@ pub struct Panel {
     /// has no footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
-}
-
-/// 2.0 (P6c): a setter of each field, since `Panel` is `#[non_exhaustive]`: a plugin builds it from
-/// [`Panel::new`] and sets what it needs, so a field a later 2.x adds is no break of its source.
-impl Panel {
-    /// A panel of `key` with `title` over `body`, of the medium size and nothing more: set the rest with the
-    /// `with_` setters, as for every request a plugin builds (`#[non_exhaustive]`, so a later field is no break).
-    pub fn new(key: impl Into<String>, title: Vec<Span>, body: Node) -> Self {
-        Self {
-            key: key.into(),
-            size: PanelSize::default(),
-            title,
-            subtitle: None,
-            body,
-            actions: Vec::new(),
-            binds: Vec::new(),
-            bleed: false,
-            centered: false,
-            bare: false,
-            close: None,
-            height: None,
-        }
-    }
-
-    /// Sets [`Self::bare`].
-    pub fn with_bare(mut self, bare: bool) -> Self {
-        self.bare = bare;
-        self
-    }
-
-    /// Sets [`Self::key`].
-    pub fn with_key(mut self, key: String) -> Self {
-        self.key = key;
-        self
-    }
-
-    /// Sets [`Self::size`].
-    pub fn with_size(mut self, size: PanelSize) -> Self {
-        self.size = size;
-        self
-    }
-
-    /// Sets [`Self::title`].
-    pub fn with_title(mut self, title: Vec<Span>) -> Self {
-        self.title = title;
-        self
-    }
-
-    /// Sets [`Self::subtitle`].
-    pub fn with_subtitle(mut self, subtitle: Option<String>) -> Self {
-        self.subtitle = subtitle;
-        self
-    }
-
-    /// Sets [`Self::body`].
-    pub fn with_body(mut self, body: Node) -> Self {
-        self.body = body;
-        self
-    }
-
-    /// Sets [`Self::actions`].
-    pub fn with_actions(mut self, actions: Vec<PanelAction>) -> Self {
-        self.actions = actions;
-        self
-    }
-
-    /// Sets [`Self::binds`].
-    pub fn with_binds(mut self, binds: Vec<PanelBind>) -> Self {
-        self.binds = binds;
-        self
-    }
-
-    /// Sets [`Self::bleed`].
-    pub fn with_bleed(mut self, bleed: bool) -> Self {
-        self.bleed = bleed;
-        self
-    }
-
-    /// Sets [`Self::centered`].
-    pub fn with_centered(mut self, centered: bool) -> Self {
-        self.centered = centered;
-        self
-    }
-
-    /// Sets [`Self::close`].
-    pub fn with_close(mut self, close: Option<String>) -> Self {
-        self.close = close;
-        self
-    }
-
-    /// Sets [`Self::height`].
-    pub fn with_height(mut self, height: Option<u16>) -> Self {
-        self.height = height;
-        self
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -4310,7 +3799,7 @@ pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 /// # use opencode_plugin_abi::*;
 /// fn setup(setup: &mut Setup) -> Result<(), String> {
 ///     setup.host().toast(Toast::new(Variant::Info, "setup may show a toast"));
-///     setup.command(Command::default().with_name("x.hello".to_owned()), |host, _| {
+///     setup.command(Command::new("x.hello"), |host, _| {
 ///         host.toast(Toast::new(Variant::Info, "a command may too"));
 ///     });
 ///     Ok(())
@@ -5506,7 +4995,7 @@ mod tests {
             features: Bytes::new(b"[]"),
         };
         let host = HostHandle::new(&api);
-        let fetch = || Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
+        let fetch = || Fetch::new("GET", "/api/session");
         let program = || Foreground::new("true");
         assert!(host.try_fetch(fetch()).is_err_and(|error| error.contains("request ID 0")));
         assert!(host.try_foreground(program()).is_err_and(|error| error.contains("request ID 0")));
@@ -5784,7 +5273,7 @@ mod tests {
     fn clicks_hovers_and_dispatches_round_trip() {
         let text = Node::text([Span { strikethrough: true, ..Span::new("a") }])
             .hover_fg("text.base")
-            .on_click(Click::command("x.open", Some("b".into())).on_down());
+            .on_click(Click::command("x.open").input("b").on_down());
         let node = Node::row(vec![text]).justify(Justify::SpaceBetween);
         let json = r#"{"type":"box","row":true,"justify":"space-between","children":[{"type":"text","spans":[{"text":"a","strikethrough":true}],"hover_fg":"text.base","on_click":{"action":{"type":"command","name":"x.open","input":"b"},"on":"down"}}]}"#;
         assert_eq!(serde_json::to_string(&node).unwrap(), json);
@@ -5873,7 +5362,7 @@ mod tests {
             body: Some(serde_json::json!({ "c": 1 })),
             bytes: false,
         };
-        let action = Action::Command { name: "x.ask".into(), input: None };
+        let action = Action::command("x.ask");
         let panel = Panel {
             key: "k".into(),
             size: PanelSize::Large,
@@ -5898,7 +5387,7 @@ mod tests {
             HostRequest::Fetch(fetch),
             HostRequest::Navigate { route: Route::Session { id: "ses_1".into() } },
             HostRequest::Dialog { dialog: Box::new(Dialog::Panel(panel)) },
-            HostRequest::Dialog { dialog: Box::new(Dialog::Prompt { title: "p".into(), placeholder: None, action }) },
+            HostRequest::Dialog { dialog: Box::new(Dialog::Prompt(Prompt::new("p", action))) },
             HostRequest::Copy { text: "x".into(), then: None },
             HostRequest::Dialog { dialog: Box::new(Dialog::Close { key: "k".into() }) },
             HostRequest::Interactive,
@@ -5910,7 +5399,7 @@ mod tests {
                     placeholder: None,
                     options: vec![SelectOption::new("A", "a").description("d"), SelectOption::new("B", "b")],
                     current: Some("b".into()),
-                    action: Action::Command { name: "x.pick".into(), input: None },
+                    action: Action::command("x.pick"),
                     key: None,
                     actions: Vec::new(),
                     binds: Vec::new(),
@@ -6279,7 +5768,7 @@ mod tests {
             placeholder: None,
             options: vec![SelectOption::new("Child", "ses_1").description("running")],
             current: None,
-            action: Action::Command { name: "x.open".into(), input: None },
+            action: Action::command("x.open"),
             key: None,
             actions: Vec::new(),
             binds: Vec::new(),
@@ -6370,7 +5859,7 @@ mod tests {
                     title: "T".into(),
                     message: "M".into(),
                     label: ConfirmLabel::default(),
-                    action: Action::Command { name: "x.a".into(), input: None },
+                    action: Action::command("x.a"),
                     size: None,
                     centered: false,
                 }))
@@ -6381,7 +5870,7 @@ mod tests {
                 serde_json::to_value(Dialog::Alert(Alert {
                     title: "T".into(),
                     message: "M".into(),
-                    action: Some(Action::Command { name: "x.a".into(), input: None }),
+                    action: Some(Action::command("x.a")),
                     size: None,
                     centered: false,
                 }))
@@ -6573,7 +6062,7 @@ mod tests {
         host.set_title("t");
         host.install_theme("t", serde_json::json!({}));
         host.toast(Toast::new(Variant::Info, "a"));
-        let panel = Panel::new("k", Vec::new(), Node::column(Vec::new())).with_size(PanelSize::XLarge);
+        let panel = Panel::new("k", Vec::new(), Node::column(Vec::new())).size(PanelSize::XLarge);
         host.dialog(Dialog::Panel(panel));
         let log = std::mem::take(&mut *log.lock().unwrap());
         let shown: Vec<&String> = log.iter().filter(|request| request.contains("\"type\":\"dialog\"")).collect();

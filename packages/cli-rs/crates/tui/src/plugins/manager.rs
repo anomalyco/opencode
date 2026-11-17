@@ -63,12 +63,7 @@ enum Asked {
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     let state = Rc::new(State::default());
-    let command = Command::default()
-        .with_name("plugins.list".to_owned())
-        .with_title("Plugins".to_owned())
-        .with_group(Some("System".to_owned()))
-        .with_slash(Some("plugins".to_owned()))
-        .with_palette(true);
+    let command = Command::new("plugins.list").title("Plugins").group("System").slash("plugins").palette();
     let opened = state.clone();
     setup.command(command, move |host, _| {
         let state = &opened;
@@ -149,7 +144,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn hidden(name: &str) -> Command {
-    Command::default().with_name(name.to_owned())
+    Command::new(name)
 }
 
 fn command(name: &str, input: Option<String>) -> Action {
@@ -330,10 +325,10 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
         },
     ]);
     Select::new("Plugins", visible.iter().map(|row| option(row, state)).collect(), error)
-        .with_key(Some(LIST.to_owned()))
-        .with_size(Some(PanelSize::Large))
-        .with_focus(focus)
-        .with_actions(actions)
+        .key(LIST)
+        .size(PanelSize::Large)
+        .maybe(focus, Select::focus)
+        .actions(actions)
 }
 
 fn option(row: &Row, state: &State) -> SelectOption {
@@ -349,18 +344,21 @@ fn option(row: &Row, state: &State) -> SelectOption {
         "text.muted"
     };
     SelectOption::new(row.label(), row.key())
-        .with_category(Some(if matches!(row, Row::Tui(_)) { "TUI" } else { "Server" }.to_owned()))
-        .with_search_text(Some(row.source()))
-        .with_footer(if updating { Some("updating".to_owned()) } else { row.footer() })
-        .with_footer_color(Some(color.into()))
-        .with_gutter(match (updating, failed) {
-            (true, _) => Some(Gutter::Spinner),
-            (false, true) => Some(Gutter::Span(Span::new("x").fg("text.feedback.error.base"))),
-            (false, false) => None,
-        })
-        .with_toggle(row.toggle())
+        .category(if matches!(row, Row::Tui(_)) { "TUI" } else { "Server" })
+        .search_text(row.source())
+        .maybe(if updating { Some("updating".to_owned()) } else { row.footer() }, SelectOption::footer)
+        .footer_color(color)
+        .maybe(
+            match (updating, failed) {
+                (true, _) => Some(Gutter::Spinner),
+                (false, true) => Some(Gutter::Span(Span::new("x").fg("text.feedback.error.base"))),
+                (false, false) => None,
+            },
+            SelectOption::gutter,
+        )
+        .maybe(row.toggle(), SelectOption::toggle)
         // The host asks about a held build; once its question closes, the list comes back on the row as it is then.
-        .with_action(row.held().then(|| command("opencode.plugins.asked", None)))
+        .maybe(row.held().then(|| command("opencode.plugins.asked", None)), SelectOption::action)
 }
 
 /// `DialogErrorDetails` for `row`; Back and escape return to the list on it.

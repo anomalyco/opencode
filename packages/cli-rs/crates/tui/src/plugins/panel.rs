@@ -64,7 +64,7 @@ type Owner = (String, u64);
 pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
     let owner = (id.to_owned(), generation);
     match dialog {
-        abi::Dialog::Prompt { title, placeholder, action } => ask(tui, owner, title, placeholder, action),
+        abi::Dialog::Prompt(prompt) => ask(tui, owner, prompt.title, prompt.placeholder, prompt.action),
         abi::Dialog::Panel(panel) => self::panel(tui, owner, panel),
         abi::Dialog::Close { key } => {
             let mine = || tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);

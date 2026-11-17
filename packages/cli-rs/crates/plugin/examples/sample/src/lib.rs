@@ -83,7 +83,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.command(command("sample.open", "Open the sample route", Some("sample")), |host, _| host.open_route("hello"));
     // Storage takes arrays too: the command shows what it read, then what it stored.
     setup.storage_key("list");
-    setup.command(command("sample.list", "Store a list", None).with_palette(false), |host, _| {
+    setup.command(command("sample.list", "Store a list", None), |host, _| {
         let shown = |value: Option<serde_json::Value>| value.map_or_else(String::new, |value| value.to_string());
         let before = shown(host.storage_get("list"));
         host.storage_set("list", json!([1, 2]));
@@ -145,20 +145,18 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 /// `/p0brun <shell command>` runs `sh -c <command>` in the foreground, twice with `/p0btwice`, and toasts how each
 /// ended and sets it as the title.
 fn pty(setup: &mut Setup) {
-    let title = command("p0b.title", "Set the title", None).with_slash(Some("p0btitle".to_owned()));
+    let title = command("p0b.title", "Set the title", None).slash("p0btitle");
     setup.command(title, |host, _| host.set_title("p0b title"));
-    let long = command("p0b.long", "Set a long title", None).with_slash(Some("p0blong".to_owned()));
+    let long = command("p0b.long", "Set a long title", None).slash("p0blong");
     setup.command(long, |host, _| host.set_title(&format!("p0b long {}", "é".repeat(3000))));
     let asked = Rc::new(std::cell::RefCell::new(Vec::new()));
     for (name, times) in [("p0brun", 1), ("p0btwice", 2)] {
-        let run = command(&format!("p0b.{name}"), "Run a program", None)
-            .with_slash(Some(name.to_owned()))
-            .with_arguments(true);
+        let run = command(&format!("p0b.{name}"), "Run a program", None).slash(name).arguments();
         let asked = asked.clone();
         setup.command(run, move |host, input| {
             for _ in 0..times {
                 let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
-                let program = opencode_plugin_abi::Foreground::new("sh").with_args(args);
+                let program = opencode_plugin_abi::Foreground::new("sh").args(args);
                 asked.borrow_mut().extend(host.try_foreground(program).ok());
             }
         });
@@ -177,12 +175,7 @@ fn pty(setup: &mut Setup) {
 }
 
 fn command(name: &str, title: &str, slash: Option<&str>) -> Command {
-    Command::default()
-        .with_name(name.to_owned())
-        .with_title(title.to_owned())
-        .with_group(Some("Sample".to_owned()))
-        .with_slash(slash.map(str::to_owned))
-        .with_palette(true)
+    Command::new(name).title(title).group("Sample").maybe(slash, Command::slash).palette()
 }
 
 /// Counts ticks on its own thread and wakes the host after each. Dropping it, when the host destroys the instance,
