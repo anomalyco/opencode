@@ -468,3 +468,31 @@ test("Mod+F finds in Markdown and HTML previews with the code view's find bar", 
   await find.press("Escape")
   await expect(find).toHaveCount(0)
 })
+
+test("an HTML preview shows the images beside its file", async ({ page }) => {
+  const directory = "C:/OpenCode/PreviewMedia"
+  const key = `local\u0000${base64Encode(directory)}/ses_previewmedia`
+  // A 1x1 PNG.
+  const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+  await openSession(page, {
+    name: "PreviewMedia",
+    fileList: () => [],
+    fileContent: (path) =>
+      path === "docs/page.html"
+        ? { type: "text", content: "<!doctype html><title>Page</title><img alt='Pixel' src='img/pixel.png?v=1'>" }
+        : { type: "binary", content: pixel, encoding: "base64", mimeType: "image/png" },
+    seed: {
+      panes: { ses_previewmedia: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["file://docs/page.html"], active: "file://docs/page.html" } },
+        },
+      },
+    },
+  })
+
+  // The preview is a blob in a sandboxed frame, so the app reads the image and hands the frame its bytes.
+  const frame = page.locator('[data-pane-content="side"]').frameLocator('iframe[data-file-find="frame"]')
+  await expect(frame.getByAltText("Pixel")).toHaveJSProperty("naturalWidth", 1)
+})

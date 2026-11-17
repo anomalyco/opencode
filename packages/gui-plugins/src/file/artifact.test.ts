@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath, splitFrontmatter } from "./artifact"
+import {
+  bytesFromContent,
+  contentBytes,
+  frameMediaPath,
+  parseDelimited,
+  resolveArtifactPath,
+  splitFrontmatter,
+} from "./artifact"
 
 describe("binary content helpers", () => {
   test("reads size and independent byte copies from raw bytes", () => {
@@ -55,6 +62,27 @@ describe("resolveArtifactPath", () => {
     ["docs", "/abs/path"],
   ])("rejects %s + %s", (base, href) => {
     expect(resolveArtifactPath(base, href)).toBeUndefined()
+  })
+})
+
+describe("frameMediaPath", () => {
+  test.each([
+    ["review/index.html", "clips/a.mp4", "review/clips/a.mp4"],
+    ["review/index.html", "./clips/../b.png?v=2#t=1", "review/b.png"],
+    ["review/index.html", "my%20clip.webm", "review/my clip.webm"],
+    ["index.html", "a.mp3", "a.mp3"],
+    ["/tmp/review/index.html", "logo.svg", "/tmp/review/logo.svg"],
+  ])("resolves %s + %s", (file, href, expected) => {
+    expect(frameMediaPath(file, href)).toBe(expected)
+  })
+
+  test.each([
+    ["review/index.html", "../secret.png"],
+    ["review/index.html", "%2e%2e/secret.png"],
+    ["review/index.html", "/etc/secret.png"],
+    ["review/index.html", "notes.txt"],
+  ])("rejects %s + %s", (file, href) => {
+    expect(frameMediaPath(file, href)).toBeUndefined()
   })
 })
 

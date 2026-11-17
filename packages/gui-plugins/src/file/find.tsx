@@ -4,6 +4,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createKeyed, type FileContent } from "@opencode/plugin/gui"
 import { FileSearchBar } from "@opencode/session-ui/file-search"
+import { htmlWithScript } from "./artifact"
 
 const HIT = "file-preview-find"
 
@@ -234,16 +235,9 @@ export function PreviewFindBar(props: { find: ReturnType<typeof createPreviewFin
   )
 }
 
-/**
- * The HTML with the find script first, after any doctype so the page keeps its rendering mode. The script runs before
- * the page's own, so a Content-Security-Policy the page declares later does not block it.
- */
-export function findableHtml(content: FileContent): FileContent {
-  if (content.type !== "text" || content.url || content.bytes) return content
-  const script = `<script>(${frameFind.toString()})(${JSON.stringify(CHANNEL)})</script>`
-  const doctype = /^(?:\s|<!--[\s\S]*?-->)*<!doctype[^>]*>/i.exec(content.content)?.[0] ?? ""
-
-  return { ...content, content: doctype + script + content.content.slice(doctype.length) }
+/** The HTML with the find script added. */
+export function findableHtml(content: FileContent) {
+  return htmlWithScript(content, `(${frameFind.toString()})(${JSON.stringify(CHANNEL)})`)
 }
 
 /** The page's colors can't resolve the app's theme, so the marks travel resolved with each search. */
