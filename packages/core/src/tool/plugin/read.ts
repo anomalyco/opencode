@@ -53,7 +53,7 @@ export const Plugin = {
         const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
-          options: { codemode: codeMode },
+          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
           description: [
             "Read the contents of a file or directory. Supports text files, images, and PDFs.",
             ...(codeMode
