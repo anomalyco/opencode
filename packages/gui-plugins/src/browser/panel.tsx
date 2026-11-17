@@ -283,6 +283,9 @@ export default function SessionBrowserPane(props: {
   const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
   createKeyed(() => visible() && state()?.id, id => props.model.seen(props.session, id))
   const revealGuard = () => props.model.revealGuard(props.session, props.tab().id)
+  // One computation under the pane's owner. Written inline as the embed's prop, the condition compiles to a getter that
+  // makes a new one on every read, and the embed reads it from callbacks that have no owner to dispose them.
+  const pageVisible = createMemo(() => drawn() && revealGuard() === undefined)
 
   // The guard's delay starts when this panel would show the native view, not while its chunk is still loading.
   createKeyed(() => drawn() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
@@ -1066,7 +1069,7 @@ export default function SessionBrowserPane(props: {
         id={embed()}
         // A page blocked in a JavaScript dialog draws no frame, so Chromium cannot capture a still of it: its dialog
         // sits over the dimmed, empty page area at once. "Leave site?" and a sign-in leave the page drawing.
-        visible={drawn() && revealGuard() === undefined}
+        visible={pageVisible()}
         frozen={overlayed().frozen || !!promptKey(true)}
         // A navigation, in-page or not, or a reload starting is another page.
         page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
