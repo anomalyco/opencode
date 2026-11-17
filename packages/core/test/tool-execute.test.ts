@@ -418,6 +418,29 @@ test("execute supports callable namespace tools", async () => {
   expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
 })
 
+test("each call in a program gets its own ID and is marked as nested in execute", async () => {
+  const ids: string[] = []
+  const nested: Array<[string, string]> = []
+  const input = Schema.Struct({})
+  const record = {
+    name: "record",
+    description: "Record the call",
+    input,
+    execute: (_, context) => Effect.sync(() => ids.push(context.id)).pipe(Effect.as({ content: "ok" })),
+  } satisfies Info<typeof input>
+  await Effect.runPromise(
+    createCodeMode(
+      new Map<string, Info>([["record", record]]),
+      permissionService({
+        nested: (call, parent) => Effect.sync(() => void nested.push([call, parent])),
+      }),
+    ).execute({ code: "await Promise.all([tools.record({}), tools.record({})])" }, context),
+  )
+  expect(new Set(ids).size).toBe(2)
+  expect(ids).not.toContain(context.id)
+  expect(nested.toSorted()).toEqual(ids.toSorted().map((id) => [id, context.id]))
+})
+
 test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
   let conversions = 0
   const echo: Info = {
@@ -437,7 +460,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
         },
       },
     },
-    execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
+    execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
   const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
@@ -457,14 +480,14 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect<unknown>(results).toEqual(
     ["first", "second"].map((id) => ({
-      output: `${id}:${id}`,
+      output: id,
       progress: [{ toolCalls: [{ tool: "echo", status: "running", input: { value: id } }] }],
     })),
   )
   expect(
     (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({ value: "x" })' }, context))).output
       .output,
-  ).toBe("call_execute:x")
+  ).toBe("x")
   expect(conversions).toBe(1)
 
   await Effect.runPromise(

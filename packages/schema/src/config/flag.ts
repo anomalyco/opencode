@@ -9,11 +9,10 @@ export const wildcard = "all"
  */
 export const registry = {
   todo: "Enable the experimental todowrite tool.",
-  background_compaction:
-    "Enable experimental background compaction: summarize the conversation in the background as it nears the compaction threshold, so automatic compaction does not wait for the summary. Background summaries that are never used still cost tokens.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   schedules: "Enable experimental scheduled tasks that wake a session with a prompt.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
+  video_generate: "Enable the experimental video generation API.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
