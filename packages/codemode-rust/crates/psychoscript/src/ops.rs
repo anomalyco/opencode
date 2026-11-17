@@ -1,10 +1,11 @@
 //! Property access, conversions, operators and iteration on program values.
 
 use crate::builtins::exotic;
+use crate::bytecode::ITER_FOR_OF;
 use crate::object::*;
 use crate::strings::StrId;
 use crate::value::{Id, Value, num_to_string, str_to_num};
-use crate::vm::{REQ_NEXT, REQ_RETURN, Reaction, Res, Vm};
+use crate::vm::{NATIVE_FUEL, REQ_NEXT, REQ_RETURN, Reaction, Res, Vm};
 
 pub const MAX_STRING_LEN: usize = 1 << 24;
 const UNAWAITED: &str = "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.";
@@ -1462,7 +1463,8 @@ impl<'rt> Vm<'rt> {
             Kind::ArrayIter { .. }
             | Kind::MapIter { .. }
             | Kind::StrIter { .. }
-            | Kind::ListIter { .. } => {
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. } => {
                 if kind != REQ_NEXT {
                     return Ok(Some(None));
                 }
@@ -1540,13 +1542,25 @@ impl<'rt> Vm<'rt> {
         if let Value::Obj(id) = v {
             let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
             if !f.is_nullish() {
-                return self.open_with(&f, v);
+                // The reference calls the method as bytecode calls it.
+                let it = self.open_with(&f, v)?;
+                if !self.is_closure(&f) {
+                    self.fuel(NATIVE_FUEL);
+                }
+                return Ok(it);
             }
+        }
+        // Anything but a value the reference walks itself it opens in its internal bytecode
+        // (`$vmOpenSyncForAsync`), entered for one unit, which calls the `Symbol.iterator` method.
+        let open = self.open_fuel(v, ITER_FOR_OF);
+        if !self.walks(v) && self.is_iterable(v) {
+            self.fuel(1);
         }
         let Value::Obj(sync) = self.get_iterator_in(v, ctx)? else {
             return Err(self.type_error("Iterator method result must be an object."));
         };
-        let next = self.record_next(&Value::Obj(sync))?;
+        self.fuel(open);
+        let next = self.record_next_of(v, &Value::Obj(sync))?;
         let proto = self.realm.async_from_sync_proto;
         Ok(Value::Obj(self.alloc(Obj::new(
             Some(proto),
@@ -1603,19 +1617,41 @@ impl<'rt> Vm<'rt> {
         Ok(Value::Obj(made))
     }
 
-    /// One `next` on a sync iterator, as a value and a done flag.
+    /// One `next` on a sync iterator, as a value and a done flag. The reference's `$vmAsyncFromSync` calls it as
+    /// bytecode calls it, except on an iterator it walks itself: a generator's or helper's native `next` costs its
+    /// fifty before the body runs.
     fn sync_step(
         &mut self,
         it: Value,
         arg: Option<Value>,
         next: Value,
     ) -> Result<(Value, bool), Value> {
-        if let Some(Some(step)) = self.sync_delegate_step(it, REQ_NEXT, arg.unwrap_or_default())? {
+        let generator = matches!(it, Value::Obj(id)
+            if matches!(self.heap[id as usize].kind, Kind::Generator(_) | Kind::IterHelper(_)));
+        if generator {
+            self.fuel(NATIVE_FUEL);
+        }
+        if next.is_nullish()
+            && let Some(Some(step)) =
+                self.sync_delegate_step(it, REQ_NEXT, arg.unwrap_or_default())?
+        {
             return Ok(step);
         }
-        let r = self
-            .delegate_call(it, REQ_NEXT, arg, next)?
-            .unwrap_or_default();
+        let m = if next.is_nullish() {
+            let nk = self.names.next;
+            self.get(&it, nk)?
+        } else {
+            next
+        };
+        let args: &[Value] = match &arg {
+            Some(a) => std::slice::from_ref(a),
+            None => &[],
+        };
+        let r = if generator {
+            self.call(&m, it, args)?
+        } else {
+            self.call_counted(&m, it, args)?
+        };
         self.iter_result_parts(&r, REQ_NEXT)
     }
 

@@ -5539,6 +5539,174 @@
       ]
     },
     {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }\n   for (let j = 0; j < 37; j++) { for await (const x of [1, 2]) {} for await (const x of 'ab') {} for await (const x of new Map([[1, 2]])) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 76
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }\n   for (let j = 0; j < 37; j++) { for await (const x of g(2)) {} for await (const x of g(3).map((x) => x)) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1515
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }\n   for (let j = 0; j < 37; j++) { for await (const x of it) {} for await (const x of bound) {} for await (const x of wrapped) {} for await (const x of h.entries()) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3416
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }\n   for (let j = 0; j < 37; j++) { for await (const x of ag()) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3263
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }; async function* a2() { yield* g(2) }\n   for (let j = 0; j < 37; j++) { for await (const x of a2()) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4249
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }; async function* a3() { yield* [1, 2] }\n   for (let j = 0; j < 37; j++) { for await (const x of a3()) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3019
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }; async function* a3() { yield* [1, 2] }\n   for (let j = 0; j < 37; j++) { const i = a3(); await i.next(); await i.next(); await i.next() }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3957
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n   async function* ag() { yield 1; yield* g(2) }; const ai = { [Symbol.asyncIterator]() { let c = 0; return { next: async () => ({ done: c++ >= 2, value: 1 }) } } }; async function* a7() { yield* ai }\n   for (let j = 0; j < 37; j++) { for await (const x of a7()) {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 751
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf: () => 1 }, s = { toString: () => 'b' }, n = {}, t = { toString: () => '[1]' }, dt = new Date(0)\n   const v = { valueOf: () => see(1) }\n   const p = r.text(); for (let j = 0; j < 1000; j++) { 'abc'.slice(o, 2); 'abc'.padStart(o, s); see(j) }\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,

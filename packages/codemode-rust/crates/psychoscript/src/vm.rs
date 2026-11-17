@@ -685,7 +685,7 @@ impl<'rt> Vm<'rt> {
 
     /// Whether the reference iterates `v` itself, with no call of its `Symbol.iterator` method: a string, a
     /// collection or a built-in iterator.
-    fn walks(&self, v: &Value) -> bool {
+    pub(crate) fn walks(&self, v: &Value) -> bool {
         match v {
             Value::Str(_) => true,
             Value::Obj(id) => matches!(
@@ -747,7 +747,7 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    fn is_closure(&self, v: &Value) -> bool {
+    pub(crate) fn is_closure(&self, v: &Value) -> bool {
         matches!(v, Value::Obj(id) if matches!(self.heap[*id as usize].kind, Kind::Closure(_)))
     }
 
@@ -1289,6 +1289,17 @@ impl<'rt> Vm<'rt> {
     /// resumer's stack waits in the generator until it yields or finishes. Nothing is copied. Returns whether a
     /// `next(v)` request must push `v`: the generator waits at a `yield` whose result is used.
     fn enter_generator(&mut self, g: Id, resume: Resume, is_base: bool) -> bool {
+        self.enter_generator_at(g, resume, is_base, true)
+    }
+
+    /// `enter_generator`, resuming the generator at its last `yield` (`from_yield`) or after an `await`.
+    fn enter_generator_at(
+        &mut self,
+        g: Id,
+        resume: Resume,
+        is_base: bool,
+        from_yield: bool,
+    ) -> bool {
         let state = match &mut self.heap[g as usize].kind {
             Kind::Generator(s) => s,
             Kind::AsyncGenerator(a) => &mut a.state,
@@ -1314,8 +1325,8 @@ impl<'rt> Vm<'rt> {
         f.hbase = hbase;
         let at = f.func.code.get(f.yield_pc as usize);
         let pushes = f.yield_pc != NO_YIELD && !matches!(at, Some(Op::YieldDrop(_)));
-        // The reference's `yield*` loops back through a back-edge each time it is resumed.
-        if matches!(at, Some(Op::YieldStar(_))) {
+        // The reference's `yield*` loops back through a back-edge each time it is resumed there.
+        if from_yield && matches!(at, Some(Op::YieldStar(_))) {
             self.spend(1);
         }
         pushes
@@ -1468,7 +1479,7 @@ impl<'rt> Vm<'rt> {
         outcome: Result<Value, Value>,
         awaited: bool,
     ) -> Result<(), Value> {
-        let wants = self.enter_generator(g, Resume::Iter, true);
+        let wants = self.enter_generator_at(g, Resume::Iter, true, !awaited);
         let r = match (outcome, awaited) {
             (Ok(v), true) => {
                 self.push(v);

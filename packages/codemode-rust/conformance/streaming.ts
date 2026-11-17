@@ -413,6 +413,26 @@ programs.push(
   during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
 )
 
+// for await over a sync iterable steps it through an adapter whose native next the loop calls; one the reference does
+// not walk itself it opens in its internal bytecode and steps there. An async generator's own requests and its
+// yield* spend fuel too. `after` shows the fuel the loop left, since every step starts a new job.
+const syncs =
+  gen +
+  "; const it = { [Symbol.iterator]() { return this }, n: 0, next() { return { done: this.n++ % 3 === 2, value: 1 } } }\n" +
+  "   const bound = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }\n" +
+  "   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n" +
+  "   async function* ag() { yield 1; yield* g(2) }"
+programs.push(
+  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of [1, 2]) {} for await (const x of 'ab') {} for await (const x of new Map([[1, 2]])) {} }"),
+  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of g(2)) {} for await (const x of g(3).map((x) => x)) {} }"),
+  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of it) {} for await (const x of bound) {} for await (const x of wrapped) {} for await (const x of h.entries()) {} }"),
+  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of ag()) {} }"),
+  after(syncs + "; async function* a2() { yield* g(2) }", "for (let j = 0; j < 37; j++) { for await (const x of a2()) {} }"),
+  after(syncs + "; async function* a3() { yield* [1, 2] }", "for (let j = 0; j < 37; j++) { for await (const x of a3()) {} }"),
+  after(syncs + "; async function* a3() { yield* [1, 2] }", "for (let j = 0; j < 37; j++) { const i = a3(); await i.next(); await i.next(); await i.next() }"),
+  after(syncs + "; const ai = { [Symbol.asyncIterator]() { let c = 0; return { next: async () => ({ done: c++ >= 2, value: 1 }) } } }; async function* a7() { yield* ai }", "for (let j = 0; j < 37; j++) { for await (const x of a7()) {} }"),
+)
+
 // A built-in that needs primitives lists them; once one is an object, the reference converts the list in its internal
 // bytecode before the built-in runs again.
 const objects =

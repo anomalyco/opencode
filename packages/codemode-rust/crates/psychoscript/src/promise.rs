@@ -2,7 +2,7 @@
 
 use crate::object::*;
 use crate::value::{Id, Value};
-use crate::vm::{Job, REQ_NEXT, REQ_RETURN, REQ_THROW, Reaction, Res, Vm};
+use crate::vm::{Job, NATIVE_FUEL, REQ_NEXT, REQ_RETURN, REQ_THROW, Reaction, Res, Vm};
 
 impl<'rt> Vm<'rt> {
     pub fn new_promise(&mut self) -> Id {
@@ -530,16 +530,27 @@ fn async_iter_self(_vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn async_gen_next(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let v = args.first().copied().unwrap_or_default();
-    vm.async_gen_request(this, REQ_NEXT, v)
+    request(vm, this, REQ_NEXT, args)
 }
 
 fn async_gen_return(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let v = args.first().copied().unwrap_or_default();
-    vm.async_gen_request(this, REQ_RETURN, v)
+    request(vm, this, REQ_RETURN, args)
 }
 
 fn async_gen_throw(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let v = args.first().copied().unwrap_or_default();
-    vm.async_gen_request(this, REQ_THROW, v)
+    request(vm, this, REQ_THROW, args)
+}
+
+/// An async generator's request. The reference's native returns before the body runs, so a call from bytecode spends
+/// its fifty first and the call costs nothing more.
+fn request(vm: &mut Vm, this: Value, kind: u8, args: &[Value]) -> Res {
+    let counted = vm.host.meter.counted;
+    if counted {
+        vm.fuel(NATIVE_FUEL);
+    }
+    let r = vm.async_gen_request(this, kind, args.first().copied().unwrap_or_default());
+    if counted && r.is_ok() {
+        vm.bytecode_builtin();
+    }
+    r
 }
