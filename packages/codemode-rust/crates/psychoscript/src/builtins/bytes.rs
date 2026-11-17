@@ -152,9 +152,9 @@ pub fn set_prop(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(),
         );
     }
     if key == vm.names.length {
-        return Some(Err(vm.type_error(
-            "Cannot set property length of [object Uint8Array] which has only a getter",
-        )));
+        return Some(Err(
+            vm.type_error("Cannot assign to read only property 'length'.")
+        ));
     }
     None
 }

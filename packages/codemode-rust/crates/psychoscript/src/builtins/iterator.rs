@@ -29,6 +29,9 @@ fn exotic_step(vm: &mut Vm, id: Id) -> Option<Value> {
     };
     let v = match &vm.heap[target as usize].kind {
         Kind::Bytes(_) => super::bytes::iter_step(vm, target, pos as usize, kind),
+        Kind::SearchParams(_) | Kind::Headers(_) => {
+            super::web::iter_step(vm, target, pos as usize, kind)
+        }
         _ => None,
     };
     if let Kind::ExoticIter { pos, .. } = &mut vm.heap[id as usize].kind {

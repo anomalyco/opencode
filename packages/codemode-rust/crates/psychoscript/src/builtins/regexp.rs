@@ -272,7 +272,7 @@ pub fn set_prop(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(),
         | "unicode" | "unicodeSets" | "sticky" => {
             let k = vm.atoms.text(key).to_owned();
             Some(Err(vm.type_error(&format!(
-                "Cannot set property {k} of [object RegExp] which has only a getter"
+                "Cannot assign to read only property '{k}'."
             ))))
         }
         _ => None,

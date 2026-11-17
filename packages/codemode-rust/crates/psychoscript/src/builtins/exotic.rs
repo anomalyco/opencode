@@ -1,7 +1,7 @@
 //! Behaviour of standard-library kinds that the generic object model reaches through small hooks: accessor
 //! properties, indexed elements, console and JSON forms.
 
-use super::{bytes, regexp};
+use super::{bytes, regexp, web};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Res, Vm};
@@ -11,7 +11,13 @@ use crate::vm::{Res, Vm};
 pub fn is_exotic(kind: &Kind) -> bool {
     matches!(
         kind,
-        Kind::RegExp(_) | Kind::Bytes(_) | Kind::TextDecoder(_)
+        Kind::RegExp(_)
+            | Kind::Bytes(_)
+            | Kind::TextDecoder(_)
+            | Kind::Url(_)
+            | Kind::SearchParams(_)
+            | Kind::Map(_)
+            | Kind::Set(_)
     )
 }
 
@@ -21,6 +27,10 @@ pub fn get(vm: &mut Vm, id: Id, key: Atom) -> Option<Value> {
         Kind::RegExp(_) => regexp::get_prop(vm, id, key),
         Kind::Bytes(_) => bytes::get_prop(vm, id, key),
         Kind::TextDecoder(_) => bytes::decoder_prop(vm, id, key),
+        Kind::Url(_) => web::url_get(vm, id, key),
+        Kind::SearchParams(_) if key == vm.names.size => {
+            Some(Value::Num(web::params_size(vm, id) as f64))
+        }
         _ => None,
     }
 }
@@ -30,6 +40,18 @@ pub fn set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), Valu
     match &vm.heap[id as usize].kind {
         Kind::RegExp(_) => regexp::set_prop(vm, id, key, val),
         Kind::Bytes(_) => bytes::set_prop(vm, id, key, val),
+        Kind::Url(_) => web::url_set(vm, id, key, val),
+        Kind::SearchParams(_) | Kind::Map(_) | Kind::Set(_) if key == vm.names.size => Some(Err(
+            vm.type_error("Cannot assign to read only property 'size'."),
+        )),
+        Kind::TextDecoder(_)
+            if matches!(vm.atoms.text(key), "encoding" | "fatal" | "ignoreBOM") =>
+        {
+            let k = vm.atoms.text(key).to_owned();
+            Some(Err(vm.type_error(&format!(
+                "Cannot assign to read only property '{k}'."
+            ))))
+        }
         _ => None,
     }
 }
@@ -75,6 +97,9 @@ pub fn inspect(vm: &mut Vm, id: Id) -> Option<String> {
         Kind::Date(t) => Some(super::date::display(*t)),
         Kind::Bytes(_) => Some(bytes::inspect(vm, id)),
         Kind::WeakMap(_) => Some("WeakMap { <items unknown> }".into()),
+        Kind::Url(_) => Some(web::url_href(vm, id)),
+        Kind::SearchParams(_) => Some(web::params_text(vm, id)),
+        Kind::Headers(_) => Some(web::headers_inspect(vm, id)),
         Kind::WeakSet(_) => Some("WeakSet { <items unknown> }".into()),
         _ => None,
     }
@@ -85,6 +110,11 @@ pub fn json_value(vm: &mut Vm, v: &Value, boundary: bool) -> Res {
     let Value::Obj(id) = v else { return Ok(*v) };
     match &vm.heap[*id as usize].kind {
         Kind::Bytes(_) => bytes::json_value(vm, *id, boundary),
+        Kind::Headers(_) => Ok(web::headers_object(vm, *id)),
+        Kind::SearchParams(_) if boundary => {
+            let s = web::params_text(vm, *id);
+            Ok(vm.string_val(s))
+        }
         _ => Ok(*v),
     }
 }

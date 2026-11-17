@@ -1,0 +1,14 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Cannot assign to read only property 'source'.",
+    "Cannot assign to read only property 'length'.",
+    "Cannot assign to read only property 'size'.",
+    "Cannot assign to read only property 'encoding'.",
+    1,
+    "Cannot assign to read only property 'size'.",
+    "Cannot assign to read only property 'size'."
+  ],
+  "logs": []
+}

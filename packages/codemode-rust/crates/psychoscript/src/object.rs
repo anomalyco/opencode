@@ -251,6 +251,9 @@ pub enum Kind {
     WeakMap(Box<OrderedMap>),
     WeakSet(Box<OrderedMap>),
     IterHelper(Box<crate::builtins::iterator::Helper>),
+    Url(Box<crate::builtins::web::UrlData>),
+    SearchParams(Box<crate::builtins::web::Params>),
+    Headers(Box<crate::builtins::web::HeaderList>),
     /// A live iterator over a standard-library collection.
     ExoticIter {
         target: Id,

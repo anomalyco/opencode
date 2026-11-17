@@ -13,6 +13,7 @@ pub mod regexp;
 mod sets;
 mod string;
 mod uri;
+pub mod web;
 
 use crate::object::*;
 use crate::value::{Id, Value};
@@ -31,6 +32,9 @@ pub struct StdProtos {
     pub weak_set: Id,
     pub iterator_helper: Id,
     pub uri_error: Id,
+    pub url: Id,
+    pub params: Id,
+    pub headers: Id,
 }
 
 /// Global names a program cannot assign to.
@@ -62,6 +66,11 @@ pub const GLOBAL_NAMES: &[&str] = &[
     "WeakMap",
     "WeakSet",
     "Iterator",
+    "URL",
+    "URLSearchParams",
+    "Headers",
+    "crypto",
+    "structuredClone",
     "encodeURI",
     "encodeURIComponent",
     "decodeURI",
@@ -203,6 +212,8 @@ impl<'rt> Vm<'rt> {
         buffer::setup(self);
         sets::setup(self);
         uri::setup(self);
+        web::setup(self);
+        web::setup_globals(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);
@@ -283,6 +294,8 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
             }
         }
         Kind::ToolRef(_) => "[object Object]".to_owned(),
+        Kind::Url(_) => web::url_href(vm, id),
+        Kind::SearchParams(_) => web::params_text(vm, id),
         _ => format!("[object {}]", object::tag_of(vm, v)),
     })
 }

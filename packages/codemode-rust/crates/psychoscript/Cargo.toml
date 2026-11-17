@@ -10,6 +10,7 @@ description = "Embeddable Rust port of OpenCode's Code Mode language"
 test262 = []
 
 [dependencies]
+idna_adapter = "~1.1"
 oxc_allocator = "0.159"
 oxc_ast = "0.159"
 oxc_ast_visit = "0.159"
@@ -24,3 +25,4 @@ rustc-hash = "2"
 serde_json = { version = "1", features = ["preserve_order"] }
 tz-rs = "0.7"
 unicode-normalization = "0.1"
+url = "2.5"
