@@ -120,6 +120,7 @@ describe("Host.namespace and Host.fail", () => {
 describe("per-run state", () => {
   test("run.metadata is the result's, and a resumed run gets it back with fresh globals", async () => {
     const gate = latch()
+    const waiting = latch()
     let made = 0
     const runtime = Runtime.make({
       globals: (run) => {
@@ -127,13 +128,20 @@ describe("per-run state", () => {
         const state = (run.metadata ??= { count: 0 }) as { count: number }
         return {
           count: Host.fn(() => ++state.count),
-          wait: Host.fn(() => Effect.promise(() => gate.promise), { type: "async", idempotent: true }),
+          wait: Host.fn(
+            () =>
+              Effect.andThen(
+                Effect.sync(waiting.resolve),
+                Effect.promise(() => gate.promise),
+              ),
+            { type: "async", idempotent: true },
+          ),
         }
       },
     })
     const program = runtime.program(`count(); count(); await wait(); return count()`, { runId: "m" })
     const fiber = Effect.runFork(program.run())
-    await Bun.sleep(10)
+    await waiting.promise
     const suspended = await Effect.runPromise(program.suspend())
     if (suspended.ok !== "suspended") throw new Error("expected a suspended run")
     expect(suspended.state.header.metadata).toEqual({ count: 2 })
@@ -149,12 +157,15 @@ describe("per-run state", () => {
   })
 
   test("a suspend fails while a call that isn't idempotent runs", async () => {
+    const called = latch()
     const runtime = Runtime.make({
-      globals: () => ({ slow: Host.fn(() => Effect.never, { type: "async" }) }),
+      globals: () => ({
+        slow: Host.fn(() => Effect.andThen(Effect.sync(called.resolve), Effect.never), { type: "async" }),
+      }),
     })
     const program = runtime.program(`await slow()`)
     const fiber = Effect.runFork(program.run())
-    await Bun.sleep(10)
+    await called.promise
     const error = await Effect.runPromise(Effect.flip(program.suspend()))
     expect(error.running).toMatchObject([{ path: "slow" }])
     await Effect.runPromise(Fiber.interrupt(fiber))
@@ -162,18 +173,24 @@ describe("per-run state", () => {
 
   test("a durable function keeps running across a suspend and is waited on again", async () => {
     const jobs = new Map<string, ReturnType<typeof latch<number>>>()
+    const waiting = latch()
     const runtime = Runtime.make({
       globals: () => ({
         job: Host.durableFn({
           start: (_, call) => Effect.sync(() => (jobs.set(call.key, latch<number>()), call.key)),
-          wait: (key) => Effect.promise(() => jobs.get(key)!.promise),
+          wait: (key) =>
+            Effect.andThen(
+              Effect.sync(waiting.resolve),
+              Effect.promise(() => jobs.get(key)!.promise),
+            ),
           cancel: () => Effect.void,
         }),
       }),
     })
     const program = runtime.program(`return (await job()) + 1`, { runId: "d" })
     const fiber = Effect.runFork(program.run())
-    await Bun.sleep(10)
+    // In `wait`, so the call is started and its data saved.
+    await waiting.promise
     const suspended = await Effect.runPromise(program.suspend())
     if (suspended.ok !== "suspended") throw new Error("expected a suspended run")
     await Effect.runPromise(Fiber.join(fiber))
