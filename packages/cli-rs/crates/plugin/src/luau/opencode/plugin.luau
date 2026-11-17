@@ -90,7 +90,7 @@ export type Button = ("left" | "middle" | "right")
 
 export type Cause = ("first" | "resized" | "version" | "animate")
 
---- What changed since a surface's last view, as a 1.x render hears it.
+--- What changed since a render's or a surface's last view.
 export type Changed = {
     all: boolean?,
     sessions: { string }?,
@@ -747,9 +747,7 @@ export type Manifest = {
     slots: { SlotClaim },
     routes: { string },
     storage: { string },
-    render: number?,
     events: { { string } }?,
-    render_routes: { string }?,
     wake: boolean?,
     route_mounts: { string }?,
     fence_gone: boolean?,
@@ -770,17 +768,10 @@ export type Member = {
     parent: string?,
 }
 
---- What a 2.x library's `describe` answers: its nonempty ID, which the host reads before any `create`.
+--- What a library's `describe` answers: its nonempty ID, which the host reads before any `create`.
 export type Metadata = {
     id: string,
     version: string?,
-    requires: { string }?,
-}
-
---- What a 1.x library's `describe` answers; the ID may be left out.
-export type MetadataV1 = {
-    version: string?,
-    id: string?,
     requires: { string }?,
 }
 
@@ -974,7 +965,7 @@ export type Palette = {
     colors: { [string]: Rgba },
 }
 
---- A panel dialog of a 1.x node body.
+--- A panel dialog, whose body is a `V1Node`.
 export type Panel = {
     key: string,
     title: { Span },
@@ -1084,19 +1075,6 @@ export type RenderFence = (Fence & {
 
 --- A request the host sends a plugin's `call`.
 export type Request = ({
-    language: string,
-    info: string,
-    code: string,
-    streaming: boolean,
-    type: "fence",
-} | {
-    claim: number,
-    session_id: string?,
-    type: "slot",
-} | {
-    name: string,
-    type: "route",
-} | {
     name: string,
     input: string?,
     type: "command",
@@ -1325,11 +1303,10 @@ export type Sides = {
     left: boolean?,
 }
 
---- A 1.x slot claim.
+--- A slot claim, which a `render` draws.
 export type SlotClaim = {
     kind: SlotKind,
     path: string,
-    render: boolean?,
     mount: boolean?,
     size: boolean?,
 }
@@ -1505,7 +1482,7 @@ export type TranscriptView = {
 
 export type Unread = ("activity" | "error")
 
---- A node of ABI 1.x, which a render and a dialog body draw.
+--- The node tree a render and a dialog body draw.
 export type V1Node = ({
     row: boolean?,
     gap: number?,

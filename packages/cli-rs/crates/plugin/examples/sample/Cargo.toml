@@ -22,7 +22,7 @@ setup-fails = []
 app = []
 # Starts no ticker, so the slot changes only when the host draws it again for a change batch.
 still = []
-# The ABI 1.5 probe of P0a (`src/p0a.rs`): dialogs, the composer and a styled box.
+# The probe of P0a (`src/p0a.rs`): dialogs, the composer and a styled box.
 p0a = []
 # Adds `/p0btitle`, which sets the terminal title, and `/p0brun <shell command>`, which runs it in the foreground and
 # toasts how it ended, for the P-PTY scenarios `P.0b/*`.
@@ -30,22 +30,11 @@ pty = []
 # A static constructor that appends a line to `opencode-sample-witness-<pid>` in the temp directory as the library
 # loads, before any of its code is called: the TUI's approval test sees whether the library was mapped at all.
 witness = []
-# Builds that pretend to target another ABI version, for the version tests.
-abi-1-0 = []
+# Builds that pretend to target another ABI version, or require what no host has, for the version tests.
 minor-newer = []
 major-3 = []
-# This crate's plugin as one of ABI 1.6, through the entry of ABI 1.
-abi-1-6 = []
 requires-future = []
-requires-1-5 = []
-requires-1-6 = []
 requires-feature = []
-# A 1.3 plugin (`src/v1_3.rs`) on the frozen 1.3 ABI crate, for the version tests.
-abi-1-3 = ["dep:abi-1-3"]
-# The same 1.3 plugin exported with the 1.0 table, without `describe`: the old wire behind the shortest table.
-abi-1-0-wire = ["abi-1-3"]
-# A 1.4 plugin (`src/v1_4.rs`) on the frozen 1.4 ABI crate, for the version tests.
-abi-1-4 = ["dep:abi-1-4"]
 # This plugin as it is, on the frozen 2.0 SDK crate of before the contract 2.x additions, built without `current`
 # (`--no-default-features`): a plugin built against the 2.0 of then.
 abi-2-0 = ["dep:abi-2-0"]
@@ -53,8 +42,6 @@ abi-2-0 = ["dep:abi-2-0"]
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi", optional = true }
 serde_json = "1"
-abi-1-3 = { package = "opencode-plugin-abi-1-3", path = "abi-1-3", optional = true }
-abi-1-4 = { package = "opencode-plugin-abi-1-4", path = "abi-1-4", optional = true }
 abi-2-0 = { package = "opencode-plugin-abi-2-0", path = "abi-2-0", optional = true }
 
 [workspace]

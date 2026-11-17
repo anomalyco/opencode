@@ -5,14 +5,9 @@
 //!
 //! The fences ([`fence`]), the sidebar claim ([`slot`]), the home claims with their event handler ([`home`]), a
 //! server request with a live panel ([`fetch`]), and a prompt footer claim whose mounts fetch ([`prompt`]) are on
-//! the one API of ABI 1.4; with the `reads` option, the small reads and verbs of ABI 1.6 ([`reads`]). The slot rows
-//! and the route are still the 1.3 surface. Callbacks reach the host only
-//! through the host they are called with. The `abi-1-3` feature builds [`v1_3`] instead: a plugin written against ABI
-//! 1.3, on a frozen copy of that crate; `abi-1-0-wire` exports it with the 1.0 table. The `abi-1-4` feature builds
-//! [`v1_4`], a plugin written against ABI 1.4 on a frozen copy of that crate. The `abi-2-0` feature, without the default
-//! `current`, builds this source as it is on a frozen copy of the 2.0 crate of before the contract 2.x additions.
-
-#![cfg_attr(any(feature = "abi-1-3", feature = "abi-1-4"), allow(dead_code, unused_imports))]
+//! the one API; with the `reads` option, the small reads and verbs ([`reads`]). Callbacks reach the host only
+//! through the host they are called with. The `abi-2-0` feature, without the default `current`, builds this source as
+//! it is on a frozen copy of the 2.0 crate of before the contract 2.x additions.
 
 // The `abi-2-0` build: the same source on the frozen 2.0 SDK crate of before the contract 2.x additions, under the name
 // the source uses, with no current SDK beside it.
@@ -46,10 +41,6 @@ mod p0a;
 mod prompt;
 mod reads;
 mod slot;
-#[cfg(feature = "abi-1-3")]
-mod v1_3;
-#[cfg(feature = "abi-1-4")]
-mod v1_4;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -58,10 +49,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use opencode_plugin_abi::{
-    Command, Line, Node, Placement, Read, Render, Setup, SlotKind, Span, ThemeMode, Toast, Variant, Waker,
-    export_plugin, plugin,
-};
+use opencode_plugin_abi::{Command, Node, Placement, Read, Render, Setup, Span, ThemeMode, Toast, Variant, Waker};
 use serde_json::json;
 
 #[cfg(feature = "p0a")]
@@ -99,6 +87,15 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         host.toast(Toast::new(Variant::Success, format!("Hello from sample {VERSION} ({count})")));
     });
     setup.command(command("sample.open", "Open the sample route", Some("sample")), |host, _| host.open_route("hello"));
+    // Storage takes arrays too: the command shows what it read, then what it stored.
+    setup.storage_key("list");
+    setup.command(command("sample.list", "Store a list", None).with_palette(false), |host, _| {
+        let shown = |value: Option<serde_json::Value>| value.map_or_else(String::new, |value| value.to_string());
+        let before = shown(host.storage_get("list"));
+        host.storage_set("list", json!([1, 2]));
+        let after = shown(host.storage_get("list"));
+        host.toast(Toast::new(Variant::Success, format!("list {before} then {after}")));
+    });
     setup
         .command(command("sample.panic", "Panic in the sample plugin", None), |_, _| panic!("sample command panicked"));
     fence::setup(setup)?;
@@ -120,7 +117,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         });
     }
     // Ticks every `tick_ms` (a second by default), `ticks` times (no limit by default), on a host that offers a
-    // waker (ABI 1.3).
+    // waker.
     let option = |name: &str| {
         setup
             .options()
@@ -134,17 +131,17 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .filter(|_| !cfg!(feature = "still"))
         .map(|waker| Ticker::start(waker, Duration::from_millis(tick), limit, ticks.clone()));
     let shown = hellos.clone();
-    setup.slot_lines(SlotKind::Append, "home.footer", move |_| {
+    setup.slot(Placement::append("home.footer"), move |_, _, _| {
         let _ = &ticker;
         let (hellos, ticks) = (shown.get(), ticks.load(Ordering::Relaxed));
         let text = format!("sample plugin {VERSION}: home.footer, {hellos} hellos, {ticks} ticks");
-        vec![vec![Span::new(text).fg("text.muted")]]
+        Render::Show(Node::text([Span::new(text).fg("text.muted")]))
     });
-    setup.route_lines("hello", move || -> Vec<Line> {
-        vec![
-            vec![Span::new("Sample route hello").bold()],
-            vec![Span::new(format!("said hello {} times", hellos.get())).fg("text.muted")],
-        ]
+    setup.route("hello", move |_, _| {
+        Render::Show(Node::column(vec![
+            Node::text([Span::new("Sample route hello").bold()]),
+            Node::text([Span::new(format!("said hello {} times", hellos.get())).fg("text.muted")]),
+        ]))
     });
     Ok(())
 }
@@ -168,7 +165,7 @@ fn pty(setup: &mut Setup) {
             for _ in 0..times {
                 let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
                 let program = opencode_plugin_abi::Foreground::new("sh").with_args(args);
-                asked.borrow_mut().push(host.foreground(program));
+                asked.borrow_mut().extend(host.try_foreground(program).ok());
             }
         });
     }
@@ -235,44 +232,24 @@ fn count(host: &dyn Read) -> u64 {
 }
 
 #[cfg(not(any(
-    feature = "abi-1-0",
-    feature = "abi-1-4",
-    feature = "abi-1-3",
-    feature = "requires-1-5",
-    feature = "requires-1-6",
-    feature = "abi-1-6",
     feature = "minor-newer",
     feature = "major-3",
     feature = "requires-future",
     feature = "requires-feature"
 )))]
-plugin!(id = "sample", setup);
-
-// Built against ABI 1.0: the shorter table, without `describe`.
-#[cfg(feature = "abi-1-0")]
-export_plugin!(@v1_0 "sample", setup);
-
-// Needs the 1.5 host, as a plugin built around the composer asks.
-#[cfg(feature = "requires-1-5")]
-export_plugin!("sample", setup, requires_minor = 5);
-// Needs the 1.6 host, as a plugin built around its reads asks.
-#[cfg(feature = "requires-1-6")]
-export_plugin!("sample", setup, requires_minor = 6);
-// This plugin as one of ABI 1.6, through the entry of ABI 1.
-#[cfg(feature = "abi-1-6")]
-export_plugin!(@version 1, opencode_plugin_abi::V1_MINOR, 4, "sample", setup);
+opencode_plugin_abi::plugin!(id = "sample", setup);
 
 // Built against a minor version newer than any host, without requiring it.
 #[cfg(feature = "minor-newer")]
-export_plugin!(@version2 2, 99, 0, "sample", setup);
+opencode_plugin_abi::export_plugin!(@version 2, 99, 0, "sample", setup);
 
 #[cfg(feature = "major-3")]
-export_plugin!(@version2 3, 0, 0, "sample", setup);
+opencode_plugin_abi::export_plugin!(@version 3, 0, 0, "sample", setup);
 
-// Needs a host minor version no host has yet, through the public macro: a 2.x minimum, never the entry of ABI 1.
+// Needs a host minor version no host has yet.
 #[cfg(feature = "requires-future")]
-plugin!(id = "sample", requires_minor = 99, setup);
+opencode_plugin_abi::plugin!(id = "sample", requires_minor = 99, setup);
 
 // Needs an optional host feature no host has.
 #[cfg(feature = "requires-feature")]
-plugin!(id = "sample", requires = ["terminal"], setup);
+opencode_plugin_abi::plugin!(id = "sample", requires = ["terminal"], setup);

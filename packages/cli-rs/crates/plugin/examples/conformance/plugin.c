@@ -2,7 +2,7 @@
  * The conformance plugin (Pc) in C, on `crates/plugin-abi/include/opencode_plugin.h` alone: the behavior of
  * `src/conformance.rs`, request for request, so the golden transcripts of `crates/plugin/conformance`, recorded from the
  * Rust source, replay against it. The loader's conformance tests build it with the system's C compiler, with symbols
- * hidden and every warning an error, and `-DCONFORMANCE_V1` exports it as a 1.x library.
+ * hidden and every warning an error.
  *
  * It reads the few fields it needs from a request with a byte search, which holds for the requests the host sends it,
  * and is no way to read JSON in general. Its options, which no transcript uses, switch a fault on: "search-toast" asks
@@ -14,16 +14,6 @@
 #include <string.h>
 
 #include "opencode_plugin.h"
-
-#ifdef CONFORMANCE_V1
-#define MAJOR 1
-#define MINOR 6
-#define REQUIRES 4
-#else
-#define MAJOR OPENCODE_ABI_MAJOR
-#define MINOR OPENCODE_ABI_MINOR
-#define REQUIRES 0
-#endif
 
 typedef struct instance {
     const opencode_host_api *host;
@@ -140,9 +130,9 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
     }
 }
 
-/* Whether the host table has its whole `features` entry: a 2.x table whose size covers the full descriptor. */
+/* Whether the host table has its whole `features` entry: one whose size covers the full descriptor. */
 static int has_features(const opencode_host_api *host) {
-    return host->major >= 2 && host->size >= offsetof(opencode_host_api, features) + sizeof(host->features);
+    return host->size >= offsetof(opencode_host_api, features) + sizeof(host->features);
 }
 
 /* The four hex digits at `at`, or -1. */
@@ -322,7 +312,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
         strncat(manifest, command, sizeof manifest - strlen(manifest) - 1);
     }
     strncat(manifest,
-            "],\"fences\":[],\"slots\":[],\"routes\":[],\"storage\":[\"count\"],\"render\":2,\"wake\":true,"
+            "],\"fences\":[],\"slots\":[],\"routes\":[],\"storage\":[\"count\"],\"wake\":true,"
             "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
             "{\"name\":\"pad\",\"place\":{\"type\":\"route\",\"name\":\"pad\"},\"draw\":true},"
             "{\"name\":\"rows\",\"place\":{\"type\":\"route\",\"name\":\"rows\"},"
@@ -797,15 +787,9 @@ static int32_t describe(opencode_owned *out) {
 }
 
 static const opencode_plugin_api API = {
-    sizeof(opencode_plugin_api), MAJOR, MINOR, REQUIRES, create, call, destroy, release, describe,
+    sizeof(opencode_plugin_api), OPENCODE_ABI_MAJOR, OPENCODE_ABI_MINOR, 0, create, call, destroy, release, describe,
 };
 
-#ifdef CONFORMANCE_V1
-OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v1(void) {
-    return &API;
-}
-#else
 OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void) {
     return &API;
 }
-#endif

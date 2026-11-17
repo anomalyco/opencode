@@ -95,16 +95,19 @@ fn the_sample_registers_a_command_a_fence_a_slot_and_a_route() {
     host.app.advance(Duration::from_millis(1));
     assert_eq!(*host.routes.borrow(), [("sample".to_owned(), "hello".to_owned())]);
 
-    let parent = View::new(host.app());
+    let parent = View::new(host.app()).column();
     let mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     assert!(!mounted.is_empty());
     host.app().root().clear();
     host.app().root().add(&parent);
+    host.app.render();
+    let screen = host.app.text();
+    assert!(screen.contains("sample plugin v1: home.footer"), "{screen}");
+    host.app().root().clear();
     let route = registry.route(&*host, "sample", "hello").unwrap();
     host.app().root().add(&route.root());
     host.app.render();
     let screen = host.app.text();
-    assert!(screen.contains("sample plugin v1: home.footer"), "{screen}");
     assert!(screen.contains("Sample route hello"), "{screen}");
     assert!(screen.contains("said hello 1 times"), "{screen}");
 }
@@ -122,7 +125,7 @@ fn sampled(library: &[u8]) -> Vec<String> {
     host.keymap().dispatch("sample.open", None);
     host.app.advance(Duration::from_millis(1));
     seen.push(format!("{:?} {:?} {:?}", host.toasts.borrow(), host.storage.borrow(), host.routes.borrow()));
-    let parent = View::new(host.app());
+    let parent = View::new(host.app()).column();
     registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
     host.app().root().clear();
     host.app().root().add(&parent);
@@ -169,7 +172,7 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     assert!(screen.contains("SAMPLE v1 BACK"), "{screen}");
 }
 
-// Expected: a plugin reads the host's theme mode (ABI 1.2), which follows the host, not the page background.
+// Expected: a plugin reads the host's theme mode, which follows the host, not the page background.
 #[test]
 fn a_plugin_reads_the_theme_mode() {
     let host = host();
@@ -202,96 +205,9 @@ fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| {
         Native.load(&dynamic(&host()), library, std::path::Path::new("plugin.so"), options).err()
     };
-    // The current build is 2.0. The same source built as a 1.6 plugin loads through the entry of ABI 1, and works.
+    // The current build is 2.0.
     let current = build("");
     assert_eq!(Native.inspect(&current).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
-    let v1_6 = build("abi-1-6");
-    assert_eq!(Native.inspect(&v1_6).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
-    let host = crate::loader::tests::host();
-    let registry = active(&host, &v1_6);
-    let screen = markdown(&host, &registry, "```sample\nsix\n```\n");
-    assert!(screen.contains("SAMPLE v1 SIX"), "{screen}");
-    // A plugin built on the frozen 1.4 crate, from before 1.5, draws its fence and its slot and runs its command.
-    let v1_4 = build("abi-1-4");
-    assert_eq!(Native.inspect(&v1_4).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
-    let fresh = crate::loader::tests::host();
-    let registry = active(&fresh, &v1_4);
-    let screen = markdown(&fresh, &registry, "```sample\nfour\n```\n");
-    assert!(screen.contains("SAMPLE 1.4 FOUR"), "{screen}");
-    let parent = View::new(fresh.app());
-    let _mounted = registry.mount(&*fresh, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    fresh.app().root().clear();
-    fresh.app().root().add(&parent);
-    fresh.app.render();
-    assert!(fresh.app.text().contains("  sample plugin 1.4: home.footer"), "{}", fresh.app.text());
-    assert!(matches!(fresh.keymap().dispatch("sample.hello", None), RunResult::Ok));
-    fresh.app.advance(Duration::from_millis(1));
-    assert_eq!(*fresh.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.4")]);
-    // A 1.0 build has the shorter table and still loads and works.
-    let old = build("abi-1-0");
-    assert_eq!(Native.inspect(&old).unwrap(), Inspected { major: 1, minor: 0, version: None });
-    let host = crate::loader::tests::host();
-    let registry = active(&host, &old);
-    let screen = markdown(&host, &registry, "```sample\nold\n```\n");
-    assert!(screen.contains("SAMPLE v1 OLD"), "{screen}");
-
-    // A plugin built on the frozen 1.3 crate gets the 1.3 requests and draws its rows, its slot and its route.
-    let v1_3 = build("abi-1-3");
-    assert_eq!(Native.inspect(&v1_3).unwrap(), Inspected { major: 1, minor: 3, version: Some("0.1.0".to_owned()) });
-    // A fresh host, so the commands of the plugins above are not in its keymap.
-    let host = crate::loader::tests::host();
-    let registry = active(&host, &v1_3);
-    let screen = markdown(&host, &registry, "```sample\nold\n```\n\n```sample-mode\nx\n```\n");
-    assert!(screen.contains("SAMPLE 1.3 OLD") && screen.contains("sample mode dark, streaming false"), "{screen}");
-    let parent = View::new(host.app());
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    host.app().root().add(&registry.route(&*host, "sample", "hello").unwrap().root());
-    host.app.render();
-    let screen = host.app.text();
-    assert!(screen.contains("sample plugin 1.3: home.footer") && screen.contains("Sample route hello"), "{screen}");
-    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(*host.toasts.borrow(), [abi::Toast::new(abi::Variant::Success, "Hello from sample 1.3")]);
-
-    // The same 1.3 plugin behind the 1.0 table, which has no `describe`, draws the same.
-    let legacy = build("abi-1-0-wire");
-    assert_eq!(Native.inspect(&legacy).unwrap(), Inspected { major: 1, minor: 0, version: None });
-    let host = crate::loader::tests::host();
-    let registry = active(&host, &legacy);
-    let screen = markdown(&host, &registry, "```sample\nold\n```\n");
-    assert!(screen.contains("SAMPLE 1.3 OLD"), "{screen}");
-    let parent = View::new(host.app());
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().clear();
-    host.app().root().add(&parent);
-    host.app.render();
-    assert!(host.app.text().contains("sample plugin 1.3: home.footer"), "{}", host.app.text());
-
-    // A host that serves ABI 1 up to 1.3 refuses this crate's 1.x plugin, which needs the 1.4 render requests.
-    assert_eq!(
-        Library::open(&v1_6, None, 3).err().unwrap(),
-        "plugin needs host ABI 1.4 or newer, this opencode-native has 1.3; update opencode-native"
-    );
-
-    // A 1.x plugin that asks for the 1.5 host with `requires_minor = 5` loads here and is refused by a 1.4 host; one
-    // that asks for 1.6, the last minor of ABI 1, loads here and is refused by a 1.5 host. The form still builds what it
-    // built before 2.0, a table of ABI 1.6 behind `opencode_plugin_v1`, though it warns as deprecated (O-125).
-    let needs = build("requires-1-5");
-    assert_eq!(Native.inspect(&needs).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
-    assert!(Library::open(&needs, None, V1_MINOR).is_ok());
-    assert_eq!(
-        Library::open(&needs, None, 4).err().unwrap(),
-        "plugin needs host ABI 1.5 or newer, this opencode-native has 1.4; update opencode-native"
-    );
-    let needs = build("requires-1-6");
-    assert_eq!(Native.inspect(&needs).unwrap(), Inspected { major: 1, minor: 6, version: Some("0.1.0".to_owned()) });
-    assert!(Library::open(&needs, None, V1_MINOR).is_ok());
-    assert_eq!(
-        Library::open(&needs, None, 5).err().unwrap(),
-        "plugin needs host ABI 1.6 or newer, this opencode-native has 1.5; update opencode-native"
-    );
     // A plugin built against a newer minor version loads and uses what this host offers.
     let newer = build("minor-newer");
     assert_eq!(Native.inspect(&newer).unwrap().minor, 99);
@@ -304,8 +220,8 @@ fn versions_follow_the_abi_rules() {
     // lacks, is refused, with a clear reason.
     assert_eq!(
         load(&build("major-3"), None).unwrap(),
-        "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0) and ABI 1.x \
-         plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2"
+        "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild the plugin \
+         against opencode-plugin-abi 2"
     );
     assert_eq!(
         load(&build("requires-future"), None).unwrap(),
@@ -347,15 +263,6 @@ fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     assert_eq!(stored("destroyed"), None);
     registry.unload(&dynamic(&host), "sample.so");
     assert_eq!(stored("destroyed").as_deref(), Some("{\"destroyed\":true}"));
-
-    // Expected (bigboi-6): a build without `describe` runs setup once to tell its ID; that instance's disposal
-    // stores nothing.
-    let (definition, _) = Native
-        .load(&dynamic(&host), &build("abi-1-0"), std::path::Path::new("plugin.so"), Some("{\"probe\":true}"))
-        .unwrap();
-    assert_eq!(definition.id, "sample");
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(stored("destroyed"), None);
 }
 
 #[test]
@@ -438,18 +345,18 @@ fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
 }
 
 // Expected: a table from a C plugin is refused, without reading past its declared size or through a null or
-// misaligned pointer, when it is too short for its header, misaligned, or leaves a required callback null. A null
-// `destroy` is allowed.
+// misaligned pointer, when it is too short for its header or for the 2.0 table, misaligned, of another major, or leaves
+// a required callback null. A null `destroy` is allowed.
 #[test]
 fn a_malformed_table_is_refused_without_reading_it() {
-    let refused = |api: *const PluginApi| Library::from_table(api, ABI_MAJOR, V1_MINOR).err().unwrap();
+    let refused = |api: *const PluginApi| Library::from_table(api).err().unwrap();
     assert_eq!(refused(std::ptr::null()), "`opencode_plugin_v2` returned no table");
     let short: [usize; 1] = [size_of::<usize>()];
     assert_eq!(refused(short.as_ptr().cast()), "plugin table is 8 bytes, shorter than its version header");
     let bytes = [0u64; 16];
     assert_eq!(refused(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast()), "plugin table is not aligned");
     let null = PluginApi {
-        size: size_of::<PluginApiV1_0>(),
+        size: size_of::<PluginApi>(),
         major: ABI_MAJOR,
         minor: 0,
         requires_minor: 0,
@@ -468,19 +375,26 @@ fn a_malformed_table_is_refused_without_reading_it() {
     let api = PluginApi { call: Some(abi::runtime::call), ..api };
     assert_eq!(refused(&api), "plugin table has a null `free` callback");
     let api = PluginApi { free: Some(abi::runtime::free), ..api };
-    let library = Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap();
-    assert!(library.destroy.is_none() && library.describe.is_none());
-    // A table must carry the major of the entry it came through: 2 through `opencode_plugin_v2`, 1 through `_v1`.
-    let v1 = PluginApi { major: 1, minor: 4, ..api };
-    assert!(
-        Library::from_table(&v1, ABI_MAJOR, V1_MINOR).err().unwrap().starts_with("plugin ABI 1.4 is not supported")
+    assert_eq!(refused(&api), "plugin table has a null `describe` callback");
+    unsafe extern "C" fn describe(_: *mut Owned) -> i32 {
+        abi::ERROR
+    }
+    let api = PluginApi { describe: Some(describe), ..api };
+    assert!(Library::from_table(&api).unwrap().destroy.is_none());
+    // A table of 1.x, though as long, is refused by its major; one shorter than 2.0's by its size.
+    let v1 = PluginApi { major: 1, minor: 6, ..api };
+    assert_eq!(
+        refused(&v1),
+        "plugin ABI 1.6 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild the plugin \
+         against opencode-plugin-abi 2"
     );
-    assert!(Library::from_table(&api, 1, V1_MINOR).err().unwrap().starts_with("plugin ABI 2.0 is not supported"));
-    assert_eq!(Library::from_table(&v1, 1, V1_MINOR).unwrap().major, 1);
+    let size = std::mem::offset_of!(PluginApi, describe);
+    let short = PluginApi { size, ..api };
+    assert_eq!(refused(&short), format!("plugin table is {size} bytes, shorter than the ABI 2.0 table"));
 }
 
-// Expected: a plugin's own thread wakes the host (ABI 1.3), which asks its mounted claim for its rows again without a
-// change batch, and the claim shows what the thread counted.
+// Expected: a plugin's own thread wakes the host, which asks its mounted claim to render again without a change batch,
+// and the claim shows what the thread counted.
 #[test]
 fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
     let host = host();
@@ -935,8 +849,8 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 }
 
-// Expected: a command that panics fails the plugin, and its slot claims, of 1.3 rows and of the one API, draw empty
-// once the key is handled, with a toast that says so.
+// Expected: a command that panics fails the plugin, and its slot claims draw empty once the key is handled, with a toast
+// that says so.
 #[test]
 fn a_panic_clears_the_plugins_claims() {
     let host = host();
@@ -1046,8 +960,6 @@ fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
 
 /// The sample's server request and live panel, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/fetch.rs"]
-// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
-#[allow(deprecated)]
 mod sample_fetch;
 
 /// The sample's fetch row before and after the reply, the fetches it sent, and the panels it showed, as `registry` has
@@ -1146,8 +1058,6 @@ fn a_slow_reply_across_a_disable_delivers_nothing() {
 
 /// The sample's prompt footer claim, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/prompt.rs"]
-// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
-#[allow(deprecated)]
 mod sample_prompt;
 
 /// The sample's prompt row as `registry` mounts `prompt.footer` for `ses_1`: as mounted, after its fetch is answered,
@@ -1216,10 +1126,8 @@ fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_l
     assert_eq!(prompted(&host, &library), direct);
 }
 
-/// The sample's reads and verbs of ABI 1.6, compiled in rather than loaded.
+/// The sample's small reads and verbs, compiled in rather than loaded.
 #[path = "../../../examples/sample/src/reads.rs"]
-// Its source is a 1.x plugin's, which calls the 1.x `fetch` and `foreground` (O-154).
-#[allow(deprecated)]
 mod sample_reads;
 
 /// A text delta, as the server streams one.
@@ -1233,7 +1141,7 @@ fn text_delta(delta: &str) -> abi::types::V2Event {
     .unwrap()
 }
 
-/// What 1.6 shows and asks for through `registry`: the sample's reads row in `home.footer` as it mounts, once a frame
+/// What the small reads and verbs show and ask for through `registry`: the sample's reads row in `home.footer` as it mounts, once a frame
 /// laid it out, after two deltas, and after its verbs command; then the verbs the host ran, the toasts and the dialogs.
 type Verbed = (Vec<String>, Vec<String>, Vec<String>, Vec<(String, abi::Dialog)>);
 
@@ -1268,7 +1176,7 @@ fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
 // run once it returns, in order, those that answer `false` not at all, and a program's exit code comes back as a
 // reply. The same in process and from the library, where every read and verb crosses the C ABI.
 #[test]
-fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
+fn the_small_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     let host = host();
     let in_process = Registry::define(vec![abi::Plugin { id: "sample", setup: sample_reads::setup }.into()], []);
     in_process.activate(&dynamic(&host));
@@ -1309,21 +1217,10 @@ fn the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     library.load(&dynamic(&host), definition.external("sample.so", error));
     assert_eq!(status(&library), Status::Active);
     assert_eq!(verbed(&host, &library), direct);
-    library.set_active(&dynamic(&host), "sample", false);
-
-    // A library of ABI 1.6, on this host of ABI 2.0, gets the same (the restack onto P0a and P0b).
-    let (definition, error) = Native
-        .load(&dynamic(&host), &build("still,abi-1-6"), std::path::Path::new("plugin.so"), Some(r#"{"reads":true}"#))
-        .unwrap();
-    let v1_6 = Registry::define(Vec::new(), []);
-    v1_6.load(&dynamic(&host), definition.external("sample.so", error));
-    assert_eq!(status(&v1_6), Status::Active);
-    assert_eq!(verbed(&host, &v1_6), direct);
 }
 
-// Expected (the restack, review bigboi-4): a library is served its own major and no more: a table of ABI 1 may require
-// up to 1.6, one of ABI 2 up to 2.0, and a table of one major behind the other's entry is refused. A 1.x instance's
-// host table ends before the entries of 2.0 (`the_host_table_states_its_version_and_features`).
+// Expected (the restack, review bigboi-4, O-169): a library of ABI 2 may require up to 2.0, and a table of another
+// major, 1 as 3, is refused, whatever it requires.
 #[test]
 fn the_version_gate_is_exact() {
     let table = |major: u32, minor: u32, requires_minor: u32| PluginApi {
@@ -1335,20 +1232,17 @@ fn the_version_gate_is_exact() {
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe: None,
+        describe: Some(abi::export_plugin!(@loopback_described "gate", first).1),
     };
-    let open = |api: PluginApi, entry: u32| {
-        Library::from_table(&api, entry, V1_MINOR).map(|library| (library.major, library.minor, library.served))
-    };
-    assert_eq!(open(table(1, 6, 6), 1), Ok((1, 6, 6)));
-    assert_eq!(open(table(1, 4, 4), 1), Ok((1, 4, 6)));
-    let newer = "plugin needs host ABI 1.7 or newer, this opencode-native has 1.6; update opencode-native";
-    assert_eq!(open(table(1, 7, 7), 1), Err(newer.to_owned()));
-    assert_eq!(open(table(2, 0, 0), 2), Ok((2, 0, 0)));
+    let open = |api: PluginApi| Library::from_table(&api).map(|library| (library.major, library.minor));
+    assert_eq!(open(table(2, 0, 0)), Ok((2, 0)));
+    assert_eq!(open(table(2, 7, 0)), Ok((2, 7)));
     let newer = "plugin needs host ABI 2.1 or newer, this opencode-native has 2.0; update opencode-native";
-    assert_eq!(open(table(2, 1, 1), 2), Err(newer.to_owned()));
-    assert!(open(table(2, 0, 0), 1).unwrap_err().starts_with("plugin ABI 2.0 is not supported"));
-    assert!(open(table(1, 6, 4), 2).unwrap_err().starts_with("plugin ABI 1.6 is not supported"));
+    assert_eq!(open(table(2, 1, 1)), Err(newer.to_owned()));
+    for (major, minor, requires) in [(1, 6, 6), (1, 4, 0), (0, 0, 0), (3, 0, 0)] {
+        let refused = open(table(major, minor, requires)).unwrap_err();
+        assert!(refused.starts_with(&format!("plugin ABI {major}.{minor} is not supported")), "{refused}");
+    }
 }
 
 thread_local! {
@@ -1485,7 +1379,7 @@ fn counted(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a route renders once as it mounts and is laid out: it has no size of its own to read (1.6 `sized` is for
+// Expected: a route renders once as it mounts and is laid out: it has no size of its own to read (`sized` is for
 // slot claims), so its layout renders nothing more. On both paths.
 #[test]
 fn a_route_renders_once_for_its_layout() {
@@ -1774,8 +1668,8 @@ fn lifecycled(
                 free: Some(abi::runtime::free),
                 describe: Some(describe),
             };
-            let library = Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap();
-            let (definition, error) = define(&dynamic(&host), library, None).unwrap();
+            let library = Library::from_table(&api).unwrap();
+            let (definition, error) = define(library, None).unwrap();
             registry.load(&dynamic(&host), definition.external("lifecycle.so", error));
         }
         false => {
@@ -1870,8 +1764,8 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
     (root, target, registry, loader)
 }
 
-const MAJOR_3: &str = "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0) and ABI \
-                       1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2";
+const MAJOR_3: &str = "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild \
+                       the plugin against opencode-plugin-abi 2";
 
 // Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
 // load failure does, and is failed and not active, so the manager offers to enable it; a broken rebuild then replaces
@@ -2033,7 +1927,7 @@ fn leak(host: &dyn abi::Host, at: &str) {
     host.open_route("r");
     let _ = host.try_fetch(abi::Fetch::default().with_method("GET".into()).with_path("/leaked".into()));
     host.dialog(abi::Dialog::Close { key: "leaked".into() });
-    // 1.6
+    // The small verbs.
     host.set_variant(Some("high"));
     host.set_model("opencode", "small");
     host.edit_tab(abi::TabEdit::Focus { session: "ses_1".into() });
@@ -2142,14 +2036,13 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
         free: Some(abi::runtime::free),
         describe: Some(describe),
     };
-    let (definition, error) =
-        define(&dynamic(host), Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     registry.load(&dynamic(host), definition.external("panicky.so", error));
     registry
 }
 
 /// What a host saw of the plugin's effects, without the failure toast: toasts, attention, routes, fetches, dialogs,
-/// storage, and the verbs of 1.6.
+/// storage, and the small verbs.
 type Seen = (Vec<String>, usize, Vec<(String, String)>, Vec<String>, usize, Vec<(String, String)>, Vec<String>);
 
 /// What the host lists of the plugin, how many failure toasts it showed, and whether the plugin's command still runs.
@@ -2213,7 +2106,7 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
     (seen, (entry, failed, command))
 }
 
-// Expected (property `ledger`, a 1.6 registration): a plugin's deltas and event handlers are held while it is active
+// Expected (property `ledger`, the deltas' registration): a plugin's deltas and event handlers are held while it is active
 // and gone once it is disabled, or once a call of it panicked (reviews bigboi-6, carbon-8), on both paths, so the
 // host keeps no deltas for it and it hears none after.
 #[test]
@@ -2267,7 +2160,7 @@ fn a_call_that_panics_has_no_effects() {
             assert_eq!((entry.status, failed, command), (Status::Active, 0, true), "{case}");
             let (leaked, _) = panicky_run(at, (at, false), through);
             assert_eq!(leaked != quiet, effects, "{case}: {leaked:?}");
-            // Every 1.6 verb ran without the panic, so the comparison covers each.
+            // Every small verb ran without the panic, so the comparison covers each.
             assert_eq!(leaked.6.len(), if effects { 8 } else { 0 }, "{case}: {:?}", leaked.6);
             let (panicked, (entry, failed, command)) = panicky_run(at, (at, true), through);
             assert_eq!(panicked, quiet, "{case}");
@@ -2317,6 +2210,17 @@ impl Table {
     }
 }
 
+/// The `describe` of a plugin without the SDK, which names `$id`.
+macro_rules! describe {
+    ($id:literal) => {{
+        unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
+            // SAFETY: the loader passes what `PluginApi::describe` documents.
+            unsafe { abi::runtime::describe($id, "0.1.0", &[], out) }
+        }
+        describe as unsafe extern "C" fn(*mut Owned) -> i32
+    }};
+}
+
 // Expected (carbon-p0a-2): a C plugin that calls the host's `call` or `theme_mode` from a thread of its own is refused
 // with an error, and gets dark, touching nothing of the host; its requests change nothing, and the same requests from
 // the UI thread are served. In process a `&dyn Host` cannot reach another thread (the doctest on `abi::Host`).
@@ -2326,16 +2230,16 @@ fn a_host_call_from_another_thread_is_refused() {
     host.mode.set(ThemeMode::Light);
     let api = PluginApi {
         size: size_of::<PluginApi>(),
-        major: 1,
-        minor: V1_MINOR,
-        requires_minor: 4,
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
         create: Some(catching),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe: None,
+        describe: Some(describe!("threads")),
     };
-    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("threads.so", error));
     let table = Table(CAUGHT.get());
@@ -2356,26 +2260,25 @@ fn a_host_call_from_another_thread_is_refused() {
     assert!(host.edits.borrow().is_empty());
 }
 
-// Expected (carbon-5, after P0a's check): each read and verb of 1.6 that a C plugin sends from a thread of its own is
+// Expected (carbon-5, after P0a's check): each small read and verb that a C plugin sends from a thread of its own is
 // refused with an error, as every host call is there, and touches nothing; from the UI thread each is served. In
 // process a `&dyn Host` or `&dyn Read` cannot reach another thread (the doctests on `abi::Host` and `abi::Read`).
 #[test]
-fn a_1_6_host_call_from_another_thread_is_refused() {
+fn a_read_or_verb_from_another_thread_is_refused() {
     let host = host();
     let api = PluginApi {
         size: size_of::<PluginApi>(),
-        major: 1,
-        minor: V1_MINOR,
-        requires_minor: 4,
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
         create: Some(catching),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe: None,
+        describe: Some(describe!("threads")),
     };
     let load = |registry: &Registry| {
-        let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+        let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
         registry.load(&dynamic(&host), definition.external("threads.so", error));
         Table(CAUGHT.get())
     };
@@ -2428,20 +2331,20 @@ fn a_1_6_host_call_from_another_thread_is_refused() {
 thread_local! {
     /// The host table of the last `raw` instance.
     static RAW_HOST: Cell<*mut HostApi> = const { Cell::new(std::ptr::null_mut()) };
-    /// How the raw render answers: 0 with `hide`, 1 with a result the host refuses, 2 with `hide` and no effects asked
-    /// for.
+    /// How the raw render and command answer: 0 with `hide` or `null`, 1 with a result the host refuses, 2 with `hide`
+    /// and no effects asked for.
     static RAW_MODE: Cell<u8> = const { Cell::new(0) };
     /// The statuses the host answered the raw render's requests with.
     static RAW_STATUSES: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) };
-    /// Each fence render takes 150 ms on [`RAW_NOW`], the clock a test gives the monitor.
+    /// Each command takes 150 ms on [`RAW_NOW`], the clock a test gives the monitor.
     static RAW_LATE: Cell<bool> = const { Cell::new(false) };
     static RAW_NOW: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
-/// A plugin written against the C ABI without the SDK: one 1.4 slot claim and one storage key.
+/// A plugin written against the C ABI without the SDK: one slot claim, one command and one storage key.
 unsafe extern "C" fn raw_create(host: *const HostApi, _: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32 {
     RAW_HOST.set(host.cast_mut());
-    let manifest = r#"{"id":"raw","commands":[],"fences":[],"slots":[{"kind":"append","path":"home.footer","render":true}],"routes":[],"storage":["k"],"render":2}"#;
+    let manifest = r#"{"id":"raw","commands":[{"name":"raw.ask","title":"Ask","group":null,"slash":null,"keybind":null,"palette":false}],"fences":[],"slots":[{"kind":"append","path":"home.footer"}],"routes":[],"storage":["k"]}"#;
     // SAFETY: the loader passes valid pointers; the instance pointer is never read.
     unsafe {
         *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
@@ -2456,13 +2359,13 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
     // SAFETY: the loader passes the request for the call.
     let request = String::from_utf8_lossy(unsafe { request.as_slice() }).into_owned();
     let mode = RAW_MODE.get();
-    // A 1.3 fence render, which may ask for effects: they apply with a result the host draws, not with one it refuses.
-    if request.contains(r#""type":"fence""#) {
+    // A command, which may ask for effects: they apply with a result the host takes, not with one it refuses.
+    if request.contains(r#""type":"command""#) {
         if RAW_LATE.get() {
             RAW_NOW.set(RAW_NOW.get() + Duration::from_millis(150));
         }
         let table = Table(RAW_HOST.get());
-        table.call(r#"{"type":"toast","variant":"info","message":"from a fence"}"#);
+        table.call(r#"{"type":"toast","variant":"info","message":"from a command"}"#);
         table.call(r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#);
         let answer = if mode == 1 { r#"{"nonsense":1}"# } else { "null" };
         // SAFETY: `out` is valid for writes during the call.
@@ -2478,7 +2381,7 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
                     r#"{"type":"toast","variant":"info","message":"from a render"}"#,
                     r#"{"type":"dialog","dialog":{"type":"alert","title":"T","message":"M"}}"#,
                     r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#,
-                    // 1.6 (review bigboi-13).
+                    // The small verbs (review bigboi-13).
                     r#"{"type":"set-variant","variant":"high"}"#,
                     r#"{"type":"set-model","provider":"p","model":"m"}"#,
                     r#"{"type":"tab","edit":{"type":"focus","session":"ses_1"}}"#,
@@ -2492,7 +2395,7 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
                 ];
                 let statuses = asks.iter().map(|ask| table.call(ask).0);
                 RAW_STATUSES.with_borrow_mut(|known| known.extend(statuses));
-                // A read of 1.6 is answered.
+                // A small read is answered.
                 assert_eq!(table.call(r#"{"type":"variants"}"#).0, abi::OK);
             }
             if mode == 1 { r#"{"type":"nonsense"}"# } else { r#"{"type":"hide"}"# }
@@ -2515,17 +2418,16 @@ fn a_render_that_asks_for_effects_gets_none() {
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
-            major: 1,
-            minor: V1_MINOR,
-            requires_minor: 4,
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
+            requires_minor: 0,
             create: Some(raw_create),
             call: Some(raw_call),
             destroy: None,
             free: Some(abi::runtime::free),
-            describe: None,
+            describe: Some(describe!("raw")),
         };
-        let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+        let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         registry.load(&dynamic(&host), definition.external("raw.so", error));
         let parent = View::new(host.app());
@@ -2592,16 +2494,16 @@ fn a_librarys_command_may_scroll_the_transcript() {
     let host = host();
     let api = PluginApi {
         size: size_of::<PluginApi>(),
-        major: 1,
-        minor: V1_MINOR,
-        requires_minor: 4,
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
         create: Some(tx_create),
         call: Some(tx_call),
         destroy: None,
         free: Some(abi::runtime::free),
-        describe: None,
+        describe: Some(describe!("tx")),
     };
-    let (definition, error) = define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("tx.so", error));
     TX_STATUS.set(None);
@@ -2609,59 +2511,10 @@ fn a_librarys_command_may_scroll_the_transcript() {
     assert_eq!(TX_STATUS.get(), Some(abi::OK));
 }
 
-/// The raw plugin as a 1.3 plugin with one fence, `raw`.
-unsafe extern "C" fn raw_create_1_3(
-    host: *const HostApi,
-    _: Bytes,
-    instance: *mut *mut c_void,
-    out: *mut Owned,
-) -> i32 {
-    RAW_HOST.set(host.cast_mut());
-    let manifest = r#"{"id":"raw","commands":[],"fences":["raw"],"slots":[],"routes":[],"storage":["k"]}"#;
-    // SAFETY: the loader passes valid pointers; the instance pointer is never read.
-    unsafe {
-        *instance = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-        *out = Owned::from_vec(manifest.as_bytes().to_vec());
-    }
-    abi::OK
-}
-
-// Expected (bigboi 8): a 1.3 fence render may ask for effects; they apply when the host draws its answer, and when it
-// refuses the answer nothing of them happens and the storage it wrote is put back. The refusal fails the plugin, as an
-// answer the host cannot decode does on every major (P4, O-135): its toast is the one left.
-#[test]
-fn a_refused_render_result_leaves_no_effects() {
-    let outcome = |mode: u8| {
-        RAW_MODE.set(mode);
-        let host = host();
-        let api = PluginApi {
-            size: size_of::<PluginApi>(),
-            major: 1,
-            minor: 3,
-            requires_minor: 0,
-            create: Some(raw_create_1_3),
-            call: Some(raw_call),
-            destroy: None,
-            free: Some(abi::runtime::free),
-            describe: None,
-        };
-        let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
-        let registry = Registry::define(Vec::new(), []);
-        registry.load(&dynamic(&host), definition.external("raw.so", error));
-        markdown(&host, &registry, "```raw\nx\n```\n");
-        host.app.advance(Duration::from_millis(1));
-        let toasts: Vec<_> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
-        (toasts, host.storage.borrow().get("plugin.raw.k").cloned())
-    };
-    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned())));
-    assert_eq!(outcome(1), (vec!["Run /plugins to view details.".to_owned()], None));
-}
-
-// Expected (bigboi): a late call's result is checked before its effects apply. A 1.3 fence render that returned a
-// result the host draws applies its effects, then, having overrun, fails the plugin; the first render after setup is
-// exempt, so the fence renders twice. One that returned a result the host refuses asks for nothing that happens, its
-// storage write goes back, and the plugin fails by the refusal (P4, O-135) at the first render, before any overrun.
+// Expected (bigboi): a late call's result is checked before its effects apply. A command that returned a result the
+// host takes applies its effects, then, having overrun, fails the plugin; the first call after setup is exempt, so the
+// command runs twice. One that returned a result the host refuses asks for nothing that happens, its storage write goes
+// back, and the plugin fails by the refusal (P4, O-135) at the first call, before any overrun.
 #[test]
 fn a_late_refused_result_leaves_no_effects() {
     let outcome = |mode: u8| {
@@ -2670,28 +2523,27 @@ fn a_late_refused_result_leaves_no_effects() {
         let host = host();
         let api = PluginApi {
             size: size_of::<PluginApi>(),
-            major: 1,
-            minor: 3,
+            major: ABI_MAJOR,
+            minor: ABI_MINOR,
             requires_minor: 0,
-            create: Some(raw_create_1_3),
+            create: Some(raw_create),
             call: Some(raw_call),
             destroy: None,
             free: Some(abi::runtime::free),
-            describe: None,
+            describe: Some(describe!("raw")),
         };
-        let (definition, error) =
-            define(&dynamic(&host), Library::from_table(&api, 1, V1_MINOR).unwrap(), None).unwrap();
+        let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         let base = std::time::Instant::now();
         registry.monitor().set_clock(move || base + RAW_NOW.get());
         registry.load(&dynamic(&host), definition.external("raw.so", error));
         for _ in 0..2 {
             host.toasts.borrow_mut().clear();
-            markdown(&host, &registry, "```raw\nx\n```\n");
+            host.keymap().dispatch("raw.ask", None);
             host.app.advance(Duration::from_millis(1));
         }
         RAW_LATE.set(false);
-        // The fence's own toasts; the failure has its own.
+        // The command's own toasts; the failure has its own.
         let toasts: Vec<_> = host
             .toasts
             .borrow()
@@ -2701,107 +2553,14 @@ fn a_late_refused_result_leaves_no_effects() {
             .collect();
         let status = registry.entries().into_iter().find(|entry| entry.id == "raw").unwrap().status;
         let cause = match &status {
-            Status::Failed(error) if error.starts_with("render-fence took 150 ms") => "overrun",
-            Status::Failed(error) if error.starts_with("render-fence returned a bad result") => "refused",
+            Status::Failed(error) if error.starts_with("run-command took 150 ms") => "overrun",
+            Status::Failed(error) if error.starts_with("run-command returned a bad result") => "refused",
             _ => "none",
         };
         (toasts, host.storage.borrow().get("plugin.raw.k").cloned(), cause)
     };
-    assert_eq!(outcome(0), (vec!["from a fence".to_owned()], Some("{\"a\":1}".to_owned()), "overrun"));
+    assert_eq!(outcome(0), (vec!["from a command".to_owned()], Some("{\"a\":1}".to_owned()), "overrun"));
     assert_eq!(outcome(1), (Vec::new(), None, "refused"));
-}
-
-/// What the frozen 1.4 host saw: the type of each request it decoded, and `refused` for each it could not.
-static OLD_SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
-
-/// A 1.4 host's `call`: it decodes each request with the frozen 1.4 types, as a 1.4 host does, answers one it cannot
-/// decode with an error, and the rest with `null`.
-unsafe extern "C" fn old_host_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-    // SAFETY: the plugin passes the request for the call.
-    let bytes = unsafe { request.as_slice() };
-    let (status, reply, seen) = match serde_json::from_slice::<opencode_plugin_abi_1_4::HostRequest>(bytes) {
-        Ok(request) => {
-            let json = serde_json::to_value(&request).unwrap();
-            (abi::OK, b"null".to_vec(), format!("{} {}", json["type"].as_str().unwrap(), json["message"]))
-        }
-        Err(error) => (abi::ERROR, error.to_string().into_bytes(), "refused".to_owned()),
-    };
-    OLD_SEEN.lock().unwrap().push(seen);
-    // SAFETY: `out` is valid for writes during the call.
-    unsafe { *out = Owned::from_vec(reply) };
-    status
-}
-
-unsafe extern "C" fn old_host_free(owned: Owned) {
-    // SAFETY: `old_host_call` made it with `Owned::from_vec`.
-    drop(unsafe { owned.into_vec() });
-}
-
-// Expected (bigboi 10): the 1.5 sample library loads on a 1.4 host, which accepts its minimum minor; that host refuses
-// its 1.5 requests (a confirm, an alert, a composer edit and read) with an error, decodes its other requests, and draws
-// its 1.5 box without the 1.5 properties, which the 1.4 types do not read.
-#[test]
-fn a_1_5_library_gets_what_a_1_4_host_offers() {
-    use opencode_plugin_abi_1_4 as old;
-    // The probe as a library of ABI 1.x, which a 1.4 host can load.
-    let library = Library::open(&build("p0a,abi-1-6"), None, 4).unwrap();
-    let api = HostApi {
-        size: size_of::<HostApi>(),
-        major: 1,
-        minor: 4,
-        ctx: std::ptr::null_mut(),
-        call: Some(old_host_call),
-        free: Some(old_host_free),
-        theme_mode: None,
-        wake: None,
-        send: None,
-        report: None,
-        stopped: None,
-        features: Bytes::new(&[]),
-    };
-    let call = |handle: *mut c_void, request: &old::Request| {
-        let json = serde_json::to_vec(request).unwrap();
-        let mut out = Owned::EMPTY;
-        // SAFETY: `handle` is live, and `out` goes back to the library's `free`.
-        unsafe {
-            let status = (library.call)(handle, Bytes::new(&json), &mut out);
-            let bytes = out.to_vec();
-            (library.free)(out);
-            (status, bytes)
-        }
-    };
-    let (mut handle, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
-    // SAFETY: the pointers are valid for the call, and `api` outlives the instance.
-    let (status, manifest) = unsafe {
-        let status = (library.create)(&api, Bytes::new(b""), &mut handle, &mut out);
-        let bytes = out.to_vec();
-        (library.free)(out);
-        (status, bytes)
-    };
-    assert_eq!(status, abi::OK, "{}", String::from_utf8_lossy(&manifest));
-    let manifest: old::Manifest = serde_json::from_slice(&manifest).unwrap();
-    OLD_SEEN.lock().unwrap().clear();
-    for name in ["p0a.confirm", "p0a.alert", "p0a.set", "p0a.read"] {
-        let request = old::Request::Command { name: name.to_owned(), input: Some("x".to_owned()) };
-        assert_eq!(call(handle, &request).0, abi::OK, "{name}");
-    }
-    let seen = std::mem::take(&mut *OLD_SEEN.lock().unwrap());
-    assert_eq!(seen, ["refused", "refused", "refused", "refused", "toast \"no composer\""]);
-    // The probe's box, the last claim of the home footer that renders.
-    let claim = manifest.slots.iter().rposition(|claim| claim.render && claim.path == "home.footer").unwrap();
-    let request = old::Request::Render { claim, input: old::SlotInput::default(), changed: old::Changed::everything() };
-    let (status, render) = call(handle, &request);
-    assert_eq!(status, abi::OK);
-    let json: serde_json::Value = serde_json::from_slice(&render).unwrap();
-    assert!(json["node"]["border"].is_object(), "{json}");
-    let old::Render::Show(old::Node::Box { children, .. }) = serde_json::from_value(json).unwrap() else {
-        panic!("not a box");
-    };
-    assert_eq!(children.len(), 2);
-    if let Some(destroy) = library.destroy {
-        // SAFETY: `handle` came from `create` and is destroyed once.
-        unsafe { destroy(handle) };
-    }
 }
 
 thread_local! {
@@ -3216,20 +2975,17 @@ fn a_plugin_written_in_c_against_the_header_runs() {
     assert!(screen.contains("drawn in C, 1 messages"), "{screen}");
 }
 
-// Expected (reviews bigboi-4, carbon-2): the same plugin built as a 1.4 library is served 1.4 exactly: its table ends
-// before `send`, so it sends nothing, and the surface and messages its manifest declares are ignored, so its route does
-// not exist; its command runs.
+// Expected (O-169): the same plugin built as a 1.4 library, which exports `opencode_plugin_v1` alone, is refused at load
+// and at inspection by its major, with the reason, not as a file that is no plugin; its entry is never called.
 #[cfg(unix)]
 #[test]
-fn a_1_4_library_gets_nothing_of_2_0() {
+fn a_1_x_library_is_refused_by_its_major() {
     let Some(library) = c_plugin(&["OPENCODE_AS_V1"]) else { return };
-    assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 1, minor: 4, version: Some("0.1.0".to_owned()) });
-    let (host, registry) = c_active(&library, "");
-    assert_eq!(entry(&registry.entries(), "c.so").status, Status::Active);
-    assert!(matches!(host.keymap().dispatch("c.hello", None), RunResult::Ok));
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(toasts(&host), ["hello from C"]);
-    assert!(c_route(&host, &registry).is_none(), "a 1.4 library mounted a 2.0 surface");
+    let refused = "plugin ABI 1.x is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild \
+                   the plugin against opencode-plugin-abi 2";
+    assert_eq!(Native.inspect(&library).err().unwrap(), refused);
+    let error = Native.load(&dynamic(&host()), &library, std::path::Path::new("plugin.so"), None).err().unwrap();
+    assert_eq!(error, refused);
 }
 
 // Expected (review bigboi-4): a 2.x library whose `describe` answers what the host cannot read is refused before any
@@ -3371,19 +3127,16 @@ fn a_library_macos_refuses_says_why() {
     }
 }
 
-// Expected (reviews carbon-2, carbon-7): the host's table states the version it serves the library's major, and offers
-// the 2.0 entries and its features to a 2.x library only.
+// Expected (reviews carbon-2, carbon-7): the host's table states the version it serves, and offers every entry and its
+// features.
 #[test]
 fn the_host_table_states_its_version_and_features() {
-    let table = host_table(2, HOST_MINOR, std::ptr::null_mut());
+    let table = host_table(std::ptr::null_mut());
     assert_eq!((table.major, table.minor, table.size), (2, HOST_MINOR, size_of::<HostApi>()));
     assert!(table.send.is_some() && table.report.is_some() && table.stopped.is_some());
     // SAFETY: the table's features are the host's static list.
     let features: Vec<String> = serde_json::from_slice(unsafe { table.features.as_slice() }).unwrap();
     assert_eq!(features, abi::FEATURES);
-    let table = host_table(1, V1_MINOR, std::ptr::null_mut());
-    assert_eq!((table.major, table.minor, table.size), (1, V1_MINOR, offset_of!(HostApi, send)));
-    assert!(table.send.is_none() && table.report.is_none() && table.stopped.is_none() && table.features.len == 0);
 }
 
 // Expected (review carbon-6): a load names the file the user gave, not the copy the host opened, and on Windows the
@@ -3393,7 +3146,7 @@ fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
     let dir = opencode_util::temp::tempdir().unwrap();
     let source = dir.path().join("plugin.so");
     std::fs::write(&source, b"not a library").unwrap();
-    let error = Library::open(b"not a library", Some((&source, None)), V1_MINOR).err().unwrap();
+    let error = Library::open(b"not a library", Some((&source, None))).err().unwrap();
     assert!(error.contains(&*source.to_string_lossy()), "{error}");
     // The source's own directory is a temporary one too; the copy's is not named.
     assert_eq!(error.matches(".tmp-").count(), 1, "{error}");
@@ -3443,8 +3196,7 @@ fn a_refused_manifest_leaves_no_effect() {
         free: Some(abi::runtime::free),
         describe: Some(describe),
     };
-    let (definition, error) =
-        define(&dynamic(&host), Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap(), None).unwrap();
+    let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("other.so", error));
     host.app.advance(Duration::from_millis(1));
@@ -3534,11 +3286,11 @@ unsafe extern "C" fn c_free(owned: Owned) {
     unsafe { owned.release() };
 }
 
-fn c_table(major: u32, describe: bool) -> PluginApi {
+fn c_table(describe: bool) -> PluginApi {
     PluginApi {
         size: size_of::<PluginApi>(),
-        major,
-        minor: if major == 1 { V1_MINOR } else { ABI_MINOR },
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
         requires_minor: 0,
         create: Some(c_create),
         call: Some(c_call),
@@ -3548,35 +3300,35 @@ fn c_table(major: u32, describe: bool) -> PluginApi {
     }
 }
 
-// Expected (big-boi 6): a 2.x library names its ID in `describe` before anything of it runs: one without `describe`,
-// or whose `describe` names no ID or an empty one, is refused with what to do, and its setup never runs. A 1.x
-// library without an ID is still asked for it by one quiet setup, as 1.0 needs; a described one is set up only when it
-// is activated.
+// Expected (big-boi 6): a library names its ID in `describe` before anything of it runs: one without `describe`, or
+// whose `describe` names no ID or an empty one, is refused with what to do, and its setup never runs; a described one
+// is set up only when it is activated.
 #[test]
 fn a_2x_library_names_its_id_before_any_setup() {
     let host = host();
-    for (major, describe, described, refusal, creates) in [
-        (ABI_MAJOR, false, "", Some("has no `describe`"), 0),
-        (ABI_MAJOR, true, r#"{"version":"1"}"#, Some("names no ID"), 0),
-        (ABI_MAJOR, true, r#"{"id":""}"#, Some("names no ID"), 0),
-        (ABI_MAJOR, true, r#"{"id":"c"}"#, None, 0),
-        (1, false, "", None, 1),
-        (1, true, r#"{"version":"1"}"#, None, 1),
-        (1, true, r#"{"id":"c"}"#, None, 0),
+    for (describe, described, refusal) in [
+        (false, "", Some("null `describe`")),
+        (
+            true,
+            r#"{"version":"1"}"#,
+            Some("names no ID in `describe`: a plugin describes itself with a nonempty \"id\""),
+        ),
+        (true, r#"{"id":""}"#, Some("names no ID in `describe`")),
+        (true, r#"{"id":"c"}"#, None),
     ] {
-        let case = format!("ABI {major}, describe {describe} {described}");
+        let case = format!("describe {describe} {described}");
         SETUP_ANSWER.set(0);
         SETUP_CREATES.set(0);
         DESCRIBED.set(described);
-        let defined = from_api(&dynamic(&host), &c_table(major, describe), major, None);
+        let defined = from_api(&dynamic(&host), &c_table(describe), None);
         match refusal {
             Some(needle) => {
                 let error = defined.err().unwrap_or_else(|| panic!("{case}: not refused"));
-                assert!(error.contains(needle) && error.contains("nonempty \"id\""), "{case}: {error}");
+                assert!(error.contains(needle), "{case}: {error}");
             }
             None => assert_eq!(defined.map(|(definition, _)| definition.id), Ok("c".to_owned()), "{case}"),
         }
-        assert_eq!(SETUP_CREATES.get(), creates, "{case}: setup ran");
+        assert_eq!(SETUP_CREATES.get(), 0, "{case}: setup ran");
     }
 }
 
@@ -3593,7 +3345,7 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
         let host = host();
         SETUP_ANSWER.set(answer);
         DESCRIBED.set(r#"{"id":"c"}"#);
-        let (definition, error) = from_api(&dynamic(&host), &c_table(ABI_MAJOR, true), ABI_MAJOR, None).unwrap();
+        let (definition, error) = from_api(&dynamic(&host), &c_table(true), None).unwrap();
         SETUP_FREED.set(0);
         let registry = Registry::define(Vec::new(), []);
         registry.load(&dynamic(&host), definition.external("c.so", error));
@@ -3605,16 +3357,14 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     }
 }
 
-// Expected (PL-9, contract 2.x additions): a 2.x library's host table states `image-bounds`, `focus-input` and
-// `fence-node`, and the host answers `image-bounds` with the bounds it decodes images within, as its limits set them;
-// a 1.x table states no feature.
+// Expected (PL-9, contract 2.x additions): a library's host table states `image-bounds`, `focus-input` and
+// `fence-node`, and the host answers `image-bounds` with the bounds it decodes images within, as its limits set them.
 #[test]
 fn the_host_states_the_bounds_of_the_images_it_decodes() {
-    let table = host_table(ABI_MAJOR, HOST_MINOR, std::ptr::null_mut());
+    let table = host_table(std::ptr::null_mut());
     // SAFETY: the host's static list.
     let features: Vec<String> = serde_json::from_slice(unsafe { table.features.as_slice() }).unwrap();
     assert_eq!(features, [abi::IMAGE_BOUNDS, abi::FOCUS_INPUT, abi::FENCE_NODE]);
-    assert!(unsafe { host_table(1, V1_MINOR, std::ptr::null_mut()).features.as_slice() }.is_empty());
     let host = host();
     let mut ctx = Ctx::new(Rc::downgrade(&dynamic(&host)), "bounded", Vec::new());
     let limits = crate::limits::get();
@@ -3712,9 +3462,9 @@ fn the_host_answers_calls_on_its_ui_thread_only() {
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe: None,
+        describe: Some(describe!("first")),
     };
-    let library = Rc::new(Library::from_table(&api, ABI_MAJOR, V1_MINOR).unwrap());
+    let library = Rc::new(Library::from_table(&api).unwrap());
     let (instance, _) = Instance::create(&library, Rc::downgrade(&dynamic), "first", None, false, None).unwrap();
     let ctx = instance.shared.as_ptr() as usize;
     let call = move || {
@@ -3768,7 +3518,7 @@ fn c_claim(host: &Rc<TestHost>, registry: &Registry) -> Option<(bool, String)> {
 // Expected (the header, P4's checks; reviews carbon-3 and carbon-9: N2, N6, CM13, CM14): a renderer claim of a plugin
 // written in C against the header alone draws its part. Its view asks the host for nothing: a toast it asks for is
 // refused and never shows. A decline that says the memo table holds more than the last view left, or content the
-// host did not number, fails the plugin. Built as 1.4, its claim is ignored with the rest of 2.0.
+// host did not number, fails the plugin.
 #[cfg(unix)]
 #[test]
 fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
@@ -3790,28 +3540,6 @@ fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
         assert!(!shows && matches!(&status, Status::Failed(failed) if failed.contains(error)), "{options}: {status:?}");
         drop(host);
     }
-
-    let Some(v1) = c_plugin(&["OPENCODE_AS_V1"]) else { return };
-    let (host, registry) = c_active(&v1, "");
-    assert!(c_claim(&host, &registry).is_none(), "a 1.4 library claimed a tool");
-}
-
-// Expected (review carbon-6): a library of ABI 1.x has none of 2.0's registrations, the plugin list's handlers (P6b)
-// and P2's layers and searches included; 2.x keeps them.
-#[test]
-fn a_1x_manifest_drops_the_2_0_registrations() {
-    let manifest = abi::Manifest {
-        id: "old".to_owned(),
-        plugins: true,
-        searches: vec!["s".to_owned()],
-        render: abi::RENDER,
-        ..abi::Manifest::default()
-    };
-    let bytes = serde_json::to_vec(&manifest).unwrap();
-    let old = super::manifest(&bytes, 1, None).unwrap();
-    assert!(!old.plugins && old.searches.is_empty() && old.layers.is_empty());
-    let new = super::manifest(&bytes, 2, None).unwrap();
-    assert!(new.plugins && new.searches == ["s"]);
 }
 
 /// An instance that counts the requests the host cancelled for it.

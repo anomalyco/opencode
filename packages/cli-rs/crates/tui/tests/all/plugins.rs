@@ -234,14 +234,13 @@ fn a_major_abi_mismatch_is_refused_with_its_reason() {
     print_excerpt("error details of a major mismatch", &screen);
 }
 
-// Expected: a plugin built on the frozen 1.3 SDK, which stores objects or arrays, stores an array in real TUI storage,
-// reads it back at once, and finds it on disk (bigboi-3).
+// Expected: a plugin, whose storage takes objects or arrays, stores an array in real TUI storage, reads it back at once,
+// and finds it on disk (bigboi-3).
 #[test]
-fn a_1_3_plugin_stores_an_array() {
-    let h = open_with(Route::Home, "", &build("abi-1-3"), |root| {
-        support::roots(support::home_paths(&root.join("home")), "test")
-    });
-    h.wait_for("sample plugin 1.3: home.footer");
+fn a_plugin_stores_an_array() {
+    let h =
+        open_with(Route::Home, "", &build(""), |root| support::roots(support::home_paths(&root.join("home")), "test"));
+    h.wait_for("sample plugin v1: home.footer");
     let storage = h.tui.storage().unwrap();
     let file = storage.file("plugin.sample.list").unwrap();
     opencode_local::storage::write_json_atomic(&file, &json!([7])).unwrap();
@@ -625,21 +624,12 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
 thread_local! {
     /// What `fetcher`'s fetches returned, and the IDs its replies came back with.
     static FETCHES: RefCell<Fetches> = const { RefCell::new((Vec::new(), Vec::new())) };
-    /// What `fetcher`'s 1.x fetches returned.
-    static LEGACY: RefCell<Vec<abi::RequestId>> = const { RefCell::new(Vec::new()) };
 }
 
 type Fetches = (Vec<Result<abi::RequestId, String>>, Vec<abi::RequestId>);
 
-/// `fetcher.go` fetches the session list, and `fetcher.legacy` as a 1.x plugin's source does; each reply is kept by
-/// its ID.
+/// `fetcher.go` fetches the session list; each reply is kept by its ID.
 fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::default().with_name("fetcher.legacy".to_owned()), |host, _| {
-        let fetch = abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
-        #[allow(deprecated)]
-        let id = host.fetch(fetch);
-        LEGACY.with_borrow_mut(|legacy| legacy.push(id));
-    });
     setup.command(abi::Command::default().with_name("fetcher.go".to_owned()), |host, _| {
         let fetch = abi::Fetch::default().with_method("GET".to_owned()).with_path("/api/session".to_owned());
         let id = host.try_fetch(fetch);
@@ -651,8 +641,7 @@ fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
 
 // Expected (bigboi's final pass): a fetch is given an ID only when its reply can come. While another plugin's fan-out
 // fills the queue of effects, an unrelated plugin's fetch is an error that says so, and every ID given gets its reply,
-// also once the fan-out ends; a fetch with room gets an ID and its reply, on both carriers. A 1.x plugin's `fetch`
-// gets `RequestId(0)`, which no reply carries, as the 1.x SDK answers a fetch the host did not take (O-125, O-154).
+// also once the fan-out ends; a fetch with room gets an ID and its reply, on both carriers.
 #[test]
 fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
     for loopback in [false, true] {
@@ -673,7 +662,6 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         opencode_tui::plugins::host::add(&h.tui, definition);
         h.wait_for("chain ready");
         FETCHES.with_borrow_mut(|fetches| *fetches = Default::default());
-        LEGACY.with_borrow_mut(Vec::clear);
         h.tui.keymap.dispatch("chain.fan", None);
         for _ in 0..80 {
             h.app.render();
@@ -683,9 +671,6 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         let under = FETCHES.with_borrow(|fetches| fetches.0.clone());
         let refused = matches!(&under[..], [Err(error)] if error.contains("the effects that wait fill its queue"));
         assert!(refused, "loopback {loopback}: a fetch with no room returned {under:?}");
-        h.tui.keymap.dispatch("fetcher.legacy", None);
-        let legacy = LEGACY.with_borrow(Vec::clone);
-        assert_eq!(legacy, [abi::RequestId(0)], "loopback {loopback}: a 1.x fetch with no room");
         // The fan-out ends, the queue drains, and a fetch with room is given an ID and its reply.
         h.tui.plugins.set_active(&host, "probe", false);
         let drained = h.app.wait_until(support::WAIT, || {
@@ -694,18 +679,12 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         });
         assert!(drained, "loopback {loopback}: the queue did not drain");
         h.tui.keymap.dispatch("fetcher.go", None);
-        h.tui.keymap.dispatch("fetcher.legacy", None);
         let replied = h.app.wait_until(support::WAIT, || {
             let (given, replies) = FETCHES.with_borrow(|fetches| fetches.clone());
-            let legacy = LEGACY.with_borrow(|legacy| legacy[1..].to_vec());
-            given.iter().flatten().chain(&legacy).all(|id| replies.contains(id))
+            given.iter().flatten().all(|id| replies.contains(id))
         });
         let (given, replies) = FETCHES.with_borrow(|fetches| fetches.clone());
-        let legacy = LEGACY.with_borrow(Vec::clone);
-        assert!(
-            replied && given.len() == 2 && given[1].is_ok() && legacy.len() == 2 && legacy[1] != abi::RequestId(0),
-            "loopback {loopback}: {given:?} {legacy:?} {replies:?}"
-        );
+        assert!(replied && given.len() == 2 && given[1].is_ok(), "loopback {loopback}: {given:?} {replies:?}");
         h.tui.plugins.deactivate_all();
         h.app.advance(Duration::from_millis(16));
     }

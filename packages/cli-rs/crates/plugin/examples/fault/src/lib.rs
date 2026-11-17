@@ -14,7 +14,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use opencode_plugin_abi::{Command, Node, Placement, Render, Setup, Span, export_plugin};
+use opencode_plugin_abi::{Command, Node, Placement, Render, Setup, Span, plugin};
 
 const KINDS: [&str; 6] = ["panic", "hang", "slow", "segv", "abort", "stack"];
 
@@ -134,8 +134,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 }
 
 #[cfg(not(any(feature = "b", feature = "c")))]
-export_plugin!("example.fault", setup);
+plugin!(id = "example.fault", setup);
 #[cfg(feature = "b")]
-export_plugin!("example.fault.b", setup);
+plugin!(id = "example.fault.b", setup);
 #[cfg(feature = "c")]
-export_plugin!("example.fault.c", setup);
+plugin!(id = "example.fault.c", setup);

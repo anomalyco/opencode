@@ -1,4 +1,4 @@
-//! The sample's server request and live panel, on the one API (ABI 1.4). `sample.fetch` asks the server for
+//! The sample's server request and live panel, on the one API. `sample.fetch` asks the server for
 //! `/api/sample` through the host; the reply comes back to `on_reply`, and the sample's `home.footer` claim shows it.
 //! `sample.panel` shows a panel, and shows it again with its key while it is open, so the host changes it in place. The
 //! loader's tests also compile this file into the host and run it in process, so both paths are proven the same.
@@ -17,7 +17,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     let asked = request.clone();
     setup.command(hidden("sample.fetch"), move |host, _| {
         let fetch = Fetch::default().with_method("GET".to_owned()).with_path("/api/sample".to_owned());
-        asked.set(Some(host.fetch(fetch)));
+        asked.set(host.try_fetch(fetch).ok());
     });
     let answered = reply.clone();
     setup.on_reply(move |_, id, result| {

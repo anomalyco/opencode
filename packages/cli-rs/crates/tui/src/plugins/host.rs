@@ -105,7 +105,7 @@ impl Host for Tui {
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
         let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
-        // The frozen 1.3 SDK stores arrays too (`typeof value === "object"`).
+        // A stored value is an object or an array, as TS stores what `typeof value === "object"` takes.
         if !(value.is_object() || value.is_array()) {
             return Err("a stored value is an object or an array".to_owned());
         }

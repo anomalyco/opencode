@@ -1,5 +1,5 @@
 //! The terminal released to another program: the external editor (`$EDITOR`) and a plugin's program in the
-//! foreground (ABI 1.6 `Host::foreground`). OpenTUI keeps one pending release, and a second one in the same turn
+//! foreground (`Host::try_foreground`). OpenTUI keeps one pending release, and a second one in the same turn
 //! would replace the first unseen, so a release waits in one slot here and a second is refused while it waits.
 
 use std::path::PathBuf;

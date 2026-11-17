@@ -2,13 +2,11 @@
   {
     "transcript": "activation",
     "about": "describe, create with the manifest, destroy as the user disables the plugin, a new instance as they enable it",
-    "library": 2,
     "script": [{ "do": "load" }, { "do": "observe" }, { "do": "disable" }, { "do": "observe" }, { "do": "enable" }, { "do": "observe" }]
   },
   {
     "transcript": "actions",
     "about": "commands and the host requests they make: a toast, storage written and read back, the theme mode and a read, in both modes",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "command", "name": "conf.toast" },
@@ -29,7 +27,6 @@
   {
     "transcript": "surfaces",
     "about": "a route surface: its first view with content, a view after a handler that keeps the memoized subtree, the unmount, and a new mount that builds again",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "conf" },
@@ -49,7 +46,6 @@
   {
     "transcript": "mailbox",
     "about": "sends to the mailbox, one replacing another under its key, delivered one message a call, then a wake and its handler",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "conf" },
@@ -68,7 +64,6 @@
   {
     "transcript": "canvas",
     "about": "a canvas (P5): the first draw as the surface paints, and a draw for a new version",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "pad" },
@@ -83,7 +78,6 @@
   {
     "transcript": "scroll",
     "about": "scroll behaviors (P3): a verb by rows, a read of where the scroll is, a step to the next anchor and where it landed, and the layout told of the scroll",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "rows" },
@@ -104,7 +98,6 @@
   {
     "transcript": "interact",
     "about": "input and surfaces (P2): every verb and read of a command (focus, the focus read, a rect, a mode and its read, held keys released, the focus of a field and the focus read, a blur, a panel and an overlay opened and closed), with a key layer of setup in the manifest; then a field given the focus (focus-input), which the host shows focused",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "rows" },
@@ -121,7 +114,6 @@
   {
     "transcript": "input",
     "about": "the user's input (P2): a key a layer of setup binds and consumes, one it binds and passes, a paste it takes, and a press and release on a node that takes the pointer, which the surface's handler gets",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "rows" },
@@ -137,7 +129,6 @@
   {
     "transcript": "search",
     "about": "a search of a select (P2), which reads only: the values whose title holds the query, twice",
-    "library": 2,
     "script": [
       { "do": "load" },
       {
@@ -166,7 +157,6 @@
   {
     "transcript": "fence",
     "about": "a renderer claim of a fence language (Pr): Markdown with a fence the claim draws around the host's code view of it (a fence node), then gone",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "markdown", "text": "```conf-fence\nhello\n```\n" },
@@ -180,7 +170,6 @@
   {
     "transcript": "fence-older",
     "about": "the same fence claim on a host that states no fence-node: the library lowers the fence node to text before it crosses",
-    "library": 2,
     "script": [
       { "do": "load", "features": ["image-bounds"] },
       { "do": "markdown", "text": "```conf-fence\nhello\n```\n" },
@@ -194,7 +183,6 @@
   {
     "transcript": "interact-older",
     "about": "a host that states no focus-input does what such a host does: a focus of the field asked for anyway leaves it unfocused, and the plugin, which sees the feature absent, falls back and says the field needs a click",
-    "library": 2,
     "script": [
       { "do": "load", "features": ["image-bounds", "fence-node"] },
       { "do": "open", "route": "rows" },
@@ -211,7 +199,6 @@
   {
     "transcript": "fence-twice",
     "about": "a fence claim whose tree holds two fence nodes: the host refuses the tree, and the fence shows the host's code view; the plugin stays active",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "markdown", "text": "```conf-fences\nhello\n```\n" },
@@ -225,7 +212,6 @@
   {
     "transcript": "fence-refused",
     "about": "a view of a route surface whose tree holds a fence node, which only a fence claim's tree may: the host refuses it whole, the plugin fails, and its surface shows nothing",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "conf" },
@@ -239,13 +225,11 @@
   {
     "transcript": "dialogs",
     "about": "dialogs of the contract 2.x additions: a select, an alert and a confirm, each centered, the select and the alert extra large, as the host takes them",
-    "library": 2,
     "script": [{ "do": "load" }, { "do": "command", "name": "conf.dialogs" }, { "do": "advance" }, { "do": "observe" }]
   },
   {
     "transcript": "claim",
     "about": "a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "claim", "tool": "conf-tool" },
@@ -262,7 +246,6 @@
   {
     "transcript": "kept",
     "about": "the built-ins' contract (P6a): a surface that hears its mount begin and end, a view told what changed that keeps its root while what it shows is the same and builds again once it is not, a hidden box, and a read of one message",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "kept" },
@@ -284,7 +267,6 @@
   {
     "transcript": "plugins",
     "about": "the plugin list (P6b): a read of it from a command, and a change of it, which the host tells a plugin whose manifest hears it, which reads it again",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "command", "name": "conf.plugins" },
@@ -298,7 +280,6 @@
   {
     "transcript": "panic",
     "about": "a command that asks for a toast and panics: nothing it asked for happens, the plugin fails once, its commands go, and it is never called again, not even destroyed",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "conf" },
@@ -315,7 +296,6 @@
   {
     "transcript": "refused-tree",
     "about": "a view whose tree holds an id twice: the host refuses it whole, the plugin fails, and its surface shows nothing",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "conf" },
@@ -329,13 +309,11 @@
   {
     "transcript": "setup-fails",
     "about": "a setup that answers an error: the plugin fails with its text, and the instance is never destroyed",
-    "library": 2,
     "script": [{ "do": "load", "options": "fail-setup" }, { "do": "advance" }, { "do": "observe" }]
   },
   {
     "transcript": "overrun",
     "about": "containment (P4c): the first call after setup may be slow; a later one over 100 ms keeps its effects, then fails the plugin",
-    "library": 2,
     "script": [
       { "do": "load" },
       { "do": "command", "name": "conf.toast", "took": 150 },
@@ -343,22 +321,6 @@
       { "do": "observe" },
       { "do": "command", "name": "conf.toast", "took": 150 },
       { "do": "advance" },
-      { "do": "observe" }
-    ]
-  },
-  {
-    "transcript": "v1",
-    "about": "the same plugin as a 1.x library on this 2.x host: served 1.x, a table that ends before send, no surfaces and no mailbox",
-    "library": 1,
-    "script": [
-      { "do": "load" },
-      { "do": "command", "name": "conf.toast" },
-      { "do": "command", "name": "conf.send" },
-      { "do": "advance" },
-      { "do": "observe" },
-      { "do": "open", "route": "conf" },
-      { "do": "observe" },
-      { "do": "disable" },
       { "do": "observe" }
     ]
   }

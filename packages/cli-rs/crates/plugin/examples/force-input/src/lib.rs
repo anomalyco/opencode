@@ -5,7 +5,7 @@
 //! it is claimed in the prompt footer and lifted two rows, into the right of the composer's own info row.
 
 use opencode_plugin_abi::{
-    Absolute, Command, Host, Layout, Node, Placement, Render, SessionStatus, Setup, Span, Wrap, export_plugin,
+    Absolute, Command, Host, Layout, Node, Placement, Render, SessionStatus, Setup, Span, Wrap, plugin,
 };
 
 const INTERRUPT: &str = "session.interrupt";
@@ -83,4 +83,4 @@ fn force_submit(host: &dyn Host) {
     host.dispatch("prompt.submit", None);
 }
 
-export_plugin!("mynameistito.opencode-force-input", setup);
+plugin!(id = "mynameistito.opencode-force-input", setup);

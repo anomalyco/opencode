@@ -192,7 +192,7 @@ pub fn schema() -> Value {
         ),
         (
             "Changed",
-            object!(Changed, "What changed since a surface's last view, as a 1.x render hears it.", { } {
+            object!(Changed, "What changed since a render's or a surface's last view.", { } {
                 all: boolean(), sessions: array(string()), lists: array(string()),
                 messages: array(pair(string(), string())), locations: array(reference("LocationRef")),
                 local: boolean(), size: boolean(), woken: boolean(),
@@ -689,16 +689,12 @@ mod tests {
         let answer = |side: &str, kind: &str| messages[side].get(kind).unwrap_or(&messages[side]["*"]).clone();
         // What the next `return` answers: the schema of its reply, or `None` for a draw's bytes.
         let mut waiting: Vec<Option<Value>> = Vec::new();
-        let mut library = 2;
         let (mut requests, mut replies, mut completed) = (0, 0, 0);
         for (number, line) in text.lines().enumerate() {
             let entry: Value = serde_json::from_str(line).unwrap();
             let at = format!("transcripts.jsonl:{}", number + 1);
-            if let Some(major) = entry.get("library").and_then(Value::as_u64) {
-                library = major;
-            }
             if entry == json!("describe") {
-                waiting.push(Some(messages[if library == 1 { "describe-v1" } else { "describe" }].clone()));
+                waiting.push(Some(messages["describe"].clone()));
             } else if entry.get("create").is_some() {
                 waiting.push(Some(messages["create"].clone()));
             } else if let Some(call) = entry.get("call") {
@@ -747,9 +743,9 @@ mod tests {
 
     // Expected (bigboi's re-review, finding 14): the shipped schema resolves without Rust. Every reference it makes
     // names a definition of its own or a component of the HTTP API's OpenAPI document, whose key in Pascal case is the
-    // generated Rust type; none is an annotation alone, which the validator refuses. Against the shipped file, a 2.x
-    // `describe` without a nonempty ID is refused as `define` refuses it, a 1.x one is not, and an API value of the
-    // wrong shape is refused through its reference.
+    // generated Rust type; none is an annotation alone, which the validator refuses. Against the shipped file, a
+    // `describe` without a nonempty ID is refused as `define` refuses it, and an API value of the wrong shape is refused
+    // through its reference.
     #[test]
     fn the_shipped_schema_resolves_its_references_and_refuses_what_the_host_refuses() {
         let schema = shipped();
@@ -795,7 +791,6 @@ mod tests {
         assert!(!describe("describe", json!({ "id": "" })));
         assert!(!describe("describe", json!({ "version": "1.0.0" })));
         assert!(describe("describe", json!({ "id": "x", "version": "1.0.0" })));
-        assert!(describe("describe-v1", json!({})));
         let session = &schema["x-messages"]["host"]["session"];
         assert!(conforms(&Value::Null, session, defs));
         assert!(!conforms(&json!({ "info": 1, "status": "idle" }), session, defs));

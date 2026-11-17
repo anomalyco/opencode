@@ -1,4 +1,4 @@
-//! What ABI 1.5 adds (P0a): a confirm and an alert whose answers come back as toasts, the composer's read and
+//! The dialogs, the composer and the box styling (P0a): a confirm and an alert whose answers come back as toasts, the composer's read and
 //! edits, and a home footer claim in a styled box. The TUI's tests run this one file linked, through the C ABI's
 //! byte shims, and in the sample library (`--features p0a`), so the three carriers run the same source. Every
 //! command is hidden: a test or a click dispatches it.
@@ -69,7 +69,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.edit_composer(ComposerEdit::Set { text: input.unwrap_or_default().to_owned() });
         host.edit_composer(ComposerEdit::Submit);
     });
-    // Every effect 1.5 adds, in one call; with the input `panic` the call panics after them, so none may happen. The
+    // Every effect of P0a, in one call; with the input `panic` the call panics after them, so none may happen. The
     // confirm replaces the alert, whose action then runs: both effects show without the panic.
     setup.command(hidden("p0a.all"), |host, input| {
         host.edit_composer(ComposerEdit::Set { text: "all".to_owned() });

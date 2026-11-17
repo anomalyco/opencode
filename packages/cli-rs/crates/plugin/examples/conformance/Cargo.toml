@@ -13,10 +13,6 @@ publish = false
 name = "opencode_conformance"
 crate-type = ["cdylib"]
 
-[features]
-# Exports the plugin as ABI 1.x, through `opencode_plugin_v1`, for the transcripts of a 1.x library.
-v1 = []
-
 [dependencies]
 opencode-plugin-abi = { path = "../../../plugin-abi" }
 serde_json = "1"
