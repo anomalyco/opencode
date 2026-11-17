@@ -9,7 +9,7 @@
 use opencode_plugin_abi::types::{SessionInboxInfo, SessionMessageInfo};
 use opencode_plugin_abi::{
     Click, Command, Dialog, Edges, Host, Justify, Layout, Node, Panel, PanelSize, Placement, Read, Render, Route,
-    Setup, Span, Toast, Variant, Width, export_plugin,
+    Setup, Span, Toast, Variant, Width, plugin,
 };
 
 const OPEN: &str = "sidebar.prompt.open";
@@ -170,7 +170,7 @@ fn preview(text: &str, limit: usize) -> String {
     }
 }
 
-export_plugin!("sidebar.prompt", setup);
+plugin!(id = "sidebar.prompt", setup);
 
 #[cfg(test)]
 mod tests {
