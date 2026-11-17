@@ -11,6 +11,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
+import { QuitBehavior } from "../service/quit-behavior"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
@@ -44,6 +45,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
       AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
+      AppGetKeepServiceRunning: () => Effect.sync(QuitBehavior.getKeepServiceRunning),
+      AppSetKeepServiceRunning: ({ enabled }) => Effect.sync(() => QuitBehavior.setKeepServiceRunning(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

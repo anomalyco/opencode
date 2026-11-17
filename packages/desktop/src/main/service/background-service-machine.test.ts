@@ -304,6 +304,46 @@ describe("background service driver", () => {
     expect(result).toEqual(A)
   })
 
+  test("disposing before the app stops the service on quit interrupts a reconnect and starts no replacement", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const attempts: string[] = []
+          const finished: string[] = []
+
+          const machine = yield* BackgroundServiceMachine.make({
+            probe: Effect.succeed(undefined),
+            ensure: (mode) =>
+              Effect.suspend(() => {
+                attempts.push(mode)
+
+                return mode === "initial"
+                  ? Effect.succeed(A)
+                  : Effect.never.pipe(Effect.onExit(() => Effect.sync(() => finished.push(mode))))
+              }),
+            publish: () => undefined,
+          })
+
+          yield* machine.connection
+          const pending = yield* Effect.forkChild(machine.reconnect.pipe(Effect.exit), { startImmediately: true })
+          yield* Effect.yieldNow
+          yield* machine.dispose
+          const reconnect = yield* Fiber.join(pending)
+          const later = yield* machine.reconnect.pipe(Effect.exit)
+
+          return { reconnect: reconnect._tag, later: later._tag, attempts, finished }
+        }),
+      ),
+    )
+
+    expect(result).toEqual({
+      reconnect: "Failure",
+      later: "Failure",
+      attempts: ["initial", "reconnect"],
+      finished: ["reconnect"],
+    })
+  })
+
   test("a connect that dies fails its callers, and the next caller connects again", async () => {
     const result = await Effect.runPromise(
       Effect.scoped(

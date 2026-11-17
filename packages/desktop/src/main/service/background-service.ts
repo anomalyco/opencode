@@ -4,11 +4,15 @@ import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect
 import { SidecarChanged } from "../../shared/ipc-rpc/events"
 import { CHANNEL } from "../constants"
 import { emitIpcEvent } from "../ipc-events"
+import { ApplicationLifecycle } from "../lifecycle"
+import { stopsForQuit } from "../lifecycle/machine"
+import { Shutdown } from "../lifecycle/shutdown"
 import { getMainWindows } from "../windows"
 import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { QuitBehavior } from "./quit-behavior"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 
@@ -27,21 +31,56 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
+    const lifecycle = yield* ApplicationLifecycle.Service
+    const shutdown = yield* Shutdown.Service
 
-    return Service.of(
-      yield* BackgroundServiceMachine.make({
-        probe: probe().pipe(Effect.provide(context)),
-        ensure: (mode) => ensure(mode).pipe(Effect.provide(context)),
-        publish: (data) => {
-          SidecarCredentials.set(data)
-          // Every window moves its requests and event stream to the new origin, not only the one that reconnected.
-          const event = new SidecarChanged({ url: data.url })
-          getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
-        },
-      }),
-    )
+    const machine = yield* BackgroundServiceMachine.make({
+      probe: probe().pipe(Effect.provide(context)),
+      ensure: (mode) => ensure(mode).pipe(Effect.provide(context)),
+      publish: (data) => {
+        SidecarCredentials.set(data)
+        // Every window moves its requests and event stream to the new origin, not only the one that reconnected.
+        const event = new SidecarChanged({ url: data.url })
+        getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
+      },
+    })
+
+    // The service outlives the app by default, so agents keep working after quit. A restart handoff or a relaunch
+    // keeps it either way.
+    const remove = yield* shutdown.add({
+      stop: Effect.suspend(() =>
+        stopsForQuit(lifecycle.state()) && !QuitBehavior.getKeepServiceRunning()
+          ? machine.dispose.pipe(Effect.andThen(stop().pipe(Effect.provide(context))))
+          : Effect.void,
+      ),
+      resume: Effect.void,
+    })
+
+    yield* Effect.addFinalizer(() => Effect.sync(remove))
+
+    return Service.of({ connection: machine.connection, reconnect: machine.reconnect })
   }),
 )
+
+const stop = Effect.fn("BackgroundService.stop")(function* () {
+  yield* Effect.logInfo("stopping v2 background service on quit")
+  const path = yield* Path.Path
+  const client = yield* Effect.promise(() => import("@opencode/client/service"))
+
+  yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path) })).pipe(
+    Effect.catch((error) => Effect.logError("failed to stop v2 background service on quit", { error })),
+  )
+})
+
+function registrationFile(path: Path.Path) {
+  if (process.env.OPENCODE_DESKTOP_SERVER_CHANNEL !== "local") return undefined
+
+  return path.join(
+    process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+    "opencode",
+    "service-local.json",
+  )
+}
 
 // A compatible service the entry module already found is adopted at once; the machine still verifies it with
 // `ensure("initial")` (which also completes a terminal handoff), off the renderer's path.
@@ -108,14 +147,7 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file =
-    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
-          "service-local.json",
-        )
-      : undefined
+  const file = registrationFile(path)
 
   return { cli, client, file, isolated, version }
 })

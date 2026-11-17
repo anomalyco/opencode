@@ -63,6 +63,12 @@ export const AppSetSpellcheckEnabled = Rpc.make("AppSetSpellcheckEnabled", {
   payload: { enabled: Schema.Boolean },
 })
 
+export const AppGetKeepServiceRunning = Rpc.make("AppGetKeepServiceRunning", { success: Schema.Boolean })
+
+export const AppSetKeepServiceRunning = Rpc.make("AppSetKeepServiceRunning", {
+  payload: { enabled: Schema.Boolean },
+})
+
 export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
@@ -83,6 +89,8 @@ export const AppRpcs = RpcGroup.make(
   AppSetForceFocus,
   AppGetSpellcheckEnabled,
   AppSetSpellcheckEnabled,
+  AppGetKeepServiceRunning,
+  AppSetKeepServiceRunning,
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
