@@ -84,6 +84,75 @@ export function createTextAttributes(style: Record<string, boolean | undefined> 
   )
 }
 
+// OpenTUI's styled text, as `lib/styled-text.ts` builds it: chunks of text, each with its colors and attributes, which
+// a text node's `content` takes (CT-27: @encoredigitalgroup/opencode's panels drew "[object Object]").
+const BrandedStyledText = Symbol.for("@opentui/core/StyledText")
+
+export interface TextChunk {
+  __isChunk: true
+  text: string
+  fg?: RGBA
+  bg?: RGBA
+  attributes?: number
+  link?: { url: string }
+}
+
+type Stylable = string | number | boolean | TextChunk
+
+export class StyledText {
+  [BrandedStyledText] = true
+  constructor(public chunks: TextChunk[]) {}
+}
+
+export function isStyledText(value: unknown): value is StyledText {
+  return !!value && typeof value === "object" && BrandedStyledText in value
+}
+
+export function stringToStyledText(content: string) {
+  return new StyledText([{ __isChunk: true, text: content }])
+}
+
+function applyStyle(input: Stylable, style: Record<string, unknown>): TextChunk {
+  const own = createTextAttributes(style as Record<string, boolean | undefined>)
+  const color = (value: unknown) => (value ? parseColor(value as string | RGBA) : undefined)
+  if (typeof input === "object" && "__isChunk" in input)
+    return {
+      __isChunk: true,
+      text: input.text,
+      fg: color(style.fg) ?? input.fg,
+      bg: color(style.bg) ?? input.bg,
+      attributes: (input.attributes ?? 0) | own,
+      link: input.link,
+    }
+  return { __isChunk: true, text: String(input), fg: color(style.fg), bg: color(style.bg), attributes: own }
+}
+
+const styled = (style: Record<string, unknown>) => (input: Stylable) => applyStyle(input, style)
+export const bold = styled({ bold: true })
+export const italic = styled({ italic: true })
+export const underline = styled({ underline: true })
+export const strikethrough = styled({ strikethrough: true })
+export const dim = styled({ dim: true })
+export const reverse = styled({ reverse: true })
+export const blink = styled({ blink: true })
+export const fg = (color: string | RGBA) => styled({ fg: color })
+export const bg = (color: string | RGBA) => styled({ bg: color })
+export const link = (url: string) => (input: Stylable) => ({
+  ...(typeof input === "object" && "__isChunk" in input ? input : { __isChunk: true as const, text: String(input) }),
+  link: { url },
+})
+
+export function t(strings: TemplateStringsArray, ...values: Stylable[]) {
+  const chunks: TextChunk[] = []
+  strings.forEach((raw, index) => {
+    if (raw) chunks.push({ __isChunk: true, text: raw, attributes: 0 })
+    const value = values[index]
+    if (typeof value === "object" && "__isChunk" in value) chunks.push(value)
+    else if (value !== undefined) chunks.push({ __isChunk: true, text: String(value), attributes: 0 })
+  })
+  return new StyledText(chunks)
+}
+
 // The file types a fenced code block's info string names, as OpenTUI's `infoStringToFiletype` reads them.
 export function infoStringToFiletype(info: string) {
   const name = info.trim().split(/\s+/)[0]?.toLowerCase()

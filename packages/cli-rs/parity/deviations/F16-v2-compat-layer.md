@@ -142,8 +142,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   answers what it holds, and nothing keeps it live between events (`P.8/skills-data`: opencode-skills-tui's skills).
   A live store would need the contract to give a plugin these collections as reads.
 - **OpenTUI's exports**: the layer exports every name the installed `@opentui/core` and `@opentui/solid` export, so a
-  plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets) and Solid's renderer
-  the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
+  plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets), Solid's renderer, and
+  styled text (`StyledText`, `t`, `fg`, `bg`, `bold` and the other attribute helpers, `link`, `stringToStyledText`,
+  which a text node's `content` draws chunk by chunk, CT-27: @encoredigitalgroup/opencode's panels drew
+  "[object Object]"; its tarball is proprietary, so a layer test pins it) the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
   nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
   plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing, and adding one to a node
   by its ref, or returning one from a render, adds nothing and is reported (CT-15: opencode-quick-quote returns one as
