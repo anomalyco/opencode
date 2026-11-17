@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use mlua::chunk::ChunkMode;
 use mlua::luau::{NavigateError, Require};
+use mlua::state::{GcIncParams, GcMode};
 use mlua::{Function, Lua, MultiValue, Table, Value, VmState};
 
 use super::Sources;
@@ -18,6 +19,12 @@ pub const MEMORY: usize = 32 << 20;
 
 /// The most of one `print` the log keeps, in bytes of the plugin's text.
 pub(crate) const PRINT: usize = 4 << 10;
+
+/// The heap a VM grows to before its collector finishes a cycle, in percent of the live data. Luau never collects
+/// before it fails an allocation, so at its default of 200 a plugin that makes garbage runs out of memory with less than
+/// half the cap live (`luau/steps/safety-audit.md` #10). At 125 the effective cap of [`MEMORY`] is about 23.5 MiB live
+/// for such a plugin, against 12.5 MiB at 200 (`luau::tests::measure_the_effective_heap_cap`).
+pub(crate) const GOAL: i32 = 125;
 
 /// How near its cap a VM's heap may be once a call returned, after a full collection: nearer, the plugin ran out of
 /// memory and caught the error, and every binding would fail at random from then on.
@@ -153,6 +160,7 @@ impl Vm {
     pub(crate) fn new(compiled: &Rc<Compiled>, limit: Duration, memory: usize) -> mlua::Result<Self> {
         let lua = Lua::new();
         lua.set_memory_limit(memory)?;
+        lua.gc_set_mode(GcMode::Incremental(GcIncParams::default().goal(GOAL)));
         let budget =
             Rc::new(Budget { limit, armed: Cell::new(None), ticks: Cell::new(0), stopped: RefCell::new(None) });
         let interrupt = budget.clone();
