@@ -515,6 +515,110 @@ fn session_usage_totals_alike_in_ts_rust_and_luau() {
     });
 }
 
+// --- opencode-session-manager (complex): a route, two layers of keys, a field, a prompt, a confirm and deletes
+
+/// Three sessions in two directories and two projects, at noon UTC, so their dates read alike in any zone within
+/// eleven hours: `ses_p` (the route's), `ses_q` beside it, and `ses_r` with its subsession `ses_s` elsewhere.
+fn manager_sessions() -> Value {
+    let at = |id: &str, title: &str, parent: Option<&str>, directory: &str, project: &str, day: u64| {
+        let noon = 1_699_963_200_000 + day * 86_400_000;
+        json!({
+            "id": id, "title": title, "parentID": parent, "projectID": project, "cost": 0,
+            "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+            "time": { "created": noon - 3_600_000, "updated": noon },
+            "location": { "directory": directory },
+        })
+    };
+    json!([
+        at("ses_p", "Plan the release", None, DIRECTORY, "proj_a", 3),
+        at("ses_q", "Draft the notes", None, DIRECTORY, "proj_a", 1),
+        at("ses_r", "Fix the theme picker", None, "/tmp/elsewhere", "proj_b", 2),
+        at("ses_s", "Check the colors", Some("ses_r"), "/tmp/elsewhere", "proj_b", 2),
+    ])
+}
+
+fn manager_server(seen: &Seen) -> Option<Reply> {
+    let sessions = manager_sessions();
+    match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": sessions[0] }))),
+        // The host's own reads of the route's session: without them, its 404 toast covers the page.
+        ("GET", "/api/session/ses_p/message") => Some((200, json!({ "data": [], "cursor": {} }))),
+        ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": [] }))),
+        ("GET", "/api/session") if !seen.param("parentID").is_empty() => {
+            Some((200, json!({ "data": [], "cursor": {} })))
+        }
+        ("GET", "/api/session") => Some((200, json!({ "data": sessions, "cursor": {} }))),
+        ("GET", "/api/project") => Some((
+            200,
+            json!([{ "id": "proj_a", "name": "Opencode", "canonical": DIRECTORY }, { "id": "proj_b", "canonical": "/tmp/elsewhere" }]),
+        )),
+        ("DELETE", _) => Some((204, Value::Null)),
+        ("PATCH", _) => Some((200, json!({ "data": {} }))),
+        _ => None,
+    }
+}
+
+// Expected: on each column, `/session-manager` opens the page with the sessions grouped by directory, the route's
+// session marked and selected; `j` moves the selection, Tab groups by project, `c` shows the subsessions as a tree,
+// `l` switches to Chinese and back, `/` opens the search row, `r` asks for a new title, `d` asks before it deletes, and
+// enter deletes the session and its subsession and says so. Where a column cannot do what TS does, its row leaves the
+// step out and `steps/ports-trio.md` says why: the ports' prompt has no value or description, so TS's rename prompt,
+// with the directory and the title filled in, is not theirs.
+#[test]
+fn session_manager_groups_searches_and_deletes_alike_in_ts_rust_and_luau() {
+    trio("@0xuwui/opencode-session-manager", "session-manager", |carrier| {
+        let h = open_with(&[carrier], 140, manager_server, true, None, None)?;
+        h.wait_for("Plan the release");
+        h.settle();
+        h.app.type_text("/session-manager");
+        h.wait_for("Browse");
+        h.app.press("return");
+        h.wait_for("Draft the notes");
+        h.settle();
+        let mut steps = vec![("page".to_owned(), screen(&h))];
+        for (key, step, until) in [
+            ("j", "moved", None),
+            ("tab", "project", Some("[Project]")),
+            ("c", "children", Some("Check the colors")),
+            ("l", "chinese", Some("项目")),
+            ("l", "english", Some("[Project]")),
+            ("shift+tab", "directory", Some("[Directory]")),
+            ("/", "search", Some("Search titles")),
+            ("escape", "cleared", None),
+        ] {
+            h.app.press(key);
+            if let Some(until) = until {
+                h.wait_for(until);
+            }
+            h.settle();
+            steps.push((step.to_owned(), screen(&h)));
+        }
+        h.app.press("k");
+        h.app.press("r");
+        h.wait_for("Rename session");
+        h.settle();
+        if matches!(carrier, Carrier::Npm(_)) {
+            steps.push(("rename".to_owned(), screen(&h)));
+        }
+        h.app.press("escape");
+        h.settle();
+        steps.push(("renamed".to_owned(), screen(&h)));
+        h.app.press("d");
+        h.wait_for("This cannot be undone.");
+        h.settle();
+        steps.push(("delete".to_owned(), screen(&h)));
+        h.app.press("return");
+        h.wait_for("Deleted");
+        h.settle();
+        steps.push(("deleted".to_owned(), screen(&h)));
+        // The plugin's: its writes, and its reads of the list and the projects; the host reads the route's session.
+        let mut requests = requests(&h, &["/api/project"]);
+        requests.extend(requests_of(&h, |seen| seen.method != "GET" && seen.path.starts_with("/api/session/")));
+        requests.extend(requests_of(&h, |seen| seen.path == "/api/session" && seen.param("parentID").is_empty()));
+        Some(Observed { steps, requests })
+    });
+}
+
 /// The reads the server saw that `keep` keeps, each once, sorted.
 fn requests_of(h: &Port, keep: impl Fn(&Seen) -> bool) -> Vec<String> {
     let log = h.log.lock().unwrap();
