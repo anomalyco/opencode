@@ -77,11 +77,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       catch: (cause) => new Error("Failed to start server", { cause }),
     })
   })
-  let lastTimedOut = false
+  let unanswered = false
   const timedOut = () =>
     pool.failure() ??
     new Error(
-      lastTimedOut
+      unanswered
         ? "Timed out waiting for the background service to respond"
         : "Timed out waiting for the background service to start",
     )
@@ -92,8 +92,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
-    lastTimedOut = registration.timedOut
-    const owner = registration.timedOut ? info : undefined
+    // A server this call started can block its event loop while it boots, opening a large database on a slow disk.
+    // The startup deadline bounds it rather than the unresponsive budget, so that boot is never killed and repeated.
+    const owner = registration.timedOut && info !== undefined && !pool.spawned(info.pid) ? info : undefined
+    unanswered = owner !== undefined
     const diskSleep = owner !== undefined && (yield* Effect.promise(() => isUninterruptibleDiskSleep(owner.pid)))
     const expired = unresponsive.observe(owner, probedAt, yield* Clock.currentTimeMillis, diskSleep)
     let evicted = false

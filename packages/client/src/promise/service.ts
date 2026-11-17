@@ -56,22 +56,25 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   }
 
   try {
-    let lastTimedOut = false
+    let unanswered = false
     while (true) {
       // An owner still within its unresponsive budget holds the deadline open, so a long budget is not cut short.
       if (Date.now() >= deadline && !unresponsive.waiting())
         throw (
           pool.failure() ??
           new Error(
-            lastTimedOut
+            unanswered
               ? "Timed out waiting for the background service to respond"
               : "Timed out waiting for the background service to start",
           )
         )
       const probedAt = Date.now()
       const registration = await registered(options.file, timing.requestTimeout)
-      lastTimedOut = registration.timedOut
-      const owner = registration.timedOut ? registration.info : undefined
+      const info = registration.info
+      // A server this call started can block its event loop while it boots, opening a large database on a slow disk.
+      // The startup deadline bounds it rather than the unresponsive budget, so that boot is never killed and repeated.
+      const owner = registration.timedOut && info !== undefined && !pool.spawned(info.pid) ? info : undefined
+      unanswered = owner !== undefined
       const diskSleep = owner !== undefined && (await isUninterruptibleDiskSleep(owner.pid))
       const expired = unresponsive.observe(owner, probedAt, Date.now(), diskSleep)
       let evicted = false
@@ -107,7 +110,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
         // An owner that times out still holds the port; a contender would only add load until it is evicted.
-        if ((!registration.timedOut || evicted) && pool.shouldRecruit(registration.info !== undefined)) {
+        if ((!registration.timedOut || evicted) && pool.shouldRecruit(info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
         }

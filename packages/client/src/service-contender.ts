@@ -84,6 +84,10 @@ export function contenderPool(timing: EnsureTiming) {
       failure = undefined
       lastSpawn = 0
     },
+    /** Whether this call started the process `pid`. */
+    spawned(pid: number) {
+      return [...contenders].some((item) => item.child.pid === pid)
+    },
     /** Let the next attempt start without waiting a spawn delay. */
     recruitNow() {
       lastSpawn = Date.now() - spawnDelay

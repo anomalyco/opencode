@@ -143,4 +143,23 @@ for (const client of clients) {
     expect(replacement.pid).not.toBe(original.pid)
     expect(endpoint.url).toBe(replacement.url)
   })
+
+  test(`${client.name} keeps a server it started that stops answering until the startup deadline`, async () => {
+    await using fixture = await serviceFixture()
+    const pending = client
+      .ensure({ file: fixture.registration, command: fixture.command("controlled") })
+      .catch((error: unknown) => error)
+    const [started] = await fixture.waitForStarts(1)
+    await fixture.release(started, "hang")
+    // Unanswered for longer than the 320 ms unresponsive budget, which would evict a service it did not start.
+    await fixture.waitForRequests(5)
+    expect(() => process.kill(started, 0)).not.toThrow()
+    const error = await pending
+
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toBe("Timed out waiting for the background service to start")
+    expect((await Bun.file(fixture.registration).json()).pid).toBe(started)
+    expect(() => process.kill(started, 0)).not.toThrow()
+  })
 }
