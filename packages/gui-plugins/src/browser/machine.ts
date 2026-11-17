@@ -60,6 +60,16 @@ export type AddressFocus =
     }
   | { readonly status: "ready"; readonly tabID: Browser.TabID }
 
+/**
+ * Something that did not work: the raw `code`, such as `browser.address.web`, and the command the person attempted,
+ * which is undefined when main reported the error by itself. `id` tells one failure from the next with the same code.
+ */
+export type Failure = {
+  readonly id: number
+  readonly code: string
+  readonly action: Browser.Action | undefined
+}
+
 export type Attachment = {
   readonly serverID: string
   readonly phase: Phase
@@ -67,8 +77,11 @@ export type Attachment = {
   readonly browser: Browser.State | null
   /** Host embed per tab page of the current binding. */
   readonly embeds: Readonly<Record<string, string | undefined>>
-  /** The raw code of the last failed request or reported error, such as `browser.address.web`. */
-  readonly error: string | undefined
+  /**
+   * The last failed command or the last error main reported, until the person's next command, their dismissal or a
+   * newer one. A healthy inventory keeps it: the person may not have read it yet.
+   */
+  readonly failure: Failure | undefined
   readonly strip: Strip
   readonly addressFocus: AddressFocus
   readonly side: "unobserved" | "open" | "closed" | "dismissed"
@@ -151,10 +164,14 @@ export type Event =
       /** The binding the command went through; undefined when none could take it. */
       readonly attempt: number | undefined
       readonly request: number
+      /** The command that failed, which a notice names and can offer again. */
+      readonly action: Browser.Action
       readonly error: string
       /** The pane's Ipc could not answer. */
       readonly unavailable: boolean
     }
+  /** The person closed the failure's notice, or its time ran out. */
+  | { readonly type: "failure.dismissed"; readonly sessionKey: string; readonly id: number }
   | { readonly type: "address.focused"; readonly sessionKey: string; readonly tabID: Browser.TabID }
   | { readonly type: "register.accepted"; readonly sessionKey: string; readonly attempt: number }
   | {
@@ -220,6 +237,7 @@ export type MachineEffect =
       readonly type: "reject-command"
       readonly sessionKey: string
       readonly request: number
+      readonly action: Browser.Action
       readonly error: string
       readonly unavailable: boolean
     }
@@ -312,7 +330,7 @@ export function sessionPending(state: State, target: Target) {
 
   if (!attachment) return target.server.compatible && !target.pending
 
-  if (attachment.browser || attachment.error) return false
+  if (attachment.browser || attachment.failure) return false
   const phase = attachment.phase
 
   return (
@@ -357,7 +375,11 @@ export function sessionSuspended(state: State, sessionKey: string) {
 }
 
 export function sessionError(state: State, sessionKey: string) {
-  return attachmentOf(state, sessionKey)?.error
+  return attachmentOf(state, sessionKey)?.failure?.code
+}
+
+export function sessionFailure(state: State, sessionKey: string) {
+  return attachmentOf(state, sessionKey)?.failure
 }
 
 export function sessionEmbed(state: State, sessionKey: string, tabID: string) {
@@ -419,7 +441,7 @@ function ipcChanged(state: Open, ipc: Ipc): Transition {
       return put(
         result.state,
         key,
-        { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, error: undefined },
+        { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, failure: undefined },
         [...result.effects, ...stop(key, phase), ...register(key, attempt, attachment.browser)],
         attempt,
       )
@@ -436,7 +458,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     phase: { status: "idle" },
     browser: null,
     embeds: {},
-    error: undefined,
+    failure: undefined,
     strip: { located: event.located, mirrored: [], prune: false, focus: undefined },
     addressFocus: noFocus(),
     side: "unobserved",
@@ -596,6 +618,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
     case "command.failed":
       return commandFailed(state, key, attachment, event)
+    case "failure.dismissed":
+      return attachment.failure?.id === event.id ? put(state, key, { ...attachment, failure: undefined }) : { state, effects: [] }
     case "address.focused": {
       if (attachment.addressFocus.status !== "ready" || attachment.addressFocus.tabID !== event.tabID)
         return { state, effects: [] }
@@ -641,7 +665,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
           ...attachment,
           phase: { status: "registering", attempt, attempts: phase.attempts },
           embeds: {},
-          error: undefined,
+          failure: undefined,
         },
         register(key, attempt, attachment.browser),
         attempt,
@@ -716,7 +740,7 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
   return put(
     state,
     key,
-    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, error: undefined },
+    { ...attachment, phase: { status: "registering", attempt, attempts: 0 }, embeds: {}, failure: undefined },
     register(key, attempt, restore),
     attempt,
   )
@@ -741,7 +765,7 @@ function command(
     return put(
       state,
       key,
-      { ...attachment, error: undefined, addressFocus: focus },
+      { ...attachment, failure: undefined, addressFocus: focus },
       [{ type: "send-command", sessionKey: key, attempt: phase.attempt, request, action: event.action }],
       request,
     )
@@ -753,8 +777,8 @@ function command(
     return put(
       state,
       key,
-      { ...attachment, error: undefined, addressFocus: noFocus() },
-      [{ type: "reject-command", sessionKey: key, request, error, unavailable: false }],
+      { ...attachment, failure: undefined, addressFocus: noFocus() },
+      [{ type: "reject-command", sessionKey: key, request, action: event.action, error, unavailable: false }],
       request,
     )
   }
@@ -765,7 +789,7 @@ function command(
       state,
       key,
       { ...suspend(attachment, "ipc"), addressFocus: noFocus() },
-      [{ type: "reject-command", sessionKey: key, request, error: "browser.pane.unavailable", unavailable: true }],
+      [{ type: "reject-command", sessionKey: key, request, action: event.action, error: "browser.pane.unavailable", unavailable: true }],
       request,
     )
   const attempt = request + 1
@@ -777,7 +801,7 @@ function command(
       ...attachment,
       phase: { status: "registering", attempt, attempts: 0 },
       embeds: {},
-      error: undefined,
+      failure: undefined,
       addressFocus: focus,
     },
     [
@@ -814,7 +838,7 @@ function commandFailed(
 
   return put(state, key, {
     ...attachment,
-    error: replaced ? "browser.pane.replaced" : event.error,
+    failure: { id: event.request, code: replaced ? "browser.pane.replaced" : event.error, action: event.action },
     addressFocus: focus,
   })
 }
@@ -845,11 +869,12 @@ function paneState(
         phase: { status: "blocked", reason: replaced ? "replaced" : "missing" },
         browser: null,
         embeds: {},
-        error: replaced ? event.error : undefined,
+        failure: replaced ? { id: state.issued + 1, code: "browser.pane.replaced", action: undefined } : undefined,
         strip: { located: attachment.strip.located, mirrored: [], prune: false, focus: undefined },
         addressFocus: noFocus(),
       },
       stop(key, phase),
+      replaced ? state.issued + 1 : undefined,
     )
   }
 
@@ -869,6 +894,13 @@ function paneState(
   }
 
   const mirrored = mirror(key, attachment.strip, event.state, true)
+  // An inventory that repeats the error it reported last is the same failure, not a new one to read again.
+  const repeated = attachment.failure?.action === undefined && attachment.failure?.code === event.error
+
+  const failure =
+    event.error === undefined || repeated
+      ? moved(attachment, event.state) ? undefined : attachment.failure
+      : { id: state.issued + 1, code: event.error, action: undefined }
 
   return put(
     state,
@@ -878,7 +910,7 @@ function paneState(
       phase: { status: "ready", attempt: phase.attempt },
       browser: event.state,
       unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),
-      error: event.error,
+      failure,
       strip: mirrored.strip,
       addressFocus: follow(attachment.addressFocus, event.state),
     },
@@ -887,7 +919,19 @@ function paneState(
       ...mirrored.effects,
       ...(event.state ? [{ type: "record-history" as const, sessionKey: key }] : []),
     ],
+    failure === attachment.failure ? state.issued : state.issued + 1,
   )
+}
+
+// A failed command names a tab's page. Once that tab shows another document, or is gone, the failure is about a page
+// the person no longer sees.
+function moved(attachment: Attachment, browser: Browser.State | null) {
+  const action = attachment.failure?.action
+
+  if (!action || !("tabID" in action)) return false
+  const generation = (state: Browser.State | null) => state?.tabs.find((tab) => tab.id === action.tabID)?.generation
+
+  return generation(attachment.browser) !== generation(browser)
 }
 
 function backoff(state: Open, key: string, attachment: Attachment, phase: Bound): Transition {
@@ -901,7 +945,7 @@ function backoff(state: Open, key: string, attachment: Attachment, phase: Bound)
       ...attachment,
       phase: { status: "backoff", attempt, attempts: prior + 1 },
       embeds: {},
-      error: undefined,
+      failure: undefined,
       addressFocus: noFocus(),
     },
     [
@@ -980,7 +1024,7 @@ function suspend(attachment: Attachment, reason: Extract<Phase,{status:"suspende
     phase: { status: "suspended", reason },
     browser,
     embeds: {},
-    error: undefined,
+    failure: undefined,
     addressFocus: noFocus(),
   }
 }

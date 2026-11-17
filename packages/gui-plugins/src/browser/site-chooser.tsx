@@ -110,7 +110,7 @@ export function SiteChooser(props: {
   const status = () => {
     const current = result()
 
-    if (listed.error !== undefined && !listed.loading) return { text: ctx.t("common.requestFailed"), error: true, retry: true }
+    if (listed.error !== undefined && !listed.loading) return { text: ctx.t("sites.failed"), error: true, retry: true }
 
     if (!current || state.seeking) return { text: ctx.t("sites.loading", { browser: browser() }), error: false, loading: true }
 

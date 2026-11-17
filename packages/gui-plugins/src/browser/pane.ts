@@ -9,7 +9,7 @@ import { HttpClient, HttpClientRequest } from "effect/http"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
-import { browserFailure, CodedError, missingArtifact } from "./errors"
+import { browserFailure, CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
 import { activityOwner, agentDriven, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
@@ -518,12 +518,14 @@ export function createBrowserPane(input: {
       // A page that asks to confirm keeps its tab; its "Leave site?" closes it.
       if (closing && !(await closing.leave())) return
       // A navigation that the next one replaced, such as a second submit or a redirect, rejects with ERR_ABORTED while
-      // the tab goes on loading. It is not a failed request; a page that fails to load reports its own error.
+      // the tab goes on loading; one the person stopped, or that became a download, commits no page; a slow one
+      // outlives the command's deadline. None is a failed command, and a page that fails to load reports its own
+      // error, which the window shows where the page would be.
       await execute(binding, { action: command, files: [] }, new AbortController().signal, "user", "present").catch(
         (error: Error) => {
           if (error instanceof FileVerificationError) throw new Error(error._tag)
 
-          if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
+          if (!pageReports(error)) throw error
         },
       )
     },

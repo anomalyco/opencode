@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { IpcClient, SessionRef, SetupContext } from "@opencode/plugin/gui"
 import { liveAccessor } from "@opencode/plugin/gui/host"
@@ -23,6 +23,8 @@ const tab = (digit: string, url = `https://${digit}.example/`): Browser.Tab => (
 function fixture() {
   const bindings = new Map<string, string>()
   const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
+  // What main rejects the next commands with, first in, first out.
+  const rejections: string[] = []
   const server = { id: "browser-test", compatible: true, builtin: true, data: { on: () => () => undefined, session: { status: () => "idle" } } }
 
   const refs = ["ses_alpha", "ses_beta"].map((id) => ({
@@ -41,7 +43,11 @@ function fixture() {
       bindings.set(input.session, input.binding)
     },
     load: async () => undefined,
-    command: async () => undefined,
+    command: async () => {
+      const message = rejections.shift()
+
+      if (message !== undefined) throw new Error(message)
+    },
     inspect: async () => undefined,
     highlight: async () => undefined,
     zoom: async () => undefined,
@@ -90,7 +96,7 @@ function fixture() {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit, send }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections }
 }
 
 test("one session's transitions leave another session's attachment as it was", async () => {
@@ -197,6 +203,54 @@ test("a passkey notice names the tab's origin and offers the import for the page
     app.send("ses_alpha", { type: "refusal", tabID: page.id, notice: { reason: "browser.passkey.off" }, token: "none" })
     expect(app.model.notice(alpha, page.id)).toEqual({ token: "none", origin: "notice.page", text: "refused.passkey.off" })
   } finally {
+    app.dispose()
+  }
+})
+
+test("a command main rejects says what the person tried, never the app's generic failure text", async () => {
+  const app = fixture()
+  const [alpha] = app.sessions
+  const page = tab("a")
+  const warned = spyOn(console, "warn").mockImplementation(() => undefined)
+
+  try {
+    await Bun.sleep(0)
+    app.emit("ses_alpha", { tabs: [page], focusedTabID: page.id })
+
+    // A message main never sent before: the notice names the reload, offers it again, and the code is logged.
+    app.rejections.push("something new in main")
+    app.model.command(alpha, { type: "reload", tabID: page.id })
+    await Bun.sleep(0)
+    expect(app.model.failure(alpha, page.id)).toMatchObject({ text: "failed.command.reload", lasting: false })
+    expect(app.model.failure(alpha, page.id)?.retry).toBeFunction()
+    expect(warned).toHaveBeenCalledWith("[browser] unmapped failure", { code: "something new in main", action: "reload" })
+    // It belongs to the tab the command was for.
+    expect(app.model.failure(alpha, tab("b").id)).toBeUndefined()
+
+    // A refused address keeps main's reason and stays to be read; nothing is logged for a code the table knows.
+    warned.mockClear()
+    app.rejections.push("browser.address.web")
+    app.model.command(alpha, { type: "navigate", tabID: page.id, url: "ftp://files.example/" })
+    await Bun.sleep(0)
+    expect(app.model.failure(alpha, page.id)).toMatchObject({ text: "refused.web", lasting: true, retry: undefined })
+    expect(warned).not.toHaveBeenCalled()
+
+    // A load that failed is the page area's to explain, from the tab's own state: no notice above it as well.
+    app.rejections.push("ERR_NAME_NOT_RESOLVED (-105) loading 'https://nowhere.example/'")
+    app.model.command(alpha, { type: "navigate", tabID: page.id, url: "https://nowhere.example/" })
+    await Bun.sleep(0)
+    expect(app.model.failure(alpha, page.id)).toBeUndefined()
+
+    // The person closes a notice by its identity.
+    app.rejections.push("something new in main")
+    app.model.command(alpha, { type: "back", tabID: page.id })
+    await Bun.sleep(0)
+    const shown = app.model.failure(alpha, page.id)
+    expect(shown?.text).toBe("failed.command.back")
+    app.model.dismissFailure(alpha, shown?.id ?? -1)
+    expect(app.model.failure(alpha, page.id)).toBeUndefined()
+  } finally {
+    warned.mockRestore()
     app.dispose()
   }
 })

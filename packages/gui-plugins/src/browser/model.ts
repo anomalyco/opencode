@@ -9,6 +9,7 @@ import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { createKeyed, type SessionRef, type SetupContext } from "@opencode/plugin/gui"
 import { readHref } from "./comment"
+import { commandFailure, refusalText } from "./failure"
 import {
   openBinding,
   unavailable,
@@ -38,7 +39,7 @@ import {
   sessionAttached,
   sessionBrowser,
   sessionEmbed,
-  sessionError,
+  sessionFailure,
   sessionPending,
   sessionRegistration,
   sessionSuspended,
@@ -138,27 +139,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const recorded = new Map<string, string>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
-  // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
-  const describe = (error: string) => {
-    if (error === "browser.menu.failed") return ctx.t("menu.failed")
-
-    if (error === "browser.pane.replaced") return ctx.t("replaced")
-
-    if (error === "browser.address.credentials") return ctx.t("refused.credentials")
-
-    if (error === "browser.address.workspace") return ctx.t("refused.workspace")
-
-    if (error === "browser.preview.restricted") return ctx.t("preview.restricted")
-
-    if (error === "browser.preview.agentRestricted") return ctx.t("preview.agentRestricted")
-
-    if (error === "browser.artifact.missing") return ctx.t("artifact.missing")
-
-    if (error === FileVerificationError.code) return ctx.t("preview.verificationUnavailable")
-
-    if (error === "browser.address.web") return ctx.t("refused.web")
-
-    return ctx.t("common.requestFailed")
+  // A failure code `failure.ts` has no sentence for still reads as what the person tried. It is logged with its code,
+  // so a new one is noticed and gets a sentence of its own.
+  const noteFailure = (code: string, action: Browser.Action | undefined) => {
+    if (!commandFailure(code, action?.type).known) console.warn("[browser] unmapped failure", { code, action: action?.type })
   }
 
   const dispatch = (event: Event) => {
@@ -226,6 +210,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           sessionKey: effect.sessionKey,
           attempt: undefined,
           request: effect.request,
+          action: effect.action,
           error: effect.error,
           unavailable: effect.unavailable,
         }),
@@ -342,6 +327,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         if (tab.generation !== sessionTab(machine(), sessionKey, id)?.generation) setState("chrome", sessionKey, id, "notice", undefined)
       })
 
+      if (event.error !== undefined) noteFailure(event.error, undefined)
+
       return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
     }
 
@@ -384,6 +371,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           sessionKey,
           attempt: effect.attempt,
           request: effect.request,
+          action: effect.action,
           error: "browser.pane.unavailable",
           unavailable: true,
         }),
@@ -394,12 +382,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       (cause: unknown) => {
         const error = cause instanceof Error && cause.message ? cause.message : "browser.command.failed"
 
-        if ((error === "browser.artifact.missing" || error === FileVerificationError.code) && !ctx.signal.aborted) ctx.toast.show({ title: describe(error), variant: "error" })
+        // In sight even while the pane is not, as when a link in the conversation asked for it.
+        if ((error === "browser.artifact.missing" || error === FileVerificationError.code) && !ctx.signal.aborted)
+          ctx.toast.show({ title: ctx.t(error === "browser.artifact.missing" ? "artifact.missing" : "preview.verificationUnavailable"), variant: "error" })
+
+        if (!unavailable(cause)) noteFailure(error, effect.action)
         dispatch({
           type: "command.failed",
           sessionKey,
           attempt: effect.attempt,
           request: effect.request,
+          action: effect.action,
           error,
           unavailable: unavailable(cause),
         })
@@ -688,7 +681,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (!available(session)) return
 
       if (url.length > 2048) {
-        ctx.toast.show({ title: describe("browser.address.web") })
+        ctx.toast.show({ title: ctx.t("refused.web") })
 
         return Promise.resolve()
       }
@@ -733,7 +726,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
         }
 
-      return { token: entry.token, origin, text: describe(notice.reason) }
+      return { token: entry.token, origin, text: ctx.t(refusalText(notice.reason)) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean, copy?: boolean) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
@@ -799,11 +792,33 @@ export function createModel(ctx: SetupContext<typeof definition>) {
      * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
      */
     tabs: (session: SessionRef, open: readonly string[]) => sessionTabs(machine(), session, open),
+    /** The last failure's identity, which changes with every new one; the address field counts them as rejections. */
     error(session: Session) {
-      const code = sessionError(machine(), session.key)
+      const failure = sessionFailure(machine(), session.key)
 
-      return code === undefined ? undefined : describe(code)
+      return failure ? `${failure.id}:${failure.code}` : undefined
     },
+    /**
+     * What to say above a tab's page about a command that did not work or an address the pane refused: never for a
+     * load the page area explains, and only in the tab the command was for. `retry` sends the command again.
+     */
+    failure(session: Session, tabID: string) {
+      const failure = sessionFailure(machine(), session.key)
+
+      if (!failure) return
+      const action = failure.action
+      const view = commandFailure(failure.code, action?.type)
+
+      if (view.surface === "none" || (action && "tabID" in action && action.tabID !== tabID)) return
+
+      return {
+        id: failure.id,
+        text: ctx.t(view.text),
+        lasting: view.lasting,
+        retry: view.retry && action ? () => command(session, action) : undefined,
+      }
+    },
+    dismissFailure: (session: Session, id: number) => dispatch({ type: "failure.dismissed", sessionKey: session.key, id }),
     suspended: (session: Session) => sessionSuspended(machine(), session.key),
     /** The host embed of a tab's page, once main created the page. */
     embed: (session: Session, tabID: string) => sessionEmbed(machine(), session.key, tabID),

@@ -261,7 +261,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  const inspect = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const inspect = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await expect(inspect).toBeDisabled()
   await address.click()
@@ -683,7 +683,7 @@ story("an agent show request preserves the selected file, and a plugin open wake
   await file.click()
   await root.getByRole("button", { name: "Agent show request" }).click()
   await expect(file).toHaveAttribute("aria-selected", "true")
-  await expect(root.getByRole("img", { name: "Agent activity" })).toBeVisible()
+  await expect(root.getByRole("img", { name: "The agent used this tab" })).toBeVisible()
   await root.getByRole("button", { name: "Suspend binding" }).click()
   await root.getByRole("button", { name: "Plugin open and close" }).click()
   await expect(root.getByText("Plugin closed: true", { exact: true })).toBeVisible()

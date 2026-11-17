@@ -1,4 +1,3 @@
-import { FileVerificationError } from "@opencode/util/file-verification"
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
 import { Icon, newIcons } from "@opencode/ui/icon"
@@ -23,7 +22,7 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, externalAction, externalPage } from "./address"
+import { addressParts, connection, externalAction, externalPage, loopback } from "./address"
 import { hostDisplay } from "./host-display"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
@@ -55,6 +54,8 @@ import {
   type OverlayEvent,
 } from "./overlay-machine"
 import { PageIcon } from "./page-icon"
+import { loadFailure } from "./failure"
+import { FailureBar, FailurePage } from "./failure-view"
 import { FindBar } from "./find-bar"
 import { RefusalBar } from "./refusal-bar"
 import type { FindAction, PromptAnswer } from "./ipc"
@@ -71,6 +72,9 @@ import {
 } from "./site-machine"
 
 const RECENT = 5
+
+/** How long a notice about a command that did not work stays before it goes by itself. */
+const FAILURE_NOTICE_MS = 8_000
 
 /** An element a component reads after render, such as a button a native view anchors to. */
 type ElementRef = { element?: HTMLElement }
@@ -92,21 +96,12 @@ export default function SessionBrowserPane(props: {
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
   const failed = () => !!state()?.loadError
 
-  const failureMessage = () => {
+  // The page that did not load, as the page area explains it.
+  const loadFailed = createMemo(() => {
     const error = state()?.loadError
 
-    if (error === "browser.restore.outside") return "restore.outside"
-
-    if (error === "browser.restore.refused") return "restore.refused"
-
-    if (error === "browser.artifact.missing") return "artifact.missing"
-
-    if (error === FileVerificationError.code) return "preview.verificationUnavailable"
-
-    if (error === "browser.preview.unsupported") return "preview.upgrade"
-
-    return /ERR_(?:CERT_|SSL_)/.test(error ?? "") ? "failed.tls" : "failed.description"
-  }
+    return error === undefined ? undefined : loadFailure(error)
+  })
 
   const serverFile = () => /^(workspace|artifact):/.test(address())
   const offline = () => serverFile() && !props.session.server.connected
@@ -237,10 +232,36 @@ export default function SessionBrowserPane(props: {
       return
     }
 
-    void props.model.find(props.session, tab.id, action).catch(() => showToast({ title: plugin.t("common.requestFailed") }))
+    void props.model.find(props.session, tab.id, action).catch(() => showToast({ title: plugin.t("find.failed") }))
   }
 
-  const error = () => props.model.error(props.session)
+  // A command that did not work, or an address the pane refused. With no page to keep, it shows where the page would
+  // be; otherwise as a line above the page, which goes by itself unless it is a refusal the person should read.
+  const failure = createMemo(() => {
+    const tab = state()
+
+    return tab ? props.model.failure(props.session, tab.id) : undefined
+  })
+
+  const pageFailure = () => {
+    const current = failure()
+
+    return current && !current.lasting && empty() && !suspended() ? current : undefined
+  }
+
+  const barFailure = () => (pageFailure() ? undefined : failure())
+
+  createKeyed(
+    () => {
+      const current = barFailure()
+
+      return current && !current.lasting ? current.id : undefined
+    },
+    (id) => {
+      const timer = setTimeout(() => props.model.dismissFailure(props.session, id), FAILURE_NOTICE_MS)
+      onCleanup(() => clearTimeout(timer))
+    },
+  )
 
   // What the tab on screen waits on the user for: a bar above a page that keeps working, or a dialog over the still of
   // a page it blocks. Each prompt mounts afresh, so its fields start from its own values.
@@ -273,7 +294,7 @@ export default function SessionBrowserPane(props: {
     if (!tab || !current) return
     void props.model
       .answer(props.session, tab.id, current.id, value)
-      .catch(() => showToast({ title: plugin.t("common.requestFailed") }))
+      .catch(() => showToast({ title: plugin.t("prompt.failed") }))
   }
 
   const inspectable = () => !!address() && !failed() && !suspended()
@@ -428,8 +449,24 @@ export default function SessionBrowserPane(props: {
     if (!url || serverFile()) return
     void system.copy(url).then(
       () => showToast({ title: plugin.t("common.copied") }),
-      () => showToast({ title: plugin.t("common.requestFailed") }),
+      () => showToast({ title: plugin.t("link.copyFailed") }),
     )
+  }
+
+  // What can help on the error page: loading again, and for a certificate problem on this computer's own address the
+  // system browser, where a development certificate is often trusted.
+  const failureActions = () => {
+    const view = loadFailed()
+    const tab = state()
+
+    if (!view || !tab) return []
+    const url = address()
+    const local = view.kind === "insecure" && URL.canParse(url) && loopback(new URL(url).hostname)
+
+    return [
+      ...(view.reload ? [{ label: plugin.t("action.reload"), run: () => command({ type: "reload", tabID: tab.id }) }] : []),
+      ...(local && pageTarget().open ? [{ label: plugin.t("external.open"), run: () => pageTarget().openPage() }] : []),
+    ]
   }
 
   // The picked element in surface pixels, and the editor anchored below it, above it, or over it.
@@ -999,18 +1036,9 @@ export default function SessionBrowserPane(props: {
           </Menu>
         </div>
       </div>
-      <Show when={error()}>
-        <div
-          class="shrink-0 px-3 py-1.5 text-12-regular text-v2-state-fg-danger border-b border-v2-border-border-muted"
-          role="alert"
-          aria-live="assertive"
-        >
-          {error()}
-        </div>
-      </Show>
       {/*
         The bars above the page, always in this order: the sign-in offer, the site's permission request, the tab's
-        notice, then find. A dialog that blocks the page sits over the page area alone, never over a bar; find, which
+        notice, a command that did not work, then find. A page that did not load is never a bar: the page area says so. A dialog that blocks the page sits over the page area alone, never over a bar; find, which
         would search the page behind it, closes while it shows.
       */}
       {/* Above a page, where a signed-out site is the reason to import; the new tab page shows the offer as a card. */}
@@ -1047,6 +1075,15 @@ export default function SessionBrowserPane(props: {
                 />
               )}
             </Show>
+            <Show when={barFailure()}>
+              {(current) => (
+                <FailureBar
+                  text={current().text}
+                  retry={current().retry}
+                  dismiss={() => props.model.dismissFailure(props.session, current().id)}
+                />
+              )}
+            </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>
               {(view) => <FindBar view={view()} input={(el) => { findInput = el }} run={find} />}
             </Show>
@@ -1074,7 +1111,7 @@ export default function SessionBrowserPane(props: {
             </Show>
           )}
         </Show>
-        <Show when={empty() && !failed() && !suspended()}>
+        <Show when={empty() && !failed() && !suspended() && !pageFailure()}>
           <div dir="auto" data-scrollable class="size-full overflow-y-auto">
             <Show when={offering()}>
               <SignInOffer variant="card" imported={imported} closed={() => setConfirming(false)} />
@@ -1108,18 +1145,28 @@ export default function SessionBrowserPane(props: {
             </Show>
           </div>
         </Show>
-        <Show when={failed() && !suspended()}>
-          {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
-          <div
-            dir="auto"
-            class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
-          >
-            <Icon name="globe" size="large" class="mb-2 shrink-0" />
-            <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
-              {plugin.t("failed.title")}
-            </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t(failureMessage())}</div>
-          </div>
+        <Show when={suspended() ? undefined : loadFailed()}>
+          {(view) => (
+            <FailurePage
+              title={plugin.t(view().title)}
+              description={plugin.t(view().description)}
+              warning={view().kind === "insecure"}
+              actions={failureActions()}
+              code={view().code}
+            />
+          )}
+        </Show>
+        <Show when={failed() ? undefined : pageFailure()}>
+          {(current) => (
+            <FailurePage
+              title={current().text}
+              description={plugin.t("failed.command.description")}
+              actions={[
+                ...(current().retry ? [{ label: plugin.t("common.retry"), run: () => current().retry?.() }] : []),
+                { label: plugin.t("common.close"), run: () => props.model.dismissFailure(props.session, current().id) },
+              ]}
+            />
+          )}
         </Show>
         <Show when={suspended()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
@@ -1376,7 +1423,7 @@ function SiteInformation(props: {
   }
 
   const run = (effect: SiteEffect) => {
-    if (effect.type === "notify-clear-failed") return showToast({ title: plugin.t("common.requestFailed") })
+    if (effect.type === "notify-clear-failed") return showToast({ title: plugin.t("site.clearFailed") })
     const attempt = effect.attempt
     const phase = effect.type === "load" ? "loading" : "clearing"
     clearTimeout(timer)
@@ -1427,7 +1474,7 @@ function SiteInformation(props: {
   const cookieDetail = () => {
     const current = view()
 
-    if (current.failed) return plugin.t("common.requestFailed")
+    if (current.failed) return plugin.t("site.cookies.failed")
 
     return current.cookies === undefined ? undefined : plugin.plural("site.cookies.count", current.cookies)
   }
@@ -1506,14 +1553,18 @@ function SiteInformation(props: {
             {/* A row like its neighbours, with their inset and icon column, so the action starts under their text. */}
             <div data-slot="browser-site-row">
               <span data-slot="browser-site-icon" class="w-4" aria-hidden="true" />
-              <Button
-                size="small"
-                variant="neutral"
-                disabled={view().actionDisabled || view().failed}
-                onClick={() => dispatch({ type: "clear-cache.clicked" })}
-              >
-                {plugin.t("site.clearCache")}
-              </Button>
+              <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                <Button
+                  size="small"
+                  variant="neutral"
+                  disabled={view().actionDisabled || view().failed}
+                  onClick={() => dispatch({ type: "clear-cache.clicked" })}
+                >
+                  {plugin.t("site.clearCache")}
+                </Button>
+                {/* What it does not do, so nobody fears losing a sign-in. */}
+                <span data-slot="browser-site-detail">{plugin.t("site.clearCache.description")}</span>
+              </div>
             </div>
             <SiteRow
               icon="outline-eye-slash"

@@ -115,6 +115,8 @@ type PaneFixtureState = {
   cookies: number
   /** Main fails the next cookie read, as when the pane is suspended. */
   failSite: boolean
+  /** Main rejects the next command for a reason of its own, with a message the window has no sentence for. */
+  failCommand: boolean
   selection: string
 }
 
@@ -215,6 +217,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       external: [],
       cookies: 3,
       failSite: false,
+      failCommand: false,
       selection: "default",
     })
 
@@ -420,6 +423,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         const reason = command.type === "navigate" ? refusal(command.url) : undefined
 
         if (reason) throw new Error(reason)
+
+        if (store.failCommand) {
+          setStore("failCommand", false)
+          throw new Error("The browser page did not finish starting.")
+        }
+
         setStore("error", undefined)
 
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
@@ -629,7 +638,13 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           {/* The plugin contributes the bar's styles through the host's Style registry, which this fixture skips.
               Menus and suggestions portal into <body>, under this fixture's fixed host unless raised above it. */}
           <style>{`${barStyles}\n[data-popper-positioner] { z-index: 1001 !important; }`}</style>
-          <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Browser pane lifecycle</h1>
+          {/* Beside the title, so the controls below keep their rows and the pane keeps its place. */}
+          <h1 style={{ "font-size": "24px", "margin-bottom": "16px", display: "flex", "justify-content": "space-between" }}>
+            Browser pane lifecycle
+            <button style={{ "font-size": "14px" }} onClick={() => setStore("failCommand", true)}>
+              Fail next command
+            </button>
+          </h1>
           <nav style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", margin: "16px 0" }}>
             <For each={["Alpha", "Beta", "Empty"]}>
               {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}

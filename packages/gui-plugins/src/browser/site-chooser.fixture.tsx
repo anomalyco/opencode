@@ -62,7 +62,6 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
     ["common.close", "Close"],
     ["common.cancel", "Cancel"],
     ["common.retry", "Try again"],
-    ["common.requestFailed", "Request failed"],
   ])
 
   const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>

@@ -754,13 +754,13 @@ story("hides the native page under a dialog even when its still never arrives", 
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
-  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.getByRole("status")).toHaveText(
-    "Click an element in the page to comment on it. Press Escape to cancel.",
+    "Click part of the page to comment on it. Press Escape to cancel.",
   )
 
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
@@ -768,7 +768,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
   await expect(editor).toHaveAttribute("placeholder", "Add an optional comment...")
-  await expect(editor).toHaveAccessibleName("Comment on this element")
+  await expect(editor).toHaveAccessibleName("Comment on this part of the page")
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
   // The spotlight frames the picked element in surface pixels.
@@ -779,7 +779,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(root.locator("#browser-panel img")).toBeVisible()
 
   await editor.fill("Make this the primary colour")
-  await root.getByRole("button", { name: "Add element comment", exact: true }).click()
+  await root.getByRole("button", { name: "Add comment", exact: true }).click()
   await expect(root.getByTestId("fixture-comments")).toHaveText("button.primary @e7: Make this the primary colour")
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
@@ -803,7 +803,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
   await page.keyboard.press("Escape")
@@ -822,7 +822,7 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
 
 story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "false")
@@ -847,7 +847,7 @@ story("replaces an open page note with the comment for an element picked meanwhi
 
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   await picker.click()
   await expect(root.getByText("Picker Alpha: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -867,7 +867,7 @@ story("cleans up the originating session's picker and comment after a session sw
 
 story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
   await picker.click()
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
@@ -885,7 +885,7 @@ story("ends the native picker and highlight when the pane unmounts", async ({ pa
 
 story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await editor.fill("Still misaligned after the reload")
@@ -900,7 +900,7 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
 story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
-  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"]')
   const field = editor.locator("textarea")
@@ -931,13 +931,13 @@ story("grows the compact comment upward without flipping and keeps its actions i
       return !!surface && !!box && box.y >= surface.y && box.y + box.height <= surface.y + surface.height
     })
     .toBe(true)
-  const submit = editor.getByRole("button", { name: "Add element comment", exact: true })
+  const submit = editor.getByRole("button", { name: "Add comment", exact: true })
   await submit.scrollIntoViewIfNeeded()
   await expect(submit).toBeInViewport()
   // Near the surface's top, growth stops at the opening bottom rather than pushing the card down.
   await field.press("Escape")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("default")
-  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Comment on part of the page", exact: true }).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   await expect(field).toBeFocused()
   const nearTop = await editor.boundingBox()
@@ -979,7 +979,7 @@ story(
   async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
     const scenario = root.getByRole("combobox", { name: "Picked element scenario" })
-    const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+    const picker = root.getByRole("button", { name: "Comment on part of the page", exact: true })
     const editor = root.locator('[data-slot="browser-comment-editor"]')
     const overlay = root.locator('[data-component="browser-comment"]')
     await scenario.selectOption("long")
@@ -1003,7 +1003,7 @@ story(
     await scenario.selectOption("default")
     await picker.click()
     await root.getByRole("button", { name: "Pick element", exact: true }).click()
-    await editor.getByRole("button", { name: "Add element", exact: true }).click()
+    await editor.getByRole("button", { name: "Add to session", exact: true }).click()
     await expect(overlay).toHaveCount(0)
     await expect(comments).toHaveText(["button.primary @e7:", "button.primary @e7:"])
     expect(JSON.parse(await root.getByTestId("fixture-comment-metadata").innerText())).toEqual(
@@ -1129,29 +1129,48 @@ story("explains why a typed address cannot open instead of searching for it", as
 story("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeVisible()
-  await expect(root.getByText("Check the URL and your connection, then try again.", { exact: true })).toBeVisible()
-  await expect(root.getByText("Request failed", { exact: true })).toBeHidden()
+  // The page area alone explains a load that failed: what happened in plain words, what to do, and Chromium's code
+  // small under it. Nothing is raised above the page beside it.
+  const failure = root.locator('[data-component="browser-failure"]')
+  await expect(failure.getByRole("heading", { name: "This site can't be reached", exact: true })).toBeVisible()
+  await expect(failure.getByText("Check the address for typing mistakes. If it is right, the site may be down.", { exact: true })).toBeVisible()
+  await expect(failure.getByText("ERR_CONNECTION_REFUSED", { exact: true })).toBeVisible()
+  await expect(root.getByRole("alert")).toHaveCount(0)
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue(
     "https://alpha.example/",
   )
 
   await root.getByRole("button", { name: "Beta", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeHidden()
+  await expect(root.getByText("This site can't be reached", { exact: true })).toBeHidden()
   await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
   await root.getByRole("button", { name: "Alpha", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeVisible()
+  await expect(root.getByText("This site can't be reached", { exact: true })).toBeVisible()
 
-  await root.getByRole("button", { name: "Reload", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeHidden()
+  await failure.getByRole("button", { name: "Reload", exact: true }).click()
+  await expect(root.getByText("This site can't be reached", { exact: true })).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("a command that did not work says what was tried above the page and offers it again", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Fail next command", exact: true }).click()
+  await root.getByRole("button", { name: "Reload", exact: true }).click()
+  const notice = root.locator('[data-component="browser-failure-bar"]')
+  // Main's own message never reaches the person, and neither does the app's generic failure text.
+  await expect(notice.getByRole("alert")).toHaveText("Couldn't reload this page.")
+  await expect(root.getByText("Request failed", { exact: true })).toHaveCount(0)
+  await expect(root.getByText("did not finish starting")).toHaveCount(0)
+  // The page stays where it was; trying again sends the same command, which takes the notice away.
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await notice.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(notice).toHaveCount(0)
 })
 
 story("returns a failed tab to the empty state when an empty URL is submitted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeVisible()
+  await expect(root.getByText("This site can't be reached", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
 
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
@@ -1162,7 +1181,7 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await root.getByRole("button", { name: "Load current page", exact: true }).click()
   await expect(root.getByRole("button", { name: "Stop", exact: true })).toBeEnabled()
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
-  await expect(root.getByText("URL can't be reached", { exact: true })).toBeHidden()
+  await expect(root.getByText("This site can't be reached", { exact: true })).toBeHidden()
   await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeDisabled()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
@@ -1340,7 +1359,7 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
-  await expect(site).toContainText("Request failed")
+  await expect(site).toContainText("Couldn't read this site's cookies.")
   const retry = site.getByRole("button", { name: "Try again", exact: true })
   await expect(retry).toBeEnabled()
   await retry.click()
@@ -1364,7 +1383,7 @@ story("Browser options says why a disabled hand-off is unavailable", async ({ pa
   await root.getByRole("button", { name: "Blank page", includeHidden: true }).dispatchEvent("click")
   await root.getByRole("button", { name: "Browser options" }).click()
   await expect(page.getByRole("menuitem", { name: "Open in default browser" })).toBeDisabled()
-  await expect(page.getByRole("menu").getByText("Not available in the default browser", { exact: true })).toBeVisible()
+  await expect(page.getByRole("menu").getByText("This page can't open in your default browser", { exact: true })).toBeVisible()
 })
 
 story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
@@ -1392,7 +1411,7 @@ story("shows a page dialog in the pane instead of the page, and answers it with 
   const dialog = page.getByRole("alertdialog", { name: "alpha.example says" })
   await expect(dialog).toContainText("Discard the draft?")
   await expect(dialog).toContainText("1 more waiting")
-  await expect(dialog.getByRole("checkbox", { name: "Stop this page from showing more dialogs" })).toBeVisible()
+  await expect(dialog.getByRole("checkbox", { name: "Stop this page from showing more messages" })).toBeVisible()
   // A page blocked in a dialog draws nothing: the native view hides, and the dialog sits over the page's box.
   await expect(native).toHaveAttribute("data-visible", "false")
   await expect(dialog.getByRole("button", { name: "OK", exact: true })).toBeFocused()
@@ -1460,7 +1479,7 @@ story("asks again for an agent's request without offering to keep the answer, an
   await root.getByRole("button", { name: "Agent permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
   await expect(bar).toContainText("alpha.example wants to use your microphone.")
-  await expect(bar).toContainText("The agent is working in this tab; your answer is for this request only.")
+  await expect(bar).toContainText("The agent is working in this tab. Your answer applies this one time.")
   await expect(bar.getByRole("button", { name: "Always allow", exact: true })).toHaveCount(0)
   await expect(bar.getByRole("button", { name: "Allow this time", exact: true })).toBeVisible()
   // Enter on the bar never grants: focus starts on the refusing button.

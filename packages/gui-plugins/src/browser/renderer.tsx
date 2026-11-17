@@ -92,7 +92,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
       if (!result) return ctx.toast.show({ title: ctx.t("link.unavailable") })
       void result.catch(() => {
-        if (!ctx.signal.aborted) ctx.toast.show({ title: ctx.t("common.requestFailed") })
+        if (!ctx.signal.aborted) ctx.toast.show({ title: ctx.t("link.failed") })
       })
     },
   })
@@ -248,6 +248,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     return {
       id: "hardReload",
       title: ctx.t("menu.hardReload"),
+      // The names developers know it by, which the palette matches.
+      keywords: "hard reload ignore cache refresh",
       group: ctx.t("command.category.view"),
       bind: mac ? "mod+alt+r" : "ctrl+f5",
       scope: "#browser-panel",
@@ -528,7 +530,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           {(error) => (
             <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
               <div class="flex flex-col gap-1">
-                <div class="text-13-regular text-text-strong">{ctx.t("common.requestFailed")}</div>
+                <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
                 <div class="text-12-regular text-text-weak break-words">{error()}</div>
               </div>
               <Button size="small" variant="outline" onClick={() => dispatchModel({ type: "retry.requested" })}>

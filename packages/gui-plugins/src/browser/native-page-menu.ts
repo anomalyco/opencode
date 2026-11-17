@@ -3,6 +3,7 @@ import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import type { Cdp } from "./cdp"
 import { externalAction } from "./address"
+import { pageReports } from "./errors"
 import { pageMenu, menuAddress, type MenuAction, type MenuPolicy } from "./page-menu"
 import { workspaceFile } from "./workspace-file"
 import { extensionResource } from "./profile/extension-api/resource"
@@ -149,7 +150,11 @@ export function attachPageMenu(
       t: input.t,
       back: contents.navigationHistory.canGoBack(),
       forward: contents.navigationHistory.canGoForward(),
-      run: (action) => void run(action).catch(input.failed),
+      // A reload or a step back whose page fails to load is the page's to report, where the page would be.
+      run: (action) =>
+        void run(action).catch((error: Error) => {
+          if (!pageReports(error)) input.failed()
+        }),
       extensions: input.extensions(contents.id, params),
       spellcheck: session.isSpellCheckerEnabled(),
       languages: params.isEditable ? session.getSpellCheckerLanguages() : [],

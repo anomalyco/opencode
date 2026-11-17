@@ -150,7 +150,16 @@ export function createProfileJobs(
     if (!finished || finished.outcome.type === "changed") return undefined
     const outcome = finished.outcome
 
-    if (outcome.type === "error") return { text: ctx.t("common.requestFailed"), error: true }
+    // Main did not answer: say what the person tried, by the job.
+    if (outcome.type === "error") {
+      const type = finished.job.type
+
+      if (type === "clear") return { text: ctx.t("settings.failed.clear"), error: true }
+
+      if (type === "enable" || type === "remove") return { text: ctx.t("settings.failed.extension"), error: true }
+
+      return { text: ctx.t(type === "import-browser" || type === "import-file" ? "settings.failed.import" : "settings.failed.install"), error: true }
+    }
 
     if (outcome.type === "cleared") return { text: ctx.t("settings.cleared"), error: false }
 

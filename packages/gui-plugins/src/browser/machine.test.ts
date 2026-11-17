@@ -6,6 +6,7 @@ import {
   REGISTER_TIMEOUT_MS,
   sessionSupported,
   sessionError,
+  sessionFailure,
   sessionPending,
   sessionRegistration,
   revealGuard,
@@ -456,6 +457,7 @@ describe("browser pane machine", () => {
           sessionKey: key,
           attempt: attempt(asked),
           request: request?.status === "opening" ? request.request : -1,
+          action: { type: "tabs.open" },
           error: "boom",
           unavailable: false,
         },
@@ -492,33 +494,50 @@ describe("browser pane machine", () => {
     ).toBeUndefined()
   })
 
-  test("a healthy inventory clears a failed command's error", () => {
+  const navigate: Browser.Action = { type: "navigate", tabID: tabA, url: "ftp://files.example/" }
+
+  const refused = (state: State, request = 1): Event => ({
+    type: "command.failed",
+    sessionKey: key,
+    attempt: attempt(state),
+    request,
+    action: navigate,
+    error: "browser.address.web",
+    unavailable: false,
+  })
+
+  test("a failed command stays with what was attempted until its tab moves on or the person dismisses it", () => {
     const start = ready()
+    const failed = transition(start, refused(start)).state
+    expect(sessionFailure(failed, key)).toEqual({ id: 1, code: "browser.address.web", action: navigate })
 
-    const failed = transition(start, {
-      type: "command.failed",
-      sessionKey: key,
-      attempt: attempt(start),
-      request: 1,
-      error: "browser.address.web",
-      unavailable: false,
-    }).state
+    // The same page reporting again, such as a new title, is not a reason to take the notice away unread.
+    const titled = transition(failed, paneState(failed, inventory({ ...tab(tabA), title: "Renamed" }))).state
+    expect(sessionError(titled, key)).toBe("browser.address.web")
+    // Another document in that tab is: the notice was about the page that was there.
+    const moved = transition(titled, paneState(titled, inventory({ ...tab(tabA), generation: 1 }))).state
+    expect(sessionFailure(moved, key)).toBeUndefined()
 
-    expect(sessionError(failed, key)).toBe("browser.address.web")
-    expect(sessionError(transition(failed, paneState(failed, inventory(tab(tabA)))).state, key)).toBeUndefined()
+    // Only the notice the person closed goes; a stale dismissal leaves a newer failure.
+    expect(transition(failed, { type: "failure.dismissed", sessionKey: key, id: 7 }).state).toBe(failed)
+    expect(sessionFailure(transition(failed, { type: "failure.dismissed", sessionKey: key, id: 1 }).state, key)).toBeUndefined()
+  })
+
+  test("an error main reports is one failure however often the inventory repeats it", () => {
+    const start = ready()
+    const reported = transition(start, paneState(start, inventory(tab(tabA)), "download_failed")).state
+    const first = sessionFailure(reported, key)
+    expect(first).toMatchObject({ code: "download_failed", action: undefined })
+    const repeated = transition(reported, paneState(reported, inventory(tab(tabA)), "download_failed")).state
+    expect(sessionFailure(repeated, key)).toEqual(first)
+    const another = transition(repeated, paneState(repeated, inventory(tab(tabA)), "browser.menu.failed")).state
+    expect(sessionFailure(another, key)?.id).not.toBe(first?.id)
   })
 
   test("a command clears the error at once and an unreachable pane fails it without one", () => {
     const start = ready()
 
-    const failed = transition(start, {
-      type: "command.failed",
-      sessionKey: key,
-      attempt: attempt(start),
-      request: 1,
-      error: "browser.address.web",
-      unavailable: false,
-    }).state
+    const failed = transition(start, refused(start)).state
 
     const sent = transition(failed, command())
     expect(sessionError(sent.state, key)).toBeUndefined()
@@ -529,6 +548,7 @@ describe("browser pane machine", () => {
       sessionKey: key,
       attempt: attempt(start),
       request: 2,
+      action: navigate,
       error: "browser.pane.unavailable",
       unavailable: true,
     })

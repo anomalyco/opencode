@@ -67,7 +67,7 @@ export function RefusalBar(props: {
   }
 
   const answer = (dismiss: boolean) =>
-    void props.answer(dismiss, copyInstead()).catch(() => showToast({ title: ctx.t("common.requestFailed") }))
+    void props.answer(dismiss, copyInstead()).catch(() => showToast({ title: ctx.t("refused.failed") }))
 
   return (
     <section class="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-01 px-3 py-2">

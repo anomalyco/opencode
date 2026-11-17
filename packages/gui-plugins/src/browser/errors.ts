@@ -1,6 +1,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CAPTURE_DEADLINE_MS, FULL_PAGE_DEADLINE_MS } from "./capture"
 import { FileVerificationError } from "@opencode/util/file-verification"
+import { NavigationDeadlineError } from "./navigation-deadline"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
@@ -11,6 +12,20 @@ export class CodedError extends Error {
   ) {
     super(message, options)
   }
+}
+
+/**
+ * Whether the tab itself reports how a rejected load ended, so the person's command did not fail: Chromium's own load
+ * error, which the page area explains; a navigation that was stopped, replaced or became a download; or one still
+ * under way when the command's deadline passed. The agent's commands still get every one of these as a failure.
+ */
+export function pageReports(error: Error) {
+  if (error instanceof NavigationDeadlineError) return true
+
+  if (error instanceof CodedError) return error.code === "navigation_failed"
+
+  // Chromium's load errors carry its negative number beside the name; Node's own `ERR_` errors have no `errno`.
+  return "errno" in error && "code" in error && String(error.code).startsWith("ERR_")
 }
 
 export function missingArtifact() {

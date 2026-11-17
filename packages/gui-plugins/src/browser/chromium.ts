@@ -15,7 +15,7 @@ import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jp
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
-import { CodedError, missingArtifact } from "./errors"
+import { CodedError, missingArtifact, pageReports } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
@@ -392,7 +392,7 @@ export function createBrowserPage(
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      void options.menu.navigate("reload").catch((error: Error) => publish(error.message))
+      void options.menu.navigate("reload").catch((error: Error) => { if (!pageReports(error)) publish(error.message) })
 
       return
     }
@@ -1199,8 +1199,9 @@ export function createBrowserPage(
             await contents.loadURL("about:blank").finally(() => { startingBlank = false })
           }).catch((error: Error) => {
             if (!options.restore) throw error
-            // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
-            publish(error.message)
+            // A dev server may have stopped while this page was unloaded. Keep its tab available to retry. The tab
+            // itself reports a load that failed or is still under way; anything else is said beside it.
+            publish(pageReports(error) ? undefined : error.message)
           }),
         ]),
     diagnostics.enable(),

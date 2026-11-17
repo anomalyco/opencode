@@ -2,7 +2,8 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import { undrawableMessage } from "./capture"
-import { browserFailure, CodedError, missingArtifact, protocolError } from "./errors"
+import { browserFailure, CodedError, missingArtifact, pageReports, protocolError } from "./errors"
+import { NavigationDeadlineError } from "./navigation-deadline"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 
@@ -32,6 +33,26 @@ test("navigation failures explain the server network and never recommend disabli
   expect(tls.message).toContain("do not bypass certificate checks")
   const aborted = browserFailure(action, new Error("net::ERR_ABORTED"))
   expect(aborted.message).toContain("browser.files.list({tabID})")
+})
+
+test("the person's command does not fail for a load the tab reports itself, and the agent still gets the failure", () => {
+  // Electron rejects a load with Chromium's name and number.
+  const load = (code: string, errno: number) => Object.assign(new Error(`${code} (${errno}) loading 'https://example.com/'`), { code, errno })
+  const stopped = new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download.")
+
+  expect(pageReports(load("ERR_NAME_NOT_RESOLVED", -105))).toBe(true)
+  expect(pageReports(load("ERR_ABORTED", -3))).toBe(true)
+  // Stop, or a link that became a download, commits no page; a slow page outlives the command's deadline.
+  expect(pageReports(stopped)).toBe(true)
+  expect(pageReports(new NavigationDeadlineError())).toBe(true)
+  // Anything else is a command that did not work, which the window says.
+  expect(pageReports(new Error("Browser network is not ready; no tab was opened."))).toBe(false)
+  expect(pageReports(new CodedError(Browser.FailureCode.previewUnavailable, "The preview could not be loaded"))).toBe(false)
+  expect(pageReports(Object.assign(new TypeError("Invalid URL"), { code: "ERR_INVALID_URL" }))).toBe(false)
+
+  const action: Browser.Action = { type: "navigate", tabID, url: "https://example.com" }
+  expect(browserFailure(action, stopped).code).toBe("navigation_failed")
+  expect(browserFailure(action, load("ERR_NAME_NOT_RESOLVED", -105)).code).toBe("navigation_failed")
 })
 
 test("native protocol errors keep the cause and give a valid recovery operation", () => {
