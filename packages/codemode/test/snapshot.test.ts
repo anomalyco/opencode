@@ -21,6 +21,11 @@ const programs: Record<string, string> = {
     const decoder = new TextDecoder('utf8', { fatal: true })
     const start = decoder.decode(new Uint8Array([0xef, 0xbb, 0xbf, 0xef]), { stream: true })
     return [start, decoder.decode(new Uint8Array([0xbb, 0xbf]))]`,
+  "a Buffer keeps its type and bytes": `
+    const buffer = Buffer.from("héllo")
+    let total = 0
+    for (const byte of buffer) total += byte
+    return [Buffer.isBuffer(buffer), buffer.toString(), buffer.toString("base64"), total]`,
   "closures over per-iteration bindings": `
     const fns = []
     for (let i = 0; i < 5; i++) fns.push(() => i * 2)
