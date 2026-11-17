@@ -7,40 +7,49 @@ import type { Context, IpcClient, SetupContext, Ui } from "@opencode/plugin/gui"
 import browserEn from "./i18n/en"
 import type definition from "./index"
 import type { BrowserProfile, ImportResult, ProfileSource, SiteList } from "./profile/ipc"
-import { profileChoices } from "./choices"
-import { SiteChooser } from "./site-chooser"
+import { SiteChooserDialog } from "./site-chooser"
 
-/** What main answers the dialog in a scenario: a profile's sites, or why it has none. */
-export type SiteScenario = { sites: number } | { failed: "locked" | "access" | "read" }
-
-const work = { id: "Default", name: "Work" }
-
-const chrome: ProfileSource = {
-  id: "chrome",
-  name: "Google Chrome",
-  engine: "chromium",
-  profiles: [work, { id: "Profile 1", name: "Home" }],
+/**
+ * What main answers the dialog: how many made-up sites the first profile has (or why it has none), whether the
+ * listing waits for the test, and whether an import brings everything (`clean`) or leaves a cookie behind.
+ */
+export type SiteScenario = {
+  readonly sites: number | "locked"
+  readonly hold?: boolean
+  readonly partial?: boolean
+  readonly query?: string
 }
 
 const sources: ProfileSource[] = [
-  chrome,
-  { id: "firefox", name: "Firefox", engine: "firefox", profiles: [{ id: "abc.default", name: "default" }] },
+  {
+    id: "chrome",
+    name: "Google Chrome",
+    engine: "chromium",
+    profiles: [
+      { id: "Default", name: "Work" },
+      { id: "Profile 1", name: "Home" },
+    ],
+  },
 ]
 
-// Five named tools first, as a profile's most recent sites, then made-up sites up to the scenario's count.
+// Five named tools first, as a profile's most recent sites, then made-up sites up to the scenario's count. A long one
+// shows how a name loses its start.
 const named = ["github.com", "linear.app", "figma.com", "bank.test", "xn--mnchen-3ya.de"]
+
+const longest = `${"very-long-subdomain-label-".repeat(4)}example.co.uk`
 
 function siteList(count: number): SiteList {
   const sites = Array.from({ length: count }, (_, index) => ({
-    site: named[index] ?? `site-${String(index).padStart(4, "0")}.example.co.uk`,
+    site: named[index] ?? (index === 5 ? longest : `site-${String(index).padStart(4, "0")}.example.co.uk`),
     cookies: (index % 7) + 1,
   }))
 
   return { type: "listed", sites, order: "recent" }
 }
 
-// Component-test fixture: the real import dialog in the real dialog host, with main's browser profile faked at its Ipc.
-// It records each import main receives, in a list beside the dialog, so the test reads what would be imported.
+// Component-test fixture: the real import dialog, with jobs of its own, in the real dialog host, and main's browser
+// profile faked at its Ipc. It records each import main receives and each list it reads in an element beside the
+// dialog, so the test reads what would be imported, and whether the dialog closed.
 export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direction?: "ltr" | "rtl" }) {
   const host = document.createElement("main")
   host.dataset.testid = "site-chooser-fixture"
@@ -51,31 +60,42 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
   const messages = new Map<string, string>([
     ...Object.entries(browserEn),
     ["common.close", "Close"],
+    ["common.cancel", "Cancel"],
+    ["common.retry", "Try again"],
     ["common.requestFailed", "Request failed"],
   ])
 
   const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
     (messages.get(key) ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(params?.[name] ?? ""))
 
-  const [store, setStore] = createStore<{ imports: { source: string; profile: string; sites?: readonly string[] }[]; listed: number }>({
-    imports: [],
-    listed: 0,
-  })
+  const [store, setStore] = createStore<{
+    imports: { source: string; profile: string; sites?: readonly string[] }[]
+    reads: string[]
+    closed: boolean
+    imported: number
+  }>({ imports: [], reads: [], closed: false, imported: 0 })
+
+  const held = Promise.withResolvers<void>()
 
   const client = {
     state: () => ({ extensions: [], remoteSignIns: false }),
     on: () => () => undefined,
     sources: async () => sources,
     summary: async () => ({ cookies: 0, persistent: true }),
-    sites: async (): Promise<SiteList> => {
-      setStore("listed", (count) => count + 1)
+    sites: async (request: { source: string; profile: string }): Promise<SiteList> => {
+      setStore("reads", (reads) => [...reads, request.profile])
 
-      return "failed" in input.scenario ? { type: "failed", reason: input.scenario.failed } : siteList(input.scenario.sites)
+      if (input.scenario.hold) await held.promise
+
+      if (request.profile === "Profile 1") return { type: "listed", sites: [{ site: "netflix.com", cookies: 4 }, { site: "bbc.co.uk", cookies: 2 }], order: "recent" }
+
+      return input.scenario.sites === "locked" ? { type: "failed", reason: "locked" } : siteList(input.scenario.sites)
     },
     importBrowser: async (request: { source: string; profile: string; sites?: readonly string[] }): Promise<ImportResult> => {
       setStore("imports", (items) => [...items, request])
+      const count = (request.sites?.length ?? 0) * 2
 
-      return { type: "imported", imported: (request.sites?.length ?? 0) * 2, skipped: 0, protected: 0, failed: 0 }
+      return { type: "imported", imported: count, skipped: 0, protected: 0, failed: input.scenario.partial ? 1 : 0 }
     },
   }
 
@@ -100,23 +120,34 @@ export function mountSiteChooser(input: { ui: Ui; scenario: SiteScenario; direct
   // SAFETY: the dialog uses only the context properties implemented above.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const plugin = fake as unknown as Context & SetupContext<typeof definition>
-  const choices = profileChoices(sources)
 
   function Opener() {
     const dialog = useDialog()
 
     onMount(() =>
-      dialog.show(() => (
-        <PluginContext.Provider value={plugin}>
-          <SiteChooser choices={choices} initial={{ source: chrome, profile: work }} close={() => dialog.close()} />
-        </PluginContext.Provider>
-      )),
+      dialog.show(
+        () => (
+          <PluginContext.Provider value={plugin}>
+            <SiteChooserDialog
+              query={input.scenario.query}
+              imported={() => setStore("imported", (count) => count + 1)}
+              close={() => dialog.close()}
+            />
+          </PluginContext.Provider>
+        ),
+        () => setStore("closed", true),
+      ),
     )
 
     return (
-      <ol data-testid="site-chooser-imports" data-listed={store.listed}>
-        <For each={store.imports}>{(item) => <li>{JSON.stringify(item)}</li>}</For>
-      </ol>
+      <>
+        <ol data-testid="site-chooser-imports" data-reads={store.reads.join(",")} data-closed={store.closed} data-imported={store.imported}>
+          <For each={store.imports}>{(item) => <li>{JSON.stringify(item)}</li>}</For>
+        </ol>
+        <button type="button" data-testid="site-chooser-release" onClick={() => held.resolve()}>
+          Answer the listing
+        </button>
+      </>
     )
   }
 

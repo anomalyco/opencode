@@ -2,7 +2,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, For, onCleanup, Show, type Accessor } from "solid-js"
+import { createMemo, For, getOwner, onCleanup, runWithOwner, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
@@ -69,13 +69,13 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
   const run = (choice: Choice) =>
     jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
 
-  // The dialog runs its own import and outlives this offer, which goes once cookies came in.
-  const imported = props.imported
+  // The dialog's import is one of this offer's jobs, which says how it ended, so the dialog goes with the offer.
+  const owner = getOwner()
 
   const chooseSites = (choice: Choice) =>
-    ctx.dialogs.open((dialog) => (
-      <SiteChooser choices={choices()} initial={choice} imported={imported} close={() => dialog.close()} />
-    ))
+    runWithOwner(owner, () =>
+      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+    )
 
   return (
     <Show

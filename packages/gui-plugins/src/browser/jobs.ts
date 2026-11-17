@@ -19,6 +19,9 @@ import {
 
 type Client = IpcClient<(typeof BrowserProfile)["spec"]>
 
+/** One surface's jobs, as `createProfileJobs` returns them; a dialog the surface opens may run its jobs there. */
+export type ProfileJobs = ReturnType<typeof createProfileJobs>
+
 /**
  * What a surface says about a finished job, and whether it is bad news. An install that added an extension which only
  * partly works here, or added nothing because it will not work here, says what will not work.

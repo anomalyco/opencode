@@ -1,60 +1,85 @@
 import { Checkbox } from "@opencode/ui/checkbox"
-import { createVirtualizer } from "@tanstack/solid-virtual"
-import { createMemo, createSignal, For, Show, untrack } from "solid-js"
-import { createLatest, usePlugin } from "@opencode/plugin/gui"
-import { choiceLabel, choiceValue, type Choice } from "./choices"
+import { Icon } from "@opencode/ui/icon"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { Select } from "@opencode/ui/select"
+import { TextInput } from "@opencode/ui/text-input"
+import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
+import { createMemo, createSignal, createUniqueId, For, Show, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
+import { createKeyed, createLatest, usePlugin } from "@opencode/plugin/gui"
+import { choiceLabel, choiceValue, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
-import { createProfileJobs } from "./jobs"
-import { importedCookies } from "./jobs-machine"
+import { createProfileJobs, type ProfileJobs } from "./jobs"
+import { importedCookies, importLoss, type Job } from "./jobs-machine"
+import type { SiteList } from "./profile/ipc"
+import { siteListMove, siteTypeAhead } from "./site-keys"
 import { matchSites } from "./site-search"
 
-/** Rows of the site list, in CSS pixels: one line of text in a checkbox row. */
+/** One row of the site list, in CSS pixels. */
 const ROW_HEIGHT = 32
 
+/** Keys typed within this many milliseconds of the last one extend the type-ahead. */
+const TYPE_AHEAD_MS = 700
+
 /**
- * The import dialog: the sites a browser profile has cookies for, one row per registrable domain with how many cookies
- * it has, to import only the chosen ones. Nothing is chosen at first, because the person came here to choose; the
- * one-click import elsewhere still brings every site. Main reads the list from the cookies' hosts alone, and it lives
- * only while the dialog is open: neither the list nor the choice is stored.
+ * The import dialog: the sites a browser profile has cookies for, one row per registrable domain with its cookie count,
+ * to bring the sign-ins of only the chosen ones. Nothing is chosen at first, because the person came here to choose;
+ * the one-click import elsewhere still brings every site. Main reads the list from the cookies' hosts alone. Lists stay
+ * only while the dialog is open, so switching back to a profile does not read it again; neither the lists nor the
+ * choice is stored.
  *
- * It runs its own import, so it keeps working whichever surface opened it, and stays open to add more sites; cookies
- * already imported stay. `imported` runs after an import that brought cookies, for the pane to load its page again.
+ * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
+ * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
+ * why. `query` starts the search, as for the site a passkey request came from.
  */
 export function SiteChooser(props: {
   choices: readonly Choice[]
   initial: Choice
-  imported?: () => void
+  jobs: ProfileJobs
+  query?: string
   close: () => void
 }) {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
+  const id = createUniqueId()
+  // Lists read while the dialog is open, by profile; a failure is not kept, so Try again reads again.
+  const lists = new Map<string, SiteList>()
+  const elements: ChooserElements = {}
 
-  const jobs = createProfileJobs({
-    finished(finished) {
-      if (importedCookies(finished.outcome) > 0) props.imported?.()
+  const [state, setState] = createStore<ChooserState>({
+    profile: choiceValue(props.initial),
+    query: props.query ?? "",
+    chosen: { profile: choiceValue(props.initial), sites: new Set() },
+    active: 0,
+    focused: false,
+    attempt: 0,
+    typed: { text: "", at: 0 },
+    seeking: !!props.query,
+  })
+
+  // The import this dialog started, compared by identity with the jobs' own, which a store would wrap in a proxy.
+  const [job, setJob] = createSignal<Job>()
+
+  const choice = createMemo(() => props.choices.find((item) => choiceValue(item) === state.profile) ?? props.initial)
+  const sites = () => (state.chosen.profile === state.profile ? state.chosen.sites : new Set<string>())
+
+  const listed = createLatest(
+    () => `${state.profile}\n${state.attempt}`,
+    async (key, signal) => {
+      const current = untrack(choice)
+      const known = lists.get(choiceValue(current))
+      const result = known ?? (await props.jobs.sites(current.source.id, current.profile.id, signal))
+
+      if (result.type === "listed") lists.set(choiceValue(current), result)
+
+      if (!signal.aborted && untrack(() => state.seeking)) seek(current, result)
+
+      return { key, result }
     },
-  })
-
-  const [profile, setProfile] = createSignal(choiceValue(props.initial))
-  const [query, setQuery] = createSignal("")
-
-  // The chosen sites of one profile: switching profiles starts from none.
-  const [chosen, setChosen] = createSignal<{ profile: string; sites: ReadonlySet<string> }>({
-    profile: profile(),
-    sites: new Set(),
-  })
-
-  const choice = createMemo(() => props.choices.find((item) => choiceValue(item) === profile()) ?? props.initial)
-  const sites = () => (chosen().profile === profile() ? chosen().sites : new Set<string>())
-
-  const listed = createLatest(profile, (key, signal) => {
-    const current = untrack(choice)
-
-    return jobs.sites(current.source.id, current.profile.id, signal).then((result) => ({ key, result }))
-  })
+  )
 
   // The previous profile's list never shows under another profile while the new one loads.
-  const result = () => (listed.latest?.key === profile() ? listed.latest.result : undefined)
+  const result = () => (listed.latest?.key === `${state.profile}\n${state.attempt}` ? listed.latest.result : undefined)
 
   const all = createMemo(() => {
     const current = result()
@@ -62,58 +87,116 @@ export function SiteChooser(props: {
     return current?.type === "listed" ? current.sites : []
   })
 
-  const shown = createMemo(() => matchSites(all(), query()))
+  const shown = createMemo(() => matchSites(all(), state.query))
+  const ready = () => result()?.type === "listed" && all().length > 0
   const browser = () => choice().source.name
+  const busy = () => props.jobs.running() !== undefined
+  const shownChosen = createMemo(() => shown().filter((item) => sites().has(item.site)).length)
 
   const status = () => {
     const current = result()
 
-    if (listed.error !== undefined && !listed.loading) return { text: ctx.t("common.requestFailed"), error: true }
+    if (listed.error !== undefined && !listed.loading) return { text: ctx.t("common.requestFailed"), error: true, retry: true }
 
-    if (!current) return { text: ctx.t("sites.loading", { browser: browser() }), error: false, loading: true }
+    if (!current || state.seeking) return { text: ctx.t("sites.loading", { browser: browser() }), error: false, loading: true }
 
     if (current.type === "failed" && current.reason === "locked")
-      return { text: ctx.t("signins.failed.locked.named", { browser: browser() }), error: true }
+      return { text: ctx.t("signins.failed.locked.named", { browser: browser() }), error: true, retry: true }
 
-    if (current.type === "failed") return { text: ctx.t(`signins.failed.${current.reason}`), error: true }
+    if (current.type === "failed") return { text: ctx.t(`signins.failed.${current.reason}`), error: true, retry: true }
 
     if (current.sites.length === 0) return { text: ctx.t("sites.empty"), error: false }
 
     if (shown().length === 0) return { text: ctx.t("sites.unmatched"), error: false }
   }
 
+  // The import this dialog started, once it ended; a clean one closes the dialog, and its surface says so.
+  const finished = createMemo(() => {
+    const last = props.jobs.last()
+
+    return job() && last?.job === job() ? last : undefined
+  })
+
+  const clean = () => {
+    const outcome = finished()?.outcome
+
+    return !!outcome && importedCookies(outcome) > 0 && outcome.type === "imported" && outcome.result.type === "imported" && !importLoss(outcome.result)
+  }
+
+  // Closes the dialog host's dialog, outside Solid, once the import it started ended cleanly.
+  createKeyed(
+    () => (clean() ? finished() : undefined),
+    () => props.close(),
+  )
+
+  const message = () => {
+    if (job() && props.jobs.running() === job()) return props.jobs.notice()
+
+    return props.jobs.unsaved() ?? (finished() && !clean() ? props.jobs.describe(finished()) : undefined)
+  }
+
+  const toTop = () => {
+    setState("active", 0)
+
+    if (elements.viewport) elements.viewport.scrollTop = 0
+  }
+
+  const search = (query: string) => {
+    setState("query", query)
+    toTop()
+  }
+
+  const switchProfile = (profile: string) => {
+    setState({ profile, seeking: false })
+    toTop()
+  }
+
+  // Opened for a site, the dialog moves on to the next browser profile until one has it, and back to the first if none.
+  const seek = (current: Choice, list: SiteList) => {
+    const found = list.type === "listed" ? matchSites(list.sites, untrack(() => state.query)) : []
+
+    // The one site the page belongs to is chosen already, so importing it is one click.
+    if (found.length > 0)
+      return setState({ seeking: false, chosen: { profile: choiceValue(current), sites: new Set(found.length === 1 ? found.map((item) => item.site) : []) } })
+    const index = props.choices.findIndex((item) => choiceValue(item) === choiceValue(current))
+    const next = props.choices[index + 1]
+
+    setState(next ? { profile: choiceValue(next) } : { profile: choiceValue(props.initial), seeking: false })
+  }
+
   const choose = (change: (next: Set<string>) => void) => {
     const next = new Set(sites())
     change(next)
-    setChosen({ profile: profile(), sites: next })
+    setState("chosen", { profile: state.profile, sites: next })
   }
 
-  const toggle = (site: string, on: boolean) => choose((next) => (on ? next.add(site) : next.delete(site)))
-  // Both act on the sites the search shows, so a search for one tool selects only its sites.
+  const toggle = (site: string) => choose((next) => (next.has(site) ? next.delete(site) : next.add(site)))
+  // Both act on the sites the search shows, which is every site without a search.
   const selectShown = () => choose((next) => shown().forEach((item) => next.add(item.site)))
   const clearShown = () => choose((next) => shown().forEach((item) => next.delete(item.site)))
+  const canImport = () => sites().size > 0 && props.jobs.available() && !busy() && props.jobs.unsaved() === undefined
 
   const start = () => {
+    if (!canImport()) return
     const current = choice()
 
-    jobs.start({
+    const next: Job = {
       type: "import-browser",
       source: current.source.id,
       profile: current.profile.id,
       sites: all().flatMap((item) => (sites().has(item.site) ? [item.site] : [])),
-    })
-  }
+    }
 
-  const busy = () => jobs.running() !== undefined
-  const message = () => jobs.unsaved() ?? jobs.notice() ?? jobs.describe(jobs.last())
-  const [scroller, setScroller] = createSignal<HTMLDivElement>()
+    setJob(next)
+    props.jobs.start(next)
+  }
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
       return shown().length
     },
-    getScrollElement: () => scroller() ?? null,
-    initialRect: { width: 0, height: 8 * ROW_HEIGHT },
+    getScrollElement: () => elements.viewport ?? null,
+    initialRect: { width: 0, height: 10 * ROW_HEIGHT },
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
     get getItemKey() {
@@ -121,11 +204,58 @@ export function SiteChooser(props: {
 
       return (index: number) => list[index]?.site ?? index
     },
+    // The active row stays rendered while it scrolls out of view, so the listbox can name it.
+    rangeExtractor: (range) => {
+      const indexes = defaultRangeExtractor(range)
+      const active = state.active
+
+      return indexes.includes(active) || active >= shown().length ? indexes : [...indexes, active].toSorted((a, b) => a - b)
+    },
   })
 
-  // Rows keep their element while they stay in view, so a focused checkbox keeps focus as the list scrolls.
+  // Rows keep their element while they stay in view.
   const placed = createMemo(() => new Map(virtualizer.getVirtualItems().map((row) => [String(row.key), row] as const)))
   const keys = createMemo(() => [...placed().keys()])
+  const optionID = (site: string) => `${id}-${site}`
+  const activeSite = () => shown()[Math.min(state.active, shown().length - 1)]?.site
+
+  const moveTo = (index: number) => {
+    setState("active", index)
+    virtualizer.scrollToIndex(index, { align: "auto" })
+  }
+
+  const onListKey = (event: KeyboardEvent) => {
+    const page = Math.floor((elements.viewport?.clientHeight ?? 0) / ROW_HEIGHT)
+    const move = siteListMove(event.key, state.active, shown().length, page)
+
+    if (move !== undefined && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault()
+
+      return moveTo(move)
+    }
+
+    if (event.key === " ") {
+      event.preventDefault()
+      const site = activeSite()
+
+      return site ? toggle(site) : undefined
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault()
+
+      return start()
+    }
+
+    if (event.key.length !== 1 || event.altKey || event.ctrlKey || event.metaKey) return
+    const typed = event.timeStamp - state.typed.at < TYPE_AHEAD_MS ? state.typed.text + event.key : event.key
+    setState("typed", { text: typed, at: event.timeStamp })
+    const found = siteTypeAhead(shown().map((item) => item.site), state.active, typed)
+
+    if (found !== undefined) moveTo(found)
+  }
+
+  const profileOptions = createMemo(() => props.choices.map((item) => ({ value: choiceValue(item), label: choiceLabel(item) })))
 
   return (
     <ui.Dialog
@@ -134,126 +264,242 @@ export function SiteChooser(props: {
       size="large"
       footer={
         <>
-          <ui.Button variant="ghost" onClick={props.close}>
-            {ctx.t("common.close")}
+          <Show when={message()}>
+            {(current) => (
+              <p
+                role={current().error ? "alert" : "status"}
+                class="me-auto min-w-0 self-center text-[13px] leading-[var(--line-height-base)]"
+                classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
+              >
+                {current().text}
+              </p>
+            )}
+          </Show>
+          <ui.Button variant="neutral" onClick={props.close}>
+            {ctx.t("common.cancel")}
           </ui.Button>
-          <ui.Button
-            variant="contrast"
-            disabled={sites().size === 0 || !jobs.available() || busy() || jobs.unsaved() !== undefined}
-            busy={busy()}
-            onClick={start}
-          >
-            {ctx.plural("sites.import", sites().size)}
+          <ui.Button variant="contrast" disabled={!canImport()} busy={!!job() && props.jobs.running() === job()} onClick={start}>
+            {ctx.t("settings.import.action")}
           </ui.Button>
         </>
       }
     >
       <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 pb-1">
         <div class="flex items-center gap-2">
-          <ui.TextInput
-            label={ctx.t("sites.search")}
+          <TextInput
+            appearance="large"
+            role="searchbox"
+            aria-label={ctx.t("sites.search")}
             placeholder={ctx.t("sites.search")}
-            type="search"
-            size="large"
             autofocus
-            value={query()}
-            onInput={setQuery}
-            class="min-w-0 flex-1"
+            autocomplete="off"
+            spellcheck={false}
+            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            showClearButton={!!state.query}
+            onClearClick={() => search("")}
+            value={state.query}
+            onInput={(event) => search(event.currentTarget.value)}
+            // With text in it, Escape clears the search; once empty, it closes the dialog.
+            data-owns-escape={state.query ? "" : undefined}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && state.query) {
+                event.preventDefault()
+                search("")
+              }
+
+              if (event.key === "ArrowDown" && ready()) {
+                event.preventDefault()
+                elements.listbox?.focus()
+              }
+            }}
+            class="min-w-40 flex-1"
           />
           <Show when={props.choices.length > 1}>
-            <ui.Select
-              label={ctx.t("sites.profile")}
-              options={props.choices.map((item) => ({ value: choiceValue(item), label: choiceLabel(item) }))}
-              value={profile()}
-              disabled={busy()}
-              onChange={setProfile}
-            />
+            {/* The profile gives way before the search on a narrow window. */}
+            <div class="min-w-28 shrink-[3] basis-52">
+              <Select
+                appearance="large"
+                aria-label={ctx.t("sites.profile")}
+                options={profileOptions()}
+                current={profileOptions().find((option) => option.value === state.profile)}
+                value={(option) => option.value}
+                label={(option) => option.label}
+                disabled={busy()}
+                placement="bottom-end"
+                gutter={6}
+                class="!w-full"
+                onSelect={(option) => option && switchProfile(option.value)}
+              />
+            </div>
           </Show>
         </div>
-        <div class="flex h-7 items-center gap-1">
-          <span
-            aria-live="polite"
-            class="min-w-0 flex-1 truncate text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted"
-          >
-            {ctx.t("sites.selected", { selected: sites().size, total: all().length })}
+        <div class="flex h-7 items-center gap-1" classList={{ invisible: !ready() }} aria-hidden={!ready()}>
+          <span class="min-w-0 flex-1 truncate text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
+            {state.query
+              ? ctx.t("sites.selected.shown", { shown: shown().length, selected: sites().size })
+              : ctx.t("sites.selected", { selected: sites().size, total: all().length })}
+            {" · "}
+            {ctx.t(listedOrder(result()) === "name" ? "sites.order.name" : "sites.order.recent")}
           </span>
-          <ui.Button size="small" variant="ghost" disabled={shown().length === 0} onClick={selectShown}>
-            {ctx.t("sites.all")}
+          <ui.Button size="small" variant="ghost" disabled={shownChosen() === shown().length} onClick={selectShown}>
+            {state.query ? ctx.t("sites.all.shown", { count: shown().length }) : ctx.t("sites.all")}
           </ui.Button>
-          <ui.Button size="small" variant="ghost" disabled={shown().length === 0} onClick={clearShown}>
-            {ctx.t("sites.none")}
+          <ui.Button size="small" variant="ghost" disabled={shownChosen() === 0} onClick={clearShown}>
+            {state.query ? ctx.t("sites.none.shown", { count: shown().length }) : ctx.t("sites.none")}
           </ui.Button>
         </div>
-        <div
-          ref={setScroller}
-          role="group"
-          aria-label={ctx.t("sites.list")}
-          class="min-h-[248px] flex-1 overflow-y-auto rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
-        >
+        <div class="relative flex min-h-0 flex-1 flex-col rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
           <Show
             when={status()}
             fallback={
-              <div class="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-                <For each={keys()}>
-                  {(site) => (
-                    <Show when={placed().get(site)}>
-                      {(row) => (
-                        <div
-                          data-site={site}
-                          class="absolute inset-x-0 top-0 flex items-center px-3"
-                          style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${row().start}px)` }}
-                        >
-                          <Checkbox
-                            appearance="compact"
-                            class="w-full [&_[data-slot=checkbox-v2-label]]:w-full [&_[data-slot=checkbox-v2-text]]:flex-1"
-                            checked={sites().has(site)}
-                            onChange={(on: boolean) => toggle(site, on)}
-                          >
-                            <span class="flex w-full min-w-0 items-center gap-3">
-                              <span class="min-w-0 flex-1 truncate" title={site}>
+              <MenuScroll class="min-h-0 flex-1" viewportClass="min-h-0 flex-1 p-1" viewportRef={(element) => (elements.viewport = element)}>
+                <div
+                  ref={(element) => (elements.listbox = element)}
+                  id={`${id}-list`}
+                  role="listbox"
+                  aria-multiselectable="true"
+                  aria-label={ctx.t("sites.list")}
+                  aria-activedescendant={activeSite() ? optionID(activeSite() ?? "") : undefined}
+                  tabIndex={0}
+                  class="relative w-full outline-none"
+                  style={{ height: `${virtualizer.getTotalSize()}px` }}
+                  onKeyDown={onListKey}
+                  onFocus={() => setState("focused", true)}
+                  onBlur={() => setState("focused", false)}
+                >
+                  <For each={keys()}>
+                    {(site) => (
+                      <Show when={placed().get(site)}>
+                        {(row) => {
+                          const item = () => shown()[row().index]
+                          const active = () => activeSite() === site
+
+                          return (
+                            <div
+                              id={optionID(site)}
+                              role="option"
+                              aria-selected={sites().has(site)}
+                              aria-setsize={shown().length}
+                              aria-posinset={row().index + 1}
+                              data-site={site}
+                              data-active={active() ? "" : undefined}
+                              class="absolute inset-x-0 top-0 flex cursor-default items-center gap-2 rounded-[6px] px-2 hover:bg-[var(--v2-overlay-simple-overlay-hover)]"
+                              classList={{
+                                "bg-[var(--v2-overlay-simple-overlay-hover)]": active() && state.focused,
+                                "shadow-[inset_0_0_0_1px_var(--v2-border-border-focus)]": active() && state.focused,
+                              }}
+                              style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${row().start}px)` }}
+                              onClick={() => {
+                                setState("active", row().index)
+                                toggle(site)
+                              }}
+                            >
+                              <Checkbox appearance="compact" surface="layer-1" presentation checked={sites().has(site)} />
+                              {/* A long name loses its start, so the registrable domain at its end stays in view. */}
+                              <span
+                                class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
+                                title={site}
+                              >
                                 <bdi dir="ltr">{site}</bdi>
                               </span>
-                              <span class="shrink-0 text-v2-text-text-muted">
-                                {ctx.plural("sites.cookies", shown()[row().index]?.cookies ?? 0)}
+                              <span class="shrink-0 text-[12px] tabular-nums text-v2-text-text-muted">
+                                {ctx.plural("sites.cookies", item()?.cookies ?? 0)}
                               </span>
-                            </span>
-                          </Checkbox>
-                        </div>
-                      )}
-                    </Show>
-                  )}
-                </For>
-              </div>
+                            </div>
+                          )
+                        }}
+                      </Show>
+                    )}
+                  </For>
+                </div>
+              </MenuScroll>
             }
           >
             {(current) => (
-              <div class="flex h-full items-center justify-center gap-2 px-6 text-center">
-                <Show when={current().loading}>
-                  <ui.Loader size="small" />
+              <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <div class="flex items-center gap-2">
+                  <Show when={current().loading}>
+                    <ui.Loader size="small" />
+                  </Show>
+                  <p
+                    role={current().error ? "alert" : "status"}
+                    class="text-[13px] font-[440] leading-[var(--line-height-base)]"
+                    classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
+                  >
+                    {current().text}
+                  </p>
+                </div>
+                <Show when={current().retry}>
+                  <ui.Button size="small" variant="neutral" onClick={() => setState("attempt", (attempt) => attempt + 1)}>
+                    {ctx.t("common.retry")}
+                  </ui.Button>
                 </Show>
-                <p
-                  role={current().error ? "alert" : "status"}
-                  class="text-[13px] font-[440] leading-[var(--line-height-base)]"
-                  classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
-                >
-                  {current().text}
-                </p>
               </div>
             )}
           </Show>
         </div>
-        <Show when={message()}>
-          {(current) => (
-            <p
-              role={current().error ? "alert" : "status"}
-              class="text-[13px] leading-[var(--line-height-base)]"
-              classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-base": !current().error }}
-            >
-              {current().text}
-            </p>
-          )}
-        </Show>
       </div>
     </ui.Dialog>
+  )
+}
+
+/**
+ * The dialog's state: the profile shown and the search; the chosen sites of one profile, so switching profiles starts
+ * from none; the active row and whether the list has the keyboard; how often the list was read again; what the
+ * type-ahead has so far; and whether it still looks for the profile that has the searched site.
+ */
+type ChooserState = {
+  profile: string
+  query: string
+  chosen: { profile: string; sites: ReadonlySet<string> }
+  active: number
+  focused: boolean
+  attempt: number
+  typed: { text: string; at: number }
+  seeking: boolean
+}
+
+/** The list's scrolling viewport and the listbox in it, once they mount. */
+type ChooserElements = { viewport?: HTMLDivElement; listbox?: HTMLDivElement }
+
+function listedOrder(list: SiteList | undefined) {
+  return list?.type === "listed" ? list.order : undefined
+}
+
+/**
+ * The import dialog with jobs of its own, for a surface that has none, such as a page's passkey notice: it lists the
+ * browsers itself and opens on the one used last. `imported` runs after an import that brought cookies.
+ */
+export function SiteChooserDialog(props: { query?: string; imported: () => void; close: () => void }) {
+  const ctx = usePlugin<typeof definition>()
+
+  const jobs = createProfileJobs({
+    finished(finished) {
+      if (importedCookies(finished.outcome) > 0) props.imported()
+    },
+  })
+
+  const choices = createMemo(() => profileChoices(jobs.sources()))
+
+  return (
+    <Show
+      when={choices()[0]}
+      fallback={
+        <ctx.ui.Dialog
+          title={ctx.t("sites.title")}
+          footer={
+            <ctx.ui.Button variant="neutral" onClick={props.close}>
+              {ctx.t("common.cancel")}
+            </ctx.ui.Button>
+          }
+        >
+          <Show when={jobs.sourcesLoaded()} fallback={<ctx.ui.Loader size="small" />}>
+            <p class="text-[13px] text-v2-text-text-muted">{ctx.t("settings.import.none")}</p>
+          </Show>
+        </ctx.ui.Dialog>
+      }
+    >
+      {(first) => <SiteChooser choices={choices()} initial={first()} jobs={jobs} query={props.query} close={props.close} />}
+    </Show>
   )
 }

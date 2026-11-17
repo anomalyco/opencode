@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js"
+import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
@@ -51,8 +51,13 @@ export default function BrowserSettings() {
     if (file) jobs.start({ type: "import-file", path: file })
   }
 
+  // The dialog's import is one of this page's jobs, whose row says how it ended, so the dialog goes with the page.
+  const owner = getOwner()
+
   const chooseSites = (choice: Choice) =>
-    ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} close={() => dialog.close()} />)
+    runWithOwner(owner, () =>
+      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+    )
 
   const addExtension = () =>
     ctx.dialogs.open((dialog) => <AddExtension sources={jobs.sources()} close={() => dialog.close()} />)
@@ -128,12 +133,7 @@ export default function BrowserSettings() {
               }
             >
               <div class="flex items-center gap-2">
-                <ui.Button
-                  size="small"
-                  variant="ghost"
-                  disabled={!jobs.available() || unsaved()}
-                  onClick={() => chooseSites(choice)}
-                >
+                <ui.Button size="small" variant="ghost-muted" disabled={blocked() || unsaved()} onClick={() => chooseSites(choice)}>
                   {ctx.t("settings.import.choose")}
                 </ui.Button>
                 <ui.Button
