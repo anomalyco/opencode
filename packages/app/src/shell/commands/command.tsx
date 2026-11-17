@@ -10,7 +10,15 @@ import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { INITIAL_KEYBIND_SUSPEND_STATE, selectKeybindsSuspended, transitionKeybindSuspend } from "./suspend-machine"
-import { chordStrokes, createAppKeymap, IS_MAC, keyFromKeyboardEvent, registerCommandLayers } from "./keymap"
+import {
+  chordStrokes,
+  createAppKeymap,
+  IS_MAC,
+  keyFromKeyboardEvent,
+  LEADER,
+  registerAppLeader,
+  registerCommandLayers,
+} from "./keymap"
 import type { ActiveKey, KeySequencePart } from "@opentui/keymap"
 
 export { keyFromKeyboardEvent }
@@ -40,6 +48,7 @@ type KeyLabel =
   | "common.key.pageDown"
   | "common.key.insert"
   | "common.key.esc"
+  | "common.key.leader"
 
 function keyText(key: KeyLabel, t?: (key: KeyLabel) => string) {
   return t ? t(key) : en[key]
@@ -293,22 +302,27 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
 /**
  * The first combo of a keybind as keycap labels. A single stroke gives one label per key (⌘, K); a chord gives one
- * label per stroke (⌘K, ⌘C).
+ * label per stroke (⌘K, ⌘C). `<leader>` shows as Leader rather than the key it stands for, which can change.
  */
 export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string): string[] {
   if (!config || config === "none") return []
   const strokes = chordStrokes(config.split(",")[0] ?? "")
 
-  if (strokes.length === 1) return displayKeybindParts(parseStroke(strokes[0]!), t)
+  if (strokes.length === 1 && strokes[0]!.toLowerCase() !== LEADER)
+    return displayKeybindParts(parseStroke(strokes[0]!), t)
 
-  return strokes.map((stroke) => joinParts(displayKeybindParts(parseStroke(stroke), t)))
+  return strokes.map((stroke) =>
+    stroke.toLowerCase() === LEADER
+      ? keyText("common.key.leader", t)
+      : joinParts(displayKeybindParts(parseStroke(stroke), t)),
+  )
 }
 
 export function formatKeybind(config: string, t?: (key: KeyLabel) => string): string {
   const strokes = chordStrokes(config && config !== "none" ? (config.split(",")[0] ?? "") : "")
   const parts = formatKeybindParts(config, t)
 
-  if (strokes.length > 1) return parts.join(" ")
+  if (strokes.length > 1 || strokes[0]?.toLowerCase() === LEADER) return parts.join(" ")
 
   return joinParts(parts)
 }
@@ -345,6 +359,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const warnedDuplicates = new Set<string>()
 
     const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
+
+    const leader = settings.keymap.leader
 
     const bind = (id: string, def: KeybindConfig | undefined, follows?: string) => {
       const base = actionId(id)
@@ -450,6 +466,14 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     )
 
     createEffect(() => {
+      const trigger = leader()
+
+      if (!trigger) return
+
+      onCleanup(registerAppLeader(app.keymap, trigger))
+    })
+
+    createEffect(() => {
       const bound = options().filter((option) => !option.id.startsWith(SUGGESTED_PREFIX) && !option.disabled)
 
       // The palette's keys come first, so they win over any other command on the same keys.
@@ -461,6 +485,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
             ...bound.filter((option) => option.id !== PALETTE_ID),
           ],
           (id) => settings.keybinds.get(id) !== undefined,
+          !!leader(),
         ),
       )
     })
@@ -536,9 +561,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       /** The key sequence in progress, and the keys that can continue it. */
       pending,
-      /** Formats one stroke of a pending key sequence. */
-      strokeParts(part: Pick<KeySequencePart, "stroke">) {
+      /** Formats one stroke of a pending key sequence; the leader shows as Leader, as in shortcut labels. */
+      strokeParts(part: Pick<KeySequencePart, "stroke" | "tokenName">) {
         const stroke = part.stroke
+
+        if (part.tokenName === "leader") return [language.t("common.key.leader")]
 
         return displayKeybindParts(
           { key: stroke.name, ctrl: stroke.ctrl, meta: stroke.super, shift: stroke.shift, alt: stroke.meta },

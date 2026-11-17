@@ -15,15 +15,17 @@ import {
   useCommand,
   type CommandSection,
 } from "@/shell/commands/command"
-import { chordStrokes } from "@/shell/commands/keymap"
+import { chordStrokes, LEADER, validChord } from "@/shell/commands/keymap"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { useSettings } from "@/settings/model"
+import { SettingsRow } from "@/settings/row"
 import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
 import {
   INITIAL_KEYBIND_CAPTURE_STATE,
+  LEADER_SLOT,
   MAX_CHORD_STROKES,
   selectCapturePrefix,
   selectCapturingKeybind,
@@ -140,14 +142,20 @@ function isEditableTarget(target: EventTarget | null) {
   )
 }
 
-// Each combo of a keybind as its strokes' signatures.
-function chords(config: string | undefined) {
+// Each combo of a keybind as its strokes' signatures, with `<leader>` spelled as the leader key when one is set.
+function chords(config: string | undefined, leader: string | undefined) {
   if (!config || config === "none") return []
 
   return config
     .split(",")
-    .map((combo) => chordStrokes(combo).map(signature))
-    .filter((chord) => chord.length > 0)
+    .filter(validChord)
+    .map((combo) =>
+      chordStrokes(combo).flatMap((stroke) => {
+        if (stroke.toLowerCase() !== LEADER) return [signature(stroke)]
+
+        return [leader ? signature(leader) : LEADER]
+      }),
+    )
 }
 
 function signature(stroke: string) {
@@ -276,6 +284,7 @@ export function createKeybindSettingsController(
     plugins?: () => ReadonlySet<string>
     settings: {
       keybinds: Pick<SettingsContext["keybinds"], "all" | "get" | "set" | "resetAll">
+      keymap: Pick<SettingsContext["keymap"], "leader" | "setLeader">
     }
     target?: Document
     notify?: (toast: { title: string; description: string }) => void
@@ -286,6 +295,7 @@ export function createKeybindSettingsController(
 ) {
   const [captureState, setCaptureState] = createSignal(INITIAL_KEYBIND_CAPTURE_STATE)
   const overrides = createMemo(() => input.settings.keybinds.all())
+  const leader = () => input.settings.keymap.leader()
 
   const list = createMemo(() => {
     language.locale()
@@ -311,16 +321,31 @@ export function createKeybindSettingsController(
   }
 
   const used = createMemo(() =>
-    Array.from(list().keys()).flatMap((id) => chords(effective(id)).map((chord) => ({ id, title: title(id), chord }))),
+    Array.from(list().keys()).flatMap((id) =>
+      chords(effective(id), leader()).map((chord) => ({ id, title: title(id), chord })),
+    ),
   )
 
   // The commands a chord would clash with, other than the one being recorded.
   const conflicts = (keybind: string, id: string) => {
-    const chord = chords(keybind)[0]
+    const chord = chords(keybind, leader())[0]
 
     if (!chord) return []
 
     return [...new Set(used().flatMap((item) => (item.id !== id && clashes(chord, item.chord) ? [item.title] : [])))]
+  }
+
+  // A leader key clashes with every shortcut that starts with that key, apart from the leader's own chords.
+  const leaderConflicts = (stroke: string) => {
+    const key = signature(stroke)
+
+    return [
+      ...new Set(
+        Array.from(list().keys()).flatMap((id) =>
+          chords(effective(id), undefined).some((chord) => chord[0] === key) ? [title(id)] : [],
+        ),
+      ),
+    ]
   }
 
   const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
@@ -342,7 +367,7 @@ export function createKeybindSettingsController(
 
     if (!id) return []
 
-    return conflicts(keybind, id)
+    return id === LEADER_SLOT ? leaderConflicts(keybind) : conflicts(keybind, id)
   }
 
   function run(effect: KeybindCaptureEffect) {
@@ -361,6 +386,8 @@ export function createKeybindSettingsController(
     }
 
     if (effect.type === "binding.set") return input.settings.keybinds.set(effect.id, effect.value)
+
+    if (effect.type === "leader.set") return input.settings.keymap.setLeader(effect.value)
 
     if (effect.type === "bindings.reset") return input.settings.keybinds.resetAll()
 
@@ -457,6 +484,11 @@ export function createKeybindSettingsController(
         dispatch({ type: "capture.extended", id, chord: firstCombo(id), pageActive: pageActive() }),
       toggle: (id: string) => dispatch({ type: "capture.toggled", id, pageActive: pageActive() }),
       unbind: (id: string) => dispatch({ type: "unbind.clicked", id }),
+      insertLeader: () => dispatch({ type: "leader.inserted" }),
+    },
+    leader: {
+      keybind: () => format(leader()),
+      set: () => !!leader(),
     },
     settings: {
       hasOverrides: () => Object.values(overrides()).some(Predicate.isString),
@@ -481,6 +513,7 @@ export function SettingsKeybinds(props: { active?: boolean }) {
   return (
     <SettingsKeybindsView
       visible={props.active}
+      leader={controller.leader.keybind()}
       groups={controller.catalog.groups}
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
@@ -488,9 +521,11 @@ export function SettingsKeybinds(props: { active?: boolean }) {
       active={controller.capture.active()}
       prefix={controller.capture.prefix()}
       extendable={controller.capture.extendable}
+      canInsertLeader={controller.leader.set()}
       onCapture={controller.capture.toggle}
       onExtend={controller.capture.extend}
       onUnbind={controller.capture.unbind}
+      onInsertLeader={controller.capture.insertLeader}
       hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
@@ -499,6 +534,7 @@ export function SettingsKeybinds(props: { active?: boolean }) {
 
 function SettingsKeybindsView(props: {
   visible?: boolean
+  leader: string
   groups: KeybindGroup[]
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
@@ -506,9 +542,11 @@ function SettingsKeybindsView(props: {
   active: string | null
   prefix: string
   extendable: (id: string) => boolean
+  canInsertLeader: boolean
   onCapture: (id: string) => void
   onExtend: (id: string) => void
   onUnbind: (id: string) => void
+  onInsertLeader: () => void
   hasOverrides: boolean
   onReset: () => void
 }) {
@@ -538,6 +576,25 @@ function SettingsKeybindsView(props: {
       </div>
       <div class="settings-tab-body">
         <div class="settings-shortcuts settings-section-stack">
+          <Show when={!store.filter}>
+            <div class="settings-section">
+              <SettingsList>
+                <SettingsRow
+                  title={language.t("command.keymap.leader")}
+                  description={language.t("settings.shortcuts.leader.description")}
+                >
+                  <ShortcutButton
+                    id={LEADER_SLOT}
+                    binding={props.leader}
+                    active={props.active}
+                    prefix={props.prefix}
+                    onCapture={props.onCapture}
+                    onUnbind={props.onUnbind}
+                  />
+                </SettingsRow>
+              </SettingsList>
+            </div>
+          </Show>
           <For each={props.groups}>
             {(group) => (
               <Show when={(filtered().get(group) ?? []).length > 0}>
@@ -549,6 +606,18 @@ function SettingsKeybindsView(props: {
                         <div class="flex items-center justify-between gap-4 py-3 border-b border-v2-border-border-base last:border-none">
                           <span>{props.title(id)}</span>
                           <div class="flex items-center gap-1">
+                            <Show when={props.active === id && props.canInsertLeader && !props.prefix}>
+                              <Button
+                                type="button"
+                                size="small"
+                                variant="ghost-muted"
+                                icon="plus"
+                                data-action="settings-shortcut-add-leader"
+                                onClick={props.onInsertLeader}
+                              >
+                                {language.t("settings.shortcuts.insertLeader")}
+                              </Button>
+                            </Show>
                             <ShortcutButton
                               id={id}
                               binding={props.keybind(id)}

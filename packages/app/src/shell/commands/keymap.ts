@@ -3,6 +3,7 @@ import {
   registerBackspacePopsPendingSequence,
   registerDefaultBindingParser,
   registerEscapeClearsPendingSequence,
+  registerTimedLeader,
 } from "@opentui/keymap/addons"
 import { createHtmlKeymapHost, type HtmlKeymapEvent } from "@opentui/keymap/html"
 import type { CommandOption } from "./command"
@@ -11,9 +12,28 @@ export const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad
 
 export type AppKeymap = Keymap<HTMLElement, HtmlKeymapEvent>
 
-/** Splits one combo of a keybind into its chord strokes: `mod+k mod+c` into two. */
+/** Stands for the leader key. It may only start a chord: `<leader> g s`. */
+export const LEADER = "<leader>"
+
+const LEADER_TIMEOUT_MS = 2000
+
+/**
+ * Splits one combo of a keybind into its chord strokes: `mod+k mod+c` into two, `<leader> n` into the leader and `n`.
+ * `<leader>n` without a space is accepted too.
+ */
 export function chordStrokes(combo: string) {
-  return combo.trim().split(/\s+/).filter(Boolean)
+  return combo
+    .trim()
+    .replace(/^<leader>(?=\S)/i, `${LEADER} `)
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+/** Whether a combo is a chord the keymap accepts: no empty strokes, and `<leader>` only as its first stroke. */
+export function validChord(combo: string) {
+  const strokes = chordStrokes(combo)
+
+  return strokes.length > 0 && strokes.every((stroke, index) => (stroke.toLowerCase() === LEADER ? index === 0 : true))
 }
 
 /**
@@ -26,10 +46,25 @@ export function createAppKeymap(input: { blocked: () => boolean; editable: (targ
   // Every binding is written by `keymapKey`: strokes separated by spaces, each a `+`-joined combo.
   keymap.prependBindingParser((ctx) => {
     if (ctx.index !== 0) return
+    const leader = ctx.tokens.get("leader")
+
+    const parts = ctx.input
+      .trim()
+      .split(/\s+/)
+      .map((stroke) =>
+        stroke === LEADER
+          ? leader
+            ? ctx.parseObjectKey(leader.stroke, { display: LEADER, match: leader.match, tokenName: "leader" })
+            : undefined
+          : ctx.parseObjectKey(strokeInput(stroke), { display: stroke }),
+      )
+
+    if (parts.some((part) => !part)) return { parts: [], nextIndex: ctx.input.length, unknownTokens: ["leader"] }
 
     return {
-      parts: chordStrokes(ctx.input).map((stroke) => ctx.parseObjectKey(strokeInput(stroke), { display: stroke })),
+      parts: parts.filter((part) => part !== undefined),
       nextIndex: ctx.input.length,
+      usedTokens: ctx.input.includes(LEADER) ? ["leader"] : [],
     }
   })
   registerDefaultBindingParser(keymap)
@@ -75,7 +110,12 @@ export function createAppKeymap(input: { blocked: () => boolean; editable: (targ
  * the order given. A command declines a key by returning false from `onSelect`, or through `when` and `skip`; the key
  * then goes to the next command, and finally to the focused element.
  */
-export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[], custom: (id: string) => boolean) {
+export function registerCommandLayers(
+  keymap: AppKeymap,
+  options: CommandOption[],
+  custom: (id: string) => boolean,
+  leader: boolean,
+) {
   const layers = new Map<HTMLElement | undefined, CommandOption[]>()
 
   options
@@ -109,7 +149,9 @@ export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[
         option
           .keybind!.split(",")
           .map((combo) => combo.trim())
-          .filter((combo) => combo && combo !== "none")
+          .filter((combo) => combo && combo !== "none" && validChord(combo))
+          // Without a leader key the `<leader>` chords stay listed but do nothing.
+          .filter((combo) => leader || chordStrokes(combo)[0]?.toLowerCase() !== LEADER)
           .map((combo) => {
             const key = keymapKey(combo)
 
@@ -122,22 +164,28 @@ export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[
   return () => disposers.forEach((dispose) => dispose())
 }
 
-/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`, `mod+k mod+c`) into the keymap's. */
+export function registerAppLeader(keymap: AppKeymap, trigger: string) {
+  return registerTimedLeader(keymap, { trigger: keymapKey(trigger), timeoutMs: LEADER_TIMEOUT_MS })
+}
+
+/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`, `<leader> g s`) into the keymap's. */
 export function keymapKey(combo: string) {
   return chordStrokes(combo)
     .map((stroke) =>
-      stroke
-        .split("+")
-        .map((part) => {
-          const lower = part.toLowerCase()
+      stroke.toLowerCase() === LEADER
+        ? LEADER
+        : stroke
+            .split("+")
+            .map((part) => {
+              const lower = part.toLowerCase()
 
-          if (lower === "mod") return IS_MAC ? "super" : "ctrl"
+              if (lower === "mod") return IS_MAC ? "super" : "ctrl"
 
-          if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
+              if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
 
-          return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
-        })
-        .join("+"),
+              return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
+            })
+            .join("+"),
     )
     .join(" ")
 }

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import type { CommandOption } from "./command"
-import { createAppKeymap, registerCommandLayers } from "./keymap"
+import { createAppKeymap, registerAppLeader, registerCommandLayers } from "./keymap"
 
 const cleanup: (() => void)[] = []
 
@@ -9,16 +9,24 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-function setup(options: CommandOption[], input?: { custom?: string[]; blocked?: () => boolean }) {
+function setup(options: CommandOption[], input?: { custom?: string[]; leader?: string; blocked?: () => boolean }) {
   const app = createAppKeymap({
     blocked: input?.blocked ?? (() => false),
     editable: (target) => target instanceof HTMLElement && target.isContentEditable,
   })
 
-  const layers = registerCommandLayers(app.keymap, options, (id) => input?.custom?.includes(id) ?? false)
+  const leader = input?.leader ? registerAppLeader(app.keymap, input.leader) : undefined
+
+  const layers = registerCommandLayers(
+    app.keymap,
+    options,
+    (id) => input?.custom?.includes(id) ?? false,
+    !!input?.leader,
+  )
 
   cleanup.push(() => {
     layers()
+    leader?.()
     app.destroy()
   })
 
@@ -118,6 +126,28 @@ test("a focus target's command wins inside the target and is absent outside it",
   expect(ran).toEqual(["prompt.stop", "dialog.close"])
 })
 
+test("a leader sequence runs from a text field, and the leader alone types nothing", () => {
+  const ran: string[] = []
+
+  const app = setup([command("tab.new", "mod+t,<leader> t", ran), command("settings.open", "<leader> comma", ran)], {
+    leader: "ctrl+x",
+  })
+
+  const field = editor()
+  const leader = press(field, { key: "x", ctrlKey: true })
+  const next = app.keymap.getActiveKeys().map((key) => String(key.command))
+
+  expect(app.keymap.getPendingSequence()).toHaveLength(1)
+  expect(next.sort()).toEqual(["settings.open", "tab.new"])
+  press(field, { key: "t" })
+  press(field, { key: "x", ctrlKey: true })
+  press(field, { key: "," })
+
+  expect(leader.defaultPrevented).toBe(true)
+  expect(ran).toEqual(["tab.new", "settings.open"])
+  expect(app.keymap.getPendingSequence()).toHaveLength(0)
+})
+
 test("chords run from any focus when their first key has a modifier, and only outside text fields otherwise", () => {
   const ran: string[] = []
   setup([command("comment.toggle", "mod+k mod+c", ran), command("inbox.go", "g i", ran)])
@@ -133,6 +163,21 @@ test("chords run from any focus when their first key has a modifier, and only ou
 
   expect(typed.defaultPrevented).toBe(false)
   expect(ran).toEqual(["comment.toggle", "inbox.go"])
+})
+
+test.each([
+  { name: "without a leader key", keybind: "<leader> t", leader: undefined },
+  { name: "with the leader after the first key", keybind: "g <leader>", leader: "ctrl+x" },
+])("a leader chord does nothing $name", (row) => {
+  const ran: string[] = []
+  const app = setup([command("tab.new", row.keybind, ran)], { leader: row.leader })
+
+  press(document.body, { key: "x", ctrlKey: true })
+  press(document.body, { key: "g" })
+  press(document.body, { key: "t" })
+
+  expect(ran).toEqual([])
+  expect(app.keymap.getPendingSequence()).toHaveLength(0)
 })
 
 test("Escape cancels a pending chord without running a command, and Backspace takes back its last key", () => {
