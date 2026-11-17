@@ -26,6 +26,7 @@ export type Registration = {
   answer(tabID: Browser.TabID, id: number, answer: PromptAnswer): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  clearCache(tabID: Browser.TabID, address: string): Promise<void>
   reveal(tabID: Browser.TabID): Promise<void>
   close(): void
 }
@@ -86,6 +87,7 @@ export function openBinding(input: {
     },
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    clearCache: (tabID, address) => ready.then(() => client.clearCache({ binding, tabID, address })),
     reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
     close() {
       if (status.closed) return

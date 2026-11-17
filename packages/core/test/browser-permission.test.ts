@@ -222,7 +222,7 @@ it.live("a subagent's session loses the inherited grant before its first prompt 
     yield* sessions.prompt({ sessionID: child.id, text: "Take a screenshot", resume: false })
     expect(yield* browser.permissions(child.id)).toEqual([])
     expect(yield* browser.permissions()).toEqual([...grant])
-    expect((yield* browser.call("general", child.id).pipe(Effect.flip)).message).toStartWith("[browser.disconnected]")
+    expect((yield* browser.call("general", child.id)).output).toMatchObject({ connected: false })
     expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
   }),
 )
@@ -460,16 +460,11 @@ it.live("without a deny, a session with no desktop hears that it is disconnected
     const detached = yield* sessions.create({ location: browser.ref })
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
     // Whether the file exists is not said: without a desktop no permission check, policies included, can run.
-    for (const file of ["page.html", "missing.html"])
-      expect(yield* refusal(browser, "preview", { path: file }, detached.id)).toStartWith(
-        `[browser.disconnected] ${path.join(browser.ref.directory, file)} was not shown`,
-      )
-    expect(yield* refusal(browser, "wait", { tabID: tab.id, selector: "#done" }, detached.id)).toStartWith(
-      "[browser.disconnected]",
-    )
-    expect(yield* refusal(browser, "snapshot", { tabID: missingTab }, detached.id)).toStartWith(
-      "[browser.disconnected]",
-    )
+    const status = (yield* browser.call("build", detached.id)).output
+    expect(status).toMatchObject({ connected: false, message: expect.stringContaining("retry only after it attaches") })
+    for (const [op, input] of [["preview", { path: "page.html" }], ["preview", { path: "missing.html" }], ["wait", { tabID: tab.id, selector: "#done" }], ["snapshot", { tabID: missingTab }]] as const)
+      expect((yield* browser.run(op, input, "build", detached.id).pipe(Effect.flip)).message).toStartWith("[browser.not_attached]")
+    expect(browser.commands.count).toBe(0)
   }),
 )
 

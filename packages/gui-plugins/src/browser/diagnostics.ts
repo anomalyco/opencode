@@ -284,7 +284,7 @@ export function createDiagnostics(cdp: Cdp, displayURL: (url: string) => string,
         return value.length ? { state: "text", text: value.slice(0, max), truncated: value.length > max } : { state: "empty" }
       }
 
-      const known = responseBody(hop, input.includeBody)
+      const known = responseBody(hop, input.includeResponseBody ?? input.includeBody)
 
       return {
         request: networkRequest(hop),

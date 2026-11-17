@@ -492,6 +492,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         setStore({ cookies: 0, generation: store.generation + 1 })
         report()
       },
+      clearCache: async () => {
+        setStore("generation", (value) => value + 1)
+        report()
+      },
       close: async () => undefined,
       forget: async () => undefined,
       state: () => undefined,
@@ -1263,6 +1267,7 @@ export function mountBrowserRegion(input: RegionHost) {
       zoom: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
+      clearCache: async () => undefined,
       find: async () => undefined,
       notice: async () => undefined,
       // Main answers the page, which then waits on nothing.

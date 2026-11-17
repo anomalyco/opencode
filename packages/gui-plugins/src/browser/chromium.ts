@@ -1,12 +1,17 @@
 import { homedir } from "node:os"
-import { navigationTurn } from "./navigation-turn"
+import { scheduler } from "node:timers/promises"
+import { navigationTurn, replacementNavigation } from "./navigation-turn"
+import { accessibilitySnapshot } from "./snapshot"
+import { documentRefs } from "./refs"
+import { describeField, Field, readableField } from "./field-value"
+import { agentRendering, needsWakeFrame } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -86,6 +91,15 @@ import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
+
+// A page can retain a removed node. Check in the same renderer call that reads or acts on the ref.
+function connectedFunction(fn: string) {
+  return `function(...args) { if (!this.isConnected) throw new Error('browser.detached_ref'); return (${fn}\n).apply(this,args) }`
+}
+
+function detachedRef() {
+  return new CodedError(Browser.FailureCode.staleRef, "Element is no longer connected. Take a fresh snapshot and choose a current ref.")
+}
 
 const noVisibleArea = "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport."
 
@@ -318,7 +332,8 @@ export function createBrowserPage(
   constructing.defer(() => pageLifetime.abort())
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
 
-  if (agentDriven(options.activity)) contents.setBackgroundThrottling(false)
+  const rendering = agentRendering(pageLifetime.signal, enabled => contents.setBackgroundThrottling(enabled))
+  const opening = agentDriven(options.activity) ? rendering.hold() : undefined
   constructing.defer(() => options.workspace?.dispose())
   constructing.defer(() => options.artifacts?.dispose())
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
@@ -349,7 +364,7 @@ export function createBrowserPage(
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      void reload().catch((error: Error) => publish(error.message))
+      void options.menu.navigate("reload").catch((error: Error) => publish(error.message))
 
       return
     }
@@ -435,7 +450,7 @@ export function createBrowserPage(
     Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
 
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
-  const refs = new Map<string, Element>()
+  const refs = documentRefs()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
@@ -657,8 +672,6 @@ export function createBrowserPage(
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
-  // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
-  // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
     const url = contents.getURL()
 
@@ -666,7 +679,7 @@ export function createBrowserPage(
     notices.clear()
     popupReport = undefined
 
-    if (agentDriven(activity)) contents.setBackgroundThrottling(false)
+    rendering.committed()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description), url, preview: preview(url), isMainFrame }),
@@ -1008,24 +1021,37 @@ export function createBrowserPage(
     }
 
     contents.once("did-navigate", commit)
+    const next = replacementNavigation()
+    contents.on("did-start-navigation", next.start)
+    contents.on("did-navigate", next.commit)
+    contents.on("did-stop-loading", next.stop)
+    contents.once("destroyed", next.stop)
 
-    return navigationDeadline(contents.loadURL(destination))
-      .catch((error: Error) => {
-          if (committedLoad(error, committed)) return
+    return navigationDeadline(contents.loadURL(destination).catch(async (error: Error) => {
+      if (committedLoad(error, committed)) return
 
-          if (options.previewFailure?.(destination)) throw new FileVerificationError()
+      if (destinationOrigin(destination) && await next.after(error)) return
 
-        if (destination.startsWith(`${previewScheme}://`))
-          throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
-        throw error
-      })
-      .finally(() => contents.off("did-navigate", commit))
+      if (options.previewFailure?.(destination)) throw new FileVerificationError()
+
+      if (destination.startsWith(`${previewScheme}://`))
+        throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
+
+      if (!committed && "errno" in error && (error.errno === -2 || error.errno === -3))
+        throw new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download. Check the tab and its downloads before navigating again.")
+      throw error
+    })).finally(() => {
+      next.stop()
+      contents.off("destroyed", next.stop)
+      contents.off("did-stop-loading", next.stop)
+      contents.off("did-navigate", next.commit)
+      contents.off("did-start-navigation", next.start)
+      contents.off("did-navigate", commit)
+    })
   }
 
-  const reload = async (signal = options.signal) => {
+  const reload = async (signal = options.signal, ignoreCache = false) => {
     const tab = state()
-
-    if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
 
     if (documentState.status !== "closed" && documentState.retry) return load(documentState.retry, true, signal)
 
@@ -1037,7 +1063,7 @@ export function createBrowserPage(
 
     if (address) return void await load(address, true, signal)
 
-    return begin(signal)(actual, () => contents.reload())
+    return begin(signal)(actual, () => ignoreCache ? contents.reloadIgnoringCache() : contents.reload())
   }
 
   const ready = navigationDeadline(Promise.all([
@@ -1064,7 +1090,7 @@ export function createBrowserPage(
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
-  ])).then(() => undefined)
+  ])).then(() => undefined).finally(() => opening?.[Symbol.dispose]())
 
   constructing.move()
 
@@ -1120,7 +1146,7 @@ export function createBrowserPage(
       await contents.session.clearAuthCache()
 
       if (closed()) return
-      await reload()
+      await options.menu.navigate("reload")
       // A slow page still cleared; the count then reads what it set so far.
       await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
         () => undefined,
@@ -1141,8 +1167,25 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+      using active = new DisposableStack()
+
+      const hidden = !view.getVisible() && win.isVisible() && !win.isMinimized() && !(process.platform === "darwin" && electron.app.isHidden())
+      const shouldPaint = () => needsWakeFrame(command.action.type, documentState.status === "loaded" && !documentState.busy && !documentState.pending, !!selectOpenDialog(dialogGate))
+
+      const hold = origin === "agent" ? active.use(rendering.hold(hidden && shouldPaint() ? async () => {
+        await ready
+
+        if (!shouldPaint() || agentRefusal({ type: "snapshot" }, mainDocument())) return
+        await withFrames(false, pageLifetime.signal, async stop => {
+          const frame = (await cdp.send("Page.getFrameTree")).frameTree.frame.id
+          const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame, worldName: "opencode-browser-paint" })
+          abortError(stop)
+          await cdp.send("Runtime.evaluate", { contextId: world.executionContextId, expression: "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))", awaitPromise: true })
+        })
+      } : undefined)) : undefined
+
       const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
-      await ready
+      await Promise.all([ready, hold?.painted])
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
       // The user leaving the page dismisses its dialog, as a browser's address bar does.
@@ -1163,10 +1206,7 @@ export function createBrowserPage(
 
       if (origin === "user") activity.userInputAt = Date.now()
 
-      if (origin === "agent") {
-        if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
-        activity.agentRuns++
-      }
+      if (origin === "agent") activity.agentRuns++
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
@@ -1175,8 +1215,14 @@ export function createBrowserPage(
       const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
 
       try {
+        const intercepting = choosers.update()
+
+        // Turning the file chooser intercept back on after the grace period is a renderer call, which an open
+        // dialog blocks until it is answered.
+        if (command.action.type === "dialog") void intercepting.catch(() => undefined)
+
         return await Promise.race([
-          choosers.update().then(() => {
+          (command.action.type === "dialog" ? Promise.resolve() : intercepting).then(() => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)
@@ -1347,7 +1393,7 @@ export function createBrowserPage(
           if (entry) await begin(signal)(entry.url, () => history.goToIndex(index), () => !closed() && contents.isLoading())
         }
 
-        if (action.type === "reload" && !saved) await reload(signal)
+        if (action.type === "reload" && (!saved || action.ignoreCache)) await reload(signal, action.ignoreCache)
 
         if (action.type === "stop") {
           navigation.cancel()
@@ -1363,7 +1409,7 @@ export function createBrowserPage(
         return result({ tab: state(), frames: await frames() })
       case "snapshot":
       case "find":
-        return result({ tab: state(), ...(await snapshot(action)) })
+        return result({ tab: state(), ...(await snapshot(action, signal)) })
       case "evaluate": {
         if (action.ref && action.frameID)
           throw new Error(
@@ -1383,7 +1429,7 @@ export function createBrowserPage(
                 "Runtime.callFunctionOn",
                 {
                   objectId,
-                  functionDeclaration: action.script,
+                  functionDeclaration: connectedFunction(action.script),
                   arguments: [{ objectId }],
                   awaitPromise: true,
                   returnByValue: true,
@@ -1401,6 +1447,8 @@ export function createBrowserPage(
               },
               context?.sessionID,
             ))
+
+        if (element && value.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
 
         if (value.exceptionDetails)
           throw new Error(
@@ -1506,7 +1554,14 @@ export function createBrowserPage(
       }
 
       case "wait": {
-        if (action.condition !== "load" && !action.text)
+        if (action.condition === "delay") {
+          await scheduler.wait(action.timeoutMs ?? 0, { signal })
+          break
+        }
+
+        if (action.condition === "url" && action.url === undefined) throw new Error("A URL wait requires a URL pattern.")
+
+        if ((action.condition === "text" || action.condition === "textGone") && !action.text)
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
           )
@@ -1524,6 +1579,8 @@ export function createBrowserPage(
           const page = agentRefusal({ type: "wait" }, mainDocument())
 
           if (page) throw new Error(page)
+
+          if (action.condition === "url") return Browser.matchesURL(state().url, action.url ?? "")
           const context = frameID ? contexts.get(frameID) : undefined
 
           if (frameID && (!context || extensionFrames().has(frameID))) {
@@ -1770,7 +1827,7 @@ export function createBrowserPage(
     if (!value)
       throw new CodedError(
         Browser.FailureCode.staleRef,
-        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
+        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from the current document.",
       )
 
     return value
@@ -1844,13 +1901,15 @@ export function createBrowserPage(
         "Runtime.callFunctionOn",
         {
           objectId,
-          functionDeclaration,
+          functionDeclaration: connectedFunction(functionDeclaration),
           arguments: args.map((value) => ({ value })),
           returnByValue: true,
           awaitPromise: true,
         },
         element.sessionID,
       )
+
+      if (result.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
 
       if (result.exceptionDetails)
         throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
@@ -1865,16 +1924,12 @@ export function createBrowserPage(
   async function resolve(element: Element) {
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
-    if (!object.object.objectId)
-      throw new CodedError(
-        Browser.FailureCode.staleRef,
-        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
-      )
+    if (!object.object.objectId) throw detachedRef()
 
     return object.object.objectId
   }
 
-  async function rect(element: Element, scroll = false) {
+  async function rect(element: Element, scroll = false, knownTree?: Awaited<ReturnType<typeof frames>>) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
       // Input is routed by the last rendered frame, so let one render at the new scroll position.
@@ -1892,7 +1947,7 @@ export function createBrowserPage(
       ),
     }
 
-    const tree = await frames()
+    const tree = knownTree ?? await frames()
     let frame = tree.find((frame) => frame.id === element.frameID)
 
     while (frame?.parentID) {
@@ -1944,7 +1999,7 @@ export function createBrowserPage(
       if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
 
       return frame
-    })
+    }, action.fullPage ? FULL_PAGE_DEADLINE_MS : undefined)
   }
 
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
@@ -1954,13 +2009,7 @@ export function createBrowserPage(
     const metrics = await cdp.send("Page.getLayoutMetrics")
     abortError(signal)
     const viewport = metrics.cssVisualViewport
-    // Chromium renders beyond the viewport only for a tab it presents on screen.
     const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
-
-    if (action.fullPage && !onscreen)
-      throw new Error(
-        "A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
-      )
 
     if (action.fullPage) return beyondViewport(action, metrics.cssContentSize)
 
@@ -2034,21 +2083,14 @@ export function createBrowserPage(
     action: Extract<Browser.Action, { type: "screenshot" }>,
     bounds: { x: number; y: number; width: number; height: number },
   ) {
-    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-    const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-    if (bounds.width <= 0 || bounds.height <= 0)
-      throw new Error(
-        "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-      )
-
-    if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-      throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getNormalBounds()).scaleFactor
+    const scale = captureScale(bounds, pixelRatio, action.maxWidth ?? 2000)
     const format = action.format ?? "jpeg"
 
     const capture = await cdp.send("Page.captureScreenshot", {
       format,
       quality: format === "png" ? undefined : (action.quality ?? 80),
+      fromSurface: true,
       captureBeyondViewport: true,
       clip: { ...bounds, scale },
     })
@@ -2259,7 +2301,8 @@ export function createBrowserPage(
     await input("Input.dispatchKeyEvent", { type: "keyUp", ...params })
   }
 
-  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
+  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>, signal: AbortSignal) {
+    const generation = documentGeneration(documentState)
     const tree = await frames()
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
     const named = selected?.frameID ?? action.frameID
@@ -2270,79 +2313,45 @@ export function createBrowserPage(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
     const sessionID = sessionFor(frameID, tree)
-    const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
-    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
-    const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
-    const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
+    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID }, sessionID)
+    abortError(signal)
 
-    if (!root)
-      throw new Error(
-        "Element is absent from this frame's accessibility snapshot. Retry browser.snapshot with the same tabID and no ref to refresh the frame, then choose a returned ref.",
-      )
-    refs.clear()
-    const pinned = new Map(Array.from(picked, ([ref, element]) => [`${element.frameID}:${element.backendID}`, ref]))
-    const lines: string[] = []
-    let truncated = false
+    const byNode = (source: Map<string, Element>) => new Map(Array.from(source)
+      .filter(([, element]) => element.frameID === frameID && element.sessionID === sessionID)
+      .map(([ref, element]) => [element.backendID, ref]))
 
-    const walk = async (node: Protocol.Accessibility.AXNode, level: number): Promise<void> => {
-      if (level > depth || lines.length >= 500) {
-        truncated = true
+    const snapshot = await accessibilitySnapshot(ax.nodes, {
+      root: selected?.backendID,
+      depth: action.type === "snapshot" ? action.depth : undefined,
+      text: action.type === "find" ? action.text : undefined,
+      interactive: action.interactive,
+      maxLines: action.maxLines,
+      maxChars: action.maxChars,
+      signal,
+      previous: refs.previous(frameID, sessionID),
+      picked: byNode(picked),
+      ref: options.shared.ref,
+      // AX does not distinguish password textboxes. Fail closed if the backing field is gone or sensitive.
+      readableValue: async (backendID, name) => {
+        abortError(signal)
+        const field = await call({ backendID, frameID, sessionID }, describeField).catch(() => undefined)
 
-        return
-      }
+        return Schema.is(Field)(field) && readableField(field, name)
+      },
+      box: action.type === "snapshot" && action.boxes ? async (backendID) => {
+        abortError(signal)
+        const box = await rect({ backendID, frameID, sessionID }, false, tree).catch(() => undefined)
 
-      const role = String(node.role?.value ?? "node")
-        .replace(/[^a-zA-Z0-9_-]/g, "")
-        .slice(0, 40)
+        return box ? ` box=${JSON.stringify(box)}` : ""
+      } : undefined,
+    })
 
-      const properties = new Map(node.properties?.map((property) => [property.name, property.value.value]) ?? [])
+    abortError(signal)
 
-      if (!node.ignored) {
-        const actionable =
-          role !== "RootWebArea" &&
-          (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
+    if (documentGeneration(documentState) !== generation) throw new CodedError(Browser.FailureCode.documentChanged, "Document changed during snapshot; request a fresh snapshot.")
+    refs.add(frameID, sessionID, snapshot.refs)
 
-        // A picked element keeps the ref its comment names, even when it is not otherwise actionable.
-        const known = node.backendDOMNodeId ? pinned.get(`${frameID}:${node.backendDOMNodeId}`) : undefined
-        const ref = known ?? (actionable && node.backendDOMNodeId ? options.shared.ref() : "")
-        const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
-
-        if (ref && element && !known) refs.set(ref, element)
-
-        const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
-          properties.has(name) ? [`${name}=${properties.get(name)}`] : [],
-        )
-
-        const box =
-          action.type === "snapshot" && action.boxes && ref && element
-            ? await rect(element).catch(() => undefined)
-            : undefined
-
-        lines.push(
-          `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(
-            String(node.name?.value ?? "")
-              .replace(/\s+/g, " ")
-              .slice(0, 300),
-          )} ${flags.join(" ")}${box ? ` box=${JSON.stringify(box)}` : ""}`,
-        )
-      }
-
-      if (["textbox", "searchbox"].includes(role) || properties.get("editable")) return
-
-      for (const childID of node.childIds ?? []) {
-        const child = nodes.get(childID)
-
-        if (child) await walk(child, level + 1)
-      }
-    }
-
-    await walk(root, 0)
-
-    const content = (
-      action.type === "find" ? lines.filter((line) => line.toLowerCase().includes(action.text.toLowerCase())) : lines
-    ).join("\n")
-
-    return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
+    return { content: snapshot.content, truncated: snapshot.truncated }
   }
 
   /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */

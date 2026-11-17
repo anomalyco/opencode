@@ -74,7 +74,7 @@ type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 type PaneHandle = {
   visible: () => boolean
   address: () => string
-  reload: () => void
+  reload: (ignoreCache?: boolean) => void
   /** Closes the selected browser tab, including a blank page. */
   close: () => void
   inspectable: () => boolean
@@ -672,6 +672,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     binding: (session: Session) => registration(session)?.binding,
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
+    clearCache: (session: Session, tabID: Browser.TabID, address: string) => registration(session)?.clearCache(tabID, address),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits.filter((visit) => {

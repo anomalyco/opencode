@@ -213,6 +213,8 @@ it.live("wait pauses, and polls for an element or an address", () =>
   Effect.gen(function* () {
     const seen = { checks: 0 }
     const browser = yield* setup((action) => {
+      if (action.type === "wait" && action.condition === "url" && action.url === "**/done")
+        return failure("Unmet URL wait", Browser.FailureCode.unmet)
       if (action.type !== "evaluate") return success(tab)
       seen.checks++
       return evaluated(seen.checks < 2 ? { count: 0, visible: 0 } : { count: 1, visible: 1 })
@@ -221,7 +223,8 @@ it.live("wait pauses, and polls for an element or an address", () =>
     expect(JSON.parse(yield* browser.run(waited(`time: 0.02`)))).toMatchObject({ met: true, waited: "delay" })
     // A lone timeout is a pause for that long, not a load wait that returns at once on a loaded page.
     expect(JSON.parse(yield* browser.run(waited(`timeout: 50`)))).toMatchObject({ met: true, waited: "delay" })
-    expect(browser.commands).toEqual([])
+    expect(browser.commands).toEqual([20,20,50].map(timeoutMs => ({type:"wait",tabID,condition:"delay",timeoutMs})))
+    browser.commands.length = 0
     expect(JSON.parse(yield* browser.run(`return await tools.browser.wait({ tabID: "${tabID}" })`))).toMatchObject({
       met: true,
       waited: "load",
@@ -293,7 +296,7 @@ it.live("HTML preview passes the checked relative path and requires a usable tab
   }),
 )
 
-it.live("preview fails for a missing file, and without a desktop names the file to tell the user", () =>
+it.live("preview fails for a missing file; an unattached inventory stays iterable and actions do not report success", () =>
   Effect.gen(function* () {
     const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
     yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
@@ -307,10 +310,7 @@ it.live("preview fails for a missing file, and without a desktop names the file 
 
     const detached = yield* setup(() => success(tab), { attach: false })
     yield* Effect.promise(() => Bun.write(join(detached.directory, "chart.svg"), "<svg/>"))
-    expect(
-      yield* detached.run(`return await tools.browser.preview({ path: "chart.svg" }).catch((error) => error.message)`),
-    ).toContain(
-      `[browser.disconnected] ${join(detached.directory, "chart.svg")} was not shown: no OpenCode desktop app is connected to this session`,
-    )
+    expect(JSON.parse(yield* detached.run(`const s = await tools.browser.tabs.list({}); return { ...s, tabs: s.tabs.map(t => t.id) }`))).toMatchObject({ connected: false, tabs: [], focusedTabID: null })
+    expect(yield* detached.run(`try { await tools.browser.click({ tabID: "${tabID}", ref: "e1" }); return "Done" } catch (error) { return error.message }`)).toStartWith("[browser.not_attached]")
   }),
 )
