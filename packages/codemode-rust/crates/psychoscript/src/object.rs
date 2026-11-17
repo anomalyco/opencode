@@ -6,7 +6,7 @@ use rustc_hash::FxHashMap;
 
 use crate::DiagnosticKind;
 use crate::bytecode::FuncProto;
-pub use crate::strings::{Atom, SYM_ITERATOR};
+pub use crate::strings::{Atom, SYM_ASYNC_ITERATOR, SYM_ITERATOR};
 use crate::value::{Id, Value};
 use crate::vm::{NativeFn, SavedFrame};
 
@@ -198,6 +198,32 @@ pub enum GenState {
     Done,
 }
 
+/// An async generator: its body, where it is, and the requests waiting for it.
+pub struct AsyncGen {
+    pub state: GenState,
+    pub phase: AsyncPhase,
+    pub queue: std::collections::VecDeque<AsyncRequest>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum AsyncPhase {
+    Start,
+    /// Suspended at a `yield`, waiting for a request.
+    Yield,
+    /// Running, or suspended at an `await` inside its body.
+    Executing,
+    /// Settling a `return` request after the body ended.
+    AwaitingReturn,
+    Completed,
+}
+
+/// A `next`, `throw` or `return` (0, 1, 2) request and the promise it answers.
+pub struct AsyncRequest {
+    pub kind: u8,
+    pub value: Value,
+    pub promise: Id,
+}
+
 pub enum Kind {
     Ordinary,
     Array(Vec<Value>),
@@ -242,8 +268,6 @@ pub enum Kind {
     },
     /// Shared state of a `Promise.all`-family combinator.
     Combinator(Box<Combinator>),
-    /// A generator `return()` travelling through `finally` blocks.
-    ReturnSignal(Value),
     RegExp(Box<crate::builtins::regexp::RegExpData>),
     /// A Date's time value.
     Date(f64),
@@ -261,6 +285,9 @@ pub enum Kind {
         pos: u32,
         kind: IterKind,
     },
+    AsyncGenerator(Box<AsyncGen>),
+    /// An async iterator over a sync one, for `for await` and an async generator's `yield*`.
+    AsyncFromSync(Id),
 }
 
 pub struct Combinator {

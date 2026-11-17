@@ -7,6 +7,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 
 use crate::bytecode::{Arith, Capture, FuncProto, Op, Program};
+use crate::compiler::{DELEGATE_ASYNC, DELEGATE_NO_ARG};
 use crate::object::*;
 use crate::strings::{StrId, Strings};
 use crate::value::{Id, Slot, Value};
@@ -27,7 +28,6 @@ const FUEL: u32 = 20_000;
 pub struct Handler {
     pc: u32,
     sp: u32,
-    finally: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -41,8 +41,10 @@ pub enum FrameKind {
 /// generator resumed from native code (`is_base`) returns an `Exit` from `run` instead.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Resume {
-    /// To the iteration instruction the resumer stopped at: `IterNext`, `IterStep` or `DelegateNext`.
+    /// To the iteration instruction the resumer stopped at: `IterNext` or `IterStep`.
     Iter,
+    /// To a `DelegateCall`: the value, skipping the `DelegateResult` after it unless done.
+    Delegate,
     /// Appends each yielded value to this array and keeps running, for spread and rest elements.
     Collect(Id),
     /// As an iterator result object, for a direct `next()` call.
@@ -61,7 +63,16 @@ pub struct Frame {
     pub argc: u32,
     pub kind: FrameKind,
     pub is_base: bool,
+    /// Where a generator's frame last yielded, or `NO_YIELD` before its first `yield`.
+    pub yield_pc: u32,
 }
+
+pub const NO_YIELD: u32 = u32::MAX;
+
+/// Generator request kinds, as `DelegateCall` and async generator queues number them.
+pub const REQ_NEXT: u8 = 0;
+pub const REQ_THROW: u8 = 1;
+pub const REQ_RETURN: u8 = 2;
 
 /// A suspended frame and its stack segment. The box is kept while the frame runs, so suspending again allocates
 /// nothing.
@@ -72,9 +83,11 @@ pub struct SavedFrame {
     pub started: bool,
 }
 
+/// How `run` left its base frame. The value is packed: returning a two-word `Value` through memory stalls the
+/// reload on store forwarding, measurably on short callbacks.
 pub enum Exit {
-    Return(Value),
-    Yield(Value),
+    Return(Slot),
+    Yield(Slot),
 }
 
 pub struct Coroutine {
@@ -104,6 +117,16 @@ pub enum Reaction {
         outcome: Result<Value, Value>,
     },
     Program,
+    /// Resume the async generator suspended at an `await`.
+    AwaitGen(Id),
+    /// Answer an async generator's `return` request with how its value settled.
+    GenReturn(Id),
+    /// An async-from-sync step: answer `made` with an iterator result of the value; on a rejection, close `close`.
+    FromSync {
+        made: Id,
+        done: bool,
+        close: Option<Id>,
+    },
 }
 
 pub enum Job {
@@ -156,6 +179,8 @@ pub struct Realm {
     pub map_proto: Id,
     pub set_proto: Id,
     pub generator_proto: Id,
+    pub async_generator_proto: Id,
+    pub async_from_sync_proto: Id,
     /// The built-in `next` of generators, which calls from bytecode resume without a nested run.
     pub generator_next: Id,
     pub iter_proto: Id,
@@ -479,7 +504,7 @@ impl<'rt> Vm<'rt> {
                 let r = self.run();
                 self.native_depth -= 1;
                 match r {
-                    Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v),
+                    Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v.get()),
                     Err(e) => Err(e),
                 }
             }
@@ -543,7 +568,7 @@ impl<'rt> Vm<'rt> {
         }
         self.stack
             .resize(base + proto.nlocals as usize, Slot::UNDEF);
-        let kind = if proto.is_async {
+        let kind = if proto.is_async && !proto.is_generator {
             let promise = if proto.is_program {
                 None
             } else {
@@ -573,6 +598,7 @@ impl<'rt> Vm<'rt> {
                 f.argc = argc as u32;
                 f.kind = kind;
                 f.is_base = is_base;
+                f.yield_pc = NO_YIELD;
             }
             None => self.frames.push(Box::new(Frame {
                 func: proto,
@@ -584,6 +610,7 @@ impl<'rt> Vm<'rt> {
                 argc: argc as u32,
                 kind,
                 is_base,
+                yield_pc: NO_YIELD,
             })),
         }
         Ok(())
@@ -714,31 +741,21 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    fn is_return_signal(&self, e: &Value) -> bool {
-        matches!(e, Value::Obj(id) if matches!(self.heap[*id as usize].kind, Kind::ReturnSignal(_)))
-    }
-
     /// Unwinds to the nearest handler. `Err` carries what `run` must return when the base frame is left.
     #[inline(never)]
     fn handle_throw(&mut self, e: Value) -> Result<(), Result<Exit, Value>> {
         let fatal = self.fatal.is_some();
-        let returning = self.is_return_signal(&e);
         loop {
             let Some(f) = self.frames.last_mut() else {
                 return Err(Err(e));
             };
-            if !fatal {
-                while self.handlers.len() > f.hbase as usize {
-                    let Some(h) = self.handlers.pop() else { break };
-                    if returning && !h.finally {
-                        continue;
-                    }
-                    let sp = f.base + h.sp as usize;
-                    f.pc = h.pc as usize;
-                    self.stack.truncate(sp);
-                    self.push(e);
-                    return Ok(());
-                }
+            if !fatal && self.handlers.len() > f.hbase as usize {
+                let h = self.handlers.pop().expect("handler");
+                let sp = f.base + h.sp as usize;
+                f.pc = h.pc as usize;
+                self.stack.truncate(sp);
+                self.push(e);
+                return Ok(());
             }
             let frame = self.frames.pop().expect("frame");
             self.handlers.truncate(frame.hbase as usize);
@@ -756,23 +773,16 @@ impl<'rt> Vm<'rt> {
                         }
                     };
                     if frame.is_base {
-                        return Err(Ok(Exit::Return(result)));
+                        return Err(Ok(Exit::Return(Slot::pack(result))));
                     }
                     self.push(result);
                     return Ok(());
                 }
-                FrameKind::Generator(g, resume) => {
+                FrameKind::Generator(g, _) => {
                     self.leave_generator(g, None);
-                    if returning && !fatal {
-                        let v = match &self.heap[e.as_obj().unwrap_or(0) as usize].kind {
-                            Kind::ReturnSignal(v) => *v,
-                            _ => Value::Undef,
-                        };
-                        if frame.is_base {
-                            return Err(Ok(Exit::Return(v)));
-                        }
-                        self.generator_done(resume, v);
-                        return Ok(());
+                    if self.is_async_generator(g) && !fatal {
+                        self.async_generator_finish(g, Err(e));
+                        return Err(Ok(Exit::Return(Slot::pack(Value::Undef))));
                     }
                     if frame.is_base {
                         return Err(Err(e));
@@ -862,12 +872,18 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    pub fn is_async_generator(&self, g: Id) -> bool {
+        matches!(self.heap[g as usize].kind, Kind::AsyncGenerator(_))
+    }
+
     /// Pushes a suspended generator's frame and switches to its stack, which holds that frame's slots; the
     /// resumer's stack waits in the generator until it yields or finishes. Nothing is copied. Returns whether a
-    /// `yield` waits for the value sent in.
+    /// `next(v)` request must push `v`: the generator waits at a `yield` whose result is used.
     fn enter_generator(&mut self, g: Id, resume: Resume, is_base: bool) -> bool {
-        let Kind::Generator(state) = &mut self.heap[g as usize].kind else {
-            return false;
+        let state = match &mut self.heap[g as usize].kind {
+            Kind::Generator(s) => s,
+            Kind::AsyncGenerator(a) => &mut a.state,
+            _ => return false,
         };
         let GenState::Suspended(mut saved) = std::mem::replace(state, GenState::Done) else {
             return false;
@@ -880,8 +896,6 @@ impl<'rt> Vm<'rt> {
         if !saved.handlers.is_empty() {
             self.handlers.append(&mut saved.handlers);
         }
-        let started = saved.started;
-        saved.started = true;
         *state = GenState::Running(saved);
         // Move the frame unchanged and adjust it in place: narrow writes to a moved value stall its copy.
         self.frames.push(frame);
@@ -889,14 +903,17 @@ impl<'rt> Vm<'rt> {
         f.kind = FrameKind::Generator(g, resume);
         f.is_base = is_base;
         f.hbase = hbase;
-        started && matches!(f.func.code.get(f.pc.wrapping_sub(1)), Some(Op::Yield))
+        f.yield_pc != NO_YIELD
+            && !matches!(f.func.code.get(f.yield_pc as usize), Some(Op::YieldDrop(_)))
     }
 
     /// Switches back to the resumer's stack after the generator's frame was popped: suspended again with `frame`,
     /// or finished without it.
     fn leave_generator(&mut self, g: Id, frame: Option<Box<Frame>>) {
-        let Kind::Generator(state) = &mut self.heap[g as usize].kind else {
-            return;
+        let state = match &mut self.heap[g as usize].kind {
+            Kind::Generator(s) => s,
+            Kind::AsyncGenerator(a) => &mut a.state,
+            _ => return,
         };
         let GenState::Running(mut saved) = std::mem::replace(state, GenState::Done) else {
             return;
@@ -913,6 +930,22 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// Hands a `throw` (1) or `return` (2) request to the generator frame just entered, which has yielded before.
+    /// `return(v)` runs the return path after its `yield`; `throw(e)` throws there, or at a `yield*` forwards it.
+    fn deliver_abrupt(&mut self, kind: u8, v: Value) -> Result<(), Result<Exit, Value>> {
+        let f = self.frames.last_mut().expect("frame");
+        let at = f.yield_pc as usize;
+        if kind == REQ_RETURN {
+            f.pc = at + 1;
+        } else if matches!(f.func.code.get(at), Some(Op::YieldStar(_))) {
+            f.pc = at + 2;
+        } else {
+            return self.handle_throw(v);
+        }
+        self.push(v);
+        Ok(())
+    }
+
     /// Delivers a finished generator's completion value to the frame that resumed it from bytecode.
     fn generator_done(&mut self, resume: Resume, v: Value) {
         match resume {
@@ -920,6 +953,15 @@ impl<'rt> Vm<'rt> {
             Resume::Result => {
                 let r = self.iter_result(v, true);
                 self.push(r);
+            }
+            Resume::Delegate => {
+                let Some(f) = self.frames.last_mut() else {
+                    return;
+                };
+                if let Some(Op::DelegateResult(exit)) = f.func.code.get(f.pc) {
+                    f.pc = *exit as usize;
+                }
+                self.push(v);
             }
             Resume::Iter => {
                 let Some(f) = self.frames.last_mut() else {
@@ -935,11 +977,6 @@ impl<'rt> Vm<'rt> {
                         self.stack[base + *slot as usize] = Slot::UNDEF;
                         self.stack.push(Slot::UNDEF);
                     }
-                    Some(Op::DelegateNext(slot, exit)) => {
-                        f.pc = *exit as usize;
-                        self.stack[base + *slot as usize] = Slot::UNDEF;
-                        self.push(v);
-                    }
                     _ => self.push(v),
                 }
             }
@@ -950,7 +987,9 @@ impl<'rt> Vm<'rt> {
     /// for `return` and 2 for `throw`.
     pub fn resume_generator(&mut self, g: Id, mode: u8, v: Value) -> Result<(Value, bool), Value> {
         let started = match &self.heap[g as usize].kind {
-            Kind::Generator(GenState::Suspended(s)) => s.started,
+            Kind::Generator(GenState::Suspended(s)) => {
+                s.frame.as_ref().is_some_and(|f| f.yield_pc != NO_YIELD)
+            }
             Kind::Generator(GenState::Running(_)) => {
                 return Err(self.type_error("Generator is already running"));
             }
@@ -975,21 +1014,16 @@ impl<'rt> Vm<'rt> {
                 self.run()
             }
             _ => {
-                let e = if mode == 1 {
-                    let proto = self.realm.object_proto;
-                    Value::Obj(self.alloc(Obj::new(Some(proto), Kind::ReturnSignal(v))))
-                } else {
-                    v
-                };
-                match self.handle_throw(e) {
+                let kind = if mode == 1 { REQ_RETURN } else { REQ_THROW };
+                match self.deliver_abrupt(kind, v) {
                     Ok(()) => self.run(),
                     Err(r) => r,
                 }
             }
         };
         match r {
-            Ok(Exit::Yield(y)) => Ok((y, false)),
-            Ok(Exit::Return(v)) => Ok((v, true)),
+            Ok(Exit::Yield(y)) => Ok((y.get(), false)),
+            Ok(Exit::Return(v)) => Ok((v.get(), true)),
             Err(e) => Err(e),
         }
     }
@@ -1008,6 +1042,42 @@ impl<'rt> Vm<'rt> {
             Kind::Array(items) => std::mem::take(items),
             _ => Vec::new(),
         })
+    }
+
+    /// Runs an async generator's body from native code, for a request (`awaited` false) or with the outcome of
+    /// what it awaited. What the body produces settles its request promises, so only a fatal failure comes back.
+    pub fn run_async_generator(
+        &mut self,
+        g: Id,
+        kind: u8,
+        outcome: Result<Value, Value>,
+        awaited: bool,
+    ) -> Result<(), Value> {
+        let wants = self.enter_generator(g, Resume::Iter, true);
+        let r = match (outcome, awaited) {
+            (Ok(v), true) => {
+                self.push(v);
+                self.run()
+            }
+            (Err(e), true) => match self.handle_throw(e) {
+                Ok(()) => self.run(),
+                Err(r) => r,
+            },
+            (Ok(v), false) | (Err(v), false) => {
+                if kind == REQ_NEXT {
+                    if wants {
+                        self.push(v);
+                    }
+                    self.run()
+                } else {
+                    match self.deliver_abrupt(kind, v) {
+                        Ok(()) => self.run(),
+                        Err(r) => r,
+                    }
+                }
+            }
+        };
+        r.map(|_| ())
     }
 
     // ---------- the run loop ----------
@@ -1045,14 +1115,29 @@ impl<'rt> Vm<'rt> {
             Value::Undef
         };
         let fp = self.realm.function_proto;
-        Value::Obj(self.alloc(Obj::new(
+        let generator = proto.is_generator.then_some(proto.is_async);
+        let id = self.alloc(Obj::new(
             Some(fp),
             Kind::Closure(Box::new(Closure {
                 proto,
                 upvals,
                 this,
             })),
-        )))
+        ));
+        // A generator function has its own `prototype`, which its generators inherit from.
+        if let Some(is_async) = generator {
+            let parent = if is_async {
+                self.realm.async_generator_proto
+            } else {
+                self.realm.generator_proto
+            };
+            let p = self.alloc(Obj::new(Some(parent), Kind::Ordinary));
+            let pk = self.names.prototype;
+            self.heap[id as usize]
+                .props
+                .push_new(pk, Value::Obj(p), WRITABLE);
+        }
+        Value::Obj(id)
     }
 
     pub fn run(&mut self) -> Result<Exit, Value> {
@@ -1824,8 +1909,12 @@ impl<'rt> Vm<'rt> {
                                 self.leave_generator(g, None);
                                 let is_base = frame.is_base;
                                 self.spare_frames.push(frame);
+                                if self.is_async_generator(g) {
+                                    self.async_generator_finish(g, Ok(v));
+                                    return Ok(Exit::Return(Slot::pack(Value::Undef)));
+                                }
                                 if is_base {
-                                    return Ok(Exit::Return(v));
+                                    return Ok(Exit::Return(Slot::pack(v)));
                                 }
                                 self.generator_done(resume, v);
                                 continue 'outer;
@@ -1834,39 +1923,70 @@ impl<'rt> Vm<'rt> {
                         let is_base = frame.is_base;
                         self.spare_frames.push(frame);
                         if is_base {
-                            return Ok(Exit::Return(result));
+                            return Ok(Exit::Return(Slot::pack(result)));
                         }
                         self.push(result);
                         continue 'outer;
                     }
                     Op::GeneratorStart => {
-                        let proto = self.realm.generator_proto;
+                        let is_async = func.is_async;
+                        let (pk, callee) = (self.names.prototype, self.stack[base - 2].get());
+                        let proto = match callee {
+                            Value::Obj(c) => self.get_obj(c, pk).as_obj(),
+                            _ => None,
+                        };
+                        let proto = proto.unwrap_or(if is_async {
+                            self.realm.async_generator_proto
+                        } else {
+                            self.realm.generator_proto
+                        });
                         let g = self.alloc(Obj::new(Some(proto), Kind::Generator(GenState::Done)));
+                        self.frames[fi].pc = pc;
                         let mut frame = self.frames.pop().expect("frame");
-                        frame.pc = pc;
                         frame.kind = FrameKind::Generator(g, Resume::Iter);
+                        frame.yield_pc = NO_YIELD;
                         let start = frame.base - 2;
                         let mut stack = Vec::with_capacity((self.stack.len() - start).max(16));
                         stack.extend(self.stack.drain(start..));
                         frame.base = 2;
                         let is_base = frame.is_base;
-                        self.heap[g as usize].kind =
-                            Kind::Generator(GenState::Suspended(Box::new(SavedFrame {
-                                frame: Some(frame),
-                                stack,
-                                handlers: Vec::new(),
-                                started: false,
-                            })));
+                        let state = GenState::Suspended(Box::new(SavedFrame {
+                            frame: Some(frame),
+                            stack,
+                            handlers: Vec::new(),
+                            started: false,
+                        }));
+                        self.heap[g as usize].kind = if is_async {
+                            Kind::AsyncGenerator(Box::new(AsyncGen {
+                                state,
+                                phase: AsyncPhase::Start,
+                                queue: VecDeque::new(),
+                            }))
+                        } else {
+                            Kind::Generator(state)
+                        };
                         if is_base {
-                            return Ok(Exit::Return(Value::Obj(g)));
+                            return Ok(Exit::Return(Slot::pack(Value::Obj(g))));
                         }
                         self.push(Value::Obj(g));
                         continue 'outer;
                     }
                     Op::Await => {
                         let v = self.pop();
-                        let FrameKind::Async(c) = self.frames[fi].kind else {
-                            throw!(self.syntax_error("await is only valid in async functions"));
+                        let c = match self.frames[fi].kind {
+                            FrameKind::Async(c) => c,
+                            FrameKind::Generator(g, _) if self.is_async_generator(g) => {
+                                // An async generator is always resumed from native code, so `run` returns here.
+                                self.frames[fi].pc = pc;
+                                let frame = self.frames.pop().expect("frame");
+                                self.leave_generator(g, Some(frame));
+                                let p = self.promise_resolve(v);
+                                self.perform_then(p, Reaction::AwaitGen(g));
+                                return Ok(Exit::Return(Slot::pack(Value::Undef)));
+                            }
+                            _ => {
+                                throw!(self.syntax_error("await is only valid in async functions"))
+                            }
                         };
                         let reuse = self.coroutines[c as usize].saved.take();
                         let (saved, is_base) = self.save_top_frame(pc, true, reuse);
@@ -1877,16 +1997,17 @@ impl<'rt> Vm<'rt> {
                             None => Value::Undef,
                         };
                         if is_base {
-                            return Ok(Exit::Return(result));
+                            return Ok(Exit::Return(Slot::pack(result)));
                         }
                         self.push(result);
                         continue 'outer;
                     }
-                    Op::Yield | Op::YieldDrop => {
+                    Op::Yield(after) | Op::YieldDrop(after) | Op::YieldStar(after) => {
                         let v = self.pop();
                         let FrameKind::Generator(g, resume) = self.frames[fi].kind else {
                             throw!(self.syntax_error("yield is only valid in generators"));
                         };
+                        let pushes = !matches!(op, Op::YieldDrop(_));
                         if let Resume::Collect(arr) = resume {
                             if let Kind::Array(items) = &mut self.heap[arr as usize].kind {
                                 if items.len() >= crate::ops::MAX_ARRAY_LEN {
@@ -1894,23 +2015,61 @@ impl<'rt> Vm<'rt> {
                                 }
                                 items.push(v);
                             }
-                            if matches!(op, Op::Yield) {
+                            if pushes {
                                 self.stack.push(Slot::UNDEF);
+                            }
+                            pc = after as usize;
+                            continue;
+                        }
+                        let at = pc - 1;
+                        self.frames[fi].pc = after as usize;
+                        self.frames[fi].yield_pc = at as u32;
+                        if self.is_async_generator(g) {
+                            // Answer the oldest request, then take the next queued one at once if there is one.
+                            match self.async_generator_yielded(g, v) {
+                                Some((REQ_NEXT, rv)) => {
+                                    if pushes {
+                                        self.push(rv);
+                                    }
+                                    pc = after as usize;
+                                }
+                                Some((REQ_RETURN, rv)) => {
+                                    self.push(rv);
+                                    pc = at + 1;
+                                }
+                                Some((_, rv)) => {
+                                    if !matches!(op, Op::YieldStar(_)) {
+                                        throw!(rv);
+                                    }
+                                    self.push(rv);
+                                    pc = at + 2;
+                                }
+                                None => {
+                                    let frame = self.frames.pop().expect("frame");
+                                    self.leave_generator(g, Some(frame));
+                                    return Ok(Exit::Yield(Slot::pack(v)));
+                                }
                             }
                             continue;
                         }
-                        self.frames[fi].pc = pc;
                         let frame = self.frames.pop().expect("frame");
                         let is_base = frame.is_base;
                         self.leave_generator(g, Some(frame));
                         if is_base {
-                            return Ok(Exit::Yield(v));
+                            return Ok(Exit::Yield(Slot::pack(v)));
                         }
-                        if resume == Resume::Result {
-                            let r = self.iter_result(v, false);
-                            self.push(r);
-                        } else {
-                            self.push(v);
+                        match resume {
+                            Resume::Result => {
+                                let r = self.iter_result(v, false);
+                                self.push(r);
+                            }
+                            Resume::Delegate => {
+                                self.push(v);
+                                if let Some(f) = self.frames.last_mut() {
+                                    f.pc += 1;
+                                }
+                            }
+                            _ => self.push(v),
                         }
                         continue 'outer;
                     }
@@ -1921,11 +2080,7 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::PushCatch(t) | Op::PushFinally(t) => {
                         let sp = (self.stack.len() - base) as u32;
-                        self.handlers.push(Handler {
-                            pc: t,
-                            sp,
-                            finally: matches!(op, Op::PushFinally(_)),
-                        });
+                        self.handlers.push(Handler { pc: t, sp });
                     }
                     Op::PopTry => {
                         if self.handlers.len() > self.frames[fi].hbase as usize {
@@ -1957,21 +2112,80 @@ impl<'rt> Vm<'rt> {
                             }
                         }
                     }
-                    Op::DelegateNext(slot, exit) => {
+                    Op::DelegateCall(slot, flags, missing) => {
                         self.frames[fi].pc = pc;
+                        let kind = flags & 3;
+                        let received = self.stack.pop().unwrap_or_default();
                         let it = self.stack[base + slot as usize];
-                        if let Some(g) = self.suspended_generator(it) {
-                            if self.enter_generator(g, Resume::Iter, false) {
-                                self.stack.push(Slot::UNDEF);
+                        if flags & DELEGATE_ASYNC == 0 {
+                            if kind == REQ_NEXT
+                                && let Some(g) = self.suspended_generator(it)
+                            {
+                                if self.enter_generator(g, Resume::Delegate, false) {
+                                    self.stack.push(received);
+                                }
+                                continue 'outer;
                             }
-                            continue 'outer;
+                            // Iterators the VM runs itself answer with a value and a done flag, not a result object.
+                            if let Some(step) =
+                                tri!(self.sync_delegate_step(it.get(), kind, received.get()))
+                            {
+                                match step {
+                                    Some((v, done)) => {
+                                        self.push(v);
+                                        match code.get(pc) {
+                                            Some(Op::DelegateResult(exit)) if done => {
+                                                pc = *exit as usize
+                                            }
+                                            _ => pc += 1,
+                                        }
+                                    }
+                                    None => {
+                                        self.stack.push(received);
+                                        pc = missing as usize;
+                                    }
+                                }
+                                continue;
+                            }
                         }
-                        let it = it.get();
-                        let (v, done) = step!(slot, self.delegate_step(&it));
+                        let arg = (flags & DELEGATE_NO_ARG == 0).then(|| received.get());
+                        match tri!(self.delegate_call(it.get(), kind, arg)) {
+                            Some(r) => self.push(r),
+                            None => {
+                                self.stack.push(received);
+                                pc = missing as usize;
+                            }
+                        }
+                    }
+                    Op::DelegateResult(exit) => {
+                        let r = self.pop();
+                        let (v, done) = tri!(self.iter_result_parts(&r));
                         self.push(v);
                         if done {
-                            self.stack[base + slot as usize] = Slot::UNDEF;
                             pc = exit as usize;
+                        }
+                    }
+                    Op::GetAsyncIter(slot) => {
+                        self.frames[fi].pc = pc;
+                        let v = self.pop();
+                        let it = tri!(self.get_async_iterator(&v));
+                        self.stack[base + slot as usize] = Slot::pack(it);
+                    }
+                    Op::AsyncClose(slot, skip) => {
+                        self.frames[fi].pc = pc;
+                        let it = std::mem::take(&mut self.stack[base + slot as usize]).get();
+                        match tri!(self.async_close(it)) {
+                            Some(r) => self.push(r),
+                            None => pc = skip as usize,
+                        }
+                    }
+                    Op::CheckObject => {
+                        let v = self.top();
+                        if !matches!(v, Value::Obj(_)) {
+                            let d = self.describe(&v);
+                            throw!(
+                                self.type_error(&format!("Iterator result {d} is not an object"))
+                            );
                         }
                     }
                     Op::IterStep(slot) => {

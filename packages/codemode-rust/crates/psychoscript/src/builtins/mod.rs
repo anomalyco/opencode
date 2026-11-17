@@ -289,6 +289,7 @@ impl<'rt> Vm<'rt> {
         collections::setup(self);
         iterator::setup(self);
         iterator::setup_helpers(self);
+        self.setup_async_iteration();
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);

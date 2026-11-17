@@ -19,6 +19,8 @@ pub type Atom = u32;
 
 /// The atom of `Symbol.iterator`, unreachable from strings.
 pub const SYM_ITERATOR: Atom = 0;
+/// The atom of `Symbol.asyncIterator`, unreachable from strings.
+pub const SYM_ASYNC_ITERATOR: Atom = 1;
 
 pub struct StrBuf {
     /// Built-in names borrow their static text, so setting up a run allocates little.
@@ -59,9 +61,11 @@ impl Strings {
             atom_str: Vec::new(),
             atom_index: Vec::new(),
         };
-        let id = s.alloc("Symbol(Symbol.iterator)".to_owned());
-        s.atom_str.push(id);
-        s.atom_index.push(u32::MAX);
+        for name in ["Symbol(Symbol.iterator)", "Symbol(Symbol.asyncIterator)"] {
+            let id = s.alloc_static(name);
+            s.atom_str.push(id);
+            s.atom_index.push(u32::MAX);
+        }
         s
     }
 

@@ -185,7 +185,8 @@ enum Control<'a> {
         labels: Vec<&'a str>,
         breaks: Vec<usize>,
         continues: Vec<usize>,
-        iter: Option<u32>,
+        /// The iterator slot of a `for...of`, and whether it is a `for await`.
+        iter: Option<(u32, bool)>,
     },
     Label {
         label: &'a str,
@@ -196,6 +197,8 @@ enum Control<'a> {
         breaks: Vec<usize>,
     },
     Try,
+    /// Array destructuring, guarded by a handler that closes its iterator.
+    Iter(u32),
     Finally {
         body: &'a BlockStatement<'a>,
     },
@@ -209,6 +212,8 @@ struct FnState<'a> {
     upval_of: FxHashMap<SymbolId, u32>,
     controls: Vec<Control<'a>>,
     is_arrow: bool,
+    is_async: bool,
+    is_generator: bool,
     needs_extra: bool,
     /// The instruction index a jump may land on; no instruction fuses across it.
     barrier: usize,
@@ -322,7 +327,6 @@ impl<'a, 's> Compiler<'a, 's> {
                 (prev, Op::JumpIfFalse(t)) => Arith::of(prev)
                     .filter(|a| a.is_comparison())
                     .map(|a| Op::JumpUnless(a, t)),
-                (Op::Yield, Op::Pop) => Some(Op::YieldDrop),
                 _ => None,
             };
             if let Some(fused) = fused {
@@ -370,7 +374,11 @@ impl<'a, 's> Compiler<'a, 's> {
             Op::PushCatch(_) => Op::PushCatch(target),
             Op::PushFinally(_) => Op::PushFinally(target),
             Op::IterNext(s, _) => Op::IterNext(s, target),
-            Op::DelegateNext(s, _) => Op::DelegateNext(s, target),
+            Op::Yield(_) => Op::Yield(target),
+            Op::YieldDrop(_) => Op::YieldDrop(target),
+            Op::YieldStar(_) => Op::YieldStar(target),
+            Op::DelegateCall(s, k, _) => Op::DelegateCall(s, k, target),
+            Op::DelegateResult(_) => Op::DelegateResult(target),
             other => other,
         };
     }
@@ -776,6 +784,7 @@ impl<'a, 's> Compiler<'a, 's> {
 
     fn compile_program(&mut self, program: &'a oxc_ast::ast::Program<'a>) -> R<()> {
         self.fns.push(FnState::new(false));
+        self.f().is_async = true;
         let name = self.atom("");
         let syms = match program.scope_id.get() {
             Some(scope) => self.declare_scope(scope),
@@ -817,6 +826,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 nlocals: f.nlocals,
                 captures: Vec::new(),
                 is_async: true,
+                is_generator: false,
                 is_arrow: false,
                 is_program: true,
                 needs_extra: false,
@@ -834,9 +844,6 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn closure_for_function(&mut self, f: &'a Function<'a>, name: Option<&str>) -> R<()> {
-        if f.r#async && f.generator {
-            return Err(unsupported("Async generator functions", f.span));
-        }
         let Some(body) = &f.body else {
             return Err(unsupported("Function declarations without a body", f.span));
         };
@@ -893,6 +900,8 @@ impl<'a, 's> Compiler<'a, 's> {
         let saved_pos = self.pos;
         let saved_chains = std::mem::take(&mut self.chains);
         self.fns.push(FnState::new(spec.is_arrow));
+        self.f().is_async = spec.is_async;
+        self.f().is_generator = spec.is_generator;
         let params = spec.params;
         let nparams = params.items.len() as u32;
         self.f().nlocals = nparams;
@@ -980,6 +989,7 @@ impl<'a, 's> Compiler<'a, 's> {
             nlocals: f.nlocals,
             captures: f.captures,
             is_async: spec.is_async,
+            is_generator: spec.is_generator,
             is_arrow: spec.is_arrow,
             is_program: false,
             needs_extra: f.needs_extra,
@@ -1031,7 +1041,12 @@ impl<'a, 's> Compiler<'a, 's> {
             }
             Statement::ReturnStatement(r) => {
                 match &r.argument {
-                    Some(a) => self.expr(a)?,
+                    Some(a) => {
+                        self.expr(a)?;
+                        if self.f().is_async && self.f().is_generator {
+                            self.emit(Op::Await);
+                        }
+                    }
                     None => {
                         self.emit(Op::Undef);
                     }
@@ -1098,9 +1113,112 @@ impl<'a, 's> Compiler<'a, 's> {
             self.emit(Op::AddLocal(l));
             return Ok(());
         }
+        if let Expression::YieldExpression(y) = e
+            && !y.delegate
+        {
+            return self.yield_expr(y, true);
+        }
         self.expr(e)?;
         self.emit(Op::Pop);
         Ok(())
+    }
+
+    /// A `yield`. Resuming it with `next(v)` continues after the inline return path with `v` pushed, unless `drop`;
+    /// `return(v)` runs that path with `v` pushed, and `throw(e)` throws at the `yield`.
+    fn yield_expr(&mut self, y: &'a YieldExpression<'a>, drop: bool) -> R<()> {
+        match &y.argument {
+            Some(a) => self.expr(a)?,
+            None => {
+                self.emit(Op::Undef);
+            }
+        }
+        if y.delegate {
+            self.yield_delegate()?;
+            if drop {
+                self.emit(Op::Pop);
+            }
+            return Ok(());
+        }
+        let is_async = self.f().is_async;
+        if is_async {
+            self.emit(Op::Await);
+        }
+        let at = self.emit(if drop { Op::YieldDrop(0) } else { Op::Yield(0) });
+        self.return_path(is_async)?;
+        self.patch(at);
+        Ok(())
+    }
+
+    /// What a `return(v)` request runs at a `yield`: `v` is on the stack.
+    fn return_path(&mut self, is_async: bool) -> R<()> {
+        if is_async {
+            self.emit(Op::Await);
+        }
+        self.emit_return()
+    }
+
+    /// `yield*` over the iterable on the stack, forwarding `next`, `throw` and `return` requests to its iterator.
+    fn yield_delegate(&mut self) -> R<()> {
+        let is_async = self.f().is_async;
+        let flag = if is_async { DELEGATE_ASYNC } else { 0 };
+        let it = self.new_local();
+        self.emit(if is_async {
+            Op::GetAsyncIter(it)
+        } else {
+            Op::GetIter(it)
+        });
+        self.emit(Op::Undef);
+        let lp = self.here();
+        self.emit(Op::DelegateCall(it, flag, 0));
+        if is_async {
+            self.emit(Op::Await);
+        }
+        let mut dones = vec![self.emit(Op::DelegateResult(0))];
+        let ys = self.here();
+        self.emit(Op::YieldStar(lp));
+        let to_ret = self.emit(Op::Jump(0));
+        // A `throw(e)` request resumes here with `e` on the stack.
+        let no_throw = self.emit(Op::DelegateCall(it, flag | 1, 0));
+        if is_async {
+            self.emit(Op::Await);
+        }
+        dones.push(self.emit(Op::DelegateResult(0)));
+        self.emit(Op::Jump(ys));
+        self.patch(no_throw);
+        self.emit(Op::Pop);
+        self.close_iter(it, is_async);
+        let msg = self.str_const("The delegated iterator does not provide a throw() method.");
+        self.emit(Op::ThrowType(msg));
+        self.patch(to_ret);
+        if is_async {
+            self.emit(Op::Await);
+        }
+        let plain = self.emit(Op::DelegateCall(it, flag | 2, 0));
+        if is_async {
+            self.emit(Op::Await);
+        }
+        let ret_done = self.emit(Op::DelegateResult(0));
+        self.emit(Op::Jump(ys));
+        self.patch(plain);
+        self.patch(ret_done);
+        self.emit_return()?;
+        for d in dones {
+            self.patch(d);
+        }
+        Ok(())
+    }
+
+    /// Closes the iterator in `slot` on a normal completion: calls its `return()` and checks the result.
+    fn close_iter(&mut self, slot: u32, is_async: bool) {
+        if !is_async {
+            self.emit(Op::IterClose(slot));
+            return;
+        }
+        let skip = self.emit(Op::AsyncClose(slot, 0));
+        self.emit(Op::Await);
+        self.emit(Op::CheckObject);
+        self.emit(Op::Pop);
+        self.patch(skip);
     }
 
     fn var_decl(&mut self, d: &'a VariableDeclaration<'a>) -> R<()> {
@@ -1132,7 +1250,10 @@ impl<'a, 's> Compiler<'a, 's> {
         let unwinding = self.f().controls.iter().any(|c| {
             matches!(
                 c,
-                Control::Try | Control::Finally { .. } | Control::Loop { iter: Some(_), .. }
+                Control::Try
+                    | Control::Iter(_)
+                    | Control::Finally { .. }
+                    | Control::Loop { iter: Some(_), .. }
             )
         });
         if !unwinding {
@@ -1155,12 +1276,18 @@ impl<'a, 's> Compiler<'a, 's> {
                 Control::Try => {
                     self.emit(Op::PopTry);
                 }
-                Control::Loop {
-                    iter: Some(slot), ..
-                } => {
+                Control::Iter(slot) => {
                     let slot = *slot;
                     self.emit(Op::PopTry);
                     self.emit(Op::IterClose(slot));
+                }
+                Control::Loop {
+                    iter: Some((slot, is_async)),
+                    ..
+                } => {
+                    let (slot, is_async) = (*slot, *is_async);
+                    self.emit(Op::PopTry);
+                    self.close_iter(slot, is_async);
                 }
                 Control::Finally { body } => {
                     let body: &'a BlockStatement<'a> = body;
@@ -1204,11 +1331,12 @@ impl<'a, 's> Compiler<'a, 's> {
         self.unwind_to(t + 1, n)?;
         if is_break
             && let Control::Loop {
-                iter: Some(slot), ..
+                iter: Some((slot, is_async)),
+                ..
             } = self.f().controls[t]
         {
             self.emit(Op::PopTry);
-            self.emit(Op::IterClose(slot));
+            self.close_iter(slot, is_async);
         }
         let j = self.emit(Op::Jump(0));
         match &mut self.f().controls[t] {
@@ -1227,7 +1355,7 @@ impl<'a, 's> Compiler<'a, 's> {
         Ok(())
     }
 
-    fn push_loop(&mut self, labels: Vec<&'a str>, iter: Option<u32>) {
+    fn push_loop(&mut self, labels: Vec<&'a str>, iter: Option<(u32, bool)>) {
         self.f().controls.push(Control::Loop {
             labels,
             breaks: Vec::new(),
@@ -1357,7 +1485,7 @@ impl<'a, 's> Compiler<'a, 's> {
 
     fn for_of(&mut self, f: &'a ForOfStatement<'a>, labels: Vec<&'a str>) -> R<()> {
         if f.r#await {
-            return Err(unsupported("`for await`", f.span));
+            return self.for_await(f, labels);
         }
         let syms = match f.scope_id.get() {
             Some(scope) => self.declare_scope(scope),
@@ -1369,7 +1497,7 @@ impl<'a, 's> Compiler<'a, 's> {
         let handler = self.emit(Op::PushFinally(0));
         let top = self.here();
         let exit = self.emit(Op::IterNext(slot, 0));
-        self.push_loop(labels, Some(slot));
+        self.push_loop(labels, Some((slot, false)));
         self.bind_for_left(&f.left, &syms)?;
         self.stmt(&f.body)?;
         self.emit(Op::Jump(top));
@@ -1384,6 +1512,52 @@ impl<'a, 's> Compiler<'a, 's> {
         self.emit(Op::GetLocal(exc));
         self.emit(Op::Throw);
         self.patch(end);
+        for b in breaks {
+            self.patch(b);
+        }
+        Ok(())
+    }
+
+    /// `for await`: each step awaits `next()` outside the body's handler, so a failed step does not close the
+    /// iterator, while a throw from the binding or body closes it and awaits `return()`.
+    fn for_await(&mut self, f: &'a ForOfStatement<'a>, labels: Vec<&'a str>) -> R<()> {
+        let syms = match f.scope_id.get() {
+            Some(scope) => self.declare_scope(scope),
+            None => Vec::new(),
+        };
+        self.expr(&f.right)?;
+        let slot = self.new_local();
+        self.emit(Op::GetAsyncIter(slot));
+        let top = self.here();
+        self.emit(Op::Undef);
+        self.emit(Op::DelegateCall(slot, DELEGATE_ASYNC | DELEGATE_NO_ARG, 0));
+        self.emit(Op::Await);
+        let exit = self.emit(Op::DelegateResult(0));
+        let handler = self.emit(Op::PushFinally(0));
+        self.push_loop(labels, Some((slot, true)));
+        self.bind_for_left(&f.left, &syms)?;
+        self.stmt(&f.body)?;
+        let cont = self.here();
+        self.emit(Op::PopTry);
+        self.emit(Op::Jump(top));
+        let breaks = self.pop_loop_continues(cont);
+        self.patch(handler);
+        let exc = self.new_local();
+        self.emit(Op::SetLocal(exc));
+        let swallow = self.emit(Op::PushCatch(0));
+        let skip = self.emit(Op::AsyncClose(slot, 0));
+        self.emit(Op::Await);
+        self.emit(Op::Pop);
+        self.patch(skip);
+        self.emit(Op::PopTry);
+        let rethrow = self.emit(Op::Jump(0));
+        self.patch(swallow);
+        self.emit(Op::Pop);
+        self.patch(rethrow);
+        self.emit(Op::GetLocal(exc));
+        self.emit(Op::Throw);
+        self.patch(exit);
+        self.emit(Op::Pop);
         for b in breaks {
             self.patch(b);
         }
@@ -1626,6 +1800,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 let slot = self.new_local();
                 self.emit(Op::GetIter(slot));
                 let guard = self.emit(Op::PushFinally(0));
+                self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
                     self.emit(Op::IterStep(slot));
                     match el {
@@ -1648,6 +1823,7 @@ impl<'a, 's> Compiler<'a, 's> {
     /// Ends array destructuring guarded by the `PushFinally` at `guard`: closes the iterator, and on an abrupt
     /// completion closes it quietly and rethrows.
     fn close_iter_guard(&mut self, guard: usize, slot: u32) {
+        self.f().controls.pop();
         self.emit(Op::PopTry);
         self.emit(Op::IterClose(slot));
         let end = self.emit(Op::Jump(0));
@@ -1678,6 +1854,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 let slot = self.new_local();
                 self.emit(Op::GetIter(slot));
                 let guard = self.emit(Op::PushFinally(0));
+                self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
                     self.emit(Op::IterStep(slot));
                     match el {
@@ -1921,26 +2098,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.expr(&a.argument)?;
                 self.emit(Op::Await);
             }
-            Expression::YieldExpression(y) => {
-                match &y.argument {
-                    Some(a) => self.expr(a)?,
-                    None => {
-                        self.emit(Op::Undef);
-                    }
-                }
-                if y.delegate {
-                    let slot = self.new_local();
-                    self.emit(Op::GetIter(slot));
-                    let top = self.here();
-                    let exit = self.emit(Op::DelegateNext(slot, 0));
-                    self.emit(Op::Yield);
-                    self.emit(Op::Pop);
-                    self.emit(Op::Jump(top));
-                    self.patch(exit);
-                } else {
-                    self.emit(Op::Yield);
-                }
-            }
+            Expression::YieldExpression(y) => self.yield_expr(y, false)?,
             Expression::ClassExpression(c) => return Err(unsupported("Classes", c.span)),
             Expression::RegExpLiteral(r) => {
                 let pattern = r.regex.pattern.text.as_str();
@@ -2385,6 +2543,11 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 }
 
+/// The `DelegateCall` flag for an async generator's `yield*`, whose results are awaited.
+pub const DELEGATE_ASYNC: u8 = 4;
+/// The `DelegateCall` flag for `for await`, which calls `next()` without an argument.
+pub const DELEGATE_NO_ARG: u8 = 8;
+
 enum KeyRef {
     Static(String),
     Local(u32),
@@ -2416,6 +2579,8 @@ impl<'a> FnState<'a> {
             upval_of: FxHashMap::default(),
             controls: Vec::new(),
             is_arrow,
+            is_async: false,
+            is_generator: false,
             needs_extra: false,
             barrier: 0,
         }

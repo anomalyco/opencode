@@ -185,7 +185,7 @@ fn string_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         return Ok(vm.static_str(""));
     }
     match &args[0] {
-        Value::Sym(_) => Ok(vm.static_str("Symbol(Symbol.iterator)")),
+        Value::Sym(s) => Ok(vm.atom_val(*s)),
         v => Ok(Value::Str(vm.string_of(v)?)),
     }
 }

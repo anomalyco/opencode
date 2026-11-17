@@ -2,7 +2,7 @@
 
 use crate::object::*;
 use crate::value::{Id, Value};
-use crate::vm::{Job, Reaction, Vm};
+use crate::vm::{Job, REQ_NEXT, REQ_RETURN, REQ_THROW, Reaction, Res, Vm};
 
 impl<'rt> Vm<'rt> {
     pub fn new_promise(&mut self) -> Id {
@@ -243,6 +243,29 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(())
             }
+            Reaction::AwaitGen(g) => self.run_async_generator(g, REQ_NEXT, outcome, true),
+            Reaction::GenReturn(g) => {
+                self.async_generator_finish(g, outcome);
+                Ok(())
+            }
+            Reaction::FromSync { made, done, close } => {
+                match outcome {
+                    Ok(v) => {
+                        let r = self.iter_result(v, done);
+                        self.resolve_promise(made, r);
+                    }
+                    Err(e) => {
+                        if let Some(sync) = close {
+                            let closed = self.iter_close(&Value::Obj(sync));
+                            if self.fatal.is_some() {
+                                return closed;
+                            }
+                        }
+                        self.reject(made, e);
+                    }
+                }
+                Ok(())
+            }
             Reaction::Program => {
                 if self.outcome.is_none() {
                     self.outcome = Some(outcome);
@@ -336,4 +359,168 @@ fn resolver_reject(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res
         vm.reject(p, args.first().cloned().unwrap_or_default());
     }
     Ok(Value::Undef)
+}
+
+// ---------- async generators ----------
+
+impl<'rt> Vm<'rt> {
+    /// Creates the async iterator prototypes. Runs while built-ins are set up.
+    pub fn setup_async_iteration(&mut self) {
+        let op = self.realm.object_proto;
+        let aip = self.alloc(Obj::new(Some(op), Kind::Ordinary));
+        let f = self.native_fn("[Symbol.asyncIterator]", 0, async_iter_self, Value::Undef);
+        self.define_hidden(aip, SYM_ASYNC_ITERATOR, f);
+        let agp = self.alloc(Obj::new(Some(aip), Kind::Ordinary));
+        self.method(agp, "next", 1, async_gen_next);
+        self.method(agp, "return", 1, async_gen_return);
+        self.method(agp, "throw", 1, async_gen_throw);
+        self.realm.async_generator_proto = agp;
+        self.realm.async_from_sync_proto = self.alloc(Obj::new(Some(aip), Kind::Ordinary));
+    }
+
+    fn async_gen(&mut self, g: Id) -> Option<&mut AsyncGen> {
+        match &mut self.heap[g as usize].kind {
+            Kind::AsyncGenerator(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// AsyncGenerator.prototype.next/return/throw: queue the request with its promise, and run the body now if it
+    /// waits for one. A request that arrives while the body runs is answered when the body reaches it.
+    fn async_gen_request(&mut self, this: Value, kind: u8, v: Value) -> Res {
+        let p = self.new_promise();
+        let g = match this {
+            Value::Obj(g) if self.is_async_generator(g) => g,
+            _ => {
+                let name = ["next", "throw", "return"][kind as usize];
+                let e = self.type_error(&format!(
+                    "AsyncGenerator.prototype.{name} called on incompatible receiver."
+                ));
+                self.reject(p, e);
+                return Ok(Value::Obj(p));
+            }
+        };
+        let Some(a) = self.async_gen(g) else {
+            return Ok(Value::Obj(p));
+        };
+        let phase = a.phase;
+        if kind == REQ_NEXT && phase == AsyncPhase::Completed {
+            let r = self.iter_result(Value::Undef, true);
+            self.resolve_promise(p, r);
+            return Ok(Value::Obj(p));
+        }
+        if kind == REQ_THROW && matches!(phase, AsyncPhase::Start | AsyncPhase::Completed) {
+            if let Some(a) = self.async_gen(g) {
+                a.phase = AsyncPhase::Completed;
+                a.state = GenState::Done;
+            }
+            self.reject(p, v);
+            return Ok(Value::Obj(p));
+        }
+        let Some(a) = self.async_gen(g) else {
+            return Ok(Value::Obj(p));
+        };
+        a.queue.push_back(AsyncRequest {
+            kind,
+            value: v,
+            promise: p,
+        });
+        if kind == REQ_RETURN && matches!(phase, AsyncPhase::Start | AsyncPhase::Completed) {
+            a.phase = AsyncPhase::AwaitingReturn;
+            a.state = GenState::Done;
+            self.await_return(g);
+            return Ok(Value::Obj(p));
+        }
+        if !matches!(phase, AsyncPhase::Start | AsyncPhase::Yield) {
+            return Ok(Value::Obj(p));
+        }
+        a.phase = AsyncPhase::Executing;
+        self.run_async_generator(g, kind, Ok(v), false)?;
+        Ok(Value::Obj(p))
+    }
+
+    /// Answers the oldest request with an iterator result, or rejects it.
+    fn complete_step(&mut self, g: Id, outcome: Result<Value, Value>, done: bool) {
+        let Some(front) = self.async_gen(g).and_then(|a| a.queue.pop_front()) else {
+            return;
+        };
+        match outcome {
+            Ok(v) => {
+                let r = self.iter_result(v, done);
+                self.resolve_promise(front.promise, r);
+            }
+            Err(e) => self.reject(front.promise, e),
+        }
+    }
+
+    /// A `yield` answered the oldest request. Returns the next queued request to continue with, or suspends.
+    pub fn async_generator_yielded(&mut self, g: Id, v: Value) -> Option<(u8, Value)> {
+        self.complete_step(g, Ok(v), false);
+        let a = self.async_gen(g)?;
+        match a.queue.front() {
+            Some(r) => Some((r.kind, r.value)),
+            None => {
+                a.phase = AsyncPhase::Yield;
+                None
+            }
+        }
+    }
+
+    /// The body returned or threw: answer the oldest request with that, then the rest in order.
+    pub fn async_generator_finish(&mut self, g: Id, outcome: Result<Value, Value>) {
+        self.complete_step(g, outcome, true);
+        self.drain_requests(g);
+    }
+
+    /// AsyncGeneratorDrainQueue: once the body has ended, answer the remaining requests in order.
+    fn drain_requests(&mut self, g: Id) {
+        loop {
+            let Some(a) = self.async_gen(g) else { return };
+            a.phase = AsyncPhase::Completed;
+            let Some(front) = a.queue.front() else { return };
+            let (kind, value) = (front.kind, front.value);
+            if kind == REQ_RETURN {
+                a.phase = AsyncPhase::AwaitingReturn;
+                self.await_return(g);
+                return;
+            }
+            let outcome = if kind == REQ_THROW {
+                Err(value)
+            } else {
+                Ok(Value::Undef)
+            };
+            self.complete_step(g, outcome, true);
+        }
+    }
+
+    /// AsyncGeneratorAwaitReturn: a `return(value)` on an ended or unstarted generator settles once `value` does.
+    fn await_return(&mut self, g: Id) {
+        let Some(v) = self
+            .async_gen(g)
+            .and_then(|a| a.queue.front().map(|r| r.value))
+        else {
+            return;
+        };
+        let p = self.promise_resolve(v);
+        self.perform_then(p, Reaction::GenReturn(g));
+    }
+}
+
+fn async_iter_self(_vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    Ok(this)
+}
+
+fn async_gen_next(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let v = args.first().copied().unwrap_or_default();
+    vm.async_gen_request(this, REQ_NEXT, v)
+}
+
+fn async_gen_return(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let v = args.first().copied().unwrap_or_default();
+    vm.async_gen_request(this, REQ_RETURN, v)
+}
+
+fn async_gen_throw(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let v = args.first().copied().unwrap_or_default();
+    vm.async_gen_request(this, REQ_THROW, v)
 }

@@ -107,6 +107,7 @@ pub fn setup(vm: &mut Vm) {
     let sp = vm.realm.symbol_proto;
     let symbol = vm.ctor("Symbol", 0, symbol_ctor, sp, Value::Undef);
     vm.constant(symbol, "iterator", Value::Sym(0));
+    vm.constant(symbol, "asyncIterator", Value::Sym(1));
     vm.methods(sp, &[("toString", 0, symbol_to_string)]);
 
     let json = vm.new_object();
@@ -590,8 +591,9 @@ fn symbol_ctor(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
     Err(vm.type_error("Custom symbols are not supported"))
 }
 
-fn symbol_to_string(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
-    Ok(vm.static_str("Symbol(Symbol.iterator)"))
+fn symbol_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    let s = if let Value::Sym(s) = this { s } else { 0 };
+    Ok(vm.atom_val(s))
 }
 
 // ---------- JSON ----------

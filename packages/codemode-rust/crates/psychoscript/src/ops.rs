@@ -4,7 +4,7 @@ use crate::builtins::exotic;
 use crate::object::*;
 use crate::strings::StrId;
 use crate::value::{Id, Value, num_to_string, str_to_num};
-use crate::vm::{Res, Vm};
+use crate::vm::{REQ_NEXT, REQ_RETURN, Reaction, Res, Vm};
 
 pub const MAX_STRING_LEN: usize = 1 << 24;
 pub const MAX_ARRAY_LEN: usize = 10_000_000;
@@ -99,7 +99,7 @@ impl<'rt> Vm<'rt> {
                     return Value::Num(m.live as f64);
                 }
                 Kind::ToolRef(path) if cur == id => {
-                    if key == self.names.then || key == SYM_ITERATOR {
+                    if key == self.names.then || key <= SYM_ASYNC_ITERATOR {
                         return Value::Undef;
                     }
                     let k = self.atoms.text(key);
@@ -176,7 +176,7 @@ impl<'rt> Vm<'rt> {
                 let s = num_to_string(*n);
                 self.atoms.intern(&s)
             }
-            Value::Sym(_) => SYM_ITERATOR,
+            Value::Sym(s) => *s,
             Value::Obj(_) => {
                 let p = self.primitive_of(k, Hint::String)?;
                 return self.key_of(&p);
@@ -517,7 +517,7 @@ impl<'rt> Vm<'rt> {
         let mut ints = Vec::new();
         let mut strs = Vec::new();
         for p in &props.items {
-            if p.flags & ENUMERABLE == 0 || p.key == SYM_ITERATOR {
+            if p.flags & ENUMERABLE == 0 || p.key <= SYM_ASYNC_ITERATOR {
                 continue;
             }
             match self.atoms.index(p.key) {
@@ -545,7 +545,7 @@ impl<'rt> Vm<'rt> {
                 return props
                     .items
                     .iter()
-                    .filter(|p| p.flags & ENUMERABLE != 0 && p.key != SYM_ITERATOR)
+                    .filter(|p| p.flags & ENUMERABLE != 0 && p.key > SYM_ASYNC_ITERATOR)
                     .map(|p| (p.key, p.value))
                     .collect();
             }
@@ -655,7 +655,7 @@ impl<'rt> Vm<'rt> {
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".into(),
             Value::Undef | Value::Uninit => "undefined".into(),
-            Value::Sym(_) => "Symbol(Symbol.iterator)".into(),
+            Value::Sym(s) => self.atoms.text(*s).to_owned(),
             Value::Obj(id) => match &self.heap[*id as usize].kind {
                 Kind::Array(_) => "array".into(),
                 Kind::Closure(c) => {
@@ -990,34 +990,176 @@ impl<'rt> Vm<'rt> {
         Err(self.type_error(&format!("{d} is not iterable")))
     }
 
-    /// One step of `yield*`: the next value, or the delegate's completion value once it is done.
+    /// A `yield*` step on an iterator the VM runs itself, as a value and a done flag: `Ok(None)` for any other
+    /// iterator, `Ok(Some(None))` when it lacks the `throw` or `return` method asked for.
     #[inline(never)]
-    pub fn delegate_step(&mut self, it: &Value) -> Result<(Value, bool), Value> {
-        if let Value::Obj(id) = it {
-            let id = *id;
-            match &self.heap[id as usize].kind {
-                Kind::Generator(_) => return self.resume_generator(id, 0, Value::Undef),
-                Kind::ArrayIter { .. }
-                | Kind::MapIter { .. }
-                | Kind::StrIter { .. }
-                | Kind::ListIter { .. } => {}
-                _ => {
-                    let next = self.names.next;
-                    let f = self.get_obj(id, next);
-                    let r = self.call(&f, *it, &[])?;
-                    let Value::Obj(rid) = r else {
-                        return Err(self.type_error("Iterator result is not an object"));
-                    };
-                    let (dk, vk) = (self.names.done, self.names.value);
-                    let d = self.get_obj(rid, dk);
-                    return Ok((self.get_obj(rid, vk), self.truthy(&d)));
+    pub fn sync_delegate_step(
+        &mut self,
+        it: Value,
+        kind: u8,
+        received: Value,
+    ) -> Result<Option<Option<(Value, bool)>>, Value> {
+        let Value::Obj(id) = it else { return Ok(None) };
+        match &self.heap[id as usize].kind {
+            Kind::Generator(_) => {
+                let mode = match kind {
+                    REQ_NEXT => 0,
+                    REQ_RETURN => 1,
+                    _ => 2,
+                };
+                Ok(Some(Some(self.resume_generator(id, mode, received)?)))
+            }
+            Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. } => {
+                if kind != REQ_NEXT {
+                    return Ok(Some(None));
                 }
+                Ok(Some(Some(match self.iter_step(&it)? {
+                    Some(v) => (v, false),
+                    None => (Value::Undef, true),
+                })))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Calls an iterator's `next`, `throw` or `return` for `yield*` or `for await`, returning its result; `None` when
+    /// `throw` or `return` is missing.
+    #[inline(never)]
+    pub fn delegate_call(
+        &mut self,
+        it: Value,
+        kind: u8,
+        arg: Option<Value>,
+    ) -> Result<Option<Value>, Value> {
+        if let Value::Obj(id) = it
+            && let Kind::AsyncFromSync(sync) = self.heap[id as usize].kind
+        {
+            return self.async_from_sync_call(sync, kind, arg).map(Some);
+        }
+        let name = self.request_name(kind);
+        let m = self.get(&it, name)?;
+        if kind != REQ_NEXT && m.is_nullish() {
+            return Ok(None);
+        }
+        let args: &[Value] = match &arg {
+            Some(a) => std::slice::from_ref(a),
+            None => &[],
+        };
+        self.call(&m, it, args).map(Some)
+    }
+
+    fn request_name(&mut self, kind: u8) -> Atom {
+        match kind {
+            REQ_NEXT => self.names.next,
+            REQ_RETURN => self.names.return_,
+            _ => self.atoms.intern_static("throw"),
+        }
+    }
+
+    /// The `value` and `done` of an iterator result, which must be an object.
+    pub fn iter_result_parts(&mut self, r: &Value) -> Result<(Value, bool), Value> {
+        let Value::Obj(rid) = r else {
+            let d = self.describe(r);
+            return Err(self.type_error(&format!("Iterator result {d} is not an object")));
+        };
+        let (dk, vk) = (self.names.done, self.names.value);
+        let d = self.get_obj(*rid, dk);
+        let done = self.truthy(&d);
+        Ok((self.get_obj(*rid, vk), done))
+    }
+
+    /// GetIterator with the async hint: `[Symbol.asyncIterator]()`, or the sync iterator adapted.
+    #[inline(never)]
+    pub fn get_async_iterator(&mut self, v: &Value) -> Res {
+        if let Value::Obj(id) = v {
+            let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
+            if !f.is_nullish() {
+                let it = self.call(&f, *v, &[])?;
+                if !matches!(it, Value::Obj(_)) {
+                    return Err(self
+                        .type_error("Result of the Symbol.asyncIterator method is not an object"));
+                }
+                return Ok(it);
             }
         }
-        Ok(match self.iter_step(it)? {
-            Some(v) => (v, false),
-            None => (Value::Undef, true),
-        })
+        let sync = self.get_iterator(v)?;
+        let Value::Obj(sync) = sync else {
+            return Err(self.type_error("Result of the Symbol.iterator method is not an object"));
+        };
+        let proto = self.realm.async_from_sync_proto;
+        Ok(Value::Obj(
+            self.alloc(Obj::new(Some(proto), Kind::AsyncFromSync(sync))),
+        ))
+    }
+
+    /// The promise of an async-from-sync iterator's `next`, `throw` or `return`.
+    fn async_from_sync_call(&mut self, sync: Id, kind: u8, arg: Option<Value>) -> Res {
+        let made = self.new_promise();
+        let sv = Value::Obj(sync);
+        let step = match kind {
+            REQ_NEXT => self.sync_step(sv, arg),
+            _ => {
+                let name = self.request_name(kind);
+                let m = self.get_obj(sync, name);
+                if m.is_nullish() {
+                    if kind == REQ_RETURN {
+                        let r = self.iter_result(arg.unwrap_or_default(), true);
+                        self.resolve_promise(made, r);
+                    } else {
+                        let closed = self.iter_close(&sv);
+                        let e = match closed {
+                            Err(e) => e,
+                            Ok(()) => self.type_error(
+                                "The delegated iterator does not provide a throw() method.",
+                            ),
+                        };
+                        self.reject(made, e);
+                    }
+                    return Ok(Value::Obj(made));
+                }
+                let args: &[Value] = match &arg {
+                    Some(a) => std::slice::from_ref(a),
+                    None => &[],
+                };
+                self.call(&m, sv, args)
+                    .and_then(|r| self.iter_result_parts(&r))
+            }
+        };
+        match step {
+            Ok((v, done)) => {
+                let close = (kind != REQ_RETURN && !done).then_some(sync);
+                let w = self.promise_resolve(v);
+                self.perform_then(w, Reaction::FromSync { made, done, close });
+            }
+            Err(e) => {
+                if self.fatal.is_some() {
+                    return Err(e);
+                }
+                self.reject(made, e);
+            }
+        }
+        Ok(Value::Obj(made))
+    }
+
+    /// One `next` on a sync iterator, as a value and a done flag.
+    fn sync_step(&mut self, it: Value, arg: Option<Value>) -> Result<(Value, bool), Value> {
+        if let Some(Some(step)) = self.sync_delegate_step(it, REQ_NEXT, arg.unwrap_or_default())? {
+            return Ok(step);
+        }
+        let r = self.delegate_call(it, REQ_NEXT, arg)?.unwrap_or_default();
+        self.iter_result_parts(&r)
+    }
+
+    /// Starts closing an async iterator: the result of its `return()`, or `None` when it has none.
+    #[inline(never)]
+    pub fn async_close(&mut self, it: Value) -> Result<Option<Value>, Value> {
+        if it.is_nullish() {
+            return Ok(None);
+        }
+        self.delegate_call(it, REQ_RETURN, None)
     }
 
     #[inline(never)]

@@ -135,9 +135,13 @@ pub enum Op {
     Return,
     GeneratorStart,
     Await,
-    Yield,
-    /// A `yield` whose result is unused: resuming it pushes nothing.
-    YieldDrop,
+    /// Suspends a generator. `next(v)` resumes at the operand with `v` pushed; `return(v)` resumes just after the
+    /// `yield`, at its inline return path, with `v` pushed; `throw(e)` throws at the `yield`.
+    Yield(u32),
+    /// A `yield` whose result is unused: `next` resumes it without pushing.
+    YieldDrop(u32),
+    /// The `yield` of a `yield*`: like `Yield`, but `throw(e)` resumes two instructions after it with `e` pushed.
+    YieldStar(u32),
 
     Throw,
     PushCatch(u32),
@@ -146,8 +150,19 @@ pub enum Op {
 
     GetIter(u32),
     IterNext(u32, u32),
-    /// Like `IterNext`, but pushes the iterator's completion value before jumping, for `yield*`.
-    DelegateNext(u32, u32),
+    /// One `yield*` step: `received` -> `result`, calling the iterator's `next`, `throw` or `return` (the flag's low
+    /// bits 0, 1, 2) with it. Jumps with `received` when `throw` or `return` is missing. Without the async flag, an
+    /// iterator the VM runs itself skips the result: it pushes the value and continues after the `DelegateResult`
+    /// that follows, or at that instruction's target when done.
+    DelegateCall(u32, u8, u32),
+    /// `result` -> `value`, jumping when the iterator result is done.
+    DelegateResult(u32),
+    /// Opens an async iterator: `Symbol.asyncIterator`, or a sync iterator adapted to async.
+    GetAsyncIter(u32),
+    /// Pushes the result of calling the iterator's `return()`, or jumps when it has none.
+    AsyncClose(u32, u32),
+    /// Throws a `TypeError` unless the top is an object.
+    CheckObject,
     IterStep(u32),
     IterRest(u32),
     IterClose(u32),
@@ -215,6 +230,7 @@ pub struct FuncProto {
     pub nlocals: u32,
     pub captures: Vec<Capture>,
     pub is_async: bool,
+    pub is_generator: bool,
     pub is_arrow: bool,
     pub is_program: bool,
     /// Keeps arguments beyond `nparams` for rest parameters and `arguments`.

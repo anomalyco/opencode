@@ -690,7 +690,7 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
         Value::Str(s) => quote(out, vm.text(*s)),
         Value::Num(n) => write_num(out, *n),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Sym(_) => out.push_str("Symbol(Symbol.iterator)"),
+        Value::Sym(s) => out.push_str(vm.atoms.text(*s)),
         Value::Obj(id) => {
             let id = *id;
             if seen.len() > MAX_VALUE_DEPTH {
