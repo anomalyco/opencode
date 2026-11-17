@@ -11,7 +11,7 @@ mod core;
 
 use opencode_plugin_abi::task::Cx;
 use opencode_plugin_abi::{
-    Alert, Command, Confirm, Fetch, Host, Prompt, Read, Route, Select, SelectOption, Setup, Toast, Variant, plugin,
+    Alert, Command, Confirm, Fetch, Prompt, Route, Select, SelectOption, Setup, Toast, Variant, plugin,
 };
 use serde_json::{Value, json};
 
@@ -27,7 +27,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 
 /// TS `openManager`.
 async fn open_manager(cx: Cx) {
-    let Route::Session { id } = cx.route() else {
+    let Route::Session { id } = cx.with(|host| host.route()) else {
         let message = "Open a session in the OpenCode v2 terminal UI first, then run /qm.";
         return cx.alert(Alert::new("Queue Manager", message)).await;
     };
@@ -354,19 +354,20 @@ impl Manager {
     }
 
     fn entries(&self) -> Vec<String> {
-        let stored = self.cx.storage_get(DRAFTS).unwrap_or(Value::Null);
+        let stored = self.cx.with(|host| host.storage_get(DRAFTS)).unwrap_or(Value::Null);
         let list = stored["sessions"][self.session.as_str()].as_array().cloned().unwrap_or_default();
         list.iter().filter_map(|text| text.as_str().map(str::to_owned)).collect()
     }
 
     /// TS `storeEntries`: the session's list in the stored drafts.
     fn store(&self, list: Vec<String>) {
-        let mut stored = self.cx.storage_get(DRAFTS).filter(Value::is_object).unwrap_or_else(|| json!({}));
+        let mut stored =
+            self.cx.with(|host| host.storage_get(DRAFTS)).filter(Value::is_object).unwrap_or_else(|| json!({}));
         if !stored["sessions"].is_object() {
             stored["sessions"] = json!({});
         }
         stored["sessions"][self.session.as_str()] = json!(list);
-        self.cx.storage_set(DRAFTS, stored);
+        self.cx.with(|host| host.storage_set(DRAFTS, stored));
     }
 
     /// TS `dropAccepted`: the admitted draft leaves the list, unless the list changed meanwhile.
@@ -381,7 +382,7 @@ impl Manager {
     }
 
     fn toast(&self, title: &str, message: &str) {
-        self.cx.toast(Toast::new(Variant::Info, message).title(title));
+        self.cx.with(|host| host.toast(Toast::new(Variant::Info, message).title(title)));
     }
 
     /// TS `reportError`.

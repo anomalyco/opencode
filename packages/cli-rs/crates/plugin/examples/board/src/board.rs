@@ -173,13 +173,13 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
 async fn ask(cx: Cx, board: Rc<RefCell<Board>>) {
     let answer = cx.confirm(Confirm::ask("Count the sessions?", "The board asks the server.")).await;
     if answer != Some(true) {
-        return cx.toast(Toast::new(Variant::Info, format!("asked {answer:?}")));
+        return cx.with(|host| host.toast(Toast::new(Variant::Info, format!("asked {answer:?}"))));
     }
     board.borrow_mut().values[CARDS - 1] += 1;
     let reply = cx.fetch(Fetch::new("GET", "/api/session")).await;
     let counted = reply.map(|body| body["data"].as_array().map_or(0, Vec::len));
     board.borrow_mut().values[CARDS - 1] += 1;
-    cx.toast(Toast::new(Variant::Info, format!("asked {answer:?}, counted {counted:?}")));
+    cx.with(|host| host.toast(Toast::new(Variant::Info, format!("asked {answer:?}, counted {counted:?}"))));
 }
 
 /// The `files` route and its commands.

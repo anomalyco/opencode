@@ -356,7 +356,7 @@ async fn refresh_cost(cx: Cx, state: Rc<RefCell<State>>, mut reload: bool) {
         let run = {
             let state = state.borrow();
             let tree = (!reload && !state.tree.is_empty()).then(|| state.tree.clone());
-            state.session.clone().map(|session| (session, state.location(&cx), tree))
+            state.session.clone().map(|session| (session, cx.with(|host| state.location(host)), tree))
         };
         // A failed run keeps the last total, as TS's `catch` does.
         if let Some((session, location, tree)) = run
@@ -415,7 +415,7 @@ async fn models(cx: &Cx, state: &Rc<RefCell<State>>, session: &str, location: Lo
         if state.session.as_deref() != Some(session) {
             return Poll::Ready(None);
         }
-        match cx.models(Some(&location)) {
+        match cx.with(|host| host.models(Some(&location))) {
             Some(models) => Poll::Ready(Some(models)),
             None => {
                 state.pricing = Some((location.clone(), context.waker().clone()));
@@ -429,7 +429,7 @@ async fn models(cx: &Cx, state: &Rc<RefCell<State>>, session: &str, location: Lo
 /// TS `discoverSessions`: every session in the tree, the family the host knows first, then their children's
 /// children by `session.list`, depth by depth.
 async fn discover(cx: &Cx, session: &str) -> Result<Vec<String>, String> {
-    let mut ids = family(cx, session);
+    let mut ids = cx.with(|host| family(host, session));
     let mut frontier = ids.clone();
     for _ in 0..MAX_DEPTH {
         if frontier.is_empty() || ids.len() >= MAX_SESSIONS {
