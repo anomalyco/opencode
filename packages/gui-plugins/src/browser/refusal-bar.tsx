@@ -9,7 +9,7 @@ import { displayHost, hostDisplay } from "./host-display"
 import type definition from "./index"
 
 export function RefusalBar(props: {
-  notice: { token: string; origin: string; text: string; target?: string; label?: string; opensApp?: boolean }
+  notice: { token: string; origin: string; text: string; target?: string; label?: string; title?: string; opensApp?: boolean }
   answer: (dismiss: boolean, copy?: boolean) => Promise<void>
 }) {
   const ctx = usePlugin<typeof definition>()
@@ -124,6 +124,7 @@ export function RefusalBar(props: {
             class="col-start-2 row-start-1"
             variant="neutral"
             size="small"
+            title={props.notice.title}
             onPointerDown={press}
             onPointerCancel={() => guard().cancel()}
             onBlur={() => guard().cancel()}

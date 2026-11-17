@@ -1036,10 +1036,8 @@ export default function SessionBrowserPane(props: {
 
                     if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss, copy)
 
-                    if ("newTab" in passkey) {
-                      const url = address()
-
-                      if (url) props.model.openURL(props.session, url)
+                    if (passkey.newTab !== undefined) {
+                      props.model.openURL(props.session, passkey.newTab)
 
                       return props.model.answerNotice(props.session, id, true)
                     }

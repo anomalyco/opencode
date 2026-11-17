@@ -717,8 +717,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
       // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
+      // The new tab opens the origin the tab was on when main made the notice, which the button names: never the
+      // agent's path, and never an address the page changed since.
       if (notice.reason === "browser.passkey.off")
-        return { token: entry.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+        return entry.site
+          ? { token: entry.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), title: entry.site, passkey: { newTab: entry.site } }
+          : { token: entry.token, origin, text: ctx.t("refused.passkey.off") }
 
       if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
         return {

@@ -181,6 +181,21 @@ test("a passkey notice names the tab's origin and offers the import for the page
       label: "refused.passkey.import",
       passkey: { site: "github.com", choose: true },
     })
+    // Where the agent's tab refuses, the new tab opens the origin main reported with the notice and the button names
+    // it: not the tab's path, which the page can change without replacing the notice.
+    app.emit("ses_alpha", { tabs: [{ ...page, url: "https://login.github.com/changed?since=notice" }], focusedTabID: page.id })
+    app.send("ses_alpha", { type: "refusal", tabID: page.id, notice: { reason: "browser.passkey.off", site: "github.com" }, token: "off", site: "https://login.github.com" })
+    expect(app.model.notice(alpha, page.id)).toEqual({
+      token: "off",
+      origin: 'notice.site {"site":"https://login.github.com"}',
+      text: "refused.passkey.off",
+      label: "refused.passkey.newTab",
+      title: "https://login.github.com",
+      passkey: { newTab: "https://login.github.com" },
+    })
+    // A page with no web origin has nowhere to reopen.
+    app.send("ses_alpha", { type: "refusal", tabID: page.id, notice: { reason: "browser.passkey.off" }, token: "none" })
+    expect(app.model.notice(alpha, page.id)).toEqual({ token: "none", origin: "notice.page", text: "refused.passkey.off" })
   } finally {
     app.dispose()
   }
