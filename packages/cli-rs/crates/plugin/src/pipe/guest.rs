@@ -144,6 +144,16 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             *current.borrow_mut() = failure.clone();
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
+            // An activation that sent more than the host keeps before it was registered applies nothing it sent, also
+            // not what its setup registered or asked for in its load: it fails here, before any of it (big-boi's
+            // catalog review: a storage write of its setup persisted).
+            if scripts.spilled_by(&loaded.id, loaded.seq) {
+                scripts.spill_load(&loaded);
+                return Err(format!(
+                    "it sent more than {} messages before the host registered it, and lost some",
+                    super::EARLY
+                ));
+            }
             // The setup already ran on the JS host for the first activation and for a reload's handover, which go
             // on from the chain the handover names; a later activation runs a fresh setup, which owns its own
             // generation alone, not the dialogs of the activations before it (big-boi's catalog recheck).

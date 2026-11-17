@@ -3221,7 +3221,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     std::fs::create_dir_all(&plugin).unwrap();
     let module = |build: &str| {
         format!(
-            "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  const notices = () => {{ for (let index = 0; index < {notices}; index++) carrier.unwatch(`notice${{index}}`) }}\n  const command = () => carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n  const fetched = () => carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  const late = () => {{\n    if ({manifest_first}) {{ command(); setTimeout(() => {{ notices(); fetched() }}, 20); return }}\n    notices(); command(); fetched()\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
+            "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  carrier.storage([\"kept\"])\n  void carrier.effect({{ type: \"storage-set\", key: \"kept\", value: JSON.stringify({{ build: \"two\" }}) }}).then(() => appendFileSync({log:?}, \"setup settled\\n\"))\n  const notices = () => {{ for (let index = 0; index < {notices}; index++) carrier.unwatch(`notice${{index}}`) }}\n  const command = () => carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n  const fetched = () => carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  const late = () => {{\n    if ({manifest_first}) {{ command(); setTimeout(() => {{ notices(); fetched() }}, 20); return }}\n    notices(); command(); fetched()\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
         )
     };
     std::fs::write(plugin.join("tui.ts"), module("one")).unwrap();
@@ -3269,15 +3269,24 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         });
         assert!(runs("build.go"));
     }
-    h.wait("the fetch ended", || {
+    // The setup's write settles once, and so does the fetch: its line is the other one.
+    let lines = || std::fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect::<Vec<_>>();
+    h.wait("the setup's write and the fetch settled", || {
         h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
+        lines().iter().any(|line| line == "setup settled") && lines().iter().any(|line| line != "setup settled")
     });
+    pipe.settle();
+    let fetch = || lines().into_iter().filter(|line| line != "setup settled" && line != "late").collect::<Vec<_>>();
+    assert_eq!(lines().iter().filter(|line| *line == "setup settled").count(), 1, "{:?}", lines());
     let fetched = || requests.lock().unwrap().iter().filter(|seen| seen.path == "/api/build").count();
+    let host = opencode_tui::plugins::host::host(&h.tui);
+    let stored = || opencode_plugin::Host::storage_read(&*host, "plugin.example.build.kept");
     if notices + 2 > 256 {
         // Its batch was answered as refused, nothing of it reached the server, and the build failed as a whole.
         let case = format!("{notices} notices, manifest first {manifest_first}");
-        assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err 0\n", "{case}");
+        // Refused at once, while the setup's write may still wait to be refused as the activation ends.
+        let fetch = fetch();
+        assert!(fetch.len() == 1 && fetch[0].starts_with("Err "), "{case}: {fetch:?}");
         h.wait("the build failed", || {
             h.app.advance(Duration::from_millis(1));
             matches!(pipe.status("example.build"), Some(opencode_plugin::Status::Failed(_)))
@@ -3286,9 +3295,12 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         assert!(error.contains("more than 256 messages"), "{case}: {error}");
         assert!(!runs("build.late"), "{case}: the late command of the build that failed is there");
         assert_eq!(fetched(), 0, "{case}: a fetch of the build that failed left");
+        // Nor did the storage write its setup asked for in its load persist (big-boi's catalog review).
+        assert_eq!(stored(), None, "{case}: the setup's write of the build that failed persisted");
         return;
     }
-    assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
+    assert_eq!(stored().as_deref(), Some(r#"{"build":"two"}"#), "the setup's write of the build");
+    assert_eq!(fetch(), ["Ok 0"]);
     h.wait("the late command is registered", || {
         h.app.advance(Duration::from_millis(1));
         runs("build.late")
