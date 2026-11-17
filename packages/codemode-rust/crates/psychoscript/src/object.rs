@@ -244,6 +244,8 @@ pub enum Kind {
     /// A generator `return()` travelling through `finally` blocks.
     ReturnSignal(Value),
     RegExp(Box<crate::builtins::regexp::RegExpData>),
+    /// A Date's time value.
+    Date(f64),
 }
 
 pub struct Combinator {

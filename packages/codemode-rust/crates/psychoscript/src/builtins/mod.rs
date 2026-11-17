@@ -2,6 +2,7 @@
 
 mod array;
 mod collections;
+pub mod date;
 pub mod exotic;
 mod object;
 pub mod regexp;
@@ -15,6 +16,7 @@ use crate::vm::{NativeFn, Vm};
 #[derive(Default)]
 pub struct StdProtos {
     pub regexp: Id,
+    pub date: Id,
 }
 
 /// Global names a program cannot assign to.
@@ -40,6 +42,7 @@ pub const GLOBAL_NAMES: &[&str] = &[
     "URIError",
     "AggregateError",
     "RegExp",
+    "Date",
     "console",
     "parseInt",
     "parseFloat",
@@ -166,6 +169,7 @@ impl<'rt> Vm<'rt> {
         string::setup(self);
         collections::setup(self);
         regexp::setup(self);
+        date::setup(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);
@@ -196,7 +200,7 @@ pub fn to_index(vm: &mut Vm, v: &Value, len: usize, default: usize) -> Result<us
 }
 
 /// ToString without consulting program-defined methods, as the reference's `coerceToString`: an array joins its
-/// elements, a RegExp or Error uses its built-in form, any other object is `[object Tag]`.
+/// elements, a Date, RegExp or Error uses its built-in form, any other object is `[object Tag]`.
 pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
     let Value::Obj(id) = v else {
         let s = vm.string_of(v)?;
@@ -220,6 +224,7 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
             }
             out
         }
+        Kind::Date(t) => date::display(*t),
         Kind::RegExp(_) => regexp::inspect(vm, id),
         Kind::Error(_) => {
             let (nk, mk) = (vm.names.name, vm.names.message);
@@ -248,6 +253,9 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
 pub fn builtin_number(vm: &mut Vm, v: &Value) -> Result<f64, Value> {
     match v {
         Value::Obj(id) => {
+            if let Kind::Date(t) = vm.heap[*id as usize].kind {
+                return Ok(t);
+            }
             if let Kind::ToolRef(_) = vm.heap[*id as usize].kind {
                 return Ok(f64::NAN);
             }
@@ -256,4 +264,40 @@ pub fn builtin_number(vm: &mut Vm, v: &Value) -> Result<f64, Value> {
         }
         v => vm.number_of(v),
     }
+}
+
+/// How diagnostics refer to a value, as the reference's `describeValue` does: `a number`, `an array`, `a Date`.
+pub fn describe_value(vm: &Vm, v: &Value) -> String {
+    let tag = match v {
+        Value::Undef | Value::Uninit => return "undefined".into(),
+        Value::Null => return "null".into(),
+        Value::Obj(id) => match &vm.heap[*id as usize].kind {
+            Kind::Array(_) => return "an array".into(),
+            Kind::ToolRef(_) => return "a tool reference".into(),
+            Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => return "a function".into(),
+            Kind::Promise(_) => return "an un-awaited Promise".into(),
+            Kind::Generator(_) => return "a generator".into(),
+            Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. } => return "an iterator".into(),
+            _ => object::tag_of(vm, v),
+        },
+        _ => return format!("a {}", vm.type_of(v)),
+    };
+    if tag == "Object" {
+        return "a data object".into();
+    }
+    let article = if tag.starts_with(['A', 'E', 'I', 'O']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} {tag}")
+}
+
+/// The reference's error for a method called on the wrong kind of receiver.
+pub fn incompatible(vm: &mut Vm, method: &str, this: &Value) -> Value {
+    let d = describe_value(vm, this);
+    vm.type_error(&format!("{method} called on incompatible receiver {d}."))
 }

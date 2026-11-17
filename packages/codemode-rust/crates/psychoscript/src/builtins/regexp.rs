@@ -200,9 +200,11 @@ fn data_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut RegExpData {
 fn this_regexp(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
     match as_regexp(vm, this) {
         Some(id) => Ok(id),
-        None => Err(vm.type_error(&format!(
-            "RegExp.prototype.{name} requires that 'this' be a RegExp."
-        ))),
+        None => Err(super::incompatible(
+            vm,
+            &format!("RegExp.prototype.{name}"),
+            this,
+        )),
     }
 }
 

@@ -39,14 +39,15 @@ pub fn index_len(_vm: &Vm, _id: Id) -> usize {
 }
 
 /// Whether the default ToPrimitive hint reads as a string, as for Dates.
-pub fn prefers_string(_vm: &Vm, _id: Id) -> bool {
-    false
+pub fn prefers_string(vm: &Vm, id: Id) -> bool {
+    matches!(vm.heap[id as usize].kind, Kind::Date(_))
 }
 
 /// The console form of an exotic object.
 pub fn inspect(vm: &mut Vm, id: Id) -> Option<String> {
     match &vm.heap[id as usize].kind {
         Kind::RegExp(_) => Some(regexp::inspect(vm, id)),
+        Kind::Date(t) => Some(super::date::display(*t)),
         _ => None,
     }
 }
