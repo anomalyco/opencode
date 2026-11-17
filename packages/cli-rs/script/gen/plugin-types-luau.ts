@@ -165,6 +165,17 @@ function props(schema: Schema, omit: string[], kind?: string) {
   )
 }
 
+// The fields of `schema` (or of its `oneOf` variant whose `type` is `kind`) but `omit`, required as the schema says.
+function shape(schema: Schema, omit: string[], kind?: string) {
+  const variant = kind ? schema.oneOf?.find((variant) => variant.properties?.type?.const === kind) : schema
+  if (!variant?.properties) throw new Error(`plugin-types-luau: no ${kind ?? "object"} in the schema for a dialog`)
+  return fields(
+    Object.fromEntries(Object.entries(variant.properties).filter(([name]) => !omit.includes(name))),
+    new Set(variant.required ?? []),
+    "",
+  )
+}
+
 function comment(text: string | undefined, indent = "") {
   if (!text) return []
   return text.split("\n").map((line) => `${indent}--- ${line}`)
@@ -231,7 +242,8 @@ ${reads}}
 export type Abi = { major: number, minor: number, features: { string } }
 
 --- What a handler acts with: the reads, and effects, which wait until the outermost call returns. A render or a view
---- that calls an effect fails.
+--- that calls an effect fails. The waiting calls (\`fetch\`, \`foreground\`, \`select\`, \`prompt\`, \`confirm\`, \`alert\`) park
+--- the task that calls them and return its answer.
 export type Host = {
 ${reads}    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
@@ -259,10 +271,33 @@ ${reads}    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     blur: (self: Host) -> (),
     setMode: (self: Host, mode: string?) -> (),
     releaseKeys: (self: Host) -> (),
-    --- A request's ID, or \`nil\` and why the host did not take it; its reply comes to \`setup:onReply\`.
-    fetch: (self: Host, fetch: Fetch) -> (number?, string?),
-    foreground: (self: Host, program: Foreground) -> (number?, string?),
+    --- Waits for the reply: its body (\`nil\` without one), or \`nil\` and the error, also when the host did not take
+    --- the request. Only a task waits (\`plugin.spawn\`).
+    fetch: (self: Host, fetch: Fetch) -> (any, string?),
+    --- Waits until the program exits: its exit code (\`nil\` when a signal ended it, which \`signal\` names), or \`nil\`
+    --- and why it did not start.
+    foreground: (self: Host, program: Foreground) -> ({ code: number?, signal: string? }?, string?),
+    --- Shows a select and waits: the value of the option picked, or \`nil\` when it closed without one.
+    select: (self: Host, select: SelectSpec) -> string?,
+    --- Shows a one-line prompt and waits: the text entered, or \`nil\` when it closed without one.
+    prompt: (self: Host, prompt: PromptSpec) -> string?,
+    --- Shows a confirm and waits: \`true\` or \`false\`, or \`nil\` when it closed without an answer.
+    confirm: (self: Host, confirm: ConfirmSpec) -> boolean?,
+    --- Shows an alert and waits until it closed.
+    alert: (self: Host, alert: AlertSpec) -> (),
 }
+
+--- A select as \`host:select\` shows it: the contract's \`Select\` without its \`action\`.
+export type SelectSpec = ${shape(schema.$defs.Select, ["action"])}
+
+--- A prompt as \`host:prompt\` shows it.
+export type PromptSpec = ${shape(schema.$defs.Dialog, ["type", "action"], "prompt")}
+
+--- A confirm as \`host:confirm\` shows it: the contract's \`Confirm\` without its \`action\`.
+export type ConfirmSpec = ${shape(schema.$defs.Confirm, ["action"])}
+
+--- An alert as \`host:alert\` shows it.
+export type AlertSpec = ${shape(schema.$defs.Alert, ["action"])}
 
 --- A surface's view: what it reads, its input, and a memo that keeps a subtree while its value stays.
 export type View = {
@@ -280,7 +315,9 @@ export type CommandSpec = { name: string, title: string?, palette: boolean?, gro
 --- A surface as \`setup:surface\` takes it.
 export type SurfaceSpec = { name: string, place: SurfacePlace, layers: { Layer }?, mounts: boolean?, palette: boolean? }
 
---- What setup registers on; each method holds only while setup runs.
+--- What setup registers on; each method holds only while setup runs. A handler given a \`host\` (a command's, an
+--- event's, a mount's, a layer's or a surface's) runs as a task, so it may wait; a key handler that waits has taken its
+--- key. Renders, views, code blocks and \`onDispose\` read only and cannot wait.
 export type Setup = {
     id: string,
     --- The \`options\` of the plugin's \`plugins\` entry, decoded.
@@ -297,7 +334,6 @@ export type Setup = {
     codeBlock: (self: Setup, language: string, render: (read: Read, fence: Fence) -> Fenced?) -> (),
     --- \`event\` is one of the API's events, a union tagged by \`type\`: \`if event.type == "…" then\` narrows it.
     onEvent: (self: Setup, types: { string }, run: (host: Host, event: ${server("V2Event")}) -> ()) -> (),
-    onReply: (self: Setup, run: (host: Host, id: number, value: any, error: string?) -> ()) -> (),
     onDispose: (self: Setup, run: (host: Host) -> ()) -> (),
     layer: (self: Setup, layer: Layer, handler: (host: Host, event: InputEvent) -> Handled?) -> (),
     surface: (self: Setup, surface: SurfaceSpec, view: (view: View) -> Node, handler: ((host: Host, event: InputEvent) -> Handled?)?) -> (),
@@ -330,6 +366,11 @@ export type Plugin = {
     show: (node: Node) -> Render,
     command: (name: string, input: string?) -> Action,
     click: (name: string, input: string?) -> Click,
+    --- Starts \`f(...)\` as a task of its own, from a handler, a task or setup; it runs until it ends or waits.
+    spawn: (f: (...any) -> ...any, ...any) -> (),
+    --- Runs each function as a task and waits until all ended: their values in order, or \`nil\` and the error of the
+    --- first that returned one. Only a task waits.
+    all: (fns: { () -> (any, any) }) -> ({ any }?, any),
 }
 `
 
@@ -343,6 +384,11 @@ const header = `--!strict
 -- then \`luau-analyze --formatter=gnu <your .luau files>\` or open the plugin in luau-lsp. At run time the host keeps
 -- \`@opencode\` its own whatever a \`.luaurc\` says, and reads no \`.luaurc\` outside the plugin. Require your own modules
 -- by Luau's rules: \`@self/x\` in \`init.luau\`, \`./x\` in the other modules.
+--
+-- A handler that acts is a task: \`local ok = host:confirm({ ... })\` and \`local body, err = host:fetch({ ... })\` wait in
+-- a straight line, and the plugin goes on with other calls meanwhile. A task parked on a fetch its mount asked for,
+-- when that mount closes, is not resumed yet (the request is cancelled): start a flow that waits from a command or an
+-- event rather than from \`onMount\`.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 `
