@@ -95,6 +95,8 @@ export const authorize = Effect.fnUntraced(function* (
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
   const actions = (yield* resolveTools(paths)).actions
+  // Configured rules only, on purpose: they choose which scoped asks to prompt for. A hook can only deny, and every
+  // check below goes through the service, which applies hook denies.
   const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({

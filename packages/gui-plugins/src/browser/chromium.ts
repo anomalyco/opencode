@@ -1346,8 +1346,7 @@ export function createBrowserPage(
       try {
         const intercepting = choosers.update()
 
-        // Turning the file chooser intercept back on after the grace period is a renderer call, which an open
-        // dialog blocks until it is answered.
+        // Updating the file chooser intercept is a renderer call, which an open dialog blocks until it is answered.
         if (command.action.type === "dialog") void intercepting.catch(() => undefined)
 
         return await Promise.race([
