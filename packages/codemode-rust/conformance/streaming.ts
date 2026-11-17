@@ -401,6 +401,8 @@ programs.push(
   during(gen, "for (let j = 0; j < 3000; j++) { Iterator.from(g(2)).toArray(); Iterator.from([1, 2]).toArray(); Iterator.from('ab').toArray(); see(j) }"),
   during("let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }", "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { for (const x of g(4).map(see)) if (x > 1) break; see(j) }"),
+  during("const it = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }; const it2 = { ...it, next: Object }",
+    "for (let j = 0; j < 3000; j++) { for (const x of it) {} const [y] = it; see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }"),
   during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
 )

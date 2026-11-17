@@ -5433,6 +5433,27 @@
       ]
     },
     {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const it = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }; const it2 = { ...it, next: Object }\n   const p = r.text(); for (let j = 0; j < 3000; j++) { for (const x of it) {} const [y] = it; see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 32
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }\n   const p = r.text(); for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,

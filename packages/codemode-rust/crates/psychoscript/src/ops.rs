@@ -1768,7 +1768,16 @@ impl<'rt> Vm<'rt> {
                 } else {
                     next
                 };
-                let r = self.call(&f, *it, &[])?;
+                // The reference steps its own iterators and helpers without a call; any other `next` is called as
+                // bytecode calls it.
+                let r = if matches!(
+                    self.heap[id as usize].kind,
+                    Kind::IterHelper(_) | Kind::ExoticIter { .. }
+                ) {
+                    self.call(&f, *it, &[])?
+                } else {
+                    self.call_counted(&f, *it, &[])?
+                };
                 let Value::Obj(rid) = r else {
                     return Err(self.type_error("Iterator next() result must be an object."));
                 };
