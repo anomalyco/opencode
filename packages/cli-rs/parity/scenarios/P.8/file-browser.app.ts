@@ -1,7 +1,8 @@
 // CT-11: `opencode-file-browser@1.0.4`, unmodified from npm: `/files` on the home screen opens its browser route over
 // `client.file.list`. Its keys are commands of layers it registers in setup, each enabled while its search field is not
 // focused; once `/` focused the field, the field hears its text by `onInput` (the search) and its arrows by
-// `onKeyDown`, which the layer did not map, so the search never ran. TS loads the package from node_modules; the Rust
+// `onKeyDown`, which the layer did not map, so the search never ran. Since contract 2.x step B the field also takes the
+// host's focus, so what the user types after `ctrl+f` is its text. TS loads the package from node_modules; the Rust
 // client runs the same files on the JS host through the V2 compatibility layer.
 import { defineApp } from "../../lib/app"
 
@@ -48,5 +49,8 @@ export default defineApp({
     { keys: ["ctrl+f"] },
     { keys: ["down"] },
     { checkpoint: "searching", deviation },
+    // The field has the host's focus too (contract 2.x, `focus-input`): what the user types is its text, and its search.
+    { type: "src" },
+    { checkpoint: "typed", until: "2 matches", deviation },
   ],
 })
