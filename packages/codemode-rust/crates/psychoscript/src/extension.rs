@@ -83,6 +83,7 @@ impl HostValue {
             HostValue::Undefined | HostValue::Function(_) => return None,
             HostValue::Null => Json::Null,
             HostValue::Bool(b) => Json::Bool(*b),
+            HostValue::Number(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => Json::from(*n as i64),
             HostValue::Number(n) => {
                 serde_json::Number::from_f64(*n).map_or(Json::Null, Json::Number)
             }

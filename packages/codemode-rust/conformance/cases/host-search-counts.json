@@ -1,0 +1,9 @@
+{
+  "bindings": {},
+  "limits": {
+    "max_tool_calls": 2
+  },
+  "ok": false,
+  "kind": "ToolCallLimitExceeded",
+  "logs": []
+}

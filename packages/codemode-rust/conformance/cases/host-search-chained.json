@@ -1,0 +1,16 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "tools.echo",
+    "tools.echo",
+    "tools.echo",
+    [
+      "items",
+      "remaining",
+      "next"
+    ],
+    true
+  ],
+  "logs": []
+}

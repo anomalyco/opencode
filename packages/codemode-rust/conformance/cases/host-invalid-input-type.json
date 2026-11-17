@@ -1,0 +1,9 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Error",
+    "Invalid input for tool 'echo': SchemaError(Expected number\n  at [\"id\"])"
+  ],
+  "logs": []
+}

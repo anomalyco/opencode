@@ -1,0 +1,10 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Cannot import \"fs\": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through `tools`.",
+    "Cannot import \"child_process\": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through `tools`.",
+    "TypeError"
+  ],
+  "logs": []
+}
