@@ -1154,6 +1154,9 @@ export function mountBrowserRegion(input: RegionHost) {
         if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
 
         if (options?.tab !== "append") setStore("strips", session.key, "active", key)
+
+        // As the host does for a selected tab, without the toggle's move of keyboard focus.
+        if (options?.tab === "select") setStore("opened", true)
       },
       // As the host does, the routed session's strip closes it.
       close: (key, session) => (session.key === view().key ? sideRegion()?.close(key) : close(session.key, key)),
@@ -1166,7 +1169,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       stored: (session) =>
         strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
-      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
+      side: { opened: () => store.opened, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => true },
       scroll: { get: () => undefined, set() {} },
       settings() {},
@@ -1526,6 +1529,14 @@ export function mountBrowserRegion(input: RegionHost) {
 
                   if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: true } }))
                 }}>Agent show request</button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "prompt", tabID, prompt: {
+                    id: 1, waiting: 1, focus: false, asked: 1, page: false,
+                    ask: { kind: "dialog", dialog: "confirm", site: { kind: "web", host: "beta.example", embedded: false }, message: "Leave?", value: "", stop: true },
+                  } } }))
+                }}>Page prompt</button>
                 <output>Plugin closed: {apiResult()}</output>
               <button
                 onClick={() => {

@@ -707,9 +707,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,
-    /** A tab behind another one waits on the user, which its strip tab shows. */
-    asking: (session: Session, tabID: string) =>
-      !!state.chrome[session.key]?.[tabID]?.prompt && sessionBrowser(machine(), session.key)?.focusedTabID !== tabID,
+    /**
+     * A tab the pane does not show waits on the user, which its strip tab shows. The layout decides, not the
+     * desktop's focused tab: Review or a file in front hides the browser's focused tab too.
+     */
+    asking(session: Session, tabID: string) {
+      const ref = drives.get(session.key)?.ref
+
+      return !!ref && !!state.chrome[session.key]?.[tabID]?.prompt && layout.state(key(tabID), ref) !== "visible"
+    },
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
     seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),

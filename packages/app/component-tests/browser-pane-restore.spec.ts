@@ -690,6 +690,33 @@ story("an agent show request preserves the selected file, and a plugin open wake
   await expect(root.getByText("Registrations: 3", { exact: true })).toBeVisible()
 })
 
+story("an agent show request opens the closed pane and leaves the keyboard in the composer", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  const composer = root.getByRole("textbox", { name: "Composer", exact: true })
+  const side = root.getByTestId("side-state")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await composer.focus()
+  await page.keyboard.press(mac ? "Meta+Shift+r" : "Control+Shift+r")
+  await expect(side).toHaveText("closed")
+  // The agent's request arrives with no input from the person, so nothing but the reveal could move the keyboard.
+  await root.getByRole("button", { name: "Agent show request" }).dispatchEvent("click")
+  await expect(side).toHaveText("open")
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(composer).toBeFocused()
+})
+
+story("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await root.getByRole("tab", { name: "beta.ts" }).click()
+  await root.getByRole("button", { name: "Page prompt" }).click()
+  await expect(root.getByRole("img", { name: "Waiting for you" })).toBeVisible()
+})
+
 story(
   "keeps the browser tabs while the pane's Ipc is away and registers them again when it returns",
   async ({ page }) => {
