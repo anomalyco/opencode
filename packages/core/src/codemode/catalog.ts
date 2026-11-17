@@ -47,7 +47,6 @@ export type Options = {
   readonly budget?: number
 }
 
-const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
@@ -135,9 +134,7 @@ export function lookup(inventory: Inventory) {
 }
 
 function listing(entry: { readonly path: string; readonly tool: Tool }) {
-  const firstLine = entry.tool.description.split("\n", 1)[0]?.trim() ?? ""
-  const description =
-    firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
+  const description = entry.tool.description.split("\n", 1)[0]?.trim() ?? ""
   const suffix = description.length === 0 ? "" : ` // ${description}`
   return { path: entry.path, line: `  - ${entry.tool.signature}${suffix}` }
 }
