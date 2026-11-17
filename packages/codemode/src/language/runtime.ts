@@ -57,6 +57,8 @@ export type Options<G extends Globals = Globals> = {
    * run's own state in `run.metadata`.
    */
   readonly globals?: ((run: Run) => G) | undefined
+  /** Module names that load a global, beyond its own name: `{ bun: "Bun" }` makes `import "bun"` load `Bun`. */
+  readonly modules?: Readonly<Record<string, string>> | undefined
   readonly limits?: Limits | undefined
   readonly translate?: Translate | undefined
 }
@@ -124,6 +126,7 @@ export const make = <const G extends Globals = {}>(options: Options<G> = {}): Ru
       maxOutputBytes: validateLimit("maxOutputBytes", options.limits?.maxOutputBytes, 0),
     },
     globals: options.globals,
+    modules: options.modules,
     translate: {
       functions: options.translate?.functions ?? "error",
       promises: options.translate?.promises ?? "error",

@@ -74,6 +74,8 @@ export type Setup<R> = {
   readonly translate?: Required<Translate> | undefined
   /** Each run's host globals (see `Host`): made when it starts, and again for a restored run. */
   readonly globals?: ((run: Run) => Readonly<Record<string, unknown>>) | undefined
+  /** Module names that load a global, beyond its own name; see `Runtime.Options`. */
+  readonly modules?: Readonly<Record<string, string>> | undefined
   /** Globals made as program values (a test harness), made again the same way for a restored run. */
   readonly programGlobals?: Globals<R> | undefined
 }
@@ -167,6 +169,7 @@ const instantiate = <R>(setup: Setup<R>, run: Run, bindings?: Readonly<Record<st
   const ctx = new Interpreter<R>({
     builtins: createBuiltins(),
     logs: [],
+    modules: setup.modules,
     globals: (ctx) => [
       ...(setup.programGlobals?.(ctx) ?? []),
       ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run), setup.translate)),

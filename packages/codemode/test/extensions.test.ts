@@ -602,6 +602,31 @@ describe("imports", () => {
     expect(calls).toEqual(["files:fs.readFile", "files:fs.promises.readFile"])
   })
 
+  test("an extension's module names load its globals, only in runs that get the extension", async () => {
+    const bun = Extension.make({
+      name: "bun",
+      globals: { Bun: { file: (path: string) => ({ name: path }) } },
+      modules: { bun: "Bun" },
+    })
+    const target = CodeMode.make({ extensions: [bun] })
+    expect(
+      await value(
+        `import Loaded, { file } from "bun"
+         return [file("a").name, Loaded === Bun, typeof require("bun").file, typeof (await import("bun")).file]`,
+        target,
+      ),
+    ).toEqual(["a", true, "function", "function"])
+    const without = await Effect.runPromise(target.execute(`import { file } from "bun"`, undefined, { extensions: [] }))
+    expect(without).toMatchObject({ ok: false, error: { message: expect.stringContaining(`Cannot import "bun"`) } })
+    expect((await failure(`import { file } from "bun"`)).message).toStartWith(`Error: Cannot import "bun"`)
+  })
+
+  test("a later extension's module name wins", async () => {
+    const one = Extension.make({ name: "one", globals: { A: { id: () => "a" } }, modules: { shared: "A" } })
+    const two = Extension.make({ name: "two", globals: { B: { id: () => "b" } }, modules: { shared: "B" } })
+    expect(await value(`return require("shared").id()`, CodeMode.make({ extensions: [one, two] }))).toBe("b")
+  })
+
   test("a module that isn't provided, or a missing export, fails at the import", async () => {
     const target = CodeMode.make({ extensions: [files] })
     expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(

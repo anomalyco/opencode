@@ -18,9 +18,15 @@ const aliases: Record<string, (global: (name: string) => Value) => Value> = {
 /** `node:fs` names the same module as `fs`. */
 export const moduleName = (specifier: string) => (specifier.startsWith("node:") ? specifier.slice(5) : specifier)
 
-export const resolveModule = (specifier: string, global: (name: string) => Value): Value => {
+/** `hosted` names the global a host's own module names load (`{ bun: "Bun" }`). */
+export const resolveModule = (
+  specifier: string,
+  global: (name: string) => Value,
+  hosted: Readonly<Record<string, string>> = {},
+): Value => {
   const name = moduleName(specifier)
-  return global(name) ?? aliases[name]?.(global)
+  const named = Object.hasOwn(hosted, name) ? hosted[name] : undefined
+  return global(name) ?? (named === undefined ? undefined : global(named)) ?? aliases[name]?.(global)
 }
 
 function pick(global: (name: string) => Value, names: ReadonlyArray<string>): Value {

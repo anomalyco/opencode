@@ -37,11 +37,14 @@ export class Interpreter<R> {
   /** The global bindings: the intrinsics, the host's globals, and the program's bindings. */
   readonly globalScope: Map<string, Binding>
   private readonly modules = new Map<string, Value>()
+  private readonly moduleGlobals: Readonly<Record<string, string>>
   private readonly namespaces = new Map<string, Obj>()
 
   constructor(options: {
     readonly builtins: Builtins
     readonly logs?: Array<string>
+    /** Module names that load a global, beyond its own name; see `Runtime.Options`. */
+    readonly modules?: Readonly<Record<string, string>> | undefined
     /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
     /** Data bound for this program, part of its saved state; host globals of the same name win. */
@@ -49,6 +52,7 @@ export class Interpreter<R> {
   }) {
     this.builtins = options.builtins
     this.logs = options.logs ?? []
+    this.moduleGlobals = options.modules ?? {}
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { value: undefined }]])
     // Everything made from here to the host globals is an intrinsic, with a static id (see `IntrinsicNames`).
@@ -83,7 +87,7 @@ export class Interpreter<R> {
     const name = moduleName(specifier)
     const cached = this.modules.get(name)
     if (cached !== undefined) return cached
-    const module = resolveModule(name, (global) => this.globalScope.get(global)?.value)
+    const module = resolveModule(name, (global) => this.globalScope.get(global)?.value, this.moduleGlobals)
     if (module === undefined)
       throw new PendingThrow(
         "Error",
