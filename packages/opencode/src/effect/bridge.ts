@@ -5,7 +5,7 @@ import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { attachWith } from "./run-service"
 
 export interface Shape {
-  readonly promise: <A, E, R>(effect: Effect.Effect<A, E, R>) => Promise<A>
+  readonly promise: <A, E, R>(effect: Effect.Effect<A, E, R>, options?: Pick<Effect.RunOptions, "signal">) => Promise<A>
   readonly fork: <A, E, R>(effect: Effect.Effect<A, E, R>) => Fiber.Fiber<A, E>
   readonly run: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
   readonly bind: <Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) => (...args: Args) => Result
@@ -61,8 +61,16 @@ export function make(): Effect.Effect<Shape> {
       attachWith(effect.pipe(Effect.provide(ctx)) as Effect.Effect<A, E, never>, { instance, workspace })
 
     return {
-      promise: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        restoreWorkspace(workspace, () => Effect.runPromise(wrap(effect))),
+      // A cancelled tool callback must not leave an approval waiter that can later
+      // execute the tool. Bind its fiber to the owner signal, and check before
+      // evaluation because runPromise can run synchronous work before checking it.
+      promise: <A, E, R>(effect: Effect.Effect<A, E, R>, options?: Pick<Effect.RunOptions, "signal">) =>
+        restoreWorkspace(workspace, () =>
+          Effect.runPromise(
+            wrap(Effect.suspend(() => (options?.signal?.aborted ? Effect.interrupt : effect))),
+            options,
+          ),
+        ),
       fork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         restoreWorkspace(workspace, () => Effect.runFork(wrap(effect))),
       run: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
