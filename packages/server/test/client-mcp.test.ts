@@ -224,7 +224,11 @@ it.live(
             message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
           ),
         ]
-        return { tools: request.tools, catalog: text.filter((part) => /Code Mode|tool catalog/.test(part)) }
+        return {
+          tools: request.tools,
+          system: request.system,
+          catalog: text.filter((part) => /Code Mode|tool catalog/.test(part)),
+        }
       })
       const url = server.url({ name: "sample" })
       url.pathname = `/api/experimental/session/${a.id}/client-mcp`
@@ -236,9 +240,13 @@ it.live(
         )
       const baseline = yield* step(b.id)
       expect(baseline.catalog.length).toBeGreaterThan(0)
+      const before = yield* step(a.id)
       const client = yield* connectClient(url, { authorization }, "read_label")
       yield* count(1)
-      expect((yield* step(a.id)).catalog.join("\n")).toContain("sample.read_label")
+      const after = yield* step(a.id)
+      expect(after.tools).toEqual(before.tools)
+      expect(after.system).toEqual(before.system)
+      expect(after.catalog.join("\n")).toContain("sample.read_label")
       yield* step(a.id, true)
       expect(client.sessions).toEqual([a.id])
       expect(yield* step(b.id)).toEqual(baseline)
@@ -458,6 +466,10 @@ it.live(
       yield* sessions.move({ sessionID: a.id, directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
       yield* until(() => first.state.closed)
       yield* sessions.move({ sessionID: a.id, directory: location.directory })
+      // A move is queued. Reattach only after the runner has applied the new location.
+      yield* until(() =>
+        Effect.runPromise(sessions.get(a.id)).then((session) => session.location.directory === location.directory),
+      )
       expect(yield* server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(a.id)))).toEqual([])
       const second = yield* attach(a.id)
       yield* sessions.remove(a.id)
