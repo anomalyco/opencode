@@ -650,17 +650,17 @@ fn measure_the_trio() {
             };
             h.wait_for(plugin.ready);
             let first = start.elapsed();
+            // The plugin's own entry, once it is active: a ready text such as the session's title can come first.
+            let ours = |id: &str| {
+                !id.starts_with("opencode.") || (id == "opencode.sidebar.limit" && plugin.port == "session-usage")
+            };
+            let active = || {
+                let entries = h.tui.plugins.entries();
+                entries.into_iter().find(|entry| ours(&entry.id) && entry.status == opencode_plugin::Status::Active)
+            };
+            h.wait(&format!("{carrier:?}: the plugin is active"), || active().is_some());
             h.settle();
-            let id = h
-                .tui
-                .plugins
-                .entries()
-                .into_iter()
-                .map(|entry| entry.id)
-                .find(|id| {
-                    !id.starts_with("opencode.") || id == "opencode.sidebar.limit" && plugin.port == "session-usage"
-                })
-                .unwrap_or_default();
+            let id = active().map(|entry| entry.id).unwrap_or_default();
             let monitor = h.tui.plugins.monitor();
             let (load, setup) = monitor.load(&id);
             let spent = monitor.calls_time(&id);
