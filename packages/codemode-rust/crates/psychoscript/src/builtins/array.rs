@@ -188,6 +188,9 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    for a in args {
+        vm.reject_circular(id, a, "Array.push result")?;
+    }
     let items = items_mut(vm, id, true)?;
     if items.len() + args.len() > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
@@ -212,6 +215,9 @@ fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    for a in args {
+        vm.reject_circular(id, a, "Array.unshift result")?;
+    }
     let items = items_mut(vm, id, true)?;
     items.splice(0..0, args.iter().cloned());
     Ok(Value::Num(items.len() as f64))
@@ -245,6 +251,9 @@ fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let n = len(vm, id);
     let (start, count) = splice_args(vm, args, n)?;
     let insert: Vec<Value> = args.iter().skip(2).cloned().collect();
+    for a in &insert {
+        vm.reject_circular(id, a, "Array.splice result")?;
+    }
     let items = items_mut(vm, id, !insert.is_empty())?;
     let removed: Vec<Value> = items.splice(start..start + count, insert).collect();
     Ok(vm.new_array(removed))
@@ -697,6 +706,7 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = to_index(vm, &arg(args, 1), n, 0)?;
     let e = to_index(vm, &arg(args, 2), n, n)?;
     let v = arg(args, 0);
+    vm.reject_circular(id, &v, "Array.fill result")?;
     let items = items_mut(vm, id, false)?;
     for slot in items.iter_mut().take(e).skip(s) {
         *slot = v;

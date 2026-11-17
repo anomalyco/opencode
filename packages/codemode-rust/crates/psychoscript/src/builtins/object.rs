@@ -220,6 +220,7 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     for src in args.iter().skip(1) {
         if let Value::Obj(s) = src {
             for (k, v) in vm.own_entries(*s) {
+                vm.reject_circular(t, &v, "Object.assign result")?;
                 vm.set_obj(t, k, v)?;
             }
         } else {

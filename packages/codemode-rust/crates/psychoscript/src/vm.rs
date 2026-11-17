@@ -1455,6 +1455,7 @@ impl<'rt> Vm<'rt> {
                     Op::SetProp(a) => {
                         let v = self.pop();
                         let o = self.pop();
+                        tri!(self.check_assignment(&o, &v));
                         tri!(self.set(&o, a, v));
                         self.push(v);
                     }
@@ -1468,6 +1469,7 @@ impl<'rt> Vm<'rt> {
                         let v = self.pop();
                         let k = self.pop();
                         let o = self.pop();
+                        tri!(self.check_assignment(&o, &v));
                         tri!(self.set_elem(&o, &k, v));
                         self.push(v);
                     }

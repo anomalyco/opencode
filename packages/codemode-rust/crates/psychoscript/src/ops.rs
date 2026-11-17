@@ -189,6 +189,55 @@ impl<'rt> Vm<'rt> {
 
     // ---------- property writes ----------
 
+    /// Rejects storing `value` into `container` when `container` is reachable from it through data objects, as
+    /// the reference does, so a value never refers to itself. Opaque values (functions, promises, collections) end
+    /// the walk but still match.
+    #[inline(never)]
+    pub fn reject_circular(
+        &mut self,
+        container: Id,
+        value: &Value,
+        label: &str,
+    ) -> Result<(), Value> {
+        let Value::Obj(start) = value else {
+            return Ok(());
+        };
+        let mut pending = vec![*start];
+        let mut seen = rustc_hash::FxHashSet::default();
+        while let Some(id) = pending.pop() {
+            if id == container {
+                let msg = format!("{label} contains a circular value.");
+                let p = self.realm.type_error_proto;
+                return Err(self.failure(p, &msg, crate::DiagnosticKind::InvalidDataValue));
+            }
+            if !seen.insert(id) {
+                continue;
+            }
+            let o = &self.heap[id as usize];
+            if let Kind::Array(items) | Kind::Arguments(items) = &o.kind {
+                pending.extend(items.iter().filter_map(Value::as_obj));
+            } else if !matches!(o.kind, Kind::Ordinary | Kind::Error(_)) {
+                continue;
+            }
+            pending.extend(o.props.items.iter().filter_map(|p| p.value.as_obj()));
+        }
+        Ok(())
+    }
+
+    /// The circularity check of a member assignment `o[k] = v`.
+    #[inline]
+    pub fn check_assignment(&mut self, o: &Value, v: &Value) -> Result<(), Value> {
+        if let (Value::Obj(c), Value::Obj(_)) = (o, v) {
+            let label = if matches!(self.heap[*c as usize].kind, Kind::Array(_)) {
+                "Array assignment result"
+            } else {
+                "Object assignment result"
+            };
+            return self.reject_circular(*c, v, label);
+        }
+        Ok(())
+    }
+
     #[inline(never)]
     pub fn set(&mut self, v: &Value, key: Atom, val: Value) -> Result<(), Value> {
         match v {

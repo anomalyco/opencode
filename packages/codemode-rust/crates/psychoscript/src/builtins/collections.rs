@@ -361,6 +361,12 @@ fn promise_any(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 fn promise_race(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let items = vm.iterate_to_vec(&arg(args, 0))?;
     let result = vm.new_promise();
+    if items.is_empty() {
+        let e = vm.type_error(
+            "Promise.race([]) would never settle; provide at least one promise or value.",
+        );
+        vm.reject(result, e);
+    }
     for item in items {
         let p = vm.promise_resolve(item);
         vm.perform_then(p, Reaction::Resolve(result));
