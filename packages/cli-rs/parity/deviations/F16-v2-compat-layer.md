@@ -158,8 +158,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
-  and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
-  (`<id> crashed in slot <path>: …`). The TS TUI's own `<spinner>` is the contract's spinner, in the host's frames,
+  throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
+  (`<id> crashed in slot <path>: …`). `<Portal>` draws its children in a box that fills the room of the mount that
+  renders it, over the rest, which its `ref` gets as the container (CT-10): in the `app` slot that is the screen, as
+  TS's renderer root (opencode-landstrip's pane); elsewhere it is the slot's room, not the screen, and its `mount` is
+  not followed (opencode-sesh's menu draws over its sidebar section). Drawing over the whole screen from another slot
+  would need the contract to let a mount place a node outside its room. The TS TUI's own `<spinner>` is the contract's spinner, in the host's frames,
   pace and color; its `frames`, `interval`, `color`, `backgroundColor` and `autoplay` are reported (CT-14).
   `renderer.root` takes nothing, and `renderer.currentFocusedEditor` and `currentFocusedRenderable` are undefined,
   each reported as it is read, so a plugin that checks they exist starts (CT-17: opencode-dollar-skills). What such a

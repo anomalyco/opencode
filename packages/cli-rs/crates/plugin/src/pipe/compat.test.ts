@@ -318,6 +318,31 @@ test("a node with a fixed size does not shrink by default", () => {
   expect(row.children.map((node: Json) => node.layout?.shrink)).toEqual([false, true, undefined])
 })
 
+// CT-10: `<Portal>` draws its children in a box that fills the mount's room, over the rest, which `ref` gets; it threw,
+// and opencode-landstrip's pane and opencode-sesh's menu showed nothing.
+test("a Portal draws its children over the mount's room", () => {
+  const fake = host()
+  const ctx = plugin("t.portal", fake)
+  const solidRuntime = modules["@opentui/solid"] as Json
+  let container: Json
+  ctx.ui.slot({
+    append: "app",
+    render: () =>
+      solidRuntime.createComponent(solidRuntime.Portal, {
+        ref: (el: Json) => (container = el),
+        get children() {
+          return h("box", { position: "absolute", bottom: 0, left: 0, right: 0, children: h("text", { children: "pane" }) })
+        },
+      }),
+  })
+  const tree = view(fake, 0, "a").draw()
+  const portal = tree.children[0]
+  expect(portal.layout.absolute).toEqual({ top: 0, right: 0, bottom: 0, left: 0, z: 1 })
+  expect(text(portal)).toBe("pane")
+  expect(container).toBeDefined()
+  expect(fake.toasts()).toEqual([])
+})
+
 // CT-23: `@opencode/plugin/effect` is served, its `Rpc` the same as `@opencode/plugin/rpc`'s (opencode-superagent's TUI
 // defines its RPC by it and failed to load); its server schemas link, undefined.
 test("@opencode/plugin/effect serves Rpc", () => {
