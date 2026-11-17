@@ -111,6 +111,45 @@ test.each([
   }
 })
 
+// Each phrase an agent is likely to search for when a login needs the user's own credential must hit.
+test.each([
+  "passkey",
+  "passkeys",
+  "security key",
+  "webauthn",
+  "sso",
+  "single sign-on",
+  "sign in",
+  "login",
+  "credential",
+])("browser.handoff is found by searching %s", (query) => {
+  const handoff = Browser.Operations.find((operation) => operation.name === "handoff")!
+  const description = handoff.description.toLowerCase()
+  const terms = query
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+  for (const term of terms) {
+    const forms = [
+      term,
+      ...(term.endsWith("es") ? [term.slice(0, -2)] : []),
+      ...(term.endsWith("s") ? [term.slice(0, -1)] : []),
+    ]
+    expect(forms.some((form) => description.includes(form))).toBe(true)
+  }
+})
+
+test("browser.handoff returns only a terminal outcome and the site's host", () => {
+  const handoff = Browser.Operations.find((operation) => operation.name === "handoff")!
+  const decode = Schema.decodeUnknownSync(handoff.output)
+
+  expect(decode({ state: "completed", host: "github.com" })).toEqual({ state: "completed", host: "github.com" })
+  expect(decode({ state: "cancelled", host: "dash.cloudflare.com" })).toMatchObject({ state: "cancelled" })
+  expect(() => decode({ state: "pending", host: "github.com" })).toThrow()
+  expect(() => decode({ state: "completed" })).toThrow()
+  expect(() => decode({ state: "finished", host: "github.com" })).toThrow()
+})
+
 test("network RPC is bounded bytes and does not add model tools", () => {
   expect(Browser.Operations.some((operation) => operation.name.startsWith("tunnel."))).toBe(false)
   expect(Schema.decodeUnknownSync(Browser.TunnelRead)({ data: "AAEC", eof: false }).data).toEqual(

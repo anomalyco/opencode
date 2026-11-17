@@ -1223,3 +1223,18 @@ story("keeps the selected device and its rotated viewport with its browser tab",
   await moreDevices.hover()
   await expect(pixel).toBeChecked()
 })
+
+story("hands a sign-in to the system browser and reports the user's answer", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Start handoff" }).click()
+
+  const banner = root.locator('[data-component="browser-handoff"]')
+  await expect(banner).toHaveAttribute("data-state", "pending")
+  await expect(banner).toContainText("Finish signing in to alpha.example")
+  await expect(banner).toContainText("OpenCode never sees that session or its credentials")
+  await expect(banner.getByRole("button", { name: "Cancel" })).toBeVisible()
+
+  await banner.getByRole("button", { name: "Done" }).click()
+  await expect(banner).toHaveAttribute("data-state", "completed")
+  await expect(banner).toContainText("Finished in the system browser")
+})

@@ -67,6 +67,9 @@ function BrowserStory(props: { scenario: BrowserScenario }) {
                     Reconnect
                   </Button>
                 </Show>
+                <Button size="small" onClick={frame.handoff}>
+                  Start handoff
+                </Button>
               </div>
               <Show when={frame.external}>
                 <output class="text-12-regular break-all">System browser request: {frame.external}</output>

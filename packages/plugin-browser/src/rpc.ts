@@ -190,6 +190,15 @@ export const Operations = [
     Schema.Struct({ path: short }),
   ),
   operation(
+    "handoff",
+    "Move this tab's current page to the user's system browser when a login needs a passkey, security key, WebAuthn authenticator, or single sign-on (SSO) the in-app browser cannot service. Opens the page in the default browser and waits for the user to choose Done or Cancel in the Review pane. The pane never receives that session, its cookies, or its credentials and stays signed out; do not ask the user to paste, read, or repeat them. Use it for the credential step, then continue in the pane.",
+    tab,
+    Schema.Struct({
+      state: Schema.Literals(["completed", "cancelled", "timedOut"]),
+      host: short.annotate({ description: "The site whose sign-in moved to the system browser." }),
+    }),
+  ),
+  operation(
     "navigate",
     "Navigate this tab to HTTP/HTTPS or about:blank; wait for the document load. Element refs expire.",
     { ...tab, url: short },
