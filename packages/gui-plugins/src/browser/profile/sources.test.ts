@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises"
+import { lutimes, mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { cookieDetails } from "./cookie"
@@ -94,6 +94,45 @@ test("sweeps the copies a crash left behind, but never one a read still uses", a
     expect(await remaining(copies.directory)).toEqual(["opencode-browser-import-reading", "something-else"])
     expect(await remaining(legacy)).toEqual(["opencode-browser-import-new"])
     expect(logged).toEqual([])
+  } finally {
+    await rm(home, { recursive: true, force: true }).catch(() => undefined)
+  }
+})
+
+test("in the shared temporary directory, a planted link is left and a link inside a copy is never followed", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "browser-copies-"))
+  const legacy = path.join(home, "temp")
+  const victim = path.join(home, "victim")
+  const old = new Date(Date.now() - 120_000)
+
+  try {
+    await mkdir(legacy, { recursive: true })
+    await mkdir(victim)
+    await writeFile(path.join(victim, "Cookies"), "the user's own file")
+    // Another user's entry named as a copy, that points at the user's files; a junction needs no privilege on Windows.
+    const planted = path.join(legacy, "opencode-browser-import-planted")
+    await symlink(victim, planted, "junction")
+    await lutimes(planted, old, old)
+    // An old copy whose file was swapped for a link to the user's directory.
+    const copy = path.join(legacy, "opencode-browser-import-copy")
+    await mkdir(copy)
+    await writeFile(path.join(copy, "Cookies-wal"), "values")
+    await symlink(victim, path.join(copy, "Cookies"), "junction")
+    await utimes(copy, old, old)
+    // Earlier versions made no directory inside a copy, so the sweep never goes down into one.
+    const nested = path.join(legacy, "opencode-browser-import-nested")
+    await mkdir(path.join(nested, "inner"), { recursive: true })
+    await writeFile(path.join(nested, "inner", "kept"), "")
+    await utimes(nested, old, old)
+    await utimes(victim, old, old)
+    const logged: string[] = []
+
+    await sweepSnapshots({ ...scratch(home), log: (_message, detail) => logged.push(path.basename(detail.directory ?? "")) }, [legacy])
+
+    expect((await readdir(legacy)).toSorted()).toEqual(["opencode-browser-import-nested", "opencode-browser-import-planted"])
+    expect(await readdir(path.join(nested, "inner"))).toEqual(["kept"])
+    expect(await readdir(victim)).toEqual(["Cookies"])
+    expect(logged).toEqual(["opencode-browser-import-nested"])
   } finally {
     await rm(home, { recursive: true, force: true }).catch(() => undefined)
   }

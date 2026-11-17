@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises"
+import { copyFile, lstat, mkdir, readdir, rm, rmdir, unlink } from "node:fs/promises"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
@@ -54,7 +54,9 @@ export async function snapshotDatabase<T>(file: string, scratch: SnapshotScratch
 
 /**
  * Deletes the copies no read uses: in the scratch directory, and in `legacy`, where earlier versions made them, those
- * older than a minute, so another app instance's read in progress is left alone.
+ * older than a minute, so another app instance's read in progress is left alone. A legacy directory, such as `/tmp`,
+ * is shared with other users, who can name an entry so: only a real directory of this user's goes, and only the
+ * entries directly in it, as earlier versions left them, so no link is ever followed.
  */
 export async function sweepSnapshots(scratch: SnapshotScratch, legacy: readonly string[] = []) {
   const stale = async (directory: string, settled: (entry: string) => Promise<boolean>) => {
@@ -66,20 +68,45 @@ export async function sweepSnapshots(scratch: SnapshotScratch, legacy: readonly 
   }
 
   const minute = Date.now() - 60_000
+  // Windows has no user ids; its temporary directory is the user's own.
+  const user = process.getuid?.()
   const own = await stale(scratch.directory, async (entry) => !scratch.live.has(entry))
 
   const earlier = await Promise.all(
     legacy.map((directory) =>
-      stale(directory, async (entry) => (await stat(entry).then((info) => info.mtimeMs, () => Infinity)) < minute),
+      stale(directory, async (entry) => {
+        const info = await lstat(entry).catch(() => undefined)
+
+        return !!info && info.isDirectory() && (user === undefined || info.uid === user) && info.mtimeMs < minute
+      }),
     ),
   )
 
-  await Promise.all([...own, ...earlier.flat()].map((entry) => remove(entry, scratch)))
+  await Promise.all([...own.map((entry) => remove(entry, scratch)), ...earlier.flat().map((entry) => removeFlat(entry, scratch))])
 }
 
 // Windows refuses to delete a file an indexer or a virus scanner holds open for a moment, so it tries once more.
 async function remove(directory: string, scratch: SnapshotScratch) {
   const removed = await rm(directory, { recursive: true, force: true, maxRetries: 1, retryDelay: 200 }).then(
+    () => true,
+    () => false,
+  )
+
+  if (!removed) scratch.log("a copy of another browser's cookie database could not be deleted", { directory })
+}
+
+// A link among the entries is deleted itself, never what it points to, and a directory among them is left, so the
+// directory stays and is logged.
+async function removeFlat(directory: string, scratch: SnapshotScratch) {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+
+  await Promise.all(
+    entries
+      .filter((entry) => !entry.isDirectory())
+      .map((entry) => unlink(path.join(directory, entry.name)).catch(() => undefined)),
+  )
+
+  const removed = await rmdir(directory).then(
     () => true,
     () => false,
   )
