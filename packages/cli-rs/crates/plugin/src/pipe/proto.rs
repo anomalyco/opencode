@@ -267,6 +267,10 @@ pub enum Up {
         activation: u64,
         seq: u64,
         effects: Vec<HostRequest>,
+        /// The mount they are of, which the JS host knows and the call that ran does not: a field's focus is the mount's
+        /// whose tree holds the field (contract 2.x, step B). They apply to that mount or, once it closed, nowhere.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mount: Option<opencode_plugin_abi::v2::MountId>,
     },
     /// A revision of a mount's tree, in a frame of its own kind.
     Tree(Box<Revision>),

@@ -72,6 +72,10 @@ pub struct Owner {
     /// The ids of its tree's nodes, and of its focusable ones.
     ids: RefCell<Vec<String>>,
     focusable: RefCell<Vec<String>>,
+    /// A node its calls asked to focus that its tree does not hold yet: over the pipe a handler shows a field and
+    /// focuses it in one call, and the focus comes before the revision that shows it (contract 2.x, step B). It waits
+    /// for that revision, one at a time.
+    pending: RefCell<Option<String>>,
     /// The mount it holds the input of, as long as it lives; `None` for an activation.
     mount: Option<Weak<()>>,
     /// That mount's ID, which a call for it names to the plugin (big-boi 4).
@@ -236,6 +240,7 @@ impl Owner {
             mode: RefCell::default(),
             ids: RefCell::default(),
             focusable: RefCell::default(),
+            pending: RefCell::default(),
             mount,
             id: None,
         }
@@ -563,6 +568,8 @@ impl Owner {
 
     /// Gives the focus to the owner's node `id`, if it is focusable and no host dialog is open.
     pub(crate) fn focus(&self, host: &dyn Host, id: &str) {
+        // A focus asked for replaces one that waits.
+        self.pending.borrow_mut().take();
         if host.modal_open() {
             log::warn!("plugin {}: a dialog of the host has the focus", self.plugin);
             return;
@@ -570,12 +577,33 @@ impl Owner {
         let focusable = self.focusable.borrow().iter().any(|known| known == id);
         match self.lookup.as_ref().and_then(|lookup| lookup(id)).filter(|_| focusable && self.alive()) {
             Some(widget) => refocus(host, || host.app().focus(&widget)),
+            // A node the tree does not hold yet waits for the revision that shows it; one it holds that takes no focus
+            // (a text, a node in a hidden box) is refused.
+            None if self.alive() && self.lookup.is_some() && !self.has(id) => {
+                *self.pending.borrow_mut() = Some(id.to_owned());
+            }
             None => log::warn!("plugin {}: {id:?} is not a focusable node of its mount", self.plugin),
         }
     }
 
+    /// Gives the focus that waits ([`Owner::focus`]) to its node once the tree the host adopted holds it, if no host
+    /// dialog is open then; a tree that holds the node as one that takes no focus refuses it. A tree without the node
+    /// leaves it waiting, for the mount's life: it ends with the mount, another focus or a blur of its calls.
+    pub(crate) fn apply_pending(&self, host: &dyn Host) {
+        let Some(id) = self.pending.borrow_mut().take() else { return };
+        if !self.alive() || host.modal_open() {
+            return;
+        }
+        if !self.has(&id) {
+            *self.pending.borrow_mut() = Some(id);
+            return;
+        }
+        self.focus(host, &id);
+    }
+
     /// Gives the composer the focus, if the owner's surface has it.
     pub(crate) fn blur(&self, host: &dyn Host) {
+        self.pending.borrow_mut().take();
         if self.scope_view().is_some_and(|view| focus_within(host.app(), view.id())) {
             host.focus_composer();
         }

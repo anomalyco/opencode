@@ -35,6 +35,7 @@ import {
   legacy,
   missing,
   mount,
+  rootOf,
   serialize,
   type Focus,
   type Mounted,
@@ -92,7 +93,8 @@ export interface Carrier {
   uncommand(name: string): void
   storage(keys: string[]): void
   on(types: string[], handler: (event: Json) => unknown): void
-  effect(request: Json): Promise<Json>
+  // A request of `mount` (a field's focus, of the mount whose tree holds it) goes as that mount's.
+  effect(request: Json, mount?: Json): Promise<Json>
   watch(key: string, request: Json): void
   unwatch(key: string): void
   read(key: string): Json
@@ -514,6 +516,7 @@ export function context(base: Base, carrier: Carrier) {
       const send = () => {
         // Another dialog came first: this one never shows.
         if (asked !== mine) return
+        sent = mine
         const asking = { ...(typeof dialog === "function" ? dialog() : dialog), action: { type: "command", name: ANSWER } }
         void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog: asking, dismissed } })
       }
@@ -530,8 +533,14 @@ export function context(base: Base, carrier: Carrier) {
   let shows = 0
   let shown: { mounted: Mounted; key: string; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
   let presentation = { size: "medium", centered: false }
-  let uncarried = false
+  // The dialog of `ask` the host shows, which a `dialog.set` after it no longer sizes.
+  let sent = 0
   let resend = false
+  // A dialog's size and centering as the contract has them, left out while they are the host's own.
+  const presented = () => ({
+    ...(["large", "xlarge"].includes(presentation.size) ? { size: presentation.size } : {}),
+    ...(presentation.centered ? { centered: true } : {}),
+  })
   const unshow = () => {
     const was = shown
     shown = undefined
@@ -632,21 +641,37 @@ export function context(base: Base, carrier: Carrier) {
   // `focus` of the node's id); any node emits `focused` and `blurred`, as OpenTUI's renderables do.
   let focusedNode: VNode | undefined
   const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
+  // The mount whose render holds `node`, by its root, as the host names it; none for a node in no mount's tree (one not
+  // added yet, or in a dialog of the plugin's own).
+  const mountOf = (node: VNode) => {
+    const root = rootOf(node)
+    for (const [at, entry] of rendered) {
+      if (entry.root !== root) continue
+      const [surface, key, generation] = at.split("\u0000")
+      return { surface, key, generation: Number(generation) }
+    }
+    return undefined
+  }
   const focus: Focus = {
     focus(node) {
       if (focusedNode !== node) focusedNode?.focusChanged(false)
       focusedNode = node
       node.focusChanged(true)
-      // The contract's focus takes a node with `interact.focusable` alone, so the host refuses a field: the plugin's
-      // own focus of it holds, and its keys come as `onKeyDown`, but what the user types goes elsewhere.
-      if (FIELDS.has(node.tag)) unsupported(`focus() of an <${node.tag}>`)
-      if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "focus", node: idOf(node) })
+      if (!FOCUSABLE.has(node.tag)) return
+      // The contract's focus of a field (`focus-input`) or a scroll, as the request of the mount whose tree holds it,
+      // whichever call the plugin runs: the host gives it the focus, so what the user types goes into a field, and one
+      // its revision has not shown yet takes it once it does. Its keys still come as `onKeyDown`. A node in no mount
+      // has no focus on the host.
+      const mount = mountOf(node)
+      if (mount) void carrier.effect({ type: "focus", node: idOf(node) }, mount)
+      else unsupported(`focus() of an <${node.tag}> in no mount`)
     },
     blur(node) {
       if (focusedNode !== node) return
       focusedNode = undefined
       node.focusChanged(false)
-      if (FOCUSABLE.has(node.tag)) void carrier.effect({ type: "blur" })
+      const mount = FOCUSABLE.has(node.tag) ? mountOf(node) : undefined
+      if (mount) void carrier.effect({ type: "blur" }, mount)
     },
   }
   // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its
@@ -1360,12 +1385,11 @@ export function context(base: Base, carrier: Carrier) {
         set(options: Json) {
           presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
           if (shown) sendShown()
-          // An alert's or a confirm's size and centering are not the contract's (CT-35: the joe-broadhead status
-          // alerts at `large`): it would need them on `Alert` and `Confirm` (contract 2.x proposal, addition 4).
-          else if (answering && (presentation.size !== "medium" || presentation.centered) && !uncarried) {
-            uncarried = true
-            console.warn(`plugin ${id}: dialog.set of an alert or a confirm is not carried; it shows at its own size`)
-          }
+          // A select's, an alert's and a confirm's size and centering are the contract's (contract 2.x, addition 4): a
+          // `dialog.set` right after them sizes the dialog, which is built a microtask later. One after the host showed
+          // it is not carried: the contract's dialogs are whole values, and sent again it would answer nothing.
+          else if (answering && sent === asked && (presentation.size !== "medium" || presentation.centered))
+            unsupported("dialog.set after its dialog showed")
         },
         clear() {
           const asking = !!answering
@@ -1376,15 +1400,23 @@ export function context(base: Base, carrier: Carrier) {
           void carrier.effect({ type: "dialog", dialog: { type: "close", key: shown.key } })
           unshow()
         },
-        alert: (options: Json) =>
-          ask({ type: "alert", title: options.title, message: options.message }).then(() => undefined),
-        confirm: (options: Json) =>
-          ask({
+        // An alert and a confirm are medium until the plugin's `dialog.set` right after says otherwise, as a select.
+        alert: (options: Json) => {
+          presentation = { size: "medium", centered: false }
+          return ask(() => ({ type: "alert", title: options.title, message: options.message, ...presented() })).then(
+            () => undefined,
+          )
+        },
+        confirm: (options: Json) => {
+          presentation = { size: "medium", centered: false }
+          return ask(() => ({
             type: "confirm",
             title: options.title,
             message: options.message,
             label: { confirm: options.label?.confirm, cancel: options.label?.cancel },
-          }).then((answer) => (answer === undefined ? undefined : answer === "true")),
+            ...presented(),
+          })).then((answer) => (answer === undefined ? undefined : answer === "true"))
+        },
         prompt: (options: Json) => {
           if (options.value !== undefined) unsupported("ui.dialog.prompt value")
           if (options.description !== undefined) unsupported("ui.dialog.prompt description")
@@ -1422,7 +1454,7 @@ export function context(base: Base, carrier: Carrier) {
             options: rows(),
             ...current(),
             ...(search ? { key, query: { type: "command", name: QUERY } } : {}),
-            ...(["large", "xlarge"].includes(presentation.size) ? { size: presentation.size } : {}),
+            ...presented(),
           })
           const run = search
             ? (query: string) => {

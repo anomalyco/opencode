@@ -50,8 +50,9 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     on(types: string[], handler: (event: Json) => unknown) {
       fake.subscriptions.push({ types, handler })
     },
-    async effect(request: Json) {
-      fake.effects.push(request)
+    async effect(request: Json, mount?: Json) {
+      // The mount a request names, as `host.ts` sends it (a field's focus, of the mount whose tree holds it).
+      fake.effects.push(mount ? { ...request, mount } : request)
       await turn()
       if (request.type === "storage-get") return fake.stored.get(request.key) ?? null
       if (request.type === "storage-set") fake.stored.set(request.key, request.value)
@@ -472,9 +473,9 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   route.options.on({ type: "submit", node, text: "ab" })
   route.options.on({ type: "change", node: "elsewhere", text: "x" })
   expect(events).toEqual(["key down", "input ab", "submit ab"])
-  // The contract's focus refuses a field.
-  // Said once in the client's log, not in a toast over the plugin's own route (P.8/file-browser's searching).
-  expect(fake.warnings()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
+  // The contract's focus of a field (`focus-input`) maps, with no notice.
+  expect(node).toBe("opentui-input-" + node.split("-").at(-1))
+  expect(fake.warnings()).toEqual([])
   expect(fake.toasts()).toEqual([])
 })
 
@@ -489,6 +490,81 @@ test("a route's tree fills the page", () => {
   const tree = route.view({ mount: { surface: "page", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
   expect([tree.layout, tree.children[0].layout]).toEqual([{ grow: true }, { grow: true }])
   expect(view(fake, fake.surfaces.indexOf(fake.surfaces.find((surface: Json) => surface.place.type !== "route")), "a").draw().layout).toBeUndefined()
+})
+
+// Contract 2.x, `focus-input`: a field's `focused` focuses it as it is created and as it turns true, and blurs it as it
+// turns false; the contract's focus and blur of its node, once each change.
+test("a field's focused prop focuses and blurs it", async () => {
+  const fake = host()
+  const ctx = plugin("t.focused", fake)
+  const [on, setOn] = solid.createSignal(true)
+  ctx.ui.router.register({ name: "f", render: () => h("input", {
+        id: "q",
+        get focused() {
+          return on()
+        },
+      }) })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  route.view({ mount: { surface: "f", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  const verbs = () =>
+    fake.effects.filter((effect: Json) => effect.type === "focus" || effect.type === "blur").map((effect: Json) => effect.type + (effect.node ? ` ${effect.node}` : ""))
+  await turn()
+  expect(verbs()).toEqual(["focus q"])
+  setOn(false)
+  await turn()
+  setOn(false)
+  await turn()
+  expect(verbs()).toEqual(["focus q", "blur"])
+  setOn(true)
+  await turn()
+  expect(verbs()).toEqual(["focus q", "blur", "focus q"])
+  expect(fake.warnings()).toEqual([])
+})
+
+// Contract 2.x, step B: a field's focus is the request of the mount whose render holds it, which names it; a field in
+// no mount (a dialog of the plugin's own) has no focus on the host, which the client's log says once.
+test("a field's focus names its mount, and a field in no mount has none", async () => {
+  const fake = host()
+  const ctx = plugin("t.owned", fake)
+  const refs: Json = {}
+  ctx.ui.router.register({ name: "f", render: () => h("input", { id: "q", ref: (el: Json) => (refs.routed = el) }) })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  const mount = { surface: "f", key: "a", generation: 7 }
+  route.view({ mount, input: { width: 40, height: 10 } })
+  refs.routed.focus()
+  ctx.ui.dialog.show(() => h("input", { id: "d", ref: (el: Json) => (refs.shown = el) }))
+  refs.shown.focus()
+  refs.shown.focus()
+  await turn()
+  const focus = fake.effects.filter((effect: Json) => effect.type === "focus")
+  expect(focus).toEqual([{ type: "focus", node: "q", mount }])
+  expect(fake.warnings()).toEqual(["t.owned: focus() of an <input> in no mount is not supported by opencode-native yet"])
+})
+
+// Contract 2.x, addition 4: a `dialog.set` right after a select, an alert or a confirm sizes and centers it, as TS's
+// sizes the dialog shown; a dialog without one is medium and placed as the host places it; one after the dialog showed
+// is not carried, which the client's log says once.
+test("dialog.set sizes and centers a select, an alert and a confirm", async () => {
+  const fake = host()
+  const ctx = plugin("t.presented", fake)
+  const shown = () => fake.effects.filter((effect: Json) => effect.type === "dialog").at(-1).dialog.dialog
+  const fields = (dialog: Json) => [dialog.type, dialog.size, dialog.centered]
+  void ctx.ui.dialog.select({ title: "Pick", options: [{ title: "A", value: 1 }] })
+  ctx.ui.dialog.set({ size: "xlarge", centered: true })
+  await turn()
+  expect(fields(shown())).toEqual(["select", "xlarge", true])
+  void ctx.ui.dialog.alert({ title: "Told", message: "m" })
+  ctx.ui.dialog.set({ size: "large", centered: true })
+  await turn()
+  expect(fields(shown())).toEqual(["alert", "large", true])
+  void ctx.ui.dialog.confirm({ title: "Asked", message: "m" })
+  await turn()
+  expect(fields(shown())).toEqual(["confirm", undefined, undefined])
+  ctx.ui.dialog.set({ size: "xlarge", centered: true })
+  ctx.ui.dialog.set({ size: "large" })
+  await turn()
+  expect(fields(shown())).toEqual(["confirm", undefined, undefined])
+  expect(fake.warnings()).toEqual(["t.presented: dialog.set after its dialog showed is not supported by opencode-native yet"])
 })
 
 // CT-18: a box's border as OpenTUI's: `true` or an array of sides draws, anything else (`{ type: "single" }`, the
