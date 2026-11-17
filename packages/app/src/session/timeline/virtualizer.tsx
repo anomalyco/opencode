@@ -617,7 +617,17 @@ export function createTimelineVirtualizer(input: Input) {
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
 
-  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
+  // Opening a session or tab runs in a transition, which holds back the rows until its data loads but not the
+  // virtualizer's store. A slot mounted for a row the transition has not committed found no row, and is not told when
+  // the transition commits. Mount a slot only once its row is committed.
+  const virtualRowKeys = createMemo(() => {
+    const byKey = rowByKey()
+
+    return virtualizer
+      .getVirtualItems()
+      .map((item) => String(item.key))
+      .filter((key) => byKey.has(key))
+  })
 
   createEffect(() => {
     if (!active()) return
