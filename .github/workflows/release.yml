@@ -745,6 +745,7 @@ jobs:
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
       contents: read
+      id-token: write
     env: *env
     steps:
       - *checkout-release
@@ -760,12 +761,17 @@ jobs:
         with:
           name: publish-winget
           path: ${{ runner.temp }}/out
+      - id: aws
+        name: Configure AWS credentials
+        if: needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with: *release-role
       # WinGet moderates every submission and can reject one for reasons unrelated to the release.
       - name: Submit
+        if: needs.plan.outputs.channel == 'latest'
         continue-on-error: true
-        run: bash .github/release/publish-winget.sh "$RUNNER_TEMP/out"
-        env:
-          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+        env: *aws-step
+        run: bash .github/release/with-secrets.sh WINGET_GITHUB_TOKEN=opencode/release/WINGET_GITHUB_TOKEN -- bash .github/release/publish-winget.sh "$RUNNER_TEMP/out"
 
   publish-github-release:
     needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop, verify]

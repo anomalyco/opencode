@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 # publish-winget.sh <manifests dir>: opens a microsoft/winget-pkgs pull request for each package render-winget.sh wrote,
-# from the fork of the WINGET_GITHUB_TOKEN owner, the only way to contribute there. Only stable releases are submitted.
+# from the fork of the WINGET_GITHUB_TOKEN owner, the only way to contribute there. The workflow runs it for stable
+# releases only.
 . "$(dirname "$0")/lib.sh"
 
-if [ "$OPENCODE_CHANNEL" != latest ]; then
-  echo "skipped WinGet submission: $OPENCODE_CHANNEL is not a stable release"
-  exit 0
-fi
 if dry_run; then
   echo "dry-run: skipped WinGet submission"
   exit 0
