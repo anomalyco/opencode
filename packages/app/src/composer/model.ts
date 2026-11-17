@@ -464,8 +464,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
-    attachKey: (event) => command.matches("file.attach", event),
-    stopKey: (event) => command.matches("prompt.stop", event),
     onSuggestionSelect(item) {
       if (item.kind !== "command") return
       const selected = slashCommands().find((entry) => entry.id === item.id)
