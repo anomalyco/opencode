@@ -179,6 +179,13 @@ describe("path", () => {
     ).toEqual([path.resolve(directory, "a", "b"), path.join("..", "c"), "x.txt", "b", "a/b", "a\\b", path.sep])
   })
 
+  test("the other platform's flavour resolves from its own root, not the server's working directory", async () => {
+    const other = path.sep === "/" ? "win32" : "posix"
+    const [resolved] = await run(`return [path.${other}.resolve("a")]`)
+    expect(resolved).toBe(path[other].resolve(path[other].sep, "a"))
+    expect(resolved).not.toContain(process.cwd())
+  })
+
   test("path is importable by its Node module names", async () => {
     expect(
       await run(`import { join } from "node:path"
