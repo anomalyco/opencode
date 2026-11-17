@@ -30,7 +30,7 @@ export function restoredActivity(saved: Stored) {
   return new Map<Browser.TabID, TabActivity>(
     saved.tabs.flatMap((tab) =>
       tab.control || tab.agent
-        ? [[tab.id, { agentRuns: 0, control: tab.control ?? "agent", agent: typeof tab.agent === "string" ? tab.agent : undefined }]]
+        ? [[tab.id, { agentRuns: 0, control: tab.control ?? "agent", agent: tab.agent === true ? undefined : tab.agent }]]
         : [],
     ),
   )
