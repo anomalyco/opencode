@@ -1,8 +1,9 @@
 --!strict
 -- `examples/force-input` in Luau: `ctrl+enter` (and `ctrl+return`) interrupts the running session and sends the
--- prompt, as `session.interrupt` three times and then `prompt.submit`. A hint in the prompt footer says what enter
--- does: `⏎ send` while the session is idle, `⏎ steer · ctrl+⏎ interrupt & send` while it runs; none in shell mode, on
--- the home screen, or with the option `"hint": false`.
+-- prompt, as `session.interrupt` three times and then `prompt.submit`. A hint says what enter does: `⏎ send` while the
+-- session is idle, `⏎ steer · ctrl+⏎ interrupt & send` while it runs; none in shell mode, on the home screen, or with
+-- the option `"hint": false`. As TS's, it is claimed in the prompt footer and lifted two rows, into the right of the
+-- composer's own info row.
 local plugin = require("@opencode/plugin")
 
 local INTERRUPT = "session.interrupt"
@@ -53,6 +54,12 @@ return plugin.define(function(setup)
                 plugin.span(" interrupt & send", { fg = LABEL }),
             }
             else { plugin.span("⏎ "), plugin.span("send", { fg = LABEL }) }
-        return plugin.show(plugin.text(spans, { fg = KEY, wrap = "none", layout = { shrink = false } }))
+        -- TS's box at `right: 2, top: -2` of the footer row: one row up is the composer's border, two rows up its info
+        -- row. TS's slot is a fragment, so the box sits in the footer row; the claim's own box fills that row for it.
+        local hint = plugin.column(
+            { plugin.text(spans, { fg = KEY, wrap = "none" }) },
+            { layout = { shrink = false, absolute = { top = -2, right = 2, z = 1 } } }
+        )
+        return plugin.show(plugin.column({ hint }, { layout = { absolute = { top = 0, right = 0, bottom = 0, left = 0 } } }))
     end)
 end)
