@@ -325,7 +325,9 @@ function inventoryTools(inventory: Inventory) {
       description: child.description,
       input: child.inputSchema,
       freeform: registration.freeform !== undefined,
-      output: child.outputSchema ?? Schema.NullOr(Schema.String),
+      // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
+      // and a plugin may have renamed the call to a tool with another output.
+      output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
