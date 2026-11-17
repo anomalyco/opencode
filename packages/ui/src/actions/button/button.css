@@ -39,19 +39,31 @@
   }
 
   [data-component="button-v2"][data-size="normal"] {
+    --button-v2-inset: 11px;
     height: 28px;
-    padding: 0 11px;
+    padding: 0 var(--button-v2-inset);
   }
 
   [data-component="button-v2"][data-size="small"] {
+    --button-v2-inset: 9px;
     height: 24px;
-    padding: 0 9px;
+    padding: 0 var(--button-v2-inset);
     border-radius: 4px;
   }
 
   [data-component="button-v2"][data-size="large"] {
+    --button-v2-inset: 15px;
     height: 32px;
-    padding: 0 15px;
+    padding: 0 var(--button-v2-inset);
+  }
+
+  /* A button without an outline at an edge of its container: its label lies on the edge. */
+  [data-component="button-v2"][data-flush="start"] {
+    margin-inline-start: calc(-1 * var(--button-v2-inset));
+  }
+
+  [data-component="button-v2"][data-flush="end"] {
+    margin-inline-end: calc(-1 * var(--button-v2-inset));
   }
 
   [data-component="button-v2"][data-icon][data-size="small"] {
