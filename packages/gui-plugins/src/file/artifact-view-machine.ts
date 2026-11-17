@@ -74,19 +74,20 @@ export function transitionArtifactViewer(
   return { status: "undecodable", content, mode: selectArtifactMode(base, content), reason: event.reason }
 }
 
-/** Text of a kind that previews from it can switch to its source, also once its preview failed to decode. */
-export function selectArtifactPreviewable(path: string, content: FileContent) {
-  return content.type !== "binary" && previewableKinds.includes(artifactKind(path))
+/** Files with both source and preview use the viewer's selected mode. */
+export function fixedArtifactMode(path: string, content: FileContent): ArtifactMode | undefined {
+  if (content.type === "binary") return "preview"
+  const kind = artifactKind(path)
+
+  if (kind === "text") return "source"
+
+  if (!previewableKinds.includes(kind)) return "preview"
 }
 
 export function selectArtifactMode(state: ArtifactViewerState, content: FileContent): ArtifactMode {
   const value = current(state, content)
 
   return value.status === "undecodable" ? value.mode : value.status
-}
-
-export function selectArtifactShowingPreview(state: ArtifactViewerState, path: string, content: FileContent) {
-  return !selectArtifactPreviewable(path, content) || selectArtifactMode(state, content) === "preview"
 }
 
 /** The viewer the stage renders; `binary` is the placeholder. */

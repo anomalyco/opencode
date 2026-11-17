@@ -956,6 +956,12 @@ test("artifact actions copy and download content, switch source, and follow the 
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
   const broken = '<svg xmlns="http://www.w3.org/2000/svg"><rect'
 
+  const code = "export function greet(name: string) {\n  return `Hello, ${name}!`\n}\n"
+
+  // Chromium writes CRLF to the Windows clipboard.
+  const clipboardText = () =>
+    page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n"))
+
   const notes = [
     "---",
     "description: Release checklist",
@@ -991,6 +997,8 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "broken.svg") return { content: broken }
 
+      if (path === "src/greet.ts") return { content: code }
+
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
     pageMessages: () => ({
@@ -1003,7 +1011,7 @@ test("artifact actions copy and download content, switch source, and follow the 
           content: [
             {
               type: "text",
-              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg)",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg) [Code](src/greet.ts)",
             },
           ],
           time: { created: 1, completed: 2 },
@@ -1120,10 +1128,7 @@ test("artifact actions copy and download content, switch source, and follow the 
   expect(surface.y - bar.y - bar.height).toBe(1)
   await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
   await copy.click()
-  // Chromium writes CRLF to the Windows clipboard.
-  await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n")))
-    .toBe(notes)
+  await expect.poll(clipboardText).toBe(notes)
   await page.getByRole("button", { name: "Dismiss", exact: true }).click()
   await sourceAction.click()
   await expect(paper).toHaveCount(0)
@@ -1146,6 +1151,15 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(panel.getByText("Couldn't load this file.", { exact: true })).toBeVisible()
   await toolbar.getByRole("button", { name: "View source", exact: true }).click()
   await expect(panel.locator("diffs-container")).toContainText(broken)
+
+  await page.getByRole("link", { name: "Code", exact: true }).click()
+  await expect(panel.locator('diffs-container [data-line="2"]')).toHaveText("return `Hello, ${name}!`")
+  await expect(toolbar.getByText("greet.ts", { exact: true })).toBeVisible()
+  await expect(toolbar.getByRole("button", { name: /^View (source|preview)$/ })).toHaveCount(0)
+  await copy.click()
+  await expect.poll(clipboardText).toBe(code)
+  await actions.click()
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Download", "Copy path"])
 })
 
 test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {

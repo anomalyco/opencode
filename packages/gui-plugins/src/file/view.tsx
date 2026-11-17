@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Match, on, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createMemo, createSignal, Match, on, onCleanup, Switch, untrack } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode/session-ui/file"
@@ -9,7 +9,6 @@ import { sampledChecksum } from "@opencode/util/encode"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { createKeyed, usePlugin, type LineRange, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
-import { artifactKind } from "@opencode/util/artifact"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
 import { createPreviewFind, PreviewFindBar } from "./find"
@@ -268,13 +267,6 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   const contents = createMemo(() => current()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
 
-  // Plain text keeps the code view; every other kind is rendered by ArtifactView.
-  const artifact = createMemo(() => {
-    const content = current()?.content
-
-    return content?.type === "binary" || artifactKind(path() ?? "") !== "text"
-  })
-
   const selectedLines = createMemo<LineRange | null>(() => {
     const p = path()
 
@@ -529,25 +521,19 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   )
 
   return (
-    <div
-      ref={(el) => (state.root = el)}
-      class="relative h-full min-h-0 flex flex-col"
-      classList={{ "mt-3": !artifact() }}
-    >
+    <div ref={(el) => (state.root = el)} class="relative h-full min-h-0 flex flex-col">
       <PreviewFindBar find={previewFind} />
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
-            <Show when={artifact()} fallback={codeView()}>
-              <ArtifactView
-                session={props.session}
-                screen={props.screen}
-                path={path() ?? ""}
-                content={value()}
-                cacheKey={cacheKey()}
-                source={codeView()}
-              />
-            </Show>
+            <ArtifactView
+              session={props.session}
+              screen={props.screen}
+              path={path() ?? ""}
+              content={value()}
+              cacheKey={cacheKey()}
+              source={codeView()}
+            />
           )}
         </Match>
         <Match when={current()?.loading}>
