@@ -116,7 +116,7 @@ export default define({
       yield* ctx.command.transform((editor) => {
         editor.add({
           name: "rollover",
-          description: "Rollover: aktifleştir / durum ve ayarlar",
+          description: "Rollover: activate / status and settings",
           execute: (input) =>
             Effect.gen(function* () {
               const session = yield* ctx.session.get({ sessionID: input.sessionID }).pipe(Effect.orDie)
