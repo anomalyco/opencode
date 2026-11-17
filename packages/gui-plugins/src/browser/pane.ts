@@ -991,6 +991,7 @@ export function createBrowserPane(input: {
 
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
+
     const present = (tabID: Browser.TabID, reveal = false, active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
       announce(binding, tabID, reveal, active)
