@@ -115,7 +115,7 @@ const permission = permissionLayer({
 })
 const config = Config.testLayer()
 const nativeDescription =
-  "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files."
+  "Read the contents of a file or directory. Supports text files, images, and PDFs. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files."
 const imageLayer = AppNodeBuilder.build(Image.node)
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -198,7 +198,7 @@ describe("ReadTool", () => {
     readOverride = undefined
   })
 
-  it.effect("keeps read native without full_codemode and retains its description", () =>
+  it.effect("keeps read native with line instructions and no image guidance without full_codemode", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       const snapshot = yield* registry.snapshot()
