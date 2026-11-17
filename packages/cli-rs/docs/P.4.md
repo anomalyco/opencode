@@ -593,7 +593,16 @@ saved, as in TS.
 ### TypeScript plugins on the JS host (P7)
 
 The JS host is on by default (O-166); `OPENCODE_PLUGIN_JS` set to `0`, `false` or `off` (any case) turns it off, and
-TypeScript plugins are then skipped with a reason that says to unset it. With it on, a directory target without a
+TypeScript plugins are then skipped with a reason that says to unset it.
+
+The JS host is behind the cargo feature `ts` of `opencode-plugin`, `opencode-tui` and `opencode-cli`, which is on by
+default (ts-feature). It gates the pipe carrier (`crates/plugin/src/pipe`), the JS host's spawn, the V2 compatibility
+layer, and the embedded `host.ts`, `compat.js` and `effect.js`. A build without it (`--no-default-features`) has no JS
+host at all: TypeScript plugins, npm entries and server TUI parts are skipped with `SKIPPED_NO_TS`, "this build of
+opencode-native has no TypeScript plugin support (built without the ts feature)", whatever `OPENCODE_PLUGIN_JS` says.
+`plugin add` in such a build names each TUI package it added: `opencode-native will not load TUI plugin "<package>":
+this build has no TypeScript plugin support (built without the ts feature). The TypeScript client (opencode) loads it
+as it is.` Native plugins load as in any build. With it on, a directory target without a
 native build runs on the JS host: one Bun process for every TypeScript TUI plugin, started with the first one
 (`crates/plugin/src/pipe`, rich-plugins 3.7 and 4.3). Bun is looked for only then, when a plugin first needs the JS
 host (`Scripts::runtime`): looking runs a binary, so a client with no TypeScript plugin, no plugin named by npm package

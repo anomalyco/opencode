@@ -18,7 +18,15 @@ pub mod loader;
 pub mod luau;
 pub mod mailbox;
 pub mod node;
+#[cfg(feature = "ts")]
 pub mod pipe;
+// A build with `luau` and without `ts` has no JS host: the Luau carrier walks its plugin directories with the pipe's
+// tree walker alone, of which what only the JS host calls goes unused.
+#[cfg(all(feature = "luau", not(feature = "ts")))]
+pub mod pipe {
+    #[allow(dead_code)]
+    pub(crate) mod tree;
+}
 pub mod reconcile;
 mod route;
 pub mod schedule;
@@ -1917,6 +1925,7 @@ impl Setup<'_> {
     }
 
     /// The first activation of the chain this one goes on from, whose dialogs it owns ([`Registry::owns`]).
+    #[cfg_attr(not(feature = "ts"), allow(dead_code))]
     pub(crate) fn continues(&mut self, since: Option<u64>) {
         self.registration.continues = since;
     }
@@ -2290,6 +2299,12 @@ pub const NO_TUI_MODULE: &str = "it has no TUI module";
 /// Why a TypeScript plugin (a directory, a package named by npm or a server plugin's TUI part) is not loaded while the
 /// JS host is off (FT-10, js-npm).
 pub const SKIPPED_JS_OFF: &str = "TypeScript TUI plugins run on the JS host, which OPENCODE_PLUGIN_JS turns off: unset it to turn the JS host back on";
+/// Why a TypeScript plugin is not loaded in a build without the `ts` feature, which has no JS host at all (ts-feature).
+pub const SKIPPED_NO_TS: &str =
+    "this build of opencode-native has no TypeScript plugin support (built without the ts feature)";
+/// Why a TypeScript plugin is not loaded when no JS host runs: [`SKIPPED_JS_OFF`], or [`SKIPPED_NO_TS`] in a build without
+/// the `ts` feature, which has none to turn on.
+pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
 /// `bun` on the path (O-166).
 pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun or set OPENCODE_BUN";

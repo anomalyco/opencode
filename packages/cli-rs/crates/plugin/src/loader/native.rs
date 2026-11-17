@@ -832,6 +832,7 @@ impl Shared {
 
 impl Ctx {
     /// The context of calls of plugin `id`, whose storage keys are `keys`, outside any instance: the pipe carrier's.
+    #[cfg_attr(not(feature = "ts"), allow(dead_code))]
     pub(crate) fn new(host: Weak<dyn Host>, id: &str, keys: Vec<String>) -> Self {
         let (effects, undo, staged) = (Vec::new(), Undo::default(), crate::Staged::default());
         Self { host, id: id.to_owned(), keys, effects, undo, staged, quiet: false, read_only: false, owners: None }

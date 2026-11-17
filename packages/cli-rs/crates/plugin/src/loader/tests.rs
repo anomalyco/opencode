@@ -559,9 +559,9 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert_eq!(entry(&entries, &lib_target).status, Status::Active);
     assert_eq!(entry(&entries, &file_target).id, "extra");
     // Skipped with why and how to load it, and named by its package rather than its path (FT-10, FT-15).
-    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
+    assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_OFF.to_owned()));
     assert_eq!(entry(&entries, &ts_target).id, "@acme/typescript-tui");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_OFF.to_owned()));
     assert_eq!(fake.active.get(), 2);
     assert_eq!(host.remounts.get(), 1);
     assert!(loader.watch_dirs().contains(&lib_dir));
@@ -606,7 +606,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     fs::remove_file(lib_dir.join(entry_file())).unwrap();
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let entries = registry.entries();
-    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
+    assert_eq!(entry(&entries, &lib_target).status, Status::Skipped(SKIPPED_OFF.to_owned()));
     assert!(!entries.iter().any(|entry| entry.id == "fake2"));
     assert_eq!(fake.active.get(), 1);
 
@@ -617,7 +617,7 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     let entries = registry.entries();
     let gone = |entry: &Entry| entry.target.as_ref().is_some_and(|target| [&lib_target, &ts_target].contains(&target));
     assert!(!entries.iter().any(gone), "{entries:?}");
-    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_JS_OFF.to_owned()));
+    assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_OFF.to_owned()));
 }
 
 #[test]
@@ -1961,6 +1961,7 @@ fn a_typescript_plugin_is_staged_only_as_it_was_approved() {
 
 // Expected (carbon-2): a TypeScript plugin's subdirectories are watched, so a save of a module in one reloads it; its
 // dependencies are not, as an install touches the directory itself.
+#[cfg(feature = "ts")]
 #[test]
 fn a_typescript_plugins_subdirectories_are_watched() {
     let project = Project::new();
@@ -1998,6 +1999,7 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
 // they resolved to while they are targets, as TS resolves a loaded package once a session; a package is not watched.
 // A server part the cache does not hold is left out, as TS leaves out an optional target. Without the JS host neither
 // resolves, and server parts are not targets.
+#[cfg(feature = "ts")]
 #[test]
 fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     let project = Project::new();
@@ -2044,6 +2046,7 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
 // Expected (O-146, O-162): a server part inside the project is a project target, and so is a package from the npm cache
 // that only the project's configuration names; a part that names a project's plugin directory another way (a link) is
 // that plugin, one target with one approval.
+#[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
 fn a_server_part_inside_the_project_is_the_projects() {
@@ -2075,6 +2078,7 @@ fn a_server_part_inside_the_project_is_the_projects() {
 // Expected (carbon jsnpm-2, O-162): a project's plugin directory that links outside the project stays pending, its
 // native build unopened, also once the server reports it by the link or by where it leads: a server part never stands in
 // for a project's plugin.
+#[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
 fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
@@ -2101,6 +2105,7 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
 
 // Expected (O-162): a server target never opens a native build, even one the user's own configuration names: the part
 // is left out, and nothing loads.
+#[cfg(feature = "ts")]
 #[test]
 fn a_server_reported_native_build_never_loads() {
     let project = Project::new();
@@ -2122,6 +2127,7 @@ fn a_server_reported_native_build_never_loads() {
 // its spec, exactly as written: the global opencode config or `cli.json`. One only a project's configuration names (the
 // server's list carries no provenance), or that the user names at another version, waits for approval. A local path
 // is vouched for under a global plugin directory or as a path of the user's configuration; any other waits.
+#[cfg(feature = "ts")]
 #[test]
 fn only_the_users_own_configuration_vouches_for_a_server_part() {
     let project = Project::new();
@@ -2175,6 +2181,7 @@ fn only_the_users_own_configuration_vouches_for_a_server_part() {
 }
 
 /// The loader on the JS host, with the npm cache under `project`, holding `specs` (each `name@version`).
+#[cfg(feature = "ts")]
 fn server_loader(project: &Project, configured: Vec<Configured>, specs: &[&str]) -> Loader {
     let cache = project.root.path().join("cache");
     for spec in specs {
@@ -2189,6 +2196,7 @@ fn server_loader(project: &Project, configured: Vec<Configured>, specs: &[&str])
 }
 
 /// Whether each target needs approval, by target.
+#[cfg(feature = "ts")]
 fn approvals(loader: &Loader) -> Vec<(String, bool)> {
     loader.targets().into_iter().map(|target| (target.target, target.project)).collect()
 }
@@ -2197,6 +2205,7 @@ fn approvals(loader: &Loader) -> Vec<(String, bool)> {
 // removal (`-<selector>`) withdraws what an earlier entry vouched for, by the spec, by the plugin's ID as the server
 // reports it, or by a `<prefix>.*` or `*` selector; a later entry that names it again, or a selector that enables it
 // again, vouches for it again. An entry that only selects never vouches for a package nobody named.
+#[cfg(feature = "ts")]
 #[test]
 fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
     let project = Project::new();
@@ -2242,6 +2251,7 @@ fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
 // Expected (carbon recheck-1, TS `PluginSourceDirectory.discover`): a plugin directly under a global `plugins`
 // directory is the user's own, a link there too, but nothing inside one (its `node_modules`) is; and a removal of its
 // path withdraws that.
+#[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
 fn only_a_direct_child_of_a_global_plugins_directory_is_vouched_for() {
@@ -2275,6 +2285,7 @@ fn only_a_direct_child_of_a_global_plugins_directory_is_vouched_for() {
 // Expected (carbon recheck-2, TS `mergePluginTargets`): a server's part and a `cli.json` entry for one directory are one
 // target, `cli.json`'s with its options, however the two spell it: the server reports where a link leads, the entry
 // names the link.
+#[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
 fn a_server_part_and_a_cli_json_entry_for_one_directory_are_one_target() {
@@ -2301,6 +2312,7 @@ fn a_server_part_and_a_cli_json_entry_for_one_directory_are_one_target() {
 // Expected (carbon recheck-2, TS `context.tsx` reconcile): when `cli.json` and a server's part name one package at two
 // versions, `cli.json`'s is the target, as TS folds `cli.json` after the server's parts and its version replaces the
 // server's for the plugin's ID; the server's part is not loaded or asked about, vouched for or not.
+#[cfg(feature = "ts")]
 #[test]
 fn a_cli_json_package_takes_precedence_over_the_servers_version() {
     let project = Project::new();
@@ -2330,6 +2342,7 @@ fn a_real_path_has_no_verbatim_prefix() {
 
 // Expected (carbon recheck-3): on Windows, a package found in the cache and a server's local part are real paths
 // without the verbatim prefix `canonicalize` gives, the ones Bun is handed.
+#[cfg(feature = "ts")]
 #[cfg(windows)]
 #[test]
 fn windows_paths_reach_the_js_host_without_a_verbatim_prefix() {
@@ -2350,6 +2363,7 @@ fn windows_paths_reach_the_js_host_without_a_verbatim_prefix() {
 
 /// Scripts whose Bun is looked for lazily, the way the client's are (O-166): `found` decides whether one is found, and
 /// the count says how often it was looked for.
+#[cfg(feature = "ts")]
 fn lazy_scripts(host: &Rc<TestHost>, found: bool) -> (Rc<crate::pipe::Scripts>, Rc<Cell<usize>>) {
     let looks = Rc::new(Cell::new(0));
     let find = crate::pipe::Find(Rc::new({
@@ -2365,6 +2379,7 @@ fn lazy_scripts(host: &Rc<TestHost>, found: bool) -> (Rc<crate::pipe::Scripts>, 
 
 // Expected (O-166): with the JS host on by default, a client whose plugins are native builds, built-ins or none looks
 // for no Bun and starts nothing; the first TypeScript plugin makes it look, once.
+#[cfg(feature = "ts")]
 #[test]
 fn no_typescript_plugin_looks_for_no_bun() {
     let project = Project::new();
@@ -2383,6 +2398,7 @@ fn no_typescript_plugin_looks_for_no_bun() {
 
 // Expected (O-166): with the JS host on and no Bun found, a TypeScript plugin is skipped saying Bun is missing, not
 // that the JS host is off; with the JS host turned off, it says how to turn it back on.
+#[cfg(feature = "ts")]
 #[test]
 fn a_typescript_plugin_without_bun_says_bun_is_missing() {
     let project = Project::new();
@@ -2400,4 +2416,23 @@ fn a_typescript_plugin_without_bun_says_bun_is_missing() {
         loader.reconcile(&dynamic(&host), &registry);
         assert_eq!(entry(&registry.entries(), &target).status, Status::Skipped(reason.to_owned()));
     }
+}
+
+// Expected (ts-feature): a build without the `ts` feature has no JS host: a TypeScript plugin directory and a `cli.json`
+// entry that names an npm package are listed as skipped, saying this build has no TypeScript plugin support, not that
+// the JS host is off; a native build beside them loads.
+#[cfg(not(feature = "ts"))]
+#[test]
+fn a_build_without_ts_says_it_has_no_typescript_plugin_support() {
+    let project = Project::new();
+    write(&project.global().join("tui.ts"), "export default {}\n");
+    let native = project.plugin("native", "id=native");
+    let configured = vec![Configured { target: "tui-pkg@1.0.0".into(), options: None }];
+    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
+    let loader = project.loader(fake.clone(), configured);
+    loader.reconcile(&dynamic(&host), &registry);
+    let skipped = Status::Skipped(crate::SKIPPED_NO_TS.to_owned());
+    assert_eq!(entry(&registry.entries(), &project.global().to_string_lossy()).status, skipped);
+    assert_eq!(entry(&registry.entries(), "tui-pkg@1.0.0").status, skipped);
+    assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
 }

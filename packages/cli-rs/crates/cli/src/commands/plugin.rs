@@ -27,8 +27,8 @@ pub fn run(_context: &Context, args: &PluginArgs) -> error::Result<()> {
     }
 }
 
-/// Runs `plugin add` on the TypeScript binary, then names each entry it added to `cli.json` while `OPENCODE_PLUGIN_JS`
-/// turns the JS host off: TS adds a package there only when it has a TUI part and no server part, and `opencode-native`
+/// Runs `plugin add` on the TypeScript binary, then names each entry it added to `cli.json` while `opencode-native` will
+/// not load it ([`not_loaded`]): TS adds a package there only when it has a TUI part and no server part, and `opencode-native`
 /// loads such a package from the cache the install filled only on its JS host, which is on by default (js-npm, O-166).
 fn add() -> error::Result<()> {
     let config = CliConfig::new(&Paths::from_env()?);
@@ -38,16 +38,29 @@ fn add() -> error::Result<()> {
     if code != 0 {
         return Err(Exit(u8::try_from(code).unwrap_or(1)).into());
     }
-    if !opencode_plugin::pipe::turned_off(std::env::var_os("OPENCODE_PLUGIN_JS").as_deref()) {
-        return Ok(());
-    }
     for added in targets(&config).into_iter().filter(|target| !before.contains(target)) {
-        println!(
-            "opencode-native loads TUI plugin \"{added}\" on its JS host, which OPENCODE_PLUGIN_JS turns off: unset it \
-             to load it. The TypeScript client (opencode) loads it as it is."
-        );
+        if let Some(line) = not_loaded(&added) {
+            println!("{line}");
+        }
     }
     Ok(())
+}
+
+/// What `plugin add` says of the TUI package `added` when `opencode-native` will not load it: this build has no JS host
+/// (ts-feature), or `OPENCODE_PLUGIN_JS` turns it off. With the JS host on it says nothing more, as TS.
+fn not_loaded(added: &str) -> Option<String> {
+    #[cfg(not(feature = "ts"))]
+    return Some(format!(
+        "opencode-native will not load TUI plugin \"{added}\": this build has no TypeScript plugin support (built \
+         without the ts feature). The TypeScript client (opencode) loads it as it is."
+    ));
+    #[cfg(feature = "ts")]
+    return opencode_plugin::pipe::turned_off(std::env::var_os("OPENCODE_PLUGIN_JS").as_deref()).then(|| {
+        format!(
+            "opencode-native loads TUI plugin \"{added}\" on its JS host, which OPENCODE_PLUGIN_JS turns off: unset it \
+             to load it. The TypeScript client (opencode) loads it as it is."
+        )
+    });
 }
 
 /// The `plugins` targets of `cli.json` as the file holds them now.

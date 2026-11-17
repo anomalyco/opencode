@@ -667,6 +667,7 @@ pub(crate) fn as_user<R>(user: bool, f: impl FnOnce() -> R) -> R {
 }
 
 /// Whether the code that runs handles the user's input: the pipe carrier carries it to where a call's effects apply.
+#[cfg(feature = "ts")]
 pub(crate) fn user() -> bool {
     USER.with(Cell::get)
 }

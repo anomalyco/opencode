@@ -44,8 +44,15 @@ fn scenarios() {
         // An npm scenario runs its packages on the JS host, so without bun it is skipped, as the JS host's own rows are
         // (`OPENCODE_RS_REQUIRE_TS=1` makes a missing bun fail instead).
         let npm = recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
+        #[cfg(feature = "ts")]
         if npm && crate::plugin_pipe::bun().is_none() {
             eprintln!("skip {} (no bun)", recording.scenario);
+            continue;
+        }
+        // A build without the `ts` feature has no JS host to run them on (ts-feature).
+        #[cfg(not(feature = "ts"))]
+        if npm {
+            eprintln!("skip {} (built without the ts feature)", recording.scenario);
             continue;
         }
         let carriers: &[bool] = match both || recording.scenario.starts_with("E.14/") {
@@ -70,12 +77,22 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
     let npm = recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
+    #[cfg(feature = "ts")]
     let config_text = match npm {
         true => npm_config(&recording.config),
         false => recording.config.to_string(),
     };
+    #[cfg(not(feature = "ts"))]
+    let config_text = {
+        // An npm scenario is skipped before it runs in such a build.
+        let _ = npm;
+        recording.config.to_string()
+    };
     let config = cli_config::decode_text(&config_text).unwrap_or_default();
+    #[cfg(feature = "ts")]
     let cache = (!recording.cache.is_empty()).then(|| cache(&recording.cache));
+    #[cfg(not(feature = "ts"))]
+    let cache: Option<opencode_util::temp::TempDir> = None;
     let args = &recording.args;
     // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
     let session = args.session_id.clone().map(SessionID);
@@ -125,6 +142,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         _ => {}
     }
     // P8: the published packages the scenario names, unmodified, on the JS host.
+    #[cfg(feature = "ts")]
     let _plugins = npm.then(|| {
         let bun = crate::plugin_pipe::bun().expect("an npm scenario needs bun (OPENCODE_BUN or bun on the path)");
         let config = opencode_plugin::pipe::Config {
@@ -498,6 +516,7 @@ fn fence_margin_plugin() -> abi::Plugin {
 /// published tarball `parity/plugins/npm/<name>.tgz` (a scope's `/` as `__`), as the TS recorder does, and named by its
 /// absolute path: the TS side resolved it against the parity directory, its working directory. An entry
 /// `./plugins/<name>` is that directory of the parity tree, by its absolute path.
+#[cfg(feature = "ts")]
 fn npm_config(config: &serde_json::Value) -> String {
     const PREFIX: &str = "./out/npm/node_modules/";
     let parity = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("parity");
@@ -540,6 +559,7 @@ fn npm_config(config: &serde_json::Value) -> String {
 
 /// js-npm: an npm cache in a temporary directory holding each package of `packages` (spec to tarball name) as TS's
 /// `Npm.add` leaves it, as the TS recorder lays it out (`npmCache` in parity/app/scenarios.test.tsx).
+#[cfg(feature = "ts")]
 fn cache(packages: &BTreeMap<String, String>) -> opencode_util::temp::TempDir {
     let cache = opencode_util::temp::tempdir().expect("npm cache");
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
