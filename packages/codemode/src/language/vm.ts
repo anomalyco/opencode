@@ -817,8 +817,15 @@ export class Vm {
             // Op.IN
             const rhs = regs[--sp] as Value
             const lhs = regs[sp - 1] as Value
-            if (typeof lhs === "number" && lhs >= 0 && (lhs | 0) === lhs && rhs instanceof ArrCtor) {
-              regs[sp - 1] = lhs in rhs.items
+            // A present element; a hole or an index past the end may still be inherited.
+            if (
+              typeof lhs === "number" &&
+              lhs >= 0 &&
+              (lhs | 0) === lhs &&
+              rhs instanceof ArrCtor &&
+              lhs in rhs.items
+            ) {
+              regs[sp - 1] = true
               pc++
               continue
             }

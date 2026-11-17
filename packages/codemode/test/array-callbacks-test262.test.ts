@@ -380,6 +380,23 @@ describe("Array callback regressions", () => {
     ).toEqual(["TypeError", "TypeError"])
   })
 
+  test("a hole reads an index inherited from Array.prototype", async () => {
+    expect(
+      await value(`
+        Array.prototype[1] = "inherited"
+        try {
+          const holes = [0, , 2]
+          const seen = []
+          holes.forEach((item) => seen.push(item))
+          const index = 1
+          return [seen, index in holes, 1 in holes, [, ,].reduce((a, b) => a + b), Object.hasOwn(holes, 1)]
+        } finally {
+          delete Array.prototype[1]
+        }
+      `),
+    ).toEqual([[0, "inherited", 2], true, true, "inherited", false])
+  })
+
   test("findLast returns the value observed before predicate mutation", async () => {
     expect(
       await value(`

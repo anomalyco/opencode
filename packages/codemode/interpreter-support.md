@@ -382,7 +382,8 @@ reject }` object. The resolvers are anonymous (`name` is `""`) with `length` 1, 
 
 - [x] The `Array` constructor with or without `new`: `Array(a, b)` collects arguments and `Array(n)` creates a sparse
       array of that length; invalid lengths throw `RangeError`. Iteration, spread, join, `flatMap`, and JSON handle
-      holes like JavaScript, and host results normalize holes to `null`.
+      holes like JavaScript, and host results normalize holes to `null`. A hole reads, and `in` finds, an index
+      inherited from `Array.prototype`, so the callback methods visit it.
 - [x] Static methods: `Array.isArray`, `Array.of`, and `Array.from`, including the `Array.from` mapper form with
       `(value, index)` arguments and stepwise synchronous iterator consumption.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.

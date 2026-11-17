@@ -6,7 +6,6 @@ built-ins/Array/length/S15.4.5.1_A1.3_T2.js  # real: ToPrimitive and ToIntegerOr
 built-ins/Array/prototype/at/index-argument-tointeger.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/fill/return-abrupt-from-end.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/fill/return-abrupt-from-start.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
-built-ins/Array/prototype/forEach/15.4.4.18-7-5.js  # real: array holes read inherited Array.prototype indexes
 built-ins/Array/prototype/includes/return-abrupt-tointeger-fromindex.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/includes/tointeger-fromindex.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/indexOf/15.4.4.14-5-23.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
@@ -19,10 +18,7 @@ built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-23.js  # real: ToPrimitive and
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-24.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # accident: circular values are allowed; the reference rejects them on purpose when created
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
-built-ins/Array/prototype/reduce/15.4.4.21-8-c-4.js  # real: array holes read inherited Array.prototype indexes
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-4.js  # real: array holes read inherited Array.prototype indexes
 built-ins/Array/prototype/slice/S15.4.4.10_A2.2_T5.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
-built-ins/Array/prototype/some/15.4.4.17-7-6.js  # real: array holes read inherited Array.prototype indexes
 built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/sort/bug_596_1.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
 built-ins/Array/prototype/splice/S15.4.4.12_A2.2_T5.js  # real: ToPrimitive and ToIntegerOrInfinity of arguments, lengths and elements (TS gap, interpreter-support.md)
