@@ -209,6 +209,22 @@ story("keeps a formula inside an application link label", async ({ page }) => {
   await expect(link).toContainText("bold")
 })
 
+story("a display formula in an application link label disarms the link", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: '<a href="obsidian://open?vault=a">$$\\rule{10em}{10em}$$</a> and <a href="obsidian://open?vault=b">$x^2$</a>',
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  // Armed, the formula's box, up to 10 em high and a line wide, would be the link's hit area.
+  await expect(md.locator("a .katex-display")).toHaveCount(1)
+  await expect(md.locator("a[data-app-link]")).toHaveCount(1)
+  await expect(md.locator("a[data-app-link]")).toHaveAttribute("data-app-link", "obsidian://open?vault=b")
+  await expect(md.locator("a[data-app-link] .katex")).toHaveCount(1)
+  await expect(md.locator("[data-display]")).toHaveCount(0)
+})
+
 story("bounds author-sized math to its own line box", async ({ page }) => {
   await page.evaluate(async (url) => {
     const { mountMarkdown } = await import(url)

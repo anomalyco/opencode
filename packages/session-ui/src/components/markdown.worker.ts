@@ -23,12 +23,14 @@ const projections = new Map<string, Projection>()
 
 const fragments = new Map<string, string>()
 
-const parser = createMarkdownParser((html, block) => {
+const parser = createMarkdownParser((html, block, display) => {
   const key = Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) => n.toString(16).padStart(8, "0")).join("")
   fragments.set(key, html)
   const tag = block ? "pre" : "span"
 
-  return `<${tag} id="${key}"></${tag}>`
+  // A display formula is a block up to its maximum size wherever it sits in a line. The sanitizer reads the mark
+  // to keep such a block out of an application link's label, and drops it like every authored data attribute.
+  return `<${tag} id="${key}"${display ? " data-display" : ""}></${tag}>`
 })
 
 // Requests run in arrival order. The main thread's lanes already keep at most one request per key in flight and drop

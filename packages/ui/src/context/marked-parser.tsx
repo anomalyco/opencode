@@ -4,9 +4,12 @@ import { Renderer, type MarkedExtension, type Tokens } from "marked"
 import { createMarkdownBase } from "./marked-base"
 import { OpenCodeTheme } from "./highlight-theme"
 
-export function createMarkdownParser(render: (html: string, block: boolean) => string = (html) => html) {
+/** `render` places renderer output: `block` for a code block, `display` for a display formula inside a line. */
+export function createMarkdownParser(
+  render: (html: string, block: boolean, display?: boolean) => string = (html) => html,
+) {
   return createMarkdownBase().use(
-    mathExtension((token) => render(renderMath(token), false)),
+    mathExtension((token) => render(renderMath(token), false, token.displayMode === true)),
     codeExtension(render),
   )
 }

@@ -199,8 +199,9 @@ if (typeof window !== "undefined" && purifier.isSupported) {
         node.removeAttribute("style")
         node.removeAttribute("class")
 
-        // A card or an entire paragraph is not a link label. Keep its contents, but don't arm that hit area.
-        if (node.querySelector(":not(b,i,em,strong,s,span,code)")) return node.removeAttribute("href")
+        // A card, an entire paragraph or a display formula (its slot is still empty here, so the worker marks it) is
+        // not a link label. Keep its contents, but don't arm that hit area.
+        if (node.querySelector(":not(b,i,em,strong,s,span,code), [data-display]")) return node.removeAttribute("href")
 
         appLinks.set(node, href)
       }
