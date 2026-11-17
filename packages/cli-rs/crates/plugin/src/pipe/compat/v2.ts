@@ -64,6 +64,19 @@ const STATES = ["disabled", "pressed", "focused", "selected", "hovered"]
 const FIELDS = new Set(["input", "textarea"])
 const SEQUENCES: Record<string, string> = { return: "\r", escape: "\x1b", tab: "\t", backspace: "\x7f", space: " " }
 
+// A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
+interface Registration {
+  retired: boolean
+  commands: Map<string, Json>
+  target?: () => unknown
+}
+
+// Whether `node` is `target` or inside it.
+function within(target: unknown, node: VNode | undefined): boolean {
+  for (let at = node; at; at = at.parent) if (at === target) return true
+  return false
+}
+
 // The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
   surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): void
@@ -861,15 +874,20 @@ export function context(base: Base, carrier: Carrier) {
   // Each command name runs the newest live registration of it that is enabled. A layer of a component that ended, or a
   // command whose `enabled` says no, runs nothing and answers `false`, as a command that declines: the key that ran it
   // goes on to the host, as TS binds no disabled command (CT-8) and lets a declined key fall through (CT-19).
-  const registrations = new Map<string, Array<{ retired: boolean; commands: Map<string, Json> }>>()
+  // A layer's `target` (CT-20): its commands run only while the plugin's focus is in that node, as TS's layer holds
+  // only while the target has the focus; elsewhere they decline. The focus is the layer's own record: what the plugin
+  // focused, or a field the user edits.
+  const registrations = new Map<string, Registration[]>()
   const dispatch = (name: string, input?: string) => {
     const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
     const command = live.at(-1)?.commands.get(name)
     if (!command) return false
+    const target = live.at(-1)?.target
+    if (target && !within(target(), focusedNode)) return false
     const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
     return enabled ? command.run(input) : false
   }
-  const commands = (registration: { retired: boolean; commands: Map<string, Json> }, scope?: string) => {
+  const commands = (registration: Registration, scope?: string) => {
     const names: string[] = []
     for (const [name, command] of registration.commands) {
       names.push(name)
@@ -1013,13 +1031,15 @@ export function context(base: Base, carrier: Carrier) {
       // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change; a disabled
       // layer registers nothing; a layer keeps to the base mode unless its `mode` is `global`; a command's own
       // `enabled` is asked as it runs. A layer a component made ends with it: from then on its commands run nothing,
-      // though the host lists them a little longer (`uncommand`). Its `priority` and `bindings` are not mapped.
+      // though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline while that
+      // node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
       layer(factory: () => Json) {
-        const registration = { retired: false, commands: new Map<string, Json>() }
+        const registration: Registration = { retired: false, commands: new Map<string, Json>() }
         let names: string[] = []
         const apply = (layer: Json) => {
           const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
           const scope = layer?.mode === "global" ? undefined : "base"
+          registration.target = typeof layer?.target === "function" ? layer.target : undefined
           registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : [], scope))
           const next = commands(registration, scope)
           names.forEach((name) => carrier.uncommand(name))

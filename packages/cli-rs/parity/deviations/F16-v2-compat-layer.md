@@ -32,7 +32,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), but its session panel closes and the route on
   screen mounts again. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
-  a command's `enabled` are kept; its `priority`, `bindings`, `target` and slash `aliases` are not mapped. A command
+  a command's `enabled` are kept; its `priority`, `bindings` and slash `aliases` are not mapped. Its `target` holds
+  its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
+  Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
+  the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command
   without an `id` is named by what the host lists of it (its layer's mode, its keys, title, slash name and the rest) and
   its place among the layer's commands that list the same, so a component that mounts again names it as before and does
   not reload the plugin again (CT-1). Two live commands that list the same in every part are one, the newest running,

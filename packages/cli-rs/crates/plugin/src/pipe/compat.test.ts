@@ -509,6 +509,33 @@ test("a disabled, declining or ended command answers false", () => {
   expect(run("t.refresh")).toBe(false)
 })
 
+// CT-20: a layer's `target` holds its commands to the plugin's focus in that node: elsewhere they decline, so a key
+// such as @slkiser/opencode-quota's window Escape goes on to the dialog on screen (Goal's select stayed open).
+test("a layer with a target declines while its node lacks the focus", () => {
+  const fake = host()
+  const ctx = plugin("t.target", fake)
+  const refs: Json = {}
+  ctx.ui.slot({
+    append: "sidebar.content",
+    render: () => {
+      ctx.keymap.layer(() => ({ target: () => refs.window, commands: [{ id: "t.close", bind: "escape", run: () => "closed" }] }))
+      return h("box", {
+        ref: (el: Json) => (refs.window = el),
+        get children() {
+          return [h("box", { ref: (el: Json) => (refs.row = el) }), h("input", { ref: (el: Json) => (refs.field = el) })]
+        },
+      })
+    },
+  })
+  view(fake, 0, "a").draw()
+  const close = () => fake.commands.get("t.close")!()
+  expect(close()).toBe(false)
+  refs.row.focus()
+  expect(close()).toBe("closed")
+  refs.row.blur()
+  expect(close()).toBe(false)
+})
+
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
 test("theme.surface answers the page theme", () => {
   const fake = host()
