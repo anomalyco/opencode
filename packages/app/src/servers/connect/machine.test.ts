@@ -462,6 +462,8 @@ describe("server connect form", () => {
       account: "signin",
     })
     expect(local.localAuth).toBe(true)
+    // The served screen is then just a sign-in: no address field and no pairing link.
+    expect(local.direct).toBe(true)
     expect(local.canSubmit).toBe(false)
 
     const result = replay({ kind: "connect", url: "http://localhost:4096", methods: ["local"] }, [
@@ -482,6 +484,11 @@ describe("server connect form", () => {
     // only way in.
     expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password"] }).draft.method).toBe("link")
     expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password", "local"] }).draft.method).toBe("link")
+    expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password"] }).direct).toBe(false)
+    expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password", "local"] }).direct).toBe(false)
+
+    // The add and edit dialogs keep their full form: they name a server the page does not host.
+    expect(view(edit({ password: "secret" })).direct).toBe(false)
   })
 
   test("a local-only server switches the shared-password form to its account form", () => {

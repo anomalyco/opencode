@@ -26,7 +26,9 @@ export function ConnectServerScreen(props: { url?: string; methods?: ServerAuthM
           <Wordmark />
         </div>
         <header>
-          <h1 id="server-connect-title">{language.t("server.connect.title")}</h1>
+          <h1 id="server-connect-title">
+            {language.t(view().direct ? "server.connect.local.title" : "server.connect.title")}
+          </h1>
           <p>
             {language.t(
               view().draft.method === "link"
@@ -81,28 +83,30 @@ export function ConnectServerScreen(props: { url?: string; methods?: ServerAuthM
                 </div>
               }
             >
-              <div class="server-connect-field">
-                <label for="server-connect-url">{language.t("dialog.server.add.url")}</label>
-                <TextInput
-                  id="server-connect-url"
-                  name="server"
-                  dir="ltr"
-                  type="text"
-                  inputMode="url"
-                  autocomplete="url"
-                  autocapitalize="off"
-                  spellcheck={false}
-                  required
-                  appearance="large"
-                  placeholder={language.t("dialog.server.add.placeholder")}
-                  value={view().draft.url}
-                  disabled={view().disabled}
-                  aria-describedby={view().error ? "server-connect-error" : undefined}
-                  onInput={(event) =>
-                    form.dispatch({ type: "field.changed", field: "url", value: event.currentTarget.value })
-                  }
-                />
-              </div>
+              <Show when={!view().direct}>
+                <div class="server-connect-field">
+                  <label for="server-connect-url">{language.t("dialog.server.add.url")}</label>
+                  <TextInput
+                    id="server-connect-url"
+                    name="server"
+                    dir="ltr"
+                    type="text"
+                    inputMode="url"
+                    autocomplete="url"
+                    autocapitalize="off"
+                    spellcheck={false}
+                    required
+                    appearance="large"
+                    placeholder={language.t("dialog.server.add.placeholder")}
+                    value={view().draft.url}
+                    disabled={view().disabled}
+                    aria-describedby={view().error ? "server-connect-error" : undefined}
+                    onInput={(event) =>
+                      form.dispatch({ type: "field.changed", field: "url", value: event.currentTarget.value })
+                    }
+                  />
+                </div>
+              </Show>
               <Show
                 when={view().localAuth}
                 fallback={
@@ -178,7 +182,13 @@ export function ConnectServerScreen(props: { url?: string; methods?: ServerAuthM
               </p>
             </Show>
             <Button type="submit" variant="contrast" size="large" disabled={!view().canSubmit}>
-              {language.t(view().busy ? "dialog.server.add.checking" : "server.connect.button")}
+              {language.t(
+                view().busy
+                  ? "dialog.server.add.checking"
+                  : view().direct
+                    ? "server.connect.local.button"
+                    : "server.connect.button",
+              )}
             </Button>
           </form>
           <Show when={view().showScan}>
@@ -192,12 +202,14 @@ export function ConnectServerScreen(props: { url?: string; methods?: ServerAuthM
             </Button>
           </Show>
           <Show when={view().cameraHint}>{(hint) => <p>{hint()}</p>}</Show>
-          <ConnectMethodSwitch
-            method={view().draft.method}
-            localAuth={view().localAuth}
-            disabled={view().disabled}
-            onChange={(method) => form.dispatch({ type: "method.changed", method })}
-          />
+          <Show when={!view().direct}>
+            <ConnectMethodSwitch
+              method={view().draft.method}
+              localAuth={view().localAuth}
+              disabled={view().disabled}
+              onChange={(method) => form.dispatch({ type: "method.changed", method })}
+            />
+          </Show>
           <Show when={view().draft.method === "link"}>
             <footer>
               <p>{language.t("server.connect.pair.link")}</p>

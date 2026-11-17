@@ -320,6 +320,9 @@ export function selectServerConnectView(state: ServerConnectState, context: Serv
   const camera = state.camera.status
   // The credentials form becomes an account sign-in once the server's 401 advertised only those.
   const localAuth = !link && localOnlyAuth(state.methods)
+  // The served screen signs in to the server that hosts it, so when that server only takes its own accounts the form
+  // is just a sign-in: the address is already the page's origin and a pairing link has nothing to add.
+  const direct = state.target.kind === "connect" && localOnlyAuth(state.methods)
   const settled = { ...context, localAuth }
 
   return {
@@ -330,6 +333,7 @@ export function selectServerConnectView(state: ServerConnectState, context: Serv
     scanning: state.status === "scanning",
     busy: state.status === "submitting",
     disabled: state.status !== "editing",
+    direct,
     localAuth,
     creating: localAuth && state.draft.account === "create",
     canSubmit:
