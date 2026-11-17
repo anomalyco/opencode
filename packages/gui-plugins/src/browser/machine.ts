@@ -73,6 +73,8 @@ export type Attachment = {
   readonly addressFocus: AddressFocus
   readonly side: "unobserved" | "open" | "closed" | "dismissed"
   readonly unseen: readonly Browser.TabID[]
+  /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
+  readonly prompts: Readonly<Record<string, "steer" | "queue">>
   /**
    * The tab an agent's show request opened the pane on. Its page stays hidden until the delay ends, which runs
    * (`timing`) from the moment the pane would draw the page, so a click aimed at the chat cannot land in it.
@@ -94,6 +96,10 @@ export type State =
   | { readonly status: "disposed" }
 
 export type Event =
+  /** The person's prompt entered the session's inbox. Steers, compactions and synthetic items are not reported. */
+  | { readonly type: "prompt.enqueued"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivery.changed"; readonly sessionKey: string; readonly id: string; readonly delivery: "steer" | "queue" }
+  | { readonly type: "inbox.delivered" | "inbox.cancelled"; readonly sessionKey: string; readonly id: string }
   | { readonly type: "pane.file"; readonly sessionKey: string; readonly attempt: number; readonly path: string; readonly enabled: boolean; readonly onScreen: boolean; readonly room: boolean; readonly opened: boolean }
   | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
   | { readonly type: "execution.ended"; readonly sessionKey: string }
@@ -435,6 +441,7 @@ function attached(state: Open, event: Extract<Event, { type: "session.attached" 
     addressFocus: noFocus(),
     side: "unobserved",
     unseen: [],
+    prompts: {},
   })
 }
 
@@ -476,6 +483,27 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   const phase = attachment.phase
 
   switch (event.type) {
+    case "prompt.enqueued":
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    case "inbox.delivery.changed": {
+      if (!(event.id in attachment.prompts) || attachment.prompts[event.id] === event.delivery) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, prompts: { ...attachment.prompts, [event.id]: event.delivery } })
+    }
+
+    case "inbox.delivered":
+    case "inbox.cancelled": {
+      if (!(event.id in attachment.prompts)) return { state, effects: [] }
+      // Only the person's next queued prompt starts over. A steer belongs to the run whose pane they closed.
+      const next = event.type === "inbox.delivered" && attachment.prompts[event.id] === "queue" && attachment.side === "dismissed"
+
+      return put(state, key, {
+        ...attachment,
+        side: next ? "closed" : attachment.side,
+        prompts: Object.fromEntries(Object.entries(attachment.prompts).filter(([id]) => id !== event.id)),
+      })
+    }
+
     case "side.changed": {
       const dismissed = event.running && (attachment.side === "open" || attachment.side === "dismissed")
       const side = event.open ? "open" : dismissed ? "dismissed" : "closed"

@@ -175,6 +175,47 @@ describe("browser pane machine", () => {
     expect(transition(observed, { ...file, onScreen: false })).toEqual({ state: observed, effects: [] })
   })
 
+  test.each([
+    ["the person's queued prompt", "user", "queue", "queue", "closed"],
+    ["the person's steer", "user", "steer", "steer", "dismissed"],
+    ["the person's steer they moved to the queue", "user", "steer", "queue", "closed"],
+    ["the person's queued prompt they moved to steer", "user", "queue", "steer", "dismissed"],
+    ["a synthetic item or a compaction", "other", "queue", "queue", "dismissed"],
+  ] as const)("a delivered inbox item ends the person's dismissal only for %s", (_label, author, enqueued, delivered, side) => {
+    const start = ready()
+    const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+
+    const next = replay([
+      changed(true),
+      changed(false),
+      ...(author === "user" ? [{ type: "prompt.enqueued" as const, sessionKey: key, id: "msg_1", delivery: enqueued }] : []),
+      { type: "inbox.delivery.changed", sessionKey: key, id: "msg_1", delivery: delivered },
+      { type: "inbox.cancelled", sessionKey: key, id: "msg_other" },
+      { type: "inbox.delivered", sessionKey: key, id: "msg_1" },
+    ], start).state
+
+    expect(attachment(next)?.side).toBe(side)
+    expect(attachment(next)?.prompts).toEqual({})
+    expect(types(transition(next, activity(next)).effects)).toEqual(side === "closed" ? ["focus-strip-tab"] : [])
+    // The reset opens nothing by itself: a restored inventory is not a show request.
+    expect(types(transition(next, paneState(next, inventory(tab(tabA)))).effects)).not.toContain("focus-strip-tab")
+  })
+
+  test("a cancelled queued prompt no longer ends the dismissal", () => {
+    const start = ready()
+    const changed = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
+
+    const next = replay([
+      changed(true),
+      changed(false),
+      { type: "prompt.enqueued", sessionKey: key, id: "msg_1", delivery: "queue" },
+      { type: "inbox.cancelled", sessionKey: key, id: "msg_1" },
+      { type: "inbox.delivered", sessionKey: key, id: "msg_1" },
+    ], start).state
+
+    expect(attachment(next)?.side).toBe("dismissed")
+  })
+
   test("a visible restored tab requests its load on acceptance, not before the new registration exists", () => {
     const start = ready()
     const closed = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.registration.closed")).state

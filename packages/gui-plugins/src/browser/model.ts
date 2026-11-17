@@ -511,8 +511,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           const changed = () => dispatch({type:"session.capability.changed", sessionKey})
           onCleanup(data.on("plugin.updated", changed))
           onCleanup(data.on("server.connected", changed))
-          onCleanup(data.on("session.inbox.delivered", event => {
-            if (event.data.sessionID === ref.id) dispatch({ type: "execution.ended", sessionKey })
+          // The server reports every inbox item. Only the person's prompts are tracked, from the moment they enter.
+          onCleanup(data.on("session.inbox.enqueued", (event) => {
+            if (event.data.sessionID === ref.id && event.data.item.type === "user")
+              dispatch({ type: "prompt.enqueued", sessionKey, id: event.data.inboxID, delivery: event.data.item.delivery })
+          }))
+          onCleanup(data.on("session.inbox.delivery.changed", (event) => {
+            if (event.data.sessionID === ref.id)
+              dispatch({ type: "inbox.delivery.changed", sessionKey, id: event.data.inboxID, delivery: event.data.delivery })
+          }))
+          onCleanup(data.on("session.inbox.delivered", (event) => {
+            if (event.data.sessionID === ref.id) dispatch({ type: "inbox.delivered", sessionKey, id: event.data.inboxID })
+          }))
+          onCleanup(data.on("session.inbox.cancelled", (event) => {
+            if (event.data.sessionID === ref.id) dispatch({ type: "inbox.cancelled", sessionKey, id: event.data.inboxID })
           }))
           onCleanup(data.on("session.deleted", event => {
             if (event.data.sessionID === ref.id) dispatch({type:"session.removed", sessionKeys:[sessionKey]})
