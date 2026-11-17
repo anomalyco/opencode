@@ -292,6 +292,89 @@ describe("AppProcess", () => {
     )
   })
 
+  describe("stdin lifecycle", () => {
+    it.live(
+      "preserves early child exit diagnostics when a small stdin pipe closes",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const command =
+          process.platform === "win32"
+            ? ChildProcess.make("cmd.exe", ["/d", "/s", "/c", "echo rejected 1>&2 & exit /b 128"])
+            : ChildProcess.make("/bin/sh", ["-c", "printf rejected >&2; exit 128"])
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const result = yield* svc.run(command, { stdin: "x" })
+          expect(result.exitCode).toBe(128)
+          expect(result.stderr.toString("utf8").trim()).toBe("rejected")
+        }
+      }),
+    )
+
+    it.live(
+      "keeps caller-managed stdin open across multiple writes",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const handle = yield* svc.spawn(
+          ChildProcess.make(
+            NODE,
+            [
+              "-e",
+              `
+          let text = ""
+          process.stdin.on("data", (chunk) => {
+            text += chunk
+            if (text.length === 2) {
+              process.stdout.write(text)
+              process.exit(0)
+            }
+          })
+          process.stdin.on("end", () => process.exit(1))
+        `,
+            ],
+            { stdin: { stream: "pipe", endOnDone: false } },
+          ),
+        )
+        yield* Stream.run(Stream.make(Buffer.from("a")), handle.stdin)
+        yield* Stream.run(Stream.make(Buffer.from("b")), handle.stdin)
+        const out = yield* Stream.runCollect(handle.stdout)
+        expect(Buffer.concat(Array.from(out)).toString()).toBe("ab")
+        expect(Number(yield* handle.exitCode)).toBe(0)
+      }),
+    )
+
+    it.live(
+      "reports a closed child stdin as a typed write failure without losing its diagnostics",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const handle = yield* svc.spawn(cmd("-e", "process.stderr.write('rejected'); process.exit(128)"))
+        const exit = yield* Stream.run(Stream.make(Buffer.alloc(1024 * 1024)), handle.stdin).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(exit.cause.reasons[0]).toMatchObject({
+            _tag: "Fail",
+            error: { _tag: "PlatformError", reason: { module: "ChildProcess", method: "fromWritable(stdin)" } },
+          })
+        }
+        const stderr = yield* Stream.runCollect(handle.stderr)
+        expect(Buffer.concat(Array.from(stderr)).toString()).toBe("rejected")
+        expect(Number(yield* handle.exitCode)).toBe(128)
+      }),
+    )
+
+    it.live(
+      "preserves failures from the stdin producer",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const handle = yield* svc.spawn(cmd("-e", "process.stdin.resume()"))
+        const error = new Error("stdin producer failed")
+        const exit = yield* Stream.run(Stream.fail(error), handle.stdin).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(exit.cause.reasons[0]).toMatchObject({ _tag: "Fail", error })
+        }
+      }),
+    )
+  })
+
   describe("runStream", () => {
     it.live(
       "emits lines incrementally and ends cleanly on exit 0",

@@ -80,15 +80,31 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
-            const result = yield* appProcess.run(
-              ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
-              { stdin: opts?.stdin },
-            )
-            return {
-              code: ChildProcessSpawner.ExitCode(result.exitCode),
-              text: result.stdout.toString("utf8"),
-              stderr: result.stderr.toString("utf8"),
-            } satisfies GitResult
+            for (let attempt = 0; ; attempt++) {
+              const result = yield* appProcess.run(
+                ChildProcess.make("git", cmd, {
+                  cwd: opts?.cwd,
+                  env: { ...opts?.env, LC_ALL: "C" },
+                  extendEnv: true,
+                }),
+                { stdin: opts?.stdin },
+              )
+              const stderr = result.stderr.toString("utf8")
+              // Other OpenCode processes share this index; their locks must be released by their owners.
+              if (
+                result.exitCode !== 128 ||
+                !stderr.includes("index.lock") ||
+                !stderr.includes("File exists") ||
+                attempt === 6
+              ) {
+                return {
+                  code: ChildProcessSpawner.ExitCode(result.exitCode),
+                  text: result.stdout.toString("utf8"),
+                  stderr,
+                } satisfies GitResult
+              }
+              yield* Effect.sleep(Duration.millis(50 * 2 ** attempt))
+            }
           },
           Effect.catch((err) =>
             Effect.succeed({
@@ -144,7 +160,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         })
 
         const stage = Effect.fnUntraced(function* (files: string[]) {
-          if (!files.length) return
+          if (!files.length) return true
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
@@ -152,11 +168,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
-          if (result.code === 0) return
+          if (result.code === 0) return true
           yield* Effect.logWarning("failed to add snapshot files", {
             exitCode: result.code,
             stderr: result.stderr,
           })
+          return false
         })
 
         const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
@@ -252,13 +269,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               otherCode: other.code,
               otherStderr: other.stderr,
             })
-            return
+            return false
           }
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
           const all = Array.from(new Set([...tracked, ...untracked]))
-          if (!all.length) return
+          if (!all.length) return true
 
           // Resolve source-repo ignore rules against the exact candidate set.
           // --no-index keeps this pattern-based even when a path is already tracked.
@@ -272,7 +289,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           }
 
           const allow = all.filter((item) => !ignored.has(item))
-          if (!allow.length) return
+          if (!allow.length) return true
 
           const large = new Set(
             (yield* Effect.all(
@@ -294,7 +311,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const block = new Set(untracked.filter((item) => large.has(item)))
           yield* sync(Array.from(block))
           // Stage only the allowed candidate paths so snapshot updates stay scoped.
-          yield* stage(allow.filter((item) => !block.has(item)))
+          return yield* stage(allow.filter((item) => !block.has(item)))
         })
 
         const cleanup = Effect.fnUntraced(function* () {
@@ -337,8 +354,15 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 yield* seed()
                 yield* Effect.logInfo("initialized")
               }
-              yield* add()
+              if (!(yield* add())) return
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+              if (result.code !== 0) {
+                yield* Effect.logWarning("failed to write snapshot tree", {
+                  exitCode: result.code,
+                  stderr: result.stderr,
+                })
+                return
+              }
               const hash = result.text.trim()
               yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
