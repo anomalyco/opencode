@@ -364,7 +364,8 @@ function resultValue(executed: Result) {
 const runHooks = {
   "tool.before": (call) => Run.use((run) => run.hooks["tool.before"]?.(call) ?? Effect.void),
   "tool.after": (call, result) => Run.use((run) => run.hooks["tool.after"]?.(call, result) ?? Effect.void),
-  // A name with no tool still goes to the plugins, which may rename it to one of the program's tools.
+  // A name with no tool still goes to the plugins, as the path the program wrote. They may rename it to the ID of one
+  // of the program's tools.
   "tool.missing": (call) => Run.use((run) => run.executeTool(call.name, undefined, call.input)),
   "extension.before": (call) => Run.use((run) => run.hooks["extension.before"]?.(call) ?? Effect.void),
   "extension.after": (call, result) => Run.use((run) => run.hooks["extension.after"]?.(call, result) ?? Effect.void),
