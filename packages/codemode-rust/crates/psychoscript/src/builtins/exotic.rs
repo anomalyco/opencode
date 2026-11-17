@@ -105,14 +105,40 @@ pub fn inspect(vm: &mut Vm, id: Id) -> Option<String> {
     }
 }
 
+/// Whether this run may hold a value with its own JSON form: only once the byte or web groups are installed.
+#[inline(always)]
+pub fn may_have_json_forms(vm: &Vm) -> bool {
+    vm.realm.std.loaded & (super::LAZY_BYTES | super::LAZY_WEB) != 0
+}
+
+/// Whether a kind serializes through `json_value` rather than as its own keys.
+#[inline]
+pub fn has_json_form(kind: &Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Bytes(_) | Kind::Headers(_) | Kind::SearchParams(_)
+    )
+}
+
 /// The value a JSON walk serializes in place of an exotic object, after `toJSON`. `boundary` is the host boundary.
+/// Inlined so the walk pays only a kind test for the values that are not exotic.
+#[inline(always)]
 pub fn json_value(vm: &mut Vm, v: &Value, boundary: bool) -> Res {
-    let Value::Obj(id) = v else { return Ok(*v) };
-    match &vm.heap[*id as usize].kind {
-        Kind::Bytes(_) => bytes::json_value(vm, *id, boundary),
-        Kind::Headers(_) => Ok(web::headers_object(vm, *id)),
+    if let Value::Obj(id) = v
+        && has_json_form(&vm.heap[*id as usize].kind)
+    {
+        return json_special(vm, *id, v, boundary);
+    }
+    Ok(*v)
+}
+
+#[inline(never)]
+fn json_special(vm: &mut Vm, id: Id, v: &Value, boundary: bool) -> Res {
+    match &vm.heap[id as usize].kind {
+        Kind::Bytes(_) => bytes::json_value(vm, id, boundary),
+        Kind::Headers(_) => Ok(web::headers_object(vm, id)),
         Kind::SearchParams(_) if boundary => {
-            let s = web::params_text(vm, *id);
+            let s = web::params_text(vm, id);
             Ok(vm.string_val(s))
         }
         _ => Ok(*v),

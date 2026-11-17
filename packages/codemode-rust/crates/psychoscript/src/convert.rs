@@ -246,7 +246,9 @@ fn write_json(
         let kv = key_value(vm, key);
         v = vm.call(f, holder, &[kv, v])?;
     }
-    let v = crate::builtins::exotic::json_value(vm, &v, false)?;
+    if crate::builtins::exotic::may_have_json_forms(vm) {
+        v = crate::builtins::exotic::json_value(vm, &v, false)?;
+    }
     match &v {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
