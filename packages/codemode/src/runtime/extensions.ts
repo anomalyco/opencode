@@ -255,7 +255,9 @@ export const extensionGlobals = <R>(
         const invocation =
           within !== undefined && root === undefined ? { extension: extension!, name: label, args } : undefined
         const writeBack = isWritingBytes(value)
-          ? values.flatMap((item, index) => (item instanceof Bytes ? [[item, args[index]] as const] : []))
+          ? values.flatMap((item, index) =>
+              item instanceof Bytes ? [[item, args[index], new Uint8Array(item.bytes)] as const] : [],
+            )
           : []
         // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
         if (isAsync(value)) {
@@ -352,8 +354,12 @@ export const extensionGlobals = <R>(
         : Effect.ensuring(
             effect,
             Effect.sync(() => {
-              for (const [program, host] of request.writeBack!)
-                if (host instanceof Uint8Array) program.bytes.set(host.subarray(0, program.bytes.length))
+              for (const [program, host, before] of request.writeBack!) {
+                if (!(host instanceof Uint8Array)) continue
+                const length = Math.min(program.bytes.length, host.length)
+                for (let index = 0; index < length; index++)
+                  if (host[index] !== before[index]) program.bytes[index] = host[index]!
+              }
             }),
           )
     if (request.stage === "settle") return written(settle(outcome<R>(request.host, request.threw)))

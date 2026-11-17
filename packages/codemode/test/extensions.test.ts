@@ -450,6 +450,40 @@ describe("byte arrays passed to a writesBytes function", () => {
   })
 })
 
+describe("concurrent writesBytes calls into one buffer", () => {
+  test("keep each other's bytes and what the program wrote meanwhile", async () => {
+    const io = Extension.make({
+      name: "io",
+      globals: {
+        readAt: Extension.writesBytes(
+          Extension.async(async (bytes: Uint8Array, offset: number, ms: number, value: number) => {
+            await new Promise((resolve) => setTimeout(resolve, ms))
+            bytes.fill(value, offset, offset + 2)
+          }),
+        ),
+      },
+    })
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [io] }).execute(
+        `const a = new Uint8Array(4)
+         await Promise.all([readAt(a, 0, 5, 1), readAt(a, 2, 20, 3)])
+         const b = new Uint8Array(4)
+         const pending = readAt(b, 0, 5, 1)
+         b[3] = 9
+         await pending
+         return [[...a], [...b]]`,
+      ),
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      value: [
+        [1, 1, 3, 3],
+        [1, 1, 0, 9],
+      ],
+    })
+  })
+})
+
 describe("Effect globals", () => {
   class Session extends Context.Service<Session, { readonly id: string }>()("test/Session") {}
   const sent: Array<string> = []

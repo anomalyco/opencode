@@ -90,11 +90,11 @@ export type ExtensionRequest = {
   args: ReadonlyArray<unknown>
   readonly threw: boolean
   /**
-   * The program's byte arrays passed as arguments, each with the host copy it crossed as. When the call settles, the
-   * host's changes to the copy are written back, so a host function can fill a buffer it was given, as `fs.readSync`
-   * does.
+   * The program's byte arrays passed as arguments, each with the host copy it crossed as and the bytes it held then.
+   * When the call settles, only the bytes the host changed are written back, so a host function can fill a buffer it
+   * was given, as `fs.readSync` does, without undoing what the program or a concurrent call wrote meanwhile.
    */
-  readonly writeBack?: ReadonlyArray<readonly [Bytes, unknown]>
+  readonly writeBack?: ReadonlyArray<readonly [program: Bytes, host: unknown, before: Uint8Array]>
 }
 
 /**
