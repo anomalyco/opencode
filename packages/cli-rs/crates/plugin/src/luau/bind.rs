@@ -57,7 +57,17 @@ pub(crate) fn setup(
     let current = Rc::new(Slot::default());
     let (read, host, memo) = objects(&vm.lua, &current).map_err(error)?;
     let prelude = vm.lua.load(prelude()?).set_name("=@opencode/plugin").set_mode(ChunkMode::Binary);
-    let module: Table = prelude.call(()).map_err(error)?;
+    // What fails a call whose task ran out of memory: the latch the call ends with ([`vm::refuse`]), as raising an error
+    // in Luau would need memory the heap no longer has.
+    let fail = vm
+        .lua
+        .create_function(|lua, message: mlua::LuaString| -> mlua::Result<()> {
+            let message = message.to_string_lossy();
+            vm::refuse(lua, &message);
+            Err(mlua::Error::runtime(message))
+        })
+        .map_err(error)?;
+    let module: Table = prelude.call(fail).map_err(error)?;
     vm.lua.register_module("@opencode/plugin", &module).map_err(error)?;
     let lua = vm.lua.clone();
     let inputs = Inputs::new(&lua).map_err(error)?;
@@ -470,7 +480,8 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "setMode" => |h, _lua, mode: Option<String>| h.set_mode(mode.as_deref());
         "releaseKeys" => |h, _lua| h.release_keys();
     }
-    // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it.
+    // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it. The prelude puts its
+    // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` to itself.
     for (name, foreground) in [("fetch", false), ("foreground", true)] {
         let current = current.clone();
         let f = lua.create_function(move |lua, (_this, request): (Value, Value)| {
