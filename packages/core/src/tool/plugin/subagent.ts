@@ -10,6 +10,7 @@ import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentDepth } from "../../session/subagent-depth.js"
 import { SubagentJob } from "../../session/subagent-job.js"
@@ -189,11 +190,13 @@ export const Plugin = {
               const running =
                 existing !== undefined &&
                 ((yield* sessions.active).has(existing.id) || (yield* jobs.get(existing.id))?.status === "running")
-              yield* context.progress({ sessionID: child.id, status: "running" })
-
+              const promptID = SessionMessage.ID.create()
+              const metadata = { sessionID: child.id, promptID, status: "running" }
+              yield* context.progress(metadata)
               yield* sessions
                 .prompt({
                   sessionID: child.id,
+                  id: promptID,
                   text:
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
@@ -205,7 +208,6 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
                   ),
                 )
-
               const recovery = {
                 kind: "subagent" as const,
                 parentSessionID: context.sessionID,
@@ -214,14 +216,13 @@ export const Plugin = {
                 description: input.description,
               }
               yield* subagents.start(recovery)
-              return backgroundResult(child.id)
-            }).pipe(
-              Effect.map((output) => ({
+              const output = backgroundResult(child.id)
+              return {
                 output,
                 content: output.output,
-                metadata: { sessionID: output.sessionID, status: output.status },
-              })),
-            ),
+                metadata,
+              }
+            }),
         }),
       )
       .pipe(Effect.orDie)
