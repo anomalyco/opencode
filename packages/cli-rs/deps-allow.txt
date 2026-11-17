@@ -156,8 +156,8 @@ zmij build
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features. The same rules apply. opencode-plugin's `luau` feature (spike `luau-spike`, Luau plugins) brings
-# all of these in; it awaits its O-58 decision.
+# with --all-features. The same rules apply. opencode-plugin's `luau` feature (Luau plugins, off by default) brings all
+# of these in, accepted by O-168 (the O-58 decision for `luau-spike`).
 
 autocfg
 bstr
