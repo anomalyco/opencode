@@ -484,6 +484,31 @@ test("a built renderable adds nothing and the renderer has a root", () => {
   ])
 })
 
+// CT-8, CT-19: a command answers `false`, so the host routes its key on, when it declines (returns `false`), when its
+// `enabled` says no (linear binds `r` while its dialog shows), and when its layer ended; one that runs answers what
+// it returned.
+test("a disabled, declining or ended command answers false", () => {
+  const fake = host()
+  const ctx = plugin("t.decline", fake)
+  const [on, setOn] = solid.createSignal(false)
+  let end = () => {}
+  solid.createRoot((dispose: () => void) => {
+    end = dispose
+    ctx.keymap.layer(() => ({
+      commands: [
+        { id: "t.refresh", bind: "r", enabled: on, run: () => "ran" },
+        { id: "t.submit", bind: "return", run: () => false },
+      ],
+    }))
+  })
+  const run = (name: string) => fake.commands.get(name)!()
+  expect([run("t.refresh"), run("t.submit")]).toEqual([false, false])
+  setOn(true)
+  expect(run("t.refresh")).toBe("ran")
+  end()
+  expect(run("t.refresh")).toBe(false)
+})
+
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
 test("theme.surface answers the page theme", () => {
   const fake = host()

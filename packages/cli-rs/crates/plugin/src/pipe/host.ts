@@ -898,15 +898,17 @@ function deactivate(plugin: Plugin) {
 
 // Runs one handler as a call: its effects are its own, and a throw has none and fails the plugin.
 function call(seq: number, plugin: Plugin, request: Json) {
-  if (!plugin.active || plugin.failed) return send({ type: "done", seq })
+  if (!plugin.active || plugin.failed)
+    return send({ type: "done", seq, ...(request.type === "command" ? { declined: true } : {}) })
   plugin.callEffects = []
   plugin.resolvers = []
   let error: string | undefined
+  let result: unknown
   try {
-    let result: unknown
     if (request.type === "command") {
+      // A command that is gone answers `false`, as one that declines: its key goes on to the host (CT-19).
       const command = plugin.commands.find((command) => command.name === request.name)
-      result = command?.run(request.input ?? undefined)
+      result = command ? command.run(request.input ?? undefined) : false
     } else if (request.type === "event") {
       const events = plugin.events[request.handler]
       result = events?.handler(request.event)
@@ -936,9 +938,11 @@ function call(seq: number, plugin: Plugin, request: Json) {
     return send({ type: "done", seq, error })
   }
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
-  // The answer comes once the views the call made due were sent: it is the call's completion, which the host times.
+  // The answer comes once the views the call made due were sent: it is the call's completion, which the host times. A
+  // command that returned `false` declined (TS's "return false to continue"): the host routes the key that ran it on.
   viewAll(plugin)
-  sendFor(plugin, { type: "done", seq, effects }, seq)
+  const declined = request.type === "command" && result === false
+  sendFor(plugin, { type: "done", seq, effects, ...(declined ? { declined: true } : {}) }, seq)
 }
 
 const work: Json[] = []

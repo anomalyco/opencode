@@ -18,6 +18,8 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `opencode-file-browser.tgz` | `opencode-file-browser@1.0.4` (catalog CT-11) | `sha512-gnpKQHYyjlqEDZcTtH8V4IiuhNSML9IOp9AyJLFDMxqr5R3A8gc3ZQhWq8TR2ewwox4K7iU5gOshfXYx5EBB+g==` |
 | `mighty-reviewer.tgz` | `mighty-reviewer@0.14.0` (catalog CT-18) | `sha512-2v8eUKRogeXXPyJ6d5G7APEFKDpl25JJCZiHgSqNd8MlITS4T1jJ1WrpaZxbfrqXDzOdrzk+Tit7dUMpPQsYBw==` |
 | `@kud__opencode-shell-highlighting.tgz` | `@kud/opencode-shell-highlighting@0.1.0` (catalog CT-16) | `sha512-K87SETtIvua6nXSromnNYFPrSSX5xopEwZ426cg0MjkSqQJ7zccnNMwkkgq1b5oW8Tq7oL4x0mKbW++ZFDgifQ==` |
+| `opencode-rundev.tgz` | `opencode-rundev@0.1.5` (catalog CT-19) | `sha512-fHiuKD7BhD8CC6Xh1sZLjTxPJYDIJSDHFiIRpPPn9576m+FngIt+fx4OWP0dHpL889+ONwIRccJuapIoXRpkxw==` |
+| `@joe-broadhead__opencode-linear.tgz` | `@joe-broadhead/opencode-linear@0.0.9` (catalog CT-8) | `sha512-JKi7qnHOXusxcPFb8jcrsKj/6zVMsWSLv0P3PWVTFOb+aGf3yaHUwR+8RL7wny8Unfbo6HzdqojEbT2L44K10g==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
 (`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
