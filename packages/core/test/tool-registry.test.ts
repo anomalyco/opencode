@@ -1008,6 +1008,37 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("a call renamed inside a Code Mode program returns the renamed tool's structured output", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const plain: Info = {
+        name: "plain",
+        description: "Return text",
+        input: Schema.Struct({ text: Schema.String }),
+        execute: () => Effect.succeed({ content: "plain" }),
+      }
+      yield* transform(service, { plain, constant: constant("structured") })
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool === "plain") event.tool = "constant"
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      const result = yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'return await tools.plain({ text: "x" })' },
+        },
+      })
+      expect(result.output).toMatchObject({ output: JSON.stringify({ text: "structured" }) })
+    }),
+  )
+
   it.effect("hooks see one ID per call inside a Code Mode program", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
