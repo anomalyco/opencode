@@ -117,6 +117,14 @@ export type Read = {
     sessions: (self: Read) -> { Session },
     family: (self: Read, id: string) -> Family,
     messages: (self: Read, id: string) -> { any },
+    --- The inbox items of session \`id\` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
+    pending: (self: Read, id: string) -> { any },
+    --- The models of \`location\`, or where the TUI works; \`nil\` while they are not loaded.
+    models: (self: Read, location: LocationRef?) -> { any }?,
+    --- The providers where the TUI works; \`nil\` while they are not loaded.
+    providers: (self: Read) -> { any }?,
+    --- The OpenCode Console workspace's usage limits; \`nil\` while they are not loaded.
+    limits: (self: Read) -> any,
     model: (self: Read) -> any,
     info: (self: Read) -> Info,
     route: (self: Read) -> Route,
@@ -202,6 +210,9 @@ export type Setup = {
     storageKey: (self: Setup, key: string) -> (),
     command: (self: Setup, command: CommandSpec, run: (host: Host, input: string?) -> ()) -> (),
     slot: (self: Setup, at: At, render: (read: Read, input: SlotInput, changed: Changed) -> Render?) -> (),
+    --- Calls \`run\` as the host mounts the claim registered last at \`at\` (\`true\`, before it first renders) and as it
+    --- unmounts it (\`false\`).
+    onMount: (self: Setup, at: At, run: (host: Host, input: SlotInput, mounted: boolean) -> ()) -> (),
     route: (self: Setup, name: string, render: (read: Read, changed: Changed) -> Render?) -> (),
     onRouteMount: (self: Setup, name: string, run: (host: Host, mounted: boolean) -> ()) -> (),
     codeBlock: (self: Setup, language: string, render: (read: Read, fence: Fence) -> Fenced?) -> (),
