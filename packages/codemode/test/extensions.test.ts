@@ -659,6 +659,23 @@ describe("configuration", () => {
     })
   })
 
+  test("a run can get only some of the runtime's extensions", async () => {
+    const files = Extension.make({ name: "files", globals: { read: () => "text" } })
+    const target = CodeMode.make({ extensions: [extension, files] })
+    expect(await value(`return [typeof read, typeof later]`, target)).toEqual(["function", "function"])
+    const only = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later, await later(1)]`, undefined, { extensions: [extension] }),
+    )
+    expect(only).toMatchObject({ ok: true, value: ["undefined", "function", 2] })
+    const none = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later]`, undefined, { extensions: [] }),
+    )
+    expect(none).toMatchObject({ ok: true, value: ["undefined", "undefined"] })
+    expect(() =>
+      target.program(`1`, undefined, { extensions: [Extension.make({ name: "other", globals: { f: () => 1 } })] }),
+    ).toThrow(`Extension "other" isn't one this runtime was made with.`)
+  })
+
   test("a global must be a function or an object", () => {
     expect(() => Extension.make({ name: "bad", globals: { n: 1 as never } })).toThrow(
       'Extension "bad" global "n" must be a function or an object.',
