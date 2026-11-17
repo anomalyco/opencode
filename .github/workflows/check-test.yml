@@ -197,14 +197,15 @@ jobs:
           # Includes bench/tests/conformance.rs, which checks every conformance case against the reference outcome.
           cargo test --locked --workspace
 
-      # Saves and restores every run at each host stop and every few loop iterations; outcomes must not change.
+      # Saves and restores every run at each host stop and after 64, 128, 256, ... loop iterations; outcomes must not
+      # change. Reuses the debug build of the step before and takes seconds.
       - name: Check codemode Rust conformance in round-trip mode
         if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
-        timeout-minutes: 10
+        timeout-minutes: 5
         working-directory: packages/codemode-rust
         env:
           PSYCHOSCRIPT_ROUNDTRIP: "1"
-        run: cargo test --locked --release -p psychoscript-bench --test conformance
+        run: cargo test --locked -p psychoscript-bench --test conformance
 
       # A change to the reference fails here until the Rust side is updated and the expectations regenerated.
       - name: Check codemode Rust conformance expectations match the reference

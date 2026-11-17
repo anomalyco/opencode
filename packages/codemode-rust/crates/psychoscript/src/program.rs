@@ -26,8 +26,10 @@ pub(crate) struct Running<'a> {
     pub code: Cow<'a, str>,
     started: bool,
     timer_armed: bool,
-    /// Active milliseconds earlier runs of the same execution used, before a resume.
-    pub active_before: u64,
+    /// Active time earlier runs of the same execution used, before a resume.
+    pub active_before: Duration,
+    /// Back-edges until the next round trip, in the round-trip test mode.
+    round_trip_every: u32,
 }
 
 /// How a run ended: with its outcome, or suspended with its saved state.
@@ -312,10 +314,10 @@ impl<'a> Program<'a> {
             if !r.started {
                 r.started = true;
                 r.vm.start = Instant::now()
-                    .checked_sub(Duration::from_millis(r.active_before))
+                    .checked_sub(r.active_before)
                     .unwrap_or_else(Instant::now);
-                if roundtrip() {
-                    r.vm.start_roundtrip(ROUNDTRIP_TICKS);
+                if round_trips(&self.shared) {
+                    r.vm.start_roundtrip(r.round_trip_every);
                 }
                 snapshot::restart_calls(&mut r.vm);
                 if r.vm.frames.is_empty() && !r.resumed() {
@@ -348,7 +350,7 @@ impl<'a> Program<'a> {
             if r.vm.host.tasks.has_ready() {
                 continue;
             }
-            if roundtrip() && !r.vm.host.calls.is_empty() {
+            if round_trips(&self.shared) && !r.vm.host.calls.is_empty() {
                 // A host stop: save and restore before waiting.
                 r.vm.suspend_wanted = true;
                 r.vm.suspended = true;
@@ -407,7 +409,8 @@ impl<'a> Program<'a> {
         r.vm.suspended = false;
         r.vm.suspend_wanted = false;
         let request = self.shared.take_request();
-        let active_ms = (r.vm.start.elapsed().as_millis() as u64).max(r.active_before);
+        let start = r.vm.start;
+        let active_ms = start.elapsed().max(r.active_before).as_millis() as u64;
         let captured = snapshot::capture(
             &r.vm,
             &snapshot::Capture {
@@ -463,6 +466,12 @@ impl<'a> Program<'a> {
                 match restore(self.rt, &state) {
                     Ok(mut fresh) => {
                         fresh.vm.host.shared = self.shared.clone();
+                        // A round trip is not a pause: the run's clock keeps its start, which the header would
+                        // round to whole milliseconds.
+                        fresh.active_before = start.elapsed();
+                        // Twice as long each time, so a long loop takes a few round trips, not thousands.
+                        fresh.round_trip_every =
+                            r.round_trip_every.saturating_mul(2).min(ROUNDTRIP_MAX);
                         self.detach();
                         self.state = State::Running(fresh);
                         None
@@ -512,7 +521,7 @@ fn restore<'a>(
     let mut started = run::start_for_resume(rt, restored.code, restored.run_id, restored.limits)?;
     snapshot::restore(&mut started.running.vm, state, &started.bytecode)?;
     let mut r = started.running;
-    r.active_before = restored.active_ms;
+    r.active_before = Duration::from_millis(restored.active_ms);
     // The program's body already started: what runs next comes from the saved frames and jobs.
     r.mark_resumed();
     Ok(r)
@@ -525,7 +534,8 @@ impl<'a> Running<'a> {
             code,
             started: false,
             timer_armed: false,
-            active_before: 0,
+            active_before: Duration::ZERO,
+            round_trip_every: ROUNDTRIP_TICKS,
         }
     }
 
@@ -538,8 +548,13 @@ impl<'a> Running<'a> {
     }
 }
 
+/// Round-trip mode leaves alone a program that has a `Suspender`: its owner suspends it.
+fn round_trips(shared: &Shared) -> bool {
+    roundtrip() && !shared.watched.load(Ordering::Relaxed)
+}
+
 /// Whether the round-trip test mode is on: every run is saved to bytes and restored into a brand-new VM at every
-/// host stop and every few steps, proving its state is plain data. Internal; tests turn it on with
+/// host stop and after 64 loop iterations, then 128, 256 and so on, proving its state is plain data. Internal; tests turn it on with
 /// `PSYCHOSCRIPT_ROUNDTRIP=1`.
 fn roundtrip() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -547,3 +562,4 @@ fn roundtrip() -> bool {
 }
 
 const ROUNDTRIP_TICKS: u32 = 64;
+const ROUNDTRIP_MAX: u32 = 1 << 16;
