@@ -1,4 +1,4 @@
-/** The recording slot of the profile's leader key, which records one stroke instead of a command's chord. */
+/** The recording slot of the leader key, which records one stroke instead of a command's chord. */
 export const LEADER_SLOT = "keymap.leader"
 
 /** A command chord takes at most this many strokes; its row offers no + past that. */

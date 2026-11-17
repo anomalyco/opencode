@@ -2,13 +2,8 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack }
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { Menu } from "@opencode/ui/menu"
-import { Select } from "@opencode/ui/select"
-import { TextField } from "@opencode/ui/text-field"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
 import { Predicate } from "effect"
@@ -23,7 +18,7 @@ import {
 import { chordStrokes, LEADER, validChord } from "@/shell/commands/keymap"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginHost } from "@/runtime/plugin/host"
-import { DEFAULT_KEYMAP, useSettings } from "@/settings/model"
+import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
@@ -289,7 +284,7 @@ export function createKeybindSettingsController(
     plugins?: () => ReadonlySet<string>
     settings: {
       keybinds: Pick<SettingsContext["keybinds"], "all" | "get" | "set" | "resetAll">
-      keymaps: Pick<SettingsContext["keymaps"], "leader" | "setLeader">
+      keymap: Pick<SettingsContext["keymap"], "leader" | "setLeader">
     }
     target?: Document
     notify?: (toast: { title: string; description: string }) => void
@@ -300,7 +295,7 @@ export function createKeybindSettingsController(
 ) {
   const [captureState, setCaptureState] = createSignal(INITIAL_KEYBIND_CAPTURE_STATE)
   const overrides = createMemo(() => input.settings.keybinds.all())
-  const leader = () => input.settings.keymaps.leader()
+  const leader = () => input.settings.keymap.leader()
 
   const list = createMemo(() => {
     language.locale()
@@ -392,7 +387,7 @@ export function createKeybindSettingsController(
 
     if (effect.type === "binding.set") return input.settings.keybinds.set(effect.id, effect.value)
 
-    if (effect.type === "leader.set") return input.settings.keymaps.setLeader(effect.value)
+    if (effect.type === "leader.set") return input.settings.keymap.setLeader(effect.value)
 
     if (effect.type === "bindings.reset") return input.settings.keybinds.resetAll()
 
@@ -505,8 +500,6 @@ export function createKeybindSettingsController(
 export function SettingsKeybinds(props: { active?: boolean }) {
   const command = useCommand()
   const settings = useSettings()
-  const dialog = useDialog()
-  const language = useLanguage()
   const host = usePluginHost()
   const plugins = createMemo(() => new Set(host.definitions().map((definition) => definition.id)))
 
@@ -517,40 +510,9 @@ export function SettingsKeybinds(props: { active?: boolean }) {
     active: () => props.active ?? true,
   })
 
-  const profileName = (profile: { id: string; name?: string }) =>
-    profile.name ?? language.t("settings.shortcuts.profile.default")
-
-  const activeProfile = () =>
-    settings.keymaps.profiles().find((profile) => profile.id === settings.keymaps.active()) ??
-    settings.keymaps.profiles()[0]!
-
-  const create = (from: "base" | "current") =>
-    settings.keymaps.create(
-      from === "base"
-        ? language.t("settings.shortcuts.profile.newName", { number: String(settings.keymaps.profiles().length + 1) })
-        : language.t("settings.shortcuts.profile.copyName", { name: profileName(activeProfile()) }),
-      from,
-    )
-
-  const rename = () => {
-    const profile = activeProfile()
-
-    void dialog.show(() => (
-      <DialogRenameProfile name={profileName(profile)} onSave={(name) => settings.keymaps.rename(profile.id, name)} />
-    ))
-  }
-
   return (
     <SettingsKeybindsView
       visible={props.active}
-      profiles={settings.keymaps.profiles().map((profile) => ({ id: profile.id, name: profileName(profile) }))}
-      profile={activeProfile().id}
-      onProfileSelect={settings.keymaps.select}
-      onProfileCreate={create}
-      onProfileRename={activeProfile().id === DEFAULT_KEYMAP ? undefined : rename}
-      onProfileDelete={
-        activeProfile().id === DEFAULT_KEYMAP ? undefined : () => settings.keymaps.remove(activeProfile().id)
-      }
       leader={controller.leader.keybind()}
       groups={controller.catalog.groups}
       filtered={controller.catalog.filtered}
@@ -572,12 +534,6 @@ export function SettingsKeybinds(props: { active?: boolean }) {
 
 function SettingsKeybindsView(props: {
   visible?: boolean
-  profiles: { id: string; name: string }[]
-  profile: string
-  onProfileSelect: (id: string) => void
-  onProfileCreate: (from: "base" | "current") => void
-  onProfileRename?: () => void
-  onProfileDelete?: () => void
   leader: string
   groups: KeybindGroup[]
   filtered: (query: string) => Map<KeybindGroup, string[]>
@@ -621,53 +577,8 @@ function SettingsKeybindsView(props: {
       <div class="settings-tab-body">
         <div class="settings-shortcuts settings-section-stack">
           <Show when={!store.filter}>
-            <div class="settings-section" data-component="keymap-profile">
-              <h3 class="settings-section-title">{language.t("settings.shortcuts.profile.title")}</h3>
+            <div class="settings-section">
               <SettingsList>
-                <SettingsRow
-                  title={language.t("settings.shortcuts.profile.label")}
-                  description={language.t("settings.shortcuts.profile.description")}
-                >
-                  <div class="flex items-center gap-1">
-                    <Select
-                      data-action="settings-keymap-profile"
-                      options={props.profiles}
-                      current={props.profiles.find((profile) => profile.id === props.profile)}
-                      value={(profile) => profile.id}
-                      label={(profile) => profile.name}
-                      placement="bottom-end"
-                      gutter={6}
-                      onSelect={(profile) => profile && props.onProfileSelect(profile.id)}
-                    />
-                    <Menu gutter={4} modal={false} placement="bottom-end">
-                      <Menu.Trigger
-                        as={IconButton}
-                        variant="ghost-muted"
-                        size="small"
-                        icon={<Icon name="outline-dots" />}
-                        aria-label={language.t("settings.shortcuts.profile.options")}
-                      />
-                      <Menu.Portal>
-                        <Menu.Content>
-                          <Menu.Item onSelect={() => props.onProfileCreate("base")}>
-                            {language.t("settings.shortcuts.profile.createFromBase")}
-                          </Menu.Item>
-                          <Menu.Item onSelect={() => props.onProfileCreate("current")}>
-                            {language.t("settings.shortcuts.profile.createFromCurrent")}
-                          </Menu.Item>
-                          <Show when={props.onProfileRename} keyed>
-                            {(rename) => <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>}
-                          </Show>
-                          <Show when={props.onProfileDelete} keyed>
-                            {(remove) => (
-                              <Menu.Item onSelect={remove}>{language.t("settings.shortcuts.profile.delete")}</Menu.Item>
-                            )}
-                          </Show>
-                        </Menu.Content>
-                      </Menu.Portal>
-                    </Menu>
-                  </div>
-                </SettingsRow>
                 <SettingsRow
                   title={language.t("command.keymap.leader")}
                   description={language.t("settings.shortcuts.leader.description")}
@@ -778,47 +689,5 @@ function ShortcutButton(props: {
         </Show>
       </Button>
     </div>
-  )
-}
-
-function DialogRenameProfile(props: { name: string; onSave: (name: string) => void }) {
-  const dialog = useDialog()
-  const language = useLanguage()
-  const [store, setStore] = createStore({ name: props.name })
-
-  const save = (event: SubmitEvent) => {
-    event.preventDefault()
-    const name = store.name.trim()
-
-    if (!name) return
-    props.onSave(name)
-    dialog.close()
-  }
-
-  return (
-    <Dialog fit>
-      <DialogHeader>
-        <DialogTitleGroup title={language.t("settings.shortcuts.profile.rename.title")} />
-      </DialogHeader>
-      <form onSubmit={save}>
-        <DialogBody>
-          <TextField
-            ref={(element: HTMLInputElement) => queueMicrotask(() => element.select())}
-            label={language.t("settings.shortcuts.profile.label")}
-            hideLabel
-            value={store.name}
-            onChange={(value) => setStore("name", value)}
-          />
-        </DialogBody>
-        <DialogFooter>
-          <Button type="button" variant="neutral" onClick={() => dialog.close()}>
-            {language.t("common.cancel")}
-          </Button>
-          <Button type="submit" variant="contrast" disabled={!store.name.trim()}>
-            {language.t("common.save")}
-          </Button>
-        </DialogFooter>
-      </form>
-    </Dialog>
   )
 }

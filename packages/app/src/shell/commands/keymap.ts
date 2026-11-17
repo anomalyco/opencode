@@ -12,7 +12,7 @@ export const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad
 
 export type AppKeymap = Keymap<HTMLElement, HtmlKeymapEvent>
 
-/** Stands for the profile's leader key. It may only start a chord: `<leader> g s`. */
+/** Stands for the leader key. It may only start a chord: `<leader> g s`. */
 export const LEADER = "<leader>"
 
 const LEADER_TIMEOUT_MS = 2000
@@ -150,7 +150,7 @@ export function registerCommandLayers(
           .keybind!.split(",")
           .map((combo) => combo.trim())
           .filter((combo) => combo && combo !== "none" && validChord(combo))
-          // Without a leader key the profile's `<leader>` chords stay listed but do nothing.
+          // Without a leader key the `<leader>` chords stay listed but do nothing.
           .filter((combo) => leader || chordStrokes(combo)[0]?.toLowerCase() !== LEADER)
           .map((combo) => {
             const key = keymapKey(combo)

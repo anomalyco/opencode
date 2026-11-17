@@ -5,7 +5,6 @@ import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { setNewIcons } from "@opencode/ui/icon"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
-import { uuid } from "@opencode/util/uuid"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -192,22 +191,9 @@ const soundsSchema = Persistence.struct({
   interfaceEnabled: Schema.optional(Schema.Boolean),
 })
 
-const keybindOverridesSchema = Persistence.record(
-  Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
-)
-
-const keymapProfileSchema = Persistence.struct({
-  name: Schema.String,
+const keymapSchema = Persistence.struct({
+  // The key that starts `<leader>` chords. Unset by default.
   leader: Persistence.optional(Schema.String),
-  keybinds: keybindOverridesSchema,
-})
-
-// The default profile keeps its overrides in `keybinds`, where they were stored before profiles, and its leader in
-// `keymaps.leader`. Other profiles hold both themselves.
-const keymapsSchema = Persistence.struct({
-  active: Persistence.optional(Schema.String),
-  leader: Persistence.optional(Schema.String),
-  profiles: Persistence.record(keymapProfileSchema.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
 })
 
 export const settingsSchema = Persistence.struct({
@@ -217,8 +203,8 @@ export const settingsSchema = Persistence.struct({
     Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   ),
   appearance: appearanceSchema,
-  keybinds: keybindOverridesSchema,
-  keymaps: Persistence.optional(keymapsSchema),
+  keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
+  keymap: Persistence.optional(keymapSchema),
   permissions: permissionsSchema,
   workspaces: workspacesSchema,
   notifications: notificationsSchema,
@@ -354,13 +340,6 @@ export const defaultSettings: Settings = {
   },
 }
 
-/** The keymap profile every install starts on. It has no leader until the user sets one. */
-export const DEFAULT_KEYMAP = "default"
-
-function overridesOf(settings: Settings, profile: string) {
-  return profile === DEFAULT_KEYMAP ? settings.keybinds : settings.keymaps?.profiles?.[profile]?.keybinds
-}
-
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
@@ -428,15 +407,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     // A project's explicit choice, or undefined when it uses the default.
     const autoApproveOverride = (project: ScopedKey | undefined) =>
       project ? store.permissions?.autoApproveProjects?.[project] : undefined
-
-    // A selected profile that was deleted, or never existed, falls back to the default.
-    const activeProfile = createMemo(() => {
-      const id = store.keymaps?.active
-
-      return id && store.keymaps?.profiles?.[id] ? id : DEFAULT_KEYMAP
-    })
-
-    const activeOverrides = () => overridesOf(store, activeProfile())
 
     return {
       ready,
@@ -537,98 +507,30 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("appearance", "reduceMotion", value)
         },
       },
-      // The active profile's overrides; every edit applies to that profile.
       keybinds: {
-        all: () => activeOverrides() ?? {},
-        get: (action: string) => activeOverrides()?.[action],
+        all: () => store.keybinds ?? {},
+        get: (action: string) => store.keybinds?.[action],
         set(action: string, keybind: string) {
-          const id = activeProfile()
-
-          if (id === DEFAULT_KEYMAP) return setStore("keybinds", action, keybind)
-          setStore("keymaps", "profiles", id, "keybinds", action, keybind)
+          setStore("keybinds", action, keybind)
         },
         reset(action: string) {
           // A returned object would merge into the stored one, keeping the key; delete it on the store itself.
           setStore(
+            "keybinds",
             produce((draft) => {
-              const overrides = overridesOf(draft, activeProfile())
-
-              if (overrides) delete overrides[action]
+              delete draft[action]
             }),
           )
         },
         resetAll() {
-          const id = activeProfile()
-
-          if (id === DEFAULT_KEYMAP) return setStore("keybinds", reconcile({}))
-          setStore("keymaps", "profiles", id, "keybinds", reconcile({}))
+          setStore("keybinds", reconcile({}))
         },
       },
-      keymaps: {
-        active: activeProfile,
-        profiles: createMemo(() => [
-          { id: DEFAULT_KEYMAP, name: undefined },
-          ...Object.entries(store.keymaps?.profiles ?? {}).map(([id, profile]) => ({ id, name: profile.name })),
-        ]),
-        /** The active profile's leader key, if it has one. */
-        leader: createMemo(() => {
-          const id = activeProfile()
-
-          return id === DEFAULT_KEYMAP ? store.keymaps?.leader : store.keymaps?.profiles?.[id]?.leader
-        }),
+      keymap: {
+        /** The leader key, if one is set. */
+        leader: () => store.keymap?.leader,
         setLeader(leader: string | undefined) {
-          const id = activeProfile()
-
-          setStore(
-            produce((draft) => {
-              draft.keymaps ??= { profiles: {} }
-
-              if (id === DEFAULT_KEYMAP) return void (draft.keymaps.leader = leader)
-              const profile = draft.keymaps.profiles[id]
-
-              if (profile) profile.leader = leader
-            }),
-          )
-        },
-        select(id: string) {
-          setStore(
-            produce((draft) => {
-              draft.keymaps ??= { profiles: {} }
-              draft.keymaps.active = id
-            }),
-          )
-        },
-        /** Creates a profile from the base keymap or a copy of the active profile, and makes it active. */
-        create(name: string, from: "base" | "current") {
-          const id = uuid()
-          const leader = from === "current" ? this.leader() : undefined
-          const keybinds = from === "current" ? { ...unwrap(activeOverrides() ?? {}) } : {}
-
-          setStore(
-            produce((draft) => {
-              draft.keymaps ??= { profiles: {} }
-              draft.keymaps.profiles[id] = { name, leader, keybinds }
-              draft.keymaps.active = id
-            }),
-          )
-
-          return id
-        },
-        rename(id: string, name: string) {
-          if (id === DEFAULT_KEYMAP || !store.keymaps?.profiles?.[id]) return
-          setStore("keymaps", "profiles", id, "name", name)
-        },
-        /** Deletes a profile other than the default; deleting the active one makes the default active. */
-        remove(id: string) {
-          if (id === DEFAULT_KEYMAP) return
-          setStore(
-            produce((draft) => {
-              if (!draft.keymaps) return
-              delete draft.keymaps.profiles[id]
-
-              if (draft.keymaps.active === id) draft.keymaps.active = undefined
-            }),
-          )
+          setStore("keymap", { leader })
         },
       },
       permissions: {

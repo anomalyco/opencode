@@ -35,7 +35,7 @@ function setup(
         },
         plugins: plugins && (() => plugins),
         settings: {
-          keymaps: { leader, setLeader },
+          keymap: { leader, setLeader },
           keybinds: {
             all: () => overrides,
             get: (id) => overrides[id],

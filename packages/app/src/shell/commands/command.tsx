@@ -360,7 +360,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const [catalog, setCatalog, _, catalogReady] = persisted(Persist.global("command.catalog.v1"), CommandCatalog, {})
 
-    const leader = settings.keymaps.leader
+    const leader = settings.keymap.leader
 
     const bind = (id: string, def: KeybindConfig | undefined, follows?: string) => {
       const base = actionId(id)
