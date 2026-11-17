@@ -14,7 +14,7 @@ import {
   type BrowseInstallCommand,
   type BrowseInstallEvent,
 } from "./install-machine"
-import { installerError } from "./installer-error"
+import { installerError, installerOutput } from "./installer-error"
 import { browseBinaries, readBrowseSetup } from "./status"
 
 export interface Interface {
@@ -98,11 +98,15 @@ const runInstaller = Effect.gen(function* () {
     try: async () => {
       const response = await net.fetch(windows ? WINDOWS_INSTALLER_URL : INSTALLER_URL)
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok)
+        throw new Error(`${windows ? WINDOWS_INSTALLER_URL : INSTALLER_URL} answered HTTP ${response.status}`)
 
       return response.text()
     },
-    catch: (): BrowseInstallFailure => ({ reason: "download" }),
+    catch: (error): BrowseInstallFailure => ({
+      reason: "download",
+      ...(error instanceof Error ? { output: error.message } : {}),
+    }),
   })
 
   if (!windows) return yield* spawnInstaller("/bin/sh", ["-s", "--", ...SETUP_ARGS], script)
@@ -148,13 +152,18 @@ function spawnInstaller(command: string, args: readonly string[], stdin?: string
 
     child.stdout.on("data", collect)
     child.stderr.on("data", collect)
-    child.on("error", (error) => resume(Effect.fail({ reason: "installer", detail: error.message })))
+    child.on("error", (error) =>
+      resume(Effect.fail({ reason: "installer", detail: error.message, output: error.message })),
+    )
     child.on("close", (code) => {
       if (code === 0) return resume(Effect.void)
 
       const detail = installerError(output)
+      const printed = installerOutput(output)
 
-      resume(Effect.fail(detail ? { reason: "installer", detail } : { reason: "installer" }))
+      resume(
+        Effect.fail({ reason: "installer", ...(detail ? { detail } : {}), ...(printed ? { output: printed } : {}) }),
+      )
     })
     // The shell can exit before it read the whole script; its `close` reports the failure.
     child.stdin.on("error", () => {})

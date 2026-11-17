@@ -33,17 +33,22 @@ export type BrowseCardTransition = { readonly state: BrowseCardState; readonly e
 export type BrowseCardView =
   | { readonly phase: "checking" }
   | { readonly phase: "unavailable" }
-  | { readonly phase: "absent"; readonly failure?: BrowseInstallFailure }
+  /**
+   * Not working yet. Every step runs the installer, which does whatever is left: `opencode` is browse installed but
+   * missing from OpenCode's config, `browser` its extension not added or not paired.
+   */
+  | { readonly phase: "setup"; readonly step: BrowseSetupStep }
   | { readonly phase: "installing"; readonly store: boolean }
-  | {
-      readonly phase: "incomplete"
-      readonly reason: BrowseIncomplete
-      readonly store: boolean
-      readonly failure?: BrowseInstallFailure
-    }
-  | { readonly phase: "ready"; readonly connected: boolean }
+  /**
+   * The installer gave up waiting for the extension (or failed some other way after installing browse) and the
+   * extension still isn't connected. Running it again fixes most of these; the rest pair by hand.
+   */
+  | { readonly phase: "stalled" }
+  /** The installer failed before browse was on this computer. */
+  | { readonly phase: "failed"; readonly failure: BrowseInstallFailure }
+  | { readonly phase: "ready" }
 
-export type BrowseIncomplete = "config" | "extension" | "pairing" | "update"
+export type BrowseSetupStep = "install" | "opencode" | "browser" | "update"
 
 /**
  * Whether the `browse_setup` flag is on, resolved as the server resolves flags: `experimental.browse_setup` from the
@@ -152,15 +157,17 @@ export function browseCardView(state: BrowseCardState): BrowseCardView {
 
   if (browse.job.status === "installing") return { phase: "installing", store: browse.extension === "not-seen" }
 
-  const failure = browse.job.status === "failed" ? browse.job.failure : undefined
+  if (!browse.installed && browse.job.status === "failed") return { phase: "failed", failure: browse.job.failure }
 
-  if (!browse.installed) return { phase: "absent", failure }
+  const step = setupStep(browse)
 
-  const reason = incomplete(browse)
+  // An installer that fails after installing browse isn't an error to show: most often its wait for the extension ran
+  // out. Other steps it left offer themselves again.
+  if (step === "browser" && browse.job.status === "failed") return { phase: "stalled" }
 
-  if (reason) return { phase: "incomplete", reason, store: browse.extension === "not-seen", failure }
+  if (step) return { phase: "setup", step }
 
-  return { phase: "ready", connected: browse.extension === "connected" }
+  return { phase: "ready" }
 }
 
 /** The row polls while the installer runs: it waits on the user to add the extension and pair it. */
@@ -168,14 +175,15 @@ export function browseCardPolling(state: BrowseCardState) {
   return browseCardView(state).phase === "installing"
 }
 
-function incomplete(browse: BrowseStatus): BrowseIncomplete | undefined {
-  if (!browse.configured) return "config"
+function setupStep(browse: BrowseStatus): BrowseSetupStep | undefined {
+  if (!browse.installed) return "install"
 
-  if (browse.extension === "not-seen") return "extension"
-
-  if (browse.extension === "unpaired" || browse.extension === "refused") return "pairing"
+  if (!browse.configured) return "opencode"
 
   if (browse.extension === "incompatible") return "update"
+
+  if (browse.extension === "not-seen" || browse.extension === "unpaired" || browse.extension === "refused")
+    return "browser"
 }
 
 function unchanged(state: BrowseCardState): BrowseCardTransition {
