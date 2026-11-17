@@ -34,17 +34,30 @@ pub struct Handler {
 pub enum FrameKind {
     Normal,
     Async(u32),
-    Generator(Id),
+    Generator(Id, Resume),
+}
+
+/// How a generator resumed from bytecode hands its yields and its completion back to the frame below it. A
+/// generator resumed from native code (`is_base`) returns an `Exit` from `run` instead.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Resume {
+    /// To the iteration instruction the resumer stopped at: `IterNext`, `IterStep` or `DelegateNext`.
+    Iter,
+    /// Appends each yielded value to this array and keeps running, for spread and rest elements.
+    Collect(Id),
+    /// As an iterator result object, for a direct `next()` call.
+    Result,
 }
 
 pub struct Frame {
     pub func: Rc<FuncProto>,
     pub pc: usize,
     pub base: usize,
-    pub cells: Vec<u32>,
     pub upvals: Rc<[u32]>,
-    pub handlers: Vec<Handler>,
-    pub extra: Vec<Value>,
+    /// Where this frame's exception handlers start in `Vm::handlers`.
+    pub hbase: u32,
+    /// Arguments beyond the declared parameters, kept for rest parameters and `arguments`.
+    pub extra: Box<[Value]>,
     pub argc: u32,
     pub kind: FrameKind,
     pub is_base: bool,
@@ -53,8 +66,9 @@ pub struct Frame {
 /// A suspended frame and its stack segment. The box is kept while the frame runs, so suspending again allocates
 /// nothing.
 pub struct SavedFrame {
-    pub frame: Option<Frame>,
+    pub frame: Option<Box<Frame>>,
     pub stack: Vec<Slot>,
+    pub handlers: Vec<Handler>,
     pub started: bool,
 }
 
@@ -142,6 +156,8 @@ pub struct Realm {
     pub map_proto: Id,
     pub set_proto: Id,
     pub generator_proto: Id,
+    /// The built-in `next` of generators, which calls from bytecode resume without a nested run.
+    pub generator_next: Id,
     pub iter_proto: Id,
     pub tools: Id,
     pub std: crate::builtins::StdProtos,
@@ -152,8 +168,14 @@ pub struct Vm<'rt> {
     pub cells: Vec<Slot>,
     pub atoms: Strings,
     pub stack: Vec<Slot>,
-    pub frames: Vec<Frame>,
-    spare_frames: Vec<Frame>,
+    /// Boxed, so suspending and resuming a generator moves a pointer rather than the frame; measured faster for
+    /// calls too, since pushing a recycled frame copies one word.
+    #[allow(clippy::vec_box)]
+    pub frames: Vec<Box<Frame>>,
+    #[allow(clippy::vec_box)]
+    spare_frames: Vec<Box<Frame>>,
+    /// The exception handlers of all frames, innermost last.
+    handlers: Vec<Handler>,
     pub realm: Realm,
     pub names: Names,
     pub globals: Vec<Value>,
@@ -219,6 +241,7 @@ impl<'rt> Vm<'rt> {
             stack: Vec::with_capacity(1024),
             frames: Vec::with_capacity(64),
             spare_frames: Vec::new(),
+            handlers: Vec::new(),
             realm: Realm::default(),
             names,
             globals: Vec::new(),
@@ -257,6 +280,10 @@ impl<'rt> Vm<'rt> {
             .map(|a| self.global_map.get(a).cloned().unwrap_or(Value::Uninit))
             .collect();
         self.global_names = program.globals;
+        let (gp, next) = (self.realm.generator_proto, self.names.next);
+        if let Value::Obj(f) = self.get_obj(gp, next) {
+            self.realm.generator_next = f;
+        }
     }
 
     // ---------- allocation ----------
@@ -498,7 +525,7 @@ impl<'rt> Vm<'rt> {
         }
         let base = fpos + 2;
         let np = proto.nparams as usize;
-        let mut extra = Vec::new();
+        let mut extra: Box<[Value]> = Box::default();
         if argc > np {
             if proto.needs_extra {
                 extra = self.stack.drain(base + np..).map(Slot::get).collect();
@@ -522,7 +549,7 @@ impl<'rt> Vm<'rt> {
         } else {
             FrameKind::Normal
         };
-        let ncells = proto.ncells as usize;
+        let hbase = self.handlers.len() as u32;
         // Reuse a retired frame and write its fields in place: building a fresh one on the stack and copying it in
         // stalls on store forwarding.
         match self.spare_frames.pop() {
@@ -532,27 +559,24 @@ impl<'rt> Vm<'rt> {
                 f.func = proto;
                 f.pc = 0;
                 f.base = base;
-                f.cells.clear();
-                f.cells.resize(ncells, 0);
                 f.upvals = upvals;
-                f.handlers.clear();
+                f.hbase = hbase;
                 f.extra = extra;
                 f.argc = argc as u32;
                 f.kind = kind;
                 f.is_base = is_base;
             }
-            None => self.frames.push(Frame {
+            None => self.frames.push(Box::new(Frame {
                 func: proto,
                 pc: 0,
                 base,
-                cells: vec![0; ncells],
                 upvals,
-                handlers: Vec::new(),
+                hbase,
                 extra,
                 argc: argc as u32,
                 kind,
                 is_base,
-            }),
+            })),
         }
         Ok(())
     }
@@ -574,6 +598,20 @@ impl<'rt> Vm<'rt> {
             }
             Kind::Native { f, .. } => {
                 let f = *f;
+                if id == self.realm.generator_next
+                    && let Some(g) = self.suspended_generator(self.stack[fpos + 1])
+                {
+                    let sent = if argc > 0 {
+                        self.stack[fpos + 2]
+                    } else {
+                        Slot::UNDEF
+                    };
+                    self.stack.truncate(fpos);
+                    if self.enter_generator(g, Resume::Result, false) {
+                        self.stack.push(sent);
+                    }
+                    return Ok(true);
+                }
                 let mut args = self.arg_pool.pop().unwrap_or_default();
                 args.extend(self.stack.drain(fpos + 2..).map(Slot::get));
                 let this = self.pop();
@@ -682,7 +720,8 @@ impl<'rt> Vm<'rt> {
                 return Err(Err(e));
             };
             if !fatal {
-                while let Some(h) = f.handlers.pop() {
+                while self.handlers.len() > f.hbase as usize {
+                    let Some(h) = self.handlers.pop() else { break };
                     if returning && !h.finally {
                         continue;
                     }
@@ -694,6 +733,7 @@ impl<'rt> Vm<'rt> {
                 }
             }
             let frame = self.frames.pop().expect("frame");
+            self.handlers.truncate(frame.hbase as usize);
             self.stack.truncate(frame.base - 2);
             match frame.kind {
                 FrameKind::Async(c) if !fatal => {
@@ -713,14 +753,18 @@ impl<'rt> Vm<'rt> {
                     self.push(result);
                     return Ok(());
                 }
-                FrameKind::Generator(g) => {
-                    self.heap[g as usize].kind = Kind::Generator(GenState::Done);
+                FrameKind::Generator(g, resume) => {
+                    self.leave_generator(g, None);
                     if returning && !fatal {
                         let v = match &self.heap[e.as_obj().unwrap_or(0) as usize].kind {
                             Kind::ReturnSignal(v) => *v,
                             _ => Value::Undef,
                         };
-                        return Err(Ok(Exit::Return(v)));
+                        if frame.is_base {
+                            return Err(Ok(Exit::Return(v)));
+                        }
+                        self.generator_done(resume, v);
+                        return Ok(());
                     }
                     if frame.is_base {
                         return Err(Err(e));
@@ -748,11 +792,16 @@ impl<'rt> Vm<'rt> {
             Box::new(SavedFrame {
                 frame: None,
                 stack: Vec::new(),
+                handlers: Vec::new(),
                 started,
             })
         });
         saved.stack.clear();
         saved.stack.extend(self.stack.drain(frame.base - 2..));
+        saved.handlers.clear();
+        saved
+            .handlers
+            .extend(self.handlers.drain(frame.hbase as usize..));
         saved.started = started;
         let is_base = frame.is_base;
         saved.frame = Some(frame);
@@ -765,7 +814,9 @@ impl<'rt> Vm<'rt> {
         };
         frame.base = self.stack.len() + 2;
         frame.is_base = true;
+        frame.hbase = self.handlers.len() as u32;
         self.stack.append(&mut saved.stack);
+        self.handlers.append(&mut saved.handlers);
         self.frames.push(frame);
         true
     }
@@ -791,19 +842,111 @@ impl<'rt> Vm<'rt> {
         self.run().map(|_| ())
     }
 
+    /// Whether `v` is a generator that can be resumed now.
+    #[inline]
+    fn suspended_generator(&self, v: Slot) -> Option<Id> {
+        match v.get() {
+            Value::Obj(id) => match &self.heap[id as usize].kind {
+                Kind::Generator(GenState::Suspended(_)) => Some(id),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Pushes a suspended generator's frame and switches to its stack, which holds that frame's slots; the
+    /// resumer's stack waits in the generator until it yields or finishes. Nothing is copied. Returns whether a
+    /// `yield` waits for the value sent in.
+    fn enter_generator(&mut self, g: Id, resume: Resume, is_base: bool) -> bool {
+        let Kind::Generator(state) = &mut self.heap[g as usize].kind else {
+            return false;
+        };
+        let GenState::Suspended(mut saved) = std::mem::replace(state, GenState::Done) else {
+            return false;
+        };
+        let Some(frame) = saved.frame.take() else {
+            return false;
+        };
+        std::mem::swap(&mut self.stack, &mut saved.stack);
+        let hbase = self.handlers.len() as u32;
+        if !saved.handlers.is_empty() {
+            self.handlers.append(&mut saved.handlers);
+        }
+        let started = saved.started;
+        saved.started = true;
+        *state = GenState::Running(saved);
+        // Move the frame unchanged and adjust it in place: narrow writes to a moved value stall its copy.
+        self.frames.push(frame);
+        let f = self.frames.last_mut().expect("frame");
+        f.kind = FrameKind::Generator(g, resume);
+        f.is_base = is_base;
+        f.hbase = hbase;
+        started && matches!(f.func.code.get(f.pc.wrapping_sub(1)), Some(Op::Yield))
+    }
+
+    /// Switches back to the resumer's stack after the generator's frame was popped: suspended again with `frame`,
+    /// or finished without it.
+    fn leave_generator(&mut self, g: Id, frame: Option<Box<Frame>>) {
+        let Kind::Generator(state) = &mut self.heap[g as usize].kind else {
+            return;
+        };
+        let GenState::Running(mut saved) = std::mem::replace(state, GenState::Done) else {
+            return;
+        };
+        std::mem::swap(&mut self.stack, &mut saved.stack);
+        if let Some(f) = frame {
+            if self.handlers.len() > f.hbase as usize {
+                saved
+                    .handlers
+                    .extend(self.handlers.drain(f.hbase as usize..));
+            }
+            saved.frame = Some(f);
+            *state = GenState::Suspended(saved);
+        }
+    }
+
+    /// Delivers a finished generator's completion value to the frame that resumed it from bytecode.
+    fn generator_done(&mut self, resume: Resume, v: Value) {
+        match resume {
+            Resume::Collect(_) => {}
+            Resume::Result => {
+                let r = self.iter_result(v, true);
+                self.push(r);
+            }
+            Resume::Iter => {
+                let Some(f) = self.frames.last_mut() else {
+                    return;
+                };
+                let base = f.base;
+                match f.func.code.get(f.pc.wrapping_sub(1)) {
+                    Some(Op::IterNext(slot, exit)) => {
+                        f.pc = *exit as usize;
+                        self.stack[base + *slot as usize] = Slot::UNDEF;
+                    }
+                    Some(Op::IterStep(slot)) => {
+                        self.stack[base + *slot as usize] = Slot::UNDEF;
+                        self.stack.push(Slot::UNDEF);
+                    }
+                    Some(Op::DelegateNext(slot, exit)) => {
+                        f.pc = *exit as usize;
+                        self.stack[base + *slot as usize] = Slot::UNDEF;
+                        self.push(v);
+                    }
+                    _ => self.push(v),
+                }
+            }
+        }
+    }
+
+    /// Resumes a generator from native code and runs it to its next yield or its end. `mode` is 0 for `next`, 1
+    /// for `return` and 2 for `throw`.
     pub fn resume_generator(&mut self, g: Id, mode: u8, v: Value) -> Result<(Value, bool), Value> {
-        let state = std::mem::replace(
-            &mut self.heap[g as usize].kind,
-            Kind::Generator(GenState::Done),
-        );
-        let mut saved = match state {
-            Kind::Generator(GenState::Suspended(s)) => s,
-            Kind::Generator(GenState::Running(b)) => {
-                self.heap[g as usize].kind = Kind::Generator(GenState::Running(b));
+        let started = match &self.heap[g as usize].kind {
+            Kind::Generator(GenState::Suspended(s)) => s.started,
+            Kind::Generator(GenState::Running(_)) => {
                 return Err(self.type_error("Generator is already running"));
             }
-            other => {
-                self.heap[g as usize].kind = other;
+            _ => {
                 return match mode {
                     0 => Ok((Value::Undef, true)),
                     1 => Ok((v, true)),
@@ -811,16 +954,14 @@ impl<'rt> Vm<'rt> {
                 };
             }
         };
-        if !saved.started && mode != 0 {
+        if !started && mode != 0 {
             self.heap[g as usize].kind = Kind::Generator(GenState::Done);
             return if mode == 1 { Ok((v, true)) } else { Err(v) };
         }
-        let started = saved.started;
-        self.restore_frame(&mut saved);
-        self.heap[g as usize].kind = Kind::Generator(GenState::Running(Some(saved)));
+        let wants = self.enter_generator(g, Resume::Iter, true);
         let r = match mode {
             0 => {
-                if started {
+                if wants {
                     self.push(v);
                 }
                 self.run()
@@ -840,15 +981,25 @@ impl<'rt> Vm<'rt> {
         };
         match r {
             Ok(Exit::Yield(y)) => Ok((y, false)),
-            Ok(Exit::Return(v)) => {
-                self.heap[g as usize].kind = Kind::Generator(GenState::Done);
-                Ok((v, true))
-            }
-            Err(e) => {
-                self.heap[g as usize].kind = Kind::Generator(GenState::Done);
-                Err(e)
-            }
+            Ok(Exit::Return(v)) => Ok((v, true)),
+            Err(e) => Err(e),
         }
+    }
+
+    /// Runs a generator from native code until it finishes, collecting what it yields.
+    pub fn collect_generator(&mut self, g: Id) -> Result<Vec<Value>, Value> {
+        let arr = self.new_array(Vec::new());
+        let Value::Obj(arr) = arr else {
+            return Ok(Vec::new());
+        };
+        if self.enter_generator(g, Resume::Collect(arr), true) {
+            self.push(Value::Undef);
+        }
+        self.run()?;
+        Ok(match &mut self.heap[arr as usize].kind {
+            Kind::Array(items) => std::mem::take(items),
+            _ => Vec::new(),
+        })
     }
 
     // ---------- the run loop ----------
@@ -876,7 +1027,7 @@ impl<'rt> Vm<'rt> {
             .captures
             .iter()
             .map(|c| match c {
-                Capture::Cell(i) => f.cells[*i as usize],
+                Capture::Cell(i) => self.stack[f.base + *i as usize].0 as u32,
                 Capture::Upval(i) => f.upvals[*i as usize],
             })
             .collect();
@@ -920,6 +1071,18 @@ impl<'rt> Vm<'rt> {
                     match $e {
                         Ok(v) => v,
                         Err(e) => throw!(e),
+                    }
+                };
+            }
+            // An iterator whose step failed is not closed afterwards, so forget it before throwing.
+            macro_rules! step {
+                ($slot:expr, $e:expr) => {
+                    match $e {
+                        Ok(v) => v,
+                        Err(e) => {
+                            self.stack[base + $slot as usize] = Slot::UNDEF;
+                            throw!(e)
+                        }
                     }
                 };
             }
@@ -1079,17 +1242,17 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::NewCell(i) => {
                         self.cells.push(Slot::UNINIT);
-                        let c = self.cells.len() as u32 - 1;
-                        self.frames[fi].cells[i as usize] = c;
+                        let c = self.cells.len() as u64 - 1;
+                        self.stack[base + i as usize] = Slot(c);
                     }
                     Op::GetCell(i) => {
-                        let c = self.frames[fi].cells[i as usize];
-                        let v = self.cells[c as usize];
+                        let c = self.stack[base + i as usize].0 as usize;
+                        let v = self.cells.get(c).copied().unwrap_or(Slot::UNINIT);
                         self.stack.push(v);
                     }
                     Op::GetCellChk(i, name) => {
-                        let c = self.frames[fi].cells[i as usize];
-                        let v = self.cells[c as usize];
+                        let c = self.stack[base + i as usize].0 as usize;
+                        let v = self.cells.get(c).copied().unwrap_or(Slot::UNINIT);
                         if v == Slot::UNINIT {
                             throw!(self.tdz_error(name));
                         }
@@ -1097,8 +1260,10 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::SetCell(i) => {
                         let v = self.stack.pop().unwrap_or_default();
-                        let c = self.frames[fi].cells[i as usize];
-                        self.cells[c as usize] = v;
+                        let c = self.stack[base + i as usize].0 as usize;
+                        if let Some(cell) = self.cells.get_mut(c) {
+                            *cell = v;
+                        }
                     }
                     Op::GetUpval(i) => {
                         let c = self.frames[fi].upvals[i as usize];
@@ -1175,7 +1340,7 @@ impl<'rt> Vm<'rt> {
                         self.push(Value::Obj(id));
                     }
                     Op::Rest(_) => {
-                        let extra = self.frames[fi].extra.clone();
+                        let extra = self.frames[fi].extra.to_vec();
                         let a = self.new_array(extra);
                         self.push(a);
                     }
@@ -1270,6 +1435,16 @@ impl<'rt> Vm<'rt> {
                         }
                     }
                     Op::ArraySpread => {
+                        let top = self.stack.last().copied().unwrap_or_default();
+                        if let Some(g) = self.suspended_generator(top) {
+                            self.stack.pop();
+                            self.frames[fi].pc = pc;
+                            let arr = self.top().as_obj().unwrap_or(0);
+                            if self.enter_generator(g, Resume::Collect(arr), false) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue 'outer;
+                        }
                         let src = self.pop();
                         let items = tri!(self.iterate_to_vec(&src));
                         if let Value::Obj(id) = self.top()
@@ -1415,7 +1590,11 @@ impl<'rt> Vm<'rt> {
                             Value::Num(x) => x,
                             _ => tri!(self.number_of(&a)),
                         };
-                        self.push(Value::Num(if op == Op::Inc { x + 1.0 } else { x - 1.0 }));
+                        self.push(Value::Num(if matches!(op, Op::Inc) {
+                            x + 1.0
+                        } else {
+                            x - 1.0
+                        }));
                     }
                     Op::ToStr => {
                         let a = self.pop();
@@ -1501,6 +1680,32 @@ impl<'rt> Vm<'rt> {
                             v => !self.truthy(&v),
                         };
                         if jump {
+                            pc = t as usize;
+                        }
+                    }
+                    Op::JumpUnless(cmp, t) => {
+                        let n = self.stack.len();
+                        let (a, b) = (self.stack[n - 2], self.stack[n - 1]);
+                        self.stack.truncate(n - 2);
+                        let r = if a.is_num() && b.is_num() {
+                            compare(cmp, a.f(), b.f())
+                        } else {
+                            let r = tri!(self.arith(cmp, a.get(), b.get()));
+                            self.truthy(&r)
+                        };
+                        if !r {
+                            pc = t as usize;
+                        }
+                    }
+                    Op::JumpUnlessI(cmp, k, t) => {
+                        let a = self.stack.pop().unwrap_or_default();
+                        let r = if a.is_num() {
+                            compare(cmp, a.f(), k as f64)
+                        } else {
+                            let r = tri!(self.arith(cmp, a.get(), Value::Num(k as f64)));
+                            self.truthy(&r)
+                        };
+                        if !r {
                             pc = t as usize;
                         }
                     }
@@ -1605,6 +1810,7 @@ impl<'rt> Vm<'rt> {
                         let v = self.pop();
                         let frame = self.frames.pop().expect("frame");
                         self.stack.truncate(frame.base - 2);
+                        self.handlers.truncate(frame.hbase as usize);
                         let result = match frame.kind {
                             FrameKind::Normal => v,
                             FrameKind::Async(c) => match self.coroutines[c as usize].promise {
@@ -1617,9 +1823,15 @@ impl<'rt> Vm<'rt> {
                                     Value::Undef
                                 }
                             },
-                            FrameKind::Generator(g) => {
-                                self.heap[g as usize].kind = Kind::Generator(GenState::Done);
-                                v
+                            FrameKind::Generator(g, resume) => {
+                                self.leave_generator(g, None);
+                                let is_base = frame.is_base;
+                                self.spare_frames.push(frame);
+                                if is_base {
+                                    return Ok(Exit::Return(v));
+                                }
+                                self.generator_done(resume, v);
+                                continue 'outer;
                             }
                         };
                         let is_base = frame.is_base;
@@ -1633,9 +1845,21 @@ impl<'rt> Vm<'rt> {
                     Op::GeneratorStart => {
                         let proto = self.realm.generator_proto;
                         let g = self.alloc(Obj::new(Some(proto), Kind::Generator(GenState::Done)));
-                        self.frames[fi].kind = FrameKind::Generator(g);
-                        let (saved, is_base) = self.save_top_frame(pc, false, None);
-                        self.heap[g as usize].kind = Kind::Generator(GenState::Suspended(saved));
+                        let mut frame = self.frames.pop().expect("frame");
+                        frame.pc = pc;
+                        frame.kind = FrameKind::Generator(g, Resume::Iter);
+                        let start = frame.base - 2;
+                        let mut stack = Vec::with_capacity((self.stack.len() - start).max(16));
+                        stack.extend(self.stack.drain(start..));
+                        frame.base = 2;
+                        let is_base = frame.is_base;
+                        self.heap[g as usize].kind =
+                            Kind::Generator(GenState::Suspended(Box::new(SavedFrame {
+                                frame: Some(frame),
+                                stack,
+                                handlers: Vec::new(),
+                                started: false,
+                            })));
                         if is_base {
                             return Ok(Exit::Return(Value::Obj(g)));
                         }
@@ -1661,21 +1885,37 @@ impl<'rt> Vm<'rt> {
                         self.push(result);
                         continue 'outer;
                     }
-                    Op::Yield => {
+                    Op::Yield | Op::YieldDrop => {
                         let v = self.pop();
-                        let FrameKind::Generator(g) = self.frames[fi].kind else {
+                        let FrameKind::Generator(g, resume) = self.frames[fi].kind else {
                             throw!(self.syntax_error("yield is only valid in generators"));
                         };
-                        let reuse = match std::mem::replace(
-                            &mut self.heap[g as usize].kind,
-                            Kind::Generator(GenState::Done),
-                        ) {
-                            Kind::Generator(GenState::Running(b)) => b,
-                            _ => None,
-                        };
-                        let (saved, _) = self.save_top_frame(pc, true, reuse);
-                        self.heap[g as usize].kind = Kind::Generator(GenState::Suspended(saved));
-                        return Ok(Exit::Yield(v));
+                        if let Resume::Collect(arr) = resume {
+                            if let Kind::Array(items) = &mut self.heap[arr as usize].kind {
+                                if items.len() >= crate::ops::MAX_ARRAY_LEN {
+                                    throw!(self.range_error("Invalid array length."));
+                                }
+                                items.push(v);
+                            }
+                            if matches!(op, Op::Yield) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue;
+                        }
+                        self.frames[fi].pc = pc;
+                        let frame = self.frames.pop().expect("frame");
+                        let is_base = frame.is_base;
+                        self.leave_generator(g, Some(frame));
+                        if is_base {
+                            return Ok(Exit::Yield(v));
+                        }
+                        if resume == Resume::Result {
+                            let r = self.iter_result(v, false);
+                            self.push(r);
+                        } else {
+                            self.push(v);
+                        }
+                        continue 'outer;
                     }
 
                     Op::Throw => {
@@ -1684,14 +1924,16 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::PushCatch(t) | Op::PushFinally(t) => {
                         let sp = (self.stack.len() - base) as u32;
-                        self.frames[fi].handlers.push(Handler {
+                        self.handlers.push(Handler {
                             pc: t,
                             sp,
                             finally: matches!(op, Op::PushFinally(_)),
                         });
                     }
                     Op::PopTry => {
-                        self.frames[fi].handlers.pop();
+                        if self.handlers.len() > self.frames[fi].hbase as usize {
+                            self.handlers.pop();
+                        }
                     }
 
                     Op::GetIter(slot) => {
@@ -1702,8 +1944,15 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::IterNext(slot, exit) => {
                         self.frames[fi].pc = pc;
-                        let it = self.stack[base + slot as usize].get();
-                        match tri!(self.iter_step(&it)) {
+                        let it = self.stack[base + slot as usize];
+                        if let Some(g) = self.suspended_generator(it) {
+                            if self.enter_generator(g, Resume::Iter, false) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue 'outer;
+                        }
+                        let it = it.get();
+                        match step!(slot, self.iter_step(&it)) {
                             Some(v) => self.push(v),
                             None => {
                                 self.stack[base + slot as usize] = Slot::UNDEF;
@@ -1713,8 +1962,15 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::DelegateNext(slot, exit) => {
                         self.frames[fi].pc = pc;
-                        let it = self.stack[base + slot as usize].get();
-                        let (v, done) = tri!(self.delegate_step(&it));
+                        let it = self.stack[base + slot as usize];
+                        if let Some(g) = self.suspended_generator(it) {
+                            if self.enter_generator(g, Resume::Iter, false) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue 'outer;
+                        }
+                        let it = it.get();
+                        let (v, done) = step!(slot, self.delegate_step(&it));
                         self.push(v);
                         if done {
                             self.stack[base + slot as usize] = Slot::UNDEF;
@@ -1723,8 +1979,15 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::IterStep(slot) => {
                         self.frames[fi].pc = pc;
-                        let it = self.stack[base + slot as usize].get();
-                        match tri!(self.iter_step(&it)) {
+                        let it = self.stack[base + slot as usize];
+                        if let Some(g) = self.suspended_generator(it) {
+                            if self.enter_generator(g, Resume::Iter, false) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue 'outer;
+                        }
+                        let it = it.get();
+                        match step!(slot, self.iter_step(&it)) {
                             Some(v) => self.push(v),
                             None => {
                                 self.stack[base + slot as usize] = Slot::UNDEF;
@@ -1734,9 +1997,22 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::IterRest(slot) => {
                         self.frames[fi].pc = pc;
-                        let it = self.stack[base + slot as usize].get();
+                        let it = self.stack[base + slot as usize];
+                        if let Some(g) = self.suspended_generator(it) {
+                            let a = self.new_array(Vec::new());
+                            self.push(a);
+                            if self.enter_generator(
+                                g,
+                                Resume::Collect(a.as_obj().unwrap_or(0)),
+                                false,
+                            ) {
+                                self.stack.push(Slot::UNDEF);
+                            }
+                            continue 'outer;
+                        }
+                        let it = it.get();
                         let mut items = Vec::new();
-                        while let Some(v) = tri!(self.iter_step(&it)) {
+                        while let Some(v) = step!(slot, self.iter_step(&it)) {
                             items.push(v);
                         }
                         self.stack[base + slot as usize] = Slot::UNDEF;
@@ -1833,6 +2109,19 @@ impl<'rt> Vm<'rt> {
             self.outcome = Some(Err(e));
             return Ok(());
         }
+    }
+}
+
+#[inline(always)]
+fn compare(op: Arith, x: f64, y: f64) -> bool {
+    match op {
+        Arith::Lt => x < y,
+        Arith::Le => x <= y,
+        Arith::Gt => x > y,
+        Arith::Ge => x >= y,
+        Arith::StrictEq => x == y,
+        Arith::StrictNe => x != y,
+        _ => false,
     }
 }
 

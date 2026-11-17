@@ -205,7 +205,6 @@ struct FnState<'a> {
     code: Vec<Op>,
     pos: Vec<u32>,
     nlocals: u32,
-    ncells: u32,
     captures: Vec<Capture>,
     upval_of: FxHashMap<SymbolId, u32>,
     controls: Vec<Control<'a>>,
@@ -317,11 +316,29 @@ impl<'a, 's> Compiler<'a, 's> {
             let fused = match (*prev, op) {
                 (Op::Int(k), op) => Arith::of(op).map(|a| Op::ArithI(a, k)),
                 (Op::GetLocal(a), Op::GetLocal(b)) => Some(Op::GetLocal2(a, b)),
+                (Op::ArithI(a, k), Op::JumpIfFalse(t)) if a.is_comparison() => {
+                    Some(Op::JumpUnlessI(a, k, t))
+                }
+                (prev, Op::JumpIfFalse(t)) => Arith::of(prev)
+                    .filter(|a| a.is_comparison())
+                    .map(|a| Op::JumpUnless(a, t)),
+                (Op::Yield, Op::Pop) => Some(Op::YieldDrop),
                 _ => None,
             };
             if let Some(fused) = fused {
                 *prev = fused;
                 return f.code.len() - 1;
+            }
+            // A binding's TDZ marker that its initialization overwrites at once is dead.
+            let n = f.code.len();
+            if let Op::SetLocal(l) = op
+                && n >= 2
+                && f.barrier + 2 <= n
+                && f.code[n - 2] == Op::Uninit
+                && f.code[n - 1] == Op::SetLocal(l)
+            {
+                f.code.truncate(n - 2);
+                f.pos.truncate(n - 2);
             }
         }
         f.code.push(op);
@@ -342,6 +359,8 @@ impl<'a, 's> Compiler<'a, 's> {
             Op::Jump(_) => Op::Jump(target),
             Op::JumpIfFalse(_) => Op::JumpIfFalse(target),
             Op::JumpIfTrue(_) => Op::JumpIfTrue(target),
+            Op::JumpUnless(a, _) => Op::JumpUnless(a, target),
+            Op::JumpUnlessI(a, k, _) => Op::JumpUnlessI(a, k, target),
             Op::JumpIfFalseKeep(_) => Op::JumpIfFalseKeep(target),
             Op::JumpIfTrueKeep(_) => Op::JumpIfTrueKeep(target),
             Op::JumpIfNotNullishKeep(_) => Op::JumpIfNotNullishKeep(target),
@@ -362,10 +381,9 @@ impl<'a, 's> Compiler<'a, 's> {
         f.nlocals - 1
     }
 
+    /// A local slot that holds a closure cell's index.
     fn new_cell(&mut self) -> u32 {
-        let f = self.f();
-        f.ncells += 1;
-        f.ncells - 1
+        self.new_local()
     }
 
     fn atom(&mut self, s: &str) -> Atom {
@@ -797,7 +815,6 @@ impl<'a, 's> Compiler<'a, 's> {
                 nparams: 0,
                 length: 0,
                 nlocals: f.nlocals,
-                ncells: f.ncells,
                 captures: Vec::new(),
                 is_async: true,
                 is_arrow: false,
@@ -961,7 +978,6 @@ impl<'a, 's> Compiler<'a, 's> {
             nparams,
             length,
             nlocals: f.nlocals,
-            ncells: f.ncells,
             captures: f.captures,
             is_async: spec.is_async,
             is_arrow: spec.is_arrow,
@@ -1609,6 +1625,7 @@ impl<'a, 's> Compiler<'a, 's> {
             BindingPattern::ArrayPattern(a) => {
                 let slot = self.new_local();
                 self.emit(Op::GetIter(slot));
+                let guard = self.emit(Op::PushFinally(0));
                 for el in &a.elements {
                     self.emit(Op::IterStep(slot));
                     match el {
@@ -1622,10 +1639,25 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.emit(Op::IterRest(slot));
                     self.bind_pattern(&rest.argument, mode)?;
                 }
-                self.emit(Op::IterClose(slot));
+                self.close_iter_guard(guard, slot);
                 Ok(())
             }
         }
+    }
+
+    /// Ends array destructuring guarded by the `PushFinally` at `guard`: closes the iterator, and on an abrupt
+    /// completion closes it quietly and rethrows.
+    fn close_iter_guard(&mut self, guard: usize, slot: u32) {
+        self.emit(Op::PopTry);
+        self.emit(Op::IterClose(slot));
+        let end = self.emit(Op::Jump(0));
+        self.patch(guard);
+        let exc = self.new_local();
+        self.emit(Op::SetLocal(exc));
+        self.emit(Op::IterCloseQuiet(slot));
+        self.emit(Op::GetLocal(exc));
+        self.emit(Op::Throw);
+        self.patch(end);
     }
 
     fn push_keys(&mut self, keys: &[KeyRef]) {
@@ -1645,6 +1677,7 @@ impl<'a, 's> Compiler<'a, 's> {
             AssignmentTarget::ArrayAssignmentTarget(a) => {
                 let slot = self.new_local();
                 self.emit(Op::GetIter(slot));
+                let guard = self.emit(Op::PushFinally(0));
                 for el in &a.elements {
                     self.emit(Op::IterStep(slot));
                     match el {
@@ -1658,7 +1691,7 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.emit(Op::IterRest(slot));
                     self.assign_target(&rest.target)?;
                 }
-                self.emit(Op::IterClose(slot));
+                self.close_iter_guard(guard, slot);
                 Ok(())
             }
             AssignmentTarget::ObjectAssignmentTarget(o) => {
@@ -2379,7 +2412,6 @@ impl<'a> FnState<'a> {
             code: Vec::new(),
             pos: Vec::new(),
             nlocals: 0,
-            ncells: 0,
             captures: Vec::new(),
             upval_of: FxHashMap::default(),
             controls: Vec::new(),

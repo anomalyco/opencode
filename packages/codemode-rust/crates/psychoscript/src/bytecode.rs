@@ -32,6 +32,7 @@ pub enum Op {
     SetLocal(u32),
     /// Reads a local that may be in its temporal dead zone; the second operand is the name's atom.
     GetLocalChk(u32, Atom),
+    /// Allocates a fresh closure cell into a local slot; the cell instructions take that slot.
     NewCell(u32),
     GetCell(u32),
     GetCellChk(u32, Atom),
@@ -113,6 +114,10 @@ pub enum Op {
     Jump(u32),
     JumpIfFalse(u32),
     JumpIfTrue(u32),
+    /// A comparison fused with the `JumpIfFalse` after it: `a b` -> ``, jumping when `a op b` is false.
+    JumpUnless(Arith, u32),
+    /// `JumpUnless` with an integer immediate as the right operand: `a` -> ``.
+    JumpUnlessI(Arith, i32, u32),
     JumpIfFalseKeep(u32),
     JumpIfTrueKeep(u32),
     JumpIfNotNullishKeep(u32),
@@ -131,6 +136,8 @@ pub enum Op {
     GeneratorStart,
     Await,
     Yield,
+    /// A `yield` whose result is unused: resuming it pushes nothing.
+    YieldDrop,
 
     Throw,
     PushCatch(u32),
@@ -164,6 +171,13 @@ pub enum Arith {
 }
 
 impl Arith {
+    pub fn is_comparison(self) -> bool {
+        !matches!(
+            self,
+            Arith::Add | Arith::Sub | Arith::Mul | Arith::Div | Arith::Mod
+        )
+    }
+
     pub fn of(op: Op) -> Option<Arith> {
         Some(match op {
             Op::Add => Arith::Add,
@@ -199,7 +213,6 @@ pub struct FuncProto {
     pub nparams: u32,
     pub length: u32,
     pub nlocals: u32,
-    pub ncells: u32,
     pub captures: Vec<Capture>,
     pub is_async: bool,
     pub is_arrow: bool,

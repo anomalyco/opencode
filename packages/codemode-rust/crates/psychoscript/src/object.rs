@@ -191,9 +191,10 @@ pub enum IterKind {
 }
 
 pub enum GenState {
+    /// Not running: its frame and its own value stack.
     Suspended(Box<SavedFrame>),
-    /// Running, holding the emptied box its frame came from.
-    Running(Option<Box<SavedFrame>>),
+    /// Running on its own stack; the box holds the stack of whoever resumed it, until it yields or finishes.
+    Running(Box<SavedFrame>),
     Done,
 }
 

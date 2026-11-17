@@ -915,6 +915,7 @@ impl<'rt> Vm<'rt> {
                 Kind::Set(m) => {
                     return Ok(m.entries.iter().flatten().map(|(k, _)| *k).collect());
                 }
+                Kind::Generator(GenState::Suspended(_)) => return self.collect_generator(*id),
                 _ => {}
             }
         }

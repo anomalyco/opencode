@@ -252,10 +252,8 @@ language/expressions/arrow-function/dflt-params-ref-later.js  # error not thrown
 language/expressions/arrow-function/dflt-params-ref-self.js  # error not thrown: ReferenceError
 language/expressions/arrow-function/lexical-arguments.js  # missing global: arguments
 language/expressions/assignment/dstr/array-elem-iter-rtrn-close-null.js  # error not thrown: TypeError
-language/expressions/assignment/dstr/array-elem-iter-rtrn-close.js  # wrong result
 language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # error not thrown: Test262Error
 language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # error not thrown: TypeError
-language/expressions/assignment/dstr/array-elem-trlg-iter-list-rtrn-close.js  # wrong result
 language/expressions/async-arrow-function/dflt-params-ref-later.js  # async: wrong result
 language/expressions/async-arrow-function/dflt-params-ref-self.js  # async: wrong result
 language/expressions/async-function/named-dflt-params-ref-later.js  # async: wrong result
@@ -2061,14 +2059,11 @@ language/statements/for-in/scope-body-lex-open.js  # error not thrown: Reference
 language/statements/for-in/scope-head-lex-close.js  # error not thrown: ReferenceError
 language/statements/for-in/scope-head-lex-open.js  # error not thrown: ReferenceError
 language/statements/for-of/dstr/array-elem-iter-rtrn-close-null.js  # error not thrown: TypeError
-language/statements/for-of/dstr/array-elem-iter-rtrn-close.js  # wrong result
 language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # error not thrown: Test262Error
 language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # error not thrown: TypeError
-language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close.js  # wrong result
 language/statements/for-of/head-const-bound-names-fordecl-tdz.js  # error not thrown: ReferenceError
 language/statements/for-of/head-let-bound-names-fordecl-tdz.js  # error not thrown: ReferenceError
 language/statements/for-of/iterator-close-non-throw-get-method-non-callable.js  # error not thrown: TypeError
-language/statements/for-of/iterator-next-error.js  # wrong result
 language/statements/for-of/scope-body-lex-open.js  # error not thrown: ReferenceError
 language/statements/for-of/scope-head-lex-close.js  # error not thrown: ReferenceError
 language/statements/for-of/scope-head-lex-open.js  # error not thrown: ReferenceError
