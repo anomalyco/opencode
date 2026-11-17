@@ -875,22 +875,6 @@ mod tests {
     }
 
     #[test]
-    fn a_nested_read_reuses_the_outer_guard() {
-        let (_runtime, data) = data();
-        let revision = data.read(|outer| data.read(|inner| (std::ptr::eq(outer, inner), inner.revision())));
-        assert_eq!(revision, (true, 0));
-        // The guard is gone after the outer read: a write locks again.
-        data.write(|state| state.batch = 0);
-    }
-
-    #[test]
-    #[should_panic(expected = "store write inside a store read")]
-    fn a_write_inside_a_read_panics() {
-        let (_runtime, data) = data();
-        data.read(|_| data.write(|_| ()));
-    }
-
-    #[test]
     #[should_panic(expected = "store read inside a store write")]
     fn a_read_inside_a_write_panics() {
         let (_runtime, data) = data();

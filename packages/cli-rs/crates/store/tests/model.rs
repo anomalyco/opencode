@@ -28,9 +28,6 @@
 //!   behind a known defect.
 //! - `MODEL_TRACE=<name>` with `-- trace --nocapture` prints the requests, replies and observations of a `KNOWN` or
 //!   `OPEN` entry.
-//! - `MODEL_SURVEY=1` groups the failures of a search by signature and shrinks one per group.
-//! - `MODEL_REPORT=1` prints the verdict of every `KNOWN` and `OPEN` entry.
-//! - `MODEL_DUMP=<path>` (and `MODEL_DUMP_OPEN=1`) write traces for `round2/models-pilot/model-differential.ts`.
 //!
 //! `permissions_converge_to_the_server` and `forms_converge_to_the_server` run by default. The other random searches
 //! are `#[ignore]`d until the plan step that fixes their open defects un-ignores them. Before a store change, run the
@@ -540,7 +537,7 @@ struct Failure {
 }
 
 thread_local! {
-    /// Off while recording observations for the differential: the trace continues past a failed check.
+    /// Off while counting where responses land: the run continues past a failed check.
     static CHECKS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
@@ -1268,47 +1265,6 @@ fn search(mix: Mix, failing: &dyn Fn(&[Op]) -> Option<Failure>) -> Option<Found>
     None
 }
 
-/// The failure with IDs and numbers taken out, so failures of one defect group together.
-fn signature(failure: &Failure) -> String {
-    let words: Vec<String> = failure
-        .message
-        .split_whitespace()
-        .map(|word| if word.chars().any(|c| c.is_ascii_digit()) { "#".into() } else { word.to_owned() })
-        .take(8)
-        .collect();
-    format!("[{}] {}", failure.class.split(' ').next().unwrap_or_default(), words.join(" "))
-}
-
-/// Groups the failures of `MODEL_CASES` cases by signature and shrinks one per group (`MODEL_SURVEY=1`).
-#[test]
-fn survey() {
-    if std::env::var("MODEL_SURVEY").is_err() {
-        return;
-    }
-    let mut rng = Rng(env("MODEL_SEED", 1));
-    let cases = env("MODEL_CASES", 200) as usize;
-    let len = env("MODEL_LEN", 30) as usize;
-    let mut groups: Vec<(String, usize, usize, Vec<Op>)> = Vec::new();
-    for case in 0..cases {
-        let ops = generate(&mut rng, ALL, len);
-        let Some(failure) = run(&ops, Mutant::None) else { continue };
-        let key = signature(&failure);
-        match groups.iter_mut().find(|group| group.0 == key) {
-            Some(group) => group.1 += 1,
-            None => groups.push((key, 1, case, ops)),
-        }
-    }
-    for (key, count, case, ops) in groups {
-        let class = run(&ops, Mutant::None).unwrap().class;
-        let (ops, failure) = shrink(ops, &|ops| run(ops, Mutant::None).filter(|found| signature(found) == key));
-        eprintln!(
-            "{key}\n  {count} cases, first case {case}; shrunk ({class}) to {} commands: {ops:?}\n  {}",
-            ops.len(),
-            failure.message
-        );
-    }
-}
-
 fn assert_converges(mix: Mix) {
     if let Some(found) = search(mix, &|ops| run(ops, Mutant::None)) {
         panic!("{found}");
@@ -1649,110 +1605,4 @@ fn trace() {
         panic!("no KNOWN or OPEN entry is named {name:?}");
     };
     eprintln!("{:?}", run(ops, Mutant::None));
-}
-
-/// Prints the verdict of every `KNOWN` and `OPEN` entry, for replays on older commits (`MODEL_REPORT=1`).
-#[test]
-fn report_known() {
-    if std::env::var("MODEL_REPORT").is_err() {
-        return;
-    }
-    for (name, class, ops) in KNOWN.iter().chain(OPEN) {
-        let failure = run(ops, Mutant::None);
-        eprintln!("{name} (expects {class}): {failure:?}");
-    }
-}
-
-// The differential with TS -----------------------------------------------------------------------------------------
-
-fn op_json(op: Op) -> Value {
-    let read = |read: Read| format!("{read:?}");
-    match op {
-        Op::Ask(s)
-        | Op::Burst(s)
-        | Op::Open(s)
-        | Op::Step(s)
-        | Op::Text(s)
-        | Op::End(s)
-        | Op::Model(s)
-        | Op::Delete(s) => {
-            json!({ "op": name(op), "s": s })
-        }
-        Op::Answer(s, k) | Op::Cancel(s, k) => json!({ "op": name(op), "s": s, "k": k }),
-        Op::Deliver(n) => json!({ "op": "Deliver", "n": n }),
-        Op::Reconnect => json!({ "op": "Reconnect" }),
-        Op::SyncPermissions(s) | Op::SyncForms(s) | Op::SyncMessages(s) | Op::LoadOlder(s) => {
-            json!({ "op": name(op), "s": s })
-        }
-        Op::Release(r, s) | Op::Fail(r, s) => json!({ "op": name(op), "read": read(r), "s": s }),
-        Op::ShellCreate | Op::ShellBurst | Op::SyncShells => json!({ "op": name(op) }),
-        Op::ShellExit(k) => json!({ "op": name(op), "k": k }),
-    }
-}
-
-/// What a user sees after a command, as the TS side writes it: per session the permission and form IDs, the rows
-/// as `[id, text]`, and "more". An absent list and an empty one look the same.
-fn seen_json(seen: &[Seen]) -> Value {
-    Value::Array(
-        seen.iter()
-            .map(|seen| {
-                let ids = |list: &Option<Vec<(String, String)>>| {
-                    list.iter().flatten().map(|(id, _)| id.clone()).collect::<Vec<_>>()
-                };
-                json!({
-                    "permissions": ids(&seen.permissions),
-                    "forms": ids(&seen.forms),
-                    "messages": seen.messages.iter().flatten().map(|(id, text)| json!([id, text])).collect::<Vec<_>>(),
-                    "more": seen.more,
-                })
-            })
-            .collect(),
-    )
-}
-
-/// Runs `ops` with the checks off and returns the observation after each command and after the drain.
-fn observations(ops: &[Op]) -> Vec<Value> {
-    CHECKS.set(false);
-    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
-    let trace = runtime.block_on(async {
-        let mut run = Run::new(Mutant::None);
-        let mut trace = Vec::new();
-        for op in ops {
-            let _ = run.step(*op).await;
-            trace.push(seen_json(&run.seen));
-        }
-        let _ = run.drain().await;
-        trace.push(seen_json(&run.seen));
-        trace
-    });
-    CHECKS.set(true);
-    trace
-}
-
-/// Writes `MODEL_CASES` random sequences with the Rust verdicts and observations to `MODEL_DUMP`, for
-/// `model-differential.ts`. Skipped without `MODEL_DUMP`.
-#[test]
-fn dump_for_the_differential() {
-    let Ok(path) = std::env::var("MODEL_DUMP") else { return };
-    let mut rng = Rng(env("MODEL_SEED", 1));
-    let cases = env("MODEL_CASES", 200) as usize;
-    let len = env("MODEL_LEN", 30) as usize;
-    // `MODEL_DUMP_OPEN=1` dumps the `OPEN` sequences instead, to see which defects TS shares.
-    let named: Vec<(String, Vec<Op>)> = match std::env::var("MODEL_DUMP_OPEN") {
-        Ok(_) => OPEN.iter().map(|(name, _, ops)| ((*name).to_owned(), ops.to_vec())).collect(),
-        Err(_) => (0..cases).map(|case| (format!("case {case}"), generate(&mut rng, ALL, len))).collect(),
-    };
-    let dump: Vec<Value> = named
-        .into_iter()
-        .map(|(name, ops)| {
-            let failure = run(&ops, Mutant::None);
-            json!({
-                "name": name,
-                "ops": ops.iter().map(|op| op_json(*op)).collect::<Vec<_>>(),
-                "rust": failure.map_or_else(|| "ok".to_owned(), |failure| format!("[{}] {}", failure.class, failure.message)),
-                "observations": observations(&ops),
-            })
-        })
-        .collect();
-    std::fs::write(path, serde_json::to_string(&dump).unwrap()).unwrap();
 }
