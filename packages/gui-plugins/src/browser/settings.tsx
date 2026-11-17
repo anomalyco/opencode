@@ -23,6 +23,8 @@ export default function BrowserSettings() {
   const preferences = ctx.stores.preferences
   // How each browser's import ended, by choice, kept while the page is open so every row keeps its own answer.
   const [results, setResults] = createSignal<ReadonlyMap<string, JobMessage>>(new Map())
+  // The cookie-file import is for developers: it waits behind a disclosure, closed until the person opens it.
+  const [developers, setDevelopers] = createSignal(false)
 
   const jobs = createProfileJobs({
     cookies: true,
@@ -166,23 +168,38 @@ export default function BrowserSettings() {
           // Settings search reaches the import section before main lists the browsers.
           id={jobs.sourcesLoaded() ? undefined : "settings-browser-import"}
           title={
-            <Identity
-              fallback="file-document"
-              name={ctx.t("settings.import.file.title")}
-              detail={ctx.t("settings.import.file.description")}
-              message={fileMessage()}
-            />
+            <button
+              type="button"
+              aria-expanded={developers()}
+              class="flex items-center gap-1 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted"
+              onClick={() => setDevelopers((open) => !open)}
+            >
+              <ui.Icon name={developers() ? "outline-chevron-down" : "outline-chevron-right"} />
+              {ctx.t("settings.developers")}
+            </button>
           }
-        >
-          <ui.Button
-            size="small"
-            disabled={blocked() || unsaved() || !desktop}
-            busy={jobs.running()?.type === "import-file"}
-            onClick={() => void pickFile()}
+        />
+        <Show when={developers()}>
+          <ui.SettingsRow
+            title={
+              <Identity
+                fallback="file-document"
+                name={ctx.t("settings.import.file.title")}
+                detail={ctx.t("settings.import.file.description")}
+                message={fileMessage()}
+              />
+            }
           >
-            {ctx.t("settings.import.file.action")}
-          </ui.Button>
-        </ui.SettingsRow>
+            <ui.Button
+              size="small"
+              disabled={blocked() || unsaved() || !desktop}
+              busy={jobs.running()?.type === "import-file"}
+              onClick={() => void pickFile()}
+            >
+              {ctx.t("settings.import.file.action")}
+            </ui.Button>
+          </ui.SettingsRow>
+        </Show>
       </ui.SettingsSection>
       <ui.SettingsSection
         title={ctx.t("settings.extensions.title")}
@@ -259,7 +276,7 @@ function SitePermissionsSection() {
   const decisions = () => client()?.state()?.decisions ?? []
   // The end of a long host is the site's own domain: shown whole, wrapping, never cut off at the end.
   const site = (origin: string) => displayHost(origin) || origin
-  const failed = () => showToast({ title: ctx.t("common.requestFailed") })
+  const failed = () => showToast({ title: ctx.t("settings.sites.failed") })
 
   return (
     <ui.SettingsSection
@@ -372,8 +389,9 @@ function ExtensionRow(props: {
 }
 
 /**
- * The Add an extension dialog: a store link, the extensions another Chromium browser has, or an unpacked folder. It
- * runs its own jobs, so it keeps working whichever page opened it, and stays open to add several.
+ * The Add an extension dialog: a store link, or the extensions another Chromium browser has. Loading one from a folder
+ * of its source files is for people who build extensions, so it waits in a closed "For developers" disclosure at the
+ * end. The dialog runs its own jobs, so it keeps working whichever page opened it, and stays open to add several.
  */
 function AddExtension(props: { sources: readonly ProfileSource[]; close: () => void }) {
   const ctx = usePlugin<typeof definition>()
@@ -443,23 +461,14 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
       description={ctx.t("settings.extensions.dialog.description")}
       size={choices().length > 0 ? "normal" : "fit"}
       footer={
-        <>
-          <ui.Button
-            variant="ghost"
-            disabled={blocked() || !desktop}
-            busy={jobs.running()?.type === "install-folder"}
-            onClick={() => void pickFolder()}
-          >
-            {ctx.t("settings.extensions.folder.action")}
-          </ui.Button>
-          <ui.Button variant="contrast" onClick={props.close}>
-            {ctx.t("settings.extensions.done")}
-          </ui.Button>
-        </>
+        <ui.Button variant="contrast" onClick={props.close}>
+          {ctx.t("settings.extensions.done")}
+        </ui.Button>
       }
     >
-      <div class="flex flex-col gap-4 pb-1">
-        <div class="flex items-center gap-2">
+      {/* The link and the developers' disclosure keep their place; what is between them scrolls when it is long. */}
+      <div class="flex h-full min-h-0 flex-col gap-4 pb-1">
+        <div class="flex shrink-0 items-center gap-2">
           <ui.TextInput
             label={ctx.t("settings.extensions.store.label")}
             placeholder={ctx.t("settings.extensions.store.placeholder")}
@@ -480,6 +489,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
             {ctx.t("settings.extensions.add")}
           </ui.Button>
         </div>
+        <div data-scrollable class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <Show when={jobs.describe(jobs.last())}>
           {(message) => (
             <div
@@ -590,6 +600,24 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
             </div>
           )}
         </Show>
+        </div>
+        <details class="shrink-0 text-v2-text-text-muted">
+          <summary class="w-fit cursor-pointer text-[13px] leading-[var(--line-height-base)]">{ctx.t("settings.developers")}</summary>
+          <div class="mt-2 flex items-center gap-3">
+            <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">
+              {ctx.t("settings.extensions.folder.description")}
+            </p>
+            <ui.Button
+              size="small"
+              variant="neutral"
+              disabled={blocked() || !desktop}
+              busy={jobs.running()?.type === "install-folder"}
+              onClick={() => void pickFolder()}
+            >
+              {ctx.t("settings.extensions.folder.action")}
+            </ui.Button>
+          </div>
+        </details>
       </div>
     </ui.Dialog>
   )
