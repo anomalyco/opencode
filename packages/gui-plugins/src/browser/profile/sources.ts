@@ -50,9 +50,14 @@ type Definition = {
   readonly flat?: boolean
 }
 
+// HOME first, as Node reads it: Bun's homedir() keeps the home the process started with on Linux and macOS.
+function userHome() {
+  return (process.platform !== "win32" && process.env.HOME) || homedir()
+}
+
 /** Every browser this desktop can import from, with its data directory on this system. */
 function definitions(): Definition[] {
-  const home = homedir()
+  const home = userHome()
 
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local")
@@ -163,7 +168,7 @@ export async function listSources(): Promise<Source[]> {
  * has no single file that carries the icon.
  */
 function applications(id: string) {
-  const home = homedir()
+  const home = userHome()
 
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local")
