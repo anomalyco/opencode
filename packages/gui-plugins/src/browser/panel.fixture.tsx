@@ -1579,14 +1579,6 @@ export function mountBrowserRegion(input: RegionHost) {
 
                   if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: true } }))
                 }}>Agent show request</button>
-                <button onClick={() => {
-                  const binding = latest()?.binding
-
-                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "prompt", tabID, prompt: {
-                    id: 1, waiting: 1, focus: false, asked: 1, page: false,
-                    ask: { kind: "dialog", dialog: "confirm", site: { kind: "web", host: "beta.example", embedded: false }, message: "Leave?", value: "", stop: true },
-                  } } }))
-                }}>Page prompt</button>
                 <output>Plugin closed: {apiResult()}</output>
               <button
                 onClick={() => {
