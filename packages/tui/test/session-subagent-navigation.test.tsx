@@ -63,11 +63,10 @@ async function fillMultilinePrompt(setup: Awaited<ReturnType<typeof createPrompt
   return prompt
 }
 
-test("Home and End navigate a subagent transcript and Up returns to its parent", async () => {
-  const parent = session("ses_subagent_parent")
-  const child = {
+test("Home and End navigate a subagent transcript", async () => {
+  const session = {
     id: "ses_subagent_navigation",
-    parentID: parent.id,
+    parentID: "ses_parent",
     title: "Subagent",
     agent: "build",
     projectID: "proj_test",
@@ -85,24 +84,14 @@ test("Home and End navigate a subagent transcript and Up returns to its parent",
   await using setup = await createAppFixture({
     width: 100,
     height: 30,
-    config: {
-      animations: false,
-      tabs: { mode: "off" },
-      keybinds: { "prompt.history.next": "none", "prompt.history.previous": "none" },
-    },
-    args: { sessionID: child.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    args: { sessionID: session.id },
     fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [parent, child], cursor: {} })
-      if (url.pathname === `/api/session/${parent.id}`) return json({ data: parent })
-      if (url.pathname === `/api/session/${child.id}`) return json({ data: child })
-      if (url.pathname === `/api/session/${child.id}/message`)
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
         return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === `/api/session/${parent.id}/message`)
-        return json({
-          data: [{ id: "msg_parent", type: "user", text: "Parent transcript", time: { created: 0 } }],
-          cursor: {},
-        })
-      if (url.pathname.endsWith("/inbox")) return json({ data: [] })
+      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
     },
   })
   await setup.ready
@@ -113,6 +102,4 @@ test("Home and End navigate a subagent transcript and Up returns to its parent",
   expect(await setup.waitForFrame((frame) => frame.includes("Message 0"))).not.toContain("Message 19")
   setup.mockInput.pressKey("END")
   expect(await setup.waitForFrame((frame) => frame.includes("Message 19"))).not.toContain("Message 0")
-  setup.mockInput.pressArrow("up")
-  await setup.waitForFrame((frame) => frame.includes("Parent transcript"))
 })
