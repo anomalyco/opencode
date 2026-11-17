@@ -59,10 +59,30 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
     return { endpoint, service: managedService(options) } satisfies Resolved
   }
-  return {
-    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
-    service: managedService(options),
-  } satisfies Resolved
+  // Service.ensure waits minutes for a registered service that stopped answering; say so instead of leaving the
+  // terminal blank. Once it starts a server, onStart reports progress and the update screen may own the terminal.
+  let started = false
+  const endpoint = yield* Effect.raceFirst(
+    resolveManaged(
+      {
+        ...options,
+        onStart: (reason, previousVersion) => {
+          started = true
+          args.onStart?.(reason, previousVersion)
+        },
+      },
+      mismatch,
+    ),
+    Effect.sleep("5 seconds").pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          if (!started) process.stderr.write("Waiting for the background server to respond...\n")
+        }),
+      ),
+      Effect.andThen(Effect.never),
+    ),
+  )
+  return { endpoint, service: managedService(options) } satisfies Resolved
 })
 
 function managedService(options: EnsureOptions) {
