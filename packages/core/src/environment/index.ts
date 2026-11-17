@@ -8,6 +8,7 @@ export {
   type FileInfo,
   type Files,
   type FilesImpl,
+  type FilesystemInfo,
   type FileType,
   NotFound,
   typeFollowing,
