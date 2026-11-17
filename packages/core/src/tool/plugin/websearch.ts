@@ -5,6 +5,9 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/http"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
@@ -39,12 +42,15 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const websearch = yield* WebSearch.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled },
           description,
           input: Input,
           output: Output,

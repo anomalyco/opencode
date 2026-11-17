@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
 import type { HttpClientError } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"
 import { KV } from "@opencode/core/kv"
@@ -38,7 +40,7 @@ const webSearchToolNode = makeLocationNode({
       })
     }),
   ),
-  deps: [Tool.node, Permission.node, WebSearch.node, Form.node],
+  deps: [Tool.node, Permission.node, WebSearch.node, Form.node, Config.node, Flag.node],
 })
 
 const sessionID = Session.ID.make("ses_websearch_test")
