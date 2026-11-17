@@ -40,6 +40,15 @@ export default defineApp({
       masks: [{ x: 36, y: 18, width: 70, height: 1, reason: "the placeholder example: random in TS and Rust" }],
     },
     { type: "/files" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the home screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    {
+      checkpoint: "slash",
+      until: "Browse, preview, edit",
+      // TS's list also shows the plugin's slash aliases (`/update-files`), which widen its name column; the contract's
+      // command has one slash name, so the host lists the names alone.
+      deviation: [{ file: "F16-v2-compat-layer", cells: 249 }],
+    },
     { keys: ["enter"] },
     { checkpoint: "browser", until: "tsconfig.json", deviation },
     { keys: ["down"] },

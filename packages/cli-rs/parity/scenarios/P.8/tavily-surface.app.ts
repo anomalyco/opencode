@@ -29,6 +29,9 @@ export default defineApp({
   steps: [
     { checkpoint: "session", until: "Searched." },
     { type: "/tavily" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the home screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    { checkpoint: "slash", until: "Show Tavily" },
     { keys: ["enter"] },
     { checkpoint: "status", until: "no such RPC" },
   ],

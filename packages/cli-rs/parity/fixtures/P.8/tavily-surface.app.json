@@ -25,6 +25,7 @@
  "steps": [
   {"checkpoint":"session","until":"Searched.","fixture":"P.8/tavily-surface/session"},
   {"type":"/tavily"},
+  {"checkpoint":"slash","until":"Show Tavily","fixture":"P.8/tavily-surface/slash"},
   {"keys":["enter"]},
   {"checkpoint":"status","until":"no such RPC","fixture":"P.8/tavily-surface/status"}
  ],

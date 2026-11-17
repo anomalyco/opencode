@@ -48,6 +48,9 @@ export default defineApp({
   steps: [
     { checkpoint: "sidebar", until: "Open full prompt" },
     { type: "/lastprompt" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the home screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    { checkpoint: "slash", until: "Show full last prompt" },
     { keys: ["enter"] },
     { checkpoint: "dialog", until: "Esc · Close" },
   ],
