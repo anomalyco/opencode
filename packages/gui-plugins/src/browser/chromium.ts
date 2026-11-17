@@ -32,6 +32,7 @@ import {
   frameStillCurrent,
   isDocumentClosed,
   isNavigationPending,
+  leftApprovedSite,
   retryOnly,
   transitionDocument,
   type DocumentEvent,
@@ -1442,7 +1443,7 @@ export function createBrowserPage(
   }
 
   async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", saved?: string): Promise<Browser.Result> {
-    if (command.expectedSite && destinationOrigin(contents.mainFrame.url) !== command.expectedSite)
+    if (leftApprovedSite(documentState, command.action.type, command.expectedSite, contents.mainFrame.url))
       throw new Error("The tab is no longer at the approved site; request the action again.")
 
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
@@ -1532,7 +1533,8 @@ export function createBrowserPage(
 
         if (action.type !== "stop") await waitFor(() => !contents.isLoading(), signal, 30_000)
 
-        return result(state())
+        // As the inventory reports the tab: an address kept for a load that was never issued stays its address.
+        return result(state(true))
       }
 
       case "frames":
