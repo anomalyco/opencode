@@ -3,10 +3,28 @@ import type { Protocol } from "devtools-protocol"
 import { readableField } from "./field-value"
 import { accessibilitySnapshot } from "./snapshot"
 
-const plain = { type: "text", autocomplete: "", labels: [], masked: false }
+const plain = { type: "text", autocomplete: "", labels: [], masked: false, maxLength: -1, toggles: [] }
 
 const fields = [
   ["email address", "shown", { ...plain, type: "email" }, "Email", "ada@example.com"],
+  ["max tokens", "shown", { ...plain, type: "number", labels: ["maxTokens"] }, "Max tokens", "4096"],
+  ["username in a form whose Show password button is not its own", "shown", { ...plain, labels: ["username"] }, "Username", "ada"],
+  ["API key", "hidden", plain, "API key", "sk-1"],
+  ["API key by an acronym id", "hidden", { ...plain, labels: ["APIKey"] }, "", "sk-1"],
+  ["private key", "hidden", plain, "Private key", "-----BEGIN"],
+  ["access key named api_key", "hidden", { ...plain, labels: ["api_key"] }, "Access key", "AKIA1"],
+  ["access token", "hidden", { ...plain, labels: ["accessToken"] }, "", "t1"],
+  ["verification code", "hidden", plain, "Verification code", "123456"],
+  ["security code", "hidden", plain, "Security code", "123"],
+  ["recovery code", "hidden", plain, "Recovery code", "abcd-efgh"],
+  ["backup code", "hidden", plain, "Backup code", "abcd-efgh"],
+  ["2FA", "hidden", plain, "2FA", "123456"],
+  ["TOTP", "hidden", { ...plain, labels: ["totp"] }, "", "123456"],
+  ["MFA", "hidden", plain, "MFA code", "123456"],
+  ["split one-time code, text box", "hidden", { ...plain, maxLength: 1 }, "Digit 1", "4"],
+  ["split one-time code, tel box", "hidden", { ...plain, type: "tel", maxLength: 1 }, "", "4"],
+  ["split one-time code, number box", "hidden", { ...plain, type: "number", maxLength: 1 }, "", "4"],
+  ["revealed password beside Hide password", "hidden", { ...plain, labels: ["field_2"], toggles: ["Hide password"] }, "", "hunter2"],
   ["search box", "shown", { ...plain, type: "search", labels: ["q", "Search pinned items"] }, "Search", "kittens"],
   ["rich text editor", "shown", { ...plain, type: "" }, "Message body", "Dear Ada"],
   ["empty field", "omitted", plain, "Notes", ""],
