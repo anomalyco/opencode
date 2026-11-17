@@ -10,6 +10,7 @@ pub mod iterator;
 mod numfmt;
 mod object;
 pub mod regexp;
+mod regexp_syntax;
 mod sets;
 mod string;
 mod uri;

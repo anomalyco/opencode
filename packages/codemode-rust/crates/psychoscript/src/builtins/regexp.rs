@@ -5,6 +5,7 @@
 //! non-unicode patterns see code units exactly as JavaScript does.
 
 use super::arg;
+use super::regexp_syntax::{self, Mode};
 use crate::object::*;
 use crate::ops::{MAX_ARRAY_LEN, MAX_STRING_LEN};
 use crate::strings::StrId;
@@ -70,7 +71,19 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
         unicode_sets: seen[6],
         ..Default::default()
     };
-    let expanded = rewrite_named_refs(pattern, rflags.unicode_sets)?;
+    let mode = if rflags.unicode_sets {
+        Mode::UnicodeSets
+    } else if rflags.unicode {
+        Mode::Unicode
+    } else {
+        Mode::Legacy
+    };
+    if let Some(code) =
+        regexp_syntax::check(&crate::strings::units_of(pattern), mode, &EngineUnicode)
+    {
+        return Err(CompileError::Pattern(code.message().into()));
+    }
+    let expanded = rewrite_named_refs(pattern, rflags.unicode_sets);
     let pattern = expanded.as_deref().unwrap_or(pattern);
     // Without the unicode flags a pattern is code units, like the text it matches.
     // A carrier pattern holds lone surrogates, which only code points can pass on.
@@ -95,19 +108,17 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
     }
 }
 
-/// What a pattern holds that `regress` gets wrong around `\\k`: its named groups (name and capture index), its
-/// `\\k<name>` references outside classes (span and name), and whether a class contains `\\k`.
+/// A pattern's named groups (name and capture index) and its `\\k<name>` references outside classes (span and
+/// name).
 struct NamedRefs {
     groups: Vec<(String, usize)>,
     refs: Vec<(usize, usize, String)>,
-    k_in_class: bool,
 }
 
 fn scan_named_refs(chars: &[char], nested_classes: bool) -> NamedRefs {
     let mut found = NamedRefs {
         groups: Vec::new(),
         refs: Vec::new(),
-        k_in_class: false,
     };
     let (mut i, mut depth, mut count) = (0, 0usize, 0usize);
     let name_at = |from: usize| {
@@ -120,14 +131,12 @@ fn scan_named_refs(chars: &[char], nested_classes: bool) -> NamedRefs {
     while i < chars.len() {
         match chars[i] {
             '\\' => {
-                if chars.get(i + 1) == Some(&'k') {
-                    if depth > 0 {
-                        found.k_in_class = true;
-                    } else if chars.get(i + 2) == Some(&'<')
-                        && let Some((end, name)) = name_at(i + 3)
-                    {
-                        found.refs.push((i, end + 1, name));
-                    }
+                if chars.get(i + 1) == Some(&'k')
+                    && depth == 0
+                    && chars.get(i + 2) == Some(&'<')
+                    && let Some((end, name)) = name_at(i + 3)
+                {
+                    found.refs.push((i, end + 1, name));
                 }
                 i += 2;
                 continue;
@@ -152,23 +161,17 @@ fn scan_named_refs(chars: &[char], nested_classes: bool) -> NamedRefs {
     found
 }
 
-/// Fixes up `\\k` before `regress` sees the pattern. With named groups, `\\k` inside a class is a syntax error,
-/// which `regress` accepts. And `regress` binds `\\k<name>` to the first group of that name only: when a name is
-/// duplicated at most one of its groups participates, and a reference to a group that did not participate matches
-/// empty, so the reference becomes the sequence of back-references to every group of that name, `(?:\\1\\2)`.
-fn rewrite_named_refs(pattern: &str, nested_classes: bool) -> Result<Option<String>, CompileError> {
+/// `regress` binds `\\k<name>` to the first group of that name only. When a name is duplicated at most one of its
+/// groups participates, and a reference to a group that did not participate matches empty, so the reference
+/// becomes the sequence of back-references to every group of that name, `(?:\\1\\2)`.
+fn rewrite_named_refs(pattern: &str, nested_classes: bool) -> Option<String> {
     if !pattern.contains("\\k") {
-        return Ok(None);
+        return None;
     }
     let chars: Vec<char> = pattern.chars().collect();
     let found = scan_named_refs(&chars, nested_classes);
     if found.groups.is_empty() {
-        return Ok(None);
-    }
-    if found.k_in_class {
-        return Err(CompileError::Pattern(
-            "invalid \\k<> named backreference".into(),
-        ));
+        return None;
     }
     let indexes = |name: &str| -> Vec<usize> {
         found
@@ -194,10 +197,48 @@ fn rewrite_named_refs(pattern: &str, nested_classes: bool) -> Result<Option<Stri
         last = *end;
     }
     if last == 0 {
-        return Ok(None);
+        return None;
     }
     out.extend(&chars[last..]);
-    Ok(Some(out))
+    Some(out)
+}
+
+/// The Unicode facts the syntax check needs, from `regress`, which runs the pattern.
+struct EngineUnicode;
+
+impl regexp_syntax::Unicode for EngineUnicode {
+    fn property(&self, expression: &str, mode: Mode) -> Option<bool> {
+        const STRINGS: [&str; 7] = [
+            "Basic_Emoji",
+            "Emoji_Keycap_Sequence",
+            "RGI_Emoji_Modifier_Sequence",
+            "RGI_Emoji_Flag_Sequence",
+            "RGI_Emoji_Tag_Sequence",
+            "RGI_Emoji_ZWJ_Sequence",
+            "RGI_Emoji",
+        ];
+        let flags = regress::Flags {
+            unicode: mode == Mode::Unicode,
+            unicode_sets: mode == Mode::UnicodeSets,
+            ..Default::default()
+        };
+        regress::Regex::with_flags(&format!("\\p{{{expression}}}"), flags).ok()?;
+        Some(mode == Mode::UnicodeSets && STRINGS.contains(&expression))
+    }
+
+    fn identifier(&self, ch: u32, start: bool) -> bool {
+        static START: std::sync::LazyLock<Option<regress::Regex>> =
+            std::sync::LazyLock::new(|| regress::Regex::with_flags("^\\p{L}$", "u").ok());
+        static PART: std::sync::LazyLock<Option<regress::Regex>> = std::sync::LazyLock::new(|| {
+            regress::Regex::with_flags("^[\\p{L}\\p{Mn}\\p{Mc}\\p{Nd}\\p{Pc}]$", "u").ok()
+        });
+        let Some(c) = char::from_u32(ch) else {
+            return false;
+        };
+        let re = if start { &*START } else { &*PART };
+        re.as_ref()
+            .is_some_and(|r| r.find(c.encode_utf8(&mut [0; 4])).is_some())
+    }
 }
 
 /// The source as `RegExp.prototype.source` spells it: `/` and line terminators escaped outside classes.
