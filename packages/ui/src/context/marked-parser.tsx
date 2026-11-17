@@ -16,6 +16,7 @@ const decoder = new TextDecoder()
 // The class keeps the fence's own language, even one without a lexer, so the viewer can label it and render Mermaid.
 function codeExtension(render: (html: string, block: boolean) => string): MarkedExtension {
   const base = new Renderer()
+
   return {
     renderer: {
       checkbox(token) {

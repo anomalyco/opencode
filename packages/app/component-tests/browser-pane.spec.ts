@@ -107,10 +107,10 @@ story("accepts an assistive activation of the focused link, not a synthetic or u
     window.addEventListener(
       "keydown",
       (event) => {
-        if (event.key !== "Enter" || !("assistive" in window)) return
+        if (event.key !== "Enter" || !document.body.dataset.assistive) return
         event.stopImmediatePropagation()
 
-        if (Reflect.get(window, "assistive") === "unfocused") row.querySelectorAll("a")[1]?.focus()
+        if (document.body.dataset.assistive === "unfocused") row.querySelectorAll("a")[1]?.focus()
       },
       true,
     )
@@ -119,12 +119,12 @@ story("accepts an assistive activation of the focused link, not a synthetic or u
   const link = page.getByRole("link", { name: "Assistive link" })
   await link.focus()
   await link.evaluate((node) => node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 })))
-  await page.evaluate(() => Object.assign(window, { assistive: "unfocused" }))
+  await page.evaluate(() => { document.body.dataset.assistive = "unfocused" })
   await link.focus()
   await page.keyboard.press("Enter")
   await expect(page.getByRole("link", { name: "Other" })).toBeFocused()
   await expect(pane.getByText(url)).toHaveCount(0)
-  await page.evaluate(() => Object.assign(window, { assistive: "focused" }))
+  await page.evaluate(() => { document.body.dataset.assistive = "focused" })
   await link.focus()
   await page.keyboard.press("Enter")
   await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
@@ -211,11 +211,13 @@ story("stops measuring the pane once a finite animation ends or is cancelled", a
 
       return rect()
     }
+
     const frames = (n: number) =>
       new Promise<void>((resolve) => {
         const step = (left: number) => (left ? requestAnimationFrame(() => step(left - 1)) : resolve())
         step(n)
       })
+
     const idle = async () => {
       const before = count.reads
       await frames(10)
@@ -250,6 +252,7 @@ story("does not measure when the pane's own still enters or leaves its box", asy
 
       return rect()
     }
+
     const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const still = document.createElement("div")
     still.className = "absolute inset-0 pointer-events-none"
@@ -267,6 +270,7 @@ story("does not measure when the pane's own still enters or leaves its box", asy
 story("hides the page when a portalled surface grows over it by a text edit alone", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   await page.emulateMedia({ reducedMotion: "reduce" })
+
   const text = await page.locator("#browser-panel").evaluateHandle((panel) => {
     const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
     // A portal's wrapper keeps its size while the fixed surface inside it grows, as a toast region's does.
@@ -281,6 +285,7 @@ story("hides the page when a portalled surface grows over it by a text edit alon
 
     return text
   })
+
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await expect(native).toHaveAttribute("data-visible", "true")
   await text.evaluate((node) => { node.data = "x".repeat(400) })
@@ -289,6 +294,7 @@ story("hides the page when a portalled surface grows over it by a text edit alon
 
 story("covers the page with unmarked portalled surfaces but not tooltips or transparent wrappers", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
+
   const portal = await page.locator("#browser-panel").evaluateHandle((panel) => {
     const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
     const box = `position:fixed; top:${pane.top + 8}px; left:${pane.left + 8}px; width:120px; height:60px`
@@ -302,6 +308,7 @@ story("covers the page with unmarked portalled surfaces but not tooltips or tran
 
     return { surface, wrapper }
   })
+
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await expect(native).toHaveAttribute("data-visible", "true")
   await portal.evaluate(({ surface }) => document.body.append(surface))
@@ -607,12 +614,15 @@ story("covers the page with its warm still only once the capture is back, and th
   await popover.click()
   await expect(native).toHaveAttribute("data-visible", "false")
   await expect(still).toHaveCount(1)
+
   const frames = await popover.evaluate(async (button) => {
     const samples: [string | null, number][] = []
-    const read = () => [
+
+    const read = (): [string | null, number] => [
       document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible") ?? null,
       document.querySelectorAll("#browser-panel img").length,
-    ] as [string | null, number]
+    ]
+
     button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     await new Promise<void>((resolve) => {
       const step = () => {
@@ -621,6 +631,7 @@ story("covers the page with its warm still only once the capture is back, and th
         if (samples.length < 60 && (samples.at(-1)?.[1] ?? 0) > 0) return requestAnimationFrame(step)
         resolve()
       }
+
       requestAnimationFrame(step)
     })
 

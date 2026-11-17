@@ -24,6 +24,7 @@ export function externalTarget(value: string, source: "conversation" | "page" = 
 
   if (source === "conversation") {
     if (scheme === "obsidian" && !/^\/\/(?:open|search)(?:\?|$)/.test(value.slice(scheme.length + 1))) return "copy"
+
     if (scheme === "mailto" && Array.from(parsed.searchParams.keys()).some(key => /^(?:attach|attachment)$/i.test(key))) return "copy"
   }
 

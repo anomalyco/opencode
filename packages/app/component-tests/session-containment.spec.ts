@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./session-containment.fixture.tsx", import.meta.url))
@@ -36,7 +36,7 @@ for (const delivery of ["text", "tool"] as const) {
   })
 }
 
-async function open(page: Page, mount: (id: string) => Promise<unknown>, markup: string, delivery: "text" | "tool") {
+async function open(page: Page, mount: (id: string) => Promise<Locator>, markup: string, delivery: "text" | "tool") {
   await page.route("https://example.invalid/**", (route) =>
     route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=", "base64") }),
   )
@@ -65,11 +65,11 @@ async function message(page: Page, delivery: "text" | "tool") {
 }
 
 // A person clicks whatever the message offers, as the cover recipes require.
-async function press(root: ReturnType<Page["locator"]>) {
+async function press(root: Locator) {
   for (const button of await root.locator("button").all()) await button.click({ force: true, timeout: 2_000 }).catch(() => undefined)
 }
 
-async function expectContained(page: Page, root: ReturnType<Page["locator"]>, delivery: "text" | "tool") {
+async function expectContained(page: Page, root: Locator, delivery: "text" | "tool") {
   const host = page.getByTestId("containment-fixture")
   const dock = await frontmost(page, host.getByRole("button", { name: "Allow once" }))
   const contained = await layout(page, root)
@@ -91,7 +91,7 @@ async function expectContained(page: Page, root: ReturnType<Page["locator"]>, de
 }
 
 // Whether hit testing at the control's centre reaches the control first.
-async function frontmost(page: Page, control: ReturnType<Page["locator"]>) {
+async function frontmost(page: Page, control: Locator) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   const box = await control.boundingBox()
 
@@ -104,7 +104,7 @@ async function frontmost(page: Page, control: ReturnType<Page["locator"]>) {
 }
 
 // Descendants painted outside the message, and message content in the top layer.
-async function layout(page: Page, root: ReturnType<Page["locator"]>) {
+async function layout(page: Page, root: Locator) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 
   return root.evaluate((message) => {

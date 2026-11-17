@@ -24,6 +24,7 @@ export function mountContainment(markup: string, delivery: "text" | "tool") {
   if (!user || assistant?.type !== "assistant") throw new Error("The permission document changed shape.")
   const created = assistant.time.created
   const text: SessionMessageAssistantText = { type: "text", text: markup }
+
   const tool: SessionMessageAssistantTool = {
     type: "tool",
     id: "tool_containment_list",
@@ -31,6 +32,7 @@ export function mountContainment(markup: string, delivery: "text" | "tool") {
     state: { status: "completed", input: { path: "." }, content: [{ type: "text", text: markup }] },
     time: { created: created + 10, ran: created + 20, completed: created + 30 },
   }
+
   const history = {
     ...permissionPendingDocument,
     messages: [user, { ...assistant, content: [delivery === "text" ? text : tool, ...assistant.content] }],
