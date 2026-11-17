@@ -532,6 +532,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const fake = {
       ...base,
+      app: { name: "opencode", version: "", channel: "dev", platform: "desktop", packaged: false },
       use: () => live,
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },

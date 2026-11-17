@@ -64,6 +64,7 @@ import { ViewportControls } from "./viewport-controls"
 import {
   initialViewportToolbar,
   transitionViewportToolbar,
+  viewportToolbarAvailable,
   viewportToolbarView,
   type ViewportToolbarEvent,
 } from "./viewport-toolbar-machine"
@@ -843,34 +844,36 @@ export default function SessionBrowserPane(props: {
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
-          <Tooltip
-            placement="top"
-            value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
-          >
-            <IconButton
-              ref={toolbarToggle}
-              variant="ghost-muted"
-              size="large"
-              classList={{ "!outline-none": pointerFocusedToggle() }}
-              onPointerDown={() => setPointerFocusedToggle(true)}
-              onBlur={() => setPointerFocusedToggle(false)}
-              onKeyDown={() => setPointerFocusedToggle(false)}
-              aria-label={plugin.t("command.toggleToolbar")}
-              aria-expanded={toolbarVisible()}
-              aria-controls={toolbarVisible() ? viewportID : undefined}
-              disabled={!inspectable()}
-              state={toolbarVisible() ? "pressed" : undefined}
-              onClick={toggleToolbar}
-              icon={
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path
-                    d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
-                    stroke="currentColor"
-                  />
-                </svg>
-              }
-            />
-          </Tooltip>
+          <Show when={viewportToolbarAvailable(plugin.app.channel)}>
+            <Tooltip
+              placement="top"
+              value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
+            >
+              <IconButton
+                ref={toolbarToggle}
+                variant="ghost-muted"
+                size="large"
+                classList={{ "!outline-none": pointerFocusedToggle() }}
+                onPointerDown={() => setPointerFocusedToggle(true)}
+                onBlur={() => setPointerFocusedToggle(false)}
+                onKeyDown={() => setPointerFocusedToggle(false)}
+                aria-label={plugin.t("command.toggleToolbar")}
+                aria-expanded={toolbarVisible()}
+                aria-controls={toolbarVisible() ? viewportID : undefined}
+                disabled={!inspectable()}
+                state={toolbarVisible() ? "pressed" : undefined}
+                onClick={toggleToolbar}
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
+                      stroke="currentColor"
+                    />
+                  </svg>
+                }
+              />
+            </Tooltip>
+          </Show>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger

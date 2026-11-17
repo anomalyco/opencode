@@ -2,7 +2,12 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import { PaneEvent, type Viewport } from "./ipc"
-import { initialViewportToolbar, transitionViewportToolbar, viewportToolbarView } from "./viewport-toolbar-machine"
+import {
+  initialViewportToolbar,
+  transitionViewportToolbar,
+  viewportToolbarAvailable,
+  viewportToolbarView,
+} from "./viewport-toolbar-machine"
 
 const target = { sessionKey: "alpha", tabID: Browser.TabID.make("tab_11111111-1111-1111-1111-111111111111") }
 
@@ -63,4 +68,11 @@ test("a failed close follows the actual page size and only notifies the visit th
   expect(transitionViewportToolbar(disposed, { type: "failed", attempt: 1, context: fixed })).toEqual({
     state: disposed,
   })
+})
+
+test("offers the toolbar only in local and dev builds", () => {
+  expect(viewportToolbarAvailable("local")).toBe(true)
+  expect(viewportToolbarAvailable("dev")).toBe(true)
+  expect(viewportToolbarAvailable("beta")).toBe(false)
+  expect(viewportToolbarAvailable("prod")).toBe(false)
 })

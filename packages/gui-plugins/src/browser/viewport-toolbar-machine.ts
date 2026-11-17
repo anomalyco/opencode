@@ -1,3 +1,4 @@
+import type { App } from "@opencode/plugin/gui"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { PageEvent } from "./connection"
 
@@ -21,6 +22,11 @@ type Effect = { type: "toggle"; attempt: number; target: Target; open: boolean }
 type Transition = { state: ViewportToolbarState; effect?: Effect }
 
 export const initialViewportToolbar: ViewportToolbarState = { status: "following", attempt: 0 }
+
+/** Device previews are unreleased: only local and dev builds offer the toolbar. */
+export function viewportToolbarAvailable(channel: App["channel"]) {
+  return channel === "local" || channel === "dev"
+}
 
 export function viewportToolbarView(state: ViewportToolbarState, context: Context) {
   if (state.status === "disposed") return { visible: false, notice: undefined }

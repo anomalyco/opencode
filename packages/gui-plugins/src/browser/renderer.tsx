@@ -28,6 +28,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
@@ -166,7 +167,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
 
-    if (!pane) return undefined
+    if (!pane || !viewportToolbarAvailable(ctx.app.channel)) return undefined
 
     return {
       id: "toggleToolbar",
