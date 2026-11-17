@@ -4,6 +4,7 @@ import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
+import { WorkStepsSettings } from "@/settings/work-steps"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -345,6 +346,9 @@ export const SettingsGeneral: Component = () => {
                 onChange={settings.general.setTimelineDetail}
               />
             </div>
+            <Show when={settings.general.workStepsEnabled()}>
+              <WorkStepsSettings />
+            </Show>
             <TimelineWidthSetting />
             <BackgroundActivitySetting />
             <SettingsRow

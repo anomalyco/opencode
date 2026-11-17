@@ -422,6 +422,7 @@ export type ContextGroupPart =
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
   busy: boolean
+  detail?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSizeChange?: () => void
@@ -612,7 +613,10 @@ export function CurrentContextToolGroup(props: {
         open={props.open}
         onOpenChange={change}
         trigger={
-          <div data-component="context-tool-group-trigger" aria-label={label().text}>
+          <div
+            data-component="context-tool-group-trigger"
+            aria-label={[label().text, props.detail].filter(Boolean).join(" · ")}
+          >
             <span data-slot="context-tool-group-title">
               <Show when={label().before || label().count || label().between}>
                 <span data-slot="context-tool-group-usage">
@@ -641,6 +645,9 @@ export function CurrentContextToolGroup(props: {
                 )}
               </Show>
               <Show when={elapsed()}>{(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}</Show>
+              <Show when={props.detail}>
+                {(value) => <span data-slot="context-tool-group-detail-preview">{value()}</span>}
+              </Show>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>

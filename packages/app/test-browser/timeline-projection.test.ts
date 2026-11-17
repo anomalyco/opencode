@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -9,6 +10,9 @@ import {
   TimelineRow,
   type ReasoningMode,
 } from "@opencode/session-ui/timeline/projection"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
+import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next"
+import type { WorkSteps } from "../src/settings/model"
 import { createTimelineProjection } from "../src/session/timeline/projection"
 
 const assistant = (id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
@@ -18,6 +22,103 @@ const assistant = (id: string, content: SessionMessageAssistant["content"]): Ses
   model: { id: "model", providerID: "provider" },
   time: { created: 2 },
   content,
+})
+
+const workSteps: WorkSteps = {
+  view: "standard",
+  collapseTiming: "completion",
+  foldedReplies: "all",
+}
+
+const workMessages: SessionMessageInfo[] = [
+  { id: "user", type: "user", text: "inspect", time: { created: 1 } },
+  {
+    ...assistant("response", [
+      { type: "reasoning", text: "Inspecting", time: { created: 2, completed: 3 } },
+      {
+        type: "tool",
+        id: "read-1",
+        name: "read",
+        state: { status: "completed", input: {}, content: [{ type: "text", text: "contents" }], metadata: {} },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        type: "tool",
+        id: "read-2",
+        name: "read",
+        state: { status: "completed", input: {}, content: [{ type: "text", text: "contents" }], metadata: {} },
+        time: { created: 2, completed: 3 },
+      },
+      { type: "text", text: "Done" },
+    ]),
+    time: { created: 2, completed: 4 },
+  },
+]
+
+type AssistantEntry = {
+  work: boolean
+  responseID?: string
+  refs: string[]
+}
+
+function assistantEntries(rows: readonly TimelineRow.TimelineRow[]): AssistantEntry[] {
+  return rows.flatMap((row) => {
+    if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+    if (row.group.type === "part") return [{ work: false, refs: [row.group.ref.partID] }]
+
+    return [
+      {
+        work: row.group.type === "context" && row.group.work !== undefined,
+        responseID: row.group.type === "context" ? row.group.work?.responseID : undefined,
+        refs: row.group.refs.map((ref) => ref.partID),
+      },
+    ]
+  })
+}
+
+const nativeWorkEntries: AssistantEntry[] = [
+  { work: false, refs: ["response:reasoning:0", "read-1", "read-2"] },
+  { work: false, refs: ["response:text:0"] },
+]
+
+const groupedWorkEntries: AssistantEntry[] = [
+  { work: true, responseID: "response", refs: ["response:reasoning:0", "read-1", "read-2"] },
+  { work: false, refs: ["response:text:0"] },
+]
+
+test("both timeline projections follow the work steps accessor live", () => {
+  createRoot((dispose) => {
+    const [state, setState] = createStore<{ workSteps?: WorkSteps }>({ workSteps })
+    const detail = timelinePresets.find((preset) => preset.id === "compact")!.value
+
+    const current = createTimelineProjection({
+      sessionMessages: () => workMessages,
+      status: () => ({ type: "idle" }),
+      reasoningMode: () => "compact",
+      timelineDetail: () => detail,
+      workSteps: () => state.workSteps,
+    })
+
+    const next = createNextTimelineProjection({
+      sessionMessages: () => workMessages,
+      status: () => ({ type: "idle" }),
+      timelineDetail: () => detail,
+      workSteps: () => state.workSteps,
+    })
+
+    expect(assistantEntries(current.rows())).toEqual(groupedWorkEntries)
+    expect(assistantEntries(next.rows())).toEqual(groupedWorkEntries)
+
+    setState("workSteps", undefined)
+    expect(assistantEntries(current.rows())).toEqual(nativeWorkEntries)
+    expect(assistantEntries(next.rows())).toEqual(nativeWorkEntries)
+
+    setState("workSteps", workSteps)
+    expect(assistantEntries(current.rows())).toEqual(groupedWorkEntries)
+    expect(assistantEntries(next.rows())).toEqual(groupedWorkEntries)
+    dispose()
+  })
 })
 
 for (const factory of [createTimelineProjection, createReactiveTimelineProjection]) {

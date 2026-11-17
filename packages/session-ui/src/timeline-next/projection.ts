@@ -7,10 +7,11 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Effect, Option, Predicate, Schema } from "effect"
+import { Effect, Match, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail } from "../timeline/detail"
 import { TimelineRow, type PartGroup, type PartRef } from "../timeline/timeline-row"
+import { workStepPolicy, type WorkStepPolicy, type WorkSteps } from "../timeline/work-steps"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -70,8 +71,16 @@ type Input = {
   pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs: readonly string[]
   turnDiffs: boolean
+  workSteps?: WorkSteps
   /** Whether a part shows. Text and thoughts are read through signals, so a streamed delta does not rebuild the rows. */
   shows: (content: Content) => boolean
+}
+
+export function groupNativeParts(
+  items: { messageID: string; partID: string; content: Content }[],
+  detail: TimelineDetail,
+) {
+  return groupContent(items, detail, new Set())
 }
 
 // A field of the wrong type decodes as absent, so one bad field does not discard its neighbours.
@@ -104,6 +113,7 @@ export function createNextTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  workSteps?: Accessor<WorkSteps | undefined>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -144,6 +154,7 @@ export function createNextTimelineProjection(input: {
       pendingInputIDs: input.pendingInputIDs?.(),
       queuedCompactionIDs: input.queuedCompactionIDs?.() ?? [],
       turnDiffs: input.turnDiffs?.() ?? false,
+      workSteps: input.workSteps?.(),
       shows: (content) =>
         content.type === "tool"
           ? contentShows(detail, content)
@@ -312,7 +323,7 @@ function constructRows(input: Input) {
           ),
         ]
 
-      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary)
+      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary, input.workSteps)
     }),
   ]
 
@@ -451,6 +462,7 @@ function turnRows(
   detail: TimelineDetail,
   isVisible: (content: Content) => boolean,
   commentary: ReadonlySet<Content>,
+  workSteps?: WorkSteps,
 ) {
   const rows: TimelineRow.TimelineRow[] = []
   const assistantMessages = turn.entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -483,7 +495,12 @@ function turnRows(
 
     const appendGroups = (items: typeof refs) => {
       let offset = 0
-      groupContent(items, detail, commentary).forEach((group) => {
+      groupContent(
+        items,
+        detail,
+        commentary,
+        workSteps ? { policy: workStepPolicy(workSteps), live: view.live } : undefined,
+      ).forEach((group) => {
         const tool = group.type !== "part" || items[offset]?.content.type !== "text"
         offset += group.type === "part" ? 1 : group.refs.length
         rows.push(
@@ -719,6 +736,8 @@ function joins(
   current: Exclude<PartGroup, { type: "part" }>,
   messageByID: ReadonlyMap<string, SessionMessageInfo>,
 ) {
+  if ((previous.type === "context" && previous.work) || (current.type === "context" && current.work)) return false
+
   const notices = (group: Exclude<PartGroup, { type: "part" }>) =>
     group.refs.every((ref) => ref.messageID === ref.partID)
 
@@ -905,9 +924,10 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   detail: TimelineDetail,
   commentary: ReadonlySet<Content>,
+  work?: { policy: WorkStepPolicy; live: boolean },
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read" | "events"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "events" | "work"; refs: PartRef[] } | undefined
 
   const flush = () => {
     const current = adjacent
@@ -915,19 +935,30 @@ function groupContent(
 
     if (!first) return
 
-    groups.push({
-      type: current.type,
-      key:
-        current.type !== "context"
-          ? `part:${first.messageID}:${first.partID}`
-          : `context:${first.messageID}:${first.partID}`,
-      refs: current.refs,
-    })
+    const key = Match.value(current.type).pipe(
+      Match.when("work", () => `work:${first.messageID}:${first.partID}`),
+      Match.when("context", () => `context:${first.messageID}:${first.partID}`),
+      Match.orElse(() => `part:${first.messageID}:${first.partID}`),
+    )
+
+    if (current.type === "work") {
+      groups.push({
+        type: "context",
+        key,
+        refs: current.refs,
+        work: { responseID: first.messageID },
+      })
+      adjacent = undefined
+
+      return
+    }
+
+    groups.push({ type: current.type, key, refs: current.refs })
     adjacent = undefined
   }
 
   items.forEach((item) => {
-    const type = contentGroup(detail, item.content, commentary)
+    const type = workGroup(detail, item.content, commentary, work)
 
     if (type === "subagent") {
       flush()
@@ -958,6 +989,27 @@ function groupContent(
   flush()
 
   return groups
+}
+
+function workGroup(
+  detail: TimelineDetail,
+  content: Content,
+  commentary: ReadonlySet<Content>,
+  work?: { policy: WorkStepPolicy; live: boolean },
+) {
+  if (!work) return contentGroup(detail, content, commentary)
+
+  if (work.policy.groupActivity === "completed" && work.live) return undefined
+
+  if (work.policy.groupActivity === "never") return undefined
+
+  if (content.type === "text") return undefined
+
+  if (content.type === "reasoning") return "work" as const
+
+  if (content.name === "question") return undefined
+
+  return "work" as const
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {

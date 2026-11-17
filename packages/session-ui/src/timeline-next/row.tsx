@@ -52,7 +52,13 @@ import { unwrapErrorMessage } from "./errors"
 import { TimelineEventItem, TimelineEventRow } from "./event-row"
 import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
-import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
+import {
+  contentEntries,
+  createNextTimelineProjection,
+  groupNativeParts,
+  resolveContent,
+  workedDuration,
+} from "./projection"
 import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
@@ -62,6 +68,25 @@ import { FileGroup } from "./tools/file-group"
 import { PatchTool } from "./tools/patch"
 import { ShellMessage } from "./tools/shell"
 import { ThoughtRow } from "./tools/thought"
+import {
+  workPhaseDisclosureKey,
+  workPhaseOpen,
+  workReplyVisible,
+  workStepPolicy,
+  workTurnDisclosureKey,
+  workTurnOpen,
+  type WorkStepDisclosureMap,
+  type WorkSteps,
+} from "../timeline/work-steps"
+import {
+  workStepDetail,
+  workStepFinalReplyPartByTurn,
+  workStepFirstRowByTurn,
+  workStepNativeDetailExpanded,
+  workStepTurnsWithLaterInput,
+  workStepTurnStatus,
+} from "../timeline/work-steps-render"
+import { WorkStepsDisclosure } from "../timeline/work-steps-row"
 
 const emptyAssistantMessages: SessionMessageAssistant[] = []
 
@@ -90,6 +115,7 @@ export function createNextTimelineRowRenderer(input: {
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
   timelineDetail: Accessor<TimelineDetail>
+  workSteps?: Accessor<WorkSteps | undefined>
   foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
@@ -275,6 +301,122 @@ export function createNextTimelineRowRenderer(input: {
 
   const phase = (messageID: string) => viewTurnPhase(input.projection.turnPhaseByID().get(messageID) ?? IDLE_TURN_PHASE)
 
+  const workPolicy = createMemo(() => {
+    const settings = input.workSteps?.()
+
+    return settings ? workStepPolicy(settings) : undefined
+  })
+
+  const workFirstRows = createMemo(() =>
+    workPolicy() ? workStepFirstRowByTurn(input.projection.rows()) : new Map<string, string>(),
+  )
+
+  const workFinalReplies = createMemo(() =>
+    workPolicy() ? workStepFinalReplyPartByTurn(turns().messages) : new Map<string, string>(),
+  )
+
+  const workTurnsWithLaterInput = createMemo(() =>
+    workPolicy() ? workStepTurnsWithLaterInput(turns().messages) : new Set<string>(),
+  )
+
+  const workDisclosure = (key: string): WorkStepDisclosureMap => ({
+    [key]: input.disclosure.value(key),
+  })
+
+  const workTurn = (messageID: string) => {
+    const laterInput = workTurnsWithLaterInput().has(messageID)
+
+    return {
+      sessionID: input.sessionID(),
+      turnID: messageID,
+      status: workStepTurnStatus(input.projection.turnPhaseByID().get(messageID) ?? IDLE_TURN_PHASE),
+      latestCompletedTurn: !laterInput,
+      hasLaterInput: laterInput,
+    }
+  }
+
+  const workTurnIsOpen = (messageID: string) => {
+    const policy = workPolicy()
+
+    if (!policy) return false
+    const key = workTurnDisclosureKey(input.sessionID(), messageID)
+
+    return workTurnOpen(policy, workTurn(messageID), workDisclosure(key))
+  }
+
+  const workPhaseKey = (row: TimelineRow.AssistantPart, withinWork = false) =>
+    row.group.type === "context" && (row.group.work || withinWork)
+      ? workPhaseDisclosureKey(input.sessionID(), row.userMessageID, row.group.key)
+      : undefined
+
+  const workPhaseIsOpen = (
+    row: TimelineRow.AssistantPart,
+    withinWork = false,
+    nativeDetailExpanded = false,
+  ) => {
+    const policy = workPolicy()
+    const key = workPhaseKey(row, withinWork)
+
+    if (!policy || !key || row.group.type !== "context") return false
+    const disclosure = workDisclosure(key)
+
+    if (disclosure[key] !== undefined) return disclosure[key]!
+
+    if (withinWork && nativeDetailExpanded) return true
+
+    return workPhaseOpen(
+      policy,
+      {
+        sessionID: input.sessionID(),
+        turnID: row.userMessageID,
+        phaseID: row.group.key,
+        status: phase(row.userMessageID).live ? "live" : "completed",
+      },
+      disclosure,
+    )
+  }
+
+  const workReplyShown = (row: TimelineRow.AssistantPart) => {
+    const policy = workPolicy()
+
+    if (!policy || row.group.type !== "part") return true
+
+    if (!workFirstRows().has(row.userMessageID)) return true
+    const reply = resolveContent(input.projection.messageByID().get(row.group.ref.messageID), row.group.ref.partID)
+
+    if (reply?.type !== "text") return true
+
+    return workReplyVisible(
+      policy,
+      {
+        kind: workFinalReplies().get(row.userMessageID) === row.group.ref.partID ? "final" : "intermediate",
+        status: phase(row.userMessageID).live ? "live" : "completed",
+      },
+      workTurnIsOpen(row.userMessageID),
+    )
+  }
+
+  const workDetail = (row: TimelineRow.AssistantPart, parts: ActivityGroupPart[], withinWork = false) => {
+    const policy = workPolicy()
+    const group = row.group
+
+    if (!policy || group.type !== "context" || (!group.work && !withinWork)) return
+
+    return workStepDetail(
+      parts.filter((part) => part.type !== "event"),
+      phase(row.userMessageID).live,
+      policy,
+    )
+  }
+
+  const workRowShown = (row: TimelineRow.AssistantPart) => {
+    if (row.group.type === "context" && row.group.work) {
+      return workFirstRows().get(row.userMessageID) === TimelineRow.key(row) || workTurnIsOpen(row.userMessageID)
+    }
+
+    return workReplyShown(row)
+  }
+
   const duration = (messageID: string) => {
     const user = input.projection.messageByID().get(messageID)
 
@@ -328,7 +470,18 @@ export function createNextTimelineRowRenderer(input: {
     return result
   }
 
-  const renderAssistant = (row: Accessor<TimelineRow.AssistantPart>, onSizeChange?: () => void) => {
+  const nativeRowSignature = (row: TimelineRow.AssistantPart) =>
+    row.group.type === "part"
+      ? `${row.userMessageID}:${TimelineRow.key(row)}`
+      : `${row.userMessageID}:${TimelineRow.key(row)}:${row.group.refs
+          .map((ref) => `${ref.messageID}:${ref.partID}`)
+          .join(",")}`
+
+  const renderAssistant = (
+    row: Accessor<TimelineRow.AssistantPart>,
+    onSizeChange?: () => void,
+    withinWork = false,
+  ) => {
     if (row().group.type === "context") {
       const parts = createMemo(() => {
         const group = row().group
@@ -377,12 +530,50 @@ export function createNextTimelineRowRenderer(input: {
         })
       })
 
-      const key = () => `context:${row().group.key}`
+      const nativeWorkRows = createMemo((previous: TimelineRow.AssistantPart[] = []) => {
+        const group = row().group
 
-      return (
+        if (group.type !== "context" || !group.work) return []
+        const contents = indexGroupContents(group.refs)
+        const reusable = new Map(previous.map((row) => [nativeRowSignature(row), row]))
+
+        return groupNativeParts(
+          group.refs.flatMap((ref) => {
+            const content = contents.get(ref.messageID)?.get(ref.partID)
+
+            return content ? [{ ...ref, content }] : []
+          }),
+          input.timelineDetail(),
+        ).map((group) => {
+          const nativeRow = new TimelineRow.AssistantPart({
+            userMessageID: row().userMessageID,
+            previousAssistantPart: false,
+            group,
+          })
+
+          return reusable.get(nativeRowSignature(nativeRow)) ?? nativeRow
+        })
+      }, [])
+
+      const key = () => {
+        const group = row().group
+
+        return workPhaseKey(row(), withinWork) ?? `context:${group.key}`
+      }
+
+      const work = () => {
+        const group = row().group
+
+        return group.type === "context" && !!group.work
+      }
+
+      const workReasoningOpen = () => input.timelineDetail().thinking.details === "expanded"
+
+      const context = () => (
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
           <ContextGroup
             parts={parts()}
+            detail={workDetail(row(), parts(), withinWork)}
             patchGroupKey={(tools) => {
               const parts = tools.map((tool) => patchPartKeys.get(tool)!)
 
@@ -396,21 +587,57 @@ export function createNextTimelineRowRenderer(input: {
 
               return key
             }}
-            reasoningDefaultOpen={thoughtOpens(input.timelineDetail(), false)}
-            reasoningOpen={(id) => input.disclosure.value(id)}
+            reasoningDefaultOpen={
+              work() || withinWork ? workReasoningOpen() : thoughtOpens(input.timelineDetail(), false)
+            }
+            reasoningOpen={(id) =>
+              input.disclosure.value(id) ?? (work() || withinWork ? workReasoningOpen() : undefined)
+            }
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
             toolDefaultOpen={(tool) => contentOpens(input.timelineDetail(), tool)}
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) => input.disclosure.value(`patch:${path}`) ?? diffOpens(input.timelineDetail())}
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-            open={input.disclosure.value(key()) === true}
+            open={
+              work() || withinWork
+                ? workPhaseIsOpen(
+                    row(),
+                    withinWork,
+                    withinWork &&
+                      workStepNativeDetailExpanded(
+                        parts().filter((part) => part.type !== "event"),
+                        input.timelineDetail(),
+                      ),
+                  )
+                : input.disclosure.value(key()) === true
+            }
             onOpenChange={(open) => input.disclosure.set(key(), open)}
             onSizeChange={onSizeChange}
             onRevealShell={input.revealPart}
           />
         </div>
       )
+
+      if (work()) {
+        return (
+          <WorkStepsDisclosure
+            first={workFirstRows().get(row().userMessageID) === TimelineRow.key(row())}
+            live={phase(row().userMessageID).live}
+            open={workTurnIsOpen(row().userMessageID)}
+            phaseOpen={workPhaseIsOpen(row())}
+            onOpenChange={(open) =>
+              input.disclosure.set(workTurnDisclosureKey(input.sessionID(), row().userMessageID), open)
+            }
+          >
+            <For each={nativeWorkRows()}>
+              {(nativeRow) => renderAssistant(() => nativeRow, onSizeChange, true)}
+            </For>
+          </WorkStepsDisclosure>
+        )
+      }
+
+      return context()
     }
 
     if (row().group.type === "events" || row().group.type === "subagent") {
@@ -533,6 +760,9 @@ export function createNextTimelineRowRenderer(input: {
 
     const defaultOpen = createMemo(() => {
       const item = content()
+
+      if (withinWork && item?.type === "reasoning")
+        return input.timelineDetail().thinking.details === "expanded"
 
       return item ? contentOpens(input.timelineDetail(), item) : undefined
     })
@@ -1204,13 +1434,15 @@ export function createNextTimelineRowRenderer(input: {
       const content = renderAssistant(current, onSizeChange)
 
       return (
-        <Frame row={current()}>
-          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
+        <Show when={workRowShown(current())}>
+          <Frame row={current()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
+              <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
+                {content}
+              </div>
             </div>
-          </div>
-        </Frame>
+          </Frame>
+        </Show>
       )
     }
 

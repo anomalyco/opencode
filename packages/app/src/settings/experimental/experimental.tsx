@@ -80,6 +80,20 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
+              title={language.t("settings.experimental.row.workSteps.title")}
+              description={language.t("settings.experimental.row.workSteps.description")}
+            >
+              <div data-action="settings-work-steps-enabled">
+                <Switch
+                  checked={settings.general.workStepsEnabled()}
+                  onChange={(checked) => settings.general.setWorkStepsEnabled(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.workSteps.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.experimental.row.newQuestionUI.title")}
               description={language.t("settings.experimental.row.newQuestionUI.description")}
             >

@@ -10,6 +10,7 @@ export function ThoughtRow(props: {
   id: string
   content: SessionMessageAssistantReasoning
   streaming: boolean
+  preview?: string
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -58,6 +59,9 @@ export function ThoughtRow(props: {
               </span>
               <Show when={!props.streaming && duration()}>
                 {(value) => <span data-slot="context-tool-group-elapsed">{value()}</span>}
+              </Show>
+              <Show when={props.preview}>
+                {(value) => <span data-slot="context-tool-group-detail-preview">{value()}</span>}
               </Show>
             </span>
           </div>

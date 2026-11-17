@@ -198,7 +198,11 @@ function MessageTimelineView(
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     // Each timeline measures and opens its own rows, so they keep separate caches.
-    presentationKey: () => `${props.next ? "next:" : ""}${JSON.stringify(props.data.timelineDetail())}`,
+    presentationKey: () =>
+      `${props.next ? "next:" : ""}${JSON.stringify({
+        timelineDetail: props.data.timelineDetail(),
+        workSteps: props.data.workSteps(),
+      })}`,
     keepsDisclosure: props.next,
     projection,
     showHeader,
@@ -320,6 +324,7 @@ function MessageTimelineView(
     },
     actions: props.actions,
     timelineDetail: props.data.timelineDetail,
+    workSteps: props.data.workSteps,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,
     padding: turnPadding,

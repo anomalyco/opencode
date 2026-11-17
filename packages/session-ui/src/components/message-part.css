@@ -1320,6 +1320,18 @@
     white-space: nowrap;
   }
 
+  [data-slot="context-tool-group-detail-preview"] {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--v2-text-text-muted);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
     cursor: pointer;

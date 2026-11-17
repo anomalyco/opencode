@@ -7,7 +7,7 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Effect, Option, Predicate, Schema } from "effect"
+import { Effect, Match, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
@@ -17,6 +17,7 @@ import {
 } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { workStepPolicy, type WorkStepPolicy, type WorkSteps } from "./work-steps"
 import {
   IDLE_TURN_PHASE,
   isInterruptedError,
@@ -92,6 +93,7 @@ export type TimelineProjectionInput = {
   pendingInputIDs?: ReadonlySet<string>
   queuedCompactionIDs?: readonly string[]
   turnDiffs?: boolean
+  workSteps?: WorkSteps
   previousRows?: TimelineRow.TimelineRow[]
 }
 
@@ -109,6 +111,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     input.timelineDetail,
     input.queuedCompactionIDs,
     input.turnDiffs,
+    input.workSteps,
   )
 
   const rows = reuseTimelineRows(input.previousRows, projection.rows)
@@ -150,6 +153,7 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  workSteps?: Accessor<WorkSteps | undefined>
 }) {
   const sessionMessageByID = createMemo(
     () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
@@ -196,6 +200,7 @@ export function createReactiveTimelineProjection(input: {
       input.timelineDetail?.(),
       input.queuedCompactionIDs?.(),
       input.turnDiffs?.(),
+      input.workSteps?.(),
     ),
   )
 
@@ -260,6 +265,15 @@ export function createReactiveTimelineProjection(input: {
 }
 
 export namespace Timeline {
+  export function groupNativeParts(
+    items: { messageID: string; partID: string; content: Content }[],
+    shellToolDefaultOpen: boolean,
+    editToolDefaultOpen: boolean,
+    detail?: TimelineDetail,
+  ) {
+    return groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, new Set(), detail)
+  }
+
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
     showReasoning: boolean,
@@ -271,6 +285,7 @@ export namespace Timeline {
     detail?: TimelineDetail,
     queuedCompactionIDs: readonly string[] = [],
     turnDiffs = false,
+    workSteps?: WorkSteps,
   ) {
     type Turn = {
       id: string
@@ -463,6 +478,7 @@ export namespace Timeline {
           visible,
           detail,
           commentary,
+          workSteps,
         )
       }),
     ]
@@ -521,6 +537,7 @@ export namespace Timeline {
     isRenderable = renderable,
     detail?: TimelineDetail,
     commentary: ReadonlySet<Content> = new Set(),
+    workSteps?: WorkSteps,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -557,7 +574,14 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
+        groupContent(
+          items,
+          shellToolDefaultOpen,
+          editToolDefaultOpen,
+          commentary,
+          detail,
+          workSteps ? { policy: workStepPolicy(workSteps), live: view.live } : undefined,
+        ).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -811,6 +835,8 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
       previous.group.type === "context" &&
       Predicate.isTagged(current, "AssistantPart") &&
       current.group.type === "context" &&
+      !previous.group.work &&
+      !current.group.work &&
       previous.userMessageID === current.userMessageID
     ) {
       result[result.length - 1] = new TimelineRow.AssistantPart({
@@ -995,9 +1021,10 @@ function groupContent(
   editToolDefaultOpen: boolean,
   commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
+  work?: { policy: WorkStepPolicy; live: boolean },
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "work"; refs: PartRef[]; tools: boolean } | undefined
 
   const flush = () => {
     const current = adjacent
@@ -1005,7 +1032,7 @@ function groupContent(
 
     if (!first) return
 
-    if (!current.tools && !detail) {
+    if (current.type !== "work" && !current.tools && !detail) {
       groups.push(
         ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
       )
@@ -1014,14 +1041,25 @@ function groupContent(
       return
     }
 
-    groups.push({
-      type: current.type,
-      key:
-        current.type !== "context"
-          ? `part:${first.messageID}:${first.partID}`
-          : `context:${first.messageID}:${first.partID}`,
-      refs: current.refs,
-    })
+    const key = Match.value(current.type).pipe(
+      Match.when("work", () => `work:${first.messageID}:${first.partID}`),
+      Match.when("context", () => `context:${first.messageID}:${first.partID}`),
+      Match.orElse(() => `part:${first.messageID}:${first.partID}`),
+    )
+
+    if (current.type === "work") {
+      groups.push({
+        type: "context",
+        key,
+        refs: current.refs,
+        work: { responseID: first.messageID },
+      })
+      adjacent = undefined
+
+      return
+    }
+
+    groups.push({ type: current.type, key, refs: current.refs })
     adjacent = undefined
   }
 
@@ -1033,6 +1071,7 @@ function groupContent(
       adjacent?.type === "context" && adjacent.tools,
       commentary,
       detail,
+      work,
     )
 
     if (type) {
@@ -1063,12 +1102,30 @@ function contentGroupType(
   hasContextGroup: boolean,
   commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
+  work?: { policy: WorkStepPolicy; live: boolean },
 ) {
+  if (work) {
+    if (work.policy.groupActivity === "always" || (work.policy.groupActivity === "completed" && !work.live))
+      return workGroupType(content)
+
+    return undefined
+  }
+
   if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
   return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
+}
+
+function workGroupType(content: Content) {
+  if (content.type === "text") return undefined
+
+  if (content.type === "reasoning") return "work" as const
+
+  if (content.name === "question") return undefined
+
+  return "work" as const
 }
 
 function toolGroupType(

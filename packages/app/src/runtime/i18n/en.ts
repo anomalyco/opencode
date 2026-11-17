@@ -887,6 +887,9 @@ export const dict = {
   "settings.experimental.row.newTimeline.title": "New timeline",
   "settings.experimental.row.newTimeline.description":
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",
+  "settings.experimental.row.workSteps.title": "Work steps",
+  "settings.experimental.row.workSteps.description":
+    "Keep agent activity open while it works, then fold it after the turn completes or new input arrives",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
@@ -1123,6 +1126,21 @@ export const dict = {
   "settings.timeline.category.notices": "Notices",
   "settings.timeline.category.tools": "Other tools",
   "settings.timeline.category.commentary": "Commentary",
+  "settings.timeline.workSteps.view.title": "Work steps",
+  "settings.timeline.workSteps.view.description": "Choose how much progress detail appears while the agent works",
+  "settings.timeline.workSteps.view.compact": "Compact",
+  "settings.timeline.workSteps.view.standard": "Standard",
+  "settings.timeline.workSteps.view.detailed": "Detailed",
+  "settings.timeline.workSteps.view.verbose": "Verbose",
+  "settings.timeline.workSteps.collapseTiming.title": "Collapse work steps",
+  "settings.timeline.workSteps.collapseTiming.description": "Choose when completed work steps fold away",
+  "settings.timeline.workSteps.collapseTiming.completion": "On completion",
+  "settings.timeline.workSteps.collapseTiming.nextInput": "On next input",
+  "settings.timeline.workSteps.foldedReplies.title": "Replies kept outside steps",
+  "settings.timeline.workSteps.foldedReplies.description":
+    "Choose which assistant replies remain visible after work steps fold",
+  "settings.timeline.workSteps.foldedReplies.all": "All replies",
+  "settings.timeline.workSteps.foldedReplies.final": "Final reply",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

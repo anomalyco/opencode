@@ -196,6 +196,8 @@ export function createTimelineController(input: {
     }
   })
 
+  const workSteps = createMemo(() => (settings.general.workStepsEnabled() ? settings.general.workSteps() : undefined))
+
   const reasoningMode = (): ReasoningMode =>
     timelineDetail().thinking.placement === "hidden"
       ? "hidden"
@@ -213,6 +215,7 @@ export function createTimelineController(input: {
     pendingInputIDs,
     queuedCompactionIDs,
     turnDiffs: settings.general.showTurnDiffs,
+    workSteps,
   }
 
   const projection = input.next
@@ -428,6 +431,7 @@ export function createTimelineController(input: {
       showHeader,
       projection,
       timelineDetail,
+      workSteps,
       reasoningMode,
       shellToolPartsExpanded,
       editToolPartsExpanded,

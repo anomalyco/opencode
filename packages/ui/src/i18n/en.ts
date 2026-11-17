@@ -116,6 +116,7 @@ const source = {
   "ui.sessionTurn.status.searchingWeb": "Searching the web",
   "ui.sessionTurn.status.makingEdits": "Making edits",
   "ui.sessionTurn.status.runningCommands": "Running commands",
+  "ui.sessionTurn.status.working": "Working",
   "ui.sessionTurn.status.thinking": "Thinking",
   "ui.sessionTurn.status.thinkingWithTopic": "Thinking - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gathering thoughts",

@@ -44,6 +44,7 @@ type WorkRun = { type: "work"; id: string; events: TimelineEvent[] }
  */
 export function ContextGroup(props: {
   parts: ActivityGroupPart[]
+  detail?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSizeChange?: () => void
@@ -158,6 +159,7 @@ export function ContextGroup(props: {
                 content={part}
                 streaming={part.streaming ?? false}
                 defaultOpen={props.reasoningDefaultOpen}
+                preview={props.detail}
                 open={props.reasoningOpen?.(part.id)}
                 onOpenChange={(open) => props.onReasoningOpenChange?.(part.id, open)}
                 onContentRendered={props.onSizeChange}
@@ -194,7 +196,10 @@ export function ContextGroup(props: {
             open={props.open}
             onOpenChange={change}
             trigger={
-              <div data-component="context-tool-group-trigger" aria-label={label().text}>
+              <div
+                data-component="context-tool-group-trigger"
+                aria-label={[label().text, props.detail].filter(Boolean).join(" · ")}
+              >
                 <Show when={activity()} fallback={<UsedTitle label={usedLabel(props.parts, i18n)} />}>
                   {(value) => (
                     <span data-slot="context-tool-group-title" data-activity="">
@@ -210,6 +215,9 @@ export function ContextGroup(props: {
                       </Show>
                     </span>
                   )}
+                </Show>
+                <Show when={props.detail}>
+                  {(value) => <span data-slot="context-tool-group-detail-preview">{value()}</span>}
                 </Show>
               </div>
             }

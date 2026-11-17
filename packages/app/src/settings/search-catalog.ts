@@ -133,6 +133,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.workSteps.title",
+    target: "settings-work-steps-enabled",
+    description: "settings.experimental.row.workSteps.description",
+    keywords: "work steps progress activity collapse fold live completed subagent shell thought",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.newQuestionUI.title",
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",

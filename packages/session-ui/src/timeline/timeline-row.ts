@@ -15,6 +15,10 @@ export type PartGroup =
       key: string
       type: "context"
       refs: PartRef[]
+      /** Marks a run of activity that belongs to one assistant response's collapsible work phase. */
+      work?: {
+        responseID: string
+      }
     }
   | {
       key: string
@@ -193,6 +197,7 @@ function sameGroup(a: PartGroup, b: PartGroup) {
   return (
     b.type === a.type &&
     b.refs.length === a.refs.length &&
+    (a.type !== "context" || b.type !== "context" || a.work?.responseID === b.work?.responseID) &&
     a.refs.every((ref, index) => {
       const other = b.refs[index]
 
