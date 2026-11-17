@@ -133,6 +133,8 @@ export type Read = {
     dialogOpen: (self: Read, key: string) -> boolean,
     composer: (self: Read) -> Composer?,
     tabs: (self: Read) -> { Tab },
+    --- Whether session tabs are on in this TUI.
+    tabsEnabled: (self: Read) -> boolean,
     theme: (self: Read) -> string?,
     themes: (self: Read) -> { string },
     selection: (self: Read) -> string?,
