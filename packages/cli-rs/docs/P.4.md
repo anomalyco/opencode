@@ -619,7 +619,7 @@ TypeScript plugins are then skipped with a reason that says to unset it.
 
 The JS host is behind the cargo feature `ts` of `opencode-plugin`, `opencode-tui` and `opencode-cli`, which is on by
 default (ts-feature). It gates the pipe carrier (`crates/plugin/src/pipe`), the JS host's spawn, the V2 compatibility
-layer, and the embedded `host.ts`, `compat.js` and `effect.js`. A build without it (`--no-default-features`) has no JS
+layer, and the embedded `host.ts` and `compat.js`. A build without it (`--no-default-features`) has no JS
 host at all: TypeScript plugins, npm entries and server TUI parts are skipped with `SKIPPED_NO_TS`, "this build of
 opencode-native has no TypeScript plugin support (built without the ts feature)", whatever `OPENCODE_PLUGIN_JS` says.
 `plugin add` in such a build names each TUI package it added: `opencode-native will not load TUI plugin "<package>":

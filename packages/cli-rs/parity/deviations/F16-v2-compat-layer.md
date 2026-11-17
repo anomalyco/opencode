@@ -191,7 +191,11 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   its slot's element; opencode-gpt-live and opencode-task-completion-loop the same). A call of a method any of OpenTUI's
   declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
-  not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is served as TS's runtime serves its own (CT-13, `plugin_compat::a_plugin_that_imports_effect_runs`): the root, minified into `effect.js` (866 KiB), which the JS host loads only once a plugin imports it, and each of its modules by subpath (`effect/Array`). Its sub-packages (`effect/http`, `effect/ai` and the rest) are not served.
+  not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
+  served (O-170): the layer serves what the TUI plugin API defines, not libraries a plugin expects the host to happen
+  to have. TS's runtime provides its own, so a plugin that imports it (opencode-plugboard and
+  @davidaayers/opencode-codex-usage-plugin declare it a peer) fails to load here, named
+  (`plugin_compat::a_plugin_that_imports_effect_fails_to_load_naming_it`).
 - **Shrink and wrap**: a node with a fixed `width` or `height` does not shrink unless its `flexShrink` says so, as
   OpenTUI's renderables (CT-25: @wpro-eng/opencode-config's 14-cell agent names shrank to their text; its tarball is
   unlicensed, so a layer test pins it). Where a long word breaks is the host's text wrap: TS's breaks

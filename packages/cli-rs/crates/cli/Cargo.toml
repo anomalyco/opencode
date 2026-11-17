@@ -51,8 +51,8 @@ rustix = { workspace = true, features = ["termios", "event", "pty"] }
 libc.workspace = true
 
 [features]
-# TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts`, `compat.js` and
-# `effect.js` (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
+# TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
+# (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
 default = ["ts"]
 ts = ["opencode-tui/ts", "opencode-plugin/ts"]
 # Luau plugins (spike `luau-spike`), off by default.
