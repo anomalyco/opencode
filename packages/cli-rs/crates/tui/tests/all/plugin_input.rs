@@ -50,8 +50,9 @@ pub struct Probe {
     pub footer: String,
     /// The rich select lists its rows by the plugin's search.
     pub search: bool,
-    /// A strip of the plugin in the session's composer top, with a node that takes drops.
+    /// A strip of the plugin in the session's composer top, with a node that takes drops; with a field `sf` too.
     pub strip: bool,
+    pub strip_field: bool,
     /// A global layer that takes pastes.
     pub paste_global: bool,
     /// The panel leaves node `b` out.
@@ -215,9 +216,13 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     if probe(|probe| probe.strip) {
         let strip = v2::Surface::new("strip", v2::Place::Slot(abi::Placement::append("session.composer.top")), |_| {
             let interact = Interact { pointer: true, focusable: true, ..Interact::default() };
-            v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("STRIP")]))])
+            let strip = v2::Node::row(vec![unselectable(v2::Node::text(vec![abi::Span::new("STRIP")]))])
                 .with_id("s")
-                .interact(interact)
+                .interact(interact);
+            match probe(|probe| probe.strip_field) {
+                true => v2::Node::column(vec![strip, v2::Node::input("").with_id("sf")]),
+                false => strip,
+            }
         });
         let layers = vec![Layer::default().with_scope(LayerScope::Surface).with_paste(true)];
         setup.surface(strip.layers(layers).on(|host, event| {
@@ -1896,6 +1901,27 @@ fn a_plugin_focuses_its_field() {
     harness.app.type_text("q");
     settle(&harness);
     assert!(changes().is_empty(), "the field took the focus from a host dialog");
+}
+
+// Expected (carbon c2a-1): the reserved chord gives the composer back the focus a slot surface's field took, one level,
+// as it closes a focused panel: the app does not end over the composer's draft, the draft stays, and what the user types
+// next is the composer's.
+#[test]
+fn the_reserved_chord_takes_the_focus_back_from_a_slot_field() {
+    let harness = open_with(|probe| (probe.strip, probe.strip_field) = (true, true));
+    harness.app.type_text("draft");
+    settle(&harness);
+    run(&harness, "input.focus", Some("sf"));
+    assert!(!opencode_plugin::Host::composer_focused(&*harness.tui), "the strip's field took no focus");
+    harness.app.type_text("x");
+    harness.app.press("ctrl+c");
+    settle(&harness);
+    assert!(!harness.app.app().is_quitting(), "the chord ended the app over the draft");
+    assert!(opencode_plugin::Host::composer_focused(&*harness.tui), "the field kept the focus");
+    harness.app.type_text("y");
+    settle(&harness);
+    let text = harness.tui.textarea.borrow().as_ref().map(|area| area.text()).unwrap_or_default();
+    assert_eq!(text, "drafty");
 }
 
 // Expected (review carbon-5): a focused node that the new tree puts in a hidden box can take no focus, so the focus
