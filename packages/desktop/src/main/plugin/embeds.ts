@@ -281,7 +281,9 @@ function attach(entry: Entry, root: View) {
   entry.corners.forEach((corner) => root.addChildView(corner))
 }
 
-// On Cocoa a parent View clips the page's pixels; hit testing requires an owned window.
+// On Cocoa a parent View clips the page's pixels; hit testing requires an owned window. A View sized to the clip
+// still routes clicks just outside the crop to the hidden page beneath an app control, so do not fold this back into
+// the parent window.
 function createClip(entry: Entry) {
   const window =
     process.platform === "darwin"
