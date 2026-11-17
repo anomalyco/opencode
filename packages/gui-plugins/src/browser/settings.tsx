@@ -163,7 +163,9 @@ export default function BrowserSettings(props: { target?: string }) {
           />
         </ui.SettingsRow>
       </ui.SettingsSection>
-      {/* A section heading like the others, with no card, that is a button: the whole row opens and closes it. */}
+      {/* A section heading like the others, with no card, that is a button: the whole row opens and closes it. The
+          chevron ends the line's text, as in the other disclosures: after the summary while closed, after the heading
+          while open. A summary too long for the window is cut short, so the chevron never wraps or leaves its word. */}
       <section class="settings-section">
         <h3 class="settings-section-title">
           <button
@@ -178,13 +180,13 @@ export default function BrowserSettings(props: { target?: string }) {
               })
             }
           >
-            {ctx.t("settings.advanced")}
-            <span class={ADVANCED_CHEVRON}>
-              <ui.Icon name={advanced() ? "outline-chevron-down" : "outline-chevron-right"} />
-            </span>
+            <span class="shrink-0">{ctx.t("settings.advanced")}</span>
             <Show when={!advanced()}>
               <span class="ms-2 min-w-0 truncate font-[440] text-v2-text-text-muted">{ctx.t("settings.advanced.summary")}</span>
             </Show>
+            <span class={ADVANCED_CHEVRON}>
+              <ui.Icon name={advanced() ? "outline-chevron-down" : "outline-chevron-right"} />
+            </span>
           </button>
         </h3>
       </section>
@@ -276,7 +278,7 @@ export default function BrowserSettings(props: { target?: string }) {
 }
 
 /** The Advanced heading's chevron: faint at rest, full strength under the pointer and on keyboard focus. */
-const ADVANCED_CHEVRON = "flex opacity-40 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:-scale-x-100"
+const ADVANCED_CHEVRON = "flex shrink-0 opacity-40 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:-scale-x-100"
 
 /**
  * The decisions the user kept for sites, one row per site and feature: the site, the feature under it, and its setting
