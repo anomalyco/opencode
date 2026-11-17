@@ -1604,9 +1604,9 @@ impl Scripts {
     /// Keeps a message of an activation not registered yet, up to [`EARLY`]. The activation that sends more spilled,
     /// and fails as a whole, before anything it sent is applied (big-boi's catalog review): from then on nothing of it
     /// is kept or applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and
-    /// once it is registered what it sent before is refused alike, not replayed, and it fails. Replaying what fit let a
-    /// fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came after missed
-    /// it.
+    /// its setup fails instead of registering it, with nothing it sent applied ([`Scripts::spill_load`]). Replaying
+    /// what fit let a fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came
+    /// after missed it.
     fn keep(&self, up: Up) {
         let Some((id, activation)) = sender(&up) else { return };
         if self.spilled_by(&id, activation) {
@@ -1624,7 +1624,7 @@ impl Scripts {
     }
 
     /// Whether activation `activation` of plugin `id` spilled ([`Scripts::keep`]).
-    fn spilled_by(&self, id: &str, activation: u64) -> bool {
+    pub(crate) fn spilled_by(&self, id: &str, activation: u64) -> bool {
         self.spilled.borrow().get(id).is_some_and(|spilled| *spilled == 0 || *spilled == activation)
     }
 
@@ -1638,23 +1638,22 @@ impl Scripts {
         }
     }
 
-    /// What plugin `id` sent before its activation was registered, now its guest's; or, when that activation spilled,
-    /// all of it refused, and the activation failed, after the turn, as the setup that registers it is still at work.
+    /// What plugin `id` sent before its activation was registered, now its guest's. An activation that spilled is never
+    /// registered ([`Scripts::spill_load`]).
     fn registered(self: &Rc<Self>, id: &str) {
         let early = self.early.borrow_mut().remove(id).unwrap_or_default();
-        let Some(activation) = self.guest(id).map(|guest| guest.activation()).filter(|at| self.spilled_by(id, *at))
-        else {
-            return early.into_iter().for_each(|up| self.up(up));
-        };
-        early.into_iter().for_each(|up| self.refuse_spilled(up));
-        let (this, id) = (self.this.clone(), id.to_owned());
-        crate::defer(&self.host, move |_| {
-            let Some(scripts) = this.upgrade() else { return };
-            scripts.spilled.borrow_mut().remove(&id);
-            if let Some(guest) = scripts.guest(&id).filter(|guest| guest.activation() == activation) {
-                guest.fail(format!("it sent more than {EARLY} messages before the host registered it, and lost some"));
-            }
-        });
+        early.into_iter().for_each(|up| self.up(up));
+    }
+
+    /// Ends `loaded`, an activation that spilled, as its setup fails: nothing it sent is applied. What it sent before is
+    /// dropped, and so are the effects its setup asked for in its load, storage writes as much as the rest; the JS host
+    /// deactivates the activation, which settles once, as refused, every answer and reply it still awaits.
+    pub(crate) fn spill_load(&self, loaded: &guest::Loaded) {
+        self.early.borrow_mut().remove(&loaded.id);
+        self.spilled.borrow_mut().remove(&loaded.id);
+        loaded.effects.borrow_mut().take();
+        let seq = self.next();
+        self.send(Down::Deactivate { seq, id: loaded.id.clone(), activation: loaded.seq }, None);
     }
 
     /// What `seq` waited for, now answered.
