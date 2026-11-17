@@ -454,6 +454,19 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (CT-13): a plugin that imports the `effect` package, its root and a module of it by subpath, loads and runs
+// with the one the JS host serves, as TS's runtime serves its own; it failed, "Cannot find package 'effect'".
+#[test]
+fn a_plugin_that_imports_effect_runs() {
+    let Some(mut config) = config() else { return };
+    // As an installed plugin, whose `node_modules` stops Bun installing a package it lacks from npm as it imports it.
+    config.args.push("--no-install".to_owned());
+    let log = log_file();
+    let pipe = open(&[("effectprobe", Some(json!({ "log": log.to_string_lossy() })))], config, (80, 30));
+    pipe.active("example.effectprobe");
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "name": "probe", "some": 2, "sum": 6 })]);
+}
+
 // Expected (contract 2.x, addition 1, R3): a page that sizes its box from its own width, a cell wider each time, is
 // held after 8 frames in a row of rect pushes with no other cause: its `onSizeChange` runs a bounded number of times,
 // and the plugin stays active. A page that settles after one change ends at that width and hears no more.
