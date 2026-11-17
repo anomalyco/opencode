@@ -140,9 +140,7 @@ built-ins/RegExp/escape/escaped-surrogates.js  # wrong result
 built-ins/RegExp/named-groups/duplicate-names-exec.js  # wrong result
 built-ins/RegExp/named-groups/duplicate-names-match.js  # wrong result
 built-ins/RegExp/named-groups/duplicate-names-test.js  # wrong result
-built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T9.js  # spurious parse error: Identifier `…` has already been declared
 built-ins/RegExp/prototype/exec/S15.10.6.2_A9.js  # wrong result
-built-ins/RegExp/prototype/test/S15.10.6.3_A1_T9.js  # spurious parse error: Identifier `…` has already been declared
 built-ins/RegExp/prototype/test/S15.10.6.3_A9.js  # wrong result
 built-ins/RegExp/prototype/toString/S15.10.6.4_A9.js  # wrong result
 built-ins/String/prototype/charAt/S15.5.4.4_A9.js  # wrong result
@@ -164,10 +162,6 @@ built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A9.js  # wrong result
 built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A9.js  # wrong result
 built-ins/String/prototype/toLowerCase/S15.5.4.16_A9.js  # wrong result
 built-ins/String/prototype/toUpperCase/S15.5.4.18_A9.js  # wrong result
-built-ins/String/raw/return-the-string-value-from-template.js  # unsupported syntax: tagged templates
-built-ins/String/raw/special-characters.js  # unsupported syntax: tagged templates
-built-ins/String/raw/template-substitutions-are-appended-on-same-index.js  # unsupported syntax: tagged templates
-built-ins/String/raw/zero-literal-segments.js  # unsupported syntax: tagged templates
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
 built-ins/decodeURI/S15.1.3.1_A5.2.js  # wrong result
 built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # wrong result
