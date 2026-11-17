@@ -23,29 +23,9 @@ pub(crate) struct Compiled {
     entry: String,
 }
 
-/// Luau 740's fixes that ship behind flags, off by default (`luau/steps/safety-audit.md` #1, #2, #12): without the
-/// first, `table.move({}, 1, 2147483647, 1, {[-2147483648] = 1})` overflows the array size and crashes the process;
-/// without the last, `table.move({}, 0, 2^31-2, 2^35, {})` walks 2^31 indices with no safepoint; the second keeps a
-/// table whole when a resize runs out of memory. Luau 747 has them on with no flag.
-const FFLAGS: [&str; 3] = ["LuauTableArrayAdjustCheck", "LuauTableRobustOom", "LuauTableMoveTimeoutFix"];
-
-/// Turns [`FFLAGS`] on, once a process, before the first compilation and so before the first VM. The flags are the
-/// process's: an error here is every Luau plugin's, which then does not start.
-fn fflags() -> Result<(), String> {
-    static SET: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
-    SET.get_or_init(|| {
-        FFLAGS.into_iter().try_for_each(|flag| {
-            Lua::set_fflag(flag, true)
-                .map_err(|()| format!("this build's Luau has no flag {flag}, which Luau plugins need to run safely"))
-        })
-    })
-    .clone()
-}
-
 impl Compiled {
     /// Compiles every `.luau` file of `sources`; a syntax error is the build's, before any setup.
     pub(crate) fn new(sources: &Sources, entry: &str) -> Result<Self, String> {
-        fflags()?;
         let compiler = mlua::chunk::Compiler::new().set_optimization_level(1).set_debug_level(1);
         let mut modules = BTreeMap::new();
         for (path, bytes) in sources.files() {
