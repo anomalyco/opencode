@@ -980,7 +980,9 @@ export default function SessionBrowserPane(props: {
         <Show when={promptKey(true)} keyed>
           {(key) => (
             <Show when={key ? prompt() : undefined}>
-              {(view) => <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} />}
+              {(view) => (
+                <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} leave={focusAddress} />
+              )}
             </Show>
           )}
         </Show>
