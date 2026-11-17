@@ -110,7 +110,7 @@ story("accepts an assistive activation of the focused link, not a synthetic or u
         if (event.key !== "Enter" || !("assistive" in window)) return
         event.stopImmediatePropagation()
 
-        if (Reflect.get(window, "assistive") === "unfocused") row.querySelectorAll("a")[1]?.focus()
+        if ("assistive" in window && window.assistive === "unfocused") row.querySelectorAll("a")[1]?.focus()
       },
       true,
     )
