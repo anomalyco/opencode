@@ -488,6 +488,7 @@ const mime = (name: string) => types[path.extname(name).slice(1).toLowerCase()] 
 /** A subset of Bun's file APIs, over the session's files and with the permissions the file tools ask. */
 export const extension = Extension.make({
   name: "bun",
+  modules: { bun: "Bun" },
   globals: {
     Bun: {
       file: open,

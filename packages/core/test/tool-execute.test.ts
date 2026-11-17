@@ -264,6 +264,17 @@ describe("Bun", () => {
     expect(JSON.parse(result.output.output)).toEqual(["undefined"])
   })
 
+  test("Bun is importable as the bun module, only with the experimental flag", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const code = `import { file, write } from "bun"
+      await write("copy.txt", file("notes.txt"))
+      return [await file("copy.txt").text(), require("bun") === Bun]`
+    expect(await run(tmp.path, code)).toEqual(["hello", true])
+    const without = await Effect.runPromise(createCodeMode(new Map()).execute({ code }, context))
+    expect(without.output.output).toContain('Cannot import "bun"')
+  })
+
   test("Bun.file reads text, JSON and bytes, and knows a file's size, type and whether it exists", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "notes.txt"), "hello world")
