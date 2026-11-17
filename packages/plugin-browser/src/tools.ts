@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Clock, Duration, Effect, Option, Result, Schema } from "effect"
 import { Base64 } from "effect/encoding"
-import { relative, resolve, sep } from "node:path"
+import { relative, sep } from "node:path"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
@@ -15,8 +15,8 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   ctx: Pick<Context, "tool" | "skill" | "location" | "permission">,
   connection: BrowserConnection.Connection,
 ) {
-  // Load and text waits run on the desktop; the rest poll from here with actions every desktop already supports.
-  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Effect.Success<ReturnType<typeof connection.authorize>>) {
+  // Element waits probe the page on every poll; other waits hold one command on the tab until they settle.
+  const wait = Effect.fn("BrowserTools.wait")(function* (tabID: Browser.TabID, plan: WaitPlan, tool: Tool.Context, approved: Extract<Effect.Success<ReturnType<typeof connection.authorize>>, { connectionID: string }>) {
     const started = yield* Clock.currentTimeMillis
     const current = connection
       .target(tool.sessionID, { type: "tabs.focus", tabID }, approved)
@@ -44,30 +44,16 @@ export const register = Effect.fn("BrowserTools.register")(function* (
       )
     const deadline = started + plan.timeoutMs
 
-    if (plan.kind === "delay") {
-      yield* current
-      yield* Effect.sleep(Duration.millis(plan.timeoutMs))
-      return yield* finish(yield* current, true)
-    }
-
-    if (plan.kind === "desktop") {
-      const target = yield* connection.target(tool.sessionID, plan.action, approved)
+    if (plan.kind !== "element") {
+      const action: WaitAction = plan.kind === "desktop" ? plan.action : { type: "wait", tabID, condition: plan.kind, ...(plan.kind === "url" ? { url: plan.url } : {}), timeoutMs: Math.max(1, plan.timeoutMs) }
+      const target = yield* connection.target(tool.sessionID, action, approved)
       return yield* target.request([]).pipe(
         Effect.flatMap((response) => Effect.fromResult(decodeResult({ name: "wait", output: Browser.Tab }, response))),
         Effect.flatMap((tab) => finish(tab, true)),
         Effect.catchIf(
           (error) => failureCode(error) === Browser.FailureCode.unmet,
-          () => Effect.flatMap(current, (tab) => finish(tab, false, unmet(plan.action))),
+          () => Effect.flatMap(current, (tab) => finish(tab, false, plan.kind === "url" ? `The address was ${tab.url} after ${plan.timeoutMs} ms.` : unmet(action))),
         ),
-      )
-    }
-
-    if (plan.kind === "url") {
-      const result = yield* until(current, (tab) => matchesURL(tab.url, plan.url), deadline, current)
-      return yield* finish(
-        result.seen,
-        result.met,
-        result.met ? undefined : `The address was ${result.seen.url} after ${plan.timeoutMs} ms.`,
       )
     }
 
@@ -143,23 +129,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   ) {
     // Before anything else, so a call the configuration denies reveals nothing but the denial.
     yield* connection.refuse(tool, input.type)
-    if (input.type === "wait") {
-      const plan = yield* parse(() => waitPlan(input))
-      const approved = yield* connection.authorize(tool, input)
-      return yield* wait(input.tabID, plan, tool, approved)
-    }
-    const action = yield* parse(() => normalizeAction(input))
-    if (action.type === "preview" && !(yield* connection.attached(tool.sessionID))) {
-      // Said without looking at the path, which no permission check has allowed yet.
-      const shown = BrowserFiles.address(action.path)
-        ? action.path
-        : resolve(ctx.location.directory, action.path.trim())
-      return yield* new Tool.Error({
-        message: `[browser.disconnected] ${shown} was not shown: no OpenCode desktop app is connected to this session, so nothing can open in its Review pane. Tell the user the file is at ${shown}; do not call browser.preview again until they open this session in the desktop app.`,
-      })
-    }
+    const action = input.type === "wait" ? { ...input, plan: yield* parse(() => waitPlan(input)) } : yield* parse(() => normalizeAction(input))
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
     const approved = yield* connection.authorize(tool, action, paths ?? (action.type === "preview" ? [action.path] : undefined))
+    if (approved.connected === false) {
+      if (action.type === "tabs.list") return { output: { ...approved, tabs: [], focusedTabID: null }, content: [{ type: "text" as const, text: approved.message }] }
+      return yield* new Tool.Error({ metadata: { code: "not_attached" }, message: `[browser.not_attached] ${approved.message}` })
+    }
+    if (action.type === "wait") return yield* wait(action.tabID, action.plan, tool, approved)
     if (action.type === "preview" && ctx.location.workspaceID) return yield* new Tool.Error({ message: "Browser preview requires a server-local workspace." })
     const checked = action.type === "preview" ? { ...action, path: yield* previewable(action.path, tool) } : action
     const target = yield* connection.target(tool.sessionID, checked, approved)
@@ -194,7 +171,7 @@ export const register = Effect.fn("BrowserTools.register")(function* (
           name: operation.name.slice(separator + 1),
           description: operation.description,
           input: operation.input,
-          output: operation.output,
+          output: operation.name === "tabs.list" ? Schema.Struct({ ...Browser.State.fields, connected: Schema.optional(Schema.Literal(false)), message: Schema.optional(Schema.String) }) : operation.output,
           options: {
             namespace: separator < 0 ? "browser" : `browser.${operation.name.slice(0, separator)}`,
             permission: "browser",
@@ -279,7 +256,23 @@ function modelResult(output: Schema.Schema.Type<Browser.Operation["output"]>, fi
   })
 }
 
-export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Browser.Action {
+export function normalizeAction(action: Exclude<Browser.Input, { readonly type: "wait" }>): Exclude<Browser.Action, { type: "wait" }> {
+  if (action.type === "find") {
+    const { query, ...rest } = action
+    return { ...rest, text: parameter(rest.text, query, "text", "query") }
+  }
+  if (action.type === "fill") {
+    const { value, ...rest } = action
+    return { ...rest, text: parameter(rest.text, value, "text", "value") }
+  }
+  if (action.type === "files.get") {
+    const { id, ...rest } = action
+    return { ...rest, fileID: parameter(rest.fileID, id, "fileID", "id") }
+  }
+  if (action.type === "network.get") {
+    const { requestID, ...rest } = action
+    return { ...rest, id: parameter(rest.id, requestID, "id", "requestID") }
+  }
   if (action.type === "preview" && (!action.path.trim() || (BrowserFiles.address(action.path) && !/^file:/i.test(action.path.trim()))))
     throw new Tool.Error({ metadata: { code: "invalid_path" }, message: "browser.preview needs a workspace file path, not a web or internal address." })
   if (action.type === "evaluate") return evaluateAction(action)
@@ -306,17 +299,20 @@ export function normalizeAction(action: Exclude<Browser.Input, { readonly type: 
       message: `${JSON.stringify(value)} is not a browser URL. Use an http:// or https:// address, or about:blank, without a user name or password. The connected server must be able to reach it; localhost is that server.`,
     })
   // Percent-encoding can grow the URL past the bound the desktop decodes from `command`.
-  return Schema.decodeUnknownOption(Browser.Action)({ ...action, url: url.href }).pipe(
-    Option.getOrThrowWith(
-      () =>
-        new Tool.Error({
-          message: "The URL is longer than 2048 characters once encoded. Open a shorter address.",
-        }),
-    ),
-  )
+  const normalized = { ...action, url: url.href }
+  if (!Schema.is(Browser.Action)(normalized)) throw new Tool.Error({ message: "The URL is longer than 2048 characters once encoded. Open a shorter address." })
+  return normalized
 }
 
 type WaitInput = Extract<Browser.Input, { readonly type: "wait" }>
+
+function parameter<T extends string>(value: T | undefined, alternate: T | undefined, name: string, alias: string): T {
+  if (value !== undefined && alternate !== undefined && value !== alternate)
+    throw new Tool.Error({ message: `Conflicting ${name} and ${alias}. Pass only ${name}.` })
+  const result = value ?? alternate
+  if (result === undefined) throw new Tool.Error({ message: `Missing ${name}. Pass ${name} or its alias ${alias}.` })
+  return result
+}
 type WaitAction = Extract<Browser.Action, { readonly type: "wait" }>
 
 export type WaitPlan = { readonly timeoutMs: number; readonly waited: Browser.Waited["waited"] } & (
@@ -463,36 +459,20 @@ function unmet(action: WaitAction) {
   return `Text "${action.text}" was still on the page after ${after}.`
 }
 
-// A glob such as **/dashboard matches the whole address; plain text matches anywhere in it.
-export function matchesURL(url: string, pattern: string) {
-  if (!pattern.includes("*")) return url.includes(pattern)
-  const parts = pattern.split(/\*+/)
-  const first = parts.shift() ?? ""
-  const last = parts.pop() ?? ""
-  if (!url.startsWith(first) || !url.endsWith(last)) return false
-  let offset = first.length
-  for (const part of parts) {
-    const found = url.indexOf(part, offset)
-    if (found < 0) return false
-    offset = found + part.length
-  }
-  return offset + last.length <= url.length
-}
-
-/** What one element probe saw; no count while the page navigated or did not answer. */
-type Seen = { readonly tab: Browser.Tab; readonly count: number | undefined; readonly visible: number | undefined }
-
 const Visibility = Schema.Struct({
   tab: Browser.Tab,
   value: Schema.Struct({ count: Schema.Number, visible: Schema.Number }),
 })
+type Seen = { readonly tab: Browser.Tab; readonly count: number | undefined; readonly visible: number | undefined }
 const refVisibility =
   "(element) => ({ count: element.isConnected ? 1 : 0, visible: element.isConnected && element.checkVisibility() ? 1 : 0 })"
 const selectorVisibility = (selector: string) =>
   `(() => { const found = [...document.querySelectorAll(${JSON.stringify(selector)})]; return { count: found.length, visible: found.filter((element) => element.checkVisibility()).length } })()`
 
-function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Browser.Action {
+function evaluateAction(input: Extract<Browser.Input, { readonly type: "evaluate" }>): Extract<Browser.Action, { type: "evaluate" }> {
   const script = input.script ?? input.expression ?? input.code
+  if ([input.expression, input.code].some(value => value !== undefined && value !== script))
+    throw new Tool.Error({ message: "Conflicting script, expression or code. Pass one script to evaluate." })
   if (script === undefined)
     throw new Tool.Error({
       message:

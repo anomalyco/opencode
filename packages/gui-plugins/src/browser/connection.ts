@@ -14,6 +14,7 @@ export type ShortcutEvent = Extract<PaneEvent, { type: "shortcut" }>
 export type Zoom = "in" | "out" | "reset"
 
 export type Registration = {
+  readonly binding: string
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
@@ -26,6 +27,7 @@ export type Registration = {
   answer(tabID: Browser.TabID, id: number, answer: PromptAnswer): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  clearCache(tabID: Browser.TabID, address: string): Promise<void>
   reveal(tabID: Browser.TabID): Promise<void>
   close(): void
 }
@@ -61,6 +63,7 @@ export function openBinding(input: {
   )
 
   return {
+    binding,
     load(tabID) {
       if (status.closed) return
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
@@ -86,6 +89,7 @@ export function openBinding(input: {
     },
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    clearCache: (tabID, address) => ready.then(() => client.clearCache({ binding, tabID, address })),
     reveal: (tabID) => ready.then(() => client.reveal({ binding, tabID })),
     close() {
       if (status.closed) return

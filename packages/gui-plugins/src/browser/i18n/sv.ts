@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Rensa",
   "site.permissions": "Behörigheter är blockerade",
   "site.permissions.description": "Kamera, mikrofon, plats och aviseringar fungerar inte i den här webbläsaren.",
-  "site.agent": "Agenten kan använda den här sidan",
-  "site.agent.description": "Den kan läsa sidan, köra skript och fylla i formulär.",
   "page.add": "Lägg till sidan i sessionen",
   "page.placeholder": "Lägg till kontext om den här sidan",
   "external.open": "Öppna i systemets webbläsare",

@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Ryd",
   "site.permissions": "Tilladelser er blokeret",
   "site.permissions.description": "Kamera, mikrofon, placering og notifikationer virker ikke i denne browser.",
-  "site.agent": "Agenten kan bruge denne side",
-  "site.agent.description": "Den kan læse siden, køre scripts og udfylde formularer.",
   "page.add": "Føj side til session",
   "page.placeholder": "Tilføj kontekst om denne side",
   "external.open": "Åbn i systembrowser",

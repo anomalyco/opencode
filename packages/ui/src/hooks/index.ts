@@ -3,3 +3,5 @@ export * from "./use-filtered-list"
 export * from "./create-auto-scroll"
 
 export * from "./spin-phase"
+
+export * from "./keyboard-owner"

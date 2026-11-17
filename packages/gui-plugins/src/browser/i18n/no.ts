@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Fjern",
   "site.permissions": "Tillatelser er blokkert",
   "site.permissions.description": "Kamera, mikrofon, posisjon og varsler fungerer ikke i denne nettleseren.",
-  "site.agent": "Agenten kan bruke denne siden",
-  "site.agent.description": "Den kan lese siden, kjøre skript og fylle ut skjemaer.",
   "page.add": "Legg til side i økten",
   "page.placeholder": "Legg til kontekst om denne siden",
   "external.open": "Åpne i systemets nettleser",

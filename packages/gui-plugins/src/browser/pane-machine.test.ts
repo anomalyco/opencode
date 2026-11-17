@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { createDocumentState, documentTab, transitionDocument } from "./page-machine"
 import { invalidReply, wireOutcome, wireState } from "./wire"
 import { SessionNotFoundError } from "@opencode/protocol/errors"
 import {
@@ -79,6 +80,18 @@ test("only the registering window owns the binding used to review a conversation
   expect(selectOwnedBinding(state, 1, "b1")).toBeDefined()
   expect(selectOwnedBinding(state, 2, "b1")).toBeUndefined()
   expect(selectOwnedBinding(state, 1, "missing")).toBeUndefined()
+})
+
+test("the saved-tab record after stopping a deferred restore is the original address", () => {
+  const prior = tab(tabA, dashboard, "Dashboard", 2)
+  const start = attached({ tabs: [prior], focusedTabID: tabA })
+  const attempt = entry(start).nextAttempt
+  const held = transitionDocument(createDocumentState(prior), { type: "navigation.started", url: dashboard, isMainFrame: true, isSameDocument: false }).state
+  const stopped = transitionDocument(held, { type: "navigation.held-stopped", address: dashboard }).state
+  const value = documentTab(stopped, { id: tabA, canGoBack: false, canGoForward: false })
+  const opened = play(start, on({ type: "tab.opened", tabID: tabA, attempt, tab: prior }))
+  const next = play(opened.state, on({ type: "tab.published", tabID: tabA, attempt, tab: value }))
+  expect(next.effects).toContainEqual({ type: "save-restore", storageKey: "server\nb1", snapshot: { tabs: [{ id: tabA, url: dashboard }], focusedTabID: tabA } })
 })
 
 test("a refused restore keeps its saved address, reports the reason once and consumes no page attempt", () => {

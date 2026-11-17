@@ -48,8 +48,6 @@ export default {
   "site.cookies.clear": "Notīrīt",
   "site.permissions": "Atļaujas ir bloķētas",
   "site.permissions.description": "Kamera, mikrofons, atrašanās vieta un paziņojumi šajā pārlūkprogrammā nedarbojas.",
-  "site.agent": "Aģents var izmantot šo lapu",
-  "site.agent.description": "Tas var lasīt lapu, izpildīt skriptus un aizpildīt veidlapas.",
   "page.add": "Pievienot lapu sesijai",
   "page.placeholder": "Pievienojiet kontekstu par šo lapu",
   "external.open": "Atvērt sistēmas pārlūkprogrammā",

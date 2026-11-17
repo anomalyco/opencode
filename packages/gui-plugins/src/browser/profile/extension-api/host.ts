@@ -7,6 +7,7 @@ import type { Manifests } from "./manifest"
 import { sendBackgroundEvent, workerQueue } from "./worker-events"
 import { eventPage } from "./event-page"
 import preloadSource from "./preload.js?raw"
+import frameStyles from "./frame-styles.js?raw"
 
 /** A context that listens to an event: a page frame, or the extension's service worker, which is started to hear it. */
 type Subscriber = { readonly kind: "frame"; readonly process: number; readonly routing: number } | { readonly kind: "worker" | "eventPage" }
@@ -50,7 +51,7 @@ export async function createExtensionHost(input: {
   // The modules already listen (to cookies, tabs); a host that cannot start lets them go again.
   await writeFile(
     file,
-    preloadSource.replace('"__NAMESPACES__"', JSON.stringify(JSON.stringify(namespaces))),
+    frameStyles + "\n" + preloadSource.replace('"__NAMESPACES__"', JSON.stringify(JSON.stringify(namespaces))),
     "utf8",
   ).catch((cause: unknown) => {
     input.modules.forEach((module) => module.dispose?.())

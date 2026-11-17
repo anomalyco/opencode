@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Temizle",
   "site.permissions": "İzinler engellendi",
   "site.permissions.description": "Kamera, mikrofon, konum ve bildirimler bu tarayıcıda çalışmaz.",
-  "site.agent": "Ajan bu sayfayı kullanabilir",
-  "site.agent.description": "Sayfayı okuyabilir, betik çalıştırabilir ve formları doldurabilir.",
   "page.add": "Sayfayı oturuma ekle",
   "page.placeholder": "Bu sayfa hakkında bağlam ekleyin",
   "external.open": "Sistem tarayıcısında aç",

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import type { BrowserWindow, Session, WebContents } from "electron"
-import { allowRendererPermissions } from "./security"
+import { allowRendererPermissions, receivesPluginPort } from "./security"
 
 type RequestHandler = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]>
 
@@ -120,4 +120,21 @@ test("retains permissions across all live windows on a shared session and revoke
   first.close()
   expect(await shared.ask(1, "notifications")).toBe(false)
   expect(shared.check(null, "notifications", { isMainFrame: false })).toBe(false)
+})
+
+test("hands the plugin port only to the app's own document, never to a page the window went to", () => {
+  const window = (url: string, destroyed = false) => ({
+    isDestroyed: () => destroyed,
+    webContents: { isDestroyed: () => false, mainFrame: { url } },
+  })
+
+  expect(receivesPluginPort(window(url))).toBe(true)
+  expect(receivesPluginPort(window("oc://renderer/settings.html#/browser"))).toBe(true)
+  // A web page, a preview, another host on the app's scheme and an address that only looks like the app's.
+  expect(receivesPluginPort(window("https://evil.test/"))).toBe(false)
+  expect(receivesPluginPort(window("oc-preview://file/index.html"))).toBe(false)
+  expect(receivesPluginPort(window("oc://evil/index.html"))).toBe(false)
+  expect(receivesPluginPort(window("https://renderer.evil.test/oc://renderer/index.html"))).toBe(false)
+  expect(receivesPluginPort(window(""))).toBe(false)
+  expect(receivesPluginPort(window(url, true))).toBe(false)
 })

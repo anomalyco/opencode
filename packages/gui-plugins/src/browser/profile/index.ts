@@ -1,5 +1,6 @@
 import { cp, lstat, readFile, realpath, rename, rm, stat } from "node:fs/promises"
 import { generateKeyPairSync } from "node:crypto"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import electron, { app, type Extension, type Session } from "electron"
 import { Schema } from "effect"
@@ -7,7 +8,9 @@ import type { Log, Storage } from "@opencode/plugin/gui/main"
 import type { PagePermissions } from "../page-prompts"
 import { guardSession } from "../session-guard"
 import { extensionAccess, extensionCompatibility } from "./compatibility"
-import { browserUserAgent, cookieDetails, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
+import { browserUserAgent, parseCookieFile, PROBE_COOKIE, type CookieRead } from "./cookie"
+import { sweepSnapshots, type SnapshotScratch } from "./database"
+import { writeCookies } from "./import"
 import { createExtensionApis } from "./extension-api"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
 import { createCookieMirror, type CookieMirror } from "./link"
@@ -30,8 +33,15 @@ import {
   type ExtensionFiles,
   type Manifest,
 } from "./extensions"
-import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension } from "./ipc"
-import { chromiumProfileDirectory, listSources, profileExtensions, readSource, windowsIcons } from "./sources"
+import { ReviewedGrants, type ImportResult, type InstallResult, type ProfileExtension, type SiteList } from "./ipc"
+import {
+  chromiumProfileDirectory,
+  listSources,
+  profileExtensions,
+  readSource,
+  readSourceHosts,
+  windowsIcons,
+} from "./sources"
 
 /** The partition every page of the desktop browser shares, on disk under the app's user data. */
 export const PARTITION = "persist:opencode-browser"
@@ -75,7 +85,18 @@ export async function createBrowserProfile(input: {
   // Each tab's permission prompts by its web contents ID; the pane fills it too.
   const permissions = new Map<number, PagePermissions>()
   const unguard = guardSession(session, downloads, permissions)
-  const persistent = cookiesPersist(session)
+
+  // Copies of cookie databases while they are read: other browsers' for an import or a site list, and the profile's own
+  // for its start-up probe; see `snapshotDatabase`. Copies a crash left behind, here or in the temporary folder where
+  // earlier versions made them, go now.
+  const scratch: SnapshotScratch = {
+    directory: path.join(app.getPath("userData"), "browser-import"),
+    live: new Set(),
+    log: (message, detail) => input.log.write("warn", message, detail),
+  }
+
+  void sweepSnapshots(scratch, [tmpdir()])
+  const persistent = cookiesPersist(session, scratch)
   let settling: ReturnType<typeof setTimeout> | undefined
 
   // A page sets or clears cookies in bursts; the cookie count hears once the burst settles. The start-up probe is no
@@ -388,31 +409,11 @@ export async function createBrowserProfile(input: {
     return result
   }
 
-  const importCookies = async (read: CookieRead): Promise<ImportResult> => {
+  const importCookies = async (read: CookieRead, chosen = false): Promise<ImportResult> => {
     // Imported sign-ins would be gone at the next start.
     if (!(await persistent)) return { type: "failed", reason: "storage" }
-    const now = Date.now() / 1000
-    const writes = read.cookies.flatMap((cookie) => cookieDetails(cookie, now) ?? [])
 
-    const results = await Promise.all(
-      writes.map((cookie) =>
-        session.cookies.set(cookie).then(
-          () => true,
-          () => false,
-        ),
-      ),
-    )
-
-    await session.cookies.flushStore()
-    const imported = results.filter(Boolean).length
-
-    return {
-      type: "imported",
-      imported,
-      skipped: (read.skipped ?? 0) + read.cookies.length - writes.length,
-      protected: read.protected,
-      failed: read.failed + writes.length - imported,
-    }
+    return writeCookies(session, read, chosen)
   }
 
   return {
@@ -461,12 +462,25 @@ export async function createBrowserProfile(input: {
         icon: source.application ? icons.get(source.application) : undefined,
       }))
     },
-    async importBrowser(source: string, profile: string): Promise<ImportResult> {
-      const read = await readSource(source, profile)
+    /** The sites a browser profile has cookies for, from their hosts alone; see `SiteList`. */
+    async sites(source: string, profile: string): Promise<SiteList> {
+      const hosts = await readSourceHosts(source, profile, scratch)
+
+      if ("failure" in hosts) return { type: "failed", reason: hosts.failure === "key" ? "read" : hosts.failure }
+      // The public-suffix list loads only when a list or a chosen import needs it, not to start the browser profile.
+      const { groupSites } = await import("./sites")
+
+      // Safari records no last use, so its list is by name.
+      return { type: "listed", sites: groupSites(hosts, Date.now() / 1000), order: hosts.some((host) => host.used > 0) ? "recent" : "name" }
+    },
+    /** Imports a browser profile's cookies, or with `sites` only those of the chosen sites. */
+    async importBrowser(source: string, profile: string, sites?: readonly string[]): Promise<ImportResult> {
+      const keep = sites ? (await import("./sites")).siteFilter(sites) : undefined
+      const read = await readSource(source, profile, scratch, keep)
 
       if ("failure" in read) return { type: "failed", reason: read.failure }
 
-      return importCookies(read)
+      return importCookies(read, !!sites)
     },
     async importFile(file: string): Promise<ImportResult> {
       // A cookie export is a few megabytes at most; anything far larger is not one.

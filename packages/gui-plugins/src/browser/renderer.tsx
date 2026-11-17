@@ -169,7 +169,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       bind: "f5",
       editable: true,
       enabled: pane.visible() && !!pane.address(),
-      run: pane.reload,
+      run: () => pane.reload(),
     }
   })
 
@@ -189,7 +189,24 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       hidden: true,
       editable: true,
       enabled: pane.visible(),
-      run: pane.reload,
+      run: () => pane.reload(),
+    }
+  })
+
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return
+
+    return {
+      id: "hardReload",
+      title: ctx.t("menu.hardReload"),
+      group: ctx.t("command.category.view"),
+      bind: mac ? "mod+alt+r" : "ctrl+f5",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible() && !!pane.address(),
+      run: () => pane.reload(true),
     }
   })
 

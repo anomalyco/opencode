@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "清除",
   "site.permissions": "权限已被阻止",
   "site.permissions.description": "摄像头、麦克风、位置和通知在此浏览器中不可用。",
-  "site.agent": "智能体可以使用此页面",
-  "site.agent.description": "它可以读取页面、运行脚本和填写表单。",
   "page.add": "将页面添加到会话",
   "page.placeholder": "添加关于此页面的上下文",
   "external.open": "在系统浏览器中打开",

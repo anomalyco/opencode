@@ -1,6 +1,7 @@
 import { createDecipheriv, createHash, pbkdf2Sync } from "node:crypto"
 import { chromiumTime, type CookieRead, type ImportedCookie } from "./cookie"
-import { snapshotDatabase } from "./database"
+import { snapshotDatabase, type SnapshotScratch } from "./database"
+import type { CookieHost } from "./sites"
 
 /**
  * The key a Chromium profile encrypts cookie values with.
@@ -71,6 +72,17 @@ function attempt<T>(run: () => T) {
   }
 }
 
+/** A cookie row whose every value has the type Chromium writes; a damaged row has another, which SQLite allows. */
+const WELL_FORMED = [
+  "typeof(host_key) = 'text'",
+  "typeof(name) = 'text'",
+  "typeof(value) = 'text'",
+  "typeof(encrypted_value) = 'blob'",
+  "typeof(path) = 'text'",
+  ...["expires_utc", "has_expires", "is_secure", "is_httponly", "samesite"].map((column) => `typeof(${column}) = 'integer'`),
+  "typeof(top_frame_site_key) IN ('text', 'null')",
+].join(" AND ")
+
 /** Chromium's `samesite` column, by value; -1 is unspecified. */
 const SAME_SITE = ["no_restriction", "lax", "strict"] as const
 
@@ -89,24 +101,65 @@ type Row = {
 }
 
 /**
- * Reads a Chromium profile's cookie database from a copy, so the running browser keeps its lock. Partitioned cookies
- * (CHIPS) stay behind: Electron cannot write a cookie's partition.
+ * The hosts of a Chromium profile's cookies that an import would write, for the list of its sites. It reads the
+ * plain-text columns only: no value is read, so nothing is decrypted and no key is asked for. Partitioned cookies
+ * stay out, as an import leaves them behind.
  */
-export async function readChromiumCookies(database: string, key: ChromiumKey): Promise<CookieRead> {
-  const rows = await snapshotDatabase(database, (db) => {
+export async function readChromiumHosts(database: string, scratch: SnapshotScratch): Promise<CookieHost[]> {
+  const rows = await snapshotDatabase(database, scratch, (db) => {
     const query = db.prepare(
-      "SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies",
+      "SELECT host_key, expires_utc, has_expires, last_access_utc FROM cookies WHERE (top_frame_site_key IS NULL OR top_frame_site_key = '') AND typeof(host_key) = 'text'",
     )
+
+    query.setReadBigInts(true)
+
+    // SAFETY: the query names Chromium's cookie table columns. SQLite types each value, so it keeps only rows whose
+    // host is text; a damaged row names no site. The rest are integers.
+    return query.all() as { host_key: string; expires_utc: bigint; has_expires: bigint; last_access_utc: bigint }[]
+  })
+
+  return rows.map((row) => ({
+    host: row.host_key,
+    expires: Number(row.has_expires) ? chromiumTime(row.expires_utc) : undefined,
+    used: chromiumTime(row.last_access_utc) ?? 0,
+  }))
+}
+
+/**
+ * Reads a Chromium profile's cookie database from a copy, so the running browser keeps its lock. Partitioned cookies
+ * (CHIPS) stay behind: Electron cannot write a cookie's partition. With `keep`, only the rows of the hosts it keeps
+ * are decrypted and counted; the others are not read further.
+ */
+export async function readChromiumCookies(
+  database: string,
+  key: ChromiumKey,
+  scratch: SnapshotScratch,
+  keep?: (host: string) => boolean,
+): Promise<CookieRead> {
+  const read = await snapshotDatabase(database, scratch, (db) => {
+    const query = db.prepare(
+      `SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies WHERE ${WELL_FORMED}`,
+    )
+
+    // Damaged rows, by host where it is text, so an import of chosen sites counts only theirs.
+    const damaged = db.prepare(`SELECT CASE WHEN typeof(host_key) = 'text' THEN host_key END AS host FROM cookies WHERE NOT (${WELL_FORMED})`)
 
     // Chromium's timestamps count microseconds since 1601, past the largest integer a number holds exactly.
     query.setReadBigInts(true)
 
-    // SAFETY: the query names Chromium's cookie table columns, whose SQLite types match `Row`.
-    return query.all() as Row[]
+    // SAFETY: the query names Chromium's cookie table columns and keeps only the rows whose values have the SQLite
+    // types `Row` says; the second one's `host` is text or null.
+    return { rows: query.all() as Row[], damaged: damaged.all() as { host: string | null }[] }
   })
 
-  return rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
+  // A damaged row is one cookie that does not import, as one whose value does not decrypt; one whose host is not text
+  // names no site, so only an import of every site counts it.
+  const failed = read.damaged.filter((row) => (row.host === null ? !keep : !keep || keep(row.host))).length
+
+  return read.rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
     (result, row) => {
+      if (keep && !keep(row.host_key)) return result
+
       if (row.top_frame_site_key) {
         result.skipped++
 
@@ -134,7 +187,7 @@ export async function readChromiumCookies(database: string, key: ChromiumKey): P
 
       return result
     },
-    { cookies: [], protected: 0, failed: 0, skipped: 0 },
+    { cookies: [], protected: 0, failed, skipped: 0 },
   )
 }
 

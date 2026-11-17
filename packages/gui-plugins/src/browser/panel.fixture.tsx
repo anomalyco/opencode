@@ -52,7 +52,7 @@ import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent, type PromptAnswer } from "./ipc"
+import { BrowserPane, type PaneEvent, type PromptAnswer, type PromptView } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
@@ -509,6 +509,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
+        report()
+      },
+      clearCache: async () => {
+        setStore("generation", (value) => value + 1)
         report()
       },
       close: async () => undefined,
@@ -1291,10 +1295,12 @@ export function mountBrowserRegion(input: RegionHost) {
       zoom: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
+      clearCache: async () => undefined,
       find: async () => undefined,
       notice: async () => undefined,
       reviewLink: async () => tabID,
-      answer: async () => undefined,
+      // Main answers the page, which then waits on nothing.
+      answer: async () => ask(null),
       reveal: async () => undefined,
       close: async () => undefined,
       forget: async () => undefined,
@@ -1317,7 +1323,15 @@ export function mountBrowserRegion(input: RegionHost) {
       servers: () => servers,
       workspaces: () => workspaces,
       desktop: () => ({ zoom: () => 1 }),
-      embeds: () => ({ View: () => null, capture: async () => undefined }),
+      // The page area with what the pane draws over it, as a page's prompt; the page itself is the iframe above.
+      embeds: () => ({
+        View: (props: Parameters<Embeds["View"]>[0]) => (
+          <div class={props.class} style={{ "min-height": "240px" }}>
+            {props.children}
+          </div>
+        ),
+        capture: async () => undefined,
+      }),
       system: () => ({ copy: async () => undefined, openExternal() {}, save: async () => false }),
       sessions: () => ({ list: () => refs, current: view }),
       screen: () => ({ current: () => screen }),
@@ -1342,6 +1356,13 @@ export function mountBrowserRegion(input: RegionHost) {
       listeners.forEach((listener) =>
         listener({ binding, event: { type: "state", state: { tabs: [tab(tabID)], focusedTabID: tabID } } }),
       )
+    }
+
+    // As main reports a page's prompt on Beta's tab.
+    const ask = (prompt: PromptView | null) => {
+      const binding = latest()?.binding
+
+      if (binding) listeners.forEach((listener) => listener({ binding, event: { type: "prompt", tabID, prompt } }))
     }
 
     // Wires an embedded page with the same before-input-event shortcut interception as chromium.ts.
@@ -1528,6 +1549,48 @@ export function mountBrowserRegion(input: RegionHost) {
               </button>
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>
+              <button
+                onClick={() =>
+                  ask({
+                    id: 1,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "prompt",
+                      site: { kind: "web", host: "beta.example", embedded: false },
+                      message: "Name the copy",
+                      value: "Draft",
+                      stop: false,
+                    },
+                  })
+                }
+              >
+                Page prompt
+              </button>
+              <button
+                onClick={() =>
+                  ask({
+                    id: 2,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "beta.example", embedded: false },
+                      permissions: ["notifications"],
+                      remember: "kept",
+                      agent: false,
+                      system: false,
+                    },
+                  })
+                }
+              >
+                Permission request
+              </button>
             </nav>
             <iframe
               title="Browser page"

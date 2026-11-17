@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "Цэвэрлэх",
   "site.permissions": "Зөвшөөрлүүд хаагдсан",
   "site.permissions.description": "Камер, микрофон, байршил болон мэдэгдлүүд энэ хөтөч дээр ажиллахгүй.",
-  "site.agent": "Агент энэ хуудсыг ашиглаж болно",
-  "site.agent.description": "Хуудсыг уншиж, скрипт ажиллуулж, маягт бөглөж чадна.",
   "page.add": "Хуудсыг сесст нэмэх",
   "page.placeholder": "Энэ хуудасны талаар контекст нэмэх",
   "external.open": "Системийн хөтөч дээр нээх",

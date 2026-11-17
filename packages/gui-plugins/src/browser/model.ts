@@ -68,13 +68,13 @@ type ModelState = {
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-type PageDetail = { icon?: string; zoom: number }
+type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 
 /** A mounted pane; the newest one answers the reload and inspect commands. */
 type PaneHandle = {
   visible: () => boolean
   address: () => string
-  reload: () => void
+  reload: (ignoreCache?: boolean) => void
   /** Closes the selected browser tab, including a blank page. */
   close: () => void
   inspectable: () => boolean
@@ -421,7 +421,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const page = (sessionKey: string, event: PageEvent) => {
     setState("pages", sessionKey, (pages) => ({
       ...pages,
-      [event.tabID]: event.icon ? { icon: event.icon, zoom: event.zoom } : { zoom: event.zoom },
+      [event.tabID]: { icon: event.icon, zoom: event.zoom, retryOnly: event.retryOnly },
     }))
     const url = sessionTab(machine(), sessionKey, event.tabID)?.url
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
@@ -647,7 +647,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
 
       if (!notice) return
-      const conversation = notice.reason !== "popup" && notice.source === "conversation"
+      const conversation = "source" in notice && notice.source === "conversation"
       const origin = conversation ? ctx.t("notice.conversation") : notice.site ? ctx.t("notice.site", { site: notice.site }) : ctx.t("notice.page")
 
       if (notice.reason === "external" || notice.reason === "popup") return {
@@ -658,17 +658,31 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
+      // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
+      // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
+      if (notice.reason === "browser.passkey.off")
+        return { token: notice.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+
+      if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
+        return {
+          token: notice.token,
+          origin,
+          text: ctx.t("refused.passkey"),
+          label: ctx.t("refused.passkey.import"),
+          passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
+        }
+
       return { token: notice.token, origin, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean, copy?: boolean) {
-      const token = state.chrome[session.key]?.[tabID]?.notice?.token
+      const notice = state.chrome[session.key]?.[tabID]?.notice
 
-      if (!token) return
+      if (!notice) return
       setState("chrome", session.key, tabID, "notice", undefined)
       const target = registration(session)
 
       if (!target) throw new Error("browser.pane.unavailable")
-      await target.notice(tabID, token, dismiss, copy)
+      await target.notice(tabID, notice.token, dismiss, copy)
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,
@@ -686,8 +700,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** The page's cookie count; undefined while the pane cannot answer. */
     site: (session: Session, tabID: Browser.TabID) => registration(session)?.site(tabID),
+    binding: (session: Session) => registration(session)?.binding,
     /** Deletes the page's cookies and stored data, and reloads it. */
     clearSite: (session: Session, tabID: Browser.TabID) => registration(session)?.clearSite(tabID),
+    clearCache: (session: Session, tabID: Browser.TabID, address: string) => registration(session)?.clearCache(tabID, address),
     revealFile: (session: Session, tabID: Browser.TabID) => registration(session)?.reveal(tabID),
     /** Pages the browser showed, newest first. */
     visits: () => history.value.visits.filter((visit) => {

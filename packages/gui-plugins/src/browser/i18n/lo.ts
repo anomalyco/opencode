@@ -47,8 +47,6 @@ export default {
   "site.cookies.clear": "ລ້າງ",
   "site.permissions": "ການອະນຸຍາດຖືກບລັອກ",
   "site.permissions.description": "ກ້ອງ, ໄມໂຄຣໂຟນ, ຕຳແໜ່ງ ແລະການແຈ້ງເຕືອນບໍ່ເຮັດວຽກໃນເບຣາວເຊີນີ້.",
-  "site.agent": "ຕົວແທນສາມາດໃຊ້ໜ້ານີ້ໄດ້",
-  "site.agent.description": "ມັນສາມາດອ່ານໜ້າ, ແລ່ນສະຄຣິບ ແລະກອກແບບຟອມໄດ້.",
   "page.add": "ເພີ່ມໜ້າໃສ່ເຊດຊັນ",
   "page.placeholder": "ເພີ່ມບໍລິບົດກ່ຽວກັບໜ້ານີ້",
   "external.open": "ເປີດໃນເບຣາວເຊີຂອງລະບົບ",

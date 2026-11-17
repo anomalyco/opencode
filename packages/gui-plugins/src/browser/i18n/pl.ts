@@ -49,8 +49,6 @@ export default {
   "site.cookies.clear": "Wyczyść",
   "site.permissions": "Uprawnienia są zablokowane",
   "site.permissions.description": "Kamera, mikrofon, lokalizacja i powiadomienia nie działają w tej przeglądarce.",
-  "site.agent": "Agent może używać tej strony",
-  "site.agent.description": "Może czytać stronę, uruchamiać skrypty i wypełniać formularze.",
   "page.add": "Dodaj stronę do sesji",
   "page.placeholder": "Dodaj kontekst dotyczący tej strony",
   "external.open": "Otwórz w przeglądarce systemowej",

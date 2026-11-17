@@ -1,12 +1,17 @@
 import { homedir } from "node:os"
-import { navigationTurn } from "./navigation-turn"
+import { scheduler } from "node:timers/promises"
+import { navigationTurn, replacementNavigation } from "./navigation-turn"
+import { accessibilitySnapshot } from "./snapshot"
+import { documentRefs } from "./refs"
+import { describeField, Field, readableField } from "./field-value"
+import { agentRendering, needsWakeFrame } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "@opencode/plugin/gui/main"
-import { captureCoordinator, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { navigationDeadline } from "./navigation-deadline"
 import { attachChildren, releaseWorker } from "./child-targets"
@@ -14,6 +19,8 @@ import { CodedError, missingArtifact } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
+import { afterRefusal, agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
+import { cookieSite } from "./profile/sites"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -25,6 +32,7 @@ import {
   frameStillCurrent,
   isDocumentClosed,
   isNavigationPending,
+  retryOnly,
   transitionDocument,
   type DocumentEvent,
 } from "./page-machine"
@@ -85,6 +93,15 @@ import type { WorkspaceSource } from "./workspace-file"
 import type { artifactPages } from "./artifact-preview"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
+
+// A page can retain a removed node. Check in the same renderer call that reads or acts on the ref.
+function connectedFunction(fn: string) {
+  return `function(...args) { if (!this.isConnected) throw new Error('browser.detached_ref'); return (${fn}\n).apply(this,args) }`
+}
+
+function detachedRef() {
+  return new CodedError(Browser.FailureCode.staleRef, "Element is no longer connected. Take a fresh snapshot and choose a current ref.")
+}
 
 const noVisibleArea = "Element has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport."
 
@@ -158,7 +175,7 @@ const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-export type PageDetail = { icon?: string; zoom: number }
+export type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
 
 /** The zoom a key press asks for: the system browser's zoom keys, with the platform's modifier already checked. */
 function zoomKey(input: Electron.Input) {
@@ -251,6 +268,13 @@ export function createBrowserPage(
     previewFailure?: (url: string) => typeof FileVerificationError.code | undefined
     artifacts?: ReturnType<typeof artifactPages>
     remote?: Extract<WorkspaceSource, { type: "remote" }>
+    /**
+     * The tab's pop-up group must refuse passkeys too: the agent drives this tab, and a page of the group can script
+     * another through `window.opener` or the window it opened. Windows only.
+     */
+    restrictPasskeys?: () => void
+    /** The tab's pop-up group refuses passkeys already, so this tab does from its first document. */
+    passkeysRestricted?: () => boolean
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
     signal: AbortSignal
@@ -299,6 +323,8 @@ export function createBrowserPage(
     webPreferences: {
       partition: options.partition,
       nodeIntegration: false,
+      // Deliver the profile's CSS receiver to child frames. It runs in the isolated sandbox, not the web world.
+      nodeIntegrationInSubFrames: options.local === true,
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
@@ -315,7 +341,8 @@ export function createBrowserPage(
   constructing.defer(() => pageLifetime.abort())
   constructing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })
 
-  if (agentDriven(options.activity)) contents.setBackgroundThrottling(false)
+  const rendering = agentRendering(pageLifetime.signal, enabled => contents.setBackgroundThrottling(enabled))
+  const opening = agentDriven(options.activity) ? rendering.hold() : undefined
   constructing.defer(() => options.workspace?.dispose())
   constructing.defer(() => options.artifacts?.dispose())
   const preview = (url: string) => options.artifacts?.display(url) ?? options.workspace?.display(url)
@@ -350,7 +377,7 @@ export function createBrowserPage(
 
     if (pageReload(input, process.platform === "darwin")) {
       event.preventDefault()
-      void reload().catch((error: Error) => publish(error.message))
+      void options.menu.navigate("reload").catch((error: Error) => publish(error.message))
 
       return
     }
@@ -417,7 +444,9 @@ export function createBrowserPage(
     const icon = documentIcon(documentState)
 
     if (icon) next.icon = icon
-    const key = `${next.zoom}:${next.icon ?? ""}`
+
+    if (retryOnly(documentState)) next.retryOnly = true
+    const key = `${next.zoom}:${next.icon ?? ""}:${!!next.retryOnly}`
 
     if (key === reported) return
     reported = key
@@ -434,7 +463,7 @@ export function createBrowserPage(
     Array.from(contexts.values()).some((context) => context.id === id && context.sessionID === sessionID))
 
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
-  const refs = new Map<string, Element>()
+  const refs = documentRefs()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
@@ -480,7 +509,7 @@ export function createBrowserPage(
   // Set the nested auto-attach policy before the new renderer can create its own children.
   const prepareFrame = async (sessionID: string) => {
     try {
-      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID)])
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID), passkeys.attach(sessionID)])
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
@@ -501,12 +530,12 @@ export function createBrowserPage(
     if (reason === "remove") extensionContexts.delete(frameId)
   })
 
-  const state = () =>
+  const state = (display = false) =>
     documentTab(documentState, {
       id: options.id,
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
-    })
+    }, display)
 
   // Every state report goes through here, so a page that was disposed publishes nothing.
   // While a user's close asks the page's beforeunload on a blank load, the tab reports nothing: the blank page is not
@@ -517,7 +546,10 @@ export function createBrowserPage(
     if (!closed() && !quiet) options.publish(error)
   }
 
+  let startingBlank = false
+
   const dispatch = (event: DocumentEvent) => {
+    if (startingBlank && event.type !== "disposed") return
     const next = transitionDocument(documentState, event)
     documentState = next.state
     next.effects.forEach((effect) => {
@@ -633,12 +665,58 @@ export function createBrowserPage(
 
   // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
   const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
+  // A site's passkey or security-key request fails where nothing here could answer it: always on macOS and Linux, and on
+  // Windows, whose own dialog would answer, in tabs the agent drives or could script. Once per page, the notice says
+  // why and a running agent command stops with the reason.
+  const native = process.platform === "win32"
+  const passkeyPage = { noticed: false, interrupted: false }
+
+  const passkeys = guardWebAuthn(cdp, {
+    native,
+    refused: (asker) => {
+      // Another site's frame does not speak for the page: its request is refused without a word.
+      if (!asker.mainFrame && (!asker.origin || asker.origin !== contents.mainFrame.origin)) return
+      const address = URL.parse(displayURL(contents.getURL()))
+
+      if (activity.agentRuns > 0 && !passkeyPage.interrupted) {
+        passkeyPage.interrupted = true
+        prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(address?.host)))
+      }
+
+      if (passkeyPage.noticed) return
+      passkeyPage.noticed = true
+      const site = address?.hostname ? cookieSite(address.hostname) : undefined
+      // On Windows only an enforced tab refuses, and a new tab of the person's would reach the system's dialog.
+      const reason = native ? "browser.passkey.off" : agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey"
+      notices.show(site && site.length <= 255 ? { reason, site } : { reason })
+    },
+  })
+
+  // A page that can never reach the system's dialog, or one the agent drove or could script, refuses in the browser
+  // process before its first document loads. On Windows a failure to do so, whenever it happens, leaves it with the
+  // system's dialog, so the tab fails.
+  const restrictPasskeys = () => {
+    if (native) options.restrictPasskeys?.()
+
+    const enforcing = passkeys.enforce()
+
+    if (native) void enforcing.catch(() => options.fail())
+
+    return enforcing
+  }
+
+  if (!native || agentDriven(options.activity) || options.passkeysRestricted?.())
+    void restrictPasskeys().catch(() => undefined)
+
   constructing.defer(() => prompts.dispose())
   constructing.defer(() => dialogs.dispose())
 
   // Chromium uses the document URL as the title of untitled files; don't persist its internal origin as a title.
   const pageTitle = (address = state().url) => {
     const title = contents.getTitle()
+
+    if (documentState.status !== "closed" && documentState.retry && (!title || title === "about:blank"))
+      return documentState.title || documentState.retry
 
     return /^oc-preview:/i.test(title) ? address : title
   }
@@ -660,17 +738,17 @@ export function createBrowserPage(
   contents.on("did-navigate", (_event, url, status, statusText) =>
     dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
-  // Only agent-driven tabs need fresh frames while hidden. A cross-site commit can replace the renderer
-  // we woke on the first agent command, so wake its replacement too.
   contents.on("did-navigate", () => {
     documentInput = false
     const url = contents.getURL()
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
+    passkeyPage.noticed = false
+    passkeyPage.interrupted = false
     popupReport = undefined
 
-    if (agentDriven(activity)) contents.setBackgroundThrottling(false)
+    rendering.committed()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) =>
     dispatch({ type: "navigation.failed", code, description: options.previewFailure?.(url) ?? (options.artifacts?.display(url) ? "browser.artifact.missing" : options.remote?.needsUpdate?.() && preview(url)?.startsWith("workspace:") ? "browser.preview.unsupported" : description), url, preview: preview(url), isMainFrame }),
@@ -777,6 +855,7 @@ export function createBrowserPage(
       overrideBrowserWindowOptions: {
         webPreferences: {
           nodeIntegration: false,
+          nodeIntegrationInSubFrames: options.local === true,
           contextIsolation: true,
           sandbox: true,
           webSecurity: true,
@@ -978,12 +1057,14 @@ export function createBrowserPage(
   const navigation = navigationTurn(options.waitForFilters, url => {
     dispatch({ type: "navigation.started", url, isMainFrame: true, isSameDocument: false })
     dispatch({ type: "loading.started" })
-  }, () => { if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() }) })
+  }, () => { if (!closed()) dispatch({ type: "loading.stopped", title: pageTitle() }) }, address => {
+    dispatch({ type: "navigation.held-stopped", address })
+  })
 
-  const begin = (signal = options.signal) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]))
+  const begin = (signal = options.signal, keepAddress = false) => navigation.begin(AbortSignal.any([pageLifetime.signal, signal, options.signal]), keepAddress)
 
-  const load = async (url: string, retry = false, commandSignal = options.signal) => {
-    const visit = begin(commandSignal)
+  const load = async (url: string, retry = false, commandSignal = options.signal, keepAddress = true) => {
+    const visit = begin(commandSignal, keepAddress)
     const destination = url.startsWith("artifact:") ? options.artifacts?.load(url) : localFileURL(url) || url.startsWith("workspace:") ? await options.workspace?.load(url, (guarded) => notices.show({reason: guarded ? "browser.preview.agentRestricted" : "browser.preview.restricted"}), retry ? contents.getURL() : undefined) : url
 
     if (!destination) return Promise.reject(new Error("Workspace preview is unavailable."))
@@ -1010,24 +1091,39 @@ export function createBrowserPage(
     }
 
     contents.once("did-navigate", commit)
+    const next = replacementNavigation()
+    contents.on("did-start-navigation", next.start)
+    contents.on("did-navigate", next.commit)
+    contents.on("did-stop-loading", next.stop)
+    contents.once("destroyed", next.stop)
 
-    return navigationDeadline(contents.loadURL(destination))
-      .catch((error: Error) => {
-          if (committedLoad(error, committed)) return
+    return navigationDeadline(contents.loadURL(destination).catch(async (error: Error) => {
+      if (committedLoad(error, committed)) return
 
-          if (options.previewFailure?.(destination)) throw new FileVerificationError()
+      if (destinationOrigin(destination) && await next.after(error)) return
 
-        if (destination.startsWith(`${previewScheme}://`))
-          throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
-        throw error
-      })
-      .finally(() => contents.off("did-navigate", commit))
+      if (options.previewFailure?.(destination)) throw new FileVerificationError()
+
+      if (destination.startsWith(`${previewScheme}://`))
+        throw new CodedError(Browser.FailureCode.previewUnavailable, `The preview could not be loaded: ${url}`)
+
+      if (!committed && "errno" in error && (error.errno === -2 || error.errno === -3))
+        throw new CodedError("navigation_failed", "No page committed. The navigation was cancelled, failed, or became a download. Check the tab and its downloads before navigating again.")
+      throw error
+    })).finally(() => {
+      next.stop()
+      contents.off("destroyed", next.stop)
+      contents.off("did-stop-loading", next.stop)
+      contents.off("did-navigate", next.commit)
+      contents.off("did-start-navigation", next.start)
+      contents.off("did-navigate", commit)
+    })
   }
 
-  const reload = async (signal = options.signal) => {
+  const reload = async (signal = options.signal, ignoreCache = false) => {
     const tab = state()
 
-    if (navigation.interrupt("reload", documentState.status === "restoring" ? documentState.url : undefined)) return
+    if (documentState.status !== "closed" && documentState.retry) return load(documentState.retry, true, signal)
 
     if (tab.loadError && /^(?:file|workspace|artifact):/.test(tab.url)) return void await load(tab.url, true, signal)
     const actual = contents.getURL()
@@ -1037,7 +1133,7 @@ export function createBrowserPage(
 
     if (address) return void await load(address, true, signal)
 
-    return begin(signal)(actual, () => contents.reload())
+    return begin(signal)(actual, () => ignoreCache ? contents.reloadIgnoringCache() : contents.reload())
   }
 
   const ready = navigationDeadline(Promise.all([
@@ -1045,7 +1141,13 @@ export function createBrowserPage(
     ...(initial === undefined
       ? []
       : [
-          load(initial).catch((error: Error) => {
+          load(initial).then(async () => {
+            // Stop before the first load leaves no renderer to finish CDP setup. Start only the inert document;
+            // its native events are not a navigation of the saved tab.
+            if (documentState.status !== "restoring" || !documentState.retry || contents.getURL() || closed()) return
+            startingBlank = true
+            await contents.loadURL("about:blank").finally(() => { startingBlank = false })
+          }).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             publish(error.message)
@@ -1054,11 +1156,12 @@ export function createBrowserPage(
     diagnostics.enable(),
     choosers.attach(),
     media.attach(),
+    passkeys.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
     attachFrames(),
-  ])).then(() => undefined)
+  ])).then(() => undefined).finally(() => opening?.[Symbol.dispose]())
 
   constructing.move()
 
@@ -1066,12 +1169,14 @@ export function createBrowserPage(
     view,
     contents,
     nativeID: contents.id,
-    state,
+    state: () => state(true),
     childActivity: () => childActivity(activity),
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),
     previewIdentity: () => options.workspace?.identity(),
     answerNotice: notices.answer,
     reviewLink: (url: string) => notices.show(navigationNotice(url, policy, "conversation")),
+    /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
+    restrictPasskeys,
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
@@ -1088,9 +1193,10 @@ export function createBrowserPage(
       if (!closed()) zoom(direction)
     },
     async site() {
+      if (closed() || retryOnly(documentState)) return { cookies: 0 }
       const url = contents.getURL()
 
-      if (closed() || !destinationOrigin(url)) return { cookies: 0 }
+      if (!destinationOrigin(url)) return { cookies: 0 }
 
       return { cookies: (await contents.session.cookies.get({ url })).length }
     },
@@ -1099,10 +1205,11 @@ export function createBrowserPage(
      * the page reloaded without them, so a count read next includes what the reload set again.
      */
     async clearSite() {
+      if (closed() || retryOnly(documentState)) return
       const url = contents.getURL()
       const origin = destinationOrigin(url)
 
-      if (closed() || !origin) return
+      if (!origin) return
       const cookies = await contents.session.cookies.get({ url })
       await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
       await contents.session.clearStorageData({
@@ -1113,7 +1220,7 @@ export function createBrowserPage(
       await contents.session.clearAuthCache()
 
       if (closed()) return
-      await reload()
+      await options.menu.navigate("reload")
       // A slow page still cleared; the count then reads what it set so far.
       await waitFor(() => closed() || !contents.isLoading(), new AbortController().signal, 30_000).catch(
         () => undefined,
@@ -1134,8 +1241,25 @@ export function createBrowserPage(
      * would run with that extension's privileges; every agent operation reaches the page through here.
      */
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
+      using active = new DisposableStack()
+
+      const hidden = !view.getVisible() && win.isVisible() && !win.isMinimized() && !(process.platform === "darwin" && electron.app.isHidden())
+      const shouldPaint = () => needsWakeFrame(command.action.type, documentState.status === "loaded" && !documentState.busy && !documentState.pending, !!selectOpenDialog(dialogGate))
+
+      const hold = origin === "agent" ? active.use(rendering.hold(hidden && shouldPaint() ? async () => {
+        await ready
+
+        if (!shouldPaint() || agentRefusal({ type: "snapshot" }, mainDocument())) return
+        await withFrames(false, pageLifetime.signal, async stop => {
+          const frame = (await cdp.send("Page.getFrameTree")).frameTree.frame.id
+          const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame, worldName: "opencode-browser-paint" })
+          abortError(stop)
+          await cdp.send("Runtime.evaluate", { contextId: world.executionContextId, expression: "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))", awaitPromise: true })
+        })
+      } : undefined)) : undefined
+
       const saved = navigation.interrupt(command.action.type, documentState.status === "restoring" ? documentState.url : undefined)
-      await ready
+      await Promise.all([ready, hold?.painted])
       const open = origin === "user" && leavable.includes(command.action.type) ? selectOpenDialog(dialogGate) : undefined
 
       // The user leaving the page dismisses its dialog, as a browser's address bar does.
@@ -1156,10 +1280,7 @@ export function createBrowserPage(
 
       if (origin === "user") activity.userInputAt = Date.now()
 
-      if (origin === "agent") {
-        if (!agentDriven(activity)) contents.setBackgroundThrottling(false)
-        activity.agentRuns++
-      }
+      if (origin === "agent") activity.agentRuns++
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
@@ -1168,8 +1289,16 @@ export function createBrowserPage(
       const signIn = origin === "agent" ? prompts.agentWait(leavable.includes(command.action.type)) : undefined
 
       try {
+        const intercepting = choosers.update()
+
+        // Turning the file chooser intercept back on after the grace period is a renderer call, which an open
+        // dialog blocks until it is answered.
+        if (command.action.type === "dialog") void intercepting.catch(() => undefined)
+
         return await Promise.race([
-          choosers.update().then(() => {
+          // The agent drives the tab from here on: refuse passkeys in the browser process before its action runs. The
+          // refusal is the browser process's own command, which an open dialog does not block.
+          afterRefusal(origin === "agent" ? restrictPasskeys : undefined, command.action.type === "dialog" ? Promise.resolve() : intercepting, () => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)
@@ -1201,6 +1330,7 @@ export function createBrowserPage(
       menu.dispose()
       choosers.dispose()
       media.dispose()
+      passkeys.dispose()
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })
@@ -1317,7 +1447,7 @@ export function createBrowserPage(
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await load(url, false, signal)
+          await load(url, false, signal, origin === "user")
         } finally {
           signal.removeEventListener("abort", cancel)
         }
@@ -1341,7 +1471,7 @@ export function createBrowserPage(
           if (entry) await begin(signal)(entry.url, () => history.goToIndex(index), () => !closed() && contents.isLoading())
         }
 
-        if (action.type === "reload" && !saved) await reload(signal)
+        if (action.type === "reload" && (!saved || action.ignoreCache)) await reload(signal, action.ignoreCache)
 
         if (action.type === "stop") {
           navigation.cancel()
@@ -1357,7 +1487,7 @@ export function createBrowserPage(
         return result({ tab: state(), frames: await frames() })
       case "snapshot":
       case "find":
-        return result({ tab: state(), ...(await snapshot(action)) })
+        return result({ tab: state(), ...(await snapshot(action, signal)) })
       case "evaluate": {
         if (action.ref && action.frameID)
           throw new Error(
@@ -1377,7 +1507,7 @@ export function createBrowserPage(
                 "Runtime.callFunctionOn",
                 {
                   objectId,
-                  functionDeclaration: action.script,
+                  functionDeclaration: connectedFunction(action.script),
                   arguments: [{ objectId }],
                   awaitPromise: true,
                   returnByValue: true,
@@ -1395,6 +1525,8 @@ export function createBrowserPage(
               },
               context?.sessionID,
             ))
+
+        if (element && value.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
 
         if (value.exceptionDetails)
           throw new Error(
@@ -1500,7 +1632,14 @@ export function createBrowserPage(
       }
 
       case "wait": {
-        if (action.condition !== "load" && !action.text)
+        if (action.condition === "delay") {
+          await scheduler.wait(action.timeoutMs ?? 0, { signal })
+          break
+        }
+
+        if (action.condition === "url" && action.url === undefined) throw new Error("A URL wait requires a URL pattern.")
+
+        if ((action.condition === "text" || action.condition === "textGone") && !action.text)
           throw new Error(
             'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
           )
@@ -1518,6 +1657,8 @@ export function createBrowserPage(
           const page = agentRefusal({ type: "wait" }, mainDocument())
 
           if (page) throw new Error(page)
+
+          if (action.condition === "url") return Browser.matchesURL(state().url, action.url ?? "")
           const context = frameID ? contexts.get(frameID) : undefined
 
           if (frameID && (!context || extensionFrames().has(frameID))) {
@@ -1764,7 +1905,7 @@ export function createBrowserPage(
     if (!value)
       throw new CodedError(
         Browser.FailureCode.staleRef,
-        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
+        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from the current document.",
       )
 
     return value
@@ -1838,13 +1979,15 @@ export function createBrowserPage(
         "Runtime.callFunctionOn",
         {
           objectId,
-          functionDeclaration,
+          functionDeclaration: connectedFunction(functionDeclaration),
           arguments: args.map((value) => ({ value })),
           returnByValue: true,
           awaitPromise: true,
         },
         element.sessionID,
       )
+
+      if (result.exceptionDetails?.exception?.description?.startsWith("Error: browser.detached_ref\n")) throw detachedRef()
 
       if (result.exceptionDetails)
         throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
@@ -1859,16 +2002,12 @@ export function createBrowserPage(
   async function resolve(element: Element) {
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
-    if (!object.object.objectId)
-      throw new CodedError(
-        Browser.FailureCode.staleRef,
-        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
-      )
+    if (!object.object.objectId) throw detachedRef()
 
     return object.object.objectId
   }
 
-  async function rect(element: Element, scroll = false) {
+  async function rect(element: Element, scroll = false, knownTree?: Awaited<ReturnType<typeof frames>>) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
       // Input is routed by the last rendered frame, so let one render at the new scroll position.
@@ -1886,7 +2025,7 @@ export function createBrowserPage(
       ),
     }
 
-    const tree = await frames()
+    const tree = knownTree ?? await frames()
     let frame = tree.find((frame) => frame.id === element.frameID)
 
     while (frame?.parentID) {
@@ -1938,7 +2077,7 @@ export function createBrowserPage(
       if (!frameStillCurrent(before, documentState)) throw new CodedError(Browser.FailureCode.documentChanged, "The document changed during capture. Check the tab and take a new screenshot.")
 
       return frame
-    })
+    }, action.fullPage ? FULL_PAGE_DEADLINE_MS : undefined)
   }
 
   async function screenshot(action: Extract<Browser.Action, { type: "screenshot" }>, signal: AbortSignal) {
@@ -1948,13 +2087,7 @@ export function createBrowserPage(
     const metrics = await cdp.send("Page.getLayoutMetrics")
     abortError(signal)
     const viewport = metrics.cssVisualViewport
-    // Chromium renders beyond the viewport only for a tab it presents on screen.
     const onscreen = view.getVisible() && win.isVisible() && !win.isMinimized()
-
-    if (action.fullPage && !onscreen)
-      throw new Error(
-        "A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
-      )
 
     if (action.fullPage) return beyondViewport(action, metrics.cssContentSize)
 
@@ -2028,21 +2161,14 @@ export function createBrowserPage(
     action: Extract<Browser.Action, { type: "screenshot" }>,
     bounds: { x: number; y: number; width: number; height: number },
   ) {
-    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-    const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
-
-    if (bounds.width <= 0 || bounds.height <= 0)
-      throw new Error(
-        "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-      )
-
-    if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-      throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+    const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getNormalBounds()).scaleFactor
+    const scale = captureScale(bounds, pixelRatio, action.maxWidth ?? 2000)
     const format = action.format ?? "jpeg"
 
     const capture = await cdp.send("Page.captureScreenshot", {
       format,
       quality: format === "png" ? undefined : (action.quality ?? 80),
+      fromSurface: true,
       captureBeyondViewport: true,
       clip: { ...bounds, scale },
     })
@@ -2253,7 +2379,8 @@ export function createBrowserPage(
     await input("Input.dispatchKeyEvent", { type: "keyUp", ...params })
   }
 
-  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
+  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>, signal: AbortSignal) {
+    const generation = documentGeneration(documentState)
     const tree = await frames()
     const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
     const named = selected?.frameID ?? action.frameID
@@ -2264,79 +2391,45 @@ export function createBrowserPage(
         "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
       )
     const sessionID = sessionFor(frameID, tree)
-    const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
-    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
-    const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
-    const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
+    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID }, sessionID)
+    abortError(signal)
 
-    if (!root)
-      throw new Error(
-        "Element is absent from this frame's accessibility snapshot. Retry browser.snapshot with the same tabID and no ref to refresh the frame, then choose a returned ref.",
-      )
-    refs.clear()
-    const pinned = new Map(Array.from(picked, ([ref, element]) => [`${element.frameID}:${element.backendID}`, ref]))
-    const lines: string[] = []
-    let truncated = false
+    const byNode = (source: Map<string, Element>) => new Map(Array.from(source)
+      .filter(([, element]) => element.frameID === frameID && element.sessionID === sessionID)
+      .map(([ref, element]) => [element.backendID, ref]))
 
-    const walk = async (node: Protocol.Accessibility.AXNode, level: number): Promise<void> => {
-      if (level > depth || lines.length >= 500) {
-        truncated = true
+    const snapshot = await accessibilitySnapshot(ax.nodes, {
+      root: selected?.backendID,
+      depth: action.type === "snapshot" ? action.depth : undefined,
+      text: action.type === "find" ? action.text : undefined,
+      interactive: action.interactive,
+      maxLines: action.maxLines,
+      maxChars: action.maxChars,
+      signal,
+      previous: refs.previous(frameID, sessionID),
+      picked: byNode(picked),
+      ref: options.shared.ref,
+      // AX does not distinguish password textboxes. Fail closed if the backing field is gone or sensitive.
+      readableValue: async (backendID, name) => {
+        abortError(signal)
+        const field = await call({ backendID, frameID, sessionID }, describeField).catch(() => undefined)
 
-        return
-      }
+        return Schema.is(Field)(field) && readableField(field, name)
+      },
+      box: action.type === "snapshot" && action.boxes ? async (backendID) => {
+        abortError(signal)
+        const box = await rect({ backendID, frameID, sessionID }, false, tree).catch(() => undefined)
 
-      const role = String(node.role?.value ?? "node")
-        .replace(/[^a-zA-Z0-9_-]/g, "")
-        .slice(0, 40)
+        return box ? ` box=${JSON.stringify(box)}` : ""
+      } : undefined,
+    })
 
-      const properties = new Map(node.properties?.map((property) => [property.name, property.value.value]) ?? [])
+    abortError(signal)
 
-      if (!node.ignored) {
-        const actionable =
-          role !== "RootWebArea" &&
-          (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
+    if (documentGeneration(documentState) !== generation) throw new CodedError(Browser.FailureCode.documentChanged, "Document changed during snapshot; request a fresh snapshot.")
+    refs.add(frameID, sessionID, snapshot.refs)
 
-        // A picked element keeps the ref its comment names, even when it is not otherwise actionable.
-        const known = node.backendDOMNodeId ? pinned.get(`${frameID}:${node.backendDOMNodeId}`) : undefined
-        const ref = known ?? (actionable && node.backendDOMNodeId ? options.shared.ref() : "")
-        const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
-
-        if (ref && element && !known) refs.set(ref, element)
-
-        const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
-          properties.has(name) ? [`${name}=${properties.get(name)}`] : [],
-        )
-
-        const box =
-          action.type === "snapshot" && action.boxes && ref && element
-            ? await rect(element).catch(() => undefined)
-            : undefined
-
-        lines.push(
-          `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(
-            String(node.name?.value ?? "")
-              .replace(/\s+/g, " ")
-              .slice(0, 300),
-          )} ${flags.join(" ")}${box ? ` box=${JSON.stringify(box)}` : ""}`,
-        )
-      }
-
-      if (["textbox", "searchbox"].includes(role) || properties.get("editable")) return
-
-      for (const childID of node.childIds ?? []) {
-        const child = nodes.get(childID)
-
-        if (child) await walk(child, level + 1)
-      }
-    }
-
-    await walk(root, 0)
-
-    const content = (
-      action.type === "find" ? lines.filter((line) => line.toLowerCase().includes(action.text.toLowerCase())) : lines
-    ).join("\n")
-
-    return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
+    return { content: snapshot.content, truncated: snapshot.truncated }
   }
 
   /** Moves the picker and runs its effects; resolves once they ran, so input waits for the picker to disarm. */

@@ -49,8 +49,6 @@ export default {
   "site.permissions": "Az engedélyek le vannak tiltva",
   "site.permissions.description":
     "A kamera, a mikrofon, a helymeghatározás és az értesítések nem működnek ebben a böngészőben.",
-  "site.agent": "Az ügynök használhatja ezt az oldalt",
-  "site.agent.description": "Elolvashatja az oldalt, szkripteket futtathat és kitölthet űrlapokat.",
   "page.add": "Oldal hozzáadása a munkamenethez",
   "page.placeholder": "Kontextus hozzáadása ehhez az oldalhoz",
   "external.open": "Megnyitás a rendszer böngészőjében",

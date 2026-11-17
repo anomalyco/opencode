@@ -1,11 +1,11 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { CAPTURE_DEADLINE_MS } from "./capture"
+import { CAPTURE_DEADLINE_MS, FULL_PAGE_DEADLINE_MS } from "./capture"
 import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
   constructor(
-    readonly code: (typeof Browser.FailureCode)[keyof typeof Browser.FailureCode],
+    readonly code: (typeof Browser.FailureCode)[keyof typeof Browser.FailureCode] | "navigation_failed",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -78,7 +78,7 @@ export function browserFailure(action: Browser.Action, cause: unknown): Extract<
             : network
               ? "The site failed to load through the connected server. Check its URL/network and the OC2 connection before retrying; inspect the current tab first."
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
-                ? `Chromium had no rendered frame of this tab for ${CAPTURE_DEADLINE_MS / 1000} seconds; the page may be stuck in a long task or crashed. Check it with browser.evaluate({tabID}) or browser.reload({tabID}), then capture again. If it keeps failing, report the capture failure instead of repeating it unchanged.`
+                ? `Chromium could not provide a rendered frame (capture deadline ${(action.fullPage ? FULL_PAGE_DEADLINE_MS : CAPTURE_DEADLINE_MS) / 1000} seconds); the page may be stuck in a long task or crashed. Check it with browser.evaluate({tabID}) or browser.reload({tabID}), then capture again. If it keeps failing, report the capture failure instead of repeating it unchanged.`
                 : undefined
 
   return {

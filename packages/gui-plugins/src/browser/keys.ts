@@ -82,6 +82,8 @@ export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undef
   const launcher = mac ? input.meta && input.control && !input.alt : input.control && input.alt && !input.meta
 
   const matched =
+    (!mac && mod && !input.alt && !input.shift && key === "f5") ||
+    (mac && mod && input.alt && !input.shift && key === "r") ||
     (!mac && key === "f3" && !input.control && !input.meta && !input.alt) ||
     (input.control && !input.meta && !input.alt && (key === "tab" || (key === "`" && !input.shift))) ||
     (launcher && !input.shift && launcherKeys.includes(input.key.toLowerCase())) ||

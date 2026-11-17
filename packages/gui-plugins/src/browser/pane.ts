@@ -38,7 +38,8 @@ import {
   type PaneMachineEvent,
   type PaneState,
 } from "./pane-machine"
-import { createBrowserRestoreStore } from "./restore"
+import { createBrowserRestoreStore, restoredActivity } from "./restore"
+import { createPasskeyGroups } from "./passkey-groups"
 import { guardSession } from "./session-guard"
 import { extensionResource } from "./profile/extension-api/resource"
 import type { SitePermissions } from "./site-permissions"
@@ -74,8 +75,14 @@ type Handle = {
   sendState?: (state: Browser.State) => void
   /** Pages by attempt. */
   pages: Map<number, BrowserPage>
-  /** Survives unloading the page, but not closing its tab or releasing the binding. */
+  /**
+   * Survives unloading the page, but not closing its tab or releasing the binding. A tab the agent drove is saved as
+   * such, so it comes back agent-driven after a restart or a window reload.
+   */
   activity: Map<Browser.TabID, TabActivity>
+  /** Which tabs refuse passkeys together, by pop-up group; see `createPasskeyGroups`. */
+  passkeys: ReturnType<typeof createPasskeyGroups>
+  readonly storageKey: string
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
 }
@@ -123,6 +130,15 @@ export function createBrowserPane(input: {
   const warned = new Set<string>()
 
   return {
+    menuReload(window: number | undefined) {
+      for (const [binding, handle] of handles) {
+        if (handle.window !== window) continue
+        const tab = inventory(binding).focusedTabID
+
+        if (tab && page(binding, tab)?.view.getVisible())
+          return () => execute(binding, { action: { type: "reload", tabID: tab, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
+      }
+    },
     async register(window: number, binding: string, target: Target) {
       const server = input.serverEndpoints.get(target.server)
 
@@ -137,6 +153,7 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
+      const saved = restore.load(storageKey)
       // A server on this machine reaches the same network as this desktop, so its pages browse in the profile. Another
       // server's pages need its network through a proxy, which Chromium sets per partition.
       const shared = server.sameMachine
@@ -172,7 +189,9 @@ export function createBrowserPane(input: {
           win.webContents.off("did-start-navigation", navigate)
         },
         pages: new Map(),
-        activity: new Map(),
+        activity: restoredActivity(saved),
+        passkeys: createPasskeyGroups(),
+        storageKey,
         requests: new Map(),
       }
 
@@ -183,7 +202,7 @@ export function createBrowserPane(input: {
         window,
         storageKey,
         restore: target.restore,
-        saved: restore.load(storageKey),
+        saved,
       })
       void runtime
         .runPromise(
@@ -377,6 +396,16 @@ export function createBrowserPane(input: {
       owned(window, binding)
       load(binding, tabID)
     },
+    toolbarTab(window: number, binding: string, tabID: Browser.TabID) {
+      owned(window, binding)
+      const target = page(binding, tabID)
+
+      // The visible toolbar's menu temporarily covers its native view. Resolve the clicked binding and
+      // selection, not view visibility or the window's last activation (which can be in another session).
+      if (!handles.get(binding)?.shared || inventory(binding).focusedTabID !== tabID) return
+
+      return target?.nativeID
+    },
     notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean) {
       owned(window, binding)
 
@@ -422,6 +451,19 @@ export function createBrowserPane(input: {
       owned(window, binding)
 
       return (await page(binding, tabID)?.site()) ?? { cookies: 0 }
+    },
+    async clearCache(window: number, binding: string, tabID: Browser.TabID, address: string) {
+      owned(window, binding)
+      const handle = handles.get(binding)
+      const origin = destinationOrigin(address)
+      const current = () => page(binding, tabID)?.contents.getURL() ?? selectTabSlot(machine.state, binding, tabID)?.tab.url
+
+      if (!handle || !origin || destinationOrigin(current() ?? "") !== origin) throw new Error("browser.site.changed")
+      const session = electron.session.fromPartition(handle.partition)
+      await session.clearData({ origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"] })
+
+      if (handle.abort.signal.aborted || destinationOrigin(current() ?? "") !== origin) return
+      await execute(binding, { action: { type: "reload", tabID, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
     },
     async clearSite(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
@@ -493,7 +535,11 @@ export function createBrowserPane(input: {
   }
 
   function dispatchBinding(binding: string, event: BindingEvent) {
-    if (event.type === "tab.closed") handles.get(binding)?.activity.delete(event.tabID)
+    if (event.type === "tab.closed") {
+      handles.get(binding)?.activity.delete(event.tabID)
+      handles.get(binding)?.passkeys.remove(event.tabID)
+    }
+
     dispatch({ type: "binding", binding, event })
 
     // Extensions hear which tab is active in a window.
@@ -505,7 +551,17 @@ export function createBrowserPane(input: {
   }
 
   function perform(effect: PaneEffect) {
-    if (effect.type === "save-restore") return restore.save(effect.storageKey, effect.snapshot)
+    if (effect.type === "save-restore") {
+      const activities = Array.from(handles.values()).flatMap((handle) => (handle.storageKey === effect.storageKey ? [handle.activity] : []))
+
+      return restore.save(effect.storageKey, effect.snapshot, (tabID) =>
+        activities.some((activity) => {
+          const tab = activity.get(tabID)
+
+          return !!tab && agentDriven(tab)
+        }),
+      )
+    }
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
 
@@ -648,6 +704,8 @@ export function createBrowserPane(input: {
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
       readonly activity?: TabActivity
       readonly identity?: string
+      /** The tab whose page opened this one, which joins its pop-up group. */
+      readonly opener?: Browser.TabID
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -660,6 +718,7 @@ export function createBrowserPane(input: {
     const inherited = options.activity && agentDriven(options.activity) ? options.activity : running ? childActivity(running) : undefined
     const activity = handle.activity.get(id) ?? inherited ?? options.activity ?? { agentRuns: 0 }
     handle.activity.set(id, activity)
+    handle.passkeys.join(id, options.opener)
     const attempt = entry.nextAttempt
     const win = handle.win
     // Every callback is fenced to this page: a later page of the same tab has another attempt.
@@ -679,6 +738,15 @@ export function createBrowserPane(input: {
     const page = createBrowserPage(win, {
       id,
       activity,
+      passkeysRestricted: () => handle.passkeys.restricted(id),
+      // Every page of the group refuses from now on, or fails where it cannot; one created later refuses from its first
+      // document.
+      restrictPasskeys: () =>
+        handle.passkeys.restrict(id).forEach((tabID) => {
+          const attempt = selectPageAttempt(machine.state, binding, tabID)
+
+          if (attempt !== undefined) void handle.pages.get(attempt)?.restrictPasskeys().catch(() => undefined)
+        }),
       partition: handle.partition,
       network: handle.network,
       initialize: options.initialize,
@@ -697,7 +765,11 @@ export function createBrowserPane(input: {
       menu: {
         t: input.t,
         extensions: (contents, params) => handle.shared ? input.profile.extensionMenu(contents, params) : [],
-        navigate: async (type) => { if (current()) await execute(binding, { action: { type, tabID: id }, files: [] }, handle.abort.signal, "user") },
+        navigate: async (type) => {
+          const action = type === "hardReload" ? { type: "reload", tabID: id, ignoreCache: true } as const : { type, tabID: id }
+
+          if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
+        },
         open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
       },
       embeds: input.embeds,
@@ -753,7 +825,7 @@ export function createBrowserPane(input: {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
       popup: (popupOptions, background, activity) => {
-        const popup = create(binding, { initialize: false, popupOptions, activity })
+        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id })
 
         if (!background) dispatchBinding(binding, { type: "tab.focused", tabID: popup.state().id })
 
@@ -877,7 +949,10 @@ export function createBrowserPane(input: {
       handle?.activity.set(id, activity)
 
       if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
-      else if (changed && current) current.contents.setBackgroundThrottling(false)
+
+      // The agent may only focus the tab, which runs no command on its page: the refusal starts now all the same, and
+      // where it cannot, the page fails.
+      void current?.restrictPasskeys().catch(() => undefined)
 
       return load(binding, id, identity)
     }

@@ -49,8 +49,6 @@ export default {
   "site.cookies.clear": "Vymazat",
   "site.permissions": "Oprávnění jsou blokována",
   "site.permissions.description": "Kamera, mikrofon, poloha a oznámení v tomto prohlížeči nefungují.",
-  "site.agent": "Agent může tuto stránku používat",
-  "site.agent.description": "Může číst stránku, spouštět skripty a vyplňovat formuláře.",
   "page.add": "Přidat stránku do relace",
   "page.placeholder": "Přidejte kontext k této stránce",
   "external.open": "Otevřít v systémovém prohlížeči",

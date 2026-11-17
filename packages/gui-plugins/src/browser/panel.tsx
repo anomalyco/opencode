@@ -13,7 +13,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, Index, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, getOwner, Index, onCleanup, runWithOwner, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -41,6 +41,7 @@ import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
 import { bare, highlight, type Visit } from "./history"
 import { SignInOffer } from "./import-prompt"
+import { SiteChooserDialog } from "./site-chooser"
 import type definition from "./index"
 import type { Model } from "./model"
 import {
@@ -149,8 +150,11 @@ export default function SessionBrowserPane(props: {
 
   // An extension's button opens its popup or tells it of the click; one without a button opens its options page.
   const chooseExtension = (extension: ProfileExtension) => {
+    if (!visible()) return
     const current = profile()
     const rect = extensionsButton.element?.getBoundingClientRect()
+    const binding = props.model.binding(props.session)
+    const tab = state()
 
     const fallback = () => {
       const page = extension.options ?? extension.popup
@@ -158,9 +162,9 @@ export default function SessionBrowserPane(props: {
       if (page) props.model.openURL(props.session, page)
     }
 
-    if (current.status !== "active" || !rect) return fallback()
+    if (current.status !== "active" || !rect || !binding || !tab) return fallback()
     const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    void current.value.click({ id: extension.id, anchor }).then((handled) => {
+    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor }).then((handled) => {
       if (!handled) fallback()
     }, fallback)
   }
@@ -326,7 +330,7 @@ export default function SessionBrowserPane(props: {
   // The address field always shows the whole URL; at rest it draws the host emphasized.
   const webParts = createMemo(() => hostDisplay(addressBar().field))
   const parts = () => webParts() ?? addressParts(addressBar().field)
-  const site = () => !!addressBar().field && !addressBar().editing
+  const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
@@ -365,6 +369,25 @@ export default function SessionBrowserPane(props: {
 
     if (tab && address()) command({ type: "reload", tabID: tab.id })
   }
+
+  // A passkey sign-in this browser cannot do: the import opens on the page's site, chosen already only in a tab of the
+  // person's. The notice stays until an import brought cookies, which then load the page again; a cancelled import
+  // leaves it, to try again.
+  const owner = getOwner()
+
+  const importSignIn = (tabID: Browser.TabID, passkey: { site?: string; choose: boolean }) =>
+    runWithOwner(owner, () =>
+      plugin.dialogs.open((dialog) => (
+        <SiteChooserDialog
+          site={passkey.site ? { name: passkey.site, choose: passkey.choose } : undefined}
+          imported={() => {
+            void props.model.answerNotice(props.session, tabID, true).catch(() => undefined)
+            command({ type: "reload", tabID })
+          }}
+          close={() => dialog.close()}
+        />
+      )),
+    )
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -430,10 +453,10 @@ export default function SessionBrowserPane(props: {
     props.model.mount({
       visible,
       address,
-      reload: () => {
+      reload: (ignoreCache) => {
         const tab = state()
 
-        if (tab) command({ type: "reload", tabID: tab.id })
+        if (tab) command({ type: "reload", tabID: tab.id, ignoreCache })
       },
       close: () => {
         const tab = state()
@@ -587,10 +610,11 @@ export default function SessionBrowserPane(props: {
               size="large"
               disabled={!state()?.loading && !address()}
               aria-label={plugin.t(state()?.loading ? "action.stop" : "action.reload")}
-              onClick={() => {
+              onClick={(event) => {
                 const tab = state()
 
-                if (tab) command({ type: tab.loading ? "stop" : "reload", tabID: tab.id })
+                if (!tab) return
+                command(tab.loading ? { type: "stop", tabID: tab.id } : { type: "reload", tabID: tab.id, ignoreCache: event.shiftKey })
               }}
               icon={
                 <Show when={state()?.loading} fallback={<Icon name="outline-rotate-clockwise" />}>
@@ -658,6 +682,11 @@ export default function SessionBrowserPane(props: {
                     const tab = state()
 
                     return tab ? props.model.clearSite(props.session, tab.id) : undefined
+                  }}
+                  clearCache={() => {
+                    const tab = state()
+
+                    return tab ? props.model.clearCache(props.session, tab.id, address()) : undefined
                   }}
                 />
               </Show>
@@ -953,7 +982,24 @@ export default function SessionBrowserPane(props: {
           <>
             <Show when={props.model.notice(props.session, id)}>
               {(notice) => (
-                <RefusalBar notice={notice()} answer={(dismiss, copy) => props.model.answerNotice(props.session, id, dismiss, copy)} />
+                <RefusalBar
+                  notice={notice()}
+                  answer={async (dismiss, copy) => {
+                    const passkey = notice().passkey
+
+                    if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss, copy)
+
+                    if ("newTab" in passkey) {
+                      const url = address()
+
+                      if (url) props.model.openURL(props.session, url)
+
+                      return props.model.answerNotice(props.session, id, true)
+                    }
+
+                    importSignIn(id, passkey)
+                  }}
+                />
               )}
             </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>
@@ -977,7 +1023,9 @@ export default function SessionBrowserPane(props: {
         <Show when={promptKey(true)} keyed>
           {(key) => (
             <Show when={key ? prompt() : undefined}>
-              {(view) => <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} />}
+              {(view) => (
+                <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} leave={focusAddress} />
+              )}
             </Show>
           )}
         </Show>
@@ -1266,6 +1314,7 @@ function SiteInformation(props: {
   /** The page's cookie count; undefined while the pane cannot answer. */
   site: () => Promise<{ cookies: number }> | undefined
   clear: () => Promise<void> | undefined
+  clearCache: () => Promise<void> | undefined
 }) {
   const plugin = usePlugin()
   const [siteState, setSiteState] = createSignal(initialSiteState)
@@ -1303,7 +1352,7 @@ function SiteInformation(props: {
       return
     }
 
-    const pending = props.clear()
+    const pending = effect.type === "clear-cache" ? props.clearCache() : props.clear()
 
     if (!pending) return dispatch({ type: "clear.failed", attempt })
     void pending.then(
@@ -1409,6 +1458,14 @@ function SiteInformation(props: {
                 {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
               </Button>
             </SiteRow>
+            <Button
+              size="small"
+              variant="neutral"
+              disabled={view().actionDisabled || view().failed}
+              onClick={() => dispatch({ type: "clear-cache.clicked" })}
+            >
+              {plugin.t("site.clearCache")}
+            </Button>
             <SiteRow
               icon="outline-eye-slash"
               title={plugin.t("site.permissions")}

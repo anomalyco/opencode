@@ -41,6 +41,13 @@ export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
   Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]), source: Schema.optionalKey(Schema.Literal("conversation")) }),
+  // A site asked for a passkey or security key, refused at once: this browser shows no request for it, in a tab of the
+  // person's or (`agent`) one the agent drives; or (`off`) the system's dialog would answer, but the tab refuses since
+  // the agent used it or a window linked to it. `site` is the page's registrable domain.
+  Schema.Struct({
+    reason: Schema.Literals(["browser.passkey", "browser.passkey.agent", "browser.passkey.off"]),
+    site: Schema.optionalKey(text(255)),
+  }),
   Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), source: Schema.Literals(["conversation", "page"]), action: Schema.Literals(["open", "copy"]) }),
   Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])
@@ -163,8 +170,9 @@ export const PaneEvent = Schema.Union([
   // Details only this desktop shows, kept out of the server's tab state: the page's icon as a data URL, and its zoom
   // factor, 1 at 100%.
   Schema.Struct({
-    type: Schema.Literal("page"),
-    tabID: Browser.TabID,
+      type: Schema.Literal("page"),
+      tabID: Browser.TabID,
+      retryOnly: Schema.optionalKey(Schema.Boolean),
     icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
   }),
@@ -246,6 +254,7 @@ export const BrowserPane = Ipc.define({
     },
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    clearCache: { input: Schema.Struct({ binding, tabID: Browser.TabID, address: text(16_384) }) },
     reveal: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
     forget: { input: Schema.Struct({server:text(16_384),session:text(256).check(Schema.isStartingWith("ses"))}) },
