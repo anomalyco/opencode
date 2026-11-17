@@ -3290,6 +3290,92 @@ fn new_build_registers_and_fetches(early: bool, notices: usize) {
     assert_eq!(pipe.status("example.build"), Some(opencode_plugin::Status::Active));
 }
 
+// Expected (big-boi's catalog review, final): a snapshot of a read only the running build watches reaches that build
+// alone, also while the host has not registered the new build yet, which the JS host knows by the plugin's ID already:
+// the new build hears nothing of it and reads nothing of it, as when the value changes after its adoption. It reached
+// the new build, whose listener heard it and which read the value.
+#[test]
+fn a_snapshot_of_the_running_build_never_reaches_the_new_one() {
+    snapshot_across_a_new_build(true);
+}
+
+// Expected (big-boi's catalog review, final, the control): the same when the value changes after the new build's
+// adoption.
+#[test]
+fn a_snapshot_after_the_new_builds_adoption_never_reaches_it() {
+    snapshot_across_a_new_build(false);
+}
+
+/// The first build of a plugin watches the stored `old`; its second build does not, and logs each snapshot it hears.
+/// The host changes `old`, `held` while it holds the second build's `Loaded`, else once it registered that build.
+fn snapshot_across_a_new_build(held: bool) {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("snapshots");
+    let plugin = root.path().join("config/plugins/snap");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let first = "export default { id: \"example.snap\", setup(context) {\n  context.storage.store(\"old\", { initial: { n: 0 } })\n} }\n";
+    let second = format!(
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.snap\", setup(context) {{\n  const carrier = context[Symbol.for(\"opencode.carrier\")]\n  carrier.listen((key) => {{ if (key === \"storage:old\") appendFileSync({log:?}, \"heard\\n\") }})\n  context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"snap.read\", run: () => appendFileSync({log:?}, `read ${{carrier.read(\"storage:old\")}}\\n`) }}] }}))\n}} }}\n"
+    );
+    std::fs::write(plugin.join("tui.ts"), first).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.snap");
+    pipe.settle();
+    let (h, scripts) = (&pipe.harness, pipe.scripts());
+    let host = opencode_tui::plugins::host::host(&h.tui);
+    let change = |n: u32| {
+        opencode_plugin::Host::storage_write(&*host, "plugin.example.snap.old", &format!("{{\"n\":{n}}}")).unwrap();
+        opencode_plugin::Host::storage_changed(&*host);
+        for _ in 0..100 {
+            h.app.advance(Duration::from_millis(2));
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    };
+    let runs = |name: &str| matches!(h.tui.keymap.dispatch(name, None), opentui::keymap::RunResult::Ok);
+    if held {
+        scripts.hold_answers(true);
+    }
+    std::fs::write(plugin.join("tui.ts"), second).unwrap();
+    opencode_tui::plugins::host::reconcile(&h.tui);
+    if held {
+        h.wait("the load described or set up", || {
+            h.app.advance(Duration::from_millis(1));
+            scripts.held_types().iter().any(|kind| kind == "described" || kind == "loaded")
+        });
+        if !scripts.held_types().iter().any(|kind| kind == "loaded") {
+            scripts.hold_answers(false);
+            scripts.hold_answers(true);
+        }
+        h.wait("the new build's Loaded held", || {
+            h.app.advance(Duration::from_millis(1));
+            scripts.held_types().iter().any(|kind| kind == "loaded")
+        });
+        // The running build is still the host's: its read follows the change.
+        change(5);
+        scripts.hold_answers(false);
+    }
+    h.wait("the new build is registered", || {
+        h.app.advance(Duration::from_millis(1));
+        runs("snap.read")
+    });
+    if !held {
+        change(5);
+        assert!(runs("snap.read"));
+    }
+    pipe.settle();
+    h.wait("the read was logged", || {
+        h.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&log).is_ok_and(|text| text.contains("read "))
+    });
+    let logged = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(logged.lines().last(), Some("read undefined"), "{logged}");
+    assert!(!logged.contains("heard"), "{logged}");
+}
+
 // Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
 // fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
 // gets its reply.
