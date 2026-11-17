@@ -1,6 +1,8 @@
 --!strict
 -- What the grid shows, as TS's `data.ts`, `breakdown.ts`, `grid.ts` and `format.ts` compute it: the context the last
 -- assistant step used, against its model's window, split by an estimate of where it came from.
+local plugin = require("@opencode/plugin")
+
 local context = {}
 
 context.GLYPH_FULL = "⛁"
@@ -104,18 +106,24 @@ local function estimate(chars: number): number
     return math.ceil(chars / 4)
 end
 
+-- A part of an assistant step.
+type Part = plugin.SessionMessageAssistantText | plugin.SessionMessageAssistantReasoning | plugin.SessionMessageAssistantTool
+
 -- TS `charsFromAssistantPart`: the characters of a step's part, as assistant and tool.
-local function partChars(part: any): (number, number)
+local function partChars(part: Part): (number, number)
     if part.type == "text" or part.type == "reasoning" then
         return length(part.text), 0
     elseif part.type ~= "tool" then
         return 0, 0
     end
-    local state = part.state or {}
+    local state = part.state
+    if not state then
+        return 0, 0
+    end
     local input = if type(state.input) == "string" then length(state.input) else count(state.input) * 16
     if state.status == "completed" then
         local output = 0
-        for _, content in state.content or {} do
+        for _, content in state.content do
             if content.type == "text" then
                 output += length(content.text)
             end
@@ -128,7 +136,7 @@ local function partChars(part: any): (number, number)
 end
 
 -- TS `estimateSystemResidual`: the first step's input, less the users' text before it.
-local function residual(messages: { any }): number?
+local function residual(messages: { plugin.SessionMessageInfo }): number?
     local leading = 0
     for _, message in messages do
         if message.type == "user" then
@@ -146,7 +154,7 @@ local function residual(messages: { any }): number?
 end
 
 -- TS `estimateBreakdown`: the estimate by category, scaled down to `input` when it is over, the rest `other`.
-local function breakdown(messages: { any }, input: number, system: number?): { Segment }
+local function breakdown(messages: { plugin.SessionMessageInfo }, input: number, system: number?): { Segment }
     if input == 0 then
         return {}
     end
@@ -185,7 +193,7 @@ local function breakdown(messages: { any }, input: number, system: number?): { S
 end
 
 -- TS `lastAssistantWithUsage`.
-local function lastWithUsage(messages: { any }, boundary: string?): any
+local function lastWithUsage(messages: { plugin.SessionMessageInfo }, boundary: string?): plugin.SessionMessageAssistant?
     local finish = #messages + 1
     if boundary then
         finish = 0
@@ -218,18 +226,21 @@ end
 
 -- TS `getContextData`: the last assistant step with usage, after the last finished compaction and before the
 -- session's revert point; `nil` without one, or with no tokens.
-function context.data(messages: { any }, session: any, models: { any }): Context?
+function context.data(messages: { plugin.SessionMessageInfo }, session: plugin.SessionInfo?, models: { plugin.ModelInfo }): Context?
     local revert = session and session.revert
     local last = lastWithUsage(messages, revert and revert.messageID)
     if not last then
         return nil
     end
     local usage = last.tokens
+    if not usage then
+        return nil
+    end
     local total = usage.input + usage.output + usage.reasoning + usage.cache.read + usage.cache.write
     if total == 0 then
         return nil
     end
-    local model: any
+    local model: plugin.ModelInfo?
     for _, known in models do
         if known.providerID == last.model.providerID and (known.id == last.model.id or known.modelID == last.model.id) then
             model = known

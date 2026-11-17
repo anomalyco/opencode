@@ -19,7 +19,7 @@ local function value(count: number?): string
 end
 
 -- TS `usageRows`: a label and its formatted count, `—` for a count the session lacks.
-local function usage(tokens: any, reasoning: boolean): { { string } }
+local function usage(tokens: plugin.TokenUsageInfo?, reasoning: boolean): { { string } }
     local cache = tokens and tokens.cache
     local rows = {
         { "Input", value(tokens and tokens.input) },
