@@ -119,7 +119,6 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | GPT Image 2.5 Sunburst          | gpt-image-2.5-sunburst          | `https://opencode.ai/inference/openai/v1/images/generations`               | `@ai-sdk/openai`            |
 | Nano Banana 2.1                 | gemini-nano-banana-2.1          | `https://opencode.ai/inference/google/v1beta/models/gemini-nano-banana-2.1:generateContent` | `@ai-sdk/google`            |
 | Grok Imagine Image 2.0          | grok-imagine-image-2.0          | `https://opencode.ai/inference/xai/v1/images/generations`                  | `@ai-sdk/xai`               |
-| GPT-Live 1                      | gpt-live-1                      | `https://opencode.ai/inference/openai/v1/live/sessions`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Iceman Free                     | iceman-free                     | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Inkling 2 Small Free            | inkling-2-small-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -225,10 +224,9 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   }'
 ```
 
-### Image and voice models
+### Image models
 
-`gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images, and
-`gpt-live-1` runs voice sessions. They aren't chat models, so they never appear in `/models` or the models endpoint,
+`gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
 [`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
@@ -245,14 +243,12 @@ curl https://opencode.ai/inference/openai/v1/images/generations \
 ```
 
 Google takes its native `contents` and `generationConfig`, and xAI its native options such as `resolution` and
-`quality`. OpenAI Images and xAI Images also accept edits at `/images/edits`. For `gpt-live-1`, start a WebRTC session
-at `POST /inference/openai/v1/live/sessions` with OpenAI's session request and return its SDP answer; session time
-bills per minute as it runs.
+`quality`. OpenAI Images and xAI Images also accept edits at `/images/edits`.
 
 ## Pricing
 
-Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**, with image and voice models priced per
-image or per minute.
+Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**, with image models priced per image where
+noted.
 
 <div class="docs-table-scroll" role="region" aria-label="Console model pricing" tabIndex={0}>
 
@@ -378,14 +374,13 @@ models to generate session titles.
   A processing fee of 4.6% + $0.31 is added to each credit purchase to cover payment costs; we don't charge anything beyond that.
 </Callout>
 
-### Image and voice pricing
+### Image pricing
 
 | Model                  | Price                       | Notes                                                                              |
 | ---------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
 | GPT Image 2.5 Sunburst | $1.00 / image               | Plus $8 / $30 per 1M input / output tokens, and $2 per 1M cached input tokens.      |
 | Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M tokens | Input / text output / image output. About $0.034 per 1K image, $0.050 per 2K, $0.113 per 4K. |
 | Grok Imagine Image 2.0 | $0.04 / image               | $0.01 per input image; quality and resolution can raise the output price to $0.05–$0.08. |
-| GPT-Live 1             | $0.05 / min                 | Session time, as OpenAI reports each whole minute; 15 seconds minimum.              |
 
 ### Free models
 
