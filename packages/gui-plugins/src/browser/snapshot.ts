@@ -12,7 +12,8 @@ type Options = {
   picked: ReadonlyMap<number, string>
   ref: () => string
   box?: (id: number) => Promise<string>
-  readableValue?: (id: number) => Promise<boolean>
+  /** Whether a field's value may be printed; `name` is its accessible name. */
+  readableValue?: (id: number, name: string) => Promise<boolean>
   signal?: AbortSignal
 }
 
@@ -37,7 +38,7 @@ type Branch = {
 
 type Line = {
   label: string
-  value?: string
+  value?: { text: string; name: string }
   id?: number
   interactive: boolean
   area?: Area
@@ -234,9 +235,10 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
         if (entry && (interactive || name.trim() || important)) entry.meaningful = true
         buckets[role === "RootWebArea" ? 0 : (priority ?? 5)].push({
           label: pad + label,
+          // An empty field prints no value and costs no page call.
           value:
-            interactive && node.value?.value !== undefined
-              ? JSON.stringify(excerpt(String(node.value.value), 160))
+            interactive && node.value?.value !== undefined && String(node.value.value) !== ""
+              ? { text: JSON.stringify(excerpt(String(node.value.value), 160)), name }
               : undefined,
           id: interactive || known || area?.id === id ? id : undefined,
           interactive,
@@ -342,7 +344,8 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
           ? await Promise.all(
               batch.map(async (line) => {
                 if (!line.id || line.deep) return ""
-                const value = line.value && (await options.readableValue?.(line.id)) ? ` value=${line.value}` : ""
+                const readable = line.value && (await options.readableValue?.(line.id, line.value.name))
+                const value = line.value ? ` value=${readable ? line.value.text : "<hidden>"}` : ""
 
                 return value + ((await options.box?.(line.id)) ?? "")
               }),

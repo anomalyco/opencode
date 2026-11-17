@@ -3,6 +3,7 @@ import { scheduler } from "node:timers/promises"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
 import { documentRefs } from "./refs"
+import { describeField, Field, readableField } from "./field-value"
 import { agentRendering, needsWakeFrame } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
@@ -2300,11 +2301,12 @@ export function createBrowserPage(
       previous: refs.previous(frameID, sessionID),
       picked: byNode(picked),
       ref: options.shared.ref,
-      // AX does not distinguish password textboxes. Fail closed if the backing input is gone or protected.
-      readableValue: async backendID => {
+      // AX does not distinguish password textboxes. Fail closed if the backing field is gone or sensitive.
+      readableValue: async (backendID, name) => {
         abortError(signal)
+        const field = await call({ backendID, frameID, sessionID }, describeField).catch(() => undefined)
 
-        return (await call({ backendID, frameID, sessionID }, `function() { return this.isConnected && !(this instanceof HTMLInputElement && ['password','file'].includes(this.type)) && getComputedStyle(this).webkitTextSecurity === 'none' }`).catch(() => false)) === true
+        return Schema.is(Field)(field) && readableField(field, name)
       },
       box: action.type === "snapshot" && action.boxes ? async (backendID) => {
         abortError(signal)
