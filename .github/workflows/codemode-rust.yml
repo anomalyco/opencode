@@ -1,0 +1,125 @@
+name: Codemode Rust
+
+on:
+  pull_request:
+    paths:
+      - packages/codemode-rust/**
+      - packages/codemode/**
+      - .github/workflows/codemode-rust.yml
+  push:
+    branches: [dev]
+    paths:
+      - packages/codemode-rust/**
+      - packages/codemode/**
+      - .github/workflows/codemode-rust.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: packages/codemode-rust
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  check:
+    name: Format, Clippy and tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # The toolchain, profile and components come from packages/codemode-rust/rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: codemode-rust-dev
+          workspaces: packages/codemode-rust -> target
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      # Includes bench/tests/conformance.rs, which checks every conformance case against the reference outcome.
+      - run: cargo test --locked --workspace
+
+  conformance-fresh:
+    name: Conformance expectations match the reference
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      # A change to the reference fails here until the Rust side is updated and the expectations regenerated.
+      - name: Regenerate every expectation from ../codemode
+        run: bun conformance/generate.ts
+      - name: Check nothing changed
+        run: |
+          git status --porcelain -- conformance
+          git diff --exit-code -- conformance
+          test -z "$(git status --porcelain -- conformance)"
+
+  test262:
+    name: test262 parity
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # The sync script needs only Bun itself, not the workspace's dependencies.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: codemode-rust-release
+          workspaces: packages/codemode-rust -> target
+      - name: Read the pinned test262 revision
+        id: test262
+        run: |
+          revision=$(jq -r .revision ../codemode/test/test262/manifest.json)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "checkout=$HOME/.cache/test262-$revision" >> "$GITHUB_OUTPUT"
+      - name: Cache the test262 checkout
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.test262.outputs.checkout }}
+          key: test262-${{ steps.test262.outputs.revision }}
+      # Fails when a file fails that test262/rust-skipped.txt does not list, or a listed file passes.
+      - name: Run test262 against rust-skipped.txt
+        env:
+          TEST262_CHECKOUT: ${{ steps.test262.outputs.checkout }}
+        run: bash test262/run.sh
+
+  bench:
+    name: Benchmarks (informational)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    # Shared runners are too noisy for a performance gate; the numbers go to the job summary only.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: ./.github/actions/setup-bun
+      - name: Install Rust
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: codemode-rust-release
+          workspaces: packages/codemode-rust -> target
+      - name: Install GNU time
+        run: "[ -x /usr/bin/time ] || (sudo apt-get update && sudo apt-get install -y time)"
+      - run: cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --example embed
+      - name: Compare with the reference
+        env:
+          ITERATIONS: "5"
+          COLD_RUNS: "5"
+          PLUGIN_RUNS: "2000"
+        run: bash bench/compare.sh
+      - name: Write the results to the job summary
+        run: cat bench/RESULTS.md >> "$GITHUB_STEP_SUMMARY"
