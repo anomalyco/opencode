@@ -10,7 +10,7 @@ suspend at once.
 
 ## Rust
 
-A plugin asks with `Host::foreground(program)` (ABI 1.6) and gets the exit in a reply. The host runs the program
+A plugin asks with `Host::try_foreground(program)` and gets the exit in a reply. The host runs the program
 once the plugin's call is done (`opencode_util::job`, `features::foreground`):
 
 - Unix: in a process group of its own, made the terminal's foreground group while it runs. Ctrl+C and Ctrl+\ end

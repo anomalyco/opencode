@@ -126,25 +126,16 @@ error.
 
 ## Which binaries load
 
-A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.x binary too, which it serves 1.6:
+A plugin binary carries its ABI version. The host is ABI 2.0:
 
 | Built with | Loads | What the host sends it |
 | --- | --- | --- |
-| The 1.0 SDK (the 1.0 table, without `describe`) | yes | The requests of 1.0 to 1.3, as below. The host learns the plugin's ID by running setup once at load and destroying that instance; what that instance asks for is dropped |
-| The 1.1 to 1.3 SDK | yes | The requests of 1.0 to 1.3: fences, slots and routes draw styled rows |
-| The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
-| The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
-| The 1.6 SDK | yes; a 1.3 host refuses it. On a 1.4 or 1.5 host the reads and verbs of 1.6 answer their defaults (see below) | The 1.4 requests, and `Deltas` to a plugin with `on_deltas` |
-| The 2.0 SDK, this crate | yes; a binary built before the features `focus-input` and `fence-node` loads and behaves as it did | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
+| The 2.0 SDK, this crate | yes; a binary built before the features `focus-input` and `fence-node` loads and behaves as it did | Renders (`RenderFence`, `Render`, `RenderRoute`), handlers (`Command`, `Event`, `Reply`, `Mount`, `RouteMount`, `Wake`, `FenceGone`, `Deltas`), surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
+| A 1.x SDK, from this branch's development | no: "plugin ABI 1.x is not supported: … rebuild the plugin against opencode-plugin-abi 2" (decision O-169) | — |
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
-A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
-`docs/P.4.md`: surfaces of contract 2.0 over the C ABI, and threads that send messages. Its source builds unchanged
-(O-154). `Host::fetch` and `Host::foreground` keep their 1.x meaning until 3.0: they return `RequestId`, and
-`RequestId(0)`, which no reply carries, for a request the host did not take, as the 1.x SDK does. They warn as
-deprecated, naming the 2.x calls `Host::try_fetch` and `Host::try_foreground`. Those return `Result<RequestId,
-String>`: an `Err` is a request the host did not take, as while the effects that wait fill its queue, and no reply
-comes for it; an ID always gets its one reply.
+`Host::try_fetch` and `Host::try_foreground` return `Result<RequestId, String>`: an `Err` is a request the host did
+not take, as while the effects that wait fill its queue, and no reply comes for it; an ID always gets its one reply.
 
 A request belongs to what asked for it, on every carrier. One a mount's call asks for (a command of the route it
 shows, or a handler of the mount's input) is that mount's: once the mount closes, it is not sent, a program does not
@@ -172,8 +163,8 @@ the contract that a later 2.x may extend is `#[non_exhaustive]` from 2.0 on, to 
 - What the host fills (`SurfaceInput`, `Geometry`, `Session`, …) is read as before.
 - Struct variants a plugin builds (a scroll verb, a target, a composer edit, an anchor) do not grow: a later 2.x adds
   a variant for a new form. `Rgba`, `Edges`, `Sides`, the rects and `ThemeMode` are whole and stay open.
-- The table `export_plugin!` exports is built by the SDK (`runtime::table`), so a table entry a later 2.x appends is
-  no break either.
+- The table `plugin!` exports is built by the SDK (`runtime::table`), so a table entry a later 2.x appends is no break
+  either.
 
 The wire is the other half of the promise: a later 2.x adds only optional fields, request types the host sends only
 to a library of that minor, and node kinds an author lowers for an older host with `v2::View::or` (below). The
@@ -207,76 +198,3 @@ behaves as it did, and a plugin built on this one meets an older 2.0 host by the
   the middle of the screen, not a quarter of the way down, and medium, large or extra large (TS `dialog.set({ size,
   centered })`). A host that does not know them places the dialog as before. A keyed select shown again with another
   `centered` moves and keeps its filter and its selected row.
-
-ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
-the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the
-terminal title, the theme, a link on a `Span`, and an `xlarge` panel ([`docs/P.4.md`](../../docs/P.4.md) lists each
-with its TS counterpart). A 1.6 plugin needs no new host: on an older one a read returns `None`, an empty list or
-`false`, a verb that answers a `bool` answers `false` and does nothing, `sized` claims get 0, a link is not drawn, and
-an `xlarge` panel shows `large`. Rebuilding a 1.4 plugin on the 1.6 SDK needs no change, except that `SlotInput`,
-`Span` and `Manifest` have new fields, so a struct literal of one needs `..Default::default()`, and a `SlotClaim`
-literal needs `size: false`.
-
-A binary of an older SDK keeps the safety of its own SDK. A 1.3 `Waker` is a raw pointer to the host, and so is
-the `Waker` of a 1.4 build from before `Waker` became `Clone`. Such a plugin must stop its threads before its state
-drops; a 1.4 build of today's SDK cannot wake a host that is gone.
-
-## Moving from the 1.4 SDK to 1.5
-
-A 1.4 plugin keeps working unbuilt: the binary boundary and the JSON only grew. Rebuilding it on the 1.5 SDK is a
-one-time source migration where it spells out the types that grew:
-
-- A `Node::Box { … }` literal no longer compiles, and Rust has no `..Default::default()` for an enum variant: build
-  boxes with `Node::column`, `Node::row` and their setters (`.gap`, `.padding`, `.bg`, `.border`, `.padding_sides`, …).
-- A `Layout { … }` literal needs `..Layout::default()`, or the builders (`.width`, `.grow`, `.shrink`, `.height`, …).
-- A pattern that names every field of `Node::Box` or `Layout` needs `..`, and an exhaustive `match` on `Dialog` or
-  `HostRequest` needs the new variants or `_`.
-
-2.0 made these types `#[non_exhaustive]` ("The source promise of 2.x", above).
-
-1.5 adds:
-
-- `Dialog::Confirm` and `Dialog::Alert`, TS `dialog.confirm` and `dialog.alert`. A confirm runs its action with the
-  input `true` or `false`; an alert runs its action once it closes, however it closes. A dialog answers the
-  activation that showed it only: it closes when the plugin is disabled, fails or reloads.
-- On a `Node::Box`: `border(Border)` (sides, style, color, a title and its alignment), `padding_sides(Edges)`,
-  `flex_wrap()` and `overflow(Overflow::Hidden)`. On a `Layout`: `height`, `min_height`, `max_height` and
-  `margin(Edges)`. A border without a color is white, as TS draws it; name a token such as `border.base` to follow the
-  theme.
-- The composer: `Read::composer()` (its text, the cursor as a byte offset, and its focus) and
-  `Host::edit_composer(ComposerEdit::{Set, Insert, Submit})`, which go through the composer's own edit path. They act
-  only on a composer that shows, and a submit only where the composer may submit (no home form, its pane has the
-  input).
-- `Read::abi_minor()`, the host's minor version, for a plugin that falls back on an older host; and
-  `export_plugin!("my.plugin", setup, requires_minor = 5)` for one that cannot, which a 1.4 host then refuses with a
-  message instead of running it with its 1.5 requests refused. That form exports ABI 1.x, as it always did, until
-  3.0, and warns as deprecated from 2.0 on. On 2.x, `Read::abi()` and `Setup::abi()` name the major, minor and
-  features the host serves, `View::or` lowers a node kind a later 2.x minor adds for an older host, and
-  `plugin!(id = "my.plugin", requires_minor = 1, setup)` asks for host 2.1, which an older host refuses at load.
-- What a dispose callback that panics asked for is dropped, as for any call that panics; the others keep theirs.
-
-## Moving from the 1.3 SDK to 1.4
-
-A 1.3 plugin keeps working unbuilt. To rebuild it on the 1.4 SDK, change:
-
-- `Setup` has a lifetime, `Setup<'a>`. `fn setup(setup: &mut Setup) -> Result<(), String>` still compiles.
-- `Setup::host()` returns `&dyn Host` for setup only, and a callback cannot keep it (the compiler refuses). Each
-  callback gets the host as an argument instead: a render gets `&dyn Read`, which only reads, and a command, event,
-  reply, mount or wake handler gets `&dyn Host`, which also has effects.
-- `Host` is a trait now, not a struct. `storage_get` returns `Option<serde_json::Value>`, not JSON text.
-  `storage_set(key, value)` takes a `serde_json::Value` and returns nothing. `toast(Toast)` takes a `Toast`, as in
-  `Toast::new(Variant::Info, "text")`; the 1.3 `Toast` enum is `Variant`. `theme_mode()` returns `ThemeMode`, dark on a
-  host without one. `log` is gone.
-- `Host::waker()` is `Setup::waker()`. `Waker` is `Clone`, not `Copy`. The host revokes it before your
-  `on_dispose` callbacks run, so a late `wake` does nothing.
-- `command(command, |input| …)` is `command(command, |host, input| …)`.
-- `code_block(language, |fence| -> Option<Vec<Line>>)` is `code_block(language, |read, fence| -> Fenced)`: `None`
-  is `Fenced::Code`, `Some(lines)` is `Fenced::Lines { lines, fg: None, drag: false }`. `Fence::streaming` now means
-  only that the message streams; whether the fence has closed is `Fence::closed`. `Fence` also has `key` and `width`.
-- `slot(kind, path, |session_id| rows)` is `slot_lines(kind, path, |session_id| rows)`, and `route(name, || rows)` is
-  `route_lines(name, || rows)`. These keep the 1.3 rows. The 1.4 forms are `slot(Placement, |read, input, changed|
-  -> Render)` and `route(name, |read, changed| -> Render)`, which draw nodes and get what changed.
-- `Span::fg` takes `impl Into<Color>`: a `&'static str`, a `String` or an `Rgba`. Pass a borrowed `&str` as
-  `.to_owned()`. `Command` and `Span` have new fields, so a struct literal of either needs `..Default::default()`.
-- Clean up in `Setup::on_dispose(|host| …)`, which runs when the plugin is disabled, unloaded, reloaded, when its
-  setup fails, and when the TUI exits.

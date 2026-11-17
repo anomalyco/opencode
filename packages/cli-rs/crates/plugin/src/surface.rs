@@ -288,7 +288,7 @@ pub(crate) struct Surface {
     this: RefCell<Weak<Surface>>,
     /// Lives as long as the mount; what its route's commands asked for checks it before it arrives.
     alive: Rc<()>,
-    /// A route's surface fills the page; a slot's takes its node's layout, as a 1.x claim's root does.
+    /// A route's surface fills the page; a slot's takes its node's layout, as a render claim's root does.
     fills: bool,
     /// The layout a slot's root took last.
     layout: Cell<Option<abi::Layout>>,
@@ -684,7 +684,7 @@ impl Surface {
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
         owned.register(host, &input.layers, &deliver);
-        // A surface that asks hears its mount begin before its first view, as a 1.x claim's `on_mount` (P6a).
+        // A surface that asks hears its mount begin before its first view, as a render claim's `on_mount` (P6a).
         mounted.tell_mount(host, true);
         *mounted.holder.borrow_mut() = Some(owned);
         let weak = Rc::downgrade(&mounted);
@@ -850,7 +850,7 @@ impl Surface {
     }
 
     /// Tells the plugin of a surface that asks that this mount began or is ending. The plugin hears it, not the mount:
-    /// what it starts is the plugin's and outlives the mount, as a 1.x `on_mount`'s does (a read the next mount shows),
+    /// what it starts is the plugin's and outlives the mount, as an `on_mount`'s does (a read the next mount shows),
     /// and it ends with the plugin's activation, as a command's does.
     fn tell_mount(&self, host: &dyn Host, mounted: bool) {
         let Some(deliver) = self.input.deliver.as_ref().filter(|_| self.input.mounts) else { return };

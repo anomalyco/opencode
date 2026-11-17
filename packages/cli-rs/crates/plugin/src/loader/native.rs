@@ -532,7 +532,7 @@ pub(crate) enum Effect {
     Dialog(Box<abi::Dialog>),
     Copy(String, Option<abi::Action>),
     Composer(abi::ComposerEdit),
-    // 1.6
+    // The small verbs.
     Variant(Option<String>),
     Model(String, String),
     Tab(abi::TabEdit),

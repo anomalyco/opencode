@@ -15,13 +15,14 @@
  * so each side keeps its own allocator. Every call runs on the host's UI thread, except the entries of the host
  * table marked "any thread".
  *
- * Versions. A minor version only appends: each table starts with its own size, and an entry past the other side's
- * `size` is absent; read an entry only when `size >= offsetof(table, entry) + sizeof(entry)`, so a plugin built against
- * a later header still loads on an earlier host. Nothing is removed inside a major. A plugin that needs a newer host
- * minor sets `requires_minor`; a host older than that refuses it, as it refuses a major it does not serve. A 2.x host
- * gives a 1.x library (`opencode_plugin_v1`) the table of ABI 1.6, which ends before `send`. Either side answers a
- * request whose "type" it does not know with OPENCODE_ERROR, and changes nothing; the host sends a library no request
- * newer than the minor its table states, and a library should send the host none newer than the host's.
+ * Versions. Every entry of both tables below is in 2.0, and a table shorter than that is refused. A later minor only
+ * appends: each table starts with its own size, and an entry past the other side's `size` is absent; read an entry a
+ * later minor adds only when `size >= offsetof(table, entry) + sizeof(entry)`, so a plugin built against a later header
+ * still loads on an earlier host. Nothing is removed inside a major. A plugin that needs a newer host minor sets
+ * `requires_minor`; a host older than that refuses it, as it refuses a major it does not serve, ABI 1.x included.
+ * Either side answers a request whose "type" it does not know with OPENCODE_ERROR, and changes nothing; the host sends
+ * a library no request newer than the minor its table states, and a library should send the host none newer than the
+ * host's.
  *
  * What the host takes from the plugin, and what the plugin must keep to:
  *
@@ -71,7 +72,7 @@ extern "C" {
 /* Status codes. With OPENCODE_OK an output buffer holds the JSON result; otherwise the error text. */
 #define OPENCODE_OK 0
 /* The callee answers with an error. From the plugin, this is an answer: what the call asked the host for happens, and
- * the host then fails a 2.x plugin (a 1.x plugin's error is logged). From the host's `call`, the request was refused. */
+ * the host then fails the plugin. From the host's `call`, the request was refused. */
 #define OPENCODE_ERROR 1
 /* The callee panicked (or threw); the output holds the message. Nothing the call asked for happens, its storage writes
  * are put back, and the host fails the plugin. */
@@ -110,19 +111,19 @@ typedef struct opencode_host_api {
     int32_t (*call)(void *ctx, opencode_bytes request, opencode_owned *out);
     /* Frees a buffer `call` wrote. */
     void (*free)(opencode_owned owned);
-    /* 1.2: OPENCODE_THEME_DARK or OPENCODE_THEME_LIGHT. */
+    /* OPENCODE_THEME_DARK or OPENCODE_THEME_LIGHT. */
     uint32_t (*theme_mode)(void *ctx);
-    /* 1.3, any thread: a redraw hint. The host runs the plugin's wake handlers, or renders its claims again. */
+    /* Any thread: a redraw hint. The host runs the plugin's wake handlers, or renders its claims again. */
     void (*wake)(void *ctx);
-    /* 2.0, any thread, never blocks: puts `message`, JSON text, in the mailbox, at the end with an empty `key`, else
+    /* Any thread, never blocks: puts `message`, JSON text, in the mailbox, at the end with an empty `key`, else
      * in the place of the entry that waits under `key`. Returns OPENCODE_OK, OPENCODE_FULL, OPENCODE_CLOSED, or
      * OPENCODE_ERROR for a message that is not JSON. The host then sends the plugin a `message` request. */
     int32_t (*send)(void *ctx, opencode_bytes key, opencode_bytes message);
-    /* 2.0, any thread: a thread of the plugin failed with `message`, text. The host fails the plugin once. */
+    /* Any thread: a thread of the plugin failed with `message`, text. The host fails the plugin once. */
     void (*report)(void *ctx, opencode_bytes message);
-    /* 2.0, any thread: 1 once the plugin has left `active`, else 0. */
+    /* Any thread: 1 once the plugin has left `active`, else 0. */
     uint32_t (*stopped)(void *ctx);
-    /* 2.0: the host's optional features, a JSON array of names. */
+    /* The host's optional features, a JSON array of names. */
     opencode_bytes features;
 } opencode_host_api;
 
@@ -143,7 +144,7 @@ typedef struct opencode_plugin_api {
     void (*destroy)(void *instance);
     /* Frees a buffer `create`, `call` or `describe` wrote. Required. */
     void (*free)(opencode_owned owned);
-    /* 1.1: writes the metadata JSON into `out`: {"version": "...", "id": "...", "requires": ["feature", ...]}. */
+    /* Writes the metadata JSON into `out`: {"version": "...", "id": "...", "requires": ["feature", ...]}. Required. */
     int32_t (*describe)(opencode_owned *out);
 } opencode_plugin_api;
 
@@ -159,8 +160,7 @@ typedef struct opencode_plugin_api {
 #endif
 #endif
 
-/* The entry every 2.x plugin exports. A 1.x plugin exports `opencode_plugin_v1` with the same table; the host serves
- * it ABI 1.6, whose host table ends before `send`. */
+/* The entry every 2.x plugin exports. */
 OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
 
 /*
@@ -169,11 +169,11 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * its `x-messages` names the definition of each request type's answer. Every message is JSON but a draw's answer,
  * which is bytes (`DrawList`). A request is tagged by "type". A field the schema leaves out of "required" may be left
  * out, and a reader ignores a field it does not know. The HTTP API's types (a session, a message, a model) are
- * references into the API's OpenAPI document, `packages/protocol/openapi.json`, relative to the schema's file. A 2.x
- * `describe` answers `Metadata`, whose "id" is required and nonempty; a 1.x one `MetadataV1`. `crates/plugin/conformance` holds every message of its scripted
- * sessions, each of which the schema takes.
+ * references into the API's OpenAPI document, `packages/protocol/openapi.json`, relative to the schema's file.
+ * `describe` answers `Metadata`, whose "id" is required and nonempty. `crates/plugin/conformance` holds every message of
+ * its scripted sessions, each of which the schema takes.
  *
- * - `describe` answers `Metadata`; a 2.x library names a nonempty "id", which the host reads before it runs any
+ * - `describe` answers `Metadata`; a library names a nonempty "id", which the host reads before it runs any
  *   `create`, so setup runs once, at activation. Loading a library runs its native initializers, never its setup.
  * - `create` answers `Manifest`: what the plugin registered. A request names a registration by its index in the
  *   manifest's list ("claim" a slot claim, "surface" a surface, "handler" an event handler, "layer" a layer).
@@ -183,8 +183,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - "command", "event", "reply", "mount", "route-mount", "wake", "fence-gone", "deltas", "unmount", "message" and
  *   "plugins" run the plugin's handlers and answer null. "reply" carries {"Ok": json} or {"Err": text}; "message" the
  *   JSON text a thread sent, as a JSON string; "plugins" goes to a plugin whose manifest has "plugins".
- * - "render-fence", "render" and "render-route" (1.4 on) answer `Fenced` and `Render`; "fence", "slot" and "route"
- *   (1.3) answer lines.
+ * - "render-fence", "render" and "render-route" answer `Fenced` and `Render`.
  * - "view" (2.0) answers `ViewReply`. Its "content" is what the view gave the host this time, numbered "next" + 1,
  *   "next" + 2, ...; a node names it as {"content": handle}, and "released" lets the host drop handles. "memo" is how
  *   many values the plugin's memo table for the mount holds, at most the tree's nodes with an id. A tree may name a
@@ -209,7 +208,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *
  * Tree nodes (`Node`, by "type"): "box", "text", "slot", "markdown", "spinner", "scroll", "diff", "input", "list",
  * "code", "image", "keep", "canvas" and "fence". A source (`Source`) is {"text": text}, {"content": handle} or
- * {"part-output": {"session", "part"}}. A dialog's and a 1.x render's body is a node of ABI 1.x (`V1Node`). A tree the
+ * {"part-output": {"session", "part"}}. A dialog's body and a render's node are the older tree, `V1Node`. A tree the
  * host cannot decode, such as one with a kind it does not know, fails the plugin and leaves no effect: a library
  * lowers a kind of a later minor, or of a feature the host does not list, for that host before it answers (the Rust
  * SDK's `View::or`). A "fence" is the host's own code view of the fence a claim draws, current with each revision of
@@ -222,9 +221,8 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   decode it, the tree breaks the contract, a handler answers anything but null), has none, and fails the plugin;
  *   so does a `create` whose buffer the host refuses, whatever its status. A call that answers OPENCODE_ERROR keeps
  *   them (see above).
- * - A render of 1.4 on, a view, a claim's view, a draw, a layout and a search read only: the host answers
- *   OPENCODE_ERROR to any request of theirs that asks for something. A render of 1.3 may ask, and what it asks for
- *   happens when the host draws its answer.
+ * - A render, a view, a claim's view, a draw, a layout and a search read only: the host answers OPENCODE_ERROR to any
+ *   request of theirs that asks for something.
  * - A "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit,
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet. A "focus" names a box that is
@@ -235,7 +233,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"), never 0, which names no
  *   request: an SDK refuses an answer of 0 as malformed. One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
- *   SDK's `Host::try_fetch` returns that as an `Err`, and its 1.x `Host::fetch` as `RequestId(0)`. A request a
+ *   SDK's `Host::try_fetch` returns that as an `Err`. A request a
  *   mount's call asks for (a "command" of the route it shows, an "input" to that mount) is the mount's: once it
  *   closes, the request is not sent, a program does not start, and its "reply" is dropped, also for the surface opened
  *   again under the same key. Any other is the activation's, whose reply comes until `destroy`: so is one of the
