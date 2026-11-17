@@ -1,7 +1,7 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { uuid } from "@opencode/util/uuid"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { ServerProvider } from "@/runtime/server/current"
+import { ServerProvider } from "@/runtime/server/runtime"
 import { useGlobal } from "@/runtime/server/runtime"
 import { usePlatform } from "@/runtime/platform/platform"
 import { createEffect, lazy, Suspense } from "solid-js"

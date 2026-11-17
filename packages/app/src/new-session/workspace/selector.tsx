@@ -200,9 +200,7 @@ export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceControll
                   {(item) =>
                     item === MAIN_CHECKOUT ? (
                       <>
-                        <span class="shrink-0 whitespace-nowrap">
-                          {language.t("session.new.workspace.useMainCheckout")}
-                        </span>
+                        <span>{language.t("session.new.workspace.useMainCheckout")}</span>
                         <span dir="auto" class="min-w-0 truncate text-v2-text-text-muted">
                           {props.workspace.bar.checkout()?.branch}
                         </span>
