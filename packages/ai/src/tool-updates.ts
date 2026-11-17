@@ -44,8 +44,8 @@ export const foldTools = <Item extends { readonly name: string }>(
 
 /**
  * Fold the declarations up to the last one this route can't send in place into the leading one (the request's
- * `tools`), and keep later markers in place, trimmed to their effective changes and carrying what a protocol needs
- * to send them (see `ToolChanges`). A marker is sent in place only after the conversation starts, when the model's
+ * `tools`), and keep later markers in place, trimmed to their effective changes. Protocols send kept markers in
+ * message order and track what they need along the way. A marker is sent in place only after the conversation starts, when the model's
  * `tools.updates` and the protocol's encoding both cover what it does: `add` a new name, `replace` a name declared
  * before (even if removed since), `remove` a current tool. Removing a name that matches no current tool does nothing.
  */
@@ -71,10 +71,8 @@ const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMReq
       const added = change.add.map((tool) => tool.name)
       const removed = state.tools.filter((tool) => change.remove.includes(tool.name) && !added.includes(tool.name))
       const tools = foldTools(state.tools, change.add, change.remove)
-      const available = new Set(toolNames(tools))
-      const withdrawn = toolNames(state.tools).filter((name) => !available.has(name))
       const kinds = [
-        ...(removed.length > 0 || withdrawn.length > 0 ? ["remove" as const] : []),
+        ...(removed.length > 0 || withdrawnTools(state.tools, tools).length > 0 ? ["remove" as const] : []),
         ...added.map((name) => (state.declared.has(name) ? ("replace" as const) : ("add" as const))),
       ]
       const native =
@@ -87,42 +85,17 @@ const plan = (request: LLMRequest, supported: ReadonlyArray<ToolUpdate>): LLMReq
         index: change.index,
         native,
         tools,
-        add: change.add,
-        remove: removed.map((tool) => tool.name),
-        withdrawn,
+        changes: { add: change.add, remove: removed.map((tool) => tool.name) },
       }
       return { tools, declared: new Set([...state.declared, ...added]), steps: [...state.steps, step] }
     },
     { tools: request.tools, declared: new Set(request.tools.map((tool) => tool.name)), steps: [] },
   ).steps
   const cut = steps.findLastIndex((step) => !step.native)
-  const leading = cut === -1 ? request.tools : steps[cut]!.tools
-  // Unavailable names and whether tools came before are tracked across the markers kept in place only.
-  const kept = steps.slice(cut + 1).reduce<{
-    readonly declared: boolean
-    readonly unavailable: ReadonlySet<string>
-    readonly markers: ReadonlyMap<number, ToolChanges>
-  }>(
-    (state, step) => {
-      const unavailable = new Set([...state.unavailable].filter((name) => !step.add.some((tool) => tool.name === name)))
-      const marker = {
-        add: step.add,
-        remove: step.remove,
-        withdrawn: step.withdrawn,
-        unavailable: [...unavailable],
-        incremental: state.declared,
-      }
-      return {
-        declared: state.declared || step.add.length > 0,
-        unavailable: new Set([...unavailable, ...step.remove]),
-        markers: new Map([...state.markers, [step.index, marker]]),
-      }
-    },
-    { declared: leading.some(declarable), unavailable: new Set(), markers: new Map() },
-  ).markers
+  const kept = new Map(steps.slice(cut + 1).map((step) => [step.index, step.changes]))
   return {
     ...request,
-    tools: leading,
+    tools: cut === -1 ? request.tools : steps[cut]!.tools,
     messages: request.messages.flatMap((message, index) => {
       if (message.role !== "system" || message.tools === undefined) return [message]
       const tools = kept.get(index)
@@ -138,9 +111,13 @@ interface PlanStep {
   readonly index: number
   readonly native: boolean
   readonly tools: ReadonlyArray<ToolEntry>
-  readonly add: ReadonlyArray<ToolEntry>
-  readonly remove: ReadonlyArray<string>
-  readonly withdrawn: ReadonlyArray<string>
+  readonly changes: ToolChanges
+}
+
+/** Flattened names of the tools in `before` that `after` no longer has, including tools a redefined namespace drops. */
+export const withdrawnTools = (before: ReadonlyArray<ToolEntry>, after: ReadonlyArray<ToolEntry>) => {
+  const kept = new Set(toolNames(after))
+  return toolNames(before).filter((name) => !kept.has(name))
 }
 
 const toolNames = (tools: ReadonlyArray<ToolEntry>) => flattenTools(tools).map((tool) => tool.name)

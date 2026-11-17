@@ -233,23 +233,30 @@ const lowerToolEntry = Effect.fnUntraced(function* (
   }
 })
 
-// Every `additional_tools` item after the first is preceded by a hint that it adds to the tools declared before it,
-// naming tools removed and not declared again since. Without it, models can read the latest item as the whole set.
-const lowerToolChanges = Effect.fnUntraced(function* (
-  changes: ToolChanges,
-  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
-) {
-  if (changes.add.length === 0) return changes.remove.length === 0 ? [] : [developer(removalNotice(changes.remove))]
-  return [
-    ...(changes.incremental === true ? [developer(incrementalNotice(changes.unavailable ?? []))] : []),
-    {
-      type: "additional_tools" as const,
-      role: "developer" as const,
-      tools: yield* Effect.forEach(changes.add, (tool) => lowerToolEntry(tool, custom)),
-    },
-    ...(changes.remove.length === 0 ? [] : [developer(removalNotice(changes.remove))]),
-  ]
-})
+// Lowers one request's tool updates, in message order. Every `additional_tools` item after the first is preceded by
+// a hint that it adds to the tools declared before it, naming tools removed and not declared again since. Without
+// it, models can read the latest item as the whole set.
+const toolChangeLowering = (declaredInPlace: boolean, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) => {
+  let declared = declaredInPlace
+  const unavailable = new Set<string>()
+  return Effect.fnUntraced(function* (changes: ToolChanges) {
+    changes.add.forEach((tool) => unavailable.delete(tool.name))
+    const hint = declared && changes.add.length > 0 ? [developer(incrementalNotice([...unavailable]))] : []
+    const additions =
+      changes.add.length === 0
+        ? []
+        : [
+            {
+              type: "additional_tools" as const,
+              role: "developer" as const,
+              tools: yield* Effect.forEach(changes.add, (tool) => lowerToolEntry(tool, custom)),
+            },
+          ]
+    declared = declared || changes.add.length > 0
+    changes.remove.forEach((name) => unavailable.add(name))
+    return [...hint, ...additions, ...(changes.remove.length === 0 ? [] : [developer(removalNotice(changes.remove))])]
+  })
+}
 
 const developer = (content: string) => ({ type: "message" as const, role: "developer" as const, content })
 
@@ -306,7 +313,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   const layout = yield* lowerToolLayout(request, custom)
   const conversation = yield* OpenResponses.lowerConversation(updates.request, {
     ...adapter,
-    lowerToolChanges: (changes) => lowerToolChanges(changes, custom),
+    lowerToolChanges: toolChangeLowering(layout.head.length > 0, custom),
   })
   return {
     ...conversation,

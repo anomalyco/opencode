@@ -29,7 +29,7 @@ import {
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
-import { addsTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
+import { addsTools, foldTools, toolsUpdate, withdrawnTools, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -806,6 +806,7 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
 const lowerToolsUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   update: ToolChanges,
+  withdrawn: ReadonlyArray<string>,
   breakpoints: Cache.Breakpoints,
 ) {
   const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
@@ -816,7 +817,7 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
-      ...(update.withdrawn ?? []).map((name) => ({
+      ...withdrawn.map((name) => ({
         type: "tool_removal" as const,
         tool: { type: "tool_reference" as const, name },
       })),
@@ -838,13 +839,17 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
   const held: Array<LLMRequest["messages"][number]> = []
+  // The tools declared so far, so each tool update can name the flattened tools it takes away.
+  let declared = request.tools
   const releaseHeld = Effect.fnUntraced(function* () {
     const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
     for (const update of held.splice(0)) {
       const tools = toolsUpdate(update)
       if (tools !== undefined) {
         if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
-        const lowered = yield* lowerToolsUpdate(update, tools, breakpoints)
+        const next = foldTools(declared, tools.add, tools.remove)
+        const lowered = yield* lowerToolsUpdate(update, tools, withdrawnTools(declared, next), breakpoints)
+        declared = next
         if (lowered.content.length > 0) messages.push(lowered)
         continue
       }
