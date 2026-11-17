@@ -87,6 +87,9 @@ pub fn setup(vm: &mut Vm) {
         let (n, m) = (vm.static_str(name), vm.static_str(""));
         vm.define_hidden(proto, nk, n);
         vm.define_hidden(proto, mk, m);
+        if name == "URIError" {
+            vm.realm.std.uri_error = proto;
+        }
     }
     let ep = vm.realm.error_proto;
     vm.method(ep, "toString", 0, error_to_string);

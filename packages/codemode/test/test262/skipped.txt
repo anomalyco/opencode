@@ -22,9 +22,6 @@ built-ins/Array/prototype/concat/create-ctor-non-object.js  # a.concat() throws 
 built-ins/Array/prototype/copyWithin/call-with-boolean.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a boolean.
 built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array.copyWithin expects start to be a number.
 built-ins/Array/prototype/copyWithin/length-near-integer-limit.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a data object.
-built-ins/Array/prototype/copyWithin/return-abrupt-from-end.js  # Expected a Test262Error but got a TypeError
-built-ins/Array/prototype/copyWithin/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
-built-ins/Array/prototype/copyWithin/return-abrupt-from-target.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/copyWithin/return-this.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a data object.
 built-ins/Array/prototype/entries/returns-iterator-from-object.js  # TypeError: Array.prototype.entries called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-1-10.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.

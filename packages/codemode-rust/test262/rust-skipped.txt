@@ -12,21 +12,7 @@ built-ins/Array/isArray/15.4.3.2-0-5.js  # wrong result
 built-ins/Array/length/S15.4.4_A1.3_T1.js  # wrong result
 built-ins/Array/length/S15.4.5.1_A1.2_T3.js  # wrong result
 built-ins/Array/length/S15.4.5.2_A3_T4.js  # uncaught RangeError: Invalid array length
-built-ins/Array/prototype/copyWithin/coerced-values-end.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/coerced-values-start.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/coerced-values-target.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/fill-holes.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-end.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-out-of-bounds-end.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-out-of-bounds-start.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-out-of-bounds-target.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-start.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/negative-target.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/non-negative-out-of-bounds-end.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/non-negative-out-of-bounds-target-and-start.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/non-negative-target-and-start.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/non-negative-target-start-and-end.js  # call of a missing method
-built-ins/Array/prototype/copyWithin/undefined-end.js  # call of a missing method
+built-ins/Array/prototype/copyWithin/fill-holes.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-4.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-5.js  # wrong result
 built-ins/Array/prototype/every/15.4.4.16-7-b-1.js  # wrong result
@@ -116,22 +102,9 @@ built-ins/Function/prototype/bind/instance-length-remaining-args.js  # wrong res
 built-ins/JSON/parse/reviver-array-get-prop-from-prototype.js  # wrong result
 built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
 built-ins/Math/hypot/Math.hypot_ToNumberErr.js  # error not thrown: Test262Error
-built-ins/Math/sumPrecise/sum-is-NaN.js  # call of a missing method
-built-ins/Math/sumPrecise/sum-is-infinite.js  # call of a missing method
-built-ins/Math/sumPrecise/sum-is-minus-zero.js  # call of a missing method
-built-ins/Math/sumPrecise/sum.js  # call of a missing method
-built-ins/Math/sumPrecise/throws-on-non-number.js  # wrong result
 built-ins/Number/S9.3.1_A2_U180E.js  # interpreter panic
 built-ins/Number/S9.3.1_A3_T1_U180E.js  # interpreter panic
 built-ins/Number/S9.3.1_A3_T2_U180E.js  # interpreter panic
-built-ins/Number/prototype/S15.7.4_A3.6.js  # wrong result
-built-ins/Number/prototype/toExponential/range.js  # call of a missing method
-built-ins/Number/prototype/toExponential/return-abrupt-tointeger-fractiondigits.js  # wrong error type: TypeError instead of Test262Error
-built-ins/Number/prototype/toExponential/return-values.js  # call of a missing method
-built-ins/Number/prototype/toExponential/this-is-0-fractiondigits-is-not-0.js  # call of a missing method
-built-ins/Number/prototype/toExponential/tointeger-fractiondigits.js  # call of a missing method
-built-ins/Number/prototype/toExponential/undefined-fractiondigits.js  # call of a missing method
-built-ins/Number/prototype/toFixed/exactness.js  # wrong result
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
@@ -241,77 +214,10 @@ built-ins/String/raw/special-characters.js  # unsupported syntax: tagged templat
 built-ins/String/raw/template-substitutions-are-appended-on-same-index.js  # unsupported syntax: tagged templates
 built-ins/String/raw/zero-literal-segments.js  # unsupported syntax: tagged templates
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.10_T1.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.11_T1.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.11_T2.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.12_T1.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.12_T2.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.12_T3.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.1_T1.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.2_T1.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A1.2_T2.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A3_T1.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A3_T2.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A3_T3.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A4_T1.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A4_T2.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A4_T3.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A4_T4.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A5.1.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A5.2.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A5.4.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A5.6.js  # missing global: decodeURI
-built-ins/decodeURI/S15.1.3.1_A5.7.js  # missing global: decodeURI
-built-ins/decodeURIComponent/S15.1.3.2_A1.10_T1.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.11_T1.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.11_T2.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T1.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T2.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T3.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.1_T1.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.2_T1.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A1.2_T2.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A3_T1.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A3_T2.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A3_T3.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A4_T1.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A4_T2.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A4_T3.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A4_T4.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A5.1.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A5.4.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A5.6.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/S15.1.3.2_A5.7.js  # missing global: decodeURIComponent
-built-ins/decodeURIComponent/throw-URIError.js  # missing global: decodeURIComponent
-built-ins/encodeURI/S15.1.3.3_A3.1_T1.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A3.2_T1.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A3.2_T2.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A3.2_T3.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A3.3_T1.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A4_T1.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A4_T2.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A4_T3.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A4_T4.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A5.1.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A5.2.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A5.4.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A5.6.js  # missing global: encodeURI
-built-ins/encodeURI/S15.1.3.3_A5.7.js  # missing global: encodeURI
-built-ins/encodeURIComponent/S15.1.3.4_A3.1_T1.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A3.2_T1.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A3.2_T2.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A3.2_T3.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A3.3_T1.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A4_T1.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A4_T2.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A4_T3.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A4_T4.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A5.1.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A5.2.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A5.4.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A5.6.js  # missing global: encodeURIComponent
-built-ins/encodeURIComponent/S15.1.3.4_A5.7.js  # missing global: encodeURIComponent
+built-ins/decodeURI/S15.1.3.1_A5.2.js  # wrong result
+built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # wrong result
+built-ins/encodeURI/S15.1.3.3_A5.2.js  # wrong result
+built-ins/encodeURIComponent/S15.1.3.4_A5.2.js  # wrong result
 built-ins/global/10.2.1.1.3-4-18-s.js  # missing global: undefined
 language/arguments-object/10.5-7-b-2-s.js  # wrong result
 language/arguments-object/10.5-7-b-3-s.js  # wrong result

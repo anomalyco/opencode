@@ -5,7 +5,7 @@ use crate::object::*;
 use crate::ops::MAX_STRING_LEN;
 use crate::strings::{StrId, StrRef};
 use crate::value::{
-    Id, Value, is_js_whitespace, num_to_fixed, num_to_radix, num_to_string, to_integer, to_uint32,
+    Id, Value, is_js_whitespace, num_to_fixed, num_to_string, to_integer, to_uint32,
 };
 use crate::vm::{Res, Vm};
 
@@ -96,6 +96,7 @@ pub fn setup(vm: &mut Vm) {
             ("toFixed", 1, n_to_fixed),
             ("toString", 1, n_to_string),
             ("toPrecision", 1, n_to_precision),
+            ("toExponential", 1, n_to_exponential),
             ("valueOf", 0, n_value_of),
             ("toLocaleString", 0, n_to_locale_string),
         ],
@@ -144,6 +145,8 @@ pub fn setup(vm: &mut Vm) {
             ("acosh", 1, m_acosh),
             ("atanh", 1, m_atanh),
             ("fround", 1, m_fround),
+            ("f16round", 1, m_f16round),
+            ("sumPrecise", 1, m_sum_precise),
             ("clz32", 1, m_clz32),
             ("atan2", 2, m_atan2),
             ("pow", 2, m_pow),
@@ -833,12 +836,14 @@ fn n_to_fixed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let x = this_num(vm, &this)?;
     let d = to_integer(vm.number_of(&arg(args, 0))?);
     if !(0.0..=100.0).contains(&d) {
-        return Err(vm.range_error("toFixed() digits argument must be between 0 and 100"));
+        return Err(vm.range_error("toFixed() argument must be between 0 and 100"));
     }
     if x.abs() >= 1e21 {
         return Ok(vm.string_val(num_to_string(x)));
     }
-    Ok(vm.string_val(num_to_fixed(x, d as usize)))
+    // The sign stays even when the digits round to zero: `(-0.0001).toFixed(2)` is "-0.00".
+    let sign = if x < 0.0 { "-" } else { "" };
+    Ok(vm.string_val(format!("{sign}{}", num_to_fixed(x.abs(), d as usize))))
 }
 
 fn n_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -848,13 +853,29 @@ fn n_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         v => to_integer(vm.number_of(&v)?),
     };
     if !(2.0..=36.0).contains(&radix) {
-        return Err(vm.range_error("toString() radix must be between 2 and 36"));
+        return Err(vm.range_error("toString() radix argument must be between 2 and 36"));
     }
     Ok(vm.string_val(if radix == 10.0 {
         num_to_string(x)
     } else {
-        num_to_radix(x, radix as u32)
+        super::numfmt::to_radix(x, radix as u32)
     }))
+}
+
+fn n_to_exponential(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let x = this_num(vm, &this)?;
+    let digits = match arg(args, 0) {
+        Value::Undef => None,
+        v => Some(to_integer(vm.number_of(&v)?)),
+    };
+    if !x.is_finite() {
+        return Ok(vm.string_val(num_to_string(x)));
+    }
+    if digits.is_some_and(|d| !(0.0..=100.0).contains(&d)) {
+        return Err(vm.range_error("toExponential() argument must be between 0 and 100"));
+    }
+    let out = super::numfmt::to_exponential(x, digits.map(|d| d as usize));
+    Ok(vm.string_val(out))
 }
 
 fn n_to_precision(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -863,29 +884,14 @@ fn n_to_precision(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         return Ok(vm.string_val(num_to_string(x)));
     }
     let p = to_integer(vm.number_of(&arg(args, 0))?);
+    if !x.is_finite() {
+        return Ok(vm.string_val(num_to_string(x)));
+    }
     if !(1.0..=100.0).contains(&p) {
         return Err(vm.range_error("toPrecision() argument must be between 1 and 100"));
     }
-    if !x.is_finite() || x == 0.0 {
-        return Ok(vm.string_val(if x == 0.0 {
-            num_to_fixed(0.0, p as usize - 1)
-        } else {
-            num_to_string(x)
-        }));
-    }
-    let e = x.abs().log10().floor() as i32;
-    let p = p as i32;
-    if e < -6 || e >= p {
-        let s = format!("{:.*e}", (p - 1) as usize, x);
-        let (m, ex) = s.split_once('e').unwrap_or((&s, "0"));
-        let ex: i32 = ex.parse().unwrap_or(0);
-        return Ok(vm.string_val(format!(
-            "{m}e{}{}",
-            if ex < 0 { "-" } else { "+" },
-            ex.abs()
-        )));
-    }
-    Ok(vm.string_val(num_to_fixed(x, (p - 1 - e).max(0) as usize)))
+    let out = super::numfmt::to_precision(x, p as usize);
+    Ok(vm.string_val(out))
 }
 
 fn n_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -969,6 +975,7 @@ math1!(m_asinh, f64::asinh);
 math1!(m_acosh, f64::acosh);
 math1!(m_atanh, f64::atanh);
 math1!(m_fround, |x| x as f32 as f64);
+math1!(m_f16round, super::numfmt::f16_round);
 math1!(m_clz32, |x| to_uint32(x).leading_zeros() as f64);
 math1!(m_sign, |x| if x.is_nan() || x == 0.0 {
     x
@@ -983,6 +990,23 @@ math1!(m_round, |x| {
     let v = if x - r >= 0.5 { r + 1.0 } else { r };
     if v == 0.0 && x < 0.0 { -0.0 } else { v }
 });
+
+fn m_sum_precise(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let it = vm.get_iterator(&arg(args, 0))?;
+    let mut values = Vec::new();
+    while let Some(v) = vm.iter_step(&it)? {
+        let Value::Num(n) = v else {
+            let _ = vm.iter_close(&it);
+            return Err(vm.type_error("Math.sumPrecise expects an iterable of numbers."));
+        };
+        if values.len() >= crate::ops::MAX_ARRAY_LEN {
+            let _ = vm.iter_close(&it);
+            return Err(vm.range_error("Invalid array length"));
+        }
+        values.push(n);
+    }
+    Ok(Value::Num(super::numfmt::sum_precise(&values)))
+}
 
 fn m_atan2(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let (y, x) = (n0(vm, args)?, n1(vm, args)?);

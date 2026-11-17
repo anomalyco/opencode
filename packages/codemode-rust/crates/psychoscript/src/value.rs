@@ -37,6 +37,74 @@ impl Value {
     }
 }
 
+/// The shortest decimal digits that round-trip a finite positive `x`, and the power of ten of the first. Of two
+/// equally close candidates JavaScript takes the even one, where Rust's formatter may take the other.
+pub fn shortest_digits(x: f64) -> (String, i32) {
+    let e = format!("{x:e}");
+    let (mantissa, exp) = e.split_once('e').unwrap_or((&e, "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let last = digits.as_bytes()[digits.len() - 1] - b'0';
+    if last.is_multiple_of(2) || digits.len() > 17 {
+        return (digits, exp);
+    }
+    // A tie means x is exactly halfway to a neighbour: equal to these digits followed by a 5, one way or the other.
+    let k = digits.len();
+    let below = format!("{}{}5", &digits[..k - 1], last - 1);
+    let above = format!("{digits}5");
+    let neighbour = if equals_decimal(x, &below, exp - k as i32) {
+        Some(last - 1)
+    } else if last < 9 && equals_decimal(x, &above, exp - k as i32) {
+        Some(last + 1)
+    } else {
+        None
+    };
+    if let Some(d) = neighbour {
+        let candidate = format!("{}{}", &digits[..k - 1], d);
+        let text = format!("{}.{}e{}", &candidate[..1], &candidate[1..], exp);
+        if text.parse::<f64>().ok() == Some(x) {
+            return (candidate, exp);
+        }
+    }
+    (digits, exp)
+}
+
+/// Whether the finite positive `x` is exactly the decimal `digits` × 10^`q`; false when that cannot be decided in
+/// 128-bit integers, which only happens far from any tie a double can make.
+fn equals_decimal(x: f64, digits: &str, q: i32) -> bool {
+    let Ok(d) = digits.parse::<u128>() else {
+        return false;
+    };
+    let bits = x.to_bits();
+    let raw = ((bits >> 52) & 0x7ff) as i32;
+    let (mut m, mut p) = if raw == 0 {
+        (bits & ((1 << 52) - 1), -1074)
+    } else {
+        ((bits & ((1 << 52) - 1)) | (1 << 52), raw - 1075)
+    };
+    while m & 1 == 0 && m != 0 {
+        m >>= 1;
+        p += 1;
+    }
+    let (mut lhs, mut rhs) = (m as u128, d);
+    let shift = |v: u128, n: u32| v.checked_mul(1u128.checked_shl(n)?);
+    let scale = |v: u128, n: u32| v.checked_mul(10u128.checked_pow(n)?);
+    let r = (|| {
+        if p >= 0 {
+            lhs = shift(lhs, p as u32)?;
+        } else {
+            rhs = shift(rhs, (-p) as u32)?;
+        }
+        if q >= 0 {
+            rhs = scale(rhs, q as u32)?;
+        } else {
+            lhs = scale(lhs, (-q) as u32)?;
+        }
+        Some(lhs == rhs)
+    })();
+    r.unwrap_or(false)
+}
+
 /// `Number.prototype.toString()` with radix 10.
 pub fn num_to_string(x: f64) -> String {
     let mut out = String::new();
@@ -57,21 +125,14 @@ pub fn write_num(out: &mut String, x: f64) {
         out.push_str(if x > 0.0 { "Infinity" } else { "-Infinity" });
         return;
     }
-    if x.fract() == 0.0 && x.abs() < 1e21 {
-        if x.abs() < 9.0e18 {
-            let _ = write!(out, "{}", x as i64);
-            return;
-        }
-        let _ = write!(out, "{x}");
+    if x.fract() == 0.0 && x.abs() < 9_007_199_254_740_992.0 {
+        let _ = write!(out, "{}", x as i64);
         return;
     }
     if x < 0.0 {
         out.push('-');
     }
-    let e = format!("{:e}", x.abs());
-    let (mantissa, exp) = e.split_once('e').unwrap_or((&e, "0"));
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let (digits, exp) = shortest_digits(x.abs());
     let k = digits.len() as i32;
     let n = exp + 1;
     if k <= n && n <= 21 {
@@ -100,47 +161,6 @@ pub fn write_num(out: &mut String, x: f64) {
         out.push(if e < 0 { '-' } else { '+' });
         let _ = write!(out, "{}", e.abs());
     }
-}
-
-/// `Number.prototype.toString(radix)` for radix other than 10.
-pub fn num_to_radix(x: f64, radix: u32) -> String {
-    if x.is_nan() {
-        return "NaN".into();
-    }
-    if x.is_infinite() {
-        return if x > 0.0 {
-            "Infinity".into()
-        } else {
-            "-Infinity".into()
-        };
-    }
-    let neg = x < 0.0;
-    let x = x.abs();
-    let mut int = x.trunc();
-    let mut frac = x - int;
-    let mut digits = Vec::new();
-    if int == 0.0 {
-        digits.push(b'0');
-    }
-    while int >= 1.0 {
-        let d = (int % radix as f64) as u32;
-        digits.push(std::char::from_digit(d, radix).unwrap_or('0') as u8);
-        int = (int / radix as f64).trunc();
-    }
-    digits.reverse();
-    let mut s = String::from_utf8(digits).unwrap_or_default();
-    if frac > 0.0 {
-        s.push('.');
-        let mut n = 0;
-        while frac > 0.0 && n < 52 {
-            frac *= radix as f64;
-            let d = frac.trunc() as u32;
-            s.push(std::char::from_digit(d, radix).unwrap_or('0'));
-            frac -= d as f64;
-            n += 1;
-        }
-    }
-    if neg { format!("-{s}") } else { s }
 }
 
 /// `Number.prototype.toFixed`, rounding the exact binary value half away from zero like JavaScript.
@@ -370,7 +390,6 @@ mod tests {
         assert_eq!(num_to_fixed(1.23456, 2), "1.23");
         assert_eq!(num_to_fixed(2.5, 0), "3");
         assert_eq!(num_to_fixed(1.005, 2), "1.00");
-        assert_eq!(num_to_radix(255.0, 16), "ff");
     }
 
     #[test]

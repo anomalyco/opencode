@@ -53,6 +53,7 @@ pub fn setup(vm: &mut Vm) {
             ("flat", 0, a_flat),
             ("flatMap", 1, a_flat_map),
             ("fill", 1, a_fill),
+            ("copyWithin", 2, a_copy_within),
             ("at", 1, a_at),
             ("with", 2, a_with),
             ("keys", 0, a_keys),
@@ -699,6 +700,21 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let items = items_mut(vm, id, false)?;
     for slot in items.iter_mut().take(e).skip(s) {
         *slot = v;
+    }
+    Ok(this)
+}
+
+fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = arr_id(vm, &this)?;
+    let n = len(vm, id);
+    let target = to_index(vm, &arg(args, 0), n, 0)?;
+    let start = to_index(vm, &arg(args, 1), n, 0)?;
+    let end = to_index(vm, &arg(args, 2), n, n)?;
+    let items = items_mut(vm, id, false)?;
+    if start < end && target < n {
+        let count = (end - start).min(n - target);
+        let copy: Vec<Value> = items[start..start + count].to_vec();
+        items[target..target + count].copy_from_slice(&copy);
     }
     Ok(this)
 }
