@@ -42,8 +42,10 @@ export const ServerOptions = Schema.Struct({
   ),
   instructions: Schema.optional(
     Schema.Struct({
-      // false skips CLAUDE.md and ~/.claude/CLAUDE.md fallbacks.
+      // false skips the per-directory CLAUDE.md fallback.
       claude: Schema.optional(Schema.Boolean),
+      // false skips the ~/.claude/CLAUDE.md fallback.
+      claudeGlobal: Schema.optional(Schema.Boolean),
     }),
   ),
   windows: Schema.optional(

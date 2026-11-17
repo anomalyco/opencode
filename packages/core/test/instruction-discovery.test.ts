@@ -34,6 +34,7 @@ const instructionLayer = (input: {
   http?: HttpClient.HttpClient
   project?: boolean
   claude?: boolean
+  claudeGlobal?: boolean
 }) => {
   const watcher = Watcher.testLayer
   const config = Config.testLayer(input.instructions ? [configured(input.instructions)] : [])
@@ -51,7 +52,11 @@ const instructionLayer = (input: {
       [
         Config.node.replace(config),
         InstructionDiscovery.node.replace(
-          InstructionDiscovery.configured({ project: input.project, claude: input.claude }),
+          InstructionDiscovery.configured({
+            project: input.project,
+            claude: input.claude,
+            claudeGlobal: input.claudeGlobal,
+          }),
         ),
         Global.node.replace(
           input.config || input.home
@@ -434,16 +439,16 @@ describe("ConfigInstructionPlugin.Plugin", () => {
         const claudeGlobal = path.join(home, ".claude", "CLAUDE.md")
         const projectAgents = path.join(project, "AGENTS.md")
         const packageClaude = path.join(directory, "CLAUDE.md")
-        const load = (claude?: boolean) =>
+        const load = (options: { claude?: boolean; claudeGlobal?: boolean } = {}) =>
           Effect.gen(function* () {
             const discovery = yield* start()
             return (yield* readInitial(yield* discovery.load())).text
-          }).pipe(Effect.provide(layer(claude)), Effect.scoped)
-        const layer = (claude?: boolean) =>
+          }).pipe(Effect.provide(layer(options)), Effect.scoped)
+        const layer = (options: { claude?: boolean; claudeGlobal?: boolean }) =>
           instructionLayer({
             config: global,
             home,
-            claude,
+            ...options,
             locationServiceLayer: Layer.succeed(
               Location.Service,
               Location.Service.of(
@@ -469,6 +474,11 @@ describe("ConfigInstructionPlugin.Plugin", () => {
             ].join("\n\n"),
           )
 
+          // The prompt flag only drops the global fallback, as in V1.
+          const withoutGlobal = yield* load({ claudeGlobal: false })
+          expect(withoutGlobal).not.toContain("claude global")
+          expect(withoutGlobal).toContain(`Instructions from: ${packageClaude}\npackage claude`)
+
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.writeFile(path.join(global, "AGENTS.md"), "global agents")
@@ -477,7 +487,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           expect(preferred).toContain(`Instructions from: ${path.join(global, "AGENTS.md")}\nglobal agents`)
           expect(preferred).not.toContain("claude global")
 
-          const disabled = yield* load(false)
+          const disabled = yield* load({ claude: false, claudeGlobal: false })
           expect(disabled).not.toContain("CLAUDE.md")
           expect(disabled).toContain(`Instructions from: ${projectAgents}\nproject agents`)
         })

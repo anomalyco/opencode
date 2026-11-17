@@ -133,7 +133,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             content: process.env.OPENCODE_CONFIG_CONTENT,
           },
           instructions: {
-            claude: !(
+            claude: !truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE),
+            // As in V1, the prompt flag only skips ~/.claude/CLAUDE.md.
+            claudeGlobal: !(
               truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE) ||
               truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT)
             ),
