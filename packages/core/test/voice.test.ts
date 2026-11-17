@@ -2,13 +2,16 @@ import { expect } from "bun:test"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Voice } from "@opencode/core/voice"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
+const hooks = LayerNode.compile(PluginHooks.node)
 
 const credential = (id: string, method: "key" | "oauth") => ({
   type: "credential" as const,
@@ -84,7 +87,8 @@ const start = (
     Effect.provide(
       Voice.layer.pipe(
         Layer.provide(
-          Layer.merge(
+          Layer.mergeAll(
+            hooks,
             mockIntegration((id) => connections[id] ?? [], resolveCredential),
             RequestExecutor.layer.pipe(
               Layer.provide(
@@ -187,7 +191,8 @@ it.effect("lists voice models with availability and default without resolving cr
         Effect.provide(
           Voice.layer.pipe(
             Layer.provide(
-              Layer.merge(
+              Layer.mergeAll(
+                hooks,
                 mockIntegration((id) => connections[id] ?? []),
                 Layer.mock(RequestExecutor.Service, {}),
               ),

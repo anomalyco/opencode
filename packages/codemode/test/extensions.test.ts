@@ -417,13 +417,18 @@ describe("Effect globals", () => {
   const web = Extension.make({
     name: "web",
     globals: {
-      fetch: (url: string) =>
+      fetch: Extension.async((url: string) =>
         Effect.gen(function* () {
           const session = yield* Session
           sent.push(url)
           return { url, session: session.id }
         }),
-      fail: () => Effect.fail(new RangeError("denied")),
+      ),
+      fail: Extension.async(() => Effect.fail(new RangeError("denied"))),
+      fs: {
+        readSync: (path: string) => Session.use((session) => Effect.succeed(`${session.id}:${path}`)),
+        failSync: () => Effect.fail(new RangeError("missing")),
+      },
     },
   })
 
@@ -456,6 +461,18 @@ describe("Effect globals", () => {
         .pipe(Effect.provideService(Session, { id: "ses_1" })),
     )
     expect(result).toMatchObject({ ok: true, value: [true, "denied"] })
+  })
+
+  test("a synchronous Effect global returns its value, or throws, before the next statement", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [web] })
+        .execute(
+          `const text = fs.readSync("a")
+           try { fs.failSync() } catch (e) { return [text, e instanceof RangeError, e.message] }`,
+        )
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: ["ses_1:a", true, "missing"] })
   })
 
   test("a denying before hook stops the Effect before it runs", async () => {
@@ -502,7 +519,7 @@ describe("imports", () => {
   test("a module that isn't provided, or a missing export, fails at the import", async () => {
     const target = CodeMode.make({ extensions: [files] })
     expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
-      `Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files.`,
+      `Error: Cannot import "yaml": it isn't available here, where packages and files can't be loaded.`,
     )
     expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
       `Cannot import "child_process"`,
@@ -622,7 +639,7 @@ describe("configuration", () => {
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a result handed to a tool is plain data", async () => {
+  test("a result with functions can't be handed to a tool; its data can", async () => {
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -634,12 +651,32 @@ describe("configuration", () => {
         }),
       },
     })
-    expect(await value(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).toEqual({
-      status: 200,
-      ok: true,
-      headers: {},
-      handlers: [null],
-    })
+    expect((await failure(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).message).toContain(
+      "contains a function, which cannot be passed to the host",
+    )
+    expect(
+      await value(
+        `const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`,
+        tools,
+      ),
+    ).toEqual({ status: 200, ok: true })
+  })
+
+  test("a run can get only some of the runtime's extensions", async () => {
+    const files = Extension.make({ name: "files", globals: { read: () => "text" } })
+    const target = CodeMode.make({ extensions: [extension, files] })
+    expect(await value(`return [typeof read, typeof later]`, target)).toEqual(["function", "function"])
+    const only = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later, await later(1)]`, undefined, { extensions: [extension] }),
+    )
+    expect(only).toMatchObject({ ok: true, value: ["undefined", "function", 2] })
+    const none = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later]`, undefined, { extensions: [] }),
+    )
+    expect(none).toMatchObject({ ok: true, value: ["undefined", "undefined"] })
+    expect(() =>
+      target.program(`1`, undefined, { extensions: [Extension.make({ name: "other", globals: { f: () => 1 } })] }),
+    ).toThrow(`Extension "other" isn't one this runtime was made with.`)
   })
 
   test("a global must be a function or an object", () => {

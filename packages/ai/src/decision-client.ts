@@ -13,15 +13,9 @@ import { AIError, InvalidProviderOutputError } from "./schema/index.js"
 
 export type Execute = RequestExecutor.Interface["execute"]
 
-/** Per-call options. `http` wraps every HTTP request of the call. */
-export interface CallOptions {
-  readonly http?: RequestExecutor.HttpMiddleware
-}
-
 export interface Interface {
   readonly generate: <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
     request: DecisionRequest<DecisionModel<Options>, Questions>,
-    options?: CallOptions,
   ) => Effect.Effect<DecisionResponseFor<Questions>, AIError>
 }
 
@@ -29,18 +23,17 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AI
 
 export const generate = <Options extends DecisionOptions, const Questions extends DecisionQuestions>(
   request: DecisionRequest<DecisionModel<Options>, Questions>,
-  options?: CallOptions,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service> =>
-  Effect.flatMap(Service, (client) => client.generate(request, options))
+  Effect.flatMap(Service, (client) => client.generate(request))
 
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     return Service.of({
-      generate: Effect.fnUntraced(function* (request, options) {
+      generate: Effect.fnUntraced(function* (request) {
         const route = request.model.route
-        const response = yield* route.generate(request, RequestExecutor.withHttp(executor, options?.http))
+        const response = yield* route.generate(request, executor.execute)
         if (answersMatch(request.questions, response.answers))
           return response as DecisionResponseFor<typeof request.questions>
         return yield* new AIError({

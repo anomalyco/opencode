@@ -92,6 +92,33 @@ it.effect("updates inventory metadata without restarting an unchanged generation
   }),
 )
 
+it.effect("reports readiness, announcing each flip, and overlapping holds flip it once", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const bus = yield* Bus.Service
+    const seen: boolean[] = []
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        event.type === Plugin.Event.Updated.type
+          ? plugins.ready.pipe(Effect.map((ready) => void seen.push(ready)))
+          : Effect.void,
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    yield* plugins.awaitActivation
+    expect(yield* plugins.ready).toBe(true)
+
+    const first = yield* plugins.hold()
+    const second = yield* plugins.hold()
+    expect(yield* plugins.ready).toBe(false)
+    yield* first
+    expect(yield* plugins.ready).toBe(false)
+    yield* second
+    expect(yield* plugins.ready).toBe(true)
+    expect(seen).toEqual([false, true])
+  }),
+)
+
 it.live("loads a local plugin with its configured options", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -163,7 +190,8 @@ it.live("serves a local plugin's GUI bundle, and reloads it alone when only the 
 
     expect(edited.revision).toBe(first.revision)
     expect((yield* plugins.gui(id))?.revision).not.toBe(served?.revision)
-    expect(updates.length).toBe(published + 1)
+    // The new bundle, plus readiness flipping to false and back to true around the activation.
+    expect(updates.length).toBe(published + 3)
     expect(yield* Effect.promise(() => Bun.file(starts).text())).toBe("x")
   }).pipe(Effect.scoped),
 )

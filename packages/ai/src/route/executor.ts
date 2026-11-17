@@ -10,6 +10,8 @@ import {
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import {
+  composeMiddleware,
+  CurrentMiddleware,
   CurrentTls,
   headerDetails,
   responseHttp,
@@ -19,7 +21,14 @@ import {
 } from "./executor-service.js"
 import type { ClientTls } from "../schema/options.js"
 
-export { CurrentTls, responseHttp, Service } from "./executor-service.js"
+export {
+  composeMiddleware,
+  CurrentMiddleware,
+  CurrentTls,
+  responseHttp,
+  Service,
+  withMiddleware,
+} from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
 
 const normalizedHeaders = (headers: Headers.Headers) =>
@@ -254,7 +263,13 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         return yield* statusError(response)
       })
     return Service.of({
-      execute: executeOnce,
+      // Scoped middleware runs outside per-call middleware. It is cleared while the request runs, so a request a
+      // middleware makes itself isn't wrapped again.
+      execute: (request, next) =>
+        Effect.gen(function* () {
+          const middleware = composeMiddleware(yield* CurrentMiddleware, next)
+          return yield* executeOnce(request, middleware).pipe(Effect.provideService(CurrentMiddleware, undefined))
+        }),
     })
   }),
 )
@@ -285,23 +300,26 @@ export const withFetch = (
   return middleware === undefined ? send : (request) => middleware(request, send)
 }
 
-/** `executor.execute` with `fn` run on every request, outside the middleware each request passes. */
-export const withHttp = (executor: Interface, fn: HttpMiddleware | undefined): Interface["execute"] =>
-  fn === undefined
-    ? executor.execute
-    : (request, next) =>
-        executor.execute(
-          request,
-          next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
-        )
-
-/** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
+/**
+ * Run `fn` on every request: it sees the raw response before status classification, inside middleware already on
+ * `executor`, and outside per-call and scoped ({@link withMiddleware}) middleware.
+ */
 export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const inner = yield* Service
-      return Service.of({ execute: withHttp(inner, fn) })
+      return Service.of({
+        // Scoped middleware sits where per-call middleware does, inside `fn`; it is read here and cleared so the
+        // executors below don't apply it again.
+        execute: (request, next) =>
+          Effect.gen(function* () {
+            const scoped = composeMiddleware(yield* CurrentMiddleware, next)
+            return yield* inner
+              .execute(request, composeMiddleware(fn, scoped))
+              .pipe(Effect.provideService(CurrentMiddleware, undefined))
+          }),
+      })
     }),
   ).pipe(Layer.provide(executor))
 

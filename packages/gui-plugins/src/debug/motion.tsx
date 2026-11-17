@@ -289,7 +289,7 @@ export default function Motion(props: { title: string; onClose: () => void }) {
                     </Show>
                   </span>
                   <Show when={!wide()} fallback={<span />}>
-                    <Icon name="outline-chevron-right" size="small" class="text-v2-icon-icon-faint rtl:-scale-x-100" />
+                    <Icon name="chevron-right" class="text-v2-icon-icon-faint rtl:-scale-x-100" />
                   </Show>
                 </button>
               )}
@@ -427,7 +427,7 @@ function FeaturePage(props: {
             class="flex h-9 items-center gap-0.5 ps-2.5 pe-3 text-[13px] font-medium text-v2-text-text-muted hover:text-v2-text-text-base"
             onClick={() => back()()}
           >
-            <Icon name="outline-chevron-right" size="small" class="-scale-x-100 rtl:scale-x-100" />
+            <Icon name="chevron-right" class="-scale-x-100 rtl:scale-x-100" />
             <span>{props.feature.area}</span>
           </button>
         )}

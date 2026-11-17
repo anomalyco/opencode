@@ -28,4 +28,5 @@ export default {
   "export.success.description": "บันทึกเซสชันไปยัง {{filename}} แล้ว",
   "export.failed.title": "ไม่สามารถส่งออกเซสชัน",
   "export.failed.description": "เกิดข้อผิดพลาดขณะส่งออกเซสชัน",
+  "usage.toggle": "สลับบริบทเซสชัน",
 }

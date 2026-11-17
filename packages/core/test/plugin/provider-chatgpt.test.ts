@@ -840,6 +840,40 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
+  it.effect("keeps the token-sharing safeguards when the token cannot be refreshed at load", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), () => {})
+      })
+      // An expired token without a registered client ID cannot be refreshed.
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "stale-token",
+          refresh: "refresh",
+          expires: 1,
+        }),
+      })
+      yield* addPlugin()
+      yield* addLegacyPlugin()
+
+      const provider = required(yield* catalog.get(Provider.ID.openai))
+      expect(provider.settings?.transport).toBe("http")
+      expect(provider.settings?.compaction).toEqual({ type: "summary" })
+      const model = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra")))
+      expect(model.compatibility?.supportsEffortUpdates).toBe(false)
+      expect(model.settings?.compaction).toEqual({ type: "summary" })
+    }),
+  )
+
   it.effect("keeps the full OpenAI catalog under an API key connection", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service

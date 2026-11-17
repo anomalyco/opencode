@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.7",
+  "version": "2.3.0",
   "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
@@ -136,6 +136,7 @@
     "./providers/vercel-ai-gateway/responses": "./src/providers/vercel-ai-gateway/responses.ts",
     "./providers/xai": "./src/providers/xai.ts",
     "./providers/xai/images": "./src/providers/xai/images.ts",
+    "./providers/xai/videos": "./src/providers/xai/videos.ts",
     "./providers/zai": "./src/providers/zai.ts",
     "./providers/zai-coding-plan": "./src/providers/zai-coding-plan.ts",
     "./providers/zai-coding-plan/chat": "./src/providers/zai-coding-plan/chat.ts",

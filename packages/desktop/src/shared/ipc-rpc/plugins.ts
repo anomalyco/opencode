@@ -36,11 +36,13 @@ const channel = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 255 
 
 const rgba = Schema.Tuple([channel, channel, channel, channel])
 
+const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
+
 export const PluginLayout = Schema.Struct({
   visible: Schema.Boolean,
-  bounds: Schema.optionalKey(
-    Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
-  ),
+  bounds: Schema.optionalKey(bounds),
+  // The intersection with the DOM scrollport, in the same window DIPs as the full bounds.
+  clip: Schema.optionalKey(bounds),
   viewport: Schema.optionalKey(Schema.Struct({ width: Schema.Finite, height: Schema.Finite })),
   background: Schema.optionalKey(rgba),
   radius: Schema.optionalKey(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),

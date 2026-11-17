@@ -38,7 +38,7 @@ export interface ModelRequestSession {
  */
 export type ModelRequestScope = { readonly model: Model.Ref } & (
   | { readonly kind: SessionRequestKind; readonly session: ModelRequestSession }
-  | { readonly kind: "text" | "image" | "decision"; readonly session?: undefined }
+  | { readonly kind: "text" | "image" | "decision" | "video" | "voice"; readonly session?: undefined }
 )
 
 /** An HTTP request to a model provider, before it is sent. Replace `request` to change it. Experimental. */
@@ -54,8 +54,10 @@ export type ModelHttpResponse = ModelRequestScope & {
 
 /**
  * Hooks on every HTTP request to a model provider, whichever Session or API makes it: Session steps, compaction,
- * titles and warming, and `generate` text, image and decision calls. Use these to read or change what is sent on the
- * wire (URL, headers, body) or the raw response. WebSocket traffic doesn't pass through them. Experimental.
+ * titles and warming, `generate` text, image, decision and video calls, and voice session setup. Use these to read or
+ * change what is sent on the wire (URL, headers, body) or the raw response. They run on each request sent, retries and
+ * media polls included, after the provider's auth headers are set; a hook that fails fails the request. WebSocket
+ * traffic doesn't pass through them. Experimental.
  */
 export interface ModelRequestHooks {
   readonly "experimental.http.request": ModelHttpRequest

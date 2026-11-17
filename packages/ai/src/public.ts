@@ -34,6 +34,7 @@ export {
   CompactionPart,
   EffortPart,
   ContentPart,
+  ToolChanges,
   Message,
   SystemMessage,
   UserMessage,
@@ -109,12 +110,14 @@ export type {
 } from "./schema/index.js"
 export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
+  ImageJob,
   ImageModelOptions,
   ImageOptions,
   ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
+  ImageStatus,
 } from "./image.js"
 export { VideoAspectRatio, VideoDuration, VideoModel, VideoModelSchema, VideoResponse } from "./video.js"
 export type {
@@ -178,6 +181,7 @@ export type {
   AwaitOptions as GenerationAwaitOptions,
   Event as GenerationEvent,
   Poll,
+  Reason as GenerationReason,
   Route as GenerationRoute,
   Snapshot as GenerationSnapshot,
   Status as GenerationStatus,
@@ -185,6 +189,7 @@ export type {
 export type {
   ExecutableTool,
   Tool,
+  ToolChangesInput,
   ToolExecute,
   ToolExecuteContext,
   ToolInput,
@@ -196,3 +201,4 @@ export type {
 } from "./tool.js"
 export type { LLM } from "./llm.js"
 export type { LLMLoopInput, LLMRequestInput } from "./llm.js"
+export type { HttpHandler, HttpMiddleware } from "./route/executor-service.js"

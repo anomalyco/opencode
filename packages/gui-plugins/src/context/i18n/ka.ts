@@ -28,4 +28,5 @@ export default {
   "export.success.description": "სესია შენახულია {{filename}}",
   "export.failed.title": "სესიის ექსპორტი ვერ მოხერხდა",
   "export.failed.description": "მოხდა შეცდომა სესიის ექსპორტის დროს",
+  "usage.toggle": "სესიის კონტექსტის გადართვა",
 }

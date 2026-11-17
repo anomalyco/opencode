@@ -1723,13 +1723,19 @@ interface SessionHookContext {
 ### Model HTTP (experimental)
 
 Model HTTP hooks run for every HTTP request to a model provider, whichever Session or API makes it: Session steps,
-compaction, titles and cache warming, and [Generate](#generate-experimental) text, image and decision calls. Use them to
-read or change what goes on the wire (URL, headers, body) or the raw response. Request and response bodies are one-shot
-streams; clone or replace a body before reading it. WebSocket traffic doesn't pass through them; see
-[Native WebSocket](#native-websocket-experimental).
+compaction, titles and cache warming, [Generate](#generate-experimental) text, image, decision and video calls, and
+voice session setup. Use them to read or change what goes on the wire (URL, headers, body) or the raw response. Request
+and response bodies are one-shot streams; clone or replace a body before reading it. WebSocket traffic doesn't pass
+through them; see [Native WebSocket](#native-websocket-experimental).
+
+- They run on each request sent: every retry, and a media job's submit, polls and result. A result downloaded from
+  another host, such as a CDN link, doesn't run them.
+- The request already carries the provider's auth headers. Changing a request the provider signs, such as Bedrock's,
+  breaks the signature.
+- A hook that fails fails the request.
 
 `event.kind` says why the call was made: `"primary"`, `"compaction"`, `"title"` or `"generate"` for Session requests,
-and `"text"`, `"image"` or `"decision"` for Generate. `event.session` is set for a Session's own model requests. A
+`"text"`, `"image"`, `"decision"` or `"video"` for Generate, and `"voice"` for voice sessions. `event.session` is set for a Session's own model requests. A
 tool that calls Generate from inside a Session, like the built-in image tool, makes a Generate call with no `session`.
 Generate calls made through the HTTP API run in the global config location, so only globally configured plugins see
 them.
@@ -1765,7 +1771,7 @@ interface ModelHookContext {
 
 type ModelRequestScope = { model: { providerID: string; id: string; variant?: string } } & (
   | { kind: "primary" | "compaction" | "title" | "generate"; session: { id: string; agent: string } }
-  | { kind: "text" | "image" | "decision"; session?: undefined }
+  | { kind: "text" | "image" | "decision" | "video" | "voice"; session?: undefined }
 )
 
 interface ModelRequestHooks {

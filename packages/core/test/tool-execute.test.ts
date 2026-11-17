@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import path from "path"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -9,6 +11,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
 
@@ -150,6 +153,69 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+describe("path", () => {
+  const directory = AbsolutePath.make(path.resolve("/session/dir"))
+  const withPath = () =>
+    CodeModeTool.create(
+      { tools: new Map() },
+      (_, tool, input, context) => execute(tool, input, context),
+      allowAll,
+      location({ directory }),
+    )
+  const run = async (code: string, codeMode = withPath()) =>
+    JSON.parse((await Effect.runPromise(codeMode.execute({ code }, context))).output.output)
+
+  test("without the experimental flag there is no path", async () => {
+    expect(await run("return [typeof path]", createCodeMode(new Map()))).toEqual(["undefined"])
+  })
+
+  test("path is the host's path module, resolving against the session's directory", async () => {
+    expect(
+      await run(
+        `return [path.resolve("a", "b"), path.relative("a", "c"), path.join("out", "..", "x.txt"), path.basename("/a/b.ts", ".ts"), path.posix.join("a", "b"), path.win32.join("a", "b"), path.sep]`,
+      ),
+    ).toEqual([path.resolve(directory, "a", "b"), path.join("..", "c"), "x.txt", "b", "a/b", "a\\b", path.sep])
+  })
+
+  test("the other platform's flavour resolves from its own root, not the server's working directory", async () => {
+    const other = path.sep === "/" ? "win32" : "posix"
+    const [resolved] = await run(`return [path.${other}.resolve("a")]`)
+    expect(resolved).toBe(path[other].resolve(path[other].sep, "a"))
+    expect(resolved).not.toContain(process.cwd())
+  })
+
+  test("path is importable by its Node module names", async () => {
+    expect(
+      await run(`import { join } from "node:path"
+        const posix = require("path").posix
+        return [join("a", "b"), posix.dirname("a/b")]`),
+    ).toEqual([path.join("a", "b"), "a"])
+  })
+})
+
+describe("execute output", () => {
+  const run = async (code: string) =>
+    (await Effect.runPromise(createCodeMode(new Map()).execute({ code }, context))).output.output
+
+  test("a program that only logs shows just its logs", async () => {
+    expect(await run('console.log("found", 12, "files")')).toBe("Logs:\nfound 12 files")
+  })
+
+  test("a program that only warns shows just its warnings", async () => {
+    expect(await run('const rejected = Promise.reject(new Error("boom"))')).toBe(
+      "Warnings:\n- [ExecutionFailure] Unhandled rejection from an un-awaited promise: Error: boom",
+    )
+  })
+
+  test("a null result with nothing else still shows null", async () => {
+    expect(await run("return null")).toBe("null")
+  })
+
+  test("a returned value keeps its line before the logs", async () => {
+    expect(await run('console.log("hi"); return { n: 1 }')).toBe('{"n":1}\n\nLogs:\nhi')
+  })
 })
 
 describe("streaming fetch", () => {
@@ -418,6 +484,29 @@ test("execute supports callable namespace tools", async () => {
   expect(result.content).toEqual([{ type: "text", text: '["admin","created"]' }])
 })
 
+test("each call in a program gets its own ID and is marked as nested in execute", async () => {
+  const ids: string[] = []
+  const nested: Array<[string, string]> = []
+  const input = Schema.Struct({})
+  const record = {
+    name: "record",
+    description: "Record the call",
+    input,
+    execute: (_, context) => Effect.sync(() => ids.push(context.id)).pipe(Effect.as({ content: "ok" })),
+  } satisfies Info<typeof input>
+  await Effect.runPromise(
+    createCodeMode(
+      new Map<string, Info>([["record", record]]),
+      permissionService({
+        nested: (call, parent) => Effect.sync(() => void nested.push([call, parent])),
+      }),
+    ).execute({ code: "await Promise.all([tools.record({}), tools.record({})])" }, context),
+  )
+  expect(new Set(ids).size).toBe(2)
+  expect(ids).not.toContain(context.id)
+  expect(nested.toSorted()).toEqual(ids.toSorted().map((id) => [id, context.id]))
+})
+
 test("executions share the prepared runtime of an inventory while keeping per-call state", async () => {
   let conversions = 0
   const echo: Info = {
@@ -437,7 +526,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
         },
       },
     },
-    execute: (input, context) => Effect.succeed({ content: `${context.id}:${(input as { value: string }).value}` }),
+    execute: (input) => Effect.succeed({ content: (input as { value: string }).value }),
   }
   const inventory = { tools: new Map([["echo", echo]]) }
   const codeMode = CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context), allowAll)
@@ -457,14 +546,14 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   expect(CodeModeTool.catalog(inventory).tools).toHaveLength(1)
   expect<unknown>(results).toEqual(
     ["first", "second"].map((id) => ({
-      output: `${id}:${id}`,
+      output: id,
       progress: [{ toolCalls: [{ tool: "echo", status: "running", input: { value: id } }] }],
     })),
   )
   expect(
     (await Effect.runPromise(codeMode.execute({ code: 'return await tools.echo({ value: "x" })' }, context))).output
       .output,
-  ).toBe("call_execute:x")
+  ).toBe("x")
   expect(conversions).toBe(1)
 
   await Effect.runPromise(

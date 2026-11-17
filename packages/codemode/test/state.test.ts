@@ -3,18 +3,19 @@ import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { parseProgram } from "../src/runtime/execute.js"
-import { Interpreter } from "../src/runtime/interpreter.js"
-import { createBuiltins } from "../src/runtime/intrinsics.js"
-import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/runtime/objects.js"
-import { normal } from "../src/runtime/signals.js"
-import { ToolRuntime } from "../src/tool-runtime.js"
-import { Code } from "../src/code.js"
-import { AsyncFromSyncIterator } from "../src/generators.js"
-import { VmIntrinsic } from "../src/internal-prelude.js"
-import { Cell, CodeFlags } from "../src/opcodes.js"
-import type { Stop } from "../src/scheduler.js"
-import { CustomIter, Frame, Mode, Vm } from "../src/vm.js"
+import { Host } from "../src/language/host-function.js"
+import { parseProgram } from "../src/language/runtime/execute.js"
+import { hostGlobals } from "../src/language/runtime/extensions.js"
+import { Interpreter } from "../src/language/runtime/interpreter.js"
+import { createBuiltins } from "../src/language/runtime/intrinsics.js"
+import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/language/runtime/objects.js"
+import { normal } from "../src/language/runtime/signals.js"
+import { Code } from "../src/language/code.js"
+import { AsyncFromSyncIterator } from "../src/language/generators.js"
+import { VmIntrinsic } from "../src/language/internal-prelude.js"
+import { Cell, CodeFlags } from "../src/language/opcodes.js"
+import type { Stop } from "../src/language/scheduler.js"
+import { CustomIter, Frame, Mode, Vm } from "../src/language/vm.js"
 
 // The VM (`src/vm.ts`) runs programs as bytecode frames, and keeps the jobs, promises, and host calls they wait on as
 // data: a frame is its code, pc, and registers, and every suspension point is one. The Effect driver only does what
@@ -45,12 +46,21 @@ const error = async (code: string) => {
   return result.error
 }
 
+// Host globals for a VM stepped by hand: the test completes their calls itself.
+const echo = Host.fn(([input]) => (input as { value: number }).value, { type: "async" })
+const vmGlobals = {
+  tools: Host.namespace({
+    keys: () => ["echo"],
+    resolve: (path) => (path.join(".") === "echo" ? echo : Host.missing(`No tools.${path.join(".")}`)),
+  }),
+  search: Host.fn(() => Effect.succeed({ items: [] }), { type: "sync-thenable" }),
+}
+
 // A VM for `code`, stepped by hand instead of by the Effect driver.
 const vmFor = (code: string) => {
   const parsed = parseProgram(code)
   if (!parsed.ok) throw new Error(parsed.error.message)
-  const tools = ToolRuntime.make(ToolRuntime.prepare(runtimeTools), undefined, {})
-  const vm = new Interpreter({ tools, builtins: createBuiltins() }).vm
+  const vm = new Interpreter({ builtins: createBuiltins(), globals: (ctx) => hostGlobals(ctx, vmGlobals) }).vm
   vm.start(parsed.source)
   return vm
 }
@@ -254,10 +264,14 @@ describe("vm", () => {
     const started = stop(vm)
     if (started.kind !== "host") throw new Error(`expected a host stop, got ${started.kind}`)
     expect(
-      started.calls.map((call) => ({ request: call.request, blocking: call.blocking, status: call.status })),
+      started.calls.map((call) => ({
+        call: { label: call.label, path: call.path, args: call.args, policy: call.policy },
+        blocking: call.blocking,
+        status: call.status,
+      })),
     ).toEqual(
       [1, 2, 3].map((value) => ({
-        request: { kind: "tool", path: ["echo"], args: [{ value }] },
+        call: { label: "tools.echo", path: ["tools", "echo"], args: [{ value }], policy: "async" },
         blocking: false,
         status: "queued",
       })),
@@ -273,7 +287,7 @@ describe("vm", () => {
     const vm = vmFor(`const found = search({ query: "echo" }); return found.items.length`)
     const started = stop(vm)
     if (started.kind !== "host") throw new Error(`expected a host stop, got ${started.kind}`)
-    expect(started.calls.map((call) => [call.request.kind, call.blocking])).toEqual([["search", true]])
+    expect(started.calls.map((call) => [call.label, call.blocking])).toEqual([["search", true]])
     expect(stop(vm)).toEqual({ kind: "host", calls: [] })
     vm.complete(started.calls[0]!.id, normal({ items: [1, 2], remaining: 0, next: null }))
     expect(stop(vm)).toEqual({ kind: "done", completion: normal(2) })
@@ -385,23 +399,19 @@ describe("vm", () => {
 
   test("the VM does not import Effect", async () => {
     const root = path.join(import.meta.dir, "..")
+    // The language's host boundary and driver; Code Mode (src/codemode/) is built on Effect throughout.
     const host = new Set([
-      "src/codemode.ts",
-      "src/extension.ts",
-      "src/scan.ts",
-      "src/tool-error.ts",
-      "src/tool-runtime.ts",
-      "src/tool-schema.ts",
-      "src/tool.ts",
-      "src/runtime/driver.ts",
-      "src/runtime/execute.ts",
-      "src/runtime/extensions.ts",
-      "src/runtime/signals.ts",
+      "src/language/host-function.ts",
+      "src/language/runtime.ts",
+      "src/language/runtime/driver.ts",
+      "src/language/runtime/execute.ts",
+      "src/language/runtime/extensions.ts",
+      "src/language/runtime/signals.ts",
     ])
     // Glob paths use the platform's separator.
-    const files = (await Array.fromAsync(new Glob("src/**/*.ts").scan({ cwd: root })))
+    const files = (await Array.fromAsync(new Glob("src/language/**/*.ts").scan({ cwd: root })))
       .map((file) => file.split(path.sep).join("/"))
-      .filter((file) => !file.startsWith("src/openapi/") && !host.has(file))
+      .filter((file) => !host.has(file))
     expect(files.length).toBeGreaterThan(0)
     for (const file of files) {
       expect(await Bun.file(path.join(root, file)).text()).not.toMatch(/from "effect"/)
@@ -447,7 +457,7 @@ describe("built-ins as data", () => {
       const tried = await Promise.try(() => work(6))
       const thenned = await work(1).then((v) => v + 1).catch(() => 0).finally(() => log.push("finally"))
       const thenable = await { then: (resolve) => resolve("thenable") }
-      const tool = await tools.echo({ value: work(10) })
+      const tool = await tools.echo({ value: await work(10) })
       const found2 = search({ query: "echo" }).items.length
       async function* agen() { yield 1; yield await work(1) }
       const collected = []
@@ -467,8 +477,7 @@ describe("built-ins as data", () => {
       if (next.kind === "stuck") throw new Error("the run is stuck")
       if (next.kind !== "host") continue
       for (const call of next.calls) {
-        const request = call.request
-        if (request.kind === "tool") vm.complete(call.id, normal((request.args[0] as { value: number }).value))
+        if (call.policy === "async") vm.complete(call.id, normal((call.args[0] as { value: number }).value))
         else vm.complete(call.id, normal({ items: [1], remaining: 0, next: null }))
       }
     }

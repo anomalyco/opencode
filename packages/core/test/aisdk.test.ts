@@ -22,7 +22,7 @@ import {
   TransportError,
   UnknownProviderError,
 } from "@opencode/ai/effect"
-import { LLMClient, RequestExecutor } from "@opencode/ai/route"
+import { LLMClient, RequestExecutor, type HttpMiddleware } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
@@ -797,6 +797,35 @@ it.effect("routes AI SDK requests and responses through HTTP hook middleware", (
     expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
     expect(seen).toEqual(["POST https://example.test/v1/chat/completions", sent[0]?.body, sent[0]?.body, "status 200"])
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
+  }),
+)
+
+it.effect("runs scoped HTTP middleware on AI SDK requests, outside per-call middleware", () =>
+  Effect.gen(function* () {
+    const headers: Headers[] = []
+    const resolved = yield* compatibleModel(
+      Object.assign(
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          headers.push(new Headers(init?.headers))
+          return new Response(chatChunk("upstream"), { headers: { "content-type": "text/event-stream" } })
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    )
+    const order: string[] = []
+    const tag =
+      (name: string): HttpMiddleware =>
+      (request, handler) =>
+        Effect.sync(() => order.push(name)).pipe(
+          Effect.andThen(handler(HttpClientRequest.setHeader(request, `x-${name}`, "1"))),
+        )
+    yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Hello" }), { http: tag("call") }).pipe(
+      RequestExecutor.withMiddleware(tag("scoped")),
+      Effect.provide(client),
+    )
+    expect(order).toEqual(["scoped", "call"])
+    expect(headers[0]?.get("x-scoped")).toBe("1")
+    expect(headers[0]?.get("x-call")).toBe("1")
   }),
 )
 

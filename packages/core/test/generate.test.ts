@@ -298,6 +298,11 @@ describe("image and decision generation", () => {
       package: "@opencode/ai/providers/zai/images",
     }),
     Info.make({
+      ...Info.default(Provider.ID.make("xai"), ID.make("grok-imagine-video")),
+      type: "video",
+      package: "@opencode/ai/providers/xai/videos",
+    }),
+    Info.make({
       ...Info.default(Provider.ID.openai, ID.make("gpt-5")),
       package: "@opencode/ai/providers/openai/responses",
     }),
@@ -398,6 +403,10 @@ describe("image and decision generation", () => {
         const text = request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : ""
         requests.push({ url: request.url, headers: request.headers, body: text ? JSON.parse(text) : undefined })
         if (request.url === "https://images.example/fox") return HttpClientResponse.fromWeb(request, new Response(PNG))
+        if (request.url === "https://api.x.ai/v1/videos/generations")
+          return HttpClientResponse.fromWeb(request, Response.json({ request_id: "vid_1" }))
+        if (request.url === "https://api.x.ai/v1/videos/vid_1")
+          return HttpClientResponse.fromWeb(request, Response.json({ status: "pending" }))
         if (request.url === "https://api.z.ai/api/paas/v4/images/generations")
           return HttpClientResponse.fromWeb(
             request,
@@ -678,7 +687,7 @@ describe("image and decision generation", () => {
     ),
   )
 
-  hookedIt.effect("runs model HTTP hooks on image and decision provider requests, but not image downloads", () =>
+  hookedIt.effect("runs model HTTP hooks on image, decision and video provider requests, but not image downloads", () =>
     Effect.gen(function* () {
       requests.length = 0
       const hooked: string[] = []
@@ -699,11 +708,26 @@ describe("image and decision generation", () => {
         input: [{ type: "text", text: "Is this a photo?" }],
         questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
       })
-      expect(hooked).toEqual(["request:image", "response:image", "request:decision", "response:decision"])
+      const video = yield* generate.video.start({ model: ref("xai", "grok-imagine-video"), prompt: "A fox" })
+      expect(yield* generate.video.status(ref("xai", "grok-imagine-video"), video.id)).toMatchObject({
+        status: "running",
+      })
+      expect(hooked).toEqual([
+        "request:image",
+        "response:image",
+        "request:decision",
+        "response:decision",
+        "request:video",
+        "response:video",
+        "request:video",
+        "response:video",
+      ])
       expect(requests.map((request) => [request.url, request.headers["x-hook"] ?? "-"])).toEqual([
         ["https://api.z.ai/api/paas/v4/images/generations", "1"],
         ["https://images.example/fox", "-"],
         ["https://api.typesafe.ai/v1/systemone", "1"],
+        ["https://api.x.ai/v1/videos/generations", "1"],
+        ["https://api.x.ai/v1/videos/vid_1", "1"],
       ])
     }),
   )

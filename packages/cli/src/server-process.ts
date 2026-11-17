@@ -124,13 +124,21 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             project: !truthy(
               process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
             ),
-            // .claude is only read for skills, so both flags gate the same roots.
+            // Config reads .claude only for skills; CLAUDE.md is gated under instructions.
             claude: !(
               truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE) ||
               truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS)
             ),
             file: process.env.OPENCODE_CONFIG,
             content: process.env.OPENCODE_CONFIG_CONTENT,
+          },
+          instructions: {
+            claude: !truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE),
+            // As in V1, the prompt flag only skips ~/.claude/CLAUDE.md.
+            claudeGlobal: !(
+              truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE) ||
+              truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT)
+            ),
           },
           windows: {
             gitbash: process.env.OPENCODE_GIT_BASH_PATH,

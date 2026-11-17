@@ -79,6 +79,8 @@ const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effe
 const instructionContext = Layer.mock(InstructionDiscovery.Service, {
   project: true,
   global: true,
+  claude: true,
+  claudeGlobal: true,
   load: () => Effect.succeed(Instructions.empty),
 })
 const skillInstructions = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })

@@ -1,10 +1,21 @@
 export * as Generate from "./generate.js"
 
-import { ai, AIError, DecisionClient, ImageClient, LLMClient, Media } from "@opencode/ai/effect"
+import {
+  ai,
+  AIError,
+  DecisionClient,
+  ImageClient,
+  LLMClient,
+  Media,
+  VideoClient,
+  type VideoAspectRatio,
+  type VideoModel,
+  type VideoStatus,
+} from "@opencode/ai/effect"
 import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from "@opencode/schema/generate"
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { RequestExecutor } from "@opencode/ai/route"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient, requestExecutor } from "./effect/app-node-platform.js"
@@ -12,12 +23,32 @@ import { Integration } from "./integration.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
 import { ModelHttp } from "./model-http.js"
-import { ModelRetry } from "./model-retry.js"
 import { PluginHooks } from "./plugin/hooks.js"
+import { ModelRetry } from "./model-retry.js"
 
 export interface TextInput {
   readonly prompt: string
   readonly model?: Model.Ref
+}
+
+export interface VideoInput {
+  readonly model: Model.Ref
+  readonly prompt: string
+  readonly start?: Media.ImageAsset
+  readonly end?: Media.ImageAsset
+  readonly references?: readonly Media.Asset[]
+  readonly duration?: number
+  readonly aspect?: VideoAspectRatio
+  readonly resolution?: string
+  readonly sound?: boolean
+}
+
+/** A finished video. `stream` downloads it as it is read, so a long video is never held in memory. */
+export interface VideoFile {
+  readonly mime: string
+  readonly width?: number
+  readonly height?: number
+  readonly stream: Stream.Stream<Uint8Array, Error>
 }
 
 export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Generate.UnavailableError", {
@@ -76,6 +107,15 @@ export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
+  /**
+   * A video is a job: `start` submits it and returns the provider's job ID, which `status` and `result` read. `result`
+   * returns every video the job made, at least one.
+   */
+  readonly video: {
+    readonly start: (input: VideoInput) => Effect.Effect<{ readonly id: string }, Error>
+    readonly status: (model: Model.Ref, id: string) => Effect.Effect<VideoStatus, Error>
+    readonly result: (model: Model.Ref, id: string) => Effect.Effect<readonly VideoFile[], Error>
+  }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Generate") {}
@@ -88,33 +128,35 @@ export const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const models = yield* Model.Service
     const executor = yield* RequestExecutor.Service
-    const hooks = yield* PluginHooks.Service
     const images = yield* ImageClient.Service
     const decisionClient = yield* DecisionClient.Service
+    const videos = yield* VideoClient.Service
+    const hooks = yield* PluginHooks.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
-      const resolved = yield* resolver.resolve(input.model).pipe(
-        Effect.catchTag(
-          [
-            "SessionRunnerModel.VariantUnavailableError",
-            "SessionRunnerModel.UnsupportedPackageError",
-            "SessionRunnerModel.ModelConfigurationError",
-            "SessionRunnerModel.ModelInitializationError",
-            "SessionRunnerModel.UnresolvedProviderVariablesError",
-            "SessionRunnerModel.UnsupportedCompactionError",
-          ],
-          (error) =>
-            Effect.fail(
-              input.model
-                ? resolutionError(input.model, "chat", error)
-                : new UnavailableError({ message: error.message, service: error.providerID }),
-            ),
-        ),
-      )
+      const resolved = yield* resolver
+        .resolve(input.model)
+        .pipe(
+          Effect.catchTag(
+            [
+              "SessionRunnerModel.VariantUnavailableError",
+              "SessionRunnerModel.UnsupportedPackageError",
+              "SessionRunnerModel.ModelConfigurationError",
+              "SessionRunnerModel.ModelInitializationError",
+              "SessionRunnerModel.UnresolvedProviderVariablesError",
+              "SessionRunnerModel.UnsupportedCompactionError",
+            ],
+            (error) =>
+              Effect.fail(
+                input.model
+                  ? resolutionError(input.model, "chat", error)
+                  : new UnavailableError({ message: error.message, service: error.providerID }),
+              ),
+          ),
+        )
       if (!resolved && input.model) return yield* missing(input.model, "chat")
       if (!resolved)
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
-      const http = yield* ModelHttp.middleware(hooks, { model: resolved.ref, kind: "text" })
       const response = yield* llm
         .generate(
           ai.request({
@@ -123,9 +165,9 @@ export const layer = Layer.effect(
             // Gateways require session attribution even for a stateless call; no Session is stored.
             headers: { "x-opencode-session": SessionID.create() },
           }),
-          { http },
         )
         .pipe(
+          ModelHttp.scoped(hooks, { model: resolved.ref, kind: "text" }),
           ModelRetry.retryOneShot,
           Effect.mapError((error) => providerError(resolved.ref, error)),
         )
@@ -134,7 +176,7 @@ export const layer = Layer.effect(
 
     // A ref no model of this type has: another type's model (422) or no model at all (404).
     const missing = Effect.fnUntraced(function* (ref: Model.Ref, type: Model.Type) {
-      const other = (yield* models.available(["chat", "image", "decision"])).find(
+      const other = (yield* models.available(["chat", "image", "video", "decision"])).find(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (other)
@@ -156,23 +198,22 @@ export const layer = Layer.effect(
         .resolveImage(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
       if (!model) return yield* missing(input.model, "image")
-      const http = yield* ModelHttp.middleware(hooks, { model: input.model, kind: "image" })
       // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
-      const response = yield* ai.image.generate({
-        model,
-        prompt: input.prompt,
-        images: input.images?.map((file) => Media.base64(file.data, file.mime)),
-        n: input.n,
-        aspect: input.aspect,
-        resolution: input.resolution,
-      }).pipe(
-        Effect.provideService(ImageClient.Service, {
-          ...images,
-          generate: (request, options) => images.generate(request, { ...options, http }),
-        }),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.image
+        .generate({
+          model,
+          prompt: input.prompt,
+          images: input.images?.map((file) => Media.base64(file.data, file.mime)),
+          n: input.n,
+          aspect: input.aspect,
+          resolution: input.resolution,
+        })
+        .pipe(
+          Effect.provideService(ImageClient.Service, images),
+          ModelHttp.scoped(hooks, { model: input.model, kind: "image" }),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       // URL results are downloaded so every image comes back inline, like the request's own files.
       // Materializing also detects the type of a downloaded image from its bytes when the URL didn't say.
       const outputs = yield* Effect.forEach(response.images, (asset) =>
@@ -199,22 +240,22 @@ export const layer = Layer.effect(
         .resolveDecision(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "decision", error)))
       if (!model) return yield* missing(input.model, "decision")
-      const http = yield* ModelHttp.middleware(hooks, { model: input.model, kind: "decision" })
-      const response = yield* ai.decision.generate({
-        model,
-        input: input.input.map((part) =>
-          part.type === "file"
-            ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
-            : part,
-        ),
-        questions: input.questions,
-      }).pipe(
-        Effect.provideService(DecisionClient.Service, {
-          generate: (request) => decisionClient.generate(request, { http }),
-        }),
-        ModelRetry.retryOneShot,
-        Effect.mapError((error) => providerError(input.model, error)),
-      )
+      const response = yield* ai.decision
+        .generate({
+          model,
+          input: input.input.map((part) =>
+            part.type === "file"
+              ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
+              : part,
+          ),
+          questions: input.questions,
+        })
+        .pipe(
+          Effect.provideService(DecisionClient.Service, decisionClient),
+          ModelHttp.scoped(hooks, { model: input.model, kind: "decision" }),
+          ModelRetry.retryOneShot,
+          Effect.mapError((error) => providerError(input.model, error)),
+        )
       const usage = response.usage
       return {
         answers: response.answers,
@@ -224,6 +265,42 @@ export const layer = Layer.effect(
           : { tokens: { input: usage.inputTokens, output: usage.outputTokens } }),
         ...(response.providerMetadata ? { native: plainJson(response.providerMetadata) } : {}),
       } satisfies DecisionResult
+    })
+
+    const video = Effect.fnUntraced(function* <A, R>(
+      ref: Model.Ref,
+      run: (model: VideoModel) => Effect.Effect<A, AIError, R>,
+    ) {
+      const model = yield* resolver
+        .resolveVideo(ref)
+        .pipe(Effect.mapError((error) => resolutionError(ref, "video", error)))
+      if (!model) return yield* missing(ref, "video")
+      return yield* run(model).pipe(
+        Effect.provideService(VideoClient.Service, videos),
+        ModelHttp.scoped(hooks, { model: ref, kind: "video" }),
+        Effect.mapError((error) => providerError(ref, error)),
+      )
+    })
+
+    const videoResult = Effect.fnUntraced(function* (ref: Model.Ref, id: string) {
+      const response = yield* video(ref, (model) => ai.video.result(model, id))
+      if (response.videos.length === 0)
+        return yield* new ProviderRequestError({
+          providerID: ref.providerID,
+          reason: "provider",
+          message: `${ref.providerID}/${ref.id} returned no video`,
+        })
+      return response.videos.map(
+        (file): VideoFile => ({
+          mime: file.mediaType,
+          width: file.info?.width,
+          height: file.info?.height,
+          stream: file.stream().pipe(
+            Stream.provideService(RequestExecutor.Service, executor),
+            Stream.mapError((error) => providerError(ref, error)),
+          ),
+        }),
+      )
     })
 
     const credentials = <A, E, R>(effect: Effect.Effect<A, E | Integration.AuthorizationError, R>) =>
@@ -238,9 +315,24 @@ export const layer = Layer.effect(
       text: (input) => credentials(runText(input)),
       image: (input) => credentials(image(input)),
       decisions: (input) => credentials(decisions(input)),
+      video: {
+        // Submitting is paid and not idempotent, so it is never retried.
+        start: (input) =>
+          credentials(
+            video(input.model, (model) =>
+              ai.video.start({
+                ...input,
+                model,
+                duration: input.duration === undefined ? undefined : (`${input.duration} seconds` as const),
+              }),
+            ),
+          ),
+        status: (model, id) => credentials(video(model, (resolved) => ai.video.status(resolved, id))),
+        result: (model, id) => credentials(videoResult(model, id)),
+      },
     })
   }),
-).pipe(Layer.provide([ImageClient.layer, DecisionClient.layer]))
+).pipe(Layer.provide([ImageClient.layer, DecisionClient.layer, VideoClient.layer]))
 
 // Provider metadata may hold undefined fields, which the JSON response schema rejects.
 function plainJson(value: Record<string, unknown>): Record<string, unknown> {

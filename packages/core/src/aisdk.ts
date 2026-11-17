@@ -710,13 +710,16 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
+function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, perCall?: HttpMiddleware) {
   const state: StreamState = { step: 0, toolNames: {}, open: {} }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
       Effect.gen(function* () {
-        const context = yield* Effect.context<never>()
+        // The SDK sends through its own fetch, not the executor, so scoped middleware is applied here, outside the
+        // per-call one, and cleared for the hooks so a request a hook makes isn't wrapped again.
+        const http = RequestExecutor.composeMiddleware(yield* RequestExecutor.CurrentMiddleware, perCall)
+        const context = Context.add(yield* Effect.context<never>(), RequestExecutor.CurrentMiddleware, undefined)
         return yield* Effect.tryPromise({
           try: () =>
             http ? httpMiddleware.run({ http, context }, () => language.doStream(options)) : language.doStream(options),

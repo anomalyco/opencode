@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { SessionID } from "./session-id.js"
 
-export const Kind = Schema.Literals(["shell", "subagent", "image"]).annotate({ identifier: "Job.Kind" })
+export const Kind = Schema.Literals(["shell", "subagent", "image", "codemode"]).annotate({ identifier: "Job.Kind" })
 export type Kind = typeof Kind.Type
 
 export const Status = Schema.Literals(["running", "completed", "error", "cancelled"]).annotate({
@@ -53,7 +53,12 @@ export const Image = Schema.Struct({
   model: Schema.String,
 }).annotate({ identifier: "Job.Image" })
 
-export const Info = Schema.Union([Shell, Subagent, Image]).pipe(
+export interface CodeMode extends Schema.Schema.Type<typeof CodeMode> {}
+export const CodeMode = Schema.Struct({ kind: Schema.tag("codemode"), ...Base }).annotate({
+  identifier: "Job.CodeMode",
+})
+
+export const Info = Schema.Union([Shell, Subagent, Image, CodeMode]).pipe(
   Schema.toTaggedUnion("kind"),
   Schema.annotate({ identifier: "Job.Info" }),
 )

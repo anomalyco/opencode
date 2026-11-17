@@ -14,4 +14,13 @@ export default {
   noChanges: "אין שינויים",
   "settings.wrapLines.title": "גלישת שורות",
   "settings.wrapLines.description": "גלוש שורות ארוכות בהבדלים בנייד במקום לגלול אופקית",
+  "menu.count.one": "{{count}} קובץ השתנה",
+  "menu.count.two": "{{count}} קבצים השתנו",
+  "menu.count.other": "{{count}} קבצים השתנו",
+  "folder.more": "{{count}} · פריטים נוספים לא מוצגים",
+  "folder.failed": "לא ניתן לטעון את השינויים",
+  "command.open": "פתח סקירה",
+  "load.failed": "לא ניתן לטעון את השינויים",
+  "load.timeout": "השרת לא הגיב בזמן",
+  offline: "לא ניתן לגשת לשרת זה",
 }

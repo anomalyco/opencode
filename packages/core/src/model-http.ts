@@ -1,6 +1,6 @@
 export * as ModelHttp from "./model-http.js"
 
-import type { HttpMiddleware } from "@opencode/ai/route"
+import { RequestExecutor, type HttpMiddleware } from "@opencode/ai/route"
 import type { ModelRequestScope } from "@opencode/plugin/effect/model"
 import { Effect, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -62,3 +62,11 @@ export const middleware = Effect.fnUntraced(function* (hooks: PluginHooks.Interf
     })
   return http
 })
+
+/** Runs `effect` with the model hooks on every provider request it makes, its polls and provider downloads included. */
+export const scoped =
+  (hooks: PluginHooks.Interface, scope: ModelRequestScope) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    middleware(hooks, scope).pipe(
+      Effect.flatMap((http) => (http ? effect.pipe(RequestExecutor.withMiddleware(http)) : effect)),
+    )
