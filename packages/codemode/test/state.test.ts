@@ -403,6 +403,7 @@ describe("vm", () => {
       "src/codemode.ts",
       "src/extension.ts",
       "src/host-function.ts",
+      "src/runtime.ts",
       "src/scan.ts",
       "src/tool-error.ts",
       "src/tool-runtime.ts",

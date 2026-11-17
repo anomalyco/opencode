@@ -413,7 +413,7 @@ describe("suspend", () => {
     const program = CodeMode.make().program(`return 1`)
     expect(await Effect.runPromise(program.run())).toMatchObject({ ok: true, value: 1 })
     const exit = await Effect.runPromise(Effect.exit(program.run()))
-    expect(String(exit)).toContain("A CodeMode program runs once")
+    expect(String(exit)).toContain("A program runs once")
   })
 
   test("interrupting run interrupts the program and its running calls", async () => {

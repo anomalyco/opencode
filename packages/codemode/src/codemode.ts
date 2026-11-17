@@ -1,19 +1,19 @@
-import { Deferred, Effect, Exit, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { type Extension, isAsync } from "./extension.js"
-import { Host } from "./host-function.js"
 import { scanTools } from "./scan.js"
 import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
 import {
-  type Outcome as RunOutcome,
-  resumeProgram,
-  type Running,
-  type Setup,
-  startProgram,
+  fromBytes,
+  globalNames,
+  Host,
+  Language,
+  type Snapshot,
+  SnapshotError,
+  type SnapshotHeader,
   SuspendError,
-} from "./runtime/execute.js"
-import { globalNames } from "./runtime/globals.js"
-import { fromBytes, type Snapshot, SnapshotError, type SnapshotHeader, toBytes } from "./snapshot/snapshot.js"
+  toBytes,
+} from "./language.js"
 
 export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
 export type { Snapshot, SnapshotHeader }
@@ -207,17 +207,10 @@ export type Program<R = never, E = never> = {
   readonly suspend: (options?: SuspendOptions) => Effect.Effect<Outcome, SuspendError>
 }
 
-const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
-  if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
-    throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
-  }
-  return value
-}
-
 const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimits => ({
-  timeoutMs: validateLimit("timeoutMs", limits?.timeoutMs, 1),
-  maxToolCalls: validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
-  maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
+  timeoutMs: Language.Runtime.validateLimit("timeoutMs", limits?.timeoutMs, 1),
+  maxToolCalls: Language.Runtime.validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
+  maxOutputBytes: Language.Runtime.validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
 })
 
 /** Executes one Effect-native CodeMode program without constructing a reusable runtime. */
@@ -246,7 +239,9 @@ export function make<
       bound.add(name)
     }
   }
-  const setupFor = (selected: ReadonlyArray<Extension> = extensions): Setup<R> => {
+  // One language runtime for each set of the runtime's extensions a run picks, made when first picked.
+  const runtimes = new Map<string, Language.Runtime.Runtime<R>>()
+  const runtimeFor = (selected: ReadonlyArray<Extension> = extensions) => {
     for (const extension of selected) {
       if (!extensions.includes(extension)) {
         throw new TypeError(`Extension "${extension.name}" isn't one this runtime was made with.`)
@@ -254,8 +249,11 @@ export function make<
     }
     // In the runtime's order, so the same extensions picked in any order give the same globals, and resume alike.
     const picked = extensions.filter((extension) => selected.includes(extension))
-    return {
-      limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
+    const key = picked.map((extension) => extensions.indexOf(extension)).join(",")
+    const known = runtimes.get(key)
+    if (known !== undefined) return known
+    // The tools' and extensions' environment, which the language runtime can't infer through them.
+    const made = Language.Runtime.make({
       globals: (run) => ({
         ...ToolRuntime.globals(prepared, hooks, run, limits.maxToolCalls),
         ...Object.fromEntries(
@@ -267,13 +265,13 @@ export function make<
           ),
         ),
       }),
-    }
+      limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
+    }) as unknown as Language.Runtime.Runtime<R>
+    runtimes.set(key, made)
+    return made
   }
-  const setup = setupFor()
-  const program = (code: string, bindings?: Readonly<Record<string, DataValue>>, programOptions?: ProgramOptions) => {
-    const run = programOptions?.extensions === undefined ? setup : setupFor(programOptions.extensions)
-    return makeProgram(() => Effect.succeed(startProgram(run, code, bindings, programOptions?.runId)))
-  }
+  const program = (code: string, bindings?: Readonly<Record<string, DataValue>>, programOptions?: ProgramOptions) =>
+    reported(runtimeFor(programOptions?.extensions).program(code, { bindings, runId: programOptions?.runId }))
   return {
     get catalog() {
       return prepared.catalog
@@ -290,10 +288,7 @@ export function make<
         }),
       ),
     program,
-    resume: (state, runOptions) => {
-      const run = runOptions?.extensions === undefined ? setup : setupFor(runOptions.extensions)
-      return makeProgram(() => resumeProgram(run, state))
-    },
+    resume: (state, runOptions) => reported(runtimeFor(runOptions?.extensions).resume(state)),
   }
 }
 
@@ -360,45 +355,14 @@ const extensionFunction = <R>(
   )
 }
 
-// A program's one run, its outcome given the run's tool calls; `start` makes it when `run()` is called, and a suspend
-// waits for it.
-const makeProgram = <R, E>(start: () => Effect.Effect<Running<R>, E>): Program<R, E> => {
-  let claimed = false
-  const started = Deferred.makeUnsafe<Running<R>, SuspendError>()
-  return {
-    run: () =>
-      Effect.suspend(() => {
-        if (claimed) {
-          return Effect.die(
-            new Error("A CodeMode program runs once; make another with runtime.program or runtime.resume."),
-          )
-        }
-        claimed = true
-        return start().pipe(
-          Effect.onExit((exit) =>
-            Exit.isSuccess(exit)
-              ? Deferred.succeed(started, exit.value)
-              : Deferred.fail(started, new SuspendError({ message: "The program didn't start.", running: [] })),
-          ),
-          Effect.flatMap((running) => running.run()),
-          Effect.map(outcome),
-        )
-      }),
-    suspend: (options) => {
-      const maxBytes = options?.maxBytes
-      if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
-        throw new RangeError("maxBytes must be a safe integer greater than or equal to 0.")
-      }
-      return Effect.map(
-        Effect.flatMap(Deferred.await(started), (running) => running.suspend(maxBytes)),
-        outcome,
-      )
-    },
-  }
-}
+// A language program whose outcomes report the run's tool calls in place of its metadata.
+const reported = <R, E>(program: Language.Runtime.Program<R, E>): Program<R, E> => ({
+  run: () => Effect.map(program.run(), outcome),
+  suspend: (options) => Effect.map(program.suspend(options), outcome),
+})
 
 // A run's outcome as Code Mode reports it: the tool calls in place of the run's metadata.
-const outcome = (ended: RunOutcome): Outcome => {
+const outcome = (ended: Language.Runtime.Outcome): Outcome => {
   if (ended.ok === "suspended") return ended
   const { metadata, ...result } = ended
   return { ...result, toolCalls: ToolRuntime.toolCalls(metadata) } as Result
