@@ -204,6 +204,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       annotations={commentsUi.annotations()}
       renderAnnotation={commentsUi.renderAnnotation}
       renderGutterUtility={lineCommentsEnabled() ? commentsUi.renderGutterUtility : undefined}
+      onCommentSelection={lineCommentsEnabled() ? commentsUi.commentSelection() : undefined}
       selectedLines={commentsUi.selected()}
       commentedLines={commentedLines()}
       media={{

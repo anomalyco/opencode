@@ -57,11 +57,11 @@ export function findCodeSelectionSide(node: Node | null): SelectedLineRange["sid
   return "additions"
 }
 
+/** The lines under the browser's text selection in a viewer's shadow root, with the selected text's DOM range. */
 export function readShadowLineSelection(opts: {
   root: ShadowRoot
   lineForNode: (node: Node | null) => number | undefined
   sideForNode?: (node: Node | null) => SelectedLineRange["side"]
-  preserveTextSelection?: boolean
 }) {
   const selection =
     (opts.root as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? window.getSelection()
@@ -76,12 +76,16 @@ export function readShadowLineSelection(opts: {
     ).getComposedRanges?.({ shadowRoots: [opts.root] })?.[0] ??
     (selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined)
 
-  const startNode = domRange?.startContainer ?? selection.anchorNode
-  const endNode = domRange?.endContainer ?? selection.focusNode
+  if (!domRange) return
 
-  if (!startNode || !endNode) return
+  if (!opts.root.contains(domRange.startContainer) || !opts.root.contains(domRange.endContainer)) return
 
-  if (!opts.root.contains(startNode) || !opts.root.contains(endNode)) return
+  // A triple click, or a drag that stops at the start of the next line, ends on a line with nothing selected in it.
+  const startLine = selectedLine(domRange.startContainer, domRange.startOffset, false)
+  const endLine = selectedLine(domRange.endContainer, domRange.endOffset, true)
+  const span = startLine?.row !== endLine?.row
+  const startNode = (span && startLine?.empty) || domRange.startContainer
+  const endNode = (span && endLine?.empty) || domRange.endContainer
 
   const start = opts.lineForNode(startNode)
   const end = opts.lineForNode(endNode)
@@ -100,6 +104,35 @@ export function readShadowLineSelection(opts: {
 
   return {
     range,
-    text: opts.preserveTextSelection && domRange ? toRange(domRange).cloneRange() : undefined,
+    text: toRange(domRange),
+    backward: (selection as Selection & { direction?: string }).direction === "backward",
   }
+}
+
+/**
+ * The line row holding one end of a selection. `empty` is the neighbouring row to read instead when no character of
+ * this row is selected: the previous row for the end, the next one for the start.
+ */
+function selectedLine(node: Node, offset: number, end: boolean) {
+  const row = findElement(node)?.closest("[data-line], [data-alt-line]")
+
+  if (!row) return
+  const part = new Range()
+
+  if (end) {
+    part.setStart(row, 0)
+    part.setEnd(node, offset)
+  } else {
+    part.setStart(node, offset)
+    part.setEnd(row, row.childNodes.length)
+  }
+
+  if (part.toString() !== "") return { row }
+
+  let next = end ? row.previousElementSibling : row.nextElementSibling
+
+  while (next && !next.matches("[data-line], [data-alt-line]"))
+    next = end ? next.previousElementSibling : next.nextElementSibling
+
+  return { row, empty: next ?? undefined }
 }

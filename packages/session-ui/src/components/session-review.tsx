@@ -703,6 +703,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderGutterUtility={
                                       props.onLineComment ? commentsUi.renderGutterUtility : undefined
                                     }
+                                    onCommentSelection={props.onLineComment ? commentsUi.commentSelection() : undefined}
                                     selectedLines={commentsUi.selected()}
                                     commentedLines={commentedLines()}
                                     media={{

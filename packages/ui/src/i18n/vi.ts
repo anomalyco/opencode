@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Bình luận về ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Thêm nhận xét",
+  "ui.lineComment.add": "Thêm nhận xét",
+  "ui.lineComment.actions": "Thao tác với phần đã chọn",
   "ui.lineComment.contextPlaceholder": "Thêm ngữ cảnh cho thay đổi này",
   "ui.lineComment.submit": "Bình luận",
   "ui.lineComment.cancel": "Hủy",
