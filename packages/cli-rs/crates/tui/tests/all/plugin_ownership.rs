@@ -977,13 +977,17 @@ local asked = false
 local function ask(host, origin)
     if origin ~= ORIGIN or asked then return end
     asked = true
-    if CLOSE == "BeforeDispatch" then host:navigate({{ type = "home" }}) end
+    if CLOSE == "BeforeDispatch" and origin ~= "MountEnd" then host:navigate({{ type = "home" }}) end
     local id
     if KIND == "Fetch" then id = host:fetch({{ method = "GET", path = "/api/hold" }})
     elseif KIND == "Foreground" then id = host:foreground({{ command = COMMAND, args = ARGS }})
     elseif KIND == "Overlay" then host:overlay(OTHER)
     elseif KIND == "Mode" then host:setMode("probe")
     elseif KIND == "Focus" then host:focus("n")
+    elseif KIND == "FocusField" then host:focus("fld")
+    elseif KIND == "Dialog" then
+        host:dialog({{ type = "select", title = "probe pick", options = {{ {{ title = "one", value = "1" }} }},
+            action = {{ type = "command", name = "probe.global" }}, centered = true }})
     elseif KIND == "Blur" then host:blur()
     elseif KIND == "Scroll" then host:scroll({{ type = "node", surface = "probe", id = "s" }}, {{ type = "offset", offset = 3 }})
     else host:scroll({{ type = "transcript" }}, {{ type = "by", rows = 3 }}) end

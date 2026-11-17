@@ -402,6 +402,13 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "mount" => |r, _lua| r.mount();
         "setting" => |r, _lua, name: String| r.setting(&name);
         "plugins" => |r, _lua| r.plugins();
+        // The host's version and optional features (`focus-input`, `fence-node`), for a plugin that falls back on a
+        // host without one.
+        "abi" => |r, _lua| {
+            let abi = r.abi();
+            serde_json::json!({ "major": abi.major, "minor": abi.minor, "features": abi.features })
+        };
+        "hasFeature" => |r, _lua, name: String| r.abi().has_feature(&name);
     }
     verbs! {
         "storageSet" => |h, lua, key: String, value: Value| h.storage_set(&key, input(lua, value)?);

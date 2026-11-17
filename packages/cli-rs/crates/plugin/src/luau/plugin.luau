@@ -6,6 +6,12 @@ local plugin = {}
 
 plugin.contract = "2.0"
 
+-- The host's optional features, which `read:hasFeature` asks for: a field the plugin focuses (`host:focus` of an
+-- `input` node), and the host's own code view of a claimed fence (a `fence` node).
+plugin.IMAGE_BOUNDS = "image-bounds"
+plugin.FOCUS_INPUT = "focus-input"
+plugin.FENCE_NODE = "fence-node"
+
 -- What a render returns besides `plugin.show(node)`: keep what shows, or show nothing (as `nil` does).
 plugin.KEEP = table.freeze({ type = "keep" })
 plugin.HIDE = table.freeze({ type = "hide" })

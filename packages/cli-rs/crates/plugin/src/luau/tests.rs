@@ -787,3 +787,45 @@ fn measure_idle_memory_and_compile() {
     let _ = define(&sources, None).unwrap();
     println!("compile counter: {:?}", start.elapsed());
 }
+
+// Expected (contract 2.x additions on the Luau carrier): a Luau plugin reads the host's version and features, and asks
+// for one by the prelude's name; it shows a centered select, and an alert and a confirm with their size and centering,
+// which reach the host as the contract's dialogs.
+#[test]
+fn a_luau_plugin_reads_the_features_and_centers_its_dialogs() {
+    let host = host();
+    let init = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:command({ name = "luau.features" }, function(host)
+        local abi = host:abi()
+        local said = abi.major .. "." .. abi.minor .. " " .. table.concat(abi.features, ",") .. " "
+            .. tostring(host:hasFeature(plugin.FOCUS_INPUT)) .. " " .. tostring(host:hasFeature(plugin.FENCE_NODE))
+            .. " " .. tostring(host:hasFeature("fence-nodes"))
+        host:toast({ variant = "info", message = said })
+    end)
+    setup:command({ name = "luau.dialogs" }, function(host)
+        local action = plugin.command("luau.features")
+        host:dialog({ type = "select", title = "pick", options = { { title = "one", value = "1" } }, action = action,
+            centered = true })
+        host:dialog({ type = "alert", title = "told", message = "said", size = "xlarge", centered = true })
+        host:dialog({ type = "confirm", title = "asked", message = "sure?", action = action, size = "large",
+            centered = true })
+    end)
+end)
+"#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("luau.features", None);
+    keymap(&host).dispatch("luau.dialogs", None);
+    host.app.advance(Duration::from_millis(1));
+    let features = abi::FEATURES.join(",");
+    let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    assert_eq!(toasts, [format!("2.0 {features} true true false")]);
+    let dialogs: Vec<abi::Dialog> = host.dialogs.borrow().iter().map(|(_, dialog)| dialog.clone()).collect();
+    let [abi::Dialog::Select(select), abi::Dialog::Alert(alert), abi::Dialog::Confirm(confirm)] = dialogs.as_slice()
+    else {
+        panic!("{dialogs:?}")
+    };
+    assert!(select.centered && alert.centered && confirm.centered, "{dialogs:?}");
+    assert_eq!((alert.size, confirm.size), (Some(abi::PanelSize::XLarge), Some(abi::PanelSize::Large)));
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
