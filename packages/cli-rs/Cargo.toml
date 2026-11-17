@@ -120,6 +120,13 @@ tree-sitter-vim = "0.4.0"
 tree-sitter-vue-next = "0.1.0"
 tree-sitter-xml = "=0.7.0"
 
+# Luau 747 (O-172): mlua `main`'s "Bump Luau to 0.747", whose mlua-sys takes `luau0-src` 0.24.0+luau747 from
+# crates.io. mlua 0.12.2's mlua-sys pins 740's type numbers, so `luau0-src` cannot move alone. The patch goes once
+# mlua 0.12.3 is on crates.io (its deprecation notes say "since 0.12.3"), which `mlua = "0.12"` takes.
+[patch.crates-io]
+mlua = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
+mlua-sys = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
+
 # Debug info stays in the object files instead of passing through the linker, and dependencies keep only file and line
 # tables. Backtraces still show file and line, and a test binary links in about half the time and memory. `test`
 # inherits this.
