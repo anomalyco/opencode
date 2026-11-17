@@ -633,14 +633,14 @@ test("a built renderable returned draws nothing, and a node's layout is the host
   expect(id).toMatch(/^opentui-box-/)
   const key = `rect:slot#1:${id}`
   expect(fake.watches.has(key)).toBe(true)
-  expect(refs.box.getLayout()).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  expect(refs.box.getLayout()).toMatchObject({ x: 0, y: 0, width: 0, height: 0 })
   // A node the host has not laid out yet reads 0×0, which is not a size; an unchanged size is not a change.
   fake.push(key, { x: 0, y: 1, width: 0, height: 0 })
   expect([sizes, refs.box.width]).toEqual([[], undefined])
   fake.push(key, { x: 2, y: 3, width: 30, height: 4 })
   fake.push(key, { x: 2, y: 3, width: 30, height: 4 })
   expect(sizes).toEqual([30])
-  expect(refs.box.getLayout()).toEqual({ x: 2, y: 3, width: 30, height: 4 })
+  expect(refs.box.getLayout()).toMatchObject({ x: 2, y: 3, width: 30, height: 4, left: 2, top: 3, right: 32, bottom: 7 })
   expect(refs.box.height).toBe(4)
 })
 
@@ -678,6 +678,30 @@ test("data collections load through the client", async () => {
   expect(ctx.data.location.agent.list({ directory: "/w" })).toEqual([{ name: "build" }, { name: "plan" }])
   expect(fetched.filter((line) => line === "GET /api/agent").length).toBe(3)
   expect(fake.toasts()).toEqual([])
+})
+
+// Contract 2.x, addition 1, the room rule: before the host laid a node out, a top node of the mount answers its own
+// width, `"100%"` of the room the mount's input gave or a number; a nested one answers nothing. Once laid out, a node's
+// own numeric width or height is what it answers, as the host lays it out so, where the host's rect is a frame late.
+test("a top node answers the room before the host laid it out", () => {
+  const fake = host()
+  const ctx = plugin("t.room", fake)
+  const refs: Json = {}
+  ctx.ui.slot({
+    append: "sidebar.content",
+    render: () => [
+      h("box", { ref: (el: Json) => (refs.full = el), width: "100%", children: h("box", { ref: (el: Json) => (refs.nested = el), width: "100%" }) }),
+      h("box", { ref: (el: Json) => (refs.fixed = el), width: 12 }),
+      h("box", { ref: (el: Json) => (refs.auto = el) }),
+    ],
+  })
+  const cx = { mount: { surface: "slot#0", key: "a", generation: 1 }, input: { width: 37, height: 1, slot: {} } }
+  fake.surfaces[0].view(cx)
+  expect([refs.full.getLayout().width, refs.nested.getLayout().width, refs.fixed.width, refs.auto.getLayout().width]).toEqual([37, 0, 12, 0])
+  const key = `rect:slot#0:${fake.surfaces[0].view(cx).children[1].id}`
+  refs.fixed.width = 13
+  fake.push(key, { x: 0, y: 1, width: 12, height: 1 })
+  expect([refs.fixed.width, refs.fixed.height]).toEqual([13, 1])
 })
 
 // CT-8, CT-22: a raised surface's theme is the host's: a color the dialog or its footer gives differently from the page

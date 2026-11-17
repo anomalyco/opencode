@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::Duration;
 
 use opencode_plugin_abi::interact::{Event, Handled};
 use opencode_plugin_abi::v2::{self, ContentRef};
@@ -27,9 +26,10 @@ use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, keyed_command, rou
 /// The reads a plugin watches at most (FT-9: opencode-tokscope watches about 80, a store each of its 64 history shards
 /// and a dozen others). What they push is charged to the plugin's content, which bounds their memory.
 const WATCHES: usize = 128;
-/// How long after the host took a tree of the plugin's its nodes' layouts are read again ([`Guest::relayout`]): past the
-/// frame that lays it out.
-const RELAYOUT: Duration = Duration::from_millis(50);
+/// Frames in a row in which a mount's watched rects changed, with no other cause between, past which the host holds
+/// the plugin's rect pushes until another cause comes (contract 2.x, addition 1, R3): a layout that follows its own
+/// size without end.
+const RECT_ROUNDS: u32 = crate::behave::STALLED;
 /// The bytes of JSON a watched read pushes at most: what one control frame carries.
 const READ: usize = super::wire::CONTROL_CAP;
 
@@ -191,7 +191,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 pushed: RefCell::default(),
                 watcher: RefCell::default(),
                 disposed: Cell::new(false),
-                relayout_timer: Cell::new(None),
+                rects: Cell::new((u64::MAX, 0)),
             });
             register(setup, &guest);
             scripts.guests.borrow_mut().insert(loaded.id.clone(), Rc::downgrade(&guest));
@@ -242,8 +242,9 @@ pub(crate) struct Guest {
     pushed: RefCell<BTreeMap<String, u64>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
-    /// The read of its nodes' layouts that waits for the frame after its newest tree ([`Guest::relayout`]).
-    relayout_timer: Cell<Option<opentui::prelude::TimerId>>,
+    /// The frame its watched rects were last compared in, and how many frames in a row they changed with no other
+    /// cause ([`Guest::laid_out`]).
+    rects: Cell<(u64, u32)>,
 }
 
 impl Guest {
@@ -292,6 +293,7 @@ impl Guest {
         if self.ended() {
             return;
         }
+        self.caused();
         self.refresh();
         if let Some(scripts) = self.scripts.upgrade() {
             scripts.call(self, export, request, hold, owner, key);
@@ -539,28 +541,44 @@ impl Guest {
                 if viewer.take(self, tree) {
                     self.activation.invalidate();
                 }
-                self.relayout();
             }
             None => count(|crossed| crossed.dropped += 1),
         }
     }
 
-    /// Reads where the plugin's nodes are again once the host laid out the tree it took (CT-24): a node's layout
-    /// ([`HostRequest::Rect`]) changes with no change of the host's data, which is what refreshes the other reads. Once
-    /// a [`RELAYOUT`] after the newest tree, past the frame that lays it out.
-    fn relayout(self: &Rc<Self>) {
-        let measuring = self.watches.borrow().values().any(|(request, _)| matches!(request, HostRequest::Rect { .. }));
-        let Some(host) = self.host.upgrade().filter(|_| measuring) else { return };
-        let weak = Rc::downgrade(self);
-        let timer = host.app().set_timeout(RELAYOUT, move |_| {
-            if let Some(guest) = weak.upgrade() {
-                guest.relayout_timer.set(None);
-                guest.refresh();
-            }
-        });
-        if let Some(old) = self.relayout_timer.replace(Some(timer)) {
-            host.app().cancel_timer(old);
+    /// A frame's geometry is final and laid out one of its mounts (contract 2.x, addition 1, R2): the rects it watches
+    /// that changed go to the JS host now, in place of a timer after each tree. A node's layout changes
+    /// with no change of the host's data, which is what refreshes the other reads. A push may draw, lay out and push
+    /// again, one round a frame: past [`RECT_ROUNDS`] frames in a row of it with no other cause, the pushes wait for
+    /// one, and the log says so once (R3).
+    pub(crate) fn laid_out(&self, frame: u64) {
+        let (last, rounds) = self.rects.get();
+        if rounds > RECT_ROUNDS || self.ended() {
+            return;
         }
+        if !self.refresh_where(|request| matches!(request, HostRequest::Rect { .. })) {
+            // A frame that changed none settles the count; a later round of the same frame that did counts once.
+            if last != frame {
+                self.rects.set((frame, 0));
+            }
+            return;
+        }
+        let rounds = if last == frame { rounds.max(1) } else { rounds + 1 };
+        if rounds > RECT_ROUNDS {
+            log::warn!(
+                "plugin {}: its layout changed in {RECT_ROUNDS} frames in a row and never settled; its rects wait for \
+                 another cause",
+                self.id()
+            );
+        }
+        self.rects.set((frame, rounds));
+    }
+
+    /// Another cause than a layout came (a call: an input or an event; a new input of a mount): the rects are pushed
+    /// again.
+    pub(crate) fn caused(&self) {
+        let (frame, _) = self.rects.get();
+        self.rects.set((frame, 0));
     }
 
     /// Pushes the value of `request` under `key` now, and each time it changes. A plugin watches at most [`WATCHES`]
@@ -657,13 +675,19 @@ impl Guest {
 
     /// Pushes each watched read whose value changed.
     fn refresh(&self) {
+        self.refresh_where(|_| true);
+    }
+
+    /// Pushes what changed of the watched reads `which` picks: whether any did.
+    fn refresh_where(&self, which: impl Fn(&HostRequest) -> bool) -> bool {
         if self.ended() {
-            return;
+            return false;
         }
         let changed: Vec<(String, serde_json::Value)> = {
             let mut watches = self.watches.borrow_mut();
             watches
                 .iter_mut()
+                .filter(|(_, (request, _))| which(request))
                 .filter_map(|(key, (request, last))| {
                     let (value, hash) = self.evaluate(request);
                     (*last != Some(hash)).then(|| {
@@ -673,9 +697,11 @@ impl Guest {
                 })
                 .collect()
         };
+        let any = !changed.is_empty();
         for (key, value) in changed {
             self.push(key, value);
         }
+        any
     }
 }
 
@@ -1010,11 +1036,23 @@ impl surface::Viewer for Viewer {
             let mount = mounts.entry(id.clone()).or_default();
             (mount.started, mount.sent.clone(), mount.real)
         };
+        // A slot's first view before a solve sees the terminal's size, which stands in for its room: its placeholder
+        // shows, and the JS host hears of the mount once a solve laid that out, with the room as its first input
+        // (contract 2.x, addition 1, R1), so a plugin that sizes itself from it at once sizes right. The surface views
+        // again after that first solve ([`surface::Viewer::waits_for_room`]).
+        if !started && viewing.laid.is_none() && viewing.input.slot.is_some() {
+            let mut mounts = self.mounts.borrow_mut();
+            let mount = mounts.get_mut(id)?;
+            mount.shown = true;
+            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
+            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0) });
+        }
         // The height it was laid out at, not the input's, which stands in the screen's before a solve (review carbon-7).
         if let (true, Some(laid)) = (real, viewing.laid) {
             self.heights.borrow_mut().insert(id.key.clone(), laid);
         }
         if !started || sent.as_ref() != Some(&input) {
+            guest.caused();
             self.tell(&guest, id, input, !started);
         }
         let mut mounts = self.mounts.borrow_mut();
@@ -1089,6 +1127,16 @@ impl surface::Viewer for Viewer {
             return Some(Viewed { node: Some(placeholder(height)), memo: Some(0) });
         }
         Some(Viewed { node: None, memo: None })
+    }
+
+    fn waits_for_room(&self) -> bool {
+        true
+    }
+
+    fn laid_out(&self, mount: &v2::MountId, frame: u64) {
+        if let Some(guest) = self.guest.upgrade().filter(|_| self.has(mount)) {
+            guest.laid_out(frame);
+        }
     }
 
     fn forget(&self, _host: &dyn Host, id: &v2::MountId) {

@@ -117,6 +117,14 @@ pub(crate) trait Viewer {
     }
     /// The mount ended.
     fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
+    /// Frame `frame`'s geometry is final, and it laid the mount out: a carrier that pushes layout reads to its plugin
+    /// pushes what changed now (contract 2.x, addition 1, R2).
+    fn laid_out(&self, _mount: &v2::MountId, _frame: u64) {}
+    /// A slot's first view before a solve shows a placeholder and waits for the room the solve gives it: the surface
+    /// views again after its first solve, also when the room equals the terminal's size that stood in.
+    fn waits_for_room(&self) -> bool {
+        false
+    }
 }
 
 /// What a view is given: the mount and its input, the mount's memo table in the host, and where the content it gives
@@ -703,12 +711,13 @@ impl Surface {
         mounted.root.on_resize(move |_, rect| {
             let Some(mounted) = weak.upgrade() else { return };
             // What `layout` named may have moved with it, also when it is first laid out.
-            mounted.laid.set(true);
+            let first = !mounted.laid.replace(true);
             behave::arm(&app);
             // Only a slot's root follows its content; a surface that fills its room follows every resize of it, as a
             // splitter drag gives.
             let latched = !mounted.fills && mounted.resized.get() >= 2;
-            if (rect.width as u16, rect.height as u16) == mounted.seen.get() || latched {
+            let waits = first && !mounted.fills && mounted.viewer.waits_for_room();
+            if ((rect.width as u16, rect.height as u16) == mounted.seen.get() || latched) && !waits {
                 return;
             }
             mounted.resized.set(mounted.resized.get() + 1);
@@ -1237,6 +1246,11 @@ impl Surface {
     /// What stands for the mount while it lives: what its route's commands and its scroll handler ask for ends with it.
     pub(crate) fn alive(&self) -> Weak<()> {
         Rc::downgrade(&self.alive)
+    }
+
+    /// Frame `frame`'s geometry is final and laid the mount out ([`Viewer::laid_out`]).
+    pub(crate) fn laid_out(&self, frame: u64) {
+        self.viewer.laid_out(&self.id, frame);
     }
 
     /// Whether a solve has laid its root out.

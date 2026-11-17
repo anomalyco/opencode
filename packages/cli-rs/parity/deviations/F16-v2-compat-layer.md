@@ -84,14 +84,28 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's do, and other events are heard and
   never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the host's state of the scroll once it came
   (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by it), and `scrollTo` and `scrollBy` are
-  the host's scroll verb. A node's `getLayout()`, `width` and `height` are where the host laid it out in its last
-  settled frame (`Read::rect`), and `onSizeChange` runs as that changes (CT-15, CT-24: @jasonencode/opencode-context
-  sized its dividers by it, `P.8/sessionwatch-width`); the node carries an id from the view after the plugin first
-  asked. `onSizeChange` runs as the laid-out size changes, and a 0×0 read (a node the host has not laid out yet) is no
-  size, as OpenTUI never reports one (navigator's section header kept it and cut its "Refresh" to "."). OpenTUI
-  answers the layout at once, where the host's comes after a frame: until then `getLayout()` is all zero
-  and `width` the prop, so a plugin that measures itself only within a few timer ticks (opencode-tokscope's sidebar,
-  opencode-llm-vibe) draws nothing. That would need the node's layout as the plugin asks. Other renderable members are
+  the host's scroll verb.
+- **Layout reads** (contract 2.x proposal, addition 1, no wire change). A node's `getLayout()` (Yoga's six fields;
+  `left` and `top` against its parent, which is measured only if they are read), `width` and `height` are where the
+  host laid it out (`Read::rect`); the node carries an id from the view after the plugin first asked. OpenTUI answers
+  at once, where the host's layout reaches the JS host a frame later, so:
+  - **R1**: a slot mount shows its placeholder and tells the JS host of the mount once a solve laid that out, so its
+    first input is its room (`sidebar.content`'s 37 columns), not the terminal's size that stood in. The surface views
+    again after its first solve also when the room equals the terminal's size.
+  - **The room rule**: before the host laid a node out, a top node of the mount answers its own width, `"100%"` of the
+    room or a number; any other node answers zero, as OpenTUI's do before their first pass. It is exact where the
+    slot's container is a column; in a row (`prompt.footer.status`, `home.footer.status`) a `100%` top node answers
+    the container's width, and the push corrects it a frame later. opencode-tokscope's sidebar measures itself within
+    ten timer ticks and drew nothing (`P.8/tokscope-sidebar`).
+  - **A fixed size**: once laid out, a node's own numeric `width` or `height` is what it answers, as the host lays it
+    out at that (it does not shrink); the host's rect is of the tree before the plugin set it, a frame late.
+  - **R2**: the rects the plugin watches are compared and pushed when a frame's geometry is final, after each solve
+    that laid one of its mounts out, in place of a timer after each tree. `onSizeChange` runs as the laid-out size
+    changes; a 0×0 read (a node the host has not laid out yet) is no size, as OpenTUI never reports one.
+  - **R3**: a push may draw, lay out and push again, one round a frame. After 8 frames in a row of changed rects with
+    no other cause (a call or a new input of a mount), the plugin's pushes wait for one, and the log says so once
+    (`plugin_compat::a_layout_that_follows_its_own_size_is_held`).
+  A plugin that reads a nested node within a few timer ticks still loses the race. Other renderable members are
   undefined.
 - **Fields** (CT-11): an `<input>` or `<textarea>` hears the host's field: `onInput` each edit, `onChange` and
   `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. The contract's focus takes

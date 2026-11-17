@@ -8,6 +8,7 @@
 
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
+import { createElement, effect, insert, insertNode, setProp } from "@opentui/solid"
 import { createSignal, onCleanup } from "solid-js"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
@@ -133,6 +134,8 @@ export default Plugin.define({
         { id: "v2probe.inline", run: () => context.ui.router.navigate({ type: "plugin", name: "inline" }) },
         { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
+        { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
+        { id: "v2probe.settle", run: () => context.ui.router.navigate({ type: "plugin", name: "settle" }) },
         // A handler that rejects later, after a reload perhaps (carbon-5).
         {
           id: "v2probe.reject",
@@ -209,6 +212,29 @@ export default Plugin.define({
         return <text>churn page</text>
       },
     })
+    // Two pages sized from their own width (contract 2.x, addition 1, R3): `grow` widens its box by a cell each time
+    // its size comes, without end; `settle` takes the width it first measured plus one, once. Built as Solid compiles
+    // a plugin's JSX, so the box and its width signal stay as the size changes.
+    const sized = (name: string, next: (width: number) => number) =>
+      context.ui.router.register({
+        name,
+        render: () => {
+          const [width, setWidth] = createSignal(10)
+          const box = createElement("box")
+          const text = createElement("text")
+          insertNode(box, text)
+          insert(text, `${name} page`)
+          effect(() => setProp(box, "width", width()))
+          setProp(box, "onSizeChange", function (this: { width: number }) {
+            log({ [name]: this.width })
+            setWidth(next(this.width))
+          })
+          return box
+        },
+      })
+    sized("grow", (width) => (width % 40) + 1)
+    let settled = false
+    sized("settle", (width) => (settled ? width : ((settled = true), width + 1)))
     // A page that registers a new command every 20 ms for as long as it shows: registrations that never settle.
     let restless = 0
     context.ui.router.register({

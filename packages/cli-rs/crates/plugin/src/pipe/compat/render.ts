@@ -55,6 +55,8 @@ export class VNode {
   typed?: string
   // The plugin asked where it is (CT-15, CT-24): it carries an id, and the host's layout of it is watched.
   measured = false
+  // A mount's root: the room the host laid the mount out in, from its input (contract 2.x, addition 1, R1).
+  room?: { width: number; height: number }
   // CT-2: an OpenTUI renderable is an event emitter, which a plugin listens to by a ref (file-browser's search field):
   // the layer emits `focused` and `blurred` as OpenTUI's renderables do; other names are heard and never come.
   private listeners = new Map<string, Listener[]>()
@@ -170,12 +172,50 @@ export class VNode {
     // A node the host has not laid out yet reads 0×0 for a frame, which OpenTUI never reports: not yet. A plugin that
     // sizes itself by it kept the empty size (navigator cut its section header's "Refresh" to nothing, then to ".").
     const rect = rootOf(this).owner?.scrolls?.rect?.(this)
-    return rect && (rect.width > 0 || rect.height > 0) ? rect : undefined
+    if (!rect || (rect.width === 0 && rect.height === 0)) return this.ahead()
+    // A fixed width (or height) is what the host lays the node out at, as such a node does not shrink: it answers at
+    // once, where the host's rect is of the tree before the plugin set it, a frame late. OpenTUI's layout follows a
+    // set size at once, so a plugin that sizes a node from its own size never sees the old one.
+    const fixed = (value: unknown, laid: number) => (typeof value === "number" ? value : laid)
+    return { ...rect, width: fixed(this.props.width, rect.width), height: fixed(this.props.height, rect.height) }
   }
 
+  // The room rule (contract 2.x, addition 1): before the host laid a node out, a top node of the mount answers a width
+  // of its own, `"100%"` of the mount's room or a number, which the host lays it out at in a column; any other node
+  // answers nothing, as OpenTUI's do before their first pass. The one place the layer answers ahead of the host, so
+  // a plugin that measures itself at once (tokscope's sidebar, within ten timer ticks) sizes right.
+  private ahead(): Rect | undefined {
+    const room = this.parent?.room
+    if (!room || this.parent?.parent) return undefined
+    const width = this.props.width === "100%" ? room.width : typeof this.props.width === "number" ? this.props.width : undefined
+    const height = typeof this.props.height === "number" ? this.props.height : 0
+    return width === undefined ? undefined : { x: 0, y: 0, width, height }
+  }
+
+  // Yoga's six fields, as OpenTUI's: `left` and `top` against the parent, which is measured only if they are read.
   getLayout() {
     const rect = this.measure()
-    return { x: rect?.x ?? 0, y: rect?.y ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0 }
+    const node = this
+    const [x, y, width, height] = [rect?.x ?? 0, rect?.y ?? 0, rect?.width ?? 0, rect?.height ?? 0]
+    const parent = () => (node.parent?.parent ? node.parent.measure() : undefined)
+    return {
+      x,
+      y,
+      width,
+      height,
+      get left() {
+        return x - (parent()?.x ?? 0)
+      },
+      get top() {
+        return y - (parent()?.y ?? 0)
+      },
+      get right() {
+        return x - (parent()?.x ?? 0) + width
+      },
+      get bottom() {
+        return y - (parent()?.y ?? 0) + height
+      },
+    }
   }
 
   // The node gained or lost the focus: it emits as an OpenTUI renderable does.

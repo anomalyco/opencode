@@ -454,6 +454,36 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (contract 2.x, addition 1, R3): a page that sizes its box from its own width, a cell wider each time, is
+// held after 8 frames in a row of rect pushes with no other cause: its `onSizeChange` runs a bounded number of times,
+// and the plugin stays active. A page that settles after one change ends at that width and hears no more.
+#[test]
+fn a_layout_that_follows_its_own_size_is_held() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let sizes = |name: &str| calls(&log).iter().filter(|call| call.get(name).is_some()).count();
+    let frames = || {
+        for _ in 0..40 {
+            pipe.harness.app.advance(Duration::from_millis(16));
+            pipe.settle();
+        }
+    };
+    let last = |name: &str| calls(&log).iter().rev().find_map(|call| call.get(name).and_then(Value::as_u64));
+    pipe.harness.tui.keymap.dispatch("v2probe.settle", None);
+    frames();
+    let settled = sizes("settle");
+    assert_eq!(last("settle"), Some(11), "{:?}", calls(&log));
+    frames();
+    assert_eq!(sizes("settle"), settled, "the settled page heard a size again");
+    pipe.harness.tui.keymap.dispatch("v2probe.grow", None);
+    frames();
+    let grown = sizes("grow");
+    assert!((2..=12).contains(&grown), "the page grew {grown} times");
+    frames();
+    assert_eq!(sizes("grow"), grown, "the held page grew again with no other cause");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
 // Expected (the key hold's bound): a printable key a JS command binds globally, whose handler stalls the JS host for
 // 1.5 s. The keys after it wait no longer than the hold's limit (50 ms): then the bound key goes on as declined, first,
 // and the keys typed after it, in order. While the JS host is still stalled, the next bound key goes on at once, and its
