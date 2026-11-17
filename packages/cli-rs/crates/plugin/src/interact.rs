@@ -675,7 +675,9 @@ impl Router {
         }
         *self.host.borrow_mut() = Some(weak.clone());
         let keyed = weak.clone();
-        let disposer = host.keymap().keymap().intercept_key(i32::MAX, false, move |context| {
+        // Below the JS host's hold (`pipe::Scripts`, at the top): a key it holds reaches no listener until it is put
+        // back, and then once (CT-19).
+        let disposer = host.keymap().keymap().intercept_key(i32::MAX - 1, false, move |context| {
             let Some(host) = keyed.upgrade() else { return };
             let Some(router) = host.router() else { return };
             if router.intercept(&*host, &context.event) {

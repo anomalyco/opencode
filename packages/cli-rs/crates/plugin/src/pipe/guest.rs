@@ -301,6 +301,11 @@ impl Guest {
         let guest = Rc::downgrade(self);
         Rc::new(move |_: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
+            // A key a command declined goes on past what heard it already: a listener heard it as it first came.
+            let declined = || guest.scripts.upgrade().is_some_and(|scripts| scripts.replaying_declined());
+            if matches!(event, Event::Key(key) if key.bind.is_none()) && declined() {
+                return Handled::Pass;
+            }
             let to = match to {
                 To::Surface(surface) => InputTo::Surface { surface, mount: owner.id().cloned() },
                 To::Layer(layer) => InputTo::Layer { layer },
