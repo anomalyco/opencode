@@ -987,6 +987,58 @@ fn a_reused_input_table_shows_each_call_its_own_values() {
     assert_eq!(shown(&full, &changed), "ses_1 true ses_3 msg_1 nil true ses_1 false");
 }
 
+// Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
+// running call's items and no others: also as a table the plugin kept from an earlier call, after the list grew,
+// shrank, was reordered or emptied, or stayed as it was while a flag changed.
+#[test]
+fn a_reused_input_list_holds_only_the_running_calls_items() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local sessions, messages = {}, {}
+        local function pairs(list)
+            local out = {}
+            for i, pair in list do out[i] = `{pair[1]}/{pair[2]}` end
+            return table.concat(out, ",")
+        end
+        return plugin.define(function(setup)
+            setup:slot({ path = "home.footer" }, function(_read, _input, changed)
+                sessions = changed.sessions or sessions
+                messages = changed.messages or messages
+                local now = if changed.sessions then table.concat(changed.sessions, ",") else "nil"
+                local text = `{now} {table.concat(sessions, ",")} {#sessions} {pairs(messages)} {#messages}`
+                    .. `{if changed["local"] then " local" else ""}`
+                return plugin.show(plugin.text(text))
+            end)
+        end)
+    "#;
+    let mut registered = abi::Registered::new("test.luau", None);
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let (_, _, render) = registered.renders().next().unwrap();
+    let shown = |sessions: &[&str], messages: &[(&str, &str)], local: bool| {
+        let changed = abi::Changed {
+            local,
+            sessions: sessions.iter().map(|id| id.to_string()).collect(),
+            messages: messages.iter().map(|(session, message)| (session.to_string(), message.to_string())).collect(),
+            ..abi::Changed::default()
+        };
+        match render(&Nop, &abi::SlotInput::default(), &changed) {
+            abi::Render::Show(abi::Node::Text { spans, .. }) => spans[0].text.clone(),
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(shown(&["a", "b", "c"], &[("a", "1"), ("b", "2")], false), "a,b,c a,b,c 3 a/1,b/2 2");
+    assert_eq!(shown(&["a", "c"], &[("a", "1"), ("b", "3")], false), "a,c a,c 2 a/1,b/3 2");
+    // Back to items an earlier call had at those slots: what the tables hold is the last call's, not that one's.
+    assert_eq!(shown(&["a", "b"], &[("a", "1"), ("b", "2")], false), "a,b a,b 2 a/1,b/2 2");
+    assert_eq!(shown(&["c", "a", "d"], &[("b", "3")], false), "c,a,d c,a,d 3 b/3 1");
+    // Emptied: `nil` in `changed`, and the kept tables are empty.
+    assert_eq!(shown(&[], &[], false), "nil  0  0");
+    assert_eq!(shown(&["d"], &[("d", "4")], false), "d d 1 d/4 1");
+    assert_eq!(shown(&["d"], &[("d", "4")], true), "d d 1 d/4 1 local");
+    assert_eq!(shown(&["d", "e"], &[("d", "4")], true), "d,e d,e 2 d/4 1 local");
+}
+
 /// A host that reads nothing and does nothing, for the call measures.
 struct Nop;
 
