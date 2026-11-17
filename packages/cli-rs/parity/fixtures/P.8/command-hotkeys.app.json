@@ -26,7 +26,7 @@
   {"keys":["alt+r"]},
   {"wait":300},
   {"keys":["ctrl+p"]},
-  {"wait":500},
+  {"checkpoint":"palette","until":"Search commands","masks":[{"x":40,"y":9,"width":62,"height":24,"reason":"the host's palette list, which the plugin does not draw"}],"fixture":"P.8/command-hotkeys/palette"},
   {"type":"Run the review"},
   {"checkpoint":"found","until":"Run the review","fixture":"P.8/command-hotkeys/found"},
   {"keys":["enter"]},
