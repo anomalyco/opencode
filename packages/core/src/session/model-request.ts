@@ -90,6 +90,8 @@ export interface Input {
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
   readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+  /** The step this request belongs to, so hooks can correlate per-step state without racing the event bus. */
+  readonly assistantMessageID?: SessionMessage.ID
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
@@ -275,7 +277,7 @@ export const layer = Layer.effect(
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
       const session = input.session
       const model = input.model
-      const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind }
+      const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind, assistantMessageID: input.assistantMessageID }
       const tools = input.tools ?? {
         definitions: [],
         execute: () => new Tool.Error({ message: "Tools are not available for this request" }),

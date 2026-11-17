@@ -271,6 +271,7 @@ const layer = Layer.effect(
             session: loaded.session,
             agent: loaded.agent.id,
             model: loaded.model,
+            assistantMessageID,
             tools: loaded.tools,
             system: transcript.system,
             messages: stepLimitReached
