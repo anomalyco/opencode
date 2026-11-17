@@ -402,6 +402,22 @@ programs.push(
   during("let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }", "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { for (const x of g(4).map(see)) if (x > 1) break; see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }"),
+  during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
+)
+
+// JSON.stringify with a replacer, a property list or a toJSON of the program's runs the reference's internal walk.
+const doc = "const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }"
+programs.push(
+  during(doc, "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => see(v)); see(j) }"),
+  during(doc, "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => typeof v === 'number' ? undefined : see(v), 2); see(j) }"),
+  during(doc, "for (let j = 0; j < 3000; j++) { JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); see(j) }"),
+  after(doc, "JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); JSON.stringify(doc, (k, v) => v)"),
+  after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
+  after("const err = new TypeError('boom'); err.extra = [1, 2]", "JSON.stringify({ err, n: [new Date(5)], h: new Headers({ a: 'b' }) }, (k, v) => v)"),
+  `const ks = []; const s = JSON.stringify({ h: new Headers({ a: 'b' }), e: new TypeError('x'), u: new Uint8Array([1]) }, (k, v) => { ks.push(k); return v }, 1)
+   return [s, ks, JSON.stringify({ h: new Headers({ a: 'b' }) }, ['h', 'z'])]`,
+  during(doc + "; const t = { x: [1, 2, { toJSON: () => see(7) }], y: doc }", "for (let j = 0; j < 300; j++) { JSON.stringify(t); JSON.stringify([doc, { toJSON() { return see(1) } }]); see(j) }"),
+  during("const err = new TypeError('boom'); err.extra = [1, 2]", "for (let j = 0; j < 3000; j++) { JSON.stringify({ err, n: [new Date(5)] }, (k, v) => v); see(j) }"),
 )
 
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.

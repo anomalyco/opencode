@@ -67,7 +67,7 @@ fn to_json_inner(
     key: Key,
     stack: &mut Vec<Id>,
 ) -> Result<Option<Json>, Value> {
-    let v = apply_to_json(vm, v, key)?;
+    let v = apply_to_json(vm, v, key, None)?;
     let v = crate::builtins::exotic::json_value(vm, &v, true)?;
     Ok(Some(match &v {
         Value::Null => Json::Null,
@@ -169,7 +169,7 @@ fn key_value(vm: &mut Vm, key: Key) -> Value {
     }
 }
 
-fn apply_to_json(vm: &mut Vm, v: &Value, key: Key) -> Res {
+fn apply_to_json(vm: &mut Vm, v: &Value, key: Key, mode: Option<&Mode>) -> Res {
     if let Value::Obj(id) = v
         && !matches!(
             vm.heap[*id as usize].kind,
@@ -183,8 +183,19 @@ fn apply_to_json(vm: &mut Vm, v: &Value, key: Key) -> Res {
         let k = vm.names.to_json;
         let f = vm.get_obj(*id, k);
         if vm.is_callable(&f) {
+            if let Some(mode) = mode
+                && !mode.walk
+                && !native_to_json(vm, &f)
+            {
+                mode.restart.set(true);
+                return Ok(Value::Undef);
+            }
             let kv = key_value(vm, key);
-            return vm.call(&f, *v, &[kv]);
+            return if mode.is_some_and(|m| m.walk) {
+                vm.call_counted(&f, *v, &[kv])
+            } else {
+                vm.call(&f, *v, &[kv])
+            };
         }
     }
     Ok(*v)
@@ -229,7 +240,48 @@ pub struct Stringify {
     pub allow: Option<Vec<Atom>>,
 }
 
+/// How `JSON.stringify` runs in the reference, for its fuel: a native walk, or its internal bytecode walk
+/// (`$vmJsonWalk`), which a replacer, a property list, a `toJSON` other than Date's and URL's, or a promise needs.
+/// The native walk stops (`restart`) at the first value that needs the other, before it calls anything, and the
+/// stringify starts over as that walk.
+struct Mode {
+    walk: bool,
+    restart: std::cell::Cell<bool>,
+}
+
 pub fn stringify(vm: &mut Vm, v: &Value, opts: &Stringify) -> Result<Option<String>, Value> {
+    let walk = opts.replacer_fn.is_some() || opts.allow.is_some();
+    if !walk {
+        let mode = Mode {
+            walk: false,
+            restart: std::cell::Cell::new(false),
+        };
+        let out = stringify_in(vm, v, opts, &mode)?;
+        if !mode.restart.get() {
+            return Ok(out);
+        }
+    }
+    // The internal walk, after `JSON.stringify`'s own call: `$vmJsonVisitor`, the root `visit` generator and its
+    // first `next`; each value then costs what `visit` spends (see `builtins/fuel.rs`).
+    vm.fuel(crate::vm::NATIVE_FUEL);
+    vm.fuel(1);
+    vm.fuel(1);
+    vm.fuel(crate::vm::NATIVE_FUEL);
+    let mode = Mode {
+        walk: true,
+        restart: std::cell::Cell::new(false),
+    };
+    let out = stringify_in(vm, v, opts, &mode)?;
+    vm.bytecode_builtin();
+    Ok(out)
+}
+
+fn stringify_in(
+    vm: &mut Vm,
+    v: &Value,
+    opts: &Stringify,
+    mode: &Mode,
+) -> Result<Option<String>, Value> {
     let mut out = String::new();
     let mut stack = Vec::new();
     let holder = vm.new_object();
@@ -242,10 +294,21 @@ pub fn stringify(vm: &mut Vm, v: &Value, opts: &Stringify) -> Result<Option<Stri
         Key::Empty,
         *v,
         opts,
+        mode,
         &mut stack,
         "",
     )?;
     Ok(if ok { Some(out) } else { None })
+}
+
+/// Whether `f` is Date's or URL's own `toJSON`, which the reference's native walk applies itself.
+fn native_to_json(vm: &mut Vm, f: &Value) -> bool {
+    let k = vm.names.to_json;
+    let (date, url) = (vm.realm.std.date, vm.realm.std.url);
+    [date, url]
+        .into_iter()
+        .filter(|p| *p != 0)
+        .any(|p| matches!((vm.get_obj(p, k), f), (Value::Obj(a), Value::Obj(b)) if a == *b))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -256,16 +319,42 @@ fn write_json(
     key: Key,
     v: Value,
     opts: &Stringify,
+    mode: &Mode,
     stack: &mut Vec<Id>,
     gap: &str,
 ) -> Result<bool, Value> {
-    let mut v = apply_to_json(vm, &v, key)?;
+    if mode.restart.get() {
+        return Ok(false);
+    }
+    if !mode.walk
+        && matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
+    {
+        mode.restart.set(true);
+        return Ok(false);
+    }
+    let mut v = apply_to_json(vm, &v, key, Some(mode))?;
     if let Some(f) = &opts.replacer_fn {
         let kv = key_value(vm, key);
-        v = vm.call(f, holder, &[kv, v])?;
+        v = vm.call_counted(f, holder, &[kv, v])?;
     }
     if crate::builtins::exotic::may_have_json_forms(vm) {
+        let headers =
+            matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Headers(_)));
         v = crate::builtins::exotic::json_value(vm, &v, false)?;
+        // Headers are JSON of their own in the reference, a record of their entries: neither the replacer nor the
+        // walk reaches inside, though a property list still picks among them.
+        if headers {
+            let plain = Stringify {
+                indent: opts.indent.clone(),
+                replacer_fn: None,
+                allow: opts.allow.clone(),
+            };
+            let mode = Mode {
+                walk: false,
+                restart: std::cell::Cell::new(false),
+            };
+            return write_json(vm, out, holder, key, v, &plain, &mode, stack, gap);
+        }
     }
     match &v {
         Value::Null => out.push_str("null"),
@@ -321,6 +410,13 @@ fn write_json(
                             },
                             _ => Value::Undef,
                         };
+                        if mode.walk {
+                            // `String(i)`, the child `visit` generator, `yield*` opening it and its `next`.
+                            vm.fuel(crate::vm::NATIVE_FUEL);
+                            vm.fuel(1);
+                            vm.fuel(crate::vm::NATIVE_FUEL);
+                            vm.fuel(crate::vm::NATIVE_FUEL);
+                        }
                         if !write_json(
                             vm,
                             out,
@@ -328,10 +424,14 @@ fn write_json(
                             Key::Index(i),
                             item,
                             opts,
+                            mode,
                             stack,
                             &inner,
                         )? {
                             out.push_str("null");
+                        }
+                        if mode.walk {
+                            vm.fuel(1);
                         }
                     }
                     if !opts.indent.is_empty() {
@@ -380,6 +480,11 @@ fn write_json(
                     if !opts.indent.is_empty() {
                         out.push(' ');
                     }
+                    if mode.walk {
+                        vm.fuel(1);
+                        vm.fuel(crate::vm::NATIVE_FUEL);
+                        vm.fuel(crate::vm::NATIVE_FUEL);
+                    }
                     if write_json(
                         vm,
                         out,
@@ -387,12 +492,20 @@ fn write_json(
                         Key::Atom(k),
                         val,
                         opts,
+                        mode,
                         stack,
                         &inner,
                     )? {
                         first = false;
+                        if mode.walk {
+                            // `$Define` of the property.
+                            vm.fuel(crate::vm::NATIVE_FUEL);
+                        }
                     } else {
                         out.truncate(mark);
+                    }
+                    if mode.walk {
+                        vm.fuel(1);
                     }
                 }
                 if !first && !opts.indent.is_empty() {

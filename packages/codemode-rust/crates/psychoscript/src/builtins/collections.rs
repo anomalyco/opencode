@@ -328,7 +328,17 @@ fn combinator_items(
 ) -> Result<Result<Vec<Value>, Id>, Value> {
     let items = arg(args, 0);
     let listed = if vm.is_iterable(&items) {
-        vm.iterate_to_vec(&items)
+        // The reference adds the items in its internal `$vmCombine`, a back-edge each, after its own call.
+        fuel::native(vm);
+        let mut list = Vec::new();
+        fuel::for_of(vm, &items, |_, v| {
+            list.push(v);
+            Ok(true)
+        })
+        .map(|_| {
+            vm.bytecode_builtin();
+            list
+        })
     } else {
         let d = vm.describe_data(&items);
         Err(vm.type_error(&format!(

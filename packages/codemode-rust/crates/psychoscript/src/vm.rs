@@ -26,7 +26,7 @@ pub(crate) const FUEL: i32 = 20_000;
 /// The reference's fuel: it starts the host calls a program queued whenever this runs out, so streaming responses
 /// count it the same way. A loop back-edge, a function call or a job costs one, a call of a native function fifty.
 pub(crate) const HANDOVER_FUEL: i32 = 10_000;
-const NATIVE_FUEL: i32 = 50;
+pub(crate) const NATIVE_FUEL: i32 = 50;
 
 #[derive(Clone, Copy)]
 pub struct Handler {
