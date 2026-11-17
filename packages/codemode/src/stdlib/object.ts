@@ -7,6 +7,7 @@ import {
   getOwn,
   hasOwn,
   hasPrototype,
+  HostNamespace,
   keys,
   own,
   ownKeys,
@@ -22,7 +23,6 @@ import { primitivePrototype } from "../runtime/intrinsics.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
 import { invokeMethod } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { ToolReference } from "../tool-runtime.js"
 
 // ToObject for enumeration.
 export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: Value, node?: AstNode): Obj => {
@@ -32,9 +32,9 @@ export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: V
   if (value instanceof PromiseObj) {
     throw invalidData(`${label} received an un-awaited Promise; await it before inspecting the result.`, node)
   }
-  if (value instanceof ToolReference) {
+  if (value instanceof HostNamespace) {
     throw invalidData(
-      `${label} cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
+      `${label} cannot read ${value.root}: it is a namespace of host functions, not plain data. Use Object.keys(${value.root}) for its names.`,
       node,
     )
   }
@@ -128,8 +128,8 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
       (_, args) =>
         new Arr(
           builtins.Array,
-          args[0] instanceof ToolReference
-            ? [...ctx.tools.keys(args[0].path)]
+          args[0] instanceof HostNamespace
+            ? [...ctx.namespaceKeys(args[0])]
             : keys(enumerableSource(ctx, "Object.keys(...)", args[0])),
         ),
     ],

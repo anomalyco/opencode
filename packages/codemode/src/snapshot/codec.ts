@@ -2,6 +2,7 @@ import { Interpreter } from "../runtime/interpreter.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
+  HostFailure,
   IteratorSymbol,
   Lost,
   lostError,
@@ -18,6 +19,7 @@ import {
   ErrorObj,
   GeneratorObj,
   HeadersObj,
+  HostNamespace,
   IteratorObj,
   MapObj,
   Native,
@@ -40,8 +42,6 @@ import { AsyncFromSyncIterator } from "../generators.js"
 import { HostCall, Resolving } from "../scheduler.js"
 import { BufferObj } from "../stdlib/buffer.js"
 import { TextDecoderObj } from "../stdlib/bytes.js"
-import { ToolError, toolError } from "../tool-error.js"
-import { ToolReference, ToolRuntimeError } from "../tool-runtime.js"
 
 // A graph codec for a run's state: every object reachable from the roots becomes one record, so identity, sharing,
 // and cycles survive, and every value inside a record is tagged JSON. Built-ins, AST nodes, bytecode, and the VM's
@@ -265,14 +265,14 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   { name: "PendingThrow", ctor: PendingThrow, fields: ["type", "message", "kind", "suggestions", "node", "value"] },
   { name: "Convert", ctor: Convert, fields: ["hints", "values", "ordinal", "coerce"] },
   { name: "Invoke", ctor: Invoke, fields: ["callable", "thisValue", "args", "site"] },
-  { name: "ToolReference", ctor: ToolReference, fields: ["path"] },
+  { name: "HostNamespace", ctor: HostNamespace, fields: ["root", "path"] },
   { name: "Lost", ctor: Lost, fields: ["description"] },
   {
     name: "Interpreter",
     ctor: Interpreter,
     anchor: "ctx",
     fields: ["logs", "globalScope", "modules", "namespaces"],
-    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "sources", "prelude"],
+    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "hostNamespaces", "sources", "prelude"],
   },
 ]
 
@@ -306,8 +306,7 @@ const errorClasses = new Map<string, Function>([
   ["ReferenceError", ReferenceError],
   ["EvalError", EvalError],
   ["URIError", URIError],
-  ["ToolRuntimeError", ToolRuntimeError],
-  ["ToolError", ToolError],
+  ["HostFailure", HostFailure],
 ])
 const errorNames = new Map([...errorClasses].map(([name, ctor]) => [ctor, name]))
 
@@ -662,7 +661,6 @@ class Decoder {
         const name = text(record.c, "an error class")
         const ctor = errorClasses.get(name) ?? invalid(`unknown error class ${name}.`)
         const message = text(record.m, "an error message")
-        if (ctor === ToolError) return toolError(message)
         const made = Object.create(ctor.prototype) as Error
         Object.defineProperty(made, "message", {
           value: message,

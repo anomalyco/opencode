@@ -46,7 +46,7 @@ export const requireCallback = (callback: Value, name: string): Callable => {
   if (isSupportedCallback(callback)) return callback
   if (typeofValue(callback) === "function") {
     throw typeError(
-      `${name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
+      `${name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value).`,
     )
   }
   throw typeError(`${name} expects a function callback.`)

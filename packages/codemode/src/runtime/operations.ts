@@ -1,5 +1,4 @@
 import type { Expression, MemberExpression, NewExpression, Super } from "acorn"
-import { ToolReference } from "../tool-runtime.js"
 import { type AstNode, invalidData, typeError } from "./model.js"
 import { checkStringLength } from "./limits.js"
 import { locate } from "./errors.js"
@@ -14,6 +13,7 @@ import {
   has,
   hasOwn,
   hasPrototype,
+  HostNamespace,
   IteratorObj,
   keys,
   Obj,
@@ -226,7 +226,7 @@ export const requireIteratorMethod = (value: Value, context: string, node?: AstN
 // for...in over null/undefined iterates nothing, like JS. After the own keys come each prototype's enumerable
 // string keys, skipping any key a nearer level has, even as a non-enumerable property.
 export const forInKeys = <R>(ctx: Interpreter<R>, value: Value, node: AstNode): Array<string> => {
-  if (value instanceof ToolReference) return [...ctx.tools.keys(value.path)]
+  if (value instanceof HostNamespace) return [...ctx.namespaceKeys(value)]
   if (value === null || value === undefined) return []
   const source = enumerableSource(ctx, "for...in", value, node)
   const chain = [source]
@@ -256,12 +256,12 @@ export const resolveProperty = (
   key: PropertyKey,
   objectNode: AstNode,
   propertyNode: AstNode,
-): MemberReference | ToolReference | { value: Value } => {
-  if (objectValue instanceof ToolReference) {
+): MemberReference | HostNamespace | { value: Value } => {
+  if (objectValue instanceof HostNamespace) {
     if (typeof key !== "string") {
-      throw typeError("Tool paths must use string property names.", propertyNode)
+      throw typeError(`${objectValue.root} paths must use string property names.`, propertyNode)
     }
-    return new ToolReference([...objectValue.path, key])
+    return new HostNamespace(objectValue.root, [...objectValue.path, key])
   }
 
   if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
@@ -284,7 +284,7 @@ export const resolveProperty = (
 // One destructured property, read the way a member expression would read it (primitives use their prototype).
 export const destructuredProperty = (builtins: Builtins, source: Value, key: PropertyKey, node: AstNode): Value => {
   const reference = resolveProperty(builtins, source, key, node, node)
-  if (reference instanceof ToolReference) return reference
+  if (reference instanceof HostNamespace) return reference
   if ("value" in reference) return reference.value
   return readProperty(reference.target, reference.key, node, reference.receiver)
 }
@@ -293,7 +293,7 @@ export const readReference = (reference: MemberReference, node: MemberExpression
   // Reject unknown promise properties so a missing await cannot hide.
   if (reference.target instanceof PromiseObj && !has(reference.target, reference.key)) {
     throw invalidData(
-      "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.",
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`.",
       node.object,
     )
   }
@@ -316,10 +316,10 @@ export const readProperty = (
 
 /** The reference an assignment or update writes through: only a data field of an object. */
 export const writableReference = (
-  reference: MemberReference | ToolReference | { value: Value } | symbol,
+  reference: MemberReference | HostNamespace | { value: Value } | symbol,
   node: MemberExpression,
 ): MemberReference => {
-  if (typeof reference === "symbol" || reference instanceof ToolReference || "value" in reference) {
+  if (typeof reference === "symbol" || reference instanceof HostNamespace || "value" in reference) {
     throw typeError("Only data fields may be assigned.", node)
   }
   if (reference.receiver !== reference.target) {

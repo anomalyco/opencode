@@ -248,7 +248,7 @@ const reactionHandler = (value: Value, method: string): Callable | undefined => 
   if (isSupportedCallback(value)) return value
   if (typeofValue(value) === "function") {
     throw typeError(
-      `${method} cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
+      `${method} cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value).`,
     )
   }
   return undefined

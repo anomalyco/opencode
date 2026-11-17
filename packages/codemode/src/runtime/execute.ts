@@ -6,7 +6,8 @@ import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
-import type { Value } from "./objects.js"
+import { HostNamespace, type Value } from "./objects.js"
+import { callTool } from "../host.js"
 import { formatLocation, sourceLocation } from "./model.js"
 import { callPath, Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
@@ -119,13 +120,22 @@ const restoreInto = (saved: unknown, vm: Vm): Snapshot =>
     interruption: () => new Interruption(Cause.interrupt()),
   })
 
+/** The `tools` global: a namespace over the run's tool bridge. */
+export const toolsGlobal = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, Value]> => {
+  ctx.hostNamespaces.set("tools", {
+    keys: (path) => ctx.tools.keys(path),
+    call: (path, args, site) => callTool(ctx.vm, ctx.vm.hosts, path, args, site),
+  })
+  return [["tools", new HostNamespace("tools", [])]]
+}
+
 // A new runtime: intrinsics, the host globals, the program's bindings, a fresh tool bridge, and its VM.
 const instantiate = <R>(setup: Setup<R>, bindings?: Globals<R>): Interpreter<R> => {
   const ctx = new Interpreter<R>({
     tools: ToolRuntime.make(setup.prepared, setup.limits.maxToolCalls, setup.hooks),
     builtins: createBuiltins(),
     logs: [],
-    globals: setup.globals,
+    globals: (ctx) => [...toolsGlobal(ctx), ...(setup.globals?.(ctx) ?? [])],
     bindings,
   })
   if (roundTrip) ctx.vm.tripEvery = ROUND_TRIP_TICKS

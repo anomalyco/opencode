@@ -7,10 +7,19 @@ import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import { type AstNode, type Binding, PendingThrow } from "./model.js"
 import { moduleName, resolveModule } from "./modules.js"
-import { define, entries, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
+import { define, entries, type HostNamespace, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
+import type { HostResult } from "../host.js"
 import { Prelude } from "../prelude/prelude.js"
 import { Push } from "./signals.js"
 import type { NodeId, Source } from "./source.js"
+
+/** What a host namespace does, by the global it is under; see `HostNamespace`. */
+export type NamespaceHandler = {
+  /** The names directly under `path`, for `Object.keys` and `for...in`. */
+  readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
+  /** Calls the function at `path`. */
+  readonly call: (path: ReadonlyArray<string>, args: Array<Value>, site: AstNode | undefined) => HostResult
+}
 
 /** One program execution: the tool bridge, the VM that runs it, captured logs, and the global scope built once. */
 export class Interpreter<R> {
@@ -27,6 +36,8 @@ export class Interpreter<R> {
   extensionWork: ((request: ExtensionRequest) => unknown) | undefined
   /** Saves and restores values returned by extensions with `snapshot` hooks; set by the extension bridge. */
   hosts: HostBridge | undefined
+  /** The host namespaces among the globals, by the global they are under. */
+  readonly hostNamespaces = new Map<string, NamespaceHandler>()
   /** The parsed sources this execution runs, by id, so a `NodeId` resolves to its node. */
   readonly sources = new Map<string, Source>()
   /** The global bindings: the intrinsics, the host's globals, and the program's bindings. */
@@ -84,7 +95,7 @@ export class Interpreter<R> {
     if (module === undefined)
       throw new PendingThrow(
         "Error",
-        `Cannot import "${specifier}": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through \`tools\`.`,
+        `Cannot import "${specifier}": it isn't available here, where packages and files can't be loaded. Use the provided globals.`,
         site,
       )
     this.modules.set(name, module)
@@ -105,6 +116,22 @@ export class Interpreter<R> {
     define(namespace, "default", module)
     this.namespaces.set(name, namespace)
     return namespace
+  }
+
+  /** The names directly under a namespace path. */
+  namespaceKeys(value: HostNamespace): ReadonlyArray<string> {
+    return this.namespaceHandler(value).keys(value.path)
+  }
+
+  /** Calls the function a namespace path names. */
+  callNamespace(value: HostNamespace, args: Array<Value>, site: AstNode | undefined): HostResult {
+    return this.namespaceHandler(value).call(value.path, args, site)
+  }
+
+  private namespaceHandler(value: HostNamespace): NamespaceHandler {
+    const handler = this.hostNamespaces.get(value.root)
+    if (handler === undefined) throw new PendingThrow("TypeError", `The namespace ${value.root} is not available.`)
+    return handler
   }
 
   /** The node a `NodeId` names, in one of this execution's sources. */

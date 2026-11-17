@@ -1,7 +1,5 @@
 import type { Diagnostic } from "../codemode.js"
-import { ToolError } from "../tool-error.js"
-import { ToolRuntimeError } from "../tool-runtime.js"
-import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation } from "./model.js"
+import { type AstNode, formatLocation, HostFailure, PendingThrow, Throw, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
@@ -54,16 +52,12 @@ export const normalizeError = (error: unknown): Diagnostic => {
     }
   }
 
-  if (error instanceof ToolRuntimeError) {
+  if (error instanceof HostFailure) {
     return {
       kind: error.kind,
       message: error.message,
       ...(error.suggestions.length > 0 ? { suggestions: error.suggestions } : {}),
     }
-  }
-
-  if (error instanceof ToolError) {
-    return { kind: "ToolFailure", message: error.message }
   }
 
   if (error instanceof Throw) {
@@ -112,7 +106,7 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
     if ((error.node === undefined || inPrelude(error.node)) && node) error.node = node
     return error
   }
-  if (error instanceof Error && !(error instanceof ToolError) && !(error instanceof ToolRuntimeError)) {
+  if (error instanceof Error && !(error instanceof HostFailure)) {
     return new PendingThrow(errorType(error), errorMessage(error), node)
   }
   return error

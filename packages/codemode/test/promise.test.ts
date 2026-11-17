@@ -1561,7 +1561,7 @@ describe("job order matches V8", () => {
 
 describe("a program that can never finish", () => {
   const stalled =
-    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program."
+    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. There are no timers or sleep, so don't wait or poll inside a program."
 
   // Each program stalls at the await on line `line`, column `column`; an outer await only waits on that one.
   test.each([

@@ -3,7 +3,7 @@ import { Glob } from "bun"
 import path from "node:path"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { parseProgram } from "../src/runtime/execute.js"
+import { parseProgram, toolsGlobal } from "../src/runtime/execute.js"
 import { Interpreter } from "../src/runtime/interpreter.js"
 import { createBuiltins } from "../src/runtime/intrinsics.js"
 import { GeneratorObj, type Native, nativeRule, Obj, PromiseObj, type Value } from "../src/runtime/objects.js"
@@ -50,7 +50,7 @@ const vmFor = (code: string) => {
   const parsed = parseProgram(code)
   if (!parsed.ok) throw new Error(parsed.error.message)
   const tools = ToolRuntime.make(ToolRuntime.prepare(runtimeTools), undefined, {})
-  const vm = new Interpreter({ tools, builtins: createBuiltins() }).vm
+  const vm = new Interpreter({ tools, builtins: createBuiltins(), globals: toolsGlobal }).vm
   vm.start(parsed.source)
   return vm
 }

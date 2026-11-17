@@ -198,7 +198,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
           }
           if (typeofValue(replacer) === "function") {
             throw typeError(
-              `String.${name} cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => tools.ns.tool(match).`,
+              `String.${name} cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match).`,
             )
           }
           const primitives = [search, replacement]

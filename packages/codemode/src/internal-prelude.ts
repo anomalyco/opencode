@@ -132,7 +132,7 @@ function $vmJsonVisitor(boundary, replacer, properties) {
     let val = holder[key]
     if ($IsPromise(val)) {
       if (!boundary) {
-        $Throw("InvalidData", "JSON.stringify received an un-awaited Promise; await it first - e.g. \x60const result = await tools.ns.tool(...)\x60.")
+        $Throw("InvalidData", "JSON.stringify received an un-awaited Promise; await it first - e.g. \x60const result = await load(...)\x60.")
       }
       val = yield val
     }

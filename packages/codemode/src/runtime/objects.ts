@@ -1,4 +1,3 @@
-import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
 import {
@@ -693,16 +692,28 @@ export class Bytes extends Wrapper {
   }
 }
 
+/**
+ * A path into a host namespace (see `Host.namespace`): the global it is under, `root`, and the property names read
+ * from it. Reading a property makes a longer path, and calling one asks the namespace for the function there. It is not
+ * an `Obj`, so no object operation reaches it by accident; the few that apply ask it explicitly.
+ */
+export class HostNamespace {
+  constructor(
+    readonly root: string,
+    readonly path: ReadonlyArray<string>,
+  ) {}
+}
+
 /** Every value a program can hold. Host values never appear here; they are copied in at the boundaries. */
-export type Value = string | number | boolean | null | undefined | symbol | Obj | ToolReference
+export type Value = string | number | boolean | null | undefined | symbol | Obj | HostNamespace
 
 /** ToString without consulting program-defined methods. */
 export const coerceToString = (value: Value): string => (value instanceof Obj ? value.toString() : String(value))
 
-/** ToNumber without consulting program-defined methods; tool references are not numbers. */
+/** ToNumber without consulting program-defined methods; namespace paths are not numbers. */
 export const coerceToNumber = (value: Value): number => {
   if (value instanceof Obj) return value.toNumber()
-  return value instanceof ToolReference ? Number.NaN : Number(value)
+  return value instanceof HostNamespace ? Number.NaN : Number(value)
 }
 
 /** ToIntegerOrInfinity: NaN is 0, fractions truncate. */
@@ -713,7 +724,7 @@ export const coerceToInteger = (value: Value): number => {
 
 /** Values that cannot cross the data boundary: opaque machinery and host-backed wrappers. */
 export const isRuntimeReference = (value: Value): boolean =>
-  value instanceof Opaque || value instanceof Wrapper || value instanceof ToolReference
+  value instanceof Opaque || value instanceof Wrapper || value instanceof HostNamespace
 
 const MAX_ARRAY_INDEX = 4_294_967_295
 

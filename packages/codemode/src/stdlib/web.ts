@@ -12,6 +12,7 @@ import {
   Bytes,
   DateObj,
   ErrorObj,
+  HostNamespace,
   MapObj,
   Obj,
   RegExpObj,
@@ -24,7 +25,6 @@ import {
 import { createErrorValue, isErrorType } from "../runtime/intrinsics.js"
 import { describeValue } from "../runtime/references.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { ToolReference } from "../tool-runtime.js"
 
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
 // TypeError as well; browsers throw a DOMException named InvalidCharacterError, which CodeMode does not have.
@@ -47,7 +47,7 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
     const builtins = ctx.builtins
     const memo = new Map<Obj, Obj>()
     const clone = (value: Value): Value => {
-      if (typeof value === "symbol" || value instanceof ToolReference) {
+      if (typeof value === "symbol" || value instanceof HostNamespace) {
         throw typeError(`DataCloneError: ${describeValue(value)} could not be cloned.`)
       }
       if (!(value instanceof Obj)) return value

@@ -64,6 +64,7 @@ export const hostsId = (ctx: Interpreter<unknown>): string =>
   hash(
     [
       ...ctx.intrinsics.hosts(),
+      ...[...ctx.hostNamespaces.keys()].map((name) => `@${name} (namespace)`),
       ...(ctx.hosts?.extensions ?? []).map(
         (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
       ),

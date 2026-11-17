@@ -1,9 +1,8 @@
-import { ToolReference } from "../tool-runtime.js"
 import { invalidData } from "./model.js"
-import { Callable, getOwn, isRuntimeReference, Obj, Opaque, ownKeys, type Value } from "./objects.js"
+import { Callable, getOwn, HostNamespace, isRuntimeReference, Obj, Opaque, ownKeys, type Value } from "./objects.js"
 
 /** Interpreter machinery that is never data, unlike a Date or Map, which cross some boundaries as copies. */
-export const isOpaque = (value: Value): boolean => value instanceof Opaque || value instanceof ToolReference
+export const isOpaque = (value: Value): boolean => value instanceof Opaque || value instanceof HostNamespace
 
 // Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it.
 const find = (
@@ -54,12 +53,12 @@ export const rejectCircularInsertion = (
 export const describeValue = (value: Value): string => {
   if (value === null || value === undefined) return String(value)
   if (value instanceof Obj) return value.describe
-  if (value instanceof ToolReference) return "a tool reference"
+  if (value instanceof HostNamespace) return "a namespace reference"
   return `a ${typeof value}`
 }
 
 export const typeofValue = (value: Value): string => {
   if (value instanceof Callable) return "function"
-  if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
+  if (value instanceof HostNamespace) return value.path.length > 0 ? "function" : "object"
   return typeof value
 }

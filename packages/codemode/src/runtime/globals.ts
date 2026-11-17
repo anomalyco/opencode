@@ -16,7 +16,6 @@ import { headersGlobal } from "../stdlib/headers.js"
 import { iteratorGlobals } from "../stdlib/iterator.js"
 import { coercion } from "../stdlib/value.js"
 import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web.js"
-import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
 import { constants, constructor, methods, native, receiver } from "./native.js"
@@ -80,7 +79,6 @@ type Factory = <R>(ctx: Interpreter<R>) => Value
 
 // A table rather than a list so the names are known before any runtime exists.
 const table: Record<string, Factory> = {
-  tools: () => new ToolReference([]),
   search: (ctx) => native(ctx.builtins, { name: "search", call: (_, args) => ctx.search(args), callback: false }),
   require: (ctx) =>
     native(ctx.builtins, {

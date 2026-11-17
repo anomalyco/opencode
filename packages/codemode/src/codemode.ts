@@ -239,7 +239,7 @@ export function make<
   const prepared = ToolRuntime.prepare<R>((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
   const extensions: ReadonlyArray<Extension> = options.extensions ?? []
-  const bound = new Set(globalNames)
+  const bound = new Set([...globalNames, "tools"])
   for (const extension of extensions) {
     for (const name of Object.keys(extension.globals)) {
       if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)

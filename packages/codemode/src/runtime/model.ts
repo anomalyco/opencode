@@ -39,6 +39,20 @@ export class PendingThrow {
 }
 
 /**
+ * A failure a host function raises with its own diagnostic `kind` and `suggestions` (see `Host.fail`). It reaches the
+ * program as an Error with its message, and a result as a diagnostic of its kind.
+ */
+export class HostFailure extends Error {
+  constructor(
+    readonly kind: DiagnosticKind,
+    message: string,
+    readonly suggestions: ReadonlyArray<string> = [],
+  ) {
+    super(message)
+  }
+}
+
+/**
  * A host value a restored run cannot have back: a function an extension returned, or what a host function returned,
  * which have no data form. Using it fails with `lostError`.
  */

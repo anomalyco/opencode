@@ -32,6 +32,7 @@ import {
   get,
   getOwn,
   hasOwn,
+  HostNamespace,
   IteratorObj,
   Native,
   type NativeResult,
@@ -81,7 +82,6 @@ import type { HostCall, Stop } from "./scheduler.js"
 import { compiledPrelude } from "./prelude/prelude.js"
 import { constructRegExp } from "./stdlib/regexp.js"
 import { enumerableSource } from "./stdlib/object.js"
-import { ToolReference } from "./tool-runtime.js"
 import { registerAsyncIntrinsics, type SettlingTarget, VmScheduler } from "./async.js"
 import type { Code } from "./code.js"
 import { type CaptureOptions, captureVm, type RestoreOptions, restoreVm } from "./snapshot.js"
@@ -104,7 +104,6 @@ import {
   BLOCK,
   callExtension,
   callSearch,
-  callTool,
   ENTERED,
   type HostResult,
   HostCalls,
@@ -2007,7 +2006,9 @@ export class Vm {
       const v = key === "length" ? o.length : this.readObjProp(this.ctx.builtins.String, key, frame.code, pc)
       return writeRead(regs, sp - 1, mode, o, v)
     }
-    if (o instanceof ToolReference) return writeRead(regs, sp - 1, mode, undefined, new ToolReference([...o.path, key]))
+    if (o instanceof HostNamespace) {
+      return writeRead(regs, sp - 1, mode, undefined, new HostNamespace(o.root, [...o.path, key]))
+    }
     const site = frame.code.siteAt(pc)!
     if (mode === 2) {
       regs[sp - 1] = destructuredProperty(this.ctx.builtins, o, key, site)
@@ -2071,7 +2072,7 @@ export class Vm {
     site: AstNode,
   ): number {
     const ref = this.resolveMember(o, key, site)
-    if (ref instanceof ToolReference) return writeRead(regs, at, mode, undefined, ref)
+    if (ref instanceof HostNamespace) return writeRead(regs, at, mode, undefined, ref)
     if ("value" in ref) return writeRead(regs, at, mode, undefined, ref.value)
     return writeRead(regs, at, mode, ref.receiver, readReference(ref, site as MemberExpression))
   }
@@ -2103,7 +2104,7 @@ export class Vm {
   private execDeleteProp(fcode: Code, o: Value, key: PropertyKey, pc: number): boolean {
     const site = fcode.siteAt(pc)!
     const ref = this.resolveMember(o, key, site)
-    if (ref instanceof ToolReference || "value" in ref || ref.receiver !== ref.target) {
+    if (ref instanceof HostNamespace || "value" in ref || ref.receiver !== ref.target) {
       throw invalidData("Only data fields may be deleted.", site)
     }
     if (remove(ref.target, ref.key)) return true
@@ -2282,12 +2283,12 @@ export class Vm {
       return this.settleNativeResult(callerFrame, res, callee, thisVal, args, false, site, pc)
     }
 
-    if (callee instanceof ToolReference) {
+    if (callee instanceof HostNamespace) {
       if (callee.path.length === 0) {
         const callNode = site as { readonly callee?: Expression } | undefined
-        throw typeError("The tools root is not callable.", callNode?.callee ?? site)
+        throw typeError(`${callee.root} is not a function.`, callNode?.callee ?? site)
       }
-      return this.hostResult(callerFrame, callTool(this, this.hosts, callee.path, args, site ?? this.currentSite()))
+      return this.hostResult(callerFrame, this.ctx.callNamespace(callee, args, site ?? this.currentSite()))
     }
 
     const callNode = site as { readonly callee?: Expression } | undefined
@@ -3049,8 +3050,7 @@ const WARMUP_SOURCE = [
   '    const obj = { a: 1, b: "two", c: [1, r], d: null, e: sorted }',
   "    if (r >= 2) sum += JSON.stringify(JSON.parse(JSON.stringify(obj))).length",
   "    const pres = await Promise.all(Array.from({ length: 2 }, (_, i) => work(i)))",
-  "    const tres = await Promise.all(Array.from({ length: 2 }, (_, i) => tools.echo({ id: i })))",
-  '    totalSum += sum + total + sorted.length + pres.length + tres.length + out.length + parts.join(",").length + map.size + set.size',
+  '    totalSum += sum + total + sorted.length + pres.length + out.length + parts.join(",").length + map.size + set.size',
   "  }",
   "  return totalSum",
   "})()",

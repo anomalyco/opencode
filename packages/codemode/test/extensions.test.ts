@@ -519,7 +519,7 @@ describe("imports", () => {
   test("a module that isn't provided, or a missing export, fails at the import", async () => {
     const target = CodeMode.make({ extensions: [files] })
     expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
-      `Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files.`,
+      `Error: Cannot import "yaml": it isn't available here, where packages and files can't be loaded.`,
     )
     expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
       `Cannot import "child_process"`,

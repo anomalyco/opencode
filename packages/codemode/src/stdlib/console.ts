@@ -1,6 +1,5 @@
 import { type Method, methods } from "../runtime/native.js"
-import { entries, get, Arr, Obj, type Value } from "../runtime/objects.js"
-import { ToolReference } from "../tool-runtime.js"
+import { entries, get, Arr, HostNamespace, Obj, type Value } from "../runtime/objects.js"
 import { containsOpaqueReference } from "../runtime/references.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
@@ -46,7 +45,7 @@ export const formatValue = (value: Value): string => {
 const formatConsoleValue = (value: Value, seen: Set<object>, depth: number): string => {
   if (value === null || value === undefined) return "null"
   if (typeof value === "string") return JSON.stringify(value)
-  if (!(value instanceof Obj)) return value instanceof ToolReference ? "[opaque reference]" : String(value)
+  if (!(value instanceof Obj)) return value instanceof HostNamespace ? "[opaque reference]" : String(value)
   if (depth > MAX_CONSOLE_DEPTH) return "..."
   if (seen.has(value)) return "[Circular]"
   seen.add(value)

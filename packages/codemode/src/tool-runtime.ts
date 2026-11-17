@@ -1,7 +1,8 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
 import type { Json } from "./data.js"
 import type { DiagnosticKind } from "./codemode.js"
-import { toolError } from "./tool-error.js"
+import { ToolError, toolError } from "./tool-error.js"
+import { HostFailure } from "./runtime/model.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -119,10 +120,6 @@ export const toolExpression = (path: string) =>
     .split(".")
     .map((segment) => (identifierSegment.test(segment) ? `.${segment}` : `[${JSON.stringify(segment)}]`))
     .join("")
-
-export class ToolReference {
-  constructor(readonly path: ReadonlyArray<string>) {}
-}
 
 // Dots in tool names are namespace separators; the last tool for a canonical path wins.
 type ToolNode<R> = {
@@ -520,7 +517,7 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`)
+    throw toolRuntimeError("UnknownTool", `Unknown tool namespace '${segments.join(".")}'.`)
   }
   return Array.from(node.children.keys())
 }
@@ -536,7 +533,7 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
       ns ? segments.slice(1).join(" ") : name,
       index,
     )[0]
-    throw new ToolRuntimeError(
+    throw toolRuntimeError(
       "UnknownTool",
       closest
         ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
@@ -552,7 +549,7 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
       .slice(0, 3)
       .map((entry) => toolExpression(entry.description.path))
     const more = under.length - shown.length
-    throw new ToolRuntimeError(
+    throw toolRuntimeError(
       "UnknownTool",
       shown.length === 0
         ? `Tool '${name}' is not callable.`
@@ -567,19 +564,16 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
   return node.tool
 }
 
-export class ToolRuntimeError extends Error {
-  constructor(
-    readonly kind: Extract<
-      DiagnosticKind,
-      "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "ToolCallLimitExceeded"
-    >,
-    message: string,
-    readonly suggestions: ReadonlyArray<string> = [],
-  ) {
-    super(message)
-    this.name = "ToolRuntimeError"
-  }
-}
+/** A tool-layer failure the program sees with its own diagnostic kind. */
+const toolRuntimeError = (
+  kind: Extract<DiagnosticKind, "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "ToolCallLimitExceeded">,
+  message: string,
+  suggestions: ReadonlyArray<string> = [],
+) => new HostFailure(kind, message, suggestions)
+
+// A ToolError (a tool's failure, or a hook's) is reported as `ToolFailure`.
+const diagnosed = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
+  Effect.mapError(effect, (error) => (error instanceof ToolError ? new HostFailure("ToolFailure", error.message) : error))
 
 export type ExecuteCallOptions = {
   readonly key: string
@@ -642,7 +636,7 @@ export const make = <R>(
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
-      throw new ToolRuntimeError("ToolCallLimitExceeded", `Execution exceeded its tool-call limit of ${maxToolCalls}.`)
+      throw toolRuntimeError("ToolCallLimitExceeded", `Execution exceeded its tool-call limit of ${maxToolCalls}.`)
     }
     calls.push(call)
   }
@@ -651,13 +645,13 @@ export const make = <R>(
     Effect.gen(function* () {
       const normalized = args.length === 0 ? [{}] : args
       if (normalized.length !== 1)
-        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
+        throw toolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = normalized[0]
       const field = typeof input === "string" ? stringParameter(tool)?.name : undefined
       return yield* Effect.try({
         try: () => decodeToolInput(tool, field === undefined ? input : { [field]: input }),
         catch: (cause) =>
-          new ToolRuntimeError(
+          toolRuntimeError(
             "InvalidToolInput",
             `Invalid input for tool '${name}': ${String(cause)}`,
             name === "search"
@@ -691,7 +685,7 @@ export const make = <R>(
         const text = JSON.stringify(decodeToolOutput(tool, raw))
         return text === undefined ? undefined : JSON.parse(text)
       },
-      catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
+      catch: (cause) => toolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
   const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, options: ExecuteCallOptions) =>
@@ -746,15 +740,15 @@ export const make = <R>(
     invocations,
     record: (name) => recordCall({ name }),
     keys: (path) => namespaceKeys(root, path),
-    search: (args, options) => Effect.suspend(() => search(args, options)),
+    search: (args, options) => diagnosed(Effect.suspend(() => search(args, options))),
     execute: (path, args, options) =>
-      Effect.suspend(() => {
+      diagnosed(Effect.suspend(() => {
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
           return search(args, options)
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, options)
-      }),
+      })),
     mode: (path) => {
       const segments = canonicalSegments(path)
       if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined) return undefined
@@ -762,7 +756,7 @@ export const make = <R>(
       return execute !== undefined && "_tag" in execute ? execute : undefined
     },
     start: (path, args, key, admit) =>
-      Effect.suspend(() => {
+      diagnosed(Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
           const input = yield* decode(found.name, found.tool, args)
@@ -779,7 +773,7 @@ export const make = <R>(
                   return text === undefined ? null : JSON.parse(text)
                 },
                 catch: (cause) =>
-                  new ToolRuntimeError("InvalidToolOutput", `Invalid start data from tool '${found.name}': ${cause}`),
+                  toolRuntimeError("InvalidToolOutput", `Invalid start data from tool '${found.name}': ${cause}`),
               }),
             ),
           )
@@ -793,9 +787,9 @@ export const make = <R>(
                 })
           return yield* before === undefined ? observed : Effect.andThen(before(invocation), observed)
         })
-      }),
+      })),
     wait: (path, args, key, data, detaching) =>
-      Effect.suspend(() => {
+      diagnosed(Effect.suspend(() => {
         const found = durableTool(path)
         const wait = found.durable.wait as (data: Json, context: ToolContext) => Effect.Effect<unknown, unknown, R>
         const after = hooks["tool.after"]
@@ -825,12 +819,12 @@ export const make = <R>(
             return after(call, { status: "failure", error: Cause.squash(exit.cause) })
           }),
         )
-      }),
+      })),
     cancel: (path, data) =>
-      Effect.suspend(() => {
+      diagnosed(Effect.suspend(() => {
         const cancel = durableTool(path).durable.cancel as (data: Json) => Effect.Effect<void, unknown, R>
         return failure(cancel(data))
-      }),
+      })),
   }
 }
 

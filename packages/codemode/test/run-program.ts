@@ -134,7 +134,7 @@ export const runProgram = (code: string, options?: RunOptions): Result => {
       error: normalizeError(
         new PendingThrow(
           "Error",
-          "The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program.",
+          "The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. There are no timers or sleep, so don't wait or poll inside a program.",
           stuckNode,
         ),
       ),
