@@ -679,7 +679,8 @@ export function context(base: Base, carrier: Carrier) {
     const node = measuring.get(key)
     if (!node) return
     if (!node.parent) return void measuring.delete(key)
-    node.props.onSizeChange?.()
+    // As OpenTUI calls it: on the renderable, whose `width` it may read as `this.width`.
+    node.props.onSizeChange?.call(node)
   })
   const surface = (name: string, place: Json, input: (cx: Json) => Json, render: (input: Json) => unknown, where: string) => {
     let removed = false

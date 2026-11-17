@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::time::Duration;
 
 use opencode_plugin_abi::interact::{Event, Handled};
 use opencode_plugin_abi::v2::{self, ContentRef};
@@ -26,6 +27,9 @@ use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, keyed_command, rou
 /// The reads a plugin watches at most (FT-9: opencode-tokscope watches about 80, a store each of its 64 history shards
 /// and a dozen others). What they push is charged to the plugin's content, which bounds their memory.
 const WATCHES: usize = 128;
+/// How long after the host took a tree of the plugin's its nodes' layouts are read again ([`Guest::relayout`]): past the
+/// frame that lays it out.
+const RELAYOUT: Duration = Duration::from_millis(50);
 /// The bytes of JSON a watched read pushes at most: what one control frame carries.
 const READ: usize = super::wire::CONTROL_CAP;
 
@@ -187,6 +191,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 pushed: RefCell::default(),
                 watcher: RefCell::default(),
                 disposed: Cell::new(false),
+                relayout_timer: Cell::new(None),
             });
             register(setup, &guest);
             scripts.guests.borrow_mut().insert(loaded.id.clone(), Rc::downgrade(&guest));
@@ -237,6 +242,8 @@ pub(crate) struct Guest {
     pushed: RefCell<BTreeMap<String, u64>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
+    /// The read of its nodes' layouts that waits for the frame after its newest tree ([`Guest::relayout`]).
+    relayout_timer: Cell<Option<opentui::prelude::TimerId>>,
 }
 
 impl Guest {
@@ -532,8 +539,27 @@ impl Guest {
                 if viewer.take(self, tree) {
                     self.activation.invalidate();
                 }
+                self.relayout();
             }
             None => count(|crossed| crossed.dropped += 1),
+        }
+    }
+
+    /// Reads where the plugin's nodes are again once the host laid out the tree it took (CT-24): a node's layout
+    /// ([`HostRequest::Rect`]) changes with no change of the host's data, which is what refreshes the other reads. Once
+    /// a [`RELAYOUT`] after the newest tree, past the frame that lays it out.
+    fn relayout(self: &Rc<Self>) {
+        let measuring = self.watches.borrow().values().any(|(request, _)| matches!(request, HostRequest::Rect { .. }));
+        let Some(host) = self.host.upgrade().filter(|_| measuring) else { return };
+        let weak = Rc::downgrade(self);
+        let timer = host.app().set_timeout(RELAYOUT, move |_| {
+            if let Some(guest) = weak.upgrade() {
+                guest.relayout_timer.set(None);
+                guest.refresh();
+            }
+        });
+        if let Some(old) = self.relayout_timer.replace(Some(timer)) {
+            host.app().cancel_timer(old);
         }
     }
 
