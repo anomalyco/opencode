@@ -191,7 +191,9 @@ const setup: Plugin.MainSetup = (ctx) => {
     state: () => ({ extensions: loaded.value?.extensions() ?? [], remoteSignIns: loaded.value?.remoteSignIns() }),
     shareSignIns: async (input) => (await profile()).shareSignIns(input.enabled),
     sources: async () => (await profile()).sources(),
-    importBrowser: (input) => serial(async () => (await profile()).importBrowser(input.source, input.profile)),
+    sites: async (input) => (await profile()).sites(input.source, input.profile),
+    importBrowser: (input) =>
+      serial(async () => (await profile()).importBrowser(input.source, input.profile, input.sites)),
     importFile: (input) => serial(async () => (await profile()).importFile(input.path)),
     summary: async () => (await profile()).summary(),
     clear: () => serial(async () => (await profile()).clear()),

@@ -13,7 +13,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, createSignal, For, Index, onCleanup, Show, untrack, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, For, getOwner, Index, onCleanup, runWithOwner, Show, untrack, type Accessor, type JSX } from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -41,6 +41,7 @@ import { commentNote, pageNote } from "./comment"
 import { Glyph } from "./choices"
 import { bare, highlight, type Visit } from "./history"
 import { SignInOffer } from "./import-prompt"
+import { SiteChooserDialog } from "./site-chooser"
 import type definition from "./index"
 import type { Model } from "./model"
 import {
@@ -368,6 +369,25 @@ export default function SessionBrowserPane(props: {
 
     if (tab && address()) command({ type: "reload", tabID: tab.id })
   }
+
+  // A passkey sign-in this browser cannot do: the import opens on the page's site, chosen already only in a tab of the
+  // person's. The notice stays until an import brought cookies, which then load the page again; a cancelled import
+  // leaves it, to try again.
+  const owner = getOwner()
+
+  const importSignIn = (tabID: Browser.TabID, passkey: { site?: string; choose: boolean }) =>
+    runWithOwner(owner, () =>
+      plugin.dialogs.open((dialog) => (
+        <SiteChooserDialog
+          site={passkey.site ? { name: passkey.site, choose: passkey.choose } : undefined}
+          imported={() => {
+            void props.model.answerNotice(props.session, tabID, true).catch(() => undefined)
+            command({ type: "reload", tabID })
+          }}
+          close={() => dialog.close()}
+        />
+      )),
+    )
 
   const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
   const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
@@ -962,7 +982,24 @@ export default function SessionBrowserPane(props: {
           <>
             <Show when={props.model.notice(props.session, id)}>
               {(notice) => (
-                <RefusalBar notice={notice()} answer={(dismiss) => props.model.answerNotice(props.session, id, dismiss)} />
+                <RefusalBar
+                  notice={notice()}
+                  answer={async (dismiss) => {
+                    const passkey = notice().passkey
+
+                    if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss)
+
+                    if ("newTab" in passkey) {
+                      const url = address()
+
+                      if (url) props.model.openURL(props.session, url)
+
+                      return props.model.answerNotice(props.session, id, true)
+                    }
+
+                    importSignIn(id, passkey)
+                  }}
+                />
               )}
             </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>

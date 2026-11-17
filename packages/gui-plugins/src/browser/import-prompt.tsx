@@ -2,12 +2,13 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, For, onCleanup, Show, type Accessor } from "solid-js"
+import { createMemo, For, getOwner, onCleanup, runWithOwner, Show, type Accessor } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, Glyph, profileChoices, type Choice } from "./choices"
 import type definition from "./index"
 import { createProfileJobs } from "./jobs"
 import { importedCookies, importLoss } from "./jobs-machine"
+import { SiteChooser } from "./site-chooser"
 
 /**
  * The pane's offer to bring sign-ins from the browser the user already uses, until they import or decline once. A
@@ -67,6 +68,14 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
 
   const run = (choice: Choice) =>
     jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
+
+  // The dialog's import is one of this offer's jobs, which says how it ended, so the dialog goes with the offer.
+  const owner = getOwner()
+
+  const chooseSites = (choice: Choice) =>
+    runWithOwner(owner, () =>
+      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+    )
 
   return (
     <Show
@@ -155,6 +164,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
               )}
             </Show>
             <div class="flex items-center gap-1">
+              <ui.Button size="small" variant="ghost" disabled={blocked()} onClick={() => chooseSites(first())}>
+                {ctx.t("signins.choose")}
+              </ui.Button>
               <ui.Button size="small" variant="ghost" onClick={decline}>
                 {ctx.t("signins.dismiss")}
               </ui.Button>
@@ -222,6 +234,9 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
                   <Show when={choices().length > 1}>
                     <Menu.Separator />
                   </Show>
+                  <Menu.Item disabled={blocked()} onSelect={() => chooseSites(first())}>
+                    {ctx.t("signins.choose")}
+                  </Menu.Item>
                   <Menu.Item onSelect={settings}>{ctx.t("signins.more")}</Menu.Item>
                 </Menu.Content>
               </Menu.Portal>

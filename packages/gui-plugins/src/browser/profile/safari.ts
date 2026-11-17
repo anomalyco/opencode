@@ -7,9 +7,10 @@ const MAC_EPOCH_OFFSET = 978_307_200
  * Parses Safari's `Cookies.binarycookies`: big-endian page sizes, then pages of little-endian cookie records with
  * null-terminated strings. Undefined for a file that is not one, or whose page table does not fit it. Every count and
  * offset is checked against the bytes there are, so a damaged or hostile file costs no more than its size: a page that
- * does not fit counts as one failed record, and so does a record that does not fit its page.
+ * does not fit counts as one failed record, and so does a record that does not fit its page. With `values` false every
+ * value is left empty, unread, for the list of the file's sites.
  */
-export function parseBinaryCookies(data: Uint8Array): CookieRead | undefined {
+export function parseBinaryCookies(data: Uint8Array, values = true): CookieRead | undefined {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
 
   if (data.byteLength < 8 || new TextDecoder().decode(data.subarray(0, 4)) !== "cook") return undefined
@@ -29,7 +30,7 @@ export function parseBinaryCookies(data: Uint8Array): CookieRead | undefined {
     if (!page || 8 + records * 4 > page.byteLength) return void cursor.failed++
 
     Array.from({ length: records }, (_, item) => page.getUint32(8 + item * 4, true)).forEach((offset) => {
-      const cookie = readCookie(page, offset)
+      const cookie = readCookie(page, offset, values)
 
       if (cookie) return void cookies.push(cookie)
       cursor.failed++
@@ -39,7 +40,7 @@ export function parseBinaryCookies(data: Uint8Array): CookieRead | undefined {
   return { cookies, protected: 0, failed: cursor.failed }
 }
 
-function readCookie(page: DataView, offset: number): ImportedCookie | undefined {
+function readCookie(page: DataView, offset: number, values: boolean): ImportedCookie | undefined {
   if (offset + 56 > page.byteLength) return undefined
   const size = page.getUint32(offset, true)
 
@@ -49,7 +50,7 @@ function readCookie(page: DataView, offset: number): ImportedCookie | undefined 
   const host = text(16)
   const name = text(20)
   const path = text(24)
-  const value = text(28)
+  const value = values ? text(28) : ""
 
   if (host === undefined || name === undefined || path === undefined || value === undefined) return undefined
   const expiry = page.getFloat64(offset + 40, true)

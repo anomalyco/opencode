@@ -3,10 +3,12 @@ import { access, readdir, readFile, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { Option, Schema } from "effect"
-import { deriveCbcKey, readChromiumCookies, type ChromiumKey } from "./chromium"
+import { deriveCbcKey, readChromiumCookies, readChromiumHosts, type ChromiumKey } from "./chromium"
 import type { CookieRead } from "./cookie"
-import { firefoxProfiles, readFirefoxCookies } from "./firefox"
+import type { SnapshotScratch } from "./database"
+import { firefoxProfiles, readFirefoxCookies, readFirefoxHosts } from "./firefox"
 import { parseBinaryCookies } from "./safari"
+import type { CookieHost } from "./sites"
 
 /** How a browser keeps its cookies. */
 export type Engine = "chromium" | "firefox" | "safari"
@@ -212,22 +214,71 @@ function applications(id: string) {
   ])
 }
 
-/** Reads a profile's cookies. `profile` must be an id `listSources` returned, so no path from a window is opened. */
-export async function readSource(id: string, profile: string): Promise<CookieRead | SourceFailure> {
-  const definition = definitions().find((item) => item.id === id)
-  const target = definition ? (await profiles(definition)).find((item) => item.id === profile) : undefined
+/**
+ * Reads a profile's cookies. `profile` must be an id `listSources` returned, so no path from a window is opened. With
+ * `keep`, only the cookies of the hosts it keeps are read; a Chromium browser decrypts no other value.
+ */
+export async function readSource(
+  id: string,
+  profile: string,
+  scratch: SnapshotScratch,
+  keep?: (host: string) => boolean,
+): Promise<CookieRead | SourceFailure> {
+  const located = await locateProfile(id, profile)
 
-  if (!definition || !target) return { failure: "read" }
+  if (!located) return { failure: "read" }
+  const definition = located.definition
+  const target = located.target
 
-  if (definition.engine === "firefox") return readFirefoxCookies(target.directory).catch(readFailure)
+  if (definition.engine === "firefox") return readFirefoxCookies(target.directory, scratch, keep).catch(readFailure)
 
   if (definition.engine === "safari")
-    return readFile(target.directory).then((data) => parseBinaryCookies(data) ?? { failure: "read" }, readFailure)
+    return readFile(target.directory).then((data): CookieRead | SourceFailure => {
+      const read = parseBinaryCookies(data)
+
+      if (!read) return { failure: "read" }
+
+      return keep ? { ...read, cookies: read.cookies.filter((cookie) => keep(cookie.host)) } : read
+    }, readFailure)
   const key = await chromiumKey(definition).catch(() => undefined)
 
   if (!key) return { failure: "key" }
 
-  return readChromiumCookies(target.database, key).catch(readFailure)
+  return readChromiumCookies(target.database, key, scratch, keep).catch(readFailure)
+}
+
+/**
+ * The hosts of a profile's cookies, for the list of its sites: never a value, so a Chromium browser's key is not
+ * asked for and nothing is decrypted. `profile` must be an id `listSources` returned.
+ */
+export async function readSourceHosts(
+  id: string,
+  profile: string,
+  scratch: SnapshotScratch,
+): Promise<readonly CookieHost[] | SourceFailure> {
+  const located = await locateProfile(id, profile)
+
+  if (!located) return { failure: "read" }
+
+  if (located.definition.engine === "firefox") return readFirefoxHosts(located.target.directory, scratch).catch(readFailure)
+
+  if (located.definition.engine === "safari")
+    return readFile(located.target.directory).then((data): readonly CookieHost[] | SourceFailure => {
+      const read = parseBinaryCookies(data, false)
+
+      if (!read) return { failure: "read" }
+
+      return read.cookies.map((cookie) => ({ host: cookie.host, expires: cookie.expires, used: 0 }))
+    }, readFailure)
+
+  return readChromiumHosts(located.target.database, scratch).catch(readFailure)
+}
+
+async function locateProfile(id: string, profile: string) {
+  const definition = definitions().find((item) => item.id === id)
+  const target = definition ? (await profiles(definition)).find((item) => item.id === profile) : undefined
+
+  return definition && target ? { definition, target } : undefined
 }
 
 /** A Chromium profile's directory, for importing its extensions. */
