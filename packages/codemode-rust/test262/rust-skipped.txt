@@ -174,56 +174,20 @@ built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # wrong result
 built-ins/encodeURI/S15.1.3.3_A5.2.js  # wrong result
 built-ins/encodeURIComponent/S15.1.3.4_A5.2.js  # wrong result
 built-ins/global/10.2.1.1.3-4-18-s.js  # missing global: undefined
-language/arguments-object/10.5-7-b-2-s.js  # wrong result
-language/arguments-object/10.5-7-b-3-s.js  # wrong result
 language/arguments-object/10.5-7-b-4-s.js  # wrong result
-language/arguments-object/10.6-10-c-ii-1-s.js  # wrong result
 language/arguments-object/S10.6_A5_T4.js  # wrong result
-language/expressions/arrow-function/lexical-arguments.js  # missing global: arguments
-language/expressions/async-function/named-returns-async-arrow-returns-arguments-from-parent-function.js  # missing global: arguments
-language/expressions/compound-assignment/S11.13.2_A7.10_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.11_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.1_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.2_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.3_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.4_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.5_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.6_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.7_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.8_T4.js  # wrong result
-language/expressions/compound-assignment/S11.13.2_A7.9_T4.js  # wrong result
 language/expressions/delete/11.4.1-4.a-17.js  # wrong result
 language/expressions/delete/11.4.1-4.a-9-s.js  # error not thrown: TypeError
-language/expressions/function/params-dflt-args-unmapped.js  # wrong result
 language/expressions/function/scope-name-var-open-strict.js  # error not thrown: TypeError
-language/expressions/generators/params-dflt-args-unmapped.js  # wrong result
 language/expressions/generators/scope-name-var-open-strict.js  # error not thrown: TypeError
-language/expressions/greater-than-or-equal/S11.8.4_A4.12_T1.js  # wrong result
 language/expressions/greater-than/S11.8.2_A4.12_T1.js  # wrong result
-language/expressions/less-than-or-equal/S11.8.3_A4.12_T1.js  # wrong result
 language/expressions/less-than/S11.8.1_A4.12_T1.js  # wrong result
-language/expressions/object/computed-property-name-topropertykey-before-value-evaluation.js  # wrong result
-language/expressions/object/method-definition/async-returns-async-arrow-returns-arguments-from-parent-function.js  # missing global: arguments
-language/expressions/object/method-definition/params-dflt-gen-meth-args-unmapped.js  # wrong result
-language/expressions/object/method-definition/params-dflt-meth-args-unmapped.js  # wrong result
-language/expressions/postfix-decrement/11.3.2-2-3-s.js  # wrong result
-language/expressions/postfix-decrement/S11.3.2_A6_T3.js  # wrong result
-language/expressions/postfix-increment/11.3.1-2-3.js  # wrong result
-language/expressions/postfix-increment/S11.3.1_A6_T3.js  # wrong result
-language/expressions/prefix-decrement/11.4.5-2-3-s.js  # wrong result
-language/expressions/prefix-decrement/S11.4.5_A6_T3.js  # wrong result
-language/expressions/prefix-increment/11.4.4-2-3-s.js  # wrong result
-language/expressions/prefix-increment/S11.4.4_A6_T3.js  # wrong result
 language/global-code/export.js  # unsupported syntax: `export`
 language/global-code/import.js  # missing global: %import
 language/reserved-words/await-script.js  # spurious parse error: Cannot use `…` as an identifier in an async context
-language/statements/async-function/evaluation-unmapped-arguments.js  # async: wrong result
-language/statements/async-function/returns-async-arrow-returns-arguments-from-parent-function.js  # missing global: arguments
 language/statements/for-of/iterator-close-non-throw-get-method-non-callable.js  # error not thrown: TypeError
 language/statements/function/S13_A11_T4.js  # wrong result
 language/statements/function/S13_A13_T1.js  # wrong result
 language/statements/function/S13_A13_T2.js  # wrong result
 language/statements/function/S13_A13_T3.js  # wrong result
-language/statements/function/params-dflt-args-unmapped.js  # wrong result
-language/statements/generators/params-dflt-args-unmapped.js  # wrong result
 language/statements/labeled/value-await-non-module-escaped.js  # spurious parse error: Keywords cannot contain escape characters

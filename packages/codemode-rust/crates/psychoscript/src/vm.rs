@@ -1305,7 +1305,9 @@ impl<'rt> Vm<'rt> {
                     tri!(self.data_operands(&a, &b));
                     let r = match (&a, &b) {
                         (Value::Num(x), Value::Num(y)) => *x $op *y,
-                        (Value::Str(x), Value::Str(y)) => self.atoms.get(*x) $op self.atoms.get(*y),
+                        (Value::Str(x), Value::Str(y)) => {
+                            self.atoms.sref(*x).cmp16(self.atoms.sref(*y)) $op std::cmp::Ordering::Equal
+                        }
                         _ => {
                             let (l, r) = if $swap { (b, a) } else { (a, b) };
                             let c = tri!(self.less_than(&l, &r, !$swap));
@@ -1656,6 +1658,20 @@ impl<'rt> Vm<'rt> {
                         let id = self.new_object();
                         tri!(self.copy_props(id, &src, &excluded));
                         self.push(Value::Obj(id));
+                    }
+                    Op::ToKey => {
+                        let k = self.top();
+                        if !matches!(k, Value::Num(_) | Value::Str(_) | Value::Sym(_)) {
+                            self.frames[fi].pc = pc;
+                            let a = tri!(self.key_of(&k));
+                            self.stack.pop();
+                            let v = if a <= SYM_ASYNC_ITERATOR {
+                                Value::Sym(a)
+                            } else {
+                                self.atom_val(a)
+                            };
+                            self.push(v);
+                        }
                     }
                     Op::RequireCoercible => {
                         let v = self.top();

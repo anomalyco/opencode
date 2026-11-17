@@ -81,9 +81,20 @@ impl<'rt> Vm<'rt> {
         loop {
             let o = &self.heap[cur as usize];
             match &o.kind {
-                Kind::Array(items) | Kind::Arguments(items) => {
+                Kind::Array(items) => {
                     if let Some(i) = self.atoms.index(key) {
                         return items.get(i as usize).cloned().unwrap_or_default();
+                    }
+                    if key == self.names.length {
+                        return Value::Num(items.len() as f64);
+                    }
+                }
+                Kind::Arguments(items) => {
+                    // An arguments object is ordinary: an index past its arguments is a plain property.
+                    if let Some(i) = self.atoms.index(key)
+                        && let Some(v) = items.get(i as usize)
+                    {
+                        return *v;
                     }
                     if key == self.names.length {
                         return Value::Num(items.len() as f64);

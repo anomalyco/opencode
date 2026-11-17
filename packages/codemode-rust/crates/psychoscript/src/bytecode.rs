@@ -71,6 +71,8 @@ pub enum Op {
     /// `src k1..kn` -> `rest`
     ObjRest(u32),
     RequireCoercible,
+    /// ToPropertyKey on the top, so a key converts once when it is both read and written.
+    ToKey,
 
     Add,
     Sub,

@@ -217,6 +217,10 @@ struct FnState<'a> {
     nlocals: u32,
     captures: Vec<Capture>,
     upval_of: FxHashMap<SymbolId, u32>,
+    /// Where this function keeps its `arguments` object, made once at entry.
+    args_store: Option<Store>,
+    /// The upvalue an arrow reads its enclosing function's `arguments` through.
+    args_upval: Option<u32>,
     controls: Vec<Control<'a>>,
     is_arrow: bool,
     is_async: bool,
@@ -247,6 +251,8 @@ struct Compiler<'a, 's> {
     readonly: FxHashSet<SymbolId>,
     /// Parameters of a function with parameter expressions, which are in their TDZ until bound in order.
     param_tdz: FxHashSet<SymbolId>,
+    /// Function scopes whose `arguments` is read, and whether an arrow inside reads it.
+    args_owner: FxHashMap<ScopeId, bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -278,6 +284,7 @@ impl<'a, 's> Compiler<'a, 's> {
             switch_scopes: FxHashSet::default(),
             readonly: FxHashSet::default(),
             param_tdz: FxHashSet::default(),
+            args_owner: FxHashMap::default(),
         }
     }
 
@@ -296,6 +303,30 @@ impl<'a, 's> Compiler<'a, 's> {
 
     /// A binding is captured when any reference to it sits in a different function than its declaration.
     fn compute_captured(&mut self) {
+        // `arguments` belongs to the nearest enclosing function that is not an arrow.
+        if let Some(refs) = self.scoping.root_unresolved_references().get("arguments") {
+            for rid in refs {
+                let mut scope = self.scoping.get_reference(*rid).scope_id();
+                let mut through_arrow = false;
+                loop {
+                    let flags = self.scoping.scope_flags(scope);
+                    if flags.is_top() {
+                        break;
+                    }
+                    if flags.is_function() && !flags.is_arrow() {
+                        *self.args_owner.entry(scope).or_insert(false) |= through_arrow;
+                        break;
+                    }
+                    if flags.is_arrow() {
+                        through_arrow = true;
+                    }
+                    match self.scoping.scope_parent_id(scope) {
+                        Some(p) => scope = p,
+                        None => break,
+                    }
+                }
+            }
+        }
         let mut memo: FxHashMap<ScopeId, ScopeId> = FxHashMap::default();
         for sym in self.scoping.symbol_ids() {
             let decl_scope = self.scoping.symbol_scope_id(sym);
@@ -763,9 +794,21 @@ impl<'a, 's> Compiler<'a, 's> {
             "undefined" => {
                 self.emit(Op::Undef);
             }
-            "arguments" if !self.f().is_arrow && self.fns.len() > 1 => {
-                self.f().needs_extra = true;
-                self.emit(Op::Arguments);
+            "arguments" if self.f().args_store.is_some() => match self.f().args_store {
+                Some(Store::Cell(c)) => {
+                    self.emit(Op::GetCell(c));
+                }
+                _ => {
+                    let l = match self.f().args_store {
+                        Some(Store::Local(l)) => l,
+                        _ => 0,
+                    };
+                    self.emit(Op::GetLocal(l));
+                }
+            },
+            "arguments" if self.f().is_arrow && self.args_depth().is_some() => {
+                let u = self.resolve_args_upval(self.depth())?;
+                self.emit(Op::GetUpval(u));
             }
             name => {
                 let g = self.global_slot(name);
@@ -773,6 +816,38 @@ impl<'a, 's> Compiler<'a, 's> {
             }
         }
         Ok(())
+    }
+
+    /// The depth of the function whose `arguments` an arrow at the current depth reads.
+    fn args_depth(&self) -> Option<usize> {
+        let d = self.fns.iter().rposition(|f| !f.is_arrow)?;
+        self.fns[d].args_store.map(|_| d)
+    }
+
+    fn resolve_args_upval(&mut self, depth: usize) -> R<u32> {
+        if let Some(u) = self.fns[depth].args_upval {
+            return Ok(u);
+        }
+        let parent = depth - 1;
+        let cap = if self.fns[parent].is_arrow {
+            Capture::Upval(self.resolve_args_upval(parent)?)
+        } else {
+            match self.fns[parent].args_store {
+                Some(Store::Cell(c)) => Capture::Cell(c),
+                _ => {
+                    return Err(CompileError {
+                        kind: DiagnosticKind::ExecutionFailure,
+                        message: "internal: captured arguments have no cell".into(),
+                        offset: Some(self.pos),
+                    });
+                }
+            }
+        };
+        let f = &mut self.fns[depth];
+        f.captures.push(cap);
+        let i = f.captures.len() as u32 - 1;
+        f.args_upval = Some(i);
+        Ok(i)
     }
 
     fn store_ident(&mut self, id: &IdentifierReference) -> R<()> {
@@ -959,6 +1034,23 @@ impl<'a, 's> Compiler<'a, 's> {
             None => Vec::new(),
         };
         self.init_scope(&syms);
+        if !spec.is_arrow
+            && let Some(captured) = spec.scope.and_then(|s| self.args_owner.get(&s).copied())
+        {
+            self.f().needs_extra = true;
+            self.emit(Op::Arguments);
+            let store = if captured {
+                let c = self.new_cell();
+                self.emit(Op::NewCell(c));
+                self.emit(Op::SetCell(c));
+                Store::Cell(c)
+            } else {
+                let l = self.new_local();
+                self.emit(Op::SetLocal(l));
+                Store::Local(l)
+            };
+            self.f().args_store = Some(store);
+        }
         for (i, p) in params.items.iter().enumerate() {
             if simple
                 && let BindingPattern::BindingIdentifier(id) = &p.pattern
@@ -2354,6 +2446,7 @@ impl<'a, 's> Compiler<'a, 's> {
                                 return Err(unsupported("Private names", p.span));
                             };
                             self.expr(e)?;
+                            self.emit(Op::ToKey);
                             self.expr(&p.value)?;
                             self.emit(Op::DefineElem);
                         }
@@ -2572,6 +2665,7 @@ impl<'a, 's> Compiler<'a, 's> {
             AssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
+                self.emit(Op::ToKey);
                 self.emit(Op::Dup2);
                 self.emit(Op::GetElem);
                 if let Some(jop) = logical {
@@ -2635,6 +2729,7 @@ impl<'a, 's> Compiler<'a, 's> {
             SimpleAssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
+                self.emit(Op::ToKey);
                 self.emit(Op::Dup2);
                 self.emit(Op::GetElem);
                 if u.prefix {
@@ -2691,6 +2786,8 @@ impl<'a> FnState<'a> {
             nlocals: 0,
             captures: Vec::new(),
             upval_of: FxHashMap::default(),
+            args_store: None,
+            args_upval: None,
             controls: Vec::new(),
             is_arrow,
             is_async: false,
