@@ -25,6 +25,8 @@ export type Alert = {
     title: string,
     message: string,
     action: Action?,
+    size: PanelSize?,
+    centered: boolean?,
 }
 
 export type Align = ("stretch" | "start" | "center" | "end")
@@ -185,6 +187,8 @@ export type Confirm = {
     message: string,
     action: Action,
     label: ConfirmLabel?,
+    size: PanelSize?,
+    centered: boolean?,
 }
 
 --- The labels of a confirm's answers.
@@ -885,6 +889,11 @@ export type Node = ({
     version: number?,
     animate: boolean?,
     type: "canvas",
+} | {
+    id: string?,
+    bg: Color?,
+    layout: Layout?,
+    type: "fence",
 })
 
 --- A node's place on the screen.
@@ -1262,6 +1271,7 @@ export type Select = {
     filterless: boolean?,
     empty: Span?,
     note: Span?,
+    centered: boolean?,
 }
 
 --- A footer action of a select.
@@ -1574,7 +1584,14 @@ export type Read = {
     mount: (self: Read) -> MountId?,
     setting: (self: Read, name: string) -> any,
     plugins: (self: Read) -> { PluginEntry },
+    --- The host's version and its optional features.
+    abi: (self: Read) -> Abi,
+    --- Whether the host has optional feature `name` (`plugin.FOCUS_INPUT`, `plugin.FENCE_NODE`).
+    hasFeature: (self: Read, name: string) -> boolean,
 }
+
+--- The version a host serves the plugin: its major, its minor of that major, and its optional features.
+export type Abi = { major: number, minor: number, features: { string } }
 
 --- What a handler acts with: the reads, and effects, which wait until the outermost call returns. A render or a view
 --- that calls an effect fails.
@@ -1648,6 +1665,9 @@ export type Setup = {
 --- `require("@opencode/plugin")`.
 export type Plugin = {
     contract: string,
+    IMAGE_BOUNDS: string,
+    FOCUS_INPUT: string,
+    FENCE_NODE: string,
     KEEP: Render,
     HIDE: Render,
     define: (setup: (setup: Setup) -> ()) -> any,
