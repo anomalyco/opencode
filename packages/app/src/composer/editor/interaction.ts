@@ -108,6 +108,10 @@ export function createComposerEditor(input: {
   onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   quoteComment?: QuoteCommentController
   onEditor?: (element: HTMLElement) => void
+  /** The key attaches files, as the `file.attach` command's keybind. Defaults to Mod+U. */
+  attachKey?: (event: KeyboardEvent) => boolean
+  /** The key stops a running session, as the `prompt.stop` command's keybind. Defaults to Escape and Ctrl+G. */
+  stopKey?: (event: KeyboardEvent) => boolean
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
   attachments?: ComposerAttachmentConfig
@@ -474,12 +478,12 @@ export function createComposerEditor(input: {
 
     flushFocus()
 
+    // The command keymap attaches first in the app; this covers the editor when it runs on its own, as in a story.
     if (
       mode() === "normal" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.key.toLowerCase() === "u"
+      (input.attachKey
+        ? input.attachKey(event)
+        : (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u")
     ) {
       event.preventDefault()
       attach()
@@ -537,10 +541,13 @@ export function createComposerEditor(input: {
       return true
     }
 
+    // As with attaching, the `prompt.stop` command stops first in the app.
     const stop =
       (input.view.submit.working?.() || input.view.submit.held?.()) &&
-      ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
-        event.key === "Escape")
+      (input.stopKey
+        ? input.stopKey(event)
+        : (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
+          event.key === "Escape")
 
     if (stop) {
       event.preventDefault()
