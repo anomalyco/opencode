@@ -22,7 +22,9 @@ async function main() {
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
   cloneLockedDevProfile()
   await prepareDesktop()
-  await prepareServer(options.server)
+  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
+
+  if (process.env.OPENCODE_DESKTOP_REUSE_SERVER !== "1") await prepareServer(options.server)
   await startDesktop(options.electron)
 }
 
@@ -149,8 +151,10 @@ function cloneLockedDevProfile() {
   }
 
   process.env.OPENCODE_DESKTOP_USER_DATA = cloneDir
+  process.env.OPENCODE_DESKTOP_REUSE_SERVER = "1"
+  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "0"
   process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ??= "0"
-  console.log(`OpenCode Dev is already running; cloned desktop state into ${cloneDir} (sharing main OpenCode DB)`)
+  console.log(`OpenCode Dev is already running; cloned UI state into ${cloneDir} and reusing live background server`)
 }
 
 async function startDesktop(args: string[]) {
