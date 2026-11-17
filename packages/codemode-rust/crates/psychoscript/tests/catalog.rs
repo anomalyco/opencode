@@ -11,11 +11,16 @@ fn fixture() -> Json {
     serde_json::from_str(&std::fs::read_to_string(path).expect("catalog.json")).expect("JSON")
 }
 
-fn schema(spec: &Json) -> Schema {
+fn schema(spec: &Json, text: Option<&str>) -> Schema {
+    // The schema as written, when its key order is what is being tested.
+    let doc = text.map_or_else(
+        || spec["schema"].clone(),
+        |t| serde_json::from_str(t).unwrap(),
+    );
     if spec["validated"] == Json::Bool(true) {
-        Schema::validated(spec["schema"].clone())
+        Schema::validated(doc)
     } else {
-        Schema::render_only(spec["schema"].clone())
+        Schema::render_only(doc)
     }
 }
 
@@ -34,9 +39,9 @@ fn runtime(fixture: &Json) -> Runtime {
         let mut tool = Tool::new(spec["description"].as_str().unwrap(), move |input, _| {
             Ok(result.clone().unwrap_or(input))
         })
-        .input(schema(&spec["input"]));
+        .input(schema(&spec["input"], spec["inputText"].as_str()));
         if let Some(output) = spec.get("output") {
-            tool = tool.output(schema(output));
+            tool = tool.output(schema(output, None));
         }
         if spec["freeform"] == Json::Bool(true) {
             tool = tool.freeform();

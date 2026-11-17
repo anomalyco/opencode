@@ -296,6 +296,53 @@
       }
     },
     {
+      "path": "keys.ordered",
+      "description": "Integer-like property names, rendered in JavaScript key order",
+      "input": {
+        "validated": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "2": {
+              "type": "boolean",
+              "description": "Two"
+            },
+            "10": {
+              "type": "number"
+            },
+            "b": {
+              "type": "string"
+            },
+            "a": {
+              "type": "object",
+              "properties": {
+                "0": {
+                  "type": "string"
+                },
+                "4294967294": {
+                  "type": "null"
+                },
+                "z": {
+                  "type": "string"
+                },
+                "01": {
+                  "type": "string"
+                },
+                "4294967295": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "required": [
+            "10",
+            "b"
+          ]
+        }
+      },
+      "inputText": "{\"type\":\"object\",\"properties\":{\"b\":{\"type\":\"string\"},\"10\":{\"type\":\"number\"},\"2\":{\"type\":\"boolean\",\"description\":\"Two\"},\"a\":{\"type\":\"object\",\"properties\":{\"z\":{\"type\":\"string\"},\"0\":{\"type\":\"string\"},\"01\":{\"type\":\"string\"},\"4294967295\":{\"type\":\"null\"},\"4294967294\":{\"type\":\"null\"}}}},\"required\":[\"10\",\"b\"]}"
+    },
+    {
       "path": "adapter.call",
       "description": "Call an adapter-described tool",
       "input": {
@@ -1027,6 +1074,11 @@
       "signature": "tools.k8s.getCronJob(): Promise<string>"
     },
     {
+      "path": "keys.ordered",
+      "description": "Integer-like property names, rendered in JavaScript key order",
+      "signature": "tools.keys.ordered({\n  /** Two */\n  \"2\"?: boolean,\n  \"10\": number,\n  b: string,\n  a?: {\n    \"0\"?: string,\n    \"4294967294\"?: null,\n    z?: string,\n    \"01\"?: string,\n    \"4294967295\"?: null,\n  },\n}): Promise<void>"
+    },
+    {
       "path": "mail.archive",
       "description": "Archive a thread",
       "signature": "tools.mail.archive(): Promise<string>"
@@ -1196,7 +1248,7 @@
             "signature": "tools.gmail.list_labels(): Promise<string>"
           }
         ],
-        "remaining": 25,
+        "remaining": 26,
         "next": {
           "offset": 10
         }
@@ -1224,7 +1276,7 @@
             "signature": "tools.cloud.list_all_issues(): Promise<string>"
           }
         ],
-        "remaining": 32,
+        "remaining": 33,
         "next": {
           "offset": 3
         }
@@ -1247,7 +1299,7 @@
             "signature": "tools.context7[\"resolve-library-id\"]({\n  libraryName: string,\n}): Promise<string>"
           }
         ],
-        "remaining": 29,
+        "remaining": 30,
         "next": {
           "offset": 6
         }
@@ -1784,6 +1836,11 @@
             "path": "tools.orders.lookup",
             "description": "Look up an order by ID",
             "signature": "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>"
+          },
+          {
+            "path": "tools.keys.ordered",
+            "description": "Integer-like property names, rendered in JavaScript key order",
+            "signature": "tools.keys.ordered({\n  /** Two */\n  \"2\"?: boolean,\n  \"10\": number,\n  b: string,\n  a?: {\n    \"0\"?: string,\n    \"4294967294\"?: null,\n    z?: string,\n    \"01\"?: string,\n    \"4294967295\"?: null,\n  },\n}): Promise<void>"
           }
         ],
         "remaining": 0,
@@ -2062,6 +2119,7 @@
           "util",
           "fetchPage",
           "context7",
+          "keys",
           "adapter",
           "files",
           "search",
@@ -2206,6 +2264,696 @@
     }
   ],
   "openapi": [
+    {
+      "name": "3.0 const in a component",
+      "spec": {
+        "openapi": "3.0.3",
+        "paths": {
+          "/test": {
+            "post": {
+              "operationId": "test",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Success",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Fixed": {
+              "type": "string",
+              "const": "a"
+            }
+          }
+        }
+      },
+      "specText": null,
+      "baseUrl": "http://localhost:4096",
+      "error": "Cannot convert JSON Schema keyword \"const\" to Draft 2020-12: it is not active in OpenAPI 3.0 but would become active in the target"
+    },
+    {
+      "name": "3.0 $id in a body",
+      "spec": {
+        "openapi": "3.0.3",
+        "paths": {
+          "/test": {
+            "post": {
+              "operationId": "test",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "$id": "x",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Success",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "a": {
+                            "$id": "x",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {}
+        }
+      },
+      "specText": null,
+      "baseUrl": "http://localhost:4096",
+      "error": "Cannot convert JSON Schema keyword \"$id\" to Draft 2020-12: it is not active in OpenAPI 3.0 but would become active in the target"
+    },
+    {
+      "name": "3.0 examples in a parameter",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/test": {
+            "get": {
+              "operationId": "test",
+              "parameters": [
+                {
+                  "name": "q",
+                  "in": "query",
+                  "schema": {
+                    "type": "string",
+                    "examples": [
+                      "x"
+                    ],
+                    "if": {}
+                  }
+                }
+              ],
+              "responses": {
+                "200": {
+                  "description": "Success"
+                }
+              }
+            }
+          }
+        }
+      },
+      "specText": null,
+      "baseUrl": "http://localhost:4096",
+      "error": "Cannot convert JSON Schema keyword \"examples\" to Draft 2020-12: it is not active in OpenAPI 3.0 but would become active in the target"
+    },
+    {
+      "name": "3.0 keywords beside a $ref pass",
+      "spec": {
+        "openapi": "3.0.3",
+        "paths": {
+          "/test": {
+            "post": {
+              "operationId": "test",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "$ref": "#/components/schemas/A",
+                          "const": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Success",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "a": {
+                            "$ref": "#/components/schemas/A",
+                            "const": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "A": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "specText": null,
+      "baseUrl": "http://localhost:4096",
+      "auth": {},
+      "headers": {},
+      "catalog": [
+        {
+          "path": "api.test",
+          "description": "POST /test",
+          "signature": "tools.api.test({\n  body: {\n    a?: string,\n  },\n}): Promise<{\n  a?: string,\n}>"
+        }
+      ],
+      "schemas": [
+        {
+          "path": "test",
+          "input": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "object",
+                "properties": {
+                  "a": {
+                    "$ref": "#/$defs/A"
+                  }
+                }
+              }
+            },
+            "required": [
+              "body"
+            ],
+            "$defs": {
+              "A": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "$ref": "#/$defs/A"
+              }
+            },
+            "$defs": {
+              "A": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "skipped": [],
+      "calls": []
+    },
+    {
+      "name": "3.0 nullable allOf moves its references",
+      "spec": {
+        "openapi": "3.0.3",
+        "paths": {
+          "/test": {
+            "post": {
+              "operationId": "test",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "wrapped": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "a": {
+                                  "type": "string"
+                                },
+                                "b": {
+                                  "$ref": "#/properties/wrapped/allOf/0/properties/a"
+                                },
+                                "c d": {
+                                  "type": "number"
+                                },
+                                "e": {
+                                  "$ref": "#/properties/wrapped/allOf/0/properties/c%20d"
+                                },
+                                "f": {
+                                  "$ref": "#/properties/wrapped/allOf/0"
+                                },
+                                "g": {
+                                  "$ref": "#/properties/wrapped"
+                                },
+                                "h": {
+                                  "$ref": "#/properties/wrapped/allOf/1"
+                                },
+                                "i": {
+                                  "$ref": "#/components/schemas/A"
+                                },
+                                "j": {
+                                  "$ref": "other.json#/properties/wrapped/allOf/0"
+                                },
+                                "k": {
+                                  "$ref": "#/properties/wrapped/allOf/0/properties/a~1b"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Success",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "wrapped": {
+                            "nullable": true,
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "a": {
+                                    "type": "string"
+                                  },
+                                  "b": {
+                                    "$ref": "#/properties/wrapped/allOf/0/properties/a"
+                                  },
+                                  "c d": {
+                                    "type": "number"
+                                  },
+                                  "e": {
+                                    "$ref": "#/properties/wrapped/allOf/0/properties/c%20d"
+                                  },
+                                  "f": {
+                                    "$ref": "#/properties/wrapped/allOf/0"
+                                  },
+                                  "g": {
+                                    "$ref": "#/properties/wrapped"
+                                  },
+                                  "h": {
+                                    "$ref": "#/properties/wrapped/allOf/1"
+                                  },
+                                  "i": {
+                                    "$ref": "#/components/schemas/A"
+                                  },
+                                  "j": {
+                                    "$ref": "other.json#/properties/wrapped/allOf/0"
+                                  },
+                                  "k": {
+                                    "$ref": "#/properties/wrapped/allOf/0/properties/a~1b"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "A": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "specText": null,
+      "baseUrl": "http://localhost:4096",
+      "auth": {},
+      "headers": {},
+      "catalog": [
+        {
+          "path": "api.test",
+          "description": "POST /test",
+          "signature": "tools.api.test({\n  body: {\n    wrapped?: {\n        a?: string,\n        b?: unknown,\n        \"c d\"?: number,\n        e?: unknown,\n        f?: unknown,\n        g?: unknown,\n        h?: unknown,\n        i?: string,\n        j?: unknown,\n        k?: unknown,\n      } | null,\n  },\n}): Promise<{\n  wrapped?: {\n      a?: string,\n      b?: unknown,\n      \"c d\"?: number,\n      e?: unknown,\n      f?: unknown,\n      g?: unknown,\n      h?: unknown,\n      i?: string,\n      j?: unknown,\n      k?: unknown,\n    } | null,\n}>"
+        }
+      ],
+      "schemas": [
+        {
+          "path": "test",
+          "input": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "object",
+                "properties": {
+                  "wrapped": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "a": {
+                            "type": "string"
+                          },
+                          "b": {
+                            "$ref": "#/properties/wrapped/anyOf/0/properties/a"
+                          },
+                          "c d": {
+                            "type": "number"
+                          },
+                          "e": {
+                            "$ref": "#/properties/wrapped/anyOf/0/properties/c%20d"
+                          },
+                          "f": {
+                            "$ref": "#/properties/wrapped/anyOf/0"
+                          },
+                          "g": {
+                            "$ref": "#/properties/wrapped"
+                          },
+                          "h": {
+                            "$ref": "#/properties/wrapped/allOf/1"
+                          },
+                          "i": {
+                            "$ref": "#/$defs/A"
+                          },
+                          "j": {
+                            "$ref": "other.json#/properties/wrapped/allOf/0"
+                          },
+                          "k": {
+                            "$ref": "#/properties/wrapped/allOf/0/properties/a~1b"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "required": [
+              "body"
+            ],
+            "$defs": {
+              "A": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "wrapped": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "a": {
+                        "type": "string"
+                      },
+                      "b": {
+                        "$ref": "#/properties/wrapped/anyOf/0/properties/a"
+                      },
+                      "c d": {
+                        "type": "number"
+                      },
+                      "e": {
+                        "$ref": "#/properties/wrapped/anyOf/0/properties/c%20d"
+                      },
+                      "f": {
+                        "$ref": "#/properties/wrapped/anyOf/0"
+                      },
+                      "g": {
+                        "$ref": "#/properties/wrapped"
+                      },
+                      "h": {
+                        "$ref": "#/properties/wrapped/allOf/1"
+                      },
+                      "i": {
+                        "$ref": "#/$defs/A"
+                      },
+                      "j": {
+                        "$ref": "other.json#/properties/wrapped/allOf/0"
+                      },
+                      "k": {
+                        "$ref": "#/properties/wrapped/allOf/0/properties/a~1b"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "$defs": {
+              "A": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "skipped": [],
+      "calls": []
+    },
+    {
+      "name": "integer-like keys",
+      "spec": {
+        "openapi": "3.1.0",
+        "paths": {
+          "/test/{2}": {
+            "post": {
+              "operationId": "test",
+              "parameters": [
+                {
+                  "name": "2",
+                  "in": "path",
+                  "required": true,
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "b",
+                        "10"
+                      ],
+                      "properties": {
+                        "1": {
+                          "type": "object",
+                          "properties": {
+                            "3": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "10": {
+                          "$ref": "#/components/schemas/z"
+                        },
+                        "b": {
+                          "type": "string"
+                        },
+                        "a": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Updated"
+                },
+                "201": {
+                  "description": "Created",
+                  "content": {
+                    "application/json": {
+                      "schema": {
+                        "$ref": "#/components/schemas/7"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "7": {
+              "type": "object",
+              "properties": {
+                "0": {
+                  "type": "number"
+                },
+                "k": {
+                  "type": "string"
+                }
+              }
+            },
+            "z": {
+              "type": "string"
+            },
+            "001": {
+              "type": "null"
+            }
+          }
+        }
+      },
+      "specText": "{\"openapi\":\"3.1.0\",\"paths\":{\"/test/{2}\":{\"post\":{\"operationId\":\"test\",\"parameters\":[{\"name\":\"2\",\"in\":\"path\",\"required\":true,\"schema\":{\"type\":\"string\"}}],\"requestBody\":{\"required\":true,\"content\":{\"application/json\":{\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"b\",\"10\"],\"properties\":{\"b\":{\"type\":\"string\"},\"10\":{\"$ref\":\"#/components/schemas/z\"},\"1\":{\"type\":\"object\",\"properties\":{\"y\":{\"type\":\"string\"},\"3\":{\"type\":\"number\"}}},\"a\":{\"type\":\"boolean\"}}}}}},\"responses\":{\"201\":{\"description\":\"Created\",\"content\":{\"application/json\":{\"schema\":{\"$ref\":\"#/components/schemas/7\"}}}},\"200\":{\"description\":\"Updated\"}}}}},\"components\":{\"schemas\":{\"z\":{\"type\":\"string\"},\"7\":{\"type\":\"object\",\"properties\":{\"k\":{\"type\":\"string\"},\"0\":{\"type\":\"number\"}}},\"001\":{\"type\":\"null\"}}}}",
+      "baseUrl": "http://localhost:4096",
+      "auth": {},
+      "headers": {},
+      "catalog": [
+        {
+          "path": "api.test",
+          "description": "POST /test/{2}",
+          "signature": "tools.api.test({\n  \"1\"?: {\n    \"3\"?: number,\n    y?: string,\n  },\n  \"2\": string,\n  \"10\": string,\n  b: string,\n  a?: boolean,\n}): Promise<null | {\n    \"0\"?: number,\n    k?: string,\n  }>"
+        }
+      ],
+      "schemas": [
+        {
+          "path": "test",
+          "input": {
+            "type": "object",
+            "properties": {
+              "1": {
+                "type": "object",
+                "properties": {
+                  "3": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "string"
+                  }
+                }
+              },
+              "2": {
+                "type": "string"
+              },
+              "10": {
+                "$ref": "#/$defs/z"
+              },
+              "b": {
+                "type": "string"
+              },
+              "a": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "2",
+              "10",
+              "b"
+            ],
+            "$defs": {
+              "7": {
+                "type": "object",
+                "properties": {
+                  "0": {
+                    "type": "number"
+                  },
+                  "k": {
+                    "type": "string"
+                  }
+                }
+              },
+              "z": {
+                "type": "string"
+              },
+              "001": {
+                "type": "null"
+              }
+            }
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/7"
+              }
+            ],
+            "$defs": {
+              "7": {
+                "type": "object",
+                "properties": {
+                  "0": {
+                    "type": "number"
+                  },
+                  "k": {
+                    "type": "string"
+                  }
+                }
+              },
+              "z": {
+                "type": "string"
+              },
+              "001": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "skipped": [],
+      "calls": []
+    },
     {
       "name": "happy path",
       "spec": {
@@ -2453,6 +3201,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "BearerAuth": {
@@ -3284,6 +4033,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -3469,6 +4219,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -3592,6 +4343,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -3693,6 +4445,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -3836,6 +4589,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -3955,6 +4709,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4085,6 +4840,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4214,6 +4970,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4446,6 +5203,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4686,6 +5444,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4788,6 +5547,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -4910,6 +5670,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -5011,6 +5772,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -5415,6 +6177,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6110,6 +6873,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6245,6 +7009,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6373,6 +7138,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6483,6 +7249,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6590,6 +7357,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6676,6 +7444,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6765,6 +7534,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -6895,6 +7665,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -7090,6 +7861,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -7451,6 +8223,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -7537,6 +8310,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -7580,6 +8354,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "bearer": {
@@ -7681,6 +8456,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "key": {
@@ -7788,6 +8564,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "first": {
@@ -7899,6 +8676,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -7951,6 +8729,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "bearer": {
@@ -8071,6 +8850,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "basic": {
@@ -8261,6 +9041,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "b": {
@@ -8427,6 +9208,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": null,
       "auth": {},
       "headers": {},
@@ -8588,6 +9370,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "https://example.com/api?tenant=one",
       "auth": {},
       "headers": {},
@@ -8619,6 +9402,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "https:/example.com",
       "auth": {},
       "headers": {},
@@ -8666,6 +9450,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -8711,6 +9496,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -8742,6 +9528,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -8797,6 +9584,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {
         "bearer": {
@@ -8881,6 +9669,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -8979,6 +9768,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -9152,6 +9942,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -9228,6 +10019,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -9367,6 +10159,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},
@@ -9686,6 +10479,7 @@
           }
         }
       },
+      "specText": null,
       "baseUrl": "http://localhost:4096",
       "auth": {},
       "headers": {},

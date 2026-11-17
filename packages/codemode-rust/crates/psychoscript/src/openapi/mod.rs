@@ -146,8 +146,22 @@ const METHODS: [&str; 8] = [
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 ];
 
-/// Builds one tool per representable operation of an OpenAPI 3.x document.
-pub fn from_spec(options: Options) -> Generated {
+/// A document the reference refuses as a whole: it throws from `OpenAPI.fromSpec` with this message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpecError(pub String);
+
+impl std::fmt::Display for SpecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for SpecError {}
+
+/// Builds one tool per representable operation of an OpenAPI 3.x document. Fails, as the reference throws, when
+/// an OpenAPI 3.0 schema uses a keyword that only JSON Schema 2020-12 defines.
+pub fn from_spec(mut options: Options) -> Result<Generated, SpecError> {
+    options.spec = crate::schema::js_key_order(std::mem::take(&mut options.spec));
     let doc = &options.spec;
     let mut projector = project::Projector::new(doc);
     let schemes = spec::security_schemes(doc);
@@ -277,5 +291,8 @@ pub fn from_spec(options: Options) -> Generated {
             tools.push((segments.join("."), tool));
         }
     }
-    Generated { tools, skipped }
+    match projector.error {
+        Some(message) => Err(SpecError(message)),
+        None => Ok(Generated { tools, skipped }),
+    }
 }

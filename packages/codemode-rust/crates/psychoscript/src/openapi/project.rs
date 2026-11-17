@@ -58,6 +58,8 @@ impl<T> Default for Solver<T> {
 pub struct Projector<'a> {
     pub doc: &'a Json,
     directional: bool,
+    /// The first schema conversion the reference refuses, which fails the whole document.
+    pub error: Option<String>,
     hidden: [Solver<bool>; 2],
     names: [Solver<HashSet<String>>; 2],
 }
@@ -128,6 +130,7 @@ impl<'a> Projector<'a> {
         Self {
             doc,
             directional: contains_directional(doc),
+            error: None,
             hidden: Default::default(),
             names: Default::default(),
         }
@@ -300,10 +303,10 @@ impl<'a> Projector<'a> {
             return Json::Object(Default::default());
         };
         if !self.directional {
-            return super::normalize::normalize(self.doc, value);
+            return super::normalize::normalize(self.doc, value, &mut self.error);
         }
         let projected =
             self.directional_schema(Resource { value, root: value }, d, &HashSet::new());
-        super::normalize::normalize(self.doc, &projected)
+        super::normalize::normalize(self.doc, &projected, &mut self.error)
     }
 }

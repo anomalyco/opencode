@@ -19,6 +19,8 @@ export type Call = { tool: string; input: unknown; reply?: Reply }
 export type Case = {
   name: string
   spec: Record<string, unknown>
+  /** The document as JSON text, whose key order JavaScript changes when it parses it: integer-like keys first. */
+  specText?: string
   baseUrl?: string
   /** Credentials by security scheme name; a missing name resolves to nothing. */
   auth?: Record<string, Credential>
@@ -122,10 +124,92 @@ const bodyOf = (schema: Record<string, unknown>, required = true) => ({
 })
 const response = { responses: { 200: { description: "Success" } } }
 
+const v30 = (schema: Record<string, unknown>, components: Record<string, unknown> = {}) => ({
+  openapi: "3.0.3",
+  paths: {
+    "/test": {
+      post: {
+        operationId: "test",
+        requestBody: { required: true, content: { "application/json": { schema } } },
+        responses: { 200: { description: "Success", content: { "application/json": { schema } } } },
+      },
+    },
+  },
+  components: { schemas: components },
+})
+
+const integerKeys = `{"openapi":"3.1.0","paths":{"/test/{2}":{"post":{"operationId":"test","parameters":[{"name":"2","in":"path","required":true,"schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","additionalProperties":false,"required":["b","10"],"properties":{"b":{"type":"string"},"10":{"$ref":"#/components/schemas/z"},"1":{"type":"object","properties":{"y":{"type":"string"},"3":{"type":"number"}}},"a":{"type":"boolean"}}}}}},"responses":{"201":{"description":"Created","content":{"application/json":{"schema":{"$ref":"#/components/schemas/7"}}}},"200":{"description":"Updated"}}}}},"components":{"schemas":{"z":{"type":"string"},"7":{"type":"object","properties":{"k":{"type":"string"},"0":{"type":"number"}}},"001":{"type":"null"}}}}`
+
 export const cases = (reference: string): Array<Case> => {
   const fixture = (name: string) =>
     JSON.parse(readFileSync(join(reference, "test/fixtures", name), "utf8")) as Record<string, unknown>
   return [
+    {
+      name: "3.0 const in a component",
+      baseUrl,
+      spec: v30({ type: "string" }, { Fixed: { type: "string", const: "a" } }),
+    },
+    {
+      name: "3.0 $id in a body",
+      baseUrl,
+      spec: v30({ type: "object", properties: { a: { $id: "x", type: "string" } } }),
+    },
+    {
+      name: "3.0 examples in a parameter",
+      baseUrl,
+      spec: {
+        openapi: "3.0.0",
+        paths: {
+          "/test": {
+            get: {
+              operationId: "test",
+              parameters: [{ name: "q", in: "query", schema: { type: "string", examples: ["x"], if: {} } }],
+              responses: { 200: { description: "Success" } },
+            },
+          },
+        },
+      },
+    },
+    {
+      name: "3.0 keywords beside a $ref pass",
+      baseUrl,
+      spec: v30({ type: "object", properties: { a: { $ref: "#/components/schemas/A", const: 1 } } }, { A: { type: "string" } }),
+    },
+    {
+      name: "3.0 nullable allOf moves its references",
+      baseUrl,
+      spec: v30({
+        type: "object",
+        properties: {
+          wrapped: {
+            nullable: true,
+            allOf: [
+              {
+                type: "object",
+                properties: {
+                  a: { type: "string" },
+                  b: { $ref: "#/properties/wrapped/allOf/0/properties/a" },
+                  "c d": { type: "number" },
+                  e: { $ref: "#/properties/wrapped/allOf/0/properties/c%20d" },
+                  f: { $ref: "#/properties/wrapped/allOf/0" },
+                  g: { $ref: "#/properties/wrapped" },
+                  h: { $ref: "#/properties/wrapped/allOf/1" },
+                  i: { $ref: "#/components/schemas/A" },
+                  j: { $ref: "other.json#/properties/wrapped/allOf/0" },
+                  k: { $ref: "#/properties/wrapped/allOf/0/properties/a~1b" },
+                },
+              },
+            ],
+          },
+        },
+      }, { A: { type: "string" } }),
+    },
+    {
+      name: "integer-like keys",
+      baseUrl,
+      spec: JSON.parse(integerKeys),
+      specText: integerKeys,
+    },
     {
       name: "happy path",
       spec: fixture("openapi-happy-path.json"),

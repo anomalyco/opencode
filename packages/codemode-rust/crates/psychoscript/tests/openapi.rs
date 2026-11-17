@@ -135,10 +135,30 @@ fn openapi_tools_match_the_reference() {
         if let Some(url) = case["baseUrl"].as_str() {
             options = options.base_url(url);
         }
-        for (k, v) in case["headers"].as_object().unwrap() {
-            options = options.header(k, v.as_str().unwrap());
+        if let Some(headers) = case["headers"].as_object() {
+            for (k, v) in headers {
+                options = options.header(k, v.as_str().unwrap());
+            }
         }
-        let generated = openapi::from_spec(options);
+        let generated = match (openapi::from_spec(options), case["error"].as_str()) {
+            (Err(e), Some(expected)) => {
+                if e.0 != expected {
+                    failures.push(format!(
+                        "{name}: error\n  expected {expected}\n  actual   {e}"
+                    ));
+                }
+                continue;
+            }
+            (Err(e), None) => {
+                failures.push(format!("{name}: unexpected error {e}"));
+                continue;
+            }
+            (Ok(_), Some(expected)) => {
+                failures.push(format!("{name}: expected the error {expected}"));
+                continue;
+            }
+            (Ok(g), None) => g,
+        };
         let skipped: Vec<Json> = generated
             .skipped
             .iter()
@@ -163,7 +183,12 @@ fn openapi_tools_match_the_reference() {
                 })
             })
             .collect();
-        if !same(&Json::from(schemas.clone()), &case["schemas"]) {
+        // Key order too: the reference's schemas are JavaScript objects, and signatures render in their order.
+        let (actual, expected) = (
+            Json::from(schemas.clone()).to_string(),
+            case["schemas"].to_string(),
+        );
+        if actual != expected {
             failures.push(format!(
                 "{name}: schemas\n  expected {}\n  actual   {}",
                 case["schemas"],
@@ -249,7 +274,8 @@ fn happy_path() -> Json {
 fn generated_operations_are_found_by_search_and_report_transport_errors() {
     let generated = openapi::from_spec(
         openapi::Options::new(happy_path(), Arc::new(Down)).base_url("http://localhost:4096"),
-    );
+    )
+    .unwrap();
     let rt = generated
         .tools
         .into_iter()

@@ -27,6 +27,8 @@ type Spec = {
   output?: unknown
   freeform?: boolean
   result?: unknown
+  /** The input as JSON text, whose key order JavaScript changes when it parses it: integer-like keys first. */
+  inputText?: string
 }
 
 const document = (schema: unknown, decoded = false) => {
@@ -79,7 +81,14 @@ const effect = {
   },
 }
 
+const integerKeys = `{"type":"object","properties":{"b":{"type":"string"},"10":{"type":"number"},"2":{"type":"boolean","description":"Two"},"a":{"type":"object","properties":{"z":{"type":"string"},"0":{"type":"string"},"01":{"type":"string"},"4294967295":{"type":"null"},"4294967294":{"type":"null"}}}},"required":["10","b"]}`
 const json: Array<Spec> = [
+  {
+    path: "keys.ordered",
+    description: "Integer-like property names, rendered in JavaScript key order",
+    input: JSON.parse(integerKeys),
+    inputText: integerKeys,
+  },
   {
     path: "adapter.call",
     description: "Call an adapter-described tool",
@@ -311,17 +320,25 @@ const openapi: Array<unknown> = []
 for (const item of cases(pkg)) {
   openapi.push(await (async () => {
     let resolutions: Array<unknown> = []
-    const api = OpenAPI.fromSpec({
-      spec: item.spec,
-      ...(item.baseUrl === undefined ? {} : { baseUrl: item.baseUrl }),
-      ...(item.headers === undefined ? {} : { headers: item.headers }),
-      auth: {
-        resolve: (context: { name: string }) => {
-          resolutions.push(JSON.parse(JSON.stringify(context)))
-          return Effect.succeed(item.auth?.[context.name])
+    const spec = item.specText === undefined ? item.spec : JSON.parse(item.specText)
+    const build = () =>
+      OpenAPI.fromSpec({
+        spec,
+        ...(item.baseUrl === undefined ? {} : { baseUrl: item.baseUrl }),
+        ...(item.headers === undefined ? {} : { headers: item.headers }),
+        auth: {
+          resolve: (context: { name: string }) => {
+            resolutions.push(JSON.parse(JSON.stringify(context)))
+            return Effect.succeed(item.auth?.[context.name])
+          },
         },
-      },
-    })
+      })
+    let api
+    try {
+      api = build()
+    } catch (error) {
+      return { name: item.name, spec, specText: item.specText ?? null, baseUrl: item.baseUrl ?? null, error: String((error as Error).message) }
+    }
     const runtime = CodeMode.make({ tools: { api: api.tools } })
     const schemas: Array<unknown> = []
     const walk = (node: Record<string, unknown>, prefix: string) => {
@@ -379,7 +396,8 @@ for (const item of cases(pkg)) {
     }
     return {
       name: item.name,
-      spec: item.spec,
+      spec,
+      specText: item.specText ?? null,
       baseUrl: item.baseUrl ?? null,
       auth: item.auth ?? {},
       headers: item.headers ?? {},

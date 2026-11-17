@@ -386,7 +386,7 @@ fn operation_body<'a>(
                     required: required && required_properties.contains(&name.as_str()),
                     // Already projected with the body as resolution root; projecting again rooted at the field
                     // would misresolve shadowed local $defs.
-                    schema: super::normalize::normalize(doc, value),
+                    schema: super::normalize::normalize(doc, value, &mut p.error),
                     style: None,
                     explode: false,
                 })

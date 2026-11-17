@@ -19,12 +19,14 @@ impl Schema {
     /// A schema that also checks values, the way the reference decodes an Effect Schema: input is checked before the
     /// tool runs and output before the program sees it. See [`Schema::validate`] for the keywords it checks.
     pub fn validated(doc: Json) -> Self {
+        let doc = js_key_order(doc);
         let validator = Some(std::sync::Arc::new(Validator::new(&doc)));
         Self { doc, validator }
     }
 
     /// A schema that only shapes the model-visible signature; values pass through unchecked.
     pub fn render_only(doc: Json) -> Self {
+        let doc = js_key_order(doc);
         Self {
             doc,
             validator: None,
@@ -61,6 +63,37 @@ impl Validator {
     fn validate(&self, value: Json) -> Result<Json, String> {
         check(&self.root, value, self, 0)
             .map_err(|(message, path)| format!("SchemaError({message}{})", render_path(&path)))
+    }
+}
+
+/// Object keys in the order JavaScript enumerates them: array indices (canonical integers below 2³² − 1) first and
+/// ascending, then the other keys in insertion order. Documents read as JavaScript objects render in this order.
+pub fn js_key_order(v: Json) -> Json {
+    match v {
+        Json::Array(items) => Json::Array(items.into_iter().map(js_key_order).collect()),
+        Json::Object(map) => {
+            let index = |k: &str| {
+                (k == "0"
+                    || (!k.starts_with('0')
+                        && !k.is_empty()
+                        && k.bytes().all(|b| b.is_ascii_digit())))
+                .then(|| k.parse::<u64>().ok())
+                .flatten()
+                .filter(|n| *n < u64::from(u32::MAX))
+            };
+            let reorder = map.keys().any(|k| index(k).is_some());
+            let mut entries: Vec<(String, Json)> =
+                map.into_iter().map(|(k, v)| (k, js_key_order(v))).collect();
+            if reorder {
+                let (mut ints, strs): (Vec<_>, Vec<_>) =
+                    entries.into_iter().partition(|(k, _)| index(k).is_some());
+                ints.sort_by_key(|(k, _)| index(k));
+                entries = ints;
+                entries.extend(strs);
+            }
+            Json::Object(entries.into_iter().collect())
+        }
+        other => other,
     }
 }
 
