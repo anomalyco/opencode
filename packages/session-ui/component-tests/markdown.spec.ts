@@ -238,18 +238,22 @@ story("retains local and download link routing and bounds untrusted application 
       '<a download href="obsidian:fixture">download</a>', '<a href="opencode:fixture">deep link</a>',
       '<a data-app-link="forged">text</a>', '<a href="DaTa:text/plain,test">data</a>',
       `<a href="obsidian:${"a".repeat(2048)}">long</a>`, '<a href="obsidian:a&lt;b">angle</a>',
+      '<a download="report" href="mailto:fixture@example.invalid?attach=fixture">mail</a>',
+      '<a download href="https://example.invalid/report.csv">web download</a>',
     ].map(html => {
       const parent = document.createElement("div")
       parent.innerHTML = sanitizeMarkdown(html)
       const a = parent.querySelector("a")!
 
-      return [a.dataset.localLink, a.dataset.appLink, a.hasAttribute("href")]
+      return [a.dataset.localLink, a.dataset.appLink, a.hasAttribute("href"), a.hasAttribute("download")]
     })
   }, fixture)
 
-  expect(result).toEqual([["C:/workspace/a.ts", undefined, false], ["src/a.ts", undefined, false],
-    [undefined, undefined, false], [undefined, "opencode:fixture", false], [undefined, undefined, false],
-    [undefined, "DaTa:text/plain,test", false], [undefined, undefined, false], [undefined, undefined, false]])
+  // Only a web link downloads. Another app's address loses `download` and is reviewed like every app link.
+  expect(result).toEqual([["C:/workspace/a.ts", undefined, false, false], ["src/a.ts", undefined, false, false],
+    [undefined, "obsidian:fixture", false, false], [undefined, "opencode:fixture", false, false], [undefined, undefined, false, false],
+    [undefined, "DaTa:text/plain,test", false, false], [undefined, undefined, false, false], [undefined, undefined, false, false],
+    [undefined, "mailto:fixture@example.invalid?attach=fixture", true, false], [undefined, undefined, true, true]])
 })
 
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {

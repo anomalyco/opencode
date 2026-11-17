@@ -130,6 +130,38 @@ story("accepts an assistive activation of the focused link, not a synthetic or u
   await expect(pane.getByRole("status").filter({ hasText: "From the conversation" })).toContainText(url)
 })
 
+story("reviews an application link that carries download, and leaves a web download to the document", async ({ page }) => {
+  const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
+  await page.evaluate(async (sanitizer) => {
+    const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
+    const row = document.createElement("div")
+    row.dataset.paneRow = ""
+    row.dataset.testid = "download-links"
+    row.innerHTML = sanitizeMarkdown(
+      '<a download href="mailto:download@example.invalid?attach=fixture">Mail</a> <a download href="obsidian://open?vault=download">Vault</a> <a download href="https://example.invalid/report.csv">Report</a>',
+    )
+    enableMarkdownAppLinks(row)
+    // A reviewed click never reaches here. Record the ones left to the document, and keep the fixture page in place.
+    row.addEventListener("click", (event) => {
+      row.dataset.passed = `${row.dataset.passed ?? ""}${event.target instanceof Element ? event.target.textContent : ""}`
+      event.preventDefault()
+    })
+    document.querySelector('[data-testid="browser-pane-fixture"]')?.prepend(row)
+  }, sanitizer)
+  const notice = page.locator("#browser-panel").getByRole("status").filter({ hasText: "From the conversation" })
+  const mail = page.getByRole("link", { name: "Mail" })
+  await expect(mail).not.toHaveAttribute("download")
+  // The attribute put back after sanitizing does not take the link past the review either.
+  await mail.evaluate((node) => node.setAttribute("download", ""))
+  await mail.click()
+  await expect(notice).toContainText("mailto:download@example.invalid?attach=fixture")
+  await page.getByRole("link", { name: "Vault" }).click()
+  await expect(notice).toContainText("obsidian://open?vault=download")
+  await page.getByRole("link", { name: "Report" }).click()
+  await expect(page.getByTestId("download-links")).toHaveAttribute("data-passed", "Report")
+  await expect(notice).toContainText("obsidian://open?vault=download")
+})
+
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const x = Number(await native.getAttribute("data-x"))

@@ -190,7 +190,11 @@ if (typeof window !== "undefined" && purifier.isSupported) {
 
       const protocol = URL.parse(href)?.protocol
 
-      if (protocol && !path && !/^(https?|file):$/.test(protocol) && !node.hasAttribute("download")) {
+      if (protocol && !path && !/^(https?|file):$/.test(protocol)) {
+        // Chromium navigates a `download` link it cannot fetch. Only web and file links download; another app's
+        // address takes the review like every other.
+        node.removeAttribute("download")
+
         if (href.length > 2048 || /[<>\x00-\x1f\x7f-\x9f]/.test(href)) return node.removeAttribute("href")
         node.removeAttribute("style")
         node.removeAttribute("class")
