@@ -406,6 +406,7 @@ function CaseCard(props: { case: Case; forced: boolean; locator: boolean }) {
     const rect = (
       element.offsetWidth < 4 && element.parentElement ? element.parentElement : element
     ).getBoundingClientRect()
+
     const outer = stage.getBoundingClientRect()
 
     setBox({ left: rect.left - outer.left, top: rect.top - outer.top, width: rect.width, height: rect.height })
