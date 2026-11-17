@@ -361,6 +361,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 sections={grouped?.sections}
                 tabFooter={grouped?.tabFooter}
                 tabLabel={grouped?.tabLabel}
+                tabMenu={grouped?.tabMenu}
+                tabMuted={grouped?.tabMuted}
+                leading={grouped?.leading}
                 tabs={tabsStore}
                 currentTab={currentTab()}
                 onNavigate={(tab, el) => {
