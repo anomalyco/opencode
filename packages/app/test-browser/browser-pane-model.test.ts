@@ -64,7 +64,7 @@ function fixture() {
 
   const fake = {
     id: "browser",
-    t: (key: string) => key,
+    t: (key: string, params?: Record<string, string>) => (params ? `${key} ${JSON.stringify(params)}` : key),
     use: () => live,
     sessions: { current, list: () => refs },
     screen: { current: () => undefined },
@@ -78,17 +78,19 @@ function fixture() {
   const ctx = fake as unknown as SetupContext<typeof definition>
   const owned = createRoot((dispose) => ({ model: createModel(ctx), dispose }))
 
-  const emit = (session: string, state: Browser.State) => {
+  const send = (session: string, event: PaneEvent) => {
     const binding = bindings.get(session)
 
-    if (binding) listeners.forEach((listener) => listener({ binding, event: { type: "state", state } }))
+    if (binding) listeners.forEach((listener) => listener({ binding, event }))
   }
+
+  const emit = (session: string, state: Browser.State) => send(session, { type: "state", state })
 
   // SAFETY: the model reads only the listed fields of a session ref.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send }
 }
 
 test("one session's transitions leave another session's attachment as it was", async () => {
@@ -113,6 +115,34 @@ test("one session's transitions leave another session's attachment as it was", a
     expect(app.model.opened(alpha, tab("a").id)).toBe(false)
     expect(app.model.opened(alpha, tab("d").id)).toBe(true)
     expect(app.model.tabs(beta, [tab("b").id, tab("c").id])).toEqual([tab("b").id, tab("c").id])
+  } finally {
+    app.dispose()
+  }
+})
+
+test("a passkey notice names the tab's origin and offers the import for the page's registrable site", async () => {
+  const app = fixture()
+  const [alpha] = app.sessions
+  const page = tab("a", "https://login.github.com/session")
+
+  try {
+    await Bun.sleep(0)
+    app.emit("ses_alpha", { tabs: [page], focusedTabID: page.id })
+    // Main sends both: the notice's own site, which the import searches for, and the origin the tab was on.
+    app.send("ses_alpha", {
+      type: "refusal",
+      tabID: page.id,
+      notice: { reason: "browser.passkey", site: "github.com" },
+      token: "token",
+      site: "https://login.github.com",
+    })
+    expect(app.model.notice(alpha, page.id)).toEqual({
+      token: "token",
+      origin: 'notice.site {"site":"https://login.github.com"}',
+      text: "refused.passkey",
+      label: "refused.passkey.import",
+      passkey: { site: "github.com", choose: true },
+    })
   } finally {
     app.dispose()
   }

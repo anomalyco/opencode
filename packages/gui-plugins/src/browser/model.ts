@@ -68,7 +68,7 @@ type ModelState = {
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
   chrome: Record<
     string,
-    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string; site?: string }; prompt?: PromptView } | undefined> | undefined
+    Record<string, { find?: FindView; notice?: { notice: RefusalNotice; token: string; site?: string }; prompt?: PromptView } | undefined> | undefined
   >
 }
 
@@ -326,7 +326,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "find" || event.type === "refusal") {
       setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
-        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token, site: event.site } }),
+        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { notice: event.notice, token: event.token, site: event.site } }),
       } }))
 
       return
@@ -696,14 +696,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       })
     },
     notice(session: Session, tabID: string) {
-      const notice = state.chrome[session.key]?.[tabID]?.notice
+      const entry = state.chrome[session.key]?.[tabID]?.notice
 
-      if (!notice) return
+      if (!entry) return
+      // `entry.site` is the tab's origin when main made the notice. A passkey notice's own `site` is the registrable
+      // domain the import searches for; never let one stand in for the other.
+      const notice = entry.notice
       const conversation = "source" in notice && notice.source === "conversation"
-      const origin = conversation ? ctx.t("notice.conversation") : notice.site ? ctx.t("notice.site", { site: notice.site }) : ctx.t("notice.page")
+      const origin = conversation ? ctx.t("notice.conversation") : entry.site ? ctx.t("notice.site", { site: entry.site }) : ctx.t("notice.page")
 
       if (notice.reason === "external" || notice.reason === "popup") return {
-        token: notice.token,
+        token: entry.token,
         origin,
         opensApp: notice.action === "open",
         text: notice.reason === "external" ? ctx.t("refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
@@ -713,18 +716,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
       // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
       if (notice.reason === "browser.passkey.off")
-        return { token: notice.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+        return { token: entry.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
 
       if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
         return {
-          token: notice.token,
+          token: entry.token,
           origin,
           text: ctx.t("refused.passkey"),
           label: ctx.t("refused.passkey.import"),
           passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
         }
 
-      return { token: notice.token, origin, text: describe(notice.reason) }
+      return { token: entry.token, origin, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean, copy?: boolean) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
