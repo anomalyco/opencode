@@ -130,8 +130,8 @@ pub fn empty() -> Fake {
 }
 
 /// The routes most fixtures serve, for a location at `directory`: session `ses_a` with no messages, the `build`
-/// agent and "Model M", empty catalogs and request lists, an echo of each prompt, and 204 for model and agent
-/// writes. Anything else is a 404.
+/// agent and "Model M", empty catalogs and request lists, an echo of each prompt, 204 for model and agent writes, and
+/// a data migration that has completed. Anything else is a 404.
 pub fn base(seen: &Seen, directory: &str) -> Reply {
     let path = seen.path.as_str();
     match (seen.method.as_str(), path) {
@@ -153,6 +153,10 @@ pub fn base(seen: &Seen, directory: &str) -> Reply {
         ) => (200, list(directory, json!([]))),
         ("GET", _) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
         ("GET", "/api/config") => (200, json!([])),
+        // The TUI reads the data migration's status a second after it connects (`features/overlays.rs`). A server
+        // with nothing to migrate says so; a 404 would toast "Data migration failed" over whatever a test is at by
+        // then, which a slow column under load reaches and a fast one does not.
+        ("GET", "/api/experimental/migration/v1") => (200, json!({ "status": "completed" })),
         ("POST", _) if path.ends_with("/prompt") => (200, prompted(seen, "steer")),
         ("POST", _) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
         _ => not_found(),
