@@ -687,7 +687,7 @@ export function context(base: Base, carrier: Carrier) {
               },
             })
           const at = key(cx)
-          mounted = mount(provided, screen, () => invalidate(at), crashed, focus, scrollsOf(name))
+          mounted = mount(provided, screen, () => invalidate(at), crashed, focus, scrollsOf(name), (feature) => unsupported(feature))
         } finally {
           rendering = before
         }
@@ -919,10 +919,26 @@ export function context(base: Base, carrier: Carrier) {
     ...(options.sessionID ? { session: options.sessionID } : {}),
   })
 
+  const root = { add() {}, remove() {}, insertBefore() {}, getChildren: () => [], requestRender: () => invalidate() }
   const renderer = new Proxy(
     {
       requestRender: () => invalidate(),
       keyInput,
+      // CT-17: OpenTUI's root renderable and focused editor, which a plugin probes for before it registers
+      // (opencode-dollar-skills): the root takes nothing, as a renderable the plugin builds draws nothing, and nothing
+      // has the focus. Each says so once.
+      get root() {
+        unsupported("renderer.root")
+        return root
+      },
+      get currentFocusedEditor() {
+        unsupported("renderer.currentFocusedEditor")
+        return undefined
+      },
+      get currentFocusedRenderable() {
+        unsupported("renderer.currentFocusedRenderable")
+        return undefined
+      },
       // The terminal's, as `useTerminalDimensions` (carbon-4): a surface's own box is not the renderer's.
       get width() {
         return info()?.size?.[0] || size[0]().width || 0
@@ -1135,7 +1151,12 @@ export function context(base: Base, carrier: Carrier) {
           rendering = reading
           try {
             const key = `compat.dialog.${++shows}`
-            shown = { mounted: mount(provided, screen, panelChanged, crashed, focus), key, onClose, opened: false }
+            shown = {
+              mounted: mount(provided, screen, panelChanged, crashed, focus, undefined, (feature) => unsupported(feature)),
+              key,
+              onClose,
+              opened: false,
+            }
           } finally {
             rendering = before
           }
