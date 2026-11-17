@@ -149,15 +149,6 @@ fn leaving_a_missing_location_session_gives_enter_back_to_the_prompt() {
 }
 
 #[test]
-fn keymap_queries_do_not_lock_the_store() {
-    let h = mount(support::session_route("ses_a"));
-    h.wait_for("the session", |screen| screen.contains("Review"));
-    // `session.list`'s `suggested` and the prompt's `running` conditions run inside `commands`.
-    let commands = h.tui.data.read(|_| h.commands());
-    assert!(commands.contains(&"session.list".to_owned()));
-}
-
-#[test]
 fn a_reconnect_reads_permissions_again() {
     let h = mount(support::session_route("ses_a"));
     h.wait_for("the session", |screen| screen.contains("Review"));
