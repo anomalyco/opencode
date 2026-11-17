@@ -1,0 +1,75 @@
+import type { AutomationInfo } from "@opencode/client/promise"
+import { createSimpleContext } from "@opencode/ui/context"
+import { useQueries } from "@tanstack/solid-query"
+import { createEffect, createMemo } from "solid-js"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { useGlobal } from "@/runtime/server/runtime"
+import { useLayout } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
+
+export const { use: useAutomationSource, provider: AutomationSourceProvider } = createSimpleContext({
+  name: "AutomationSource",
+  init: () => {
+    const global = useGlobal()
+    const servers = useServers()
+    const layout = useLayout()
+    const tabs = useTabs()
+    const connections = createMemo(() => servers.visible.flatMap((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+      if (!ctx || ctx.sdk.connection.status() !== "connected") return []
+      const selected = layout.home.selection()
+      const last = tabs.lastTarget()
+      const route = layout.route()
+      const active = route.type === "session" && route.server === server
+        ? ctx.data.session.get(route.sessionId)?.location.directory : undefined
+      const directories = [...new Set([
+        active,
+        selected.server === server ? selected.directory : undefined,
+        last?.server === server ? last.directory : undefined,
+        ...ctx.projects.used().map((p) => p.worktree),
+      ].filter((directory): directory is string => !!directory))]
+      if (!directories.length && ctx.sync.data.path.home) directories.push(ctx.sync.data.path.home)
+      return [{ server, ctx, directories, serverLabel: servers.label(conn) }]
+    }))
+
+    // The server registers /automation only where the effective flag is on. The shared catalog also
+    // handles command.updated after config changes. Older servers without the command stay hidden.
+    createEffect(() => {
+      for (const { ctx, directories } of connections()) {
+        for (const directory of directories) void ctx.data.location.command.sync({ directory }).catch(() => undefined)
+      }
+    })
+    const enabled = createMemo(() => connections().flatMap((item) => {
+      const directories = item.directories.filter((directory) =>
+        item.ctx.data.location.command.list({ directory })?.some((command) => command.name === "automation"))
+      return directories.length ? [{ ...item, directories }] : []
+    }))
+
+    // The server filters this list using each row's saved directory. Fetch it once per server,
+    // not once per project, and never use an empty list as a capability signal.
+    const queries = useQueries(() => ({ queries: enabled().map((item) => ({
+      queryKey: [item.ctx.sdk.scope, "automations"] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) => item.ctx.sdk.api.experimental.automation.list(undefined, { signal }),
+      select: (rows: AutomationInfo[]) => () => rows,
+      retry: false,
+      refetchInterval: layout.route().type === "automations" ? 5_000 : 30_000,
+    })) }))
+    const entries = createMemo(() => enabled().flatMap((item, index) => {
+      const query = queries[index]
+      if (!query?.isSuccess) return []
+      return (query.data?.() ?? []).map((row) => ({ ...item, row, key: `${item.server}\0${row.id}` }))
+    }))
+    return {
+      enabled, entries,
+      available: () => enabled().length > 0,
+      multiServer: () => connections().length > 1,
+      loading: () => queries.some((query) => query.isPending),
+      failed: () => queries.some((query) => query.isError),
+      active: createMemo(() => entries().filter((entry) => entry.row.status === "active").length),
+      refresh: () => Promise.all(queries.map((query) => query.refetch())),
+    }
+  },
+})
+
+export type AutomationEntry = ReturnType<ReturnType<typeof useAutomationSource>["entries"]>[number]

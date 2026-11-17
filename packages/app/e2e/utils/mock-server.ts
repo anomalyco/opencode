@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, AutomationInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
@@ -168,6 +168,8 @@ export interface MockServerConfig {
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
+  // Serves `/api/experimental/automation*`; defaults to an empty list.
+  automations?: AutomationInfo[]
   // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
   // Without it, the server has a working daemon and no terminals; `capability: false` makes the routes answer 503.
   persistentPty?: MockPersistentPtyConfig
@@ -947,6 +949,45 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        automationList: (ctx) =>
+          Effect.sync(() => {
+            const list = config.automations ?? []
+            const filtered = ctx.query.sessionID ? list.filter((item) => item.sessionID === ctx.query.sessionID) : list
+
+            return { data: filtered }
+          }),
+        automationPause: (ctx) =>
+          Effect.suspend(() => {
+            const list = config.automations ?? []
+            const index = list.findIndex((item) => item.id === ctx.params.automationID)
+
+            if (index === -1) return Effect.fail(new MockNotFound({ message: `Automation not found: ${ctx.params.automationID}` }))
+            const updated: AutomationInfo = { ...list[index]!, status: "paused", time: { ...list[index]!.time, updated: Date.now() } }
+            list[index] = updated
+
+            return Effect.succeed({ data: updated })
+          }),
+        automationResume: (ctx) =>
+          Effect.suspend(() => {
+            const list = config.automations ?? []
+            const index = list.findIndex((item) => item.id === ctx.params.automationID)
+
+            if (index === -1) return Effect.fail(new MockNotFound({ message: `Automation not found: ${ctx.params.automationID}` }))
+            const updated: AutomationInfo = { ...list[index]!, status: "active", time: { ...list[index]!.time, updated: Date.now() } }
+            list[index] = updated
+
+            return Effect.succeed({ data: updated })
+          }),
+        automationDelete: (ctx) =>
+          Effect.suspend(() => {
+            const list = config.automations ?? []
+            const index = list.findIndex((item) => item.id === ctx.params.automationID)
+
+            if (index === -1) return Effect.fail(new MockNotFound({ message: `Automation not found: ${ctx.params.automationID}` }))
+            list.splice(index, 1)
+
+            return noContent
+          }),
         worktreeList: () =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)
