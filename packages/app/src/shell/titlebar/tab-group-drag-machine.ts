@@ -650,8 +650,7 @@ function attachTabSlideShifts(
   const sourceIndented = source.groupKey !== undefined
 
   if (indicator.kind === "combine-tab" || indicator.kind === "join-group") {
-    const targetIndented = indicator.kind === "join-group"
-    const laneShift = targetIndented === sourceIndented ? undefined : targetIndented ? "in" : "out"
+    const laneShift = sourceIndented ? undefined : "in"
     const tabShiftY: Record<string, number> = {}
     const headerShiftY: Record<string, number> = {}
 
@@ -660,13 +659,28 @@ function attachTabSlideShifts(
         ? rows.find((r) => r.kind === "tab" && r.tabKey === indicator.tabKey)
         : rows.find((r) => r.kind === "header" && r.groupKey === indicator.groupKey)
 
-    if (targetRow && targetRow.top < sourceRow.top) {
+    if (targetRow) {
+      const sCenter = (sourceRow.top + sourceRow.bottom) / 2
+      const slotAfterTargetY = targetRow.bottom + 0.5
+
       rows.forEach((row) => {
-        if (row.top <= sourceRow.bottom) return
+        if (row.kind === "tab" && row.tabKey === source.tabKey) return
+        const rCenter = (row.top + row.bottom) / 2
 
-        if (row.kind === "header") headerShiftY[row.groupKey] = -tabStride
+        const shift =
+          slotAfterTargetY < sCenter
+            ? slotAfterTargetY < rCenter && rCenter < sCenter
+              ? tabStride
+              : 0
+            : sCenter < rCenter && rCenter < slotAfterTargetY
+              ? -tabStride
+              : 0
 
-        if (row.kind === "tab") tabShiftY[row.tabKey] = -tabStride
+        if (shift === 0) return
+
+        if (row.kind === "header") headerShiftY[row.groupKey] = shift
+
+        if (row.kind === "tab") tabShiftY[row.tabKey] = shift
       })
     }
 
@@ -679,7 +693,7 @@ function attachTabSlideShifts(
         headerShiftY,
         railByGroup: EMPTY_SHIFTS.railByGroup,
         laneShift,
-        tucked: true,
+        tucked: false,
       },
     }
   }

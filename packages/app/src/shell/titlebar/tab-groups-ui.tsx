@@ -31,7 +31,6 @@ import {
   selectDraggingGroupKey,
   selectDraggingTabKey,
   selectDropInsideGroupKey,
-  selectDropLine,
   selectGroupRailAdjustment,
   selectGroupShiftY,
   selectHeaderShiftY,
@@ -850,24 +849,10 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       },
       groupRailAdjustment: (groupKey: string) => selectGroupRailAdjustment(drag(), groupKey),
       combineColorOfTab: (key: string) => selectCombineColorOfTab(drag(), key),
-      get combineBadgeLabel() {
-        return language.t("tabs.groups.combineBadge")
-      },
+      combineBadgeLabel: "",
       onPointerDown,
       onScroll,
-      overlay: () => (
-        <Show when={selectDropLine(drag())}>
-          {(line) => (
-            <div
-              data-slot="tab-group-drop-line"
-              data-indented={line().indented ? "true" : undefined}
-              data-group-color={line().color}
-              style={{ top: `${line().visualY}px` }}
-              aria-hidden="true"
-            />
-          )}
-        </Show>
-      ),
+      overlay: () => undefined,
     }
 
     return {

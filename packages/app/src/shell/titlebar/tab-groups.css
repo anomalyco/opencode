@@ -184,23 +184,15 @@
     opacity 120ms ease-out;
 }
 
-/* Elevated full-width dragged tab sliding 1:1 with pointer */
+/* Dragged tab keeps dev's exact native pressed fill (from tab-nav.css) with zero added outline or shadow */
 [data-titlebar-tab-slot][data-drag-source="true"] {
   z-index: 40;
 }
 
 [data-titlebar-tab-slot][data-drag-source="true"] [data-titlebar-tab] {
-  --tab-base: var(--v2-background-bg-base);
-  --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
-  border-radius: 6px;
-  box-shadow:
-    inset 0 0 0 0.5px var(--v2-border-border-strong),
-    var(--v2-elevation-floating);
   transition:
-    transform 140ms cubic-bezier(0.2, 0, 0, 1),
     margin-inline-start 140ms cubic-bezier(0.2, 0, 0, 1),
-    width 140ms cubic-bezier(0.2, 0, 0, 1),
-    opacity 120ms ease-out;
+    width 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Snap dragged tab inline into/out of group rail indent without overflowing the right edge */
@@ -214,106 +206,35 @@
   width: calc(100% + 16px);
 }
 
-/* Tuck dragged tab slightly when hovering over a folder combine target or group header */
-[data-titlebar-tab-slot][data-drag-source="true"][data-drag-tucked="true"] [data-titlebar-tab] {
-  transform: scale(0.95);
-  opacity: 0.72;
-}
-
-/* Elevated full-width dragged group sliding 1:1 with pointer */
+/* Dragged group keeps native look with zero added outline or background box */
 [data-tab-group][data-dragging="true"] {
   z-index: 40;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent);
-  box-shadow:
-    inset 0 0 0 0.5px var(--v2-border-border-strong),
-    var(--v2-elevation-floating);
 }
 
-/* Emphasize a group's left rail while an insertion line sits inside that group */
-[data-tab-group][data-drop-inside="true"] > [data-tab-group-items]::before {
-  width: 2px;
-  background: var(--tab-group-swatch);
-}
-
-/* Crisp 2px insertion bar inside the opened slot:
-   - Full-width (x = 3px, accent hue) = drops ungrouped / reorders whole group
-   - Indented (x = 18px, group swatch hue) = drops inside group */
-[data-slot="tab-group-drop-line"] {
-  position: absolute;
-  inset-inline: 3px 2px;
-  height: 2px;
-  border-radius: 9999px;
-  background: var(--drop-line-color, var(--v2-icon-icon-accent));
-  pointer-events: none;
-  z-index: 30;
-  transform: translateY(-1px);
-  transition: top 140ms cubic-bezier(0.2, 0, 0, 1);
-}
-
-[data-slot="tab-group-drop-line"][data-indented="true"] {
-  inset-inline-start: 18px;
-}
-
-[data-slot="tab-group-drop-line"][data-group-color] {
-  --drop-line-color: var(--tab-group-swatch);
-}
-
-[data-slot="tab-group-drop-line"]::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: -1px;
-  top: -2px;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--drop-line-color, var(--v2-icon-icon-accent));
-}
-
-/* Join existing group header highlight */
+/* Join existing group header: quiet flat pill wash, no heavy ring */
 [data-tab-group-header][data-drop-over="true"] {
   background: var(--tab-group-pill-bg);
-  box-shadow: inset 0 0 0 1.5px var(--tab-group-swatch);
   border-radius: 6px;
 }
 
-/* iOS Home-Screen Folder combine well when hovering over the center of another tab */
+/* Combine target: Metro left rail bar + indent spanning target + opened slot below (zero outlines, zero overlap) */
 [data-titlebar-tab-slot][data-combine-target="true"] [data-titlebar-tab] {
-  --tab-base: var(--tab-group-pill-bg);
-  --tab-overlay: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--tab-group-swatch);
+  margin-inline-start: 16px;
+  width: calc(100% - 16px);
+  transition:
+    margin-inline-start 140ms cubic-bezier(0.2, 0, 0, 1),
+    width 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 [data-titlebar-tab-slot][data-combine-target="true"]::after {
   content: "";
   position: absolute;
-  inset: -2px 0;
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 1.5px var(--tab-group-swatch);
-  background: color-mix(in srgb, var(--tab-group-pill-bg) 42%, transparent);
-  pointer-events: none;
-  z-index: 35;
-}
-
-[data-slot="tab-combine-badge"] {
-  position: absolute;
-  inset-inline-end: 6px;
-  top: 14px;
-  transform: translateY(-50%);
-  z-index: 45;
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding-inline: 6px;
-  border-radius: 4px;
-  background: var(--tab-group-pill-bg);
-  color: var(--tab-group-pill-fg);
-  box-shadow:
-    inset 0 0 0 1px var(--tab-group-swatch),
-    var(--v2-elevation-floating);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: var(--line-height-compact);
+  inset-inline-start: 8px;
+  top: 3px;
+  height: 54px;
+  width: 1.5px;
+  border-radius: 9999px;
+  background: var(--tab-group-rail);
   pointer-events: none;
 }
 
@@ -338,8 +259,7 @@
   [data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]),
   [data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]) [data-tab-group-header],
   [data-titlebar-tab-list][data-dragging="true"] [data-tab-group][data-orientation="vertical"] > [data-tab-group-items]::before,
-  [data-titlebar-tab-slot][data-drag-source="true"] [data-titlebar-tab],
-  [data-slot="tab-group-drop-line"] {
+  [data-titlebar-tab-slot][data-drag-source="true"] [data-titlebar-tab] {
     transition: none;
   }
 }

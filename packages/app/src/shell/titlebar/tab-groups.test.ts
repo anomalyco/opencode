@@ -357,8 +357,8 @@ describe("tab-groups", () => {
 
     const center = hitTestVerticalDrag(source, geometry, 60, 14, above.intent)
     expect(center.indicator).toEqual({ kind: "combine-tab", tabKey: tabKey(t1), color: "blue" })
-    expect(center.shifts.tabShiftY).toEqual({})
-    expect(center.shifts.tucked).toBe(true)
+    expect(center.shifts.tabShiftY).toEqual({ [tabKey(t2)]: 31 })
+    expect(center.shifts.laneShift).toBe("in")
     expect(center.intent).toEqual({
       type: "combine-tabs",
       sourceTabKey: tabKey(t3),
