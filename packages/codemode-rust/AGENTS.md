@@ -30,6 +30,7 @@ Out of scope: classes (rejected, like the reference), `export`, Effect integrati
 - Dependencies: pure Rust only, and few. Justify each in the commit that adds it.
 - test262 parity runs both ways: `bash test262/run.sh` must pass, and `test262/rust-skipped.txt` and `test262/reference-gaps.txt` may only shrink.
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` must pass.
+- The conformance cases must also pass in round-trip mode, which saves and restores every run at each host stop and every 64 loop iterations: `PSYCHOSCRIPT_ROUNDTRIP=1 cargo test --release -p psychoscript-bench --test conformance`.
 - Benchmark claims need the command, machine and numbers in `bench/RESULTS.md`.
-- CI: the `unit` job of `.github/workflows/check-test.yml` runs these checks, conformance freshness, test262 and the informational bench on Linux, whenever `packages/codemode`, `packages/codemode-rust` or that workflow changed.
+- CI: the `unit` job of `.github/workflows/check-test.yml` runs these checks, round-trip conformance, conformance freshness, test262 and the informational bench on Linux, whenever `packages/codemode`, `packages/codemode-rust` or that workflow changed.
 - Nothing in the repo mentions internal tooling, private chats, home paths, hostnames or secrets.
