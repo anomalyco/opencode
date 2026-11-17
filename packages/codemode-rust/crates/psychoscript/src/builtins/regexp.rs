@@ -1014,7 +1014,14 @@ pub fn string_replace(vm: &mut Vm, s: StrId, re: Id, rep: &Value, all: bool) -> 
     };
     let subject = Subject::new(vm, s);
     let found = collect_matches(vm, re, &subject, true)?;
+    // With a callback, the reference finds the matches, then hands them to its prelude's `replaceWith`.
+    if callable {
+        super::fuel::handoff(vm);
+    }
     if found.is_empty() {
+        if callable {
+            vm.bytecode_builtin();
+        }
         return Ok(Value::Str(s));
     }
     let mut out = String::new();
@@ -1055,8 +1062,10 @@ pub fn string_replace(vm: &mut Vm, s: StrId, re: Id, rep: &Value, all: bool) -> 
                     }
                     cargs.push(Value::Obj(gid));
                 }
-                let r = vm.call(rep, Value::Undef, &cargs)?;
+                let r = vm.call_counted(rep, Value::Undef, &cargs)?;
                 let r = vm.string_of(&r)?;
+                super::fuel::native(vm);
+                super::fuel::step(vm);
                 out.push_str(vm.text(r));
             }
         }
@@ -1066,6 +1075,9 @@ pub fn string_replace(vm: &mut Vm, s: StrId, re: Id, rep: &Value, all: bool) -> 
         last = f.end;
     }
     out.push_str(&subject.slice(last, subject.len()));
+    if callable {
+        vm.bytecode_builtin();
+    }
     Ok(vm.string_val(out))
 }
 

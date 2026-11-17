@@ -366,6 +366,21 @@ programs.push(
     during(`const like = { size: 3, has: (x) => see(x) % 7 === 0, keys: () => [1, 2, 3].values() }; const s1 = new Set(${range(0, 2)})`,
       `for (let j = 0; j < 3000; j++) { s1.${name}(like); see(j) }`),
   ]),
+  during("const u = new Uint8Array(d.slice(0, 20000))", "u.forEach(see); u.map(see); u.filter(see)"),
+  during("const u = new Uint8Array(d.slice(0, 20000))", "u.some((x) => !see(x)); u.every(see); u.find((x) => !see(1)); u.findLastIndex((x) => !see(1))"),
+  during("const u = new Uint8Array(d.slice(0, 20000))", "u.reduce((s, x) => see(s)); u.reduceRight((s, x) => see(s), 0)"),
+  during("", "Uint8Array.from(d.slice(0, 20000), see)"),
+  after("const b = d.slice(0, 3000); const u = new Uint8Array(3000)", "new Uint8Array(b); Uint8Array.from(b); u.set(b); u.set(new Uint8Array(b)); new Uint8Array(u)"),
+  during("const b = d.slice(0, 3000).reverse()", "b.slice().sort((x, y) => see(x) - y); b.toSorted((x, y) => see(y) - x)"),
+  during("const u = new Uint8Array(d.slice(0, 3000).reverse())", "u.sort((x, y) => see(x) - y)"),
+  after("const b = d.slice(0, 20000).reverse(); const c = d.slice(0, 4096)", "b.slice().sort(); c.slice().sort(); b.toSorted(); [3, 1, 2].sort((x, y) => x - y)"),
+  during("const s = 'ab'.repeat(5000)", "s.replace(/b/g, see); s.replaceAll('a', see); s.replace('b', see); 'é'.repeat(2000).replaceAll('é', see); s.replace(/z/g, see)"),
+  during("const j = JSON.stringify({ x: d.slice(0, 3000), y: { z: d.slice(0, 2000) } })", "JSON.parse(j, (key, v) => see(v))"),
+  after("const pairs = d.slice(0, 2000).map((x) => [x, x])", "Object.fromEntries(pairs); Object.fromEntries(new Map(pairs)); Math.sumPrecise(d); AggregateError(d.slice(0, 1000)); new AggregateError(d)"),
+  after("const pairs = d.slice(0, 1000).map((x) => ['k' + x, String(x)])", "new Headers(pairs); new URLSearchParams(pairs); new Headers({ a: 'b' }); new URLSearchParams(new URLSearchParams('a=b'))"),
+  during("const h = new Headers(d.slice(0, 2000).map((x) => ['k' + x, String(x)])); const q = new URLSearchParams(d.slice(0, 2000).map((x) => ['k', String(x)]))", "h.forEach(see); q.forEach(see)"),
+  during("const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2", "s.forEach(see); s.reduceRight((t, x) => see(t), 0); [s].flatMap((x) => see(x))"),
+  after("const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2", "s.forEach((x) => x)"),
 )
 
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.

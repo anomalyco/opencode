@@ -435,6 +435,21 @@ fn read_pairs(
     label: &str,
     headers: bool,
 ) -> Result<Vec<(String, String)>, Value> {
+    // The fuel is the prelude's `readPairs`: `$IsIterable`, then per pair `$IsIterable` and a `String` per part, and
+    // `$Pairs` at the end (see `fuel.rs`).
+    super::fuel::method(vm);
+    super::fuel::native(vm);
+    let pairs = read_pairs_in(vm, init, label, headers)?;
+    super::fuel::native(vm);
+    Ok(pairs)
+}
+
+fn read_pairs_in(
+    vm: &mut Vm,
+    init: &Value,
+    label: &str,
+    headers: bool,
+) -> Result<Vec<(String, String)>, Value> {
     if !is_iterable(vm, init) {
         if !matches!(init, Value::Obj(_)) || is_runtime_reference(vm, init) {
             return Err(vm.type_error(if headers {
@@ -454,20 +469,22 @@ fn read_pairs(
         }
         return Ok(out);
     }
-    let items = vm.iterate_to_vec(init)?;
-    let mut rows = Vec::with_capacity(items.len());
-    for pair in items {
+    let mut rows = Vec::new();
+    super::fuel::for_of(vm, init, |vm, pair| {
+        super::fuel::native(vm);
         if !is_iterable(vm, &pair) || matches!(pair, Value::Str(_)) {
             return Err(vm.type_error(&format!("{label} expects iterable [name, value] pairs.")));
         }
-        let parts = vm.iterate_to_vec(&pair)?;
-        let mut strings = Vec::with_capacity(parts.len());
-        for p in parts {
+        let mut strings = Vec::new();
+        super::fuel::for_of(vm, &pair, |vm, p| {
             let s = vm.string_of(&p)?;
+            super::fuel::native(vm);
             strings.push(vm.text(s).to_owned());
-        }
+            Ok(true)
+        })?;
         rows.push(strings);
-    }
+        Ok(true)
+    })?;
     if rows.iter().any(|r| r.len() != 2) {
         return Err(vm.type_error(&format!("{label} expects iterable [name, value] pairs.")));
     }
@@ -619,10 +636,14 @@ fn pairs_for_each(
 ) -> Res {
     let f = require_callback(vm, &arg(args, 0), label)?;
     let this_arg = arg(args, 1);
+    // The reference hands the pairs to its prelude's `pairsForEach`.
+    super::fuel::handoff(vm);
     for (k, v) in pairs {
         let (k, v) = (js_text(vm, k), js_text(vm, v));
-        vm.call(&f, this_arg, &[v, k, *this])?;
+        vm.call_counted(&f, this_arg, &[v, k, *this])?;
+        super::fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(Value::Undef)
 }
 

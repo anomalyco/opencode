@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::{arg, describe_value, incompatible};
+use super::{arg, describe_value, fuel, incompatible};
 use crate::object::*;
 use crate::ops::{MAX_ARRAY_LEN, MAX_STRING_LEN};
 use crate::value::{Id, Value};
@@ -426,22 +426,38 @@ fn collect(
     source: &Value,
     name: &str,
     mapper: Option<(Value, Value)>,
+    native: bool,
 ) -> Result<Vec<u8>, Value> {
     if let (Some(b), None) = (bytes_of(vm, source), &mapper) {
         return Ok(b);
     }
+    // The reference's `collectBytes`, after the native's own call when a native hands on to it (see `fuel.rs`).
+    if native {
+        fuel::handoff(vm);
+    } else {
+        fuel::method(vm);
+    }
+    fuel::native(vm);
     if !is_iterable(vm, source) {
         let d = describe_value(vm, source);
+        fuel::native(vm);
         return Err(vm.type_error(&format!(
             "{name} expects a Uint8Array, an array, or an iterable of numbers, received {d}."
         )));
     }
-    let mut values = vm.iterate_to_vec(source)?;
+    let mut values = Vec::new();
+    fuel::for_of(vm, source, |_, v| {
+        values.push(v);
+        Ok(true)
+    })?;
     if let Some((f, this_arg)) = mapper {
         for (i, v) in values.iter_mut().enumerate() {
-            *v = vm.call(&f, this_arg, &[*v, Value::Num(i as f64)])?;
+            *v = vm.call_counted(&f, this_arg, &[*v, Value::Num(i as f64)])?;
+            fuel::step(vm);
         }
     }
+    fuel::native(vm);
+    vm.bytecode_builtin();
     let mut out = Vec::with_capacity(values.len());
     for v in values {
         out.push(to_u8(super::builtin_number(vm, &v)?));
@@ -453,7 +469,7 @@ fn uint8_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     requires_new(vm, &this, "Uint8Array")?;
     let source = arg(args, 0);
     if let Value::Obj(_) = source {
-        let data = collect(vm, &source, "new Uint8Array(...)", None)?;
+        let data = collect(vm, &source, "new Uint8Array(...)", None, false)?;
         return Ok(new_bytes(vm, data, false));
     }
     let n = match source {
@@ -485,6 +501,7 @@ fn uint8_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         &arg(args, 0),
         "Uint8Array.from",
         mapper.map(|f| (f, arg(args, 2))),
+        true,
     )?;
     Ok(new_bytes(vm, data, false))
 }
@@ -569,7 +586,7 @@ fn u_subarray(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn u_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_bytes(vm, &this, "set")?;
-    let data = collect(vm, &arg(args, 0), "Uint8Array.set", None)?;
+    let data = collect(vm, &arg(args, 0), "Uint8Array.set", None, true)?;
     let offset = match arg(args, 1) {
         Value::Undef => 0.0,
         v => super::builtin_integer(vm, &v)?,
@@ -770,23 +787,29 @@ fn walk(
     reverse: bool,
     stop: &mut dyn FnMut(&mut Vm, usize, Value, Value) -> Option<Value>,
 ) -> Result<Option<Value>, Value> {
+    // The reference's `Uint8Array$prototype$...` and its shared item loop (see `fuel.rs`); the caller ends it.
+    fuel::method(vm);
     let id = this_bytes(vm, this, name)?;
+    fuel::receiver_then_loop(vm);
     let f = super::require_callback(vm, &arg(args, 0), &format!("Uint8Array.{name}"))?;
+    fuel::native(vm);
     let this_arg = arg(args, 1);
     let len = len_of(vm, id);
     for k in 0..len {
         let i = if reverse { len - 1 - k } else { k };
         let item = byte_at(vm, id, i);
-        let r = vm.call(&f, this_arg, &[item, Value::Num(i as f64), *this])?;
+        let r = vm.call_counted(&f, this_arg, &[item, Value::Num(i as f64), *this])?;
         if let Some(v) = stop(vm, i, item, r) {
             return Ok(Some(v));
         }
+        fuel::step(vm);
     }
     Ok(None)
 }
 
 fn u_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     walk(vm, &this, args, "forEach", false, &mut |_, _, _, _| None)?;
+    vm.bytecode_builtin();
     Ok(Value::Undef)
 }
 
@@ -803,6 +826,8 @@ fn u_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Some(e) = err {
         return Err(e);
     }
+    fuel::native(vm);
+    vm.bytecode_builtin();
     Ok(new_bytes(vm, out, false))
 }
 
@@ -816,6 +841,8 @@ fn u_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         }
         None
     })?;
+    fuel::native(vm);
+    vm.bytecode_builtin();
     Ok(new_bytes(vm, out, false))
 }
 
@@ -827,6 +854,7 @@ fn find_in(vm: &mut Vm, this: Value, args: &[Value], name: &str, last: bool, ind
             None
         }
     })?;
+    vm.bytecode_builtin();
     Ok(r.unwrap_or(if index {
         Value::Num(-1.0)
     } else {
@@ -854,6 +882,7 @@ fn u_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let r = walk(vm, &this, args, "some", false, &mut |vm, _, _, r| {
         vm.truthy(&r).then_some(Value::Bool(true))
     })?;
+    vm.bytecode_builtin();
     Ok(r.unwrap_or(Value::Bool(false)))
 }
 
@@ -861,13 +890,17 @@ fn u_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let r = walk(vm, &this, args, "every", false, &mut |vm, _, _, r| {
         (!vm.truthy(&r)).then_some(Value::Bool(false))
     })?;
+    vm.bytecode_builtin();
     Ok(r.unwrap_or(Value::Bool(true)))
 }
 
 fn reduce(vm: &mut Vm, this: Value, args: &[Value], right: bool) -> Res {
     let name = if right { "reduceRight" } else { "reduce" };
+    fuel::method(vm);
     let id = this_bytes(vm, &this, name)?;
+    fuel::receiver_then_loop(vm);
     let f = super::require_callback(vm, &arg(args, 0), &format!("Uint8Array.{name}"))?;
+    fuel::native(vm);
     let len = len_of(vm, id);
     let order: Vec<usize> = if right {
         (0..len).rev().collect()
@@ -889,8 +922,10 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], right: bool) -> Res {
     };
     for i in iter {
         let item = byte_at(vm, id, i);
-        acc = vm.call(&f, Value::Undef, &[acc, item, Value::Num(i as f64), this])?;
+        acc = vm.call_counted(&f, Value::Undef, &[acc, item, Value::Num(i as f64), this])?;
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(acc)
 }
 

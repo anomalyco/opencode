@@ -1,6 +1,6 @@
 //! Object, Function, Error, Boolean, Symbol, JSON, console and the global functions.
 
-use super::{arg, this_obj};
+use super::{arg, fuel, this_obj};
 use crate::convert;
 use crate::object::*;
 use crate::value::{Id, Value, parse_float_prefix, to_int32};
@@ -235,27 +235,40 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     // The reference's for...of over the entries: each entry is read as it comes, and a bad one closes the iterator.
-    let it = vm.get_iterator_in(&arg(args, 0), crate::bytecode::ITER_FOR_OF)?;
+    // Its fuel is the prelude's `Object$fromEntries` (see `fuel.rs`).
+    fuel::method(vm);
+    let source = arg(args, 0);
+    let open = vm.open_fuel(&source, crate::bytecode::ITER_FOR_OF);
+    let it = vm.get_iterator_in(&source, crate::bytecode::ITER_FOR_OF)?;
+    vm.fuel(open);
     let id = vm.new_object();
     while let Some(item) = vm.iter_step(&it)? {
         if let Err(e) = from_entry(vm, id, &item) {
             if vm.fatal.is_none() {
+                let close = vm.close_fuel(&it);
                 let _ = vm.iter_close(&it);
+                vm.fuel(close);
             }
             return Err(e);
         }
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(Value::Obj(id))
 }
 
+/// One entry: `$IsObject`, `String` of its key, `$Define`.
 fn from_entry(vm: &mut Vm, id: Id, item: &Value) -> Result<(), Value> {
+    fuel::native(vm);
     if !matches!(item, Value::Obj(_)) || contains_opaque(vm, item, &mut Vec::new()) {
         return Err(vm.type_error("Object.fromEntries expects [key, value] entry objects."));
     }
     let k = vm.get_elem(item, &Value::Num(0.0))?;
     let v = vm.get_elem(item, &Value::Num(1.0))?;
     let a = vm.key_of(&k)?;
+    fuel::native(vm);
     vm.define(id, a, v);
+    fuel::native(vm);
     Ok(())
 }
 
@@ -595,17 +608,32 @@ fn error_ctor(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     make_error_from(vm, proto, &arg(args, 0), &arg(args, 1))
 }
 
-fn aggregate_error_ctor(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+fn aggregate_error_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let proto = vm
         .native_data(callee)
         .as_obj()
         .unwrap_or(vm.realm.aggregate_error_proto);
     let e = make_error_from(vm, proto, &arg(args, 1), &arg(args, 2))?;
-    let errors = vm.iterate_to_vec(&arg(args, 0))?;
+    // The errors are read in the reference's prelude (`aggregateError`), after the call itself when it is not `new`.
+    let called = !matches!(this, Value::Uninit);
+    if called {
+        fuel::handoff(vm);
+    } else {
+        fuel::method(vm);
+    }
+    let mut errors = Vec::new();
+    fuel::for_of(vm, &arg(args, 0), |_, v| {
+        errors.push(v);
+        Ok(true)
+    })?;
+    fuel::native(vm);
     let arr = vm.new_array(errors);
     if let Value::Obj(id) = e {
         let ek = vm.names.errors;
         vm.define_hidden(id, ek, arr);
+    }
+    if called {
+        vm.bytecode_builtin();
     }
     Ok(e)
 }
@@ -671,13 +699,22 @@ fn json_parse(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let holder = vm.new_object();
     let empty = vm.atoms.intern_static("");
     vm.define(holder, empty, v);
-    revive(vm, &reviver, Value::Obj(holder), empty)
+    // The reference revives in its prelude (`revive`), after `JSON.parse`'s own call.
+    fuel::native(vm);
+    let r = revive(vm, &reviver, Value::Obj(holder), empty)?;
+    vm.bytecode_builtin();
+    Ok(r)
 }
 
+/// The prelude's `revive`: entered once per value; an object's `$IsObject` and `$Keys`, a back-edge per key, then
+/// the reviver.
 fn revive(vm: &mut Vm, reviver: &Value, holder: Value, key: Atom) -> Res {
+    fuel::method(vm);
     let val = vm.get(&holder, key)?;
+    fuel::native(vm);
     if let Value::Obj(id) = val {
         let keys: Vec<Atom> = vm.own_keys(id);
+        fuel::native(vm);
         for k in keys {
             let nv = revive(vm, reviver, val, k)?;
             if let Value::Undef = nv {
@@ -685,10 +722,11 @@ fn revive(vm: &mut Vm, reviver: &Value, holder: Value, key: Atom) -> Res {
             } else {
                 vm.set_obj(id, k, nv)?;
             }
+            fuel::step(vm);
         }
     }
     let kv = Value::Str(vm.atoms.atom_str(key));
-    vm.call(reviver, holder, &[kv, val])
+    vm.call_counted(reviver, holder, &[kv, val])
 }
 
 fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

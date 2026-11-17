@@ -938,10 +938,15 @@ pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<
     let (mut defined, undefs): (Vec<Value>, Vec<Value>) =
         list.into_iter().partition(|v| !matches!(v, Value::Undef));
     if let Value::Undef = cmp {
+        // Over `SORT_RUN` values the reference sorts in bounded native steps in its prelude (`sortDefault`).
+        let stepped = defined.len() > SORT_RUN;
         let mut keyed = Vec::with_capacity(defined.len());
         for v in defined {
             let s = vm.string_of(&v)?;
             keyed.push((s, v));
+        }
+        if stepped {
+            sort_default_fuel(vm, keyed.len());
         }
         let mut sorted = merge_sort(
             vm,
@@ -952,18 +957,85 @@ pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<
         )?;
         defined = sorted.drain(..).map(|(_, v)| v).collect();
     } else {
-        let f = *cmp;
-        defined = merge_sort(vm, defined, &mut |vm, a: &Value, b: &Value| {
-            let r = vm.call(&f, Value::Undef, &[*a, *b])?;
-            let n = match r {
-                Value::Num(n) => n,
-                v => vm.number_of(&v)?,
-            };
-            Ok(n > 0.0)
-        })?;
+        defined = sort_with(vm, defined, *cmp)?;
     }
     defined.extend(undefs);
     Ok(defined)
+}
+
+/// The most values the reference's default sort sorts in one native call, and how many a merge step of the
+/// bounded sort past it merges.
+const SORT_RUN: usize = 4096;
+const MERGE_STEP: usize = 65_536;
+
+/// The fuel of the reference's `sortDefault` over `n` values: `$SortState`, a `$SortStep` per run of `SORT_RUN` and
+/// per `MERGE_STEP` values of each merge pass, a back-edge after each step that leaves work, `$SortResult` and
+/// `$Sorted`, after the native's own call.
+fn sort_default_fuel(vm: &mut Vm, n: usize) {
+    fuel::handoff(vm);
+    fuel::native(vm);
+    let mut steps = n.div_ceil(SORT_RUN);
+    let mut width = SORT_RUN;
+    while width < n {
+        steps += n.div_ceil(MERGE_STEP);
+        width *= 2;
+    }
+    for i in 0..steps {
+        fuel::native(vm);
+        if i + 1 < steps {
+            fuel::step(vm);
+        }
+    }
+    fuel::native(vm);
+    fuel::native(vm);
+    vm.bytecode_builtin();
+}
+
+/// A sort with a comparator as the reference's `sortWith` runs it: a stable top-down merge sort, its merges planned
+/// in post-order so the comparator sees the pairs the recursive sort compares, in the same order. A result that is
+/// not above zero, or NaN, keeps the left value first.
+fn sort_with(vm: &mut Vm, mut work: Vec<Value>, f: Value) -> Result<Vec<Value>, Value> {
+    fn plan(low: usize, high: usize, out: &mut Vec<(usize, usize, usize)>) {
+        if high - low <= 1 {
+            return;
+        }
+        let middle = low + (high - low) / 2;
+        plan(low, middle, out);
+        plan(middle, high, out);
+        out.push((low, middle, high));
+    }
+    let mut merges = Vec::new();
+    plan(0, work.len(), &mut merges);
+    fuel::handoff(vm);
+    let mut merged = Vec::with_capacity(work.len());
+    for (low, middle, high) in merges {
+        merged.clear();
+        let (mut left, mut right) = (low, middle);
+        while left < middle && right < high {
+            let r = vm.call_counted(&f, Value::Undef, &[work[left], work[right]])?;
+            let order = match r {
+                Value::Num(n) => n,
+                v => vm.number_of(&v)?,
+            };
+            if order <= 0.0 || order.is_nan() {
+                merged.push(work[left]);
+                left += 1;
+            } else {
+                merged.push(work[right]);
+                right += 1;
+            }
+            fuel::step(vm);
+        }
+        merged.extend_from_slice(&work[left..middle]);
+        merged.extend_from_slice(&work[right..high]);
+        work[low..high].copy_from_slice(&merged);
+        // `$MergeRest`, and the back-edge to the next merge.
+        fuel::native(vm);
+        fuel::step(vm);
+    }
+    fuel::native(vm);
+    vm.bytecode_builtin();
+    Ok(work)
 }
 
 type Greater<'a, T> = dyn FnMut(&mut Vm, &T, &T) -> Result<bool, Value> + 'a;

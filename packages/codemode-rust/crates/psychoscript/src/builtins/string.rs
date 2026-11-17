@@ -670,7 +670,14 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
             }
         }
     }
+    // With a callback, the reference finds the matches, then hands them to its prelude's `replaceWith`.
+    if callable {
+        super::fuel::handoff(vm);
+    }
     if positions.is_empty() {
+        if callable {
+            vm.bytecode_builtin();
+        }
         return Ok(Value::Str(s));
     }
     let mut out = String::new();
@@ -681,18 +688,23 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
             Some(t) => out.push_str(&expand_replacement(t, &needle, pos, &subject)),
             None => {
                 let offset = subject[..pos].encode_utf16().count() as f64;
-                let r = vm.call(
+                let r = vm.call_counted(
                     &rep,
                     Value::Undef,
                     &[Value::Str(pat), Value::Num(offset), Value::Str(s)],
                 )?;
                 let r = vm.string_of(&r)?;
+                super::fuel::native(vm);
+                super::fuel::step(vm);
                 out.push_str(vm.text(r));
             }
         }
         last = pos + needle.len();
     }
     out.push_str(&subject[last..]);
+    if callable {
+        vm.bytecode_builtin();
+    }
     Ok(vm.string_val(out))
 }
 
@@ -730,7 +742,14 @@ fn replace16(
             }
         }
     }
+    let callable = template.is_none();
+    if callable {
+        super::fuel::handoff(vm);
+    }
     if positions.is_empty() {
+        if callable {
+            vm.bytecode_builtin();
+        }
         return Ok(Value::Str(s));
     }
     let mut out: Vec<u16> = Vec::with_capacity(subject.len());
@@ -740,18 +759,23 @@ fn replace16(
         match &template {
             Some(t) => expand_replacement16(&mut out, t, &needle, pos, &subject),
             None => {
-                let r = vm.call(
+                let r = vm.call_counted(
                     rep,
                     Value::Undef,
                     &[Value::Str(pat), Value::Num(pos as f64), Value::Str(s)],
                 )?;
                 let r = vm.string_of(&r)?;
+                super::fuel::native(vm);
+                super::fuel::step(vm);
                 out.extend(vm.atoms.sref(r).iter16());
             }
         }
         last = pos + needle.len();
     }
     out.extend_from_slice(&subject[last..]);
+    if callable {
+        vm.bytecode_builtin();
+    }
     Ok(Value::Str(vm.atoms.alloc_units(&out)))
 }
 
@@ -1164,19 +1188,21 @@ math1!(m_round, |x| {
 });
 
 fn m_sum_precise(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let it = vm.get_iterator(&arg(args, 0))?;
+    // The reference's prelude `Math$sumPrecise`: a back-edge per value, then `$SumPrecise`.
+    super::fuel::method(vm);
     let mut values = Vec::new();
-    while let Some(v) = vm.iter_step(&it)? {
+    super::fuel::for_of(vm, &arg(args, 0), |vm, v| {
         let Value::Num(n) = v else {
-            let _ = vm.iter_close(&it);
             return Err(vm.type_error("Math.sumPrecise expects an iterable of numbers."));
         };
         if values.len() >= crate::ops::MAX_ARRAY_LEN {
-            let _ = vm.iter_close(&it);
             return Err(vm.range_error("Invalid array length"));
         }
         values.push(n);
-    }
+        Ok(true)
+    })?;
+    super::fuel::native(vm);
+    vm.bytecode_builtin();
     Ok(Value::Num(super::numfmt::sum_precise(&values)))
 }
 
