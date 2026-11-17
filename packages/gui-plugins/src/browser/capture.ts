@@ -4,8 +4,12 @@ export type Undrawable = "minimized" | "hidden" | "stalled"
 /** How long a viewport or element capture may wait for the tab's frame before it gives up. */
 export const CAPTURE_DEADLINE_MS = 2_500
 
-/** A full document may rasterize and encode up to 16 MP before a fresh frame is delivered. */
-export const FULL_PAGE_DEADLINE_MS = 6_000
+/**
+ * A full document may rasterize and encode up to 16 MP before a fresh frame is delivered, and a tab that was never
+ * shown first wakes and paints. About 15.6 MP took up to 1 s on Windows and 5.6 s on macOS, which left a 6 s deadline
+ * no margin. Still well inside the tool's 60 s.
+ */
+export const FULL_PAGE_DEADLINE_MS = 15_000
 
 type Size = { width: number; height: number }
 
