@@ -27,17 +27,20 @@ pub(crate) fn build(name: &str) -> Vec<u8> {
     }
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples");
     let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/sample-plugin");
+    // A release test run, as the measures run, builds the plugin in release too.
+    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
         .args(["build", "--quiet", "--manifest-path"])
         .arg(examples.join(name).join("Cargo.toml"))
         .arg("--target-dir")
         .arg(&target)
+        .args((profile == "release").then_some("--release"))
         .status()
         .unwrap();
     assert!(status.success(), "the {name} plugin did not build");
     let file =
         format!("{}opencode_{}{}", std::env::consts::DLL_PREFIX, name.replace('-', "_"), std::env::consts::DLL_SUFFIX);
-    let library = std::fs::read(target.join("debug").join(file)).unwrap();
+    let library = std::fs::read(target.join(profile).join(file)).unwrap();
     built.push((name.to_owned(), library.clone()));
     library
 }
@@ -169,6 +172,19 @@ pub(crate) fn open_with(
     first: Option<Route>,
     options: Option<&Value>,
 ) -> Option<Port> {
+    open_timed(carriers, width, handler, stored, first, options, false)
+}
+
+/// [`open_with`]; the budget's monitor keeps the real clock when `timed`, so it times each call, as the measures read.
+pub(crate) fn open_timed(
+    carriers: &[Carrier<'_>],
+    width: u16,
+    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
+    stored: bool,
+    first: Option<Route>,
+    options: Option<&Value>,
+    timed: bool,
+) -> Option<Port> {
     let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
         true => Some(crate::plugin_pipe::config()?),
         false => None,
@@ -229,7 +245,9 @@ pub(crate) fn open_with(
     // swap), which is no wait on a run queue, is charged: one over the overrun fails the port. A call here takes no
     // time.
     let now = std::time::Instant::now();
-    harness.tui.plugins.monitor().set_clock(move || now);
+    if !timed {
+        harness.tui.plugins.monitor().set_clock(move || now);
+    }
     let external = External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() };
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),

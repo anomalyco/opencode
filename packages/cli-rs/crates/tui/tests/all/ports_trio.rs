@@ -9,7 +9,7 @@
 //! Every column must draw the same cells (text, colors, attributes) of the region the plugin draws in, at each step,
 //! and send the same requests.
 
-use crate::ports::{Carrier, Port, open_with, session};
+use crate::ports::{Carrier, Port, open_timed, open_with, session};
 use crate::support::{DIRECTORY, Reply, Seen};
 
 use serde_json::{Value, json};
@@ -521,4 +521,190 @@ fn requests_of(h: &Port, keep: impl Fn(&Seen) -> bool) -> Vec<String> {
     seen.sort();
     seen.dedup();
     seen
+}
+
+// --- The measures of `steps/ports-trio.md`
+
+/// The resident memory of process `pid` (`self` for this one), in bytes.
+fn rss(pid: &str) -> u64 {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap_or_default();
+    let kib = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmRSS:"))
+        .and_then(|rest| rest.split_whitespace().next()?.parse::<u64>().ok());
+    kib.unwrap_or(0) * 1024
+}
+
+/// One measured plugin: its package, its ports, its server, options and width, the text its first draw shows, and
+/// what makes it run once (one update).
+struct Measured {
+    npm: &'static str,
+    port: &'static str,
+    server: fn() -> Box<dyn Fn(&Seen) -> Option<Reply> + Send + Sync>,
+    options: Option<fn() -> Value>,
+    width: u16,
+    ready: &'static str,
+    update: fn(&Port, u32),
+}
+
+/// A `session.usage.updated` of `session` with `round` input tokens: each slot of these plugins draws again.
+fn usage_event(h: &Port, session: &str, round: u32) {
+    h.events.emit(&json!({
+        "id": format!("evt_measure_{round}"), "created": 10 + round, "type": "session.usage.updated",
+        "location": { "directory": DIRECTORY },
+        "data": { "sessionID": session, "cost": 0.08, "tokens": { "input": 1000 + round, "output": 1, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+    }));
+}
+
+// The measures of the trio, printed: per plugin and column, the time to its first draw from the TUI's mount, the load
+// and setup the budget's monitor timed, what one update's calls of the plugin took (the mean of 50, each waited for
+// until the monitor counted it), the Luau VM's idle heap, the native library's size, and the JS host's resident memory.
+// Run with `--release --features luau --ignored --nocapture --test-threads=1`, on a machine at rest.
+#[test]
+#[ignore]
+fn measure_the_trio() {
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    let plugins = [
+        Measured {
+            npm: "opencode-sidebar-tokens",
+            port: "sidebar-tokens",
+            server: || Box::new(tokens_server),
+            options: None,
+            width: 170,
+            ready: "Cache write",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+        Measured {
+            npm: "opencode-sidebar-prompt",
+            port: "sidebar-prompt",
+            server: || Box::new(prompt_server(false)),
+            options: None,
+            width: 170,
+            ready: "Open full prompt",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+        Measured {
+            npm: "opencode-command-hotkeys",
+            port: "command-hotkeys",
+            server: || Box::new(hotkeys_server(204)),
+            options: Some(hotkeys),
+            width: 170,
+            ready: "Hotkeys",
+            update: |h, _| h.app.press("alt+r"),
+        },
+        Measured {
+            npm: "@khaosoigai/oc-context-grid",
+            port: "context-grid",
+            server: || Box::new(grid_server),
+            options: None,
+            width: 170,
+            ready: "tokens (18%)",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+        Measured {
+            npm: "opencode-subagents-sidebar",
+            port: "subagents-sidebar",
+            server: || Box::new(crate::ports::subagents),
+            options: None,
+            width: 170,
+            ready: "+2 more",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+        Measured {
+            npm: "@mynameistito/opencode-force-input",
+            port: "force-input",
+            server: || Box::new(crate::ports::running),
+            options: None,
+            width: 120,
+            ready: "interrupt & send",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+        Measured {
+            npm: "opencode-session-usage",
+            port: "session-usage",
+            server: || Box::new(crate::ports::usage(Arc::new(Mutex::new(false)), false)),
+            options: None,
+            width: 170,
+            ready: "≈ $2.50 session total",
+            update: |h, round| usage_event(h, "ses_p", round),
+        },
+    ];
+    let rounds = 50;
+    // Each library is built before it is timed.
+    plugins.iter().for_each(|plugin| drop(crate::ports::build(plugin.port)));
+    println!("plugin | column | first draw | load | setup | per update | memory");
+    for plugin in &plugins {
+        for carrier in columns(plugin.npm, plugin.port) {
+            let options = plugin.options.map(|options| options());
+            let start = Instant::now();
+            let Some(h) = open_timed(&[carrier], plugin.width, (plugin.server)(), false, None, options.as_ref(), true)
+            else {
+                continue;
+            };
+            h.wait_for(plugin.ready);
+            let first = start.elapsed();
+            h.settle();
+            let id = h
+                .tui
+                .plugins
+                .entries()
+                .into_iter()
+                .map(|entry| entry.id)
+                .find(|id| {
+                    !id.starts_with("opencode.") || id == "opencode.sidebar.limit" && plugin.port == "session-usage"
+                })
+                .unwrap_or_default();
+            let monitor = h.tui.plugins.monitor();
+            let (load, setup) = monitor.load(&id);
+            let spent = monitor.calls_time(&id);
+            let mut counted = 0;
+            for round in 0..rounds {
+                let last = monitor.calls_time(&id);
+                (plugin.update)(&h, round);
+                counted += u32::from(h.app.wait_until(Duration::from_secs(2), || monitor.calls_time(&id) > last));
+                h.settle();
+            }
+            let each = (monitor.calls_time(&id).saturating_sub(spent)) / counted.max(1);
+            let memory = match carrier {
+                Carrier::Npm(_) => {
+                    let pid = h.tui.plugins.scripts.borrow().as_ref().and_then(|scripts| scripts.pid());
+                    format!("JS host {} MiB", pid.map_or(0, |pid| rss(&pid.to_string())) / (1 << 20))
+                }
+                Carrier::Port(name) => format!("library {} KiB", crate::ports::build(name).len() / 1024),
+                #[cfg(feature = "luau")]
+                Carrier::Luau(name) => {
+                    let dir =
+                        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name);
+                    let heap = opencode_plugin::luau::idle_memory(&opencode_plugin::luau::Sources::read(&dir).unwrap())
+                        .unwrap();
+                    format!("VM {} KiB", heap / 1024)
+                }
+            };
+            let ms = |took: Option<Duration>| {
+                took.map_or("-".to_owned(), |took| format!("{:.2} ms", took.as_secs_f64() * 1e3))
+            };
+            // From an event to its cells on screen, on every column alike: the JS host's calls run in its own
+            // process, where the monitor does not see them.
+            let latency = (plugin.port == "sidebar-tokens").then(|| {
+                let start = Instant::now();
+                for round in 0..rounds {
+                    usage_event(&h, "ses_p", 1000 + round);
+                    let shown = format!("2,{:03}", round);
+                    h.wait(&shown, || h.app.text().contains(&shown));
+                }
+                format!(", event to cells {:.2} ms", start.elapsed().as_secs_f64() * 1e3 / f64::from(rounds))
+            });
+            let latency = latency.unwrap_or_default();
+            println!(
+                "{} | {carrier:?} | {:.0} ms | {} | {} | {:.1} µs ({counted} of {rounds} counted){latency} | {memory}",
+                plugin.port,
+                first.as_secs_f64() * 1e3,
+                ms(load),
+                ms(setup),
+                each.as_secs_f64() * 1e6,
+            );
+        }
+    }
 }
