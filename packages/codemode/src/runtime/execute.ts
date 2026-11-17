@@ -2,6 +2,7 @@ import { parse, type Program } from "acorn"
 import { Cause, Deferred, Effect, Option, Schema } from "effect"
 import type { DataValue, Diagnostic, Outcome, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
 import { fromBytes, header, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
+import { captureVm, restoreVm } from "../snapshot.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
@@ -106,7 +107,7 @@ export const resumeProgram = <R>(
 const restoredSources = new Map<string, Source>()
 
 const restoreInto = (saved: unknown, vm: Vm): Snapshot =>
-  vm.restore(saved, {
+  restoreVm(vm, saved, {
     parse: (code) => {
       const known = restoredSources.get(code)
       if (known !== undefined) return known
@@ -311,7 +312,7 @@ export class Running<R> {
     }
     const limits = this.setup.limits
     const saved = attempt(() =>
-      vm.capture({
+      captureVm(vm, {
         limits: {
           timeoutMs: limits.timeoutMs ?? null,
           maxToolCalls: limits.maxToolCalls ?? null,
@@ -358,7 +359,7 @@ export class Running<R> {
     }
     if (driver.holdsHostValues) return
     this.trips++
-    const attempted = attempt(() => this.ctx.vm.capture({ strict: !this.setup.lossy }))
+    const attempted = attempt(() => captureVm(this.ctx.vm, { strict: !this.setup.lossy }))
     // An extension's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
     if (!attempted.ok) {
       const error = attempted.error

@@ -9,10 +9,11 @@ import { Vm } from "../../src/vm.js"
 setRoundTrip(true)
 
 let saved = 0
-const capture = Vm.prototype.capture
-Vm.prototype.capture = function (this: Vm, options) {
+// `captureVm` compacts the VM first, and nothing else does: counting compactions counts saves.
+const compact = Vm.prototype.compact
+Vm.prototype.compact = function (this: Vm) {
   if (this.frames.some((frame) => (frame.code.flags & CodeFlags.INTERNAL) !== 0)) saved++
-  return capture.call(this, options)
+  return compact.call(this)
 }
 const result = await Effect.runPromise(
   CodeMode.execute({

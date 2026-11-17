@@ -22,7 +22,8 @@ import { abrupt, type Completion, Interruption, Invoke, MAX_CALL_DEPTH, normal }
 import { type Combination, type Job, type Reaction, Resolving } from "./scheduler.js"
 import { internalCode, VmIntrinsic } from "./internal-prelude.js"
 import { CodeFlags } from "./opcodes.js"
-import { type Frame, type FrameMode, Mode, type Vm } from "./vm.js"
+import { type Frame, type FrameMode, Mode } from "./frame.js"
+import type { Vm } from "./vm.js"
 
 export type SettlingTarget = {
   resolve(value: Value): void
