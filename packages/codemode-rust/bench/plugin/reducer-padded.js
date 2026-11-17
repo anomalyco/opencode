@@ -1,0 +1,14 @@
+if (event.type === "init") return { state: { runs: 0 }, commands: [{ name: "git.status", key: "ctrl+g" }] }
+if (event.type === "command" && event.name === "git.log") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.log" }, slots: { statusbar: { text: "log " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.diff") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.diff" }, slots: { statusbar: { text: "diff " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.branch") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.branch" }, slots: { statusbar: { text: "branch " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.stash") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.stash" }, slots: { statusbar: { text: "stash " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.fetch") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.fetch" }, slots: { statusbar: { text: "fetch " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.pull") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.pull" }, slots: { statusbar: { text: "pull " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.push") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.push" }, slots: { statusbar: { text: "push " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.commit") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.commit" }, slots: { statusbar: { text: "commit " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.reset") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.reset" }, slots: { statusbar: { text: "reset " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.merge") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.merge" }, slots: { statusbar: { text: "merge " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.rebase") { const s = await tools.git.status(); return { state: { runs: state.runs + 1, last: "git.rebase" }, slots: { statusbar: { text: "rebase " + s.branch + (s.dirty ? " *" : "") } } } }
+if (event.type === "command" && event.name === "git.status") { const s = await tools.git.status(); return { state: { runs: state.runs + 1 }, slots: { statusbar: { text: s.branch + (s.dirty ? " *" : "") } } } }
+return { state }

@@ -1,0 +1,8 @@
+[package]
+name = "psychoscript-test262"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+psychoscript = { path = "../crates/psychoscript", features = ["test262"] }

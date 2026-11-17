@@ -23,6 +23,9 @@ mod run;
 mod schema;
 mod search;
 mod strings;
+#[cfg(feature = "test262")]
+#[doc(hidden)]
+pub mod test262;
 mod tool;
 mod value;
 mod vm;

@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Embeddable Rust port of OpenCode's Code Mode language"
 
+[features]
+# The test262 harness globals, for the parity runner in test262/ only.
+test262 = []
+
 [dependencies]
 oxc_allocator = "0.159"
 oxc_ast = "0.159"
