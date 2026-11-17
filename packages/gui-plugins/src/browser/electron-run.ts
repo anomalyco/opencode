@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -54,31 +54,43 @@ export async function runElectronFixture(input: {
 
     if (!built.success) throw new AggregateError(built.logs, "The Electron fixture did not build.")
 
-    const child = await spawn(
-      [
-        await electronBinary(),
-        `--user-data-dir=${path.join(out, "profile")}`,
-        // CI's Linux runners have no display, and node_modules' chrome-sandbox is not set up as root.
-        ...(process.platform === "linux" ? ["--ozone-platform=headless", "--no-sandbox", "--disable-gpu"] : []),
-        path.join(out, "loader.cjs"),
-      ],
-      {
-        ...process.env,
-        ...input.env,
-        ELECTRON_RUN_AS_NODE: undefined,
-        ELECTRON_ENABLE_LOGGING: undefined,
-        ELECTRON_FIXTURE_LOG: log,
-        ELECTRON_FIXTURE_ENTRY: path.join(out, "fixture.mjs"),
-      },
-    )
+    const binary = await electronBinary()
 
-    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-    const line = stdout.split("\n").find((text) => text.startsWith("{"))
+    const launch = async (attempt: number): Promise<string> => {
+      await settled()
 
-    if (line) return line
-    const failure = await readFile(log, "utf8").catch(() => "")
+      const child = await spawn(
+        [
+          binary,
+          `--user-data-dir=${path.join(out, `profile-${attempt}`)}`,
+          // CI's Linux runners have no display, and node_modules' chrome-sandbox is not set up as root.
+          ...(process.platform === "linux" ? ["--ozone-platform=headless", "--no-sandbox", "--disable-gpu"] : []),
+          path.join(out, "loader.cjs"),
+        ],
+        {
+          ...process.env,
+          ...input.env,
+          ELECTRON_RUN_AS_NODE: undefined,
+          ELECTRON_ENABLE_LOGGING: undefined,
+          ELECTRON_FIXTURE_LOG: log,
+          ELECTRON_FIXTURE_ENTRY: path.join(out, "fixture.mjs"),
+        },
+      )
 
-    throw new Error(`Electron printed no result (exit ${code}).\n${failure}\n${stderr}`)
+      const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+      const line = stdout.split("\n").find((text) => text.startsWith("{"))
+
+      if (line) return line
+      const failure = await readFile(log, "utf8").catch(() => "")
+
+      // Killed by a signal before the loader ran, as Chromium is when another suite's install rewrites its files under
+      // it. Launch once more once the files have settled; a fixture's own failure is logged and never retried.
+      if (attempt === 0 && !failure && code > 128) return launch(1)
+
+      throw new Error(`Electron printed no result (exit ${code}).\n${failure}\n${stderr}`)
+    }
+
+    return await launch(0)
   } finally {
     await rm(out, { recursive: true, force: true })
   }
@@ -107,6 +119,28 @@ async function electronBinary() {
     return String(binary)
   } finally {
     await rm(lock, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Waits until no file of the Electron distribution changed for 2 seconds: another suite may still be extracting it
+ * after this one found the executable in place.
+ */
+async function settled() {
+  const directory = path.join(path.dirname(createRequire(import.meta.url).resolve("electron/package.json")), "dist")
+  const deadline = Date.now() + 60_000
+
+  for (;;) {
+    const entries = await readdir(directory, { recursive: true, withFileTypes: true })
+
+    const times = await Promise.all(
+      entries.filter((entry) => entry.isFile()).map((entry) => stat(path.join(entry.parentPath, entry.name)).then((info) => info.mtimeMs, () => Date.now())),
+    )
+
+    const quiet = Date.now() - Math.max(0, ...times)
+
+    if (quiet >= 2_000 || Date.now() > deadline) return
+    await Bun.sleep(2_000 - quiet)
   }
 }
 
