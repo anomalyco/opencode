@@ -9,7 +9,7 @@ function usage.round(value: number): number
 end
 
 -- TS `catalogCost`: what `tokens` cost at the most specific context tier the context exceeds, else the base price.
-function usage.catalogCost(costs, tokens): number
+function usage.catalogCost(costs: { any }, tokens: any): number
     if not tokens then
         return 0
     end
@@ -39,7 +39,7 @@ function usage.catalogCost(costs, tokens): number
 end
 
 -- TS `sessionCost`: the costs the provider reported, when any is positive, else the catalog estimate.
-function usage.sessionCost(messages, models): number
+function usage.sessionCost(messages: { any }, models: { any }): number
     local reported, catalog, hasReported = 0, 0, false
     for _, message in messages do
         if message.type == "assistant" then

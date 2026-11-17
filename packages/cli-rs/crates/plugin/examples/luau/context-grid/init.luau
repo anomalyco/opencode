@@ -6,19 +6,19 @@
 -- Options: `sidebar = false` leaves the sidebar's grid out. TS's slash alias `/ctx` has no port: a command has one
 -- slash name (the JS host drops it too).
 local plugin = require("@opencode/plugin")
-local context = require("./context")
+local context = require("@self/context")
 
 local ROUTE = "contextgrid"
 local MODE = "oc-context-grid"
 
 -- TS `getContextData` for `session`, from what the host has loaded.
-local function data(read, session: string)
+local function data(read: plugin.Read, session: string)
     local info = read:session(session)
     return context.data(read:messages(session), info and info.info, read:models() or {})
 end
 
 -- TS `Grid`: rows of ten squares, each its glyph and a space in its category's color.
-local function squares(found, total: number)
+local function squares(found: context.Context, total: number)
     local rows = {}
     local grid = if found.limit > 0 then context.grid(found.segments, found.limit, total) else {}
     for index, square in grid do
@@ -34,7 +34,7 @@ local function squares(found, total: number)
 end
 
 -- TS `MiniGrid`: the sidebar's grid of 30 squares.
-local function mini(read, session: string)
+local function mini(read: plugin.Read, session: string)
     local rows = { plugin.text({ plugin.span("Context grid", { bold = true }) }, { fg = "text.base" }) }
     local found = data(read, session)
     if not found then
@@ -50,7 +50,7 @@ local function mini(read, session: string)
 end
 
 -- TS `FullView`: the page, with its grid of 100 squares and the estimate by category.
-local function full(read, session: string?)
+local function full(read: plugin.Read, session: string?)
     local rows = { plugin.text({ plugin.span("Context Usage", { bold = true }) }, { fg = "text.base" }) }
     local found = session and data(read, session)
     if not found then

@@ -25,7 +25,8 @@ function core.repeatMessage(text: string, count: number): ({ string }?, string?)
     if message == "" then
         return nil, "Message cannot be blank."
     end
-    return table.create(count, message), nil
+    local copies: { string } = table.create(count, message :: string)
+    return copies, nil
 end
 
 -- TS `parseMessageLines`: the non-blank lines, trimmed, without a leading byte-order mark.

@@ -15,14 +15,15 @@ local DIM = "text.muted"
 type Child = { id: string, title: string, running: boolean }
 
 -- The direct children of `session`, last updated first; equal times keep the host's order.
-local function children(read, session: string): { Child }
-    local members = {}
+local function children(read: plugin.Read, session: string): { Child }
+    type Entry = { member: plugin.Member, index: number }
+    local members: { Entry } = {}
     for index, member in read:family(session).members do
         if member.parent == session then
             table.insert(members, { member = member, index = index })
         end
     end
-    table.sort(members, function(a, b)
+    table.sort(members, function(a: Entry, b: Entry): boolean
         if a.member.updated ~= b.member.updated then
             return a.member.updated > b.member.updated
         end
@@ -42,7 +43,7 @@ local function children(read, session: string): { Child }
 end
 
 -- Whether the list is unfolded: the stored `view`, open at first.
-local function open(read): boolean
+local function open(read: plugin.Read): boolean
     local view = read:storageGet("view")
     return not (type(view) == "table" and view.open == false)
 end
@@ -128,7 +129,7 @@ return plugin.define(function(setup)
     setup:command({ name = TOGGLE }, function(host)
         host:storageMerge("view", { open = not open(host) })
     end)
-    local at = { path = "sidebar.content" }
+    local at: plugin.At = { path = "sidebar.content" }
     setup:slot(at, function(read, input, changed)
         local session = input.session_id
         if not session then

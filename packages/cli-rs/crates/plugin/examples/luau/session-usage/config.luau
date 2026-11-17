@@ -14,7 +14,7 @@ local function numberIn(value: any, low: number, high: number): number?
     return math.clamp(usage.round(value), low, high)
 end
 
-local FLAGS = {
+local FLAGS: { [string]: string } = {
     compact = "compact",
     showEstimate = "showEstimate",
     showMeters = "showMeters",
@@ -48,7 +48,7 @@ return function(options: any)
         config.position = input.position
     end
     if type(input.title) == "string" then
-        local title = input.title:match("^%s*(.-)%s*$") :: string
+        local title = (input.title :: string):match("^%s*(.-)%s*$") :: string
         if title ~= "" then
             config.title = title:sub(1, (utf8.offset(title, MAX_TITLE + 1) or (#title + 1)) - 1)
         end

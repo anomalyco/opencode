@@ -20,11 +20,11 @@ local function trimmed(value: any): string?
     if type(value) ~= "string" then
         return nil
     end
-    local text = value:match("^%s*(.-)%s*$") :: string
+    local text = (value :: string):match("^%s*(.-)%s*$") :: string
     return if text ~= "" then text else nil
 end
 
-local ALIASES = { enter = "return", esc = "escape", pgdown = "pagedown", pgup = "pageup", control = "ctrl" }
+local ALIASES: { [string]: string } = { enter = "return", esc = "escape", pgdown = "pagedown", pgup = "pageup", control = "ctrl" }
 ALIASES.option = "meta"
 ALIASES.alt = "meta"
 
@@ -115,7 +115,7 @@ local function parse(options: any): { Binding }?
 end
 
 -- TS `ctx.client.session.command`.
-local function command(session: string, name: string, text: string)
+local function command(session: string, name: string, text: string): plugin.Fetch
     return { method = "POST", path = `/api/session/{session}/command`, body = { name = name, text = text } }
 end
 
@@ -132,14 +132,14 @@ return plugin.define(function(setup)
     local locks: { [string]: boolean } = {}
     local waiting: { [number]: { step: string, session: string, binding: string, race: string? } } = {}
 
-    local function finish(host, session: string, binding: string, failed: boolean)
+    local function finish(host: plugin.Host, session: string, binding: string, failed: boolean)
         locks[`{session}\0{binding}`] = nil
         if failed then
             host:toast({ variant = "error", title = TITLE, message = FAILED, session = session })
         end
     end
 
-    local function send(host, fetch, step: string, session: string, binding: string, race: string?)
+    local function send(host: plugin.Host, fetch: plugin.Fetch, step: string, session: string, binding: string, race: string?)
         local id = host:fetch(fetch)
         if id then
             waiting[id] = { step = step, session = session, binding = binding, race = race }
@@ -149,7 +149,7 @@ return plugin.define(function(setup)
     end
 
     -- TS `execute`: one run per session and binding at a time.
-    local function execute(host, binding: Binding)
+    local function execute(host: plugin.Host, binding: Binding)
         local route = host:route()
         if route.type ~= "session" then
             return
@@ -178,7 +178,8 @@ return plugin.define(function(setup)
     local keys = {}
     for index, binding in bindings do
         for alternative in (binding.key .. ","):gmatch("([^,]*),") do
-            table.insert(keys, { key = trimmed(alternative), name = tostring(index), title = binding.title })
+            -- `parse` refused a blank alternative, so each is a key.
+            table.insert(keys, { key = trimmed(alternative) :: string, name = tostring(index), title = binding.title })
         end
     end
     setup:layer({ scope = "global", keys = keys }, function(host, event)
@@ -213,7 +214,7 @@ return plugin.define(function(setup)
             if not directory then
                 return finish(host, session, binding, true)
             end
-            local fetch = {
+            local fetch: plugin.Fetch = {
                 method = "POST",
                 path = "/api/rpc/opencode.goal/get",
                 query = { { "location[directory]", directory } },
