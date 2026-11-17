@@ -31,6 +31,30 @@ describe("global", () => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
+  test("configDirectory adds the XDG default only for the OPENCODE_CONFIG_DIR override", () => {
+    const previous = process.env.OPENCODE_CONFIG_DIR
+    const override = path.join(os.tmpdir(), "opencode-config-override")
+    try {
+      process.env.OPENCODE_CONFIG_DIR = override
+      // The override adds to the XDG default instead of replacing it (opencode#28658, opencode#32825).
+      expect(Global.configDirectory(override)).toEqual({ config: override, configDirs: [override, Global.Path.config] })
+      const explicit = path.join(os.tmpdir(), "opencode-explicit")
+      expect(Global.configDirectory(explicit)).toEqual({ config: explicit })
+      expect(Global.configDirectory(undefined)).toEqual({})
+      // Pointing the override at the XDG default itself collapses to one directory.
+      process.env.OPENCODE_CONFIG_DIR = Global.Path.config
+      expect(Global.configDirectory(Global.Path.config)).toEqual({
+        config: Global.Path.config,
+        configDirs: [Global.Path.config],
+      })
+      expect(Global.make({ config: explicit }).configDirs).toEqual([explicit])
+      expect(Global.make().configDirs).toEqual([Global.Path.config])
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CONFIG_DIR
+      else process.env.OPENCODE_CONFIG_DIR = previous
+    }
+  })
+
   test("building layerWith creates service directories and preserves an explicit tmp", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-global-layer-"))
     const directories = {

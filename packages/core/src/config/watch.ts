@@ -3,12 +3,12 @@ export * as ConfigWatch from "./watch.js"
 import path from "path"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
-import type { ConfigDiscovery } from "./discovery.js"
+import { ConfigDiscovery } from "./discovery.js"
 
 export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
     ...(sources.system?.present ? [sources.system.path] : []),
-    ...(sources.global ? [sources.global] : []),
+    ...ConfigDiscovery.globalDirectories(sources),
     ...sources.project.filter((root) => root.present).map((root) => root.path),
   ]
   const files = [

@@ -65,7 +65,8 @@ export type ThemeSource = Readonly<{
   subscribeRefresh?(refresh: () => void): () => void
 }>
 
-export const createThemeSource = (config: string): ThemeSource => ({
+/** `config` lists global config directories lowest priority first; `discoverThemes` lets later directories win. */
+export const createThemeSource = (config: readonly string[]): ThemeSource => ({
   async discover() {
     return discoverThemes(configDirectories(config, process.cwd()))
   },

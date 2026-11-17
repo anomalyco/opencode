@@ -38,7 +38,11 @@ export const Plugin = define({
       const home = yield* fs.resolve(global.home)
       const project = discovery.project && FSUtil.contains(root, start)
       const stop = FSUtil.contains(home, start) ? home : root
-      const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
+      // Primary first: with `OPENCODE_CONFIG_DIR` set the override directory leads and the
+      // XDG default stays behind it as the fallback (opencode#28658).
+      const globalFiles = yield* Effect.forEach(global.configDirs, (directory) =>
+        fs.resolve(join(directory, "AGENTS.md")),
+      )
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
       const configured: { sources: string[]; remote: Map<string, InstructionDiscovery.File> } = {
         sources: [],
@@ -46,14 +50,14 @@ export const Plugin = define({
       }
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
-      // The ancestor walk can reach the global file when the location sits
-      // beneath the global config dir; global: false excludes it there too.
+      // The ancestor walk can reach a global file when the location sits
+      // beneath a global config dir; global: false excludes it there too.
       const candidates = [
-        ...(discovery.global ? [globalFile] : []),
+        ...(discovery.global ? globalFiles : []),
         ...(project
           ? ancestorDirectories(start, stop)
               .map((directory) => join(directory, "AGENTS.md"))
-              .filter((file) => discovery.global || file !== globalFile)
+              .filter((file) => discovery.global || !globalFiles.includes(file))
           : []),
       ]
       for (const file of new Set(candidates)) {
@@ -76,9 +80,15 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        if (!discovery.global || !(yield* fs.isFile(globalFile))) return []
-        const file = yield* read(globalFile)
-        return file instanceof InstructionDiscovery.File ? [file] : []
+        if (!discovery.global) return []
+        // First match wins: the override directory's AGENTS.md replaces the XDG default's
+        // instead of both loading, so an explicit global file keeps full precedence.
+        for (const filepath of globalFiles) {
+          if (!(yield* fs.isFile(filepath))) continue
+          const file = yield* read(filepath)
+          if (file instanceof InstructionDiscovery.File) return [file]
+        }
+        return []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
@@ -87,7 +97,7 @@ export const Plugin = define({
           yield* fs.up({ targets: ["AGENTS.md"], start, stop, type: "file" }),
           fs.resolve,
         )
-        const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
+        const discovered = new Set(walked.filter((file) => discovery.global || !globalFiles.includes(file)))
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file) => file instanceof InstructionDiscovery.File)
@@ -112,9 +122,12 @@ export const Plugin = define({
         }
         if (project) return yield* fs.globUp(expanded, start, root)
         if (!discovery.global) return []
-        return yield* fs
-          .scan(expanded, { ...options, cwd: global.config })
-          .pipe(Effect.orElseSucceed(() => [] as string[]))
+        // Without a project, relative patterns resolve against every global config
+        // directory so the override and the XDG default both contribute matches.
+        const scanned = yield* Effect.forEach(global.configDirs, (directory) =>
+          fs.scan(expanded, { ...options, cwd: directory }).pipe(Effect.orElseSucceed(() => [] as string[])),
+        )
+        return scanned.flat()
       })
 
       const configuredSource = Effect.fn("ConfigInstructionPlugin.configuredSource")(function* () {

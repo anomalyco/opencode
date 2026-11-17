@@ -24,6 +24,7 @@ function discoverWith(
   directory: string,
   projectDirectory = directory,
   wrapFs?: (base: FSUtil.Interface) => Partial<FSUtil.Interface>,
+  configDirs?: readonly string[],
 ) {
   const globalDir = path.join(root, "global")
   const fsLayer = wrapFs
@@ -37,7 +38,11 @@ function discoverWith(
     Effect.provide(
       Layer.mergeAll(
         fsLayer,
-        Global.layerWith({ config: globalDir, home: path.join(globalDir, "home") }),
+        Global.layerWith({
+          config: globalDir,
+          home: path.join(globalDir, "home"),
+          ...(configDirs ? { configDirs } : {}),
+        }),
         Layer.succeed(
           Location.Service,
           Location.Service.of(
@@ -143,6 +148,50 @@ describe("ConfigDiscovery.discover", () => {
             path: AbsolutePath.make(path.join(project, ".opencode")),
             present: true,
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("reports every global config directory with the primary first and none when global is disabled", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const root = yield* Effect.promise(() => fs.realpath(tmp.path))
+          const project = path.join(root, "repo")
+          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+          const primary = path.join(root, "global")
+          const extra = path.join(root, "xdg-config", "opencode")
+
+          // OPENCODE_CONFIG_DIR adds a second global directory; the override (primary) leads.
+          const sources = yield* discoverWith(root, project, project, undefined, [primary, extra])
+          expect(sources.global).toBe(AbsolutePath.make(primary))
+          expect(sources.globalDirs).toEqual([AbsolutePath.make(primary), AbsolutePath.make(extra)])
+
+          // Without an override the global layer stays a single directory.
+          const single = yield* discoverWith(root, project, project)
+          expect(single.global).toBe(AbsolutePath.make(primary))
+          expect(single.globalDirs).toEqual([AbsolutePath.make(primary)])
+
+          const disabled = yield* ConfigDiscovery.discover({ system: false, global: false }).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                AppNodeBuilder.build(FSUtil.node),
+                Global.layerWith({ config: primary, home: path.join(primary, "home"), configDirs: [primary, extra] }),
+                Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(project) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+          expect(disabled.global).toBeUndefined()
+          expect(disabled.globalDirs).toEqual([])
         }),
       ),
     ),

@@ -415,7 +415,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                       <SessionTerminalsProvider>
                                                         <ThemeProvider
                                                           mode={mode}
-                                                          source={createThemeSource(global.config)}
+                                                          source={createThemeSource(global.configDirs.toReversed())}
                                                         >
                                                           <ThemeErrorToast />
                                                           <ClientMcp />
