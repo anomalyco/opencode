@@ -4,7 +4,6 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode/core/config"
-import { Document, Info } from "@opencode/schema/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -28,7 +27,7 @@ import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Environment } from "@opencode/core/environment/index"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, codeModeListings } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
@@ -114,8 +113,6 @@ const permission = permissionLayer({
   allows: (input) => Effect.succeed(allow && !input.resources.some((resource) => resource === deniedResource)),
 })
 const config = Config.testLayer()
-const nativeDescription =
-  "Read the contents of a file or directory. Supports text files, images, and PDFs. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files."
 const imageLayer = AppNodeBuilder.build(Image.node)
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -124,28 +121,22 @@ const locationLayer = Layer.succeed(
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
-const readLayer = (imageLayer: Layer.Layer<Image.Service>, configuration = config) =>
+const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
       Environment.node.replace(hostEnvironmentLayer),
       Permission.node.replace(permission),
-      Config.node.replace(configuration),
+      Config.node.replace(config),
       Image.node.replace(imageLayer),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
     // Merge by reference so Config.Test and Image.Service resolve to the memoized instances.
-    configuration,
+    config,
     imageLayer,
   )
 const it = testEffect(readLayer(imageLayer))
-const codeModeIt = testEffect(
-  readLayer(
-    imageLayer,
-    Config.testLayer([new Document({ type: "document", info: new Info({ experimental: { full_codemode: true } }) })]),
-  ),
-)
 // Real-file tests provide their own layer per temp folder.
 const live = testEffect(Layer.empty)
 // Reads through the real filesystem with the location at `directory`.
@@ -197,82 +188,6 @@ describe("ReadTool", () => {
     readFailure = undefined
     readOverride = undefined
   })
-
-  it.effect("keeps read native with line instructions and no image guidance without full_codemode", () =>
-    Effect.gen(function* () {
-      const registry = yield* Tool.Service
-      const snapshot = yield* registry.snapshot()
-      const read = snapshot.definitions.find((tool) => tool.name === "read")
-
-      expect(read?.description).toBe(nativeDescription)
-      expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).not.toContain("read")
-    }),
-  )
-
-  codeModeIt.effect("moves read into Code Mode with attachment guidance and no native line instructions", () =>
-    Effect.gen(function* () {
-      const registry = yield* Tool.Service
-      const snapshot = yield* registry.snapshot()
-      const read = codeModeListings(snapshot.codeModeCatalog!).find((entry) => entry.path === "read")
-
-      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(read?.line).toContain("Reading an image or PDF automatically attaches it to the execute result")
-      expect(read?.line).toContain("even if the program doesn't return or print the media reference")
-      const registered = (yield* registry.list()).find((tool) => tool.id === "read")
-      expect(registered?.description).toBe(
-        "Read the contents of a file or directory. Supports text files, images, and PDFs. Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-      )
-      expect(registered?.description).not.toContain("Each text line is prefixed")
-      expect(registered?.description).not.toContain("Directory entries are returned one per line")
-
-      const result = yield* executeTool(registry, {
-        sessionID,
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call-read-code-mode",
-          name: "execute",
-          input: { code: 'return await tools.read({ path: "README.md" })' },
-        },
-      })
-      expect(result).toMatchObject({
-        status: "completed",
-        output: { output: JSON.stringify({ type: "text", content: "hello", offset: 1, lineCount: 1 }) },
-      })
-    }),
-  )
-
-  codeModeIt.effect("attaches Code Mode image and PDF reads even when their references are not returned", () =>
-    Effect.gen(function* () {
-      const registry = yield* Tool.Service
-      for (const file of [
-        {
-          name: "pixel.png",
-          mime: "image/png",
-          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-        },
-        { name: "document.pdf", mime: "application/pdf", data: Buffer.from("%PDF-1.7\ncontent").toString("base64") },
-      ]) {
-        readResult = mediaResult(file.name, file.mime, file.data)
-        const result = yield* executeTool(registry, {
-          sessionID,
-          ...toolIdentity,
-          call: {
-            type: "tool-call",
-            id: `call-read-${file.name}`,
-            name: "execute",
-            input: { code: `await tools.read({ path: ${JSON.stringify(file.name)} }); return "done"` },
-          },
-        })
-
-        expect(result).toMatchObject({ status: "completed", output: { output: "done" } })
-        expect(result.content).toEqual([
-          { type: "text", text: "done" },
-          { type: "file", uri: `data:${file.mime};base64,${file.data}`, mime: file.mime, name: file.name },
-        ])
-      }
-    }),
-  )
 
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
     Effect.gen(function* () {
