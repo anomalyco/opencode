@@ -962,6 +962,52 @@ describe("Tool", () => {
     )
   })
 
+  it.effect("a hook can rename a call inside a Code Mode program to another of its tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make(), constant: constant("renamed") })
+      yield* transform(service, { direct: constant("direct") }, { codemode: false })
+      const seen: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool !== "echo") return
+          event.tool = Schema.is(Schema.Struct({ text: Schema.String }))(event.input) ? event.input.text : event.tool
+        }),
+      )
+      yield* hooks.register("tool", "execute.after", (event) => Effect.sync(() => void seen.push(event.tool)))
+      const snapshot = yield* service.snapshot()
+      const program = (code: string) =>
+        snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
+        })
+
+      expect((yield* program('return await tools.echo({ text: "constant" })')).output).toMatchObject({
+        output: JSON.stringify({ text: "renamed" }),
+      })
+      expect(seen).toContain("constant")
+      // A program can only reach its own tools, however the call is renamed.
+      for (const name of ["direct", "missing"])
+        expect(
+          (yield* program(`try { await tools.echo({ text: "${name}" }) } catch (e) { return e.message }`)).output,
+        ).toMatchObject({ output: `Tool is not available for this request: ${name}` })
+
+      const check = (tools: string[]) =>
+        service.check({
+          code: 'return await tools.echo({ text: "constant" })',
+          tools,
+          bindings: {},
+          permissions: [],
+          limits: {},
+          context: { sessionID, ...identity, progress: () => Effect.void },
+        })
+      expect(yield* check(["echo"])).toMatchObject({ ok: false })
+      expect(yield* check(["echo", "constant"])).toMatchObject({ ok: true, value: { text: "renamed" } })
+    }),
+  )
+
   it.effect("hooks see one ID per call inside a Code Mode program", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
