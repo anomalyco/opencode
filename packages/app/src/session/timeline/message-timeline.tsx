@@ -193,6 +193,21 @@ function MessageTimelineView(
   const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const messageByID = projection.messageByID
+  const settings = useSettings()
+
+  // The text and context a prompt carries, as its row and the prompt rail's preview show it.
+  const presentation = (message: SessionMessageUser) => {
+    const value = readPromptPresentation(message.metadata)
+    const parsed = value ? undefined : parseCommentNote(message.text)
+    const voice = parseVoiceDelegation(value?.displayText ?? message.text)
+
+    return {
+      displayText: voice ? (voice.framing ?? voice.instruction) : value?.displayText,
+      comments: value?.comments ?? (parsed ? [parsed] : []),
+      references: value?.attachments,
+      voice: !!voice,
+    }
+  }
 
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
@@ -265,6 +280,8 @@ function MessageTimelineView(
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
     setPage: props.setPage,
+    promptText: (message) => presentation(message).displayText ?? message.text,
+    promptRail: () => settings.general.promptRail(),
     reveal: props.reveal,
   })
 
@@ -299,25 +316,12 @@ function MessageTimelineView(
         ],
   )
 
-  const settings = useSettings()
-
   const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
-    presentation: (message: SessionMessageUser) => {
-      const value = readPromptPresentation(message.metadata)
-      const parsed = value ? undefined : parseCommentNote(message.text)
-      const voice = parseVoiceDelegation(value?.displayText ?? message.text)
-
-      return {
-        displayText: voice ? (voice.framing ?? voice.instruction) : value?.displayText,
-        comments: value?.comments ?? (parsed ? [parsed] : []),
-        references: value?.attachments,
-        voice: !!voice,
-      }
-    },
+    presentation,
     actions: props.actions,
     timelineDetail: props.data.timelineDetail,
     disclosure: virtualized.disclosure,

@@ -134,6 +134,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.promptRail.title",
+    target: "settings-prompt-rail",
+    description: "settings.experimental.row.promptRail.description",
+    keywords: "prompt markers rail scrollbar navigation jumps milestones preview",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.sidebarOrganize.title",
     target: "settings-sidebar-organize",
     description: "settings.experimental.row.sidebarOrganize.description",

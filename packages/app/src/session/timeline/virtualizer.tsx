@@ -9,6 +9,7 @@ import {
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
 import { Predicate } from "effect"
 import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
   batch,
@@ -48,6 +49,7 @@ import {
 } from "./cold-mount"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { holdLandingWidth } from "@/shell/panel-motion"
+import { PromptMarkers, type PromptMarker } from "./prompt-markers"
 import type { TimelineFollow } from "./follow"
 import {
   CONTACT_LOST_EVENT,
@@ -60,6 +62,12 @@ import {
 } from "./machine"
 
 const fallbackItemSize = 60
+
+// Prompts whose marks would land closer than this share one, as the rail is too short to draw both.
+const MARKER_GAP = 0.008
+
+// A preview holds three lines of a prompt; cutting it here keeps a pasted document out of the rail's DOM.
+const PREVIEW_LENGTH = 400
 
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
@@ -125,6 +133,10 @@ type Input = {
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
+  /** A prompt's text as the timeline shows it, for the prompt rail's previews. */
+  promptText?: (message: SessionMessageUser) => string
+  /** The "Prompt markers" experiment: the rail of marks beside the scrollbar. */
+  promptRail?: Accessor<boolean>
   reveal?: TimelineRouteReveal
 }
 
@@ -280,6 +292,8 @@ export function createTimelineVirtualizer(input: Input) {
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   const [headerHeight, setHeaderHeight] = createSignal(48)
+  // The viewport under the header, composer inset included. The prompt rail compares it with the rows' height.
+  const [viewportHeight, setViewportHeight] = createSignal(0)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -296,6 +310,7 @@ export function createTimelineVirtualizer(input: Input) {
           setHeaderHeight(
             root ? parseFloat(getComputedStyle(root).getPropertyValue("--session-header-height")) || 48 : 48,
           )
+          setViewportHeight(rect.height)
           callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
         })
       }
@@ -1127,6 +1142,117 @@ export function createTimelineVirtualizer(input: Input) {
       )
     }
 
+    // The rail's data is built only while the experiment is on. A memo runs as soon as it is created, so keeping it
+    // here, outside this component, would charge every scroll and every row measurement even with the rail off.
+    function PromptRail() {
+      // A prompt's start is read from the rows' measured offsets, so the rail never touches the DOM.
+      const promptRows = createMemo<PromptMarker[]>((previous) => {
+        const next = rows()
+          .flatMap((row, index) => (Predicate.isTagged(row, "UserMessage") ? [{ index, id: row.userMessageID }] : []))
+          // A mark can stand for more than one prompt, so the ordinal a reader hears is the prompt's own number.
+          .map((row, index) => ({ ...row, ordinal: index + 1 }))
+
+        if (
+          previous?.length === next.length &&
+          previous.every((row, index) => {
+            const other = next[index]
+
+            return !!other && row.index === other.index && row.id === other.id
+          })
+        )
+          return previous
+
+        return next
+      })
+
+      const promptFractions = createMemo(() => {
+        const fractions = new Map<string, number>()
+        const total = virtualizer.getTotalSize()
+
+        if (!total) return fractions
+        // Reading the total first built the measurements this then indexes, so neither is stale.
+        const measurements = virtualizer.measurementsCache
+
+        promptRows().forEach((row) => {
+          fractions.set(row.id, Math.min(1, Math.max(0, (measurements[row.index]?.start ?? 0) / total)))
+        })
+
+        return fractions
+      })
+
+      // Marks closer together than MARKER_GAP would draw over each other, so the first prompt of a run stands for
+      // the run. Keeping the first prompt is also what keeps drawn marks a full gap apart: moving a drawn mark to
+      // the later prompt would leave the next one able to land almost on top of it. The list keeps its identity
+      // while the same prompts are drawn, so a reply streaming below them never rebuilds the rail.
+      const promptMarkers = createMemo<PromptMarker[]>((previous) => {
+        const fractions = promptFractions()
+        const markers: PromptMarker[] = []
+        let last = -1
+
+        promptRows().forEach((row) => {
+          const fraction = fractions.get(row.id) ?? 0
+
+          if (last >= 0 && fraction - last < MARKER_GAP) return
+          markers.push(row)
+          last = fraction
+        })
+
+        if (previous?.length === markers.length && previous.every((row, index) => row === markers[index]))
+          return previous
+
+        return markers
+      })
+
+      const activePromptID = createMemo(() => {
+        // The range holds overscan rows above the viewport, so the first one that reaches the view's top edge names
+        // the prompt in view.
+        const items = virtualizer.getVirtualItems()
+        const top = (virtualizer.scrollOffset ?? 0) + (input.showHeader() ? headerHeight() + 16 : 0)
+        const first = items.find((item) => item.end > top)?.index ?? items[0]?.index ?? 0
+        const markers = promptMarkers()
+
+        return markers.findLast((marker) => marker.index <= first)?.id ?? markers[0]?.id
+      })
+
+      // The rail only earns its room when the prompts cannot all be seen at once. Its own height, not the scroll
+      // state's, so a timeline restored to its end shows it before the reader scrolls.
+      const overflows = createMemo(
+        () =>
+          viewportHeight() > 0 &&
+          (input.showHeader() ? headerHeight() : 0) + virtualizer.getTotalSize() + bottomInset() > viewportHeight(),
+      )
+
+      return (
+        <Show when={isDesktop() && overflows() && promptMarkers().length > 0}>
+          <PromptMarkers
+            top={input.showHeader() ? headerHeight() : 0}
+            markers={promptMarkers}
+            fraction={(id) => promptFractions().get(id) ?? 0}
+            activeID={activePromptID}
+            text={promptText}
+            onJump={jumpToPrompt}
+          />
+        </Show>
+      )
+    }
+
+    const promptText = (id: string) => {
+      const message = input.projection.messageByID().get(id)
+
+      if (message?.type !== "user") return ""
+      const text = input.promptText?.(message) ?? message.text
+
+      return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH).trimEnd()}…` : text
+    }
+
+    function jumpToPrompt(index: number) {
+      if (!active()) return
+      prepareNavigation()
+      // Choosing a prompt is navigation away from the newest content, as a search result is.
+      input.follow.dispatch({ type: "detach" })
+      virtualizer.scrollToIndex(index, { align: "start" })
+    }
+
     return (
       <div ref={setViewRoot} class="relative w-full h-full min-w-0">
         <div
@@ -1220,7 +1346,11 @@ export function createTimelineVirtualizer(input: Input) {
           data-slot="session-timeline-visible"
           class="pointer-events-none absolute inset-x-0 top-0"
           style={{ bottom: `${bottomInset()}px` }}
-        />
+        >
+          <Show when={input.promptRail?.()}>
+            <PromptRail />
+          </Show>
+        </div>
       </div>
     )
   }

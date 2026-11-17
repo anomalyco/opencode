@@ -680,6 +680,8 @@ export const dict = {
   "session.timeline.status.waitingAnswer": "Waiting for your answer",
   "session.timeline.status.waitingShell": "Waiting for shell",
   "session.timeline.status.working": "Working",
+  "session.timeline.markers.label": "Prompts",
+  "session.timeline.markers.goto": "Go to prompt {{index}}",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
 
@@ -884,6 +886,9 @@ export const dict = {
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
+  "settings.experimental.row.promptRail.title": "Prompt markers",
+  "settings.experimental.row.promptRail.description":
+    "Show a mark for each of your prompts beside the timeline's scrollbar. Hover one to preview that prompt, and choose it to jump there.",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
     "Choose how to organize sessions in side tabs. On desktop, Projects and Customize replace Home with Settings in the sidebar.",
