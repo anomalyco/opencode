@@ -25,10 +25,14 @@ export const Input = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
 })
 
-const Output = Schema.Struct({
-  provider: WebSearch.ID,
-  results: Schema.Array(WebSearch.Result),
-})
+const Output = Schema.Array(
+  Schema.Struct({
+    url: WebSearch.Result.fields.url,
+    title: WebSearch.Result.fields.title,
+    content: WebSearch.Result.fields.content,
+    published: WebSearch.Result.fields.time.fields.published,
+  }),
+)
 export const Plugin = {
   id: "opencode.tool.websearch",
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: Context) {
@@ -144,12 +148,14 @@ export const Plugin = {
                     )
                 }),
               )
-              const output = {
-                provider: result.providerID,
-                results: result.results,
-              }
-              const content = output.results.length
-                ? output.results
+              const output = result.results.map((hit) => ({
+                url: hit.url,
+                ...(hit.title === undefined ? {} : { title: hit.title }),
+                ...(hit.content === undefined ? {} : { content: hit.content }),
+                ...(hit.time.published === undefined ? {} : { published: hit.time.published }),
+              }))
+              const content = result.results.length
+                ? result.results
                     .map((result) => {
                       const title = result.title ?? result.url
                       const published = result.time.published
@@ -159,7 +165,7 @@ export const Plugin = {
                     })
                     .join("\n\n")
                 : NO_RESULTS
-              return { output, content, metadata: { provider: output.provider } }
+              return { output, content, metadata: { provider: result.providerID } }
             }).pipe(
               Effect.mapError((error) => {
                 const fallback = `Unable to search the web for ${input.query}`
