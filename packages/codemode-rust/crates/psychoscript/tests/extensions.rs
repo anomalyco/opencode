@@ -406,3 +406,228 @@ fn a_module_that_is_not_provided_or_a_missing_export_fails_at_the_import() {
         failure(&Runtime::new(), r#"require("fs")"#).starts_with(r#"Error: Cannot import "fs""#)
     );
 }
+
+/// A host value from the reference's description of it (see `describe` in `conformance/catalog.ts`).
+fn decode(d: &Json) -> HostValue {
+    let pairs = |v: &Json| -> Vec<(String, String)> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                (
+                    p[0].as_str().unwrap().to_owned(),
+                    p[1].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    let bytes = |v: &Json| -> Vec<u8> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b.as_u64().unwrap() as u8)
+            .collect()
+    };
+    match d {
+        Json::Null => HostValue::Null,
+        Json::Bool(b) => HostValue::Bool(*b),
+        Json::Number(n) => HostValue::Number(n.as_f64().unwrap()),
+        Json::String(s) => HostValue::String(s.clone()),
+        Json::Object(m) => {
+            let (tag, v) = m.iter().next().unwrap();
+            match tag.as_str() {
+                "undefined" => HostValue::Undefined,
+                "number" => HostValue::Number(v.as_str().unwrap().parse().unwrap_or(f64::NAN)),
+                "date" => HostValue::Date(v.as_f64().unwrap_or(f64::NAN)),
+                "regexp" => HostValue::RegExp {
+                    source: v[0].as_str().unwrap().to_owned(),
+                    flags: v[1].as_str().unwrap().to_owned(),
+                },
+                "url" => HostValue::Url(v.as_str().unwrap().to_owned()),
+                "params" => HostValue::SearchParams(pairs(v)),
+                "headers" => HostValue::Headers(pairs(v)),
+                "buffer" => HostValue::Buffer(bytes(v)),
+                "bytes" | "arrayBuffer" => HostValue::Bytes(bytes(v)),
+                "map" => HostValue::Map(
+                    v.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|p| (decode(&p[0]), decode(&p[1])))
+                        .collect(),
+                ),
+                "set" => HostValue::Set(v.as_array().unwrap().iter().map(decode).collect()),
+                "array" => HostValue::Array(
+                    v.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|i| (i.get("hole").is_none()).then(|| decode(i)))
+                        .collect(),
+                ),
+                "object" => HostValue::Object(
+                    v.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|p| (p[0].as_str().unwrap().to_owned(), decode(&p[1])))
+                        .collect(),
+                ),
+                "error" => HostValue::Error(Box::new(HostError {
+                    name: v["name"].as_str().unwrap().to_owned(),
+                    message: v["message"].as_str().unwrap().to_owned(),
+                    cause: v.get("cause").map(|c| Box::new(decode(c))),
+                    fields: v["fields"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|p| (p[0].as_str().unwrap().to_owned(), decode(&p[1])))
+                        .collect(),
+                })),
+                other => panic!("unknown description {other}"),
+            }
+        }
+        Json::Array(_) => panic!("unexpected description {d}"),
+    }
+}
+
+/// What a host value looks like to the host, in the reference's description format.
+fn describe(v: &HostValue) -> Json {
+    let pairs = |p: &[(String, String)]| -> Json { p.iter().map(|(k, v)| json!([k, v])).collect() };
+    match v {
+        HostValue::Undefined => json!({ "undefined": true }),
+        HostValue::Null => Json::Null,
+        HostValue::Bool(b) => json!(b),
+        HostValue::Number(n) if !n.is_finite() => {
+            let text = if n.is_nan() {
+                "NaN"
+            } else if *n > 0.0 {
+                "Infinity"
+            } else {
+                "-Infinity"
+            };
+            json!({ "number": text })
+        }
+        HostValue::Number(n) => json!(n),
+        HostValue::String(s) => json!(s),
+        HostValue::Function(f) => json!({ "function": f.name() }),
+        HostValue::Date(t) if t.is_nan() => json!({ "date": "NaN" }),
+        HostValue::Date(t) => json!({ "date": t }),
+        HostValue::RegExp { source, flags } => json!({ "regexp": [source, flags] }),
+        HostValue::Url(href) => json!({ "url": href }),
+        HostValue::SearchParams(p) => json!({ "params": pairs(p) }),
+        HostValue::Headers(p) => json!({ "headers": pairs(p) }),
+        HostValue::Buffer(b) => json!({ "buffer": b }),
+        HostValue::Bytes(b) => json!({ "bytes": b }),
+        HostValue::Map(entries) => {
+            json!({ "map": entries.iter().map(|(k, v)| json!([describe(k), describe(v)])).collect::<Vec<_>>() })
+        }
+        HostValue::Set(items) => json!({ "set": items.iter().map(describe).collect::<Vec<_>>() }),
+        HostValue::Array(items) => json!({
+            "array": items
+                .iter()
+                .map(|i| i.as_ref().map_or(json!({ "hole": true }), describe))
+                .collect::<Vec<_>>()
+        }),
+        HostValue::Object(fields) => {
+            json!({ "object": fields.iter().map(|(k, v)| json!([k, describe(v)])).collect::<Vec<_>>() })
+        }
+        HostValue::Error(e) => {
+            let mut error = json!({
+                "name": e.name,
+                "message": e.message,
+                "fields": e.fields.iter().map(|(k, v)| json!([k, describe(v)])).collect::<Vec<_>>(),
+            });
+            if let Some(c) = &e.cause {
+                error["cause"] = describe(c);
+            }
+            json!({ "error": error })
+        }
+    }
+}
+
+/// JSON equality where numbers compare by value.
+fn same(a: &Json, b: &Json) -> bool {
+    match (a, b) {
+        (Json::Number(x), Json::Number(y)) => x.as_f64() == y.as_f64(),
+        (Json::Array(x), Json::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same(x, y))
+        }
+        (Json::Object(x), Json::Object(y)) => {
+            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same(v, w)))
+        }
+        _ => a == b,
+    }
+}
+
+/// Dates, URLs, URLSearchParams, Headers, bytes, Buffers and RegExps crossing both ways, against the reference's
+/// `boundary` section of `conformance/catalog.json`, which `bun conformance/catalog.ts` generates.
+#[test]
+fn boundary_types_match_the_reference() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../conformance/catalog.json"
+    );
+    let fixture: Json = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let boundary = &fixture["boundary"];
+    let samples: Vec<(String, HostValue)> = boundary["samples"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(k, v)| (k.clone(), decode(v)))
+        .collect();
+    let mut failures = Vec::new();
+    assert!(boundary["programs"].as_array().unwrap().len() >= 18);
+    for program in boundary["programs"].as_array().unwrap() {
+        let kept = Arc::new(Mutex::new(Vec::new()));
+        let seen = kept.clone();
+        let samples = samples.clone();
+        let rt = Runtime::new().extension(
+            Extension::new("probe")
+                .function(
+                    "keep",
+                    HostFunction::new("keep", 1, move |args| {
+                        let v = args.into_iter().next().unwrap_or_default();
+                        seen.lock().unwrap().push(describe(&v));
+                        Ok(v)
+                    }),
+                )
+                .function(
+                    "make",
+                    HostFunction::new("make", 1, move |args| {
+                        let name = args[0].as_str().unwrap_or_default();
+                        Ok(samples
+                            .iter()
+                            .find(|(k, _)| k == name)
+                            .map(|(_, v)| v.clone())
+                            .unwrap_or_default())
+                    }),
+                )
+                .function(
+                    "kind",
+                    HostFunction::new("kind", 1, |args| {
+                        Ok(match args.first() {
+                            Some(HostValue::Buffer(_)) => "Buffer".into(),
+                            Some(HostValue::Bytes(_)) => "Uint8Array".into(),
+                            _ => "Object".into(),
+                        })
+                    }),
+                ),
+        );
+        let code = program["code"].as_str().unwrap();
+        let outcome = match rt.execute(code, &serde_json::Map::new()).result {
+            Ok(value) => json!({ "ok": true, "value": value }),
+            Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
+        };
+        let actual = json!({ "outcome": outcome, "kept": *kept.lock().unwrap() });
+        let expected = json!({ "outcome": program["outcome"], "kept": program["kept"] });
+        if !same(&actual, &expected) {
+            failures.push(format!(
+                "{code}\n  expected {expected}\n  actual   {actual}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}

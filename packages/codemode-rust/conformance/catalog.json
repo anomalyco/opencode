@@ -10705,5 +10705,614 @@
         }
       ]
     }
-  ]
+  ],
+  "boundary": {
+    "samples": {
+      "date": {
+        "date": 0
+      },
+      "invalidDate": {
+        "date": "NaN"
+      },
+      "regexp": {
+        "regexp": [
+          "a+\\/b",
+          "gi"
+        ]
+      },
+      "url": {
+        "url": "https://user@a.test:8080/p%20a?q=1&r=%20#h"
+      },
+      "params": {
+        "params": [
+          [
+            "a",
+            "1"
+          ],
+          [
+            "b",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ]
+        ]
+      },
+      "headers": {
+        "headers": [
+          [
+            "x-a",
+            "1, 3"
+          ],
+          [
+            "x-b",
+            "2"
+          ]
+        ]
+      },
+      "bytes": {
+        "bytes": [
+          1,
+          2,
+          3
+        ]
+      },
+      "buffer": {
+        "buffer": [
+          104,
+          105
+        ]
+      },
+      "arrayBuffer": {
+        "arrayBuffer": [
+          4,
+          5
+        ]
+      },
+      "nested": {
+        "object": [
+          [
+            "when",
+            {
+              "date": 1000000000000
+            }
+          ],
+          [
+            "links",
+            {
+              "array": [
+                {
+                  "url": "https://b.test/x"
+                }
+              ]
+            }
+          ],
+          [
+            "table",
+            {
+              "map": [
+                [
+                  {
+                    "date": 5
+                  },
+                  {
+                    "headers": [
+                      [
+                        "k",
+                        "v"
+                      ]
+                    ]
+                  }
+                ]
+              ]
+            }
+          ],
+          [
+            "tags",
+            {
+              "set": [
+                {
+                  "bytes": [
+                    9
+                  ]
+                }
+              ]
+            }
+          ],
+          [
+            "failure",
+            {
+              "error": {
+                "name": "RangeError",
+                "message": "bad",
+                "cause": {
+                  "date": 7
+                },
+                "fields": [
+                  [
+                    "at",
+                    {
+                      "url": "https://c.test/"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      }
+    },
+    "programs": [
+      {
+        "code": "const o = { n: 1, list: [1], d: new Date(0), u: new URL(\"https://a.test/\") }; keep(o); o.n = 2; o.list.push(2); return o.n",
+        "outcome": {
+          "ok": true,
+          "value": 2
+        },
+        "kept": [
+          {
+            "object": [
+              [
+                "n",
+                1
+              ],
+              [
+                "list",
+                {
+                  "array": [
+                    1
+                  ]
+                }
+              ],
+              [
+                "d",
+                {
+                  "date": 0
+                }
+              ],
+              [
+                "u",
+                {
+                  "url": "https://a.test/"
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "const h = make(\"headers\"); h.set(\"x-a\", \"2\"); const back = keep(h); back.set(\"x-a\", \"3\"); return [h instanceof Headers, h.get(\"x-a\"), back === h, back.get(\"x-a\"), [...back], [...make(\"headers\")]]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            "2",
+            false,
+            "3",
+            [
+              [
+                "x-a",
+                "3"
+              ],
+              [
+                "x-b",
+                "2"
+              ]
+            ],
+            [
+              [
+                "x-a",
+                "1, 3"
+              ],
+              [
+                "x-b",
+                "2"
+              ]
+            ]
+          ]
+        },
+        "kept": [
+          {
+            "headers": [
+              [
+                "x-a",
+                "2"
+              ],
+              [
+                "x-b",
+                "2"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "const b = make(\"bytes\"); b[0] = 42; const mine = new Uint8Array([5]); const name = kind(mine); return [[...b], [...make(\"bytes\")], [...make(\"arrayBuffer\")], b instanceof Uint8Array, name, mine[0], kind(make(\"arrayBuffer\"))]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            [
+              42,
+              2,
+              3
+            ],
+            [
+              1,
+              2,
+              3
+            ],
+            [
+              4,
+              5
+            ],
+            true,
+            "Uint8Array",
+            5,
+            "Uint8Array"
+          ]
+        },
+        "kept": []
+      },
+      {
+        "code": "const d = make(\"date\"); return [d instanceof Date, d.getTime(), d.toISOString(), make(\"invalidDate\").getTime(), keep(new Date(86400000)).getTime(), keep(new Date(NaN)).getTime()]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            0,
+            "1970-01-01T00:00:00.000Z",
+            null,
+            86400000,
+            null
+          ]
+        },
+        "kept": [
+          {
+            "date": 86400000
+          },
+          {
+            "date": "NaN"
+          }
+        ]
+      },
+      {
+        "code": "const r = make(\"regexp\"); return [r instanceof RegExp, r.source, r.flags, r.test(\"aa/b\"), keep(/x(y)\\//m).source]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            "a+\\/b",
+            "gi",
+            true,
+            "x(y)\\/"
+          ]
+        },
+        "kept": [
+          {
+            "regexp": [
+              "x(y)\\/",
+              "m"
+            ]
+          }
+        ]
+      },
+      {
+        "code": "const u = make(\"url\"); return [u instanceof URL, u.href, u.pathname, u.port, u.searchParams.get(\"r\"), keep(u).href, keep(u.searchParams).toString()]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            "https://user@a.test:8080/p%20a?q=1&r=%20#h",
+            "/p%20a",
+            "8080",
+            " ",
+            "https://user@a.test:8080/p%20a?q=1&r=%20#h",
+            "q=1&r=+"
+          ]
+        },
+        "kept": [
+          {
+            "url": "https://user@a.test:8080/p%20a?q=1&r=%20#h"
+          },
+          {
+            "params": [
+              [
+                "q",
+                "1"
+              ],
+              [
+                "r",
+                " "
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "const p = make(\"params\"); return [p instanceof URLSearchParams, p.getAll(\"a\"), p.toString(), keep(new URLSearchParams(\"x=1&x=2\")).toString()]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            [
+              "1",
+              "3"
+            ],
+            "a=1&b=2&a=3",
+            "x=1&x=2"
+          ]
+        },
+        "kept": [
+          {
+            "params": [
+              [
+                "x",
+                "1"
+              ],
+              [
+                "x",
+                "2"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "const b = make(\"buffer\"); return [Buffer.isBuffer(b), b.toString(), keep(Buffer.from(\"yo\")).length, keep(new Uint8Array([7]))[0], kind(Buffer.from(\"z\")), kind(new Uint8Array(1))]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            "hi",
+            2,
+            7,
+            "Buffer",
+            "Uint8Array"
+          ]
+        },
+        "kept": [
+          {
+            "buffer": [
+              121,
+              111
+            ]
+          },
+          {
+            "bytes": [
+              7
+            ]
+          }
+        ]
+      },
+      {
+        "code": "return make(\"nested\")",
+        "outcome": {
+          "ok": false,
+          "kind": "InvalidDataValue",
+          "message": "TypeError: A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`."
+        },
+        "kept": []
+      },
+      {
+        "code": "const n = make(\"nested\"); return [n.when instanceof Date, n.links[0].host, [...n.table.keys()][0].getTime(), [...n.table.values()][0].get(\"k\"), [...[...n.tags][0]], n.failure instanceof RangeError, n.failure.cause.getTime(), n.failure.at.href]",
+        "outcome": {
+          "ok": true,
+          "value": [
+            true,
+            "b.test",
+            5,
+            "v",
+            [
+              9
+            ],
+            true,
+            7,
+            "https://c.test/"
+          ]
+        },
+        "kept": []
+      },
+      {
+        "code": "keep(make(\"nested\")); return 1",
+        "outcome": {
+          "ok": true,
+          "value": 1
+        },
+        "kept": [
+          {
+            "object": [
+              [
+                "when",
+                {
+                  "date": 1000000000000
+                }
+              ],
+              [
+                "links",
+                {
+                  "array": [
+                    {
+                      "url": "https://b.test/x"
+                    }
+                  ]
+                }
+              ],
+              [
+                "table",
+                {
+                  "map": [
+                    [
+                      {
+                        "date": 5
+                      },
+                      {
+                        "headers": [
+                          [
+                            "k",
+                            "v"
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ],
+              [
+                "tags",
+                {
+                  "set": [
+                    {
+                      "bytes": [
+                        9
+                      ]
+                    }
+                  ]
+                }
+              ],
+              [
+                "failure",
+                {
+                  "error": {
+                    "name": "RangeError",
+                    "message": "bad",
+                    "cause": {
+                      "date": 7
+                    },
+                    "fields": [
+                      [
+                        "at",
+                        {
+                          "url": "https://c.test/"
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "keep(new Map([[new Date(1), new Set([new URL(\"https://m.test/\")])]])); return 1",
+        "outcome": {
+          "ok": true,
+          "value": 1
+        },
+        "kept": [
+          {
+            "map": [
+              [
+                {
+                  "date": 1
+                },
+                {
+                  "set": [
+                    {
+                      "url": "https://m.test/"
+                    }
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "code": "keep([new Headers({ \"X-Y\": \"1\" }), new URLSearchParams(\"z=9\"), /q/]); return 1",
+        "outcome": {
+          "ok": true,
+          "value": 1
+        },
+        "kept": [
+          {
+            "array": [
+              {
+                "headers": [
+                  [
+                    "x-y",
+                    "1"
+                  ]
+                ]
+              },
+              {
+                "params": [
+                  [
+                    "z",
+                    "9"
+                  ]
+                ]
+              },
+              {
+                "regexp": [
+                  "q",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "code": "function f() { return keep(arguments) }\nf(1, \"two\"); keep(new WeakMap()); keep(new TextDecoder()); return 1",
+        "outcome": {
+          "ok": true,
+          "value": 1
+        },
+        "kept": [
+          {
+            "object": [
+              [
+                "0",
+                1
+              ],
+              [
+                "1",
+                "two"
+              ]
+            ]
+          },
+          {
+            "object": []
+          },
+          {
+            "object": []
+          }
+        ]
+      },
+      {
+        "code": "try { keep((function* () {})()) } catch (e) { return e.message }",
+        "outcome": {
+          "ok": true,
+          "value": "Argument 1 to keep contains a generator, which cannot be passed to an extension."
+        },
+        "kept": []
+      },
+      {
+        "code": "try { keep(new Map().entries()) } catch (e) { return e.message }",
+        "outcome": {
+          "ok": true,
+          "value": "Argument 1 to keep contains an iterator, which cannot be passed to an extension."
+        },
+        "kept": []
+      },
+      {
+        "code": "try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }",
+        "outcome": {
+          "ok": true,
+          "value": "Argument 1 to keep contains an un-awaited Promise, which cannot be passed to an extension."
+        },
+        "kept": []
+      },
+      {
+        "code": "return JSON.stringify([make(\"date\"), make(\"url\"), make(\"params\"), make(\"headers\"), make(\"bytes\"), make(\"buffer\"), make(\"regexp\")])",
+        "outcome": {
+          "ok": true,
+          "value": "[\"1970-01-01T00:00:00.000Z\",\"https://user@a.test:8080/p%20a?q=1&r=%20#h\",{},{\"x-a\":\"1, 3\",\"x-b\":\"2\"},{\"0\":1,\"1\":2,\"2\":3},{\"type\":\"Buffer\",\"data\":[104,105]},{}]"
+        },
+        "kept": []
+      }
+    ]
+  }
 }

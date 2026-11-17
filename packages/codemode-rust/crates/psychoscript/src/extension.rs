@@ -26,6 +26,22 @@ pub enum HostValue {
     Set(Vec<HostValue>),
     Function(HostFunction),
     Error(Box<HostError>),
+    /// Milliseconds since the epoch; `NaN` is an invalid date.
+    Date(f64),
+    RegExp {
+        source: String,
+        flags: String,
+    },
+    /// A URL by its `href`.
+    Url(String),
+    /// `URLSearchParams` by its name-value pairs.
+    SearchParams(Vec<(String, String)>),
+    /// `Headers` by its entries.
+    Headers(Vec<(String, String)>),
+    /// A `Uint8Array`, or an `ArrayBuffer`'s bytes.
+    Bytes(Vec<u8>),
+    /// A Node `Buffer`.
+    Buffer(Vec<u8>),
 }
 
 impl HostValue {
@@ -110,7 +126,22 @@ impl HostValue {
                     .filter_map(|(k, v)| v.to_json().map(|j| (k.clone(), j)))
                     .collect(),
             ),
-            HostValue::Map(_) => Json::Object(Default::default()),
+            HostValue::Map(_)
+            | HostValue::RegExp { .. }
+            | HostValue::SearchParams(_)
+            | HostValue::Headers(_) => Json::Object(Default::default()),
+            HostValue::Date(t) => match t.is_finite() {
+                true => Json::String(crate::builtins::date::iso_string(*t)),
+                false => Json::Null,
+            },
+            HostValue::Url(href) => Json::String(href.clone()),
+            HostValue::Bytes(data) => Json::Object(
+                data.iter()
+                    .enumerate()
+                    .map(|(i, b)| (i.to_string(), Json::from(*b)))
+                    .collect(),
+            ),
+            HostValue::Buffer(data) => serde_json::json!({ "type": "Buffer", "data": data }),
             HostValue::Error(e) => {
                 let mut map = serde_json::Map::new();
                 map.insert("name".into(), Json::String(e.name.clone()));

@@ -725,11 +725,14 @@ fn describe(vm: &Vm, v: &Value) -> &'static str {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
             Kind::ToolRef(_) => "a tool reference",
             Kind::Promise(_) => "an un-awaited Promise",
-            Kind::Generator(_)
-            | Kind::ArrayIter { .. }
+            Kind::Generator(_) | Kind::AsyncGenerator(_) => "a generator",
+            Kind::ArrayIter { .. }
             | Kind::MapIter { .. }
             | Kind::StrIter { .. }
-            | Kind::ListIter { .. } => "an iterator",
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+            | Kind::IterHelper(_)
+            | Kind::AsyncFromSync { .. } => "an iterator",
             _ => "an object",
         },
         _ => "a value",
@@ -763,14 +766,25 @@ fn to_host(
         }
         Value::Obj(id) => *id,
     };
-    let opaque = !matches!(
+    // Interpreter machinery is never data; every other object crosses as a copy, as the reference's `toHost`.
+    let opaque = matches!(
         vm.heap[id as usize].kind,
-        Kind::Ordinary
-            | Kind::Array(_)
-            | Kind::Arguments(_)
-            | Kind::Error(_)
-            | Kind::Map(_)
-            | Kind::Set(_)
+        Kind::Closure(_)
+            | Kind::Native { .. }
+            | Kind::Bound(_)
+            | Kind::ToolRef(_)
+            | Kind::Promise(_)
+            | Kind::Generator(_)
+            | Kind::AsyncGenerator(_)
+            | Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+            | Kind::IterHelper(_)
+            | Kind::AsyncFromSync { .. }
+            | Kind::Resolvers { .. }
+            | Kind::Combinator(_)
     );
     if opaque {
         let msg = format!(
@@ -784,7 +798,23 @@ fn to_host(
     }
     seen.push(id);
     let out = match &vm.heap[id as usize].kind {
-        Kind::Array(items) | Kind::Arguments(items) => {
+        Kind::Date(t) => HostValue::Date(*t),
+        Kind::RegExp(r) => HostValue::RegExp {
+            source: r.source.clone(),
+            flags: r.flags.clone(),
+        },
+        Kind::Url(_) => HostValue::Url(crate::builtins::web::url_href(vm, id)),
+        Kind::SearchParams(p) => HostValue::SearchParams(p.list.clone()),
+        Kind::Headers(h) => HostValue::Headers(crate::builtins::web::header_entries(&h.list)),
+        Kind::Bytes(b) => {
+            let data = b.to_vec();
+            if b.buffer {
+                HostValue::Buffer(data)
+            } else {
+                HostValue::Bytes(data)
+            }
+        }
+        Kind::Array(items) => {
             let items = items.clone();
             let mut out = Vec::with_capacity(items.len());
             for item in &items {
@@ -908,6 +938,33 @@ fn from_host(
             }
             Value::Obj(id)
         }
+        HostValue::Date(t) => {
+            crate::builtins::date::new_date(vm, crate::builtins::date::time_clip(*t))
+        }
+        HostValue::RegExp { source, flags } => {
+            crate::builtins::regexp::new_regexp(vm, source, flags)?
+        }
+        HostValue::Url(href) => match url::Url::parse(href) {
+            Ok(u) => crate::builtins::web::new_url(vm, u),
+            Err(_) => {
+                let msg = format!("{label} produced an invalid URL '{href}'.");
+                return Err(vm.type_error(&msg));
+            }
+        },
+        HostValue::SearchParams(list) => crate::builtins::web::new_params(vm, list.clone()),
+        HostValue::Headers(list) => {
+            // As `new Headers(...)` leaves them: lowercase names and values without surrounding HTTP whitespace.
+            let list = list
+                .iter()
+                .map(|(k, v)| {
+                    let v = v.trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' '));
+                    (k.to_ascii_lowercase(), v.to_owned())
+                })
+                .collect();
+            crate::builtins::web::new_headers(vm, list)
+        }
+        HostValue::Bytes(data) => crate::builtins::bytes::new_bytes(vm, data.clone(), false),
+        HostValue::Buffer(data) => crate::builtins::bytes::new_bytes(vm, data.clone(), true),
         HostValue::Map(entries) => {
             let proto = vm.realm.map_proto;
             let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));

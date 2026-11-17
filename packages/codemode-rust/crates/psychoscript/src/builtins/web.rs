@@ -366,7 +366,7 @@ fn update(vm: &mut Vm, id: Id) {
     }
 }
 
-fn new_params(vm: &mut Vm, list: Vec<(String, String)>) -> Value {
+pub fn new_params(vm: &mut Vm, list: Vec<(String, String)>) -> Value {
     let pp = vm.realm.std.params;
     Value::Obj(vm.alloc(Obj::new(
         Some(pp),
@@ -680,7 +680,7 @@ fn header_value(vm: &mut Vm, name: &str, value: &str) -> Result<String, Value> {
 
 /// The iteration view: other names sorted with their values combined, then each `set-cookie` value apart, as the
 /// host's Headers list them.
-fn header_entries(list: &[(String, String)]) -> Vec<(String, String)> {
+pub fn header_entries(list: &[(String, String)]) -> Vec<(String, String)> {
     let mut names: Vec<&String> = list
         .iter()
         .map(|(n, _)| n)

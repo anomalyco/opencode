@@ -15,7 +15,9 @@ import { join, resolve } from "node:path"
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
 const { Effect, Schema } = await import(Bun.resolveSync("effect", join(pkg, "src")))
-const { CodeMode, Namespace, OpenAPI, Tool, searchSignature, toolExpression } = await import(join(pkg, "src/index.ts"))
+const { CodeMode, Extension, Namespace, OpenAPI, Tool, searchSignature, toolExpression } = await import(
+  join(pkg, "src/index.ts")
+)
 const { Layer } = await import(Bun.resolveSync("effect", join(pkg, "src")))
 const { HttpClient, HttpClientRequest, HttpClientResponse } = await import(Bun.resolveSync("effect/http", join(pkg, "src")))
 const { cases } = await import("./openapi-specs.ts")
@@ -416,6 +418,103 @@ for (const item of cases(pkg)) {
   })())
 }
 
+// Extension boundary: host values of every type crossing into programs and program values crossing out, described as
+// data. `make(kind)` hands the program one of `samples`; `keep(value)` records what the host received and returns it.
+const describe = (v: unknown): unknown => {
+  if (v === undefined) return { undefined: true }
+  if (typeof v === "number" && !Number.isFinite(v)) return { number: String(v) }
+  if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v
+  if (typeof v === "function") return { function: v.name }
+  if (v instanceof Date) return { date: Number.isNaN(v.getTime()) ? "NaN" : v.getTime() }
+  if (v instanceof RegExp) return { regexp: [v.source, v.flags] }
+  if (v instanceof URL) return { url: v.href }
+  if (v instanceof URLSearchParams) return { params: [...v] }
+  if (v instanceof Headers) return { headers: [...v] }
+  if (Buffer.isBuffer(v)) return { buffer: [...v] }
+  if (v instanceof Uint8Array) return { bytes: [...v] }
+  if (v instanceof ArrayBuffer) return { arrayBuffer: [...new Uint8Array(v)] }
+  if (v instanceof Map) return { map: [...v].map(([k, x]) => [describe(k), describe(x)]) }
+  if (v instanceof Set) return { set: [...v].map(describe) }
+  if (Array.isArray(v)) return { array: Array.from({ length: v.length }, (_, i) => (i in v ? describe(v[i]) : { hole: true })) }
+  if (v instanceof Error) {
+    const fields = v as unknown as Record<string, unknown>
+    return {
+      error: {
+        name: v.name,
+        message: v.message,
+        ...("cause" in v ? { cause: describe(v.cause) } : {}),
+        fields: Object.keys(v).map((k) => [k, describe(fields[k])]),
+      },
+    }
+  }
+  return { object: Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, describe(x)]) }
+}
+const samples: Record<string, unknown> = {
+  date: new Date(0),
+  invalidDate: new Date(Number.NaN),
+  regexp: /a+\/b/gi,
+  url: new URL("https://user@a.test:8080/p a?q=1&r=%20#h"),
+  params: new URLSearchParams("a=1&b=2&a=3"),
+  headers: new Headers([["X-B", "2"], ["x-a", "1"], ["X-A", " 3 "]]),
+  bytes: new Uint8Array([1, 2, 3]),
+  buffer: Buffer.from("hi"),
+  arrayBuffer: new Uint8Array([4, 5]).buffer,
+  nested: {
+    when: new Date(1e12),
+    links: [new URL("https://b.test/x")],
+    table: new Map<unknown, unknown>([[new Date(5), new Headers({ k: "v" })]]),
+    tags: new Set([new Uint8Array([9])]),
+    failure: Object.assign(new RangeError("bad", { cause: new Date(7) }), { at: new URL("https://c.test/") }),
+  },
+}
+const boundaryPrograms = [
+  `const o = { n: 1, list: [1], d: new Date(0), u: new URL("https://a.test/") }; keep(o); o.n = 2; o.list.push(2); return o.n`,
+  `const h = make("headers"); h.set("x-a", "2"); const back = keep(h); back.set("x-a", "3"); return [h instanceof Headers, h.get("x-a"), back === h, back.get("x-a"), [...back], [...make("headers")]]`,
+  `const b = make("bytes"); b[0] = 42; const mine = new Uint8Array([5]); const name = kind(mine); return [[...b], [...make("bytes")], [...make("arrayBuffer")], b instanceof Uint8Array, name, mine[0], kind(make("arrayBuffer"))]`,
+  `const d = make("date"); return [d instanceof Date, d.getTime(), d.toISOString(), make("invalidDate").getTime(), keep(new Date(86400000)).getTime(), keep(new Date(NaN)).getTime()]`,
+  `const r = make("regexp"); return [r instanceof RegExp, r.source, r.flags, r.test("aa/b"), keep(/x(y)\\//m).source]`,
+  `const u = make("url"); return [u instanceof URL, u.href, u.pathname, u.port, u.searchParams.get("r"), keep(u).href, keep(u.searchParams).toString()]`,
+  `const p = make("params"); return [p instanceof URLSearchParams, p.getAll("a"), p.toString(), keep(new URLSearchParams("x=1&x=2")).toString()]`,
+  `const b = make("buffer"); return [Buffer.isBuffer(b), b.toString(), keep(Buffer.from("yo")).length, keep(new Uint8Array([7]))[0], kind(Buffer.from("z")), kind(new Uint8Array(1))]`,
+  `return make("nested")`,
+  `const n = make("nested"); return [n.when instanceof Date, n.links[0].host, [...n.table.keys()][0].getTime(), [...n.table.values()][0].get("k"), [...[...n.tags][0]], n.failure instanceof RangeError, n.failure.cause.getTime(), n.failure.at.href]`,
+  `keep(make("nested")); return 1`,
+  `keep(new Map([[new Date(1), new Set([new URL("https://m.test/")])]])); return 1`,
+  `keep([new Headers({ "X-Y": "1" }), new URLSearchParams("z=9"), /q/]); return 1`,
+  `function f() { return keep(arguments) }\nf(1, "two"); keep(new WeakMap()); keep(new TextDecoder()); return 1`,
+  `try { keep((function* () {})()) } catch (e) { return e.message }`,
+  `try { keep(new Map().entries()) } catch (e) { return e.message }`,
+  `try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }`,
+  `return JSON.stringify([make("date"), make("url"), make("params"), make("headers"), make("bytes"), make("buffer"), make("regexp")])`,
+]
+const probe = (kept: Array<unknown>) =>
+  Extension.make({
+    name: "probe",
+    globals: {
+      keep: (value: unknown) => {
+        kept.push(describe(value))
+        return value
+      },
+      make: (name: string) => samples[name],
+      kind: (value: unknown) => (value as { constructor: { name: string } }).constructor.name,
+    },
+  })
+const boundary = {
+  samples: Object.fromEntries(Object.entries(samples).map(([k, v]) => [k, describe(v)])),
+  programs: [] as Array<unknown>,
+}
+for (const code of boundaryPrograms) {
+  const kept: Array<unknown> = []
+  const result = await Effect.runPromise(CodeMode.make({ extensions: [probe(kept)] }).execute(code))
+  boundary.programs.push({
+    code,
+    outcome: result.ok
+      ? { ok: true, value: result.value }
+      : { ok: false, kind: result.error.kind, message: result.error.message },
+    kept,
+  })
+}
+
 const expected = {
   tools: specs,
   namespaces,
@@ -431,6 +530,7 @@ const expected = {
   ]),
   programs: await Promise.all(programs.map(async (code) => ({ code, ...(await outcome(code)) }))),
   openapi,
+  boundary,
 }
 writeFileSync(join(import.meta.dir, "catalog.json"), JSON.stringify(expected, null, 2) + "\n")
 console.log(
