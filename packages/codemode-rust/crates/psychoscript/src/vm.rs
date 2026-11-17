@@ -638,7 +638,6 @@ impl<'rt> Vm<'rt> {
                 | Kind::StrIter { .. }
                 | Kind::ListIter { .. }
                 | Kind::ExoticIter { .. }
-                | Kind::IterHelper(_)
         );
         if walked && ctx != crate::bytecode::ITER_DELEGATE {
             return 0;
@@ -655,7 +654,7 @@ impl<'rt> Vm<'rt> {
     pub(crate) fn close_fuel(&mut self, it: &Value) -> i32 {
         let Value::Obj(id) = it else { return 0 };
         match self.heap[*id as usize].kind {
-            Kind::Generator(_) => NATIVE_FUEL,
+            Kind::Generator(_) | Kind::IterHelper(_) => NATIVE_FUEL,
             Kind::Ordinary => {
                 let key = self.names.return_;
                 let method = self.get_obj(*id, key);
@@ -1926,6 +1925,8 @@ impl<'rt> Vm<'rt> {
                             self.stack.pop();
                             self.frames[fi].pc = pc;
                             let arr = self.top().as_obj().unwrap_or(0);
+                            // The reference opens a generator with a call of its `Symbol.iterator`.
+                            self.spend(NATIVE_FUEL);
                             if self.enter_generator(g, Resume::Collect(arr), false) {
                                 self.stack.push(Slot::UNDEF);
                             }
@@ -1935,6 +1936,8 @@ impl<'rt> Vm<'rt> {
                         if !self.is_iterable(&src) {
                             throw!(self.not_iterable(&src, crate::bytecode::ITER_SPREAD));
                         }
+                        let open = self.open_fuel(&src, crate::bytecode::ITER_SPREAD);
+                        self.spend(open);
                         let items = tri!(self.iterate_to_vec(&src));
                         if let Value::Obj(id) = self.top()
                             && let Kind::Array(arr) = &mut self.heap[id as usize].kind

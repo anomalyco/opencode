@@ -1,6 +1,6 @@
 //! Live iterators over standard-library collections, and the shared iterator prototype's `next`.
 
-use super::arg;
+use super::{arg, fuel};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Res, Vm};
@@ -135,14 +135,57 @@ fn iterator_ctor(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Err(vm.type_error("Constructor Iterator requires 'new'."))
 }
 
-/// GetIteratorDirect: the iterator and its `next`, read once.
+/// GetIteratorDirect: the iterator and its `next`, read once; the reference's `$Direct` helper.
 fn direct(vm: &mut Vm, v: &Value) -> Result<(Value, Value), Value> {
     let Value::Obj(id) = v else {
         return Err(vm.type_error("An iterator must be an object."));
     };
     let nk = vm.names.next;
     let next = vm.get_obj(*id, nk);
+    fuel::native(vm);
     Ok((*v, next))
+}
+
+/// Whether the reference steps `iter` without calling its `next`: a built-in iterator, a generator or a helper.
+fn stepped_directly(vm: &Vm, iter: &Value) -> bool {
+    matches!(iter, Value::Obj(id) if matches!(
+        vm.heap[*id as usize].kind,
+        Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+            | Kind::Generator(_)
+            | Kind::IterHelper(_)
+    ))
+}
+
+/// Closes an iterator record a prelude `for...of` leaves early: the iterator's `return`, at what calling it costs.
+fn close_record(vm: &mut Vm, iter: &Value) -> Result<(), Value> {
+    let close = vm.close_fuel(iter);
+    vm.iter_close(iter)?;
+    vm.fuel(close);
+    Ok(())
+}
+
+/// The prelude's `closeIterator(source)`: entered, then a `return` method called and its result checked with
+/// `$IsObject`.
+fn close_source(vm: &mut Vm, iter: &Value) -> Result<(), Value> {
+    fuel::method(vm);
+    let Value::Obj(id) = iter else { return Ok(()) };
+    let rk = vm.names.return_;
+    let method = vm.get_obj(*id, rk);
+    if method.is_nullish() {
+        return Ok(());
+    }
+    let native =
+        !matches!(&method, Value::Obj(m) if matches!(vm.heap[*m as usize].kind, Kind::Closure(_)));
+    vm.iter_close(iter)?;
+    if native {
+        fuel::native(vm);
+    }
+    fuel::native(vm);
+    Ok(())
 }
 
 /// Where an iterator record was made, for the error when its `next` is not a function: by a helper, with the name
@@ -163,7 +206,11 @@ fn step(vm: &mut Vm, iter: &Value, next: &Value, site: Site) -> Result<Option<Va
         let name = name.as_deref().unwrap_or("The called value");
         return Err(vm.type_error(&format!("{name} is not a function.")));
     }
-    let r = vm.call(next, *iter, &[])?;
+    let r = if stepped_directly(vm, iter) {
+        vm.call(next, *iter, &[])?
+    } else {
+        vm.call_counted(next, *iter, &[])?
+    };
     let Value::Obj(rid) = r else {
         return Err(vm.type_error("Iterator next() result must be an object."));
     };
@@ -175,15 +222,24 @@ fn step(vm: &mut Vm, iter: &Value, next: &Value, site: Site) -> Result<Option<Va
     Ok(Some(vm.get_obj(rid, vk)))
 }
 
-/// An iterable by its `[Symbol.iterator]`, otherwise the object itself as an iterator.
+/// An iterable by its `[Symbol.iterator]`, otherwise the object itself as an iterator: the prelude's
+/// `flattenable`, with its `$IsObject` for a value that is not a string, and `$Describe` when it fails.
 fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<(Value, Value), Value> {
+    fuel::method(vm);
     let ok = match v {
         Value::Str(_) => strings,
-        Value::Obj(_) => true,
-        _ => false,
+        Value::Obj(_) => {
+            fuel::native(vm);
+            true
+        }
+        _ => {
+            fuel::native(vm);
+            false
+        }
     };
     if !ok {
         let d = super::describe_value(vm, v);
+        fuel::native(vm);
         return Err(vm.type_error(&format!(
             "{name} expects an iterable or iterator, received {d}."
         )));
@@ -192,9 +248,19 @@ fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<(Val
     let it = if method.is_nullish() {
         *v
     } else {
-        vm.call(&method, *v, &[])?
+        vm.call_counted(&method, *v, &[])?
     };
     direct(vm, &it)
+}
+
+/// A helper made: its prelude generator called, `prime` entered, and its first `next` run to the first `yield`.
+fn primed(vm: &mut Vm, iter: Value, next: Value, op: HelperOp) -> Value {
+    fuel::method(vm);
+    fuel::method(vm);
+    fuel::native(vm);
+    let h = new_helper(vm, iter, next, op);
+    vm.bytecode_builtin();
+    h
 }
 
 fn new_helper(vm: &mut Vm, iter: Value, next: Value, op: HelperOp) -> Value {
@@ -229,12 +295,19 @@ fn inherits_iterator(vm: &Vm, v: &Value) -> bool {
 }
 
 fn iterator_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    // The prelude's `Iterator$from`: `$IsObject`, and for an object `$Inherits`.
+    fuel::method(vm);
     let v = arg(args, 0);
+    fuel::native(vm);
+    if matches!(v, Value::Obj(_)) {
+        fuel::native(vm);
+    }
     if inherits_iterator(vm, &v) {
+        vm.bytecode_builtin();
         return Ok(v);
     }
     let (iter, next) = flattenable(vm, &v, true, "Iterator.from")?;
-    Ok(new_helper(vm, iter, next, HelperOp::Wrap))
+    Ok(primed(vm, iter, next, HelperOp::Wrap))
 }
 
 fn callback_helper(
@@ -244,9 +317,11 @@ fn callback_helper(
     name: &str,
     make: fn(Value) -> HelperOp,
 ) -> Res {
+    fuel::method(vm);
     let (iter, next) = direct(vm, this)?;
     let f = super::require_callback(vm, &arg(args, 0), &format!("Iterator.prototype.{name}"))?;
-    Ok(new_helper(vm, iter, next, make(f)))
+    fuel::native(vm);
+    Ok(primed(vm, iter, next, make(f)))
 }
 
 fn it_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -274,15 +349,19 @@ fn count(vm: &mut Vm, v: &Value, name: &str) -> Result<f64, Value> {
 }
 
 fn it_take(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
+    fuel::method(vm);
     let n = count(vm, &arg(args, 0), "take")?;
-    Ok(new_helper(vm, iter, next, HelperOp::Take(n)))
+    Ok(primed(vm, iter, next, HelperOp::Take(n)))
 }
 
 fn it_drop(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
+    fuel::method(vm);
     let n = count(vm, &arg(args, 0), "drop")?;
-    Ok(new_helper(vm, iter, next, HelperOp::Drop(n)))
+    Ok(primed(vm, iter, next, HelperOp::Drop(n)))
 }
 
 fn helper_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut Helper {
@@ -305,32 +384,48 @@ fn this_helper(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
     ))
 }
 
-/// One result of a helper: `Some(value)`, or `None` once it is done.
-fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
+/// One result of a helper: `Some(value)`, or `None` once it is done. `resumed` is whether it yielded before, so
+/// its prelude generator goes on from that `yield`: through its loop's back-edge, and for `take` with nothing left,
+/// out of the loop. Spends that generator's fuel (see `fuel.rs`).
+fn helper_step(vm: &mut Vm, id: Id, resumed: bool) -> Result<Option<Value>, Value> {
     let h = helper_mut(vm, id);
     let (iter, next, site) = (h.iter, h.next, h.site);
     if let HelperOp::Take(n) = h.op
         && n <= 0.0
     {
-        vm.iter_close(&iter)?;
+        if resumed {
+            close_record(vm, &iter)?;
+        } else {
+            close_source(vm, &iter)?;
+        }
         return Ok(None);
     }
+    let mut back = resumed;
     loop {
         let h = helper_mut(vm, id);
         if let HelperOp::FlatMap(_, Some((inner, inext))) = h.op {
+            if std::mem::take(&mut back) {
+                fuel::step(vm);
+            }
             match step(vm, &inner, &inext, Site::Kept(Value::Undef)) {
                 Ok(Some(v)) => return Ok(Some(v)),
                 Ok(None) => {
                     if let HelperOp::FlatMap(_, slot) = &mut helper_mut(vm, id).op {
                         *slot = None;
                     }
+                    fuel::step(vm);
                     continue;
                 }
                 Err(e) => {
+                    let close = vm.close_fuel(&iter);
                     let _ = vm.iter_close(&iter);
+                    vm.fuel(close);
                     return Err(e);
                 }
             }
+        }
+        if std::mem::take(&mut back) {
+            fuel::step(vm);
         }
         let Some(item) = step(vm, &iter, &next, Site::Kept(site))? else {
             return Ok(None);
@@ -346,6 +441,7 @@ fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
             HelperOp::Drop(n) => {
                 if *n > 0.0 {
                     *n -= 1.0;
+                    back = true;
                     Ok(None)
                 } else {
                     Ok(Some(item))
@@ -354,20 +450,21 @@ fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
             HelperOp::Map(f) => {
                 let f = *f;
                 h.counter += 1.0;
-                vm.call(&f, Value::Undef, &[item, Value::Num(index)])
+                vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)])
                     .map(Some)
             }
             HelperOp::Filter(f) => {
                 let f = *f;
                 h.counter += 1.0;
-                vm.call(&f, Value::Undef, &[item, Value::Num(index)])
+                back = true;
+                vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)])
                     .map(|r| vm.truthy(&r).then_some(item))
             }
             HelperOp::FlatMap(f, _) => {
                 let f = *f;
                 h.counter += 1.0;
                 let r = vm
-                    .call(&f, Value::Undef, &[item, Value::Num(index)])
+                    .call_counted(&f, Value::Undef, &[item, Value::Num(index)])
                     .and_then(|r| flattenable(vm, &r, false, "Iterator.prototype.flatMap"));
                 match r {
                     Ok(inner) => {
@@ -384,7 +481,9 @@ fn helper_step(vm: &mut Vm, id: Id) -> Result<Option<Value>, Value> {
             Ok(Some(v)) => return Ok(Some(v)),
             Ok(None) => continue,
             Err(e) => {
+                let close = vm.close_fuel(&iter);
                 let _ = vm.iter_close(&iter);
+                vm.fuel(close);
                 return Err(e);
             }
         }
@@ -398,8 +497,9 @@ fn helper_next(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
         HelperState::Running => return Err(vm.type_error("Generator is already running")),
         _ => {}
     }
+    let resumed = helper_mut(vm, id).state == HelperState::Suspended;
     helper_mut(vm, id).state = HelperState::Running;
-    let r = helper_step(vm, id);
+    let r = helper_step(vm, id, resumed);
     let h = helper_mut(vm, id);
     match r {
         Ok(Some(v)) => {
@@ -425,19 +525,24 @@ fn helper_return(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
         HelperState::Running => return Err(vm.type_error("Generator is already running")),
         _ => {}
     }
+    // Before its first value the prelude generator's `finally` closes the source with `closeIterator`; at a `yield`
+    // its loops close their iterator records.
+    let started = h.state == HelperState::Suspended;
     h.state = HelperState::Done;
     let iter = h.iter;
     let inner = match &mut h.op {
         HelperOp::FlatMap(_, slot) => slot.take(),
         _ => None,
     };
-    if let Some((inner, _)) = inner {
-        let r = vm.iter_close(&inner);
-        let r2 = vm.iter_close(&iter);
+    if !started {
+        close_source(vm, &iter)?;
+    } else if let Some((inner, _)) = inner {
+        let r = close_record(vm, &inner);
+        let r2 = close_record(vm, &iter);
         r?;
         r2?;
     } else {
-        vm.iter_close(&iter)?;
+        close_record(vm, &iter)?;
     }
     Ok(vm.iter_result(Value::Undef, true))
 }
@@ -450,23 +555,32 @@ fn consume(
     name: &str,
     decide: fn(&mut Vm, Value, Value) -> Option<Value>,
 ) -> Result<Option<Value>, Value> {
+    // The prelude's `Iterator$prototype$...` and its `iteratorTest`.
+    fuel::method(vm);
+    fuel::method(vm);
     let (iter, next) = direct(vm, this)?;
     let f = super::require_callback(vm, &arg(args, 0), &format!("Iterator.prototype.{name}"))?;
+    fuel::native(vm);
     let mut index = 0.0;
     while let Some(item) = step(vm, &iter, &next, Site::Running)? {
-        let r = match vm.call(&f, Value::Undef, &[item, Value::Num(index)]) {
+        let r = match vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)]) {
             Ok(r) => r,
             Err(e) => {
+                let close = vm.close_fuel(&iter);
                 let _ = vm.iter_close(&iter);
+                vm.fuel(close);
                 return Err(e);
             }
         };
         index += 1.0;
         if let Some(v) = decide(vm, item, r) {
-            vm.iter_close(&iter)?;
+            close_record(vm, &iter)?;
+            vm.bytecode_builtin();
             return Ok(Some(v));
         }
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(None)
 }
 
@@ -497,6 +611,7 @@ fn it_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn it_to_array(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
     let mut out = Vec::new();
     while let Some(item) = step(vm, &iter, &next, Site::Running)? {
@@ -504,30 +619,40 @@ fn it_to_array(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
             return Err(vm.range_error("Invalid array length"));
         }
         out.push(item);
+        fuel::step(vm);
     }
+    vm.bytecode_builtin();
     Ok(vm.new_array(out))
 }
 
 fn it_reduce(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
     let f = super::require_callback(vm, &arg(args, 0), "Iterator.prototype.reduce")?;
+    fuel::native(vm);
     let mut acc = args.get(1).copied();
     let mut index = 0.0;
     while let Some(item) = step(vm, &iter, &next, Site::Running)? {
         acc = Some(match acc {
             None => item,
-            Some(a) => match vm.call(&f, Value::Undef, &[a, item, Value::Num(index)]) {
+            Some(a) => match vm.call_counted(&f, Value::Undef, &[a, item, Value::Num(index)]) {
                 Ok(r) => r,
                 Err(e) => {
+                    let close = vm.close_fuel(&iter);
                     let _ = vm.iter_close(&iter);
+                    vm.fuel(close);
                     return Err(e);
                 }
             },
         });
         index += 1.0;
+        fuel::step(vm);
     }
     match acc {
-        Some(a) => Ok(a),
+        Some(a) => {
+            vm.bytecode_builtin();
+            Ok(a)
+        }
         None => Err(
             vm.type_error("Iterator.prototype.reduce of an empty iterator with no initial value.")
         ),

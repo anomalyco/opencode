@@ -383,6 +383,27 @@ programs.push(
   after("const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2", "s.forEach((x) => x)"),
 )
 
+// Iterator helpers are prelude generators there, and the consumers prelude functions.
+const gen = "function* g(n) { for (let i = 0; i < n; i++) yield i }"
+programs.push(
+  during("", "d.values().map(see).toArray()"),
+  during("", "d.values().filter((x) => see(x) % 3).toArray()"),
+  during("", "d.values().drop(5000).map(see).toArray(); d.values().take(20000).forEach(see)"),
+  during("", "d.values().flatMap((x) => [see(x), x]).toArray()"),
+  during("", "d.values().flatMap((x) => x % 2 ? [see(x)] : new Set([x])).reduce((s, x) => s + x, 0)"),
+  during(gen, "g(30000).map(see).filter((x) => x % 2).toArray()"),
+  during(gen, "for (const x of g(30000).map(see)) {}"),
+  during(gen, "[...d.values().map(see)]"),
+  during("", "d.values().reduce((s, x) => see(s)); d.values().some((x) => see(x) > 15000); d.values().every((x) => see(x) < 15000); d.values().find((x) => see(x) > 20000)"),
+  during(gen, "for (let j = 0; j < 3000; j++) { g(5).map(see).take(2).toArray(); see(j) }"),
+  during(gen, "for (let j = 0; j < 3000; j++) { const h = g(5).map(see); h.next(); h.return(); see(j) }"),
+  during(gen, "for (let j = 0; j < 3000; j++) { const h = [1, 2].values().filter(see); h.return(); g(3).take(0).next(); see(j) }"),
+  during(gen, "for (let j = 0; j < 3000; j++) { Iterator.from(g(2)).toArray(); Iterator.from([1, 2]).toArray(); Iterator.from('ab').toArray(); see(j) }"),
+  during("let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }", "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }"),
+  during(gen, "for (let j = 0; j < 3000; j++) { for (const x of g(4).map(see)) if (x > 1) break; see(j) }"),
+  during(gen, "for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }"),
+)
+
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.
 const suspensions: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)}); await tools.wait({}); return [r.status, r.bodyUsed]`,
