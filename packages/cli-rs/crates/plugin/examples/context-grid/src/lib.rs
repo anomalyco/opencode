@@ -13,9 +13,7 @@ use std::rc::Rc;
 use context::{GLYPH_FREE, GLYPH_FULL, Key};
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::types::SessionMessageInfo;
-use opencode_plugin_abi::{
-    Command, Host, Layout, Node, Placement, Read, Render, Route, Setup, Span, export_plugin, v2,
-};
+use opencode_plugin_abi::{Command, Host, Layout, Node, Placement, Read, Render, Route, Setup, Span, plugin, v2};
 
 const ROUTE: &str = "contextgrid";
 const MODE: &str = "oc-context-grid";
@@ -165,4 +163,4 @@ fn full(read: &dyn Read, session: Option<&str>) -> v2::Node {
     v2::Node::column(rows).padding(1, 1).gap(1)
 }
 
-export_plugin!("oc-context-grid", setup);
+plugin!(id = "oc-context-grid", setup);

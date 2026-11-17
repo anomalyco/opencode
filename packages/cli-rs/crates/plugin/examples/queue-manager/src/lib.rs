@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use opencode_plugin_abi::{
-    Action, Command, Dialog, Fetch, Host, RequestId, Route, Select, SelectOption, Setup, Toast, Variant, export_plugin,
+    Action, Command, Dialog, Fetch, Host, RequestId, Route, Select, SelectOption, Setup, Toast, Variant, plugin,
 };
 use serde_json::{Value, json};
 
@@ -662,4 +662,4 @@ fn text(value: &str) -> Option<String> {
     Some(value.trim().to_owned()).filter(|text| !text.is_empty())
 }
 
-export_plugin!("queue.manager.tui", setup);
+plugin!(id = "queue.manager.tui", setup);

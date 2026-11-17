@@ -6,7 +6,7 @@
 //! groups digits as `en-US` does, whatever `locale` says.
 
 use opencode_plugin_abi::types::TokenUsageInfo;
-use opencode_plugin_abi::{Edges, Justify, Layout, Node, Placement, Render, Setup, Span, export_plugin};
+use opencode_plugin_abi::{Edges, Justify, Layout, Node, Placement, Render, Setup, Span, plugin};
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let options: serde_json::Value =
@@ -68,7 +68,7 @@ fn group(count: f64) -> String {
     grouped
 }
 
-export_plugin!("sidebar.tokens", setup);
+plugin!(id = "sidebar.tokens", setup);
 
 #[cfg(test)]
 mod tests {

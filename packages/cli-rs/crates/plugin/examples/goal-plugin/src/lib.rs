@@ -19,7 +19,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use i18n::{Locale, Messages};
 use opencode_plugin_abi::{
     Action, Command, Dialog, Fetch, Host, Node, Placement, Read, Render, Route, Select, SelectOption, Setup, Span,
-    Toast, Variant, export_plugin,
+    Toast, Variant, plugin,
 };
 use serde_json::{Value, json};
 
@@ -421,7 +421,7 @@ fn is_goal(goal: &Value) -> bool {
         && nullish("sampledAt", Value::is_number)
 }
 
-export_plugin!("local.goal-mode.tui", setup);
+plugin!(id = "local.goal-mode.tui", setup);
 
 #[cfg(test)]
 mod tests {

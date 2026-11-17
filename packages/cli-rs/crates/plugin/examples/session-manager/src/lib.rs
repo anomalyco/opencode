@@ -24,7 +24,7 @@ use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::v2::{self, Scroll, ScrollAlign, Target};
 use opencode_plugin_abi::{
     Action, Click, Command, Dialog, Edges, Fetch, Host, Layout, Read, RequestId, Route, Setup, Span, TabEdit, Toast,
-    Variant, Waker, Wrap, export_plugin,
+    Variant, Waker, Wrap, plugin,
 };
 use serde_json::{Value, json};
 
@@ -1091,4 +1091,4 @@ impl Timer {
     }
 }
 
-export_plugin!("session-manager", setup);
+plugin!(id = "session-manager", setup);

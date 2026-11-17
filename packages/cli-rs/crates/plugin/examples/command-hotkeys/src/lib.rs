@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
-use opencode_plugin_abi::{Command, Fetch, Host, RequestId, Route, Setup, Toast, Variant, export_plugin};
+use opencode_plugin_abi::{Command, Fetch, Host, RequestId, Route, Setup, Toast, Variant, plugin};
 use serde_json::{Value, json};
 
 const TITLE: &str = "Command Hotkeys";
@@ -287,7 +287,7 @@ fn identity(key: &str) -> String {
         .join(" ")
 }
 
-export_plugin!("command-hotkeys", setup);
+plugin!(id = "command-hotkeys", setup);
 
 #[cfg(test)]
 mod tests {
