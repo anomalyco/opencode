@@ -329,7 +329,7 @@ fn the_sandbox_holds_a_plugin_to_its_own_files() {
                     absolute = refused(function() return require("/etc/passwd") end),
                     fs = refused(function() return require("fs") end),
                     global = refused(function() string.upper = nil end),
-                    mine = require("./mine").value,
+                    mine = require("@self/mine").value,
                 }
                 local keys = {}
                 for key, value in seen do table.insert(keys, `{key}={value}`) end
@@ -352,10 +352,10 @@ fn the_sandbox_holds_a_plugin_to_its_own_files() {
     assert_eq!(seen["getenv"], "nil");
     assert_eq!(seen["loadstring"], "nil");
     assert_eq!(seen["dofile"], "nil");
-    assert!(seen["up"].contains("its own modules"), "{message}");
-    assert!(seen["climb"].contains("no module outside the plugin"), "{message}");
-    assert!(seen["absolute"].contains("its own modules"), "{message}");
-    assert!(seen["fs"].contains("its own modules"), "{message}");
+    assert!(seen["up"].contains("could not get parent of requiring context"), "{message}");
+    assert!(seen["climb"].contains("could not get parent of requiring context"), "{message}");
+    assert!(seen["absolute"].contains("must start with a valid prefix"), "{message}");
+    assert!(seen["fs"].contains("must start with a valid prefix"), "{message}");
     assert!(seen["global"].contains("readonly"), "{message}");
     assert_eq!(seen["mine"], "own");
 }
@@ -536,26 +536,28 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "after the refusal"));
 }
 
-// Expected (review luau-4): a cycle of `require` is an error naming it; `./x`, `@self/x` and `./x/init` are one module,
-// loaded once; and a link out of the plugin directory is refused, where one inside it is read.
+// Expected (review luau-4): a cycle of `require` is an error naming it; a module is one however it is reached
+// (`@self/x` from the root, `../x` from `lib`), loaded once; and a link out of the plugin directory is refused, where
+// one inside it is read.
 #[test]
 fn require_loads_each_module_once_and_names_a_cycle() {
     let host = host();
     let init = r#"
         local plugin = require("@opencode/plugin")
-        local one, two, three = require("./x"), require("@self/x"), require("./x/init")
-        local ok, cycle = pcall(require, "./a")
+        local one, two = require("@self/x"), require("@self/lib/again")
+        local ok, cycle = pcall(require, "@self/a")
         return plugin.define(function(setup)
             setup:command({ name = "probe" }, function(host)
-                host:toast({ variant = "info", message = `{one == two and two == three} {one.loads} {tostring(cycle)}` })
+                host:toast({ variant = "info", message = `{one == two} {one.loads} {tostring(cycle)}` })
             end)
         end)
     "#;
     let mut sources = sources(init);
     for (path, text) in [
         ("x/init.luau", "return { loads = 1 }"),
+        ("lib/again.luau", "return require('../x')"),
         ("a.luau", "return require('./b')"),
-        ("b.luau", "return require('@self/a')"),
+        ("b.luau", "return require('./a')"),
     ] {
         sources.files.insert(path.into(), text.as_bytes().to_vec());
     }
@@ -580,6 +582,91 @@ fn a_link_out_of_the_plugin_directory_is_refused() {
     std::os::unix::fs::symlink(temp.path().join("outside.luau"), dir.join("outside.luau")).unwrap();
     let error = Sources::read(&dir).unwrap_err();
     assert!(error.contains("a link out of the plugin directory"), "{error}");
+}
+
+// Expected (better-audit 2): `require` follows Luau's require-by-string as luau-analyze does, over the files read at
+// load: `./x` is beside the requiring module (so outside the plugin from `init.luau`), `@self/x` inside it, a nested
+// module's `./b` is its own directory's, nothing past the plugin's root is reached, a `.luaurc` inside the plugin
+// names aliases for the modules under it, and `@opencode` stays the host's and `@self` the module's whatever that
+// `.luaurc` says. The plugin's
+// directory is gone before it starts, and a module required at call time still loads: nothing reads the disk.
+#[test]
+fn require_resolves_by_luaus_rules_within_the_plugin_and_reads_no_file_after_load() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let dir = temp.path().join("plugin");
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local function try(path: string)
+            local ok, value = pcall(require, path)
+            return if ok then tostring(value) else `refused: {value}`
+        end
+        local seen = {
+            self = try("@self/a"),
+            beside = try("./a"),
+            nested = try("@self/lib/one"),
+            relative = try("@self/lib/sibling"),
+            past = try("@self/lib/up"),
+            alias = try("@self/aliased"),
+            host = try("@self/host"),
+            module = plugin.contract,
+        }
+        return plugin.define(function(setup)
+            setup:command({ name = "probe" }, function(host)
+                seen.late = try("@self/late")
+                local keys = {}
+                for key, value in seen do table.insert(keys, `{key}={value}`) end
+                table.sort(keys)
+                host:toast({ variant = "info", message = table.concat(keys, "\n") })
+            end)
+        end)
+    "#;
+    for (path, text) in [
+        ("plugin.toml", "id = \"test.luau\"\ncontract = \"2.0\""),
+        ("init.luau", init),
+        ("a.luau", "return 'a'"),
+        ("two.luau", "return 'the root two'"),
+        ("lib/one.luau", "return 'lib/one sees ' .. require('./two')"),
+        ("lib/two.luau", "return 'lib/two'"),
+        ("lib/sibling.luau", "return 'lib/sibling sees ' .. require('../a')"),
+        ("lib/up.luau", "return require('../../escape')"),
+        (
+            "aliased.luau",
+            "return require('@util/x') .. ' ' .. require('@self/a') .. ' ' .. require('@opencode/plugin').contract",
+        ),
+        // A root module other than `init.luau`, which the root `.luaurc` covers (Luau reads none for `init.luau`).
+        ("host.luau", "return require('@opencode/other')"),
+        ("aliased/a.luau", "return 'aliased/a'"),
+        ("util/x.luau", "return 'util/x'"),
+        ("fake/plugin.luau", "return { contract = 'fake' }"),
+        ("fake/other.luau", "return 'fake/other'"),
+        ("fake/a.luau", "return 'fake/a'"),
+        ("late.luau", "return 'late'"),
+        (".luaurc", r#"{ "aliases": { "util": "./util", "opencode": "./fake", "self": "./fake" } }"#),
+    ] {
+        fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
+        fs::write(dir.join(path), text).unwrap();
+    }
+    fs::write(temp.path().join("escape.luau"), "return 'escaped'").unwrap();
+    let sources = Sources::read(&dir).unwrap();
+    let definition = define(&sources, None).unwrap().0;
+    fs::remove_dir_all(&dir).unwrap();
+    let host = host();
+    let registry = running(&host, definition);
+    keymap(&host).dispatch("probe", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    let message = host.toasts.borrow().last().unwrap().message.clone();
+    let seen: std::collections::BTreeMap<&str, &str> =
+        message.lines().filter_map(|line| line.split_once('=')).collect();
+    assert_eq!(seen["self"], "a", "{message}");
+    assert!(seen["beside"].contains("could not get parent of requiring context"), "{message}");
+    assert_eq!(seen["nested"], "lib/one sees lib/two", "{message}");
+    assert_eq!(seen["relative"], "lib/sibling sees a", "{message}");
+    assert!(seen["past"].contains("could not get parent of component"), "{message}");
+    assert_eq!(seen["alias"], "util/x aliased/a 2.0", "{message}");
+    assert!(seen["host"].contains("refused") && !seen["host"].contains("fake"), "{message}");
+    assert_eq!(seen["module"], "2.0", "{message}");
+    assert_eq!(seen["late"], "late", "{message}");
 }
 
 // Expected (call cost): the tables a render's input and `Changed` come in are reused from call to call, so each call

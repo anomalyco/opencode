@@ -294,7 +294,9 @@ const header = `--!strict
 -- The host registers the real module; this file only types it for luau-analyze and luau-lsp. Point the alias
 -- \`opencode\` at this directory in a \`.luaurc\` beside your plugin or above it:
 --   { "languageMode": "strict", "aliases": { "opencode": "<path to crates/plugin/src/luau/opencode>" } }
--- then \`luau-analyze --formatter=gnu <your .luau files>\` or open the plugin in luau-lsp.
+-- then \`luau-analyze --formatter=gnu <your .luau files>\` or open the plugin in luau-lsp. At run time the host keeps
+-- \`@opencode\` its own whatever a \`.luaurc\` says, and reads no \`.luaurc\` outside the plugin. Require your own modules
+-- by Luau's rules: \`@self/x\` in \`init.luau\`, \`./x\` in the other modules.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 `
