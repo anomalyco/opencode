@@ -1158,8 +1158,8 @@ unsafe extern "C" fn grid_free(owned: Owned) {
 
 /// The grid: the major the host serves, one below, which is ABI 1.x, two below and one above; minors at, below and
 /// above the host's; a `requires_minor` the host has and one it lacks; a table cut short of 2.0's and one shorter than
-/// its header; and `describe` answers that are fine, missing, that fail, that the host cannot read, that require a
-/// feature it lacks, and that carry a field it does not know.
+/// its header; and `describe` answers that are fine, missing, that fail, that the host cannot read, that name no ID or
+/// an empty one, that require a feature it lacks, and that carry a field it does not know.
 fn grid() -> Vec<Row> {
     let mut rows = Vec::new();
     let row = |major, minor, requires_minor, size: &str, describe: Value| Row {
@@ -1188,6 +1188,8 @@ fn grid() -> Vec<Row> {
     rows.push(row(ABI_MAJOR, 0, 0, "full", Value::Null));
     rows.push(row(ABI_MAJOR, 0, 0, "full", json!("ERROR")));
     rows.push(row(ABI_MAJOR, 0, 0, "full", json!("{\"version\":2}")));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "version": "1.0.0" })));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "id": "" })));
     rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "id": "grid", "requires": ["terminal"] })));
     rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "id": "grid", "x-future": [1, 2] })));
     rows
@@ -1229,8 +1231,10 @@ fn rule(row: &Row) -> bool {
     let described = match &row.describe {
         Value::Null => false,
         Value::String(text) => serde_json::from_str::<abi::Metadata>(text).is_ok(),
-        value => serde_json::from_value::<abi::Metadata>(value.clone())
-            .is_ok_and(|metadata| metadata.requires.iter().all(|feature| abi::FEATURES.contains(&feature.as_str()))),
+        value => serde_json::from_value::<abi::Metadata>(value.clone()).is_ok_and(|metadata| {
+            metadata.id.is_some_and(|id| !id.is_empty())
+                && metadata.requires.iter().all(|feature| abi::FEATURES.contains(&feature.as_str()))
+        }),
     };
     row.major == ABI_MAJOR && row.size == "full" && row.requires_minor < ABI_MINOR + 1 && described
 }
@@ -1238,7 +1242,7 @@ fn rule(row: &Row) -> bool {
 // Expected: the version gate is exact. Each table of the grid is taken or refused, with the words of the golden rows,
 // and the verdict follows the rule of the header: the major is the one the host serves (1.x is refused as any other,
 // O-169), the table covers 2.0's, `requires_minor` is at most the host's minor, and `describe` answers metadata the
-// host reads and requires no feature it lacks. A minor above the host's is taken; a field the host does not know is
+// host reads, with a nonempty ID, that requires no feature it lacks (big-boi's drop-abi1 check: as load refuses it). A minor above the host's is taken; a field the host does not know is
 // ignored. `CONFORMANCE_WRITE=1` writes the rows again.
 #[test]
 fn the_version_gate_is_exact() {
