@@ -2344,6 +2344,54 @@
   gap: 8px;
 }
 
+/* The busy button keeps the pressed button's label, hidden, so it stays that width with the loader over it. */
+.settings-feature-card-busy[data-component="button-v2"] {
+  position: relative;
+}
+
+.settings-feature-card-busy-label {
+  visibility: hidden;
+}
+
+.settings-feature-card-busy [data-slot="spinner-dots"] {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--v2-icon-icon-muted);
+}
+
+/* The installer's output, opened from the failed row, spans the card under the text and actions. */
+.settings-feature-card-error {
+  position: relative;
+  flex: 1 0 100%;
+  min-width: 0;
+  /* 12px from the card's sides and bottom, inside its 16px padding. */
+  margin: 0 -4px -4px;
+  border-radius: 4px;
+  background: var(--v2-background-bg-layer-02);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+}
+
+.settings-feature-card-error-output {
+  max-height: calc(8 * 18px + 24px);
+  margin: 0;
+  padding: 12px 72px 12px 12px;
+  overflow: auto;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--v2-text-text-base);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.settings-feature-card-error-copy[data-component="button-v2"] {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+}
+
 /* The name keeps its own width so the source sits right after it, not against the actions. */
 .settings-mcp-row .settings-extension-name {
   flex: 0 1 auto;

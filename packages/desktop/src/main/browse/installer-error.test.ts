@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { installerError } from "./installer-error"
+import { installerError, installerOutput } from "./installer-error"
+
+test("the output shown to the user drops color codes and surrounding blank lines", () => {
+  expect(installerOutput("\n\u001b[0;31mbrowse: unknown channel\u001b[0m\r\n  hint\r\n\n")).toBe(
+    "browse: unknown channel\n  hint",
+  )
+})
 
 test.each([
   {

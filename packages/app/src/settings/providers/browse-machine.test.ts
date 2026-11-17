@@ -60,7 +60,7 @@ describe("browse card machine", () => {
       { type: "read", attempt: 4 },
       { type: "sync-mcps" },
     ])
-    expect(browseCardView(run.state)).toEqual({ phase: "ready", connected: true })
+    expect(browseCardView(run.state)).toEqual({ phase: "ready" })
     expect(browseCardPolling(run.state)).toBe(false)
   })
 
@@ -102,21 +102,30 @@ describe("browse card machine", () => {
       { type: "install.failed", attempt: 2 },
     ])
 
-    expect(browseCardView(run.state)).toEqual({ phase: "absent", failure: { reason: "start" } })
+    expect(browseCardView(run.state)).toEqual({ phase: "failed", failure: { reason: "start" } })
     expect(transitionBrowseCard(run.state, { type: "install.requested" }).effects).toEqual([
       { type: "install", attempt: 3 },
     ])
   })
 
   test.each([
-    { browse: status({ installed: true }), view: { phase: "incomplete", reason: "config", store: false } },
+    { browse: status(), view: { phase: "setup", step: "install" } },
+    { browse: status({ installed: true }), view: { phase: "setup", step: "opencode" } },
     {
       browse: status({ installed: true, configured: true, extension: "not-seen" }),
-      view: { phase: "incomplete", reason: "extension", store: true },
+      view: { phase: "setup", step: "browser" },
     },
     {
       browse: status({ installed: true, configured: true, extension: "refused" }),
-      view: { phase: "incomplete", reason: "pairing", store: false },
+      view: { phase: "setup", step: "browser" },
+    },
+    {
+      browse: status({ installed: true, configured: true, extension: "incompatible" }),
+      view: { phase: "setup", step: "update" },
+    },
+    {
+      browse: status({ job: { status: "failed", failure: { reason: "download" } } }),
+      view: { phase: "failed", failure: { reason: "download" } },
     },
     {
       browse: status({
@@ -125,18 +134,14 @@ describe("browse card machine", () => {
         extension: "not-seen",
         job: { status: "failed", failure: { reason: "installer", detail: "Not connected yet" } },
       }),
-      view: {
-        phase: "incomplete",
-        reason: "extension",
-        store: true,
-        failure: { reason: "installer", detail: "Not connected yet" },
-      },
+      view: { phase: "stalled" },
     },
-    { browse: status({ installed: true, configured: true }), view: { phase: "ready", connected: false } },
     {
-      browse: status({ installed: true, configured: true, extension: "paired-offline" }),
-      view: { phase: "ready", connected: false },
+      browse: status({ installed: true, job: { status: "failed", failure: { reason: "installer" } } }),
+      view: { phase: "setup", step: "opencode" },
     },
+    { browse: status({ installed: true, configured: true }), view: { phase: "ready" } },
+    { browse: status({ installed: true, configured: true, extension: "paired-offline" }), view: { phase: "ready" } },
   ])("view of $browse", ({ browse, view }) => {
     expect(browseCardView(replay([{ type: "read.succeeded", attempt: 1, browse }]).state)).toEqual(view)
   })

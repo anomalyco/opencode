@@ -11,6 +11,8 @@ const states = {
   waiting: { ...installed, extension: "not-seen", job: { status: "installing" } },
   extension: { ...installed, extension: "not-seen", job: { status: "idle" } },
   config: { installed: true, configured: false, extension: "connected", job: { status: "idle" } },
+  pairing: { ...installed, extension: "unpaired", job: { status: "idle" } },
+  update: { ...installed, extension: "incompatible", job: { status: "idle" } },
   timedOut: {
     ...installed,
     extension: "not-seen",
@@ -27,24 +29,48 @@ const states = {
     installed: false,
     configured: false,
     extension: "unknown",
-    job: { status: "failed", failure: { reason: "download" } },
+    job: {
+      status: "failed",
+      failure: { reason: "download", output: "https://opencode.ai/browse/install answered HTTP 503" },
+    },
   },
-  installed: { ...installed, extension: "unknown", job: { status: "idle" } },
+  installerFailed: {
+    installed: false,
+    configured: false,
+    extension: "unknown",
+    job: {
+      status: "failed",
+      failure: {
+        reason: "installer",
+        detail: "checksum mismatch for browse-darwin-arm64",
+        output: [
+          "Installing browse (stable) for darwin-arm64",
+          "Downloading https://anoma.ly/release/browse/stable/browse-darwin-arm64.gz",
+          "  expected sha256 4f1c…9a2e",
+          "  got      0b77…d310",
+          "browse: checksum mismatch for browse-darwin-arm64",
+        ].join("\n"),
+      },
+    },
+  },
   connected: { ...installed, extension: "connected", job: { status: "idle" } },
 } satisfies Record<string, BrowseStatus>
 
 type StateName = keyof typeof states
 
-// "installed" and "connected" show only after an install on this page: a browse already set up isn't offered.
+// "connected" shows only after an install on this page: a browse already set up isn't offered. "timedOut" is an
+// installer that gave up waiting for the extension, which offers the step that's left rather than an error.
 const STATE_NAMES: StateName[][] = [
   ["absent"],
   ["installing"],
   ["waiting"],
-  ["extension"],
   ["config"],
+  ["extension"],
+  ["pairing"],
+  ["update"],
   ["timedOut"],
   ["download"],
-  ["waiting", "installed"],
+  ["installerFailed"],
   ["waiting", "connected"],
 ]
 
@@ -82,4 +108,4 @@ export default {
 
 export const States = { render: () => <BrowseStory names={STATE_NAMES} /> }
 
-export const Narrow = { render: () => <BrowseStory names={[["waiting"], ["timedOut"], ["extension"]]} width={360} /> }
+export const Narrow = { render: () => <BrowseStory names={[["installing"], ["waiting"], ["download"]]} width={360} /> }

@@ -88,6 +88,7 @@ const BrowseStatus = Schema.Struct({
       failure: Schema.Struct({
         reason: Schema.Literals(["start", "download", "timeout", "installer"]),
         detail: Schema.optionalKey(Schema.String),
+        output: Schema.optionalKey(Schema.String),
       }),
     }),
   ]),

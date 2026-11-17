@@ -160,10 +160,14 @@ export type BrowseStatus = {
   job: { status: "idle" } | { status: "installing" } | { status: "failed"; failure: BrowseInstallFailure }
 }
 
-/** `start`: the desktop didn't take the request. `installer`: browse's installer failed; `detail` is its own words. */
+/**
+ * `start`: the desktop didn't take the request. `installer`: browse's installer failed; `detail` is its own words.
+ * `output` is the end of what the installer (or the download) printed, for the user to read or copy.
+ */
 export type BrowseInstallFailure = {
   reason: "start" | "download" | "timeout" | "installer"
   detail?: string
+  output?: string
 }
 
 export type BrowseBridge = {
