@@ -242,7 +242,11 @@ function sanitize(data: Data): Data {
           }
         : undefined,
     },
-    messages: data.messages.map(sanitizeMessage),
+    // Recorded tool changes are left out: redacted definitions would be sent to the provider as real tools, and
+    // without them the next step records a fresh baseline.
+    messages: data.messages
+      .filter((message) => message.type !== "system" || message.tools === undefined)
+      .map(sanitizeMessage),
   }
 }
 
@@ -295,14 +299,6 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       ...message,
       metadata: meta,
       text: redact("system", message.id, message.text),
-      tools: message.tools && {
-        ...message.tools,
-        add: message.tools.add.map((tool, index) => ({
-          name: tool.name,
-          description: redact("tool-description", `${message.id}:${index}`, tool.description),
-          inputSchema: { redacted: `tool-schema:${message.id}:${index}` },
-        })),
-      },
     }
   if (message.type === "skill") return { ...message, metadata: meta, text: redact("skill", message.id, message.text) }
   if (message.type === "shell")

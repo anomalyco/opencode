@@ -1467,6 +1467,40 @@ describe("SessionTransfer", () => {
     }),
   )
 
+  it.effect("exports recorded tool changes, and a sanitized export leaves them out", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.create({ location, title: "Transfer source" })
+      const sessionID = Session.ID.create()
+      const userID = SessionMessage.ID.create()
+      const toolsID = SessionMessage.ID.create()
+      const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+
+      yield* transfer.import({
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            {
+              id: toolsID,
+              type: "system",
+              text: "",
+              tools: { add: [{ name: "read", description: "Read a file.", inputSchema: {} }], remove: [], model },
+              time: { created: DateTime.makeUnsafe(1) },
+            },
+            { id: userID, type: "user", text: "Hi", time: { created: DateTime.makeUnsafe(2) } },
+          ],
+        },
+        location,
+      })
+
+      expect((yield* transfer.export({ sessionID })).messages.map((message) => message.id)).toEqual([toolsID, userID])
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages.map((message) => message.id)).toEqual([
+        userID,
+      ])
+    }),
+  )
+
   it.effect("imports projected messages and reserves their aggregate sequence", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
