@@ -302,25 +302,25 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
 /**
  * The first combo of a keybind as keycap labels. A single stroke gives one label per key (⌘, K); a chord gives one
- * label per stroke (⌘K, ⌘C). `leader` is the profile's leader key, shown in place of `<leader>`.
+ * label per stroke (⌘K, ⌘C). `<leader>` shows as Leader rather than the key it stands for, which can change.
  */
-export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string, leader?: string): string[] {
+export function formatKeybindParts(config: string, t?: (key: KeyLabel) => string): string[] {
   if (!config || config === "none") return []
   const strokes = chordStrokes(config.split(",")[0] ?? "")
 
   if (strokes.length === 1 && strokes[0]!.toLowerCase() !== LEADER)
     return displayKeybindParts(parseStroke(strokes[0]!), t)
 
-  return strokes.map((stroke) => {
-    if (stroke.toLowerCase() !== LEADER) return joinParts(displayKeybindParts(parseStroke(stroke), t))
-
-    return leader ? joinParts(displayKeybindParts(parseStroke(leader), t)) : keyText("common.key.leader", t)
-  })
+  return strokes.map((stroke) =>
+    stroke.toLowerCase() === LEADER
+      ? keyText("common.key.leader", t)
+      : joinParts(displayKeybindParts(parseStroke(stroke), t)),
+  )
 }
 
-export function formatKeybind(config: string, t?: (key: KeyLabel) => string, leader?: string): string {
+export function formatKeybind(config: string, t?: (key: KeyLabel) => string): string {
   const strokes = chordStrokes(config && config !== "none" ? (config.split(",")[0] ?? "") : "")
-  const parts = formatKeybindParts(config, t, leader)
+  const parts = formatKeybindParts(config, t)
 
   if (strokes.length > 1 || strokes[0]?.toLowerCase() === LEADER) return parts.join(" ")
 
@@ -552,17 +552,21 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
         if (!config) return ""
 
-        return formatKeybind(config, language.t, leader())
+        return formatKeybind(config, language.t)
       },
       keybindParts(id: string) {
         const config = keybindConfig(id)
 
-        return config ? formatKeybindParts(config, language.t, leader()) : []
+        return config ? formatKeybindParts(config, language.t) : []
       },
       /** The key sequence in progress, and the keys that can continue it. */
       pending,
-      /** Formats one stroke of a pending key sequence. */
-      strokeParts(stroke: KeySequencePart["stroke"]) {
+      /** Formats one stroke of a pending key sequence; the leader shows as Leader, as in shortcut labels. */
+      strokeParts(part: Pick<KeySequencePart, "stroke" | "tokenName">) {
+        const stroke = part.stroke
+
+        if (part.tokenName === "leader") return [language.t("common.key.leader")]
+
         return displayKeybindParts(
           { key: stroke.name, ctrl: stroke.ctrl, meta: stroke.super, shift: stroke.shift, alt: stroke.meta },
           language.t,

@@ -172,7 +172,7 @@ describe("keybind settings controller", () => {
   test("a leader chord starts with the leader, and clashes with shortcuts on the leader's key", () => {
     const state = setup({}, undefined, undefined, "alt+x")
 
-    expect(state.controller.catalog.keybind("session.next")).toMatch(/X N$/)
+    expect(state.controller.catalog.keybind("session.next")).toBe("common.key.leader N")
 
     state.controller.capture.toggle("session.beta")
     state.controller.capture.insertLeader()

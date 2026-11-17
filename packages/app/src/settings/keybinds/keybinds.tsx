@@ -408,7 +408,7 @@ export function createKeybindSettingsController(
     notify({
       title: language.t("settings.shortcuts.conflict.title"),
       description: language.t("settings.shortcuts.conflict.description", {
-        keybind: formatKeybind(effect.keybind, language.t, leader()),
+        keybind: formatKeybind(effect.keybind, language.t),
         titles: effect.conflictTitles.join(", "),
       }),
     })
@@ -463,7 +463,7 @@ export function createKeybindSettingsController(
   createEffect(() => dispatch({ type: "catalog.synced", ids: new Set(list().keys()) }))
   onCleanup(() => dispatch({ type: "disposed" }))
 
-  const format = (config: string | undefined) => formatKeybind(config ?? "", language.t, leader())
+  const format = (config: string | undefined) => formatKeybind(config ?? "", language.t)
 
   const firstCombo = (id: string) => {
     const config = effective(id)
