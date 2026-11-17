@@ -487,16 +487,26 @@ fn a_session_panel_stays_open_across_a_reload() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (CT-13): a plugin that imports the `effect` package, its root and a module of it by subpath, loads and runs
-// with the one the JS host serves, as TS's runtime serves its own; it failed, "Cannot find package 'effect'".
+// Expected (O-170): a plugin that imports the `effect` package fails to load alone, naming the package, and the client
+// goes on: the JS host serves what the TUI plugin API defines, not libraries a plugin expects the host to happen to
+// have. The row held the opposite when the host served effect (CT-13).
 #[test]
-fn a_plugin_that_imports_effect_runs() {
-    // The JS host installs nothing (js-no-install), so `effect` comes from the host alone.
+fn a_plugin_that_imports_effect_fails_to_load_naming_it() {
     let Some(config) = config() else { return };
     let log = log_file();
     let pipe = open(&[("effectprobe", Some(json!({ "log": log.to_string_lossy() })))], config, (80, 30));
-    pipe.active("example.effectprobe");
-    assert_eq!(logged(&pipe, &log, 1), [json!({ "name": "probe", "some": 2, "sum": 6 })]);
+    let dir = pipe.root.path().join("config").join("plugins").join("effectprobe");
+    pipe.harness.wait("the plugin failed", || {
+        pipe.settle();
+        matches!(listed(&pipe, &dir, "example.effectprobe"), Some(Status::Failed(_)))
+    });
+    let Some(Status::Failed(error)) = listed(&pipe, &dir, "example.effectprobe") else { unreachable!() };
+    assert!(error.contains("'effect'") && error.contains("not installed"), "{error}");
+    let failed =
+        pipe.harness.tui.plugins.entries().into_iter().filter(|entry| matches!(entry.status, Status::Failed(_)));
+    assert_eq!(failed.count(), 1, "another plugin failed");
+    assert!(calls(&log).is_empty(), "the plugin ran");
+    assert!(!pipe.harness.app.text().is_empty(), "the client stopped drawing");
 }
 
 // Expected (contract 2.x, addition 1, R3): a page that sizes its box from its own width, a cell wider each time, is
