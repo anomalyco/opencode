@@ -1,20 +1,22 @@
 import { beforeEach, describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Effect, Exit, Layer, Result } from "effect"
 import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { FileSystem } from "@opencode/core/filesystem"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { Image } from "@opencode/core/image"
 import { Permission } from "@opencode/core/permission"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
-import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
@@ -26,7 +28,7 @@ import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Environment } from "@opencode/core/environment/index"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, codeModeListings } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
@@ -42,6 +44,8 @@ const readToolNode = makeLocationNode({
     FSUtil.node,
     Environment.node,
     Location.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -56,14 +60,19 @@ const listCalls: AbsolutePath[] = []
 let readDefect: unknown
 let missingDirectories: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
-let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
-  type: "file",
-  uri: "file:///README.md",
-  name: "README.md",
+let readResult: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media = {
+  type: "text",
   content: "hello",
-  encoding: "utf8",
-  mime: "text/plain",
+  offset: 1,
+  lineCount: 1,
 }
+const mediaResult = (name: string, mime: string, base64: string) => ({
+  type: "media" as const,
+  uri: `file:///${name}`,
+  name,
+  mime,
+  bytes: Buffer.from(base64, "base64"),
+})
 let readFailure: ReadToolFileSystem.ReadError | undefined
 let readOverride: ReadToolFileSystem.Interface["read"] | undefined
 const reader = Layer.succeed(
@@ -105,6 +114,8 @@ const permission = permissionLayer({
   allows: (input) => Effect.succeed(allow && !input.resources.some((resource) => resource === deniedResource)),
 })
 const config = Config.testLayer()
+const nativeDescription =
+  "Read the contents of a file or directory. Supports text files, images, and PDFs. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files."
 const imageLayer = AppNodeBuilder.build(Image.node)
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -113,34 +124,39 @@ const locationLayer = Layer.succeed(
 const unavailableImage = Layer.mock(Image.Service, {
   normalize: () => Effect.fail(new Image.ResizerUnavailableError()),
 })
-const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
+const readLayer = (imageLayer: Layer.Layer<Image.Service>, configuration = config) =>
   Layer.mergeAll(
     AppNodeBuilder.build(LayerNode.group([Tool.node, readToolNode, Skill.node]), [
       ReadToolFileSystem.node.replace(reader),
       Environment.node.replace(hostEnvironmentLayer),
       Permission.node.replace(permission),
-      Config.node.replace(config),
+      Config.node.replace(configuration),
       Image.node.replace(imageLayer),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
     // Merge by reference so Config.Test and Image.Service resolve to the memoized instances.
-    config,
+    configuration,
     imageLayer,
   )
 const it = testEffect(readLayer(imageLayer))
+const codeModeIt = testEffect(
+  readLayer(
+    imageLayer,
+    Config.testLayer([new Document({ type: "document", info: new Info({ experimental: { full_codemode: true } }) })]),
+  ),
+)
 // Real-file tests provide their own layer per temp folder.
 const live = testEffect(Layer.empty)
-// Reads through the real filesystem with the location at `directory`; returns the failure message.
-const readMissing = (directory: string, file: string) =>
+// Reads through the real filesystem with the location at `directory`.
+const readReal = (directory: string, file: string) =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
-    const result = yield* executeTool(registry, {
+    return yield* executeTool(registry, {
       sessionID,
       ...toolIdentity,
       call: { type: "tool-call", id: "call-suggest", name: "read", input: { path: file } },
     })
-    return result.error?.message
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
@@ -159,6 +175,9 @@ const readMissing = (directory: string, file: string) =>
       ),
     ),
   )
+// Returns the failure message of a real-filesystem read.
+const readMissing = (directory: string, file: string) =>
+  readReal(directory, file).pipe(Effect.map((result) => result.error?.message))
 const write = (file: string) =>
   Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }).then(() => fs.writeFile(file, "x\n")))
 const itWithoutResizer = testEffect(readLayer(unavailableImage))
@@ -174,17 +193,86 @@ describe("ReadTool", () => {
     readDefect = undefined
     missingDirectories = []
     directoryEntryDetails = []
-    readResult = {
-      type: "file",
-      uri: "file:///README.md",
-      name: "README.md",
-      content: "hello",
-      encoding: "utf8",
-      mime: "text/plain",
-    }
+    readResult = { type: "text", content: "hello", offset: 1, lineCount: 1 }
     readFailure = undefined
     readOverride = undefined
   })
+
+  it.effect("keeps read native with line instructions and no image guidance without full_codemode", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const snapshot = yield* registry.snapshot()
+      const read = snapshot.definitions.find((tool) => tool.name === "read")
+
+      expect(read?.description).toBe(nativeDescription)
+      expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).not.toContain("read")
+    }),
+  )
+
+  codeModeIt.effect("moves read into Code Mode with attachment guidance and no native line instructions", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const snapshot = yield* registry.snapshot()
+      const read = codeModeListings(snapshot.codeModeCatalog!).find((entry) => entry.path === "read")
+
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(read?.line).toContain("Reading an image or PDF automatically attaches it to the execute result")
+      expect(read?.line).toContain("even if the program doesn't return or print the media reference")
+      const registered = (yield* registry.list()).find((tool) => tool.id === "read")
+      expect(registered?.description).toBe(
+        "Read the contents of a file or directory. Supports text files, images, and PDFs. Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+      )
+      expect(registered?.description).not.toContain("Each text line is prefixed")
+      expect(registered?.description).not.toContain("Directory entries are returned one per line")
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-read-code-mode",
+          name: "execute",
+          input: { code: 'return await tools.read({ path: "README.md" })' },
+        },
+      })
+      expect(result).toMatchObject({
+        status: "completed",
+        output: { output: JSON.stringify({ type: "text", content: "hello", offset: 1, lineCount: 1 }) },
+      })
+    }),
+  )
+
+  codeModeIt.effect("attaches Code Mode image and PDF reads even when their references are not returned", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      for (const file of [
+        {
+          name: "pixel.png",
+          mime: "image/png",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        },
+        { name: "document.pdf", mime: "application/pdf", data: Buffer.from("%PDF-1.7\ncontent").toString("base64") },
+      ]) {
+        readResult = mediaResult(file.name, file.mime, file.data)
+        const result = yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: `call-read-${file.name}`,
+            name: "execute",
+            input: { code: `await tools.read({ path: ${JSON.stringify(file.name)} }); return "done"` },
+          },
+        })
+
+        expect(result).toMatchObject({ status: "completed", output: { output: "done" } })
+        expect(result.content).toEqual([
+          { type: "text", text: "done" },
+          { type: "file", uri: `data:${file.mime};base64,${file.data}`, mime: file.mime, name: file.name },
+        ])
+      }
+    }),
+  )
 
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
     Effect.gen(function* () {
@@ -203,14 +291,8 @@ describe("ReadTool", () => {
       })
       expect(execution.status).toBe("completed")
       if (execution.status !== "completed") return
-      expect(execution.output).toEqual({
-        type: "file",
-        uri: "file:///README.md",
-        name: "README.md",
-        content: "hello",
-        encoding: "utf8",
-        mime: "text/plain",
-      })
+      expect(execution.output).toEqual({ type: "text", content: "hello", offset: 1, lineCount: 1 })
+      expect(execution.metadata).toEqual({ truncated: false })
       expect(execution.content).toEqual([{ type: "text", text: "Read file README.md, lines 1-1\n1: hello" }])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
       expect(readCalls).toEqual([
@@ -267,14 +349,7 @@ describe("ReadTool", () => {
   it.effect("returns a small PNG as native media instead of durable base64 text", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = {
-        type: "file",
-        uri: "file:///pixel.png",
-        name: "pixel.png",
-        content: png,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("pixel.png", "image/png", png)
       const registry = yield* Tool.Service
 
       const execution = yield* executeTool(registry, {
@@ -284,6 +359,12 @@ describe("ReadTool", () => {
       })
       expect(execution.status).toBe("completed")
       if (execution.status !== "completed") return
+      expect(execution.output).toEqual({
+        type: "media",
+        uri: "file:///pixel.png",
+        mime: "image/png",
+        name: "pixel.png",
+      })
       expect(execution.content).toEqual([
         { type: "text", text: "Image read successfully" },
         { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "pixel.png" },
@@ -318,14 +399,7 @@ describe("ReadTool", () => {
       const png = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
       expect(Buffer.byteLength(png)).toBeGreaterThan(50 * 1024)
-      readResult = {
-        type: "file",
-        uri: "file:///large.png",
-        name: "large.png",
-        content: png,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("large.png", "image/png", png)
       const registry = yield* Tool.Service
 
       const settled = yield* executeTool(registry, {
@@ -336,12 +410,7 @@ describe("ReadTool", () => {
 
       expect(settled.status).toBe("completed")
       if (settled.status !== "completed") return
-      expect(settled.output).toMatchObject({
-        uri: "file:///large.png",
-        name: "large.png",
-        mime: "image/png",
-        encoding: "base64",
-      })
+      expect(settled.output).toEqual({ type: "media", uri: "file:///large.png", name: "large.png", mime: "image/png" })
       expect(settled.content).toEqual([
         { type: "text", text: "Image read successfully" },
         { type: "file", uri: `data:image/png;base64,${png}`, mime: "image/png", name: "large.png" },
@@ -352,14 +421,7 @@ describe("ReadTool", () => {
   itWithoutResizer.effect("returns the original image when the resizer is unavailable", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = {
-        type: "file",
-        uri: "file:///pixel.png",
-        name: "pixel.png",
-        content: png,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("pixel.png", "image/png", png)
       const registry = yield* Tool.Service
 
       expect(
@@ -377,14 +439,7 @@ describe("ReadTool", () => {
 
   it.effect("drops undecodable image data from the outcome", () =>
     Effect.gen(function* () {
-      readResult = {
-        type: "file",
-        uri: "file:///truncated.png",
-        name: "truncated.png",
-        content: "iVBORw0KGgo=",
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("truncated.png", "image/png", "iVBORw0KGgo=")
       const registry = yield* Tool.Service
 
       expect(
@@ -409,14 +464,7 @@ describe("ReadTool", () => {
       const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
-      readResult = {
-        type: "file",
-        uri: "file:///wide.png",
-        name: "wide.png",
-        content: base64,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("wide.png", "image/png", base64)
       const image = yield* Image.Service
       yield* image.transform((editor) => editor.configure({ autoResize: false, maxWidth: 4 }))
       const registry = yield* Tool.Service
@@ -443,14 +491,7 @@ describe("ReadTool", () => {
       const source = new photon.PhotonImage(new Uint8Array(Array.from({ length: 16 * 4 }, () => 255)), 16, 1)
       const base64 = Buffer.from(source.get_bytes()).toString("base64")
       source.free()
-      readResult = {
-        type: "file",
-        uri: "file:///wide.png",
-        name: "wide.png",
-        content: base64,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("wide.png", "image/png", base64)
       const image = yield* Image.Service
       yield* image.transform((editor) => editor.configure({ maxWidth: 4 }))
       const registry = yield* Tool.Service
@@ -483,14 +524,7 @@ describe("ReadTool", () => {
       const opaqueSource = new photon.PhotonImage(opaquePixels, width, height)
       const opaqueBase64 = Buffer.from(opaqueSource.get_bytes()).toString("base64")
       opaqueSource.free()
-      readResult = {
-        type: "file",
-        uri: "file:///screenshot.png",
-        name: "screenshot.png",
-        content: opaqueBase64,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("screenshot.png", "image/png", opaqueBase64)
       const registry = yield* Tool.Service
       const result = yield* executeTool(registry, {
         sessionID,
@@ -590,14 +624,7 @@ describe("ReadTool", () => {
   it.effect("drops images that cannot fit max base64 bytes after resize attempts", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = {
-        type: "file",
-        uri: "file:///pixel.png",
-        name: "pixel.png",
-        content: png,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("pixel.png", "image/png", png)
       const image = yield* Image.Service
       yield* image.transform((editor) => editor.configure({ maxBase64Bytes: 1 }))
       const registry = yield* Tool.Service
@@ -621,14 +648,7 @@ describe("ReadTool", () => {
   it.effect("returns supported image contents despite a misleading binary extension", () =>
     Effect.gen(function* () {
       const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-      readResult = {
-        type: "file",
-        uri: "file:///pixel.bin",
-        name: "pixel.bin",
-        content: png,
-        encoding: "base64",
-        mime: "image/png",
-      }
+      readResult = mediaResult("pixel.bin", "image/png", png)
       const registry = yield* Tool.Service
 
       expect(
@@ -647,14 +667,7 @@ describe("ReadTool", () => {
   it.effect("returns PDFs as native media", () =>
     Effect.gen(function* () {
       const pdf = "JVBERi0xLjcK"
-      readResult = {
-        type: "file",
-        uri: "file:///document.pdf",
-        name: "document.pdf",
-        content: pdf,
-        encoding: "base64",
-        mime: "application/pdf",
-      }
+      readResult = mediaResult("document.pdf", "application/pdf", pdf)
       const registry = yield* Tool.Service
 
       expect(
@@ -665,12 +678,61 @@ describe("ReadTool", () => {
         }),
       ).toMatchObject({
         status: "completed",
+        output: { type: "media", uri: "file:///document.pdf", mime: "application/pdf", name: "document.pdf" },
         content: [
           { type: "text", text: "PDF read successfully" },
           { type: "file", uri: `data:application/pdf;base64,${pdf}`, mime: "application/pdf", name: "document.pdf" },
         ],
       })
     }),
+  )
+
+  live.live("attaches real image and PDF files without their bytes in the structured output", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const files = [
+          {
+            name: "pixel.png",
+            mime: "image/png",
+            text: "Image read successfully",
+            bytes: Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          },
+          {
+            name: "document.pdf",
+            mime: "application/pdf",
+            text: "PDF read successfully",
+            bytes: Buffer.from("%PDF-1.7\ncontent"),
+          },
+        ]
+        for (const file of files) {
+          const absolute = path.join(tmp.path, file.name)
+          yield* Effect.promise(() => fs.writeFile(absolute, file.bytes))
+
+          const result = yield* readReal(tmp.path, file.name)
+
+          expect(result.status).toBe("completed")
+          if (result.status !== "completed") return
+          expect(result.output).toEqual({
+            type: "media",
+            uri: pathToFileURL(absolute).href,
+            mime: file.mime,
+            name: file.name,
+          })
+          expect(result.content).toEqual([
+            { type: "text", text: file.text },
+            {
+              type: "file",
+              uri: `data:${file.mime};base64,${file.bytes.toString("base64")}`,
+              mime: file.mime,
+              name: file.name,
+            },
+          ])
+        }
+      }),
+    ),
   )
 
   it.effect("returns expected filesystem failures to the model", () =>
@@ -1035,7 +1097,7 @@ describe("ReadTool", () => {
       readOverride = (input) =>
         input === requestedAbsolute
           ? Effect.fail(new Environment.NotFound({ path: requestedAbsolute }))
-          : Effect.succeed(new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false }))
+          : Effect.succeed({ type: "directory" as const, entries: [] })
       const registry = yield* Tool.Service
 
       expect(
@@ -1052,15 +1114,7 @@ describe("ReadTool", () => {
 
   it.effect("lists a bounded directory page through read", () =>
     Effect.gen(function* () {
-      readResult = new ReadToolFileSystem.ListPage({
-        type: "list-page",
-        entries: [
-          FileSystem.Entry.make({ path: RelativePath.make("components/"), type: "directory" }),
-          FileSystem.Entry.make({ path: RelativePath.make("index.ts"), type: "file" }),
-        ],
-        truncated: true,
-        next: 4,
-      })
+      readResult = { type: "directory", entries: ["components/", "index.ts"], next: 4 }
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1075,7 +1129,7 @@ describe("ReadTool", () => {
       })
       expect(result).toMatchObject({
         status: "completed",
-        output: { entries: readResult.entries, truncated: true, next: 4 },
+        output: { type: "directory", entries: ["components/", "index.ts"], next: 4 },
       })
       if (result.status !== "completed") return
       expect(result.metadata).toEqual({ truncated: true })
@@ -1094,12 +1148,7 @@ describe("ReadTool", () => {
 
   it.effect("normalizes a zero directory offset in the model heading", () =>
     Effect.gen(function* () {
-      readResult = new ReadToolFileSystem.ListPage({
-        type: "list-page",
-        entries: [FileSystem.Entry.make({ path: RelativePath.make("index.ts"), type: "file" })],
-        truncated: true,
-        next: 2,
-      })
+      readResult = { type: "directory", entries: ["index.ts"], next: 2 }
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1144,15 +1193,7 @@ describe("ReadTool", () => {
 
   it.effect("forwards pagination and returns bounded text pages with continuation", () =>
     Effect.gen(function* () {
-      readResult = new ReadToolFileSystem.TextPage({
-        type: "text-page",
-        content: "hello",
-        lineCount: 1,
-        mime: "text/plain",
-        offset: 2,
-        truncated: true,
-        next: 3,
-      })
+      readResult = { type: "text", content: "hello", offset: 2, lineCount: 1, next: 3 }
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1167,7 +1208,7 @@ describe("ReadTool", () => {
       })
       expect(result).toMatchObject({
         status: "completed",
-        output: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
+        output: { type: "text", content: "hello", offset: 2, lineCount: 1, next: 3 },
       })
       if (result.status !== "completed") return
       expect(result.metadata).toEqual({ truncated: true })
@@ -1185,15 +1226,7 @@ describe("ReadTool", () => {
 
   it.effect("forwards a negative offset and shows the real line numbers and continuation", () =>
     Effect.gen(function* () {
-      readResult = new ReadToolFileSystem.TextPage({
-        type: "text-page",
-        content: "nine\nten",
-        lineCount: 2,
-        mime: "text/plain",
-        offset: 9,
-        truncated: true,
-        next: 11,
-      })
+      readResult = { type: "text", content: "nine\nten", offset: 9, lineCount: 2, next: 11 }
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
@@ -1250,6 +1283,7 @@ describe("ReadTool", () => {
               }),
               {
                 "references/style.md": "Line 1\nLine 2",
+                "references/guide.pdf": "%PDF-1.7\nguide",
               },
             ),
           )
@@ -1276,6 +1310,7 @@ describe("ReadTool", () => {
           })
           expect(file).toMatchObject({
             status: "completed",
+            output: { type: "text", content: "Line 2", offset: 2, lineCount: 1 },
             content: [{ type: "text", text: "Read file skill://guide/references/style.md, lines 2-2\n2: Line 2" }],
           })
 
@@ -1286,6 +1321,7 @@ describe("ReadTool", () => {
           })
           expect(root).toMatchObject({
             status: "completed",
+            output: { type: "directory", entries: ["references/", "SKILL.md"] },
             content: [
               {
                 type: "text",
@@ -1322,6 +1358,36 @@ describe("ReadTool", () => {
             { sessionID, action: "read", resources: ["skill://guide/missing.md"], save: ["*"] },
           ])
           expect(readCalls).toEqual([])
+
+          const pdf = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-skill-pdf",
+              name: "read",
+              input: { path: "skill://guide/references/guide.pdf" },
+            },
+          })
+          expect(pdf).toMatchObject({
+            status: "completed",
+            content: [
+              { type: "text", text: "PDF read successfully" },
+              {
+                type: "file",
+                uri: `data:application/pdf;base64,${Buffer.from("%PDF-1.7\nguide").toString("base64")}`,
+                mime: "application/pdf",
+                name: "skill://guide/references/guide.pdf",
+              },
+            ],
+          })
+          if (pdf.status !== "completed") return
+          expect(pdf.output).toEqual({
+            type: "media",
+            uri: "skill://guide/references/guide.pdf",
+            mime: "application/pdf",
+            name: "guide.pdf",
+          })
 
           deniedResource = "guide"
           expect(

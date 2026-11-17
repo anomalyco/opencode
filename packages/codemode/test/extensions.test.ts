@@ -417,13 +417,18 @@ describe("Effect globals", () => {
   const web = Extension.make({
     name: "web",
     globals: {
-      fetch: (url: string) =>
+      fetch: Extension.async((url: string) =>
         Effect.gen(function* () {
           const session = yield* Session
           sent.push(url)
           return { url, session: session.id }
         }),
-      fail: () => Effect.fail(new RangeError("denied")),
+      ),
+      fail: Extension.async(() => Effect.fail(new RangeError("denied"))),
+      fs: {
+        readSync: (path: string) => Session.use((session) => Effect.succeed(`${session.id}:${path}`)),
+        failSync: () => Effect.fail(new RangeError("missing")),
+      },
     },
   })
 
@@ -456,6 +461,18 @@ describe("Effect globals", () => {
         .pipe(Effect.provideService(Session, { id: "ses_1" })),
     )
     expect(result).toMatchObject({ ok: true, value: [true, "denied"] })
+  })
+
+  test("a synchronous Effect global returns its value, or throws, before the next statement", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [web] })
+        .execute(
+          `const text = fs.readSync("a")
+           try { fs.failSync() } catch (e) { return [text, e instanceof RangeError, e.message] }`,
+        )
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: ["ses_1:a", true, "missing"] })
   })
 
   test("a denying before hook stops the Effect before it runs", async () => {

@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { type Extension, isAsync, StreamingResponse } from "../extension.js"
+import { BufferObj } from "../stdlib/buffer.js"
 import { hooked } from "../tool-runtime.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
@@ -164,6 +165,8 @@ export const extensionGlobals = <R>(
         return result
       }
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
+      if (typeof Buffer !== "undefined" && Buffer.isBuffer(value))
+        return new BufferObj(builtins.Buffer, new Uint8Array(value))
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
       if (value instanceof ArrayBuffer) {
         const view = new Uint8Array(value)
@@ -359,7 +362,8 @@ const pending = <R>(ctx: Interpreter<R>, call: ExtensionRequest, site: AstNode |
 
 /**
  * Calls a synchronous extension function's host function, once its `extension.before` hook allowed it: a promise for
- * a result that settles later (an Effect or a Promise), or the request that settles what it returned or threw now.
+ * a returned Promise, or the request that settles what it returned or threw. A returned Effect settles through that
+ * request too, so the program blocks until it completes, as `fs.readFileSync` does.
  */
 export const startExtensionCall = <R>(
   ctx: Interpreter<R>,
@@ -370,7 +374,7 @@ export const startExtensionCall = <R>(
 ): PromiseObj | ExtensionRequest => {
   const [result, threw] = callHost(host, args)
   const request = { stage: "settle", ...call, host: result, args, threw } as const
-  if (!threw && (Effect.isEffect(result) || result instanceof Promise)) return pending(ctx, request, site)
+  if (!threw && result instanceof Promise) return pending(ctx, request, site)
   return request
 }
 

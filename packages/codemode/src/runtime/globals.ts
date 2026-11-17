@@ -1,6 +1,7 @@
 import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
+import { bufferGlobal } from "../stdlib/buffer.js"
 import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
@@ -120,6 +121,8 @@ const table: Record<string, Factory> = {
   URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
   Headers: (ctx) => headersGlobal(ctx),
   Uint8Array: (ctx) => uint8ArrayGlobal(ctx),
+  // Built on the host's Buffer, so only where there is one (Node and Bun, not browsers).
+  ...(typeof Buffer === "undefined" ? {} : { Buffer: <R>(ctx: Interpreter<R>) => bufferGlobal(ctx) }),
   TextEncoder: (ctx) => textEncoderGlobal(ctx),
   TextDecoder: (ctx) => textDecoderGlobal(ctx),
   encodeURI: (ctx) => uriGlobal(ctx, "encodeURI"),
