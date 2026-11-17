@@ -1110,7 +1110,7 @@ fn module_name(specifier: &str) -> &str {
 
 fn global_value(vm: &mut Vm, name: &str) -> Option<Value> {
     let a = vm.atoms.intern(name);
-    if !vm.global_map.contains_key(&a) {
+    if !vm.global_map.contains_key(&a) && !crate::builtins::ensure_global(vm, name) {
         define_host_global(vm, name);
     }
     match vm.global_map.get(&a) {

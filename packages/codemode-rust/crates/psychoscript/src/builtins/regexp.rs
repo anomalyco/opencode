@@ -169,6 +169,7 @@ pub fn setup(vm: &mut Vm) {
 
 /// A new RegExp object, or the program's `SyntaxError` when the pattern or flags are invalid.
 pub fn new_regexp(vm: &mut Vm, pattern: &str, flags: &str) -> Res {
+    super::ensure(vm, super::LAZY_REGEXP);
     match compile(pattern, flags) {
         Ok((regex, flags)) => {
             let proto = vm.realm.std.regexp;
@@ -589,6 +590,7 @@ fn re_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 /// A RegExp argument as is, or anything else compiled as a pattern string with `flags`.
 fn pattern_arg(vm: &mut Vm, v: &Value, method: &str, flags: &str) -> Result<Id, Value> {
+    super::ensure(vm, super::LAZY_REGEXP);
     if let Some(id) = as_regexp(vm, v) {
         return Ok(id);
     }

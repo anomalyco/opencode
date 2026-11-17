@@ -35,6 +35,88 @@ pub struct StdProtos {
     pub url: Id,
     pub params: Id,
     pub headers: Id,
+    /// The lazily installed groups already set up (see `LAZY`).
+    pub loaded: u8,
+}
+
+/// Built-in groups installed only when a program names one of their globals (or makes one of their values), so a
+/// run pays for what it uses: (bit, globals, setup).
+/// A lazy group: its bit, the globals it defines, and its setup.
+type LazyGroup = (u8, &'static [&'static str], fn(&mut Vm));
+
+const LAZY: &[LazyGroup] = &[
+    (1, &["RegExp"], regexp::setup),
+    (2, &["Date"], date::setup),
+    (
+        4,
+        &[
+            "Uint8Array",
+            "Buffer",
+            "TextEncoder",
+            "TextDecoder",
+            "atob",
+            "btoa",
+        ],
+        setup_bytes,
+    ),
+    (
+        8,
+        &["Map", "Set", "Object", "WeakMap", "WeakSet"],
+        sets::setup,
+    ),
+    (
+        16,
+        &[
+            "encodeURI",
+            "encodeURIComponent",
+            "decodeURI",
+            "decodeURIComponent",
+        ],
+        uri::setup,
+    ),
+    (32, &["URL", "URLSearchParams", "Headers"], web::setup),
+    (64, &["crypto", "structuredClone"], web::setup_globals),
+];
+
+pub const LAZY_REGEXP: u8 = 1;
+pub const LAZY_DATE: u8 = 2;
+pub const LAZY_BYTES: u8 = 4;
+
+fn setup_bytes(vm: &mut Vm) {
+    bytes::setup(vm);
+    buffer::setup(vm);
+}
+
+/// Installs the lazy group with `bit`, once.
+pub fn ensure(vm: &mut Vm, bit: u8) {
+    if vm.realm.std.loaded & bit != 0 {
+        return;
+    }
+    vm.realm.std.loaded |= bit;
+    if let Some((_, _, setup)) = LAZY.iter().find(|(b, _, _)| *b == bit) {
+        setup(vm);
+    }
+}
+
+/// Installs the lazy group that defines the global `name`; false when no group does.
+pub fn ensure_global(vm: &mut Vm, name: &str) -> bool {
+    match LAZY.iter().find(|(_, names, _)| names.contains(&name)) {
+        Some((bit, _, _)) => {
+            ensure(vm, *bit);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Installs the lazy groups a program's referenced globals need.
+pub fn ensure_globals(vm: &mut Vm, globals: &[Atom]) {
+    for a in globals {
+        let name = vm.atoms.text(*a);
+        if let Some((bit, _, _)) = LAZY.iter().find(|(_, names, _)| names.contains(&name)) {
+            ensure(vm, *bit);
+        }
+    }
 }
 
 /// Global names a program cannot assign to.
@@ -204,16 +286,8 @@ impl<'rt> Vm<'rt> {
         array::setup(self);
         string::setup(self);
         collections::setup(self);
-        regexp::setup(self);
-        date::setup(self);
         iterator::setup(self);
         iterator::setup_helpers(self);
-        bytes::setup(self);
-        buffer::setup(self);
-        sets::setup(self);
-        uri::setup(self);
-        web::setup(self);
-        web::setup_globals(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);

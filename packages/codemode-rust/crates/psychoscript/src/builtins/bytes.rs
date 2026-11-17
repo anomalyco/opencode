@@ -71,6 +71,7 @@ pub fn to_u8(n: f64) -> u8 {
 }
 
 pub fn new_bytes(vm: &mut Vm, data: Vec<u8>, buffer: bool) -> Value {
+    super::ensure(vm, super::LAZY_BYTES);
     let proto = if buffer {
         vm.realm.std.buffer
     } else {

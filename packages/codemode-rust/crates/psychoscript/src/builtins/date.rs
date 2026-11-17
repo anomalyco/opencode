@@ -719,6 +719,7 @@ pub fn setup(vm: &mut Vm) {
 }
 
 pub fn new_date(vm: &mut Vm, t: f64) -> Value {
+    super::ensure(vm, super::LAZY_DATE);
     let proto = vm.realm.std.date;
     Value::Obj(vm.alloc(Obj::new(Some(proto), Kind::Date(t))))
 }

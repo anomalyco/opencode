@@ -248,6 +248,7 @@ impl<'rt> Vm<'rt> {
     }
 
     pub fn load(&mut self, program: Program) {
+        crate::builtins::ensure_globals(self, &program.globals);
         self.consts = program.consts;
         self.protos = program.protos;
         self.globals = program
