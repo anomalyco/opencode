@@ -7,10 +7,8 @@ import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { CodeModeExecution } from "../../codemode/execution.js"
 import { Environment } from "../../environment/index.js"
-import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
@@ -306,10 +304,6 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
-    const config = yield* Config.Service
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
-    const flags = yield* Flag.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
@@ -373,26 +367,31 @@ export const Plugin = {
     })
 
     yield* ctx.tool
-      .transform((editor) => {
-        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
+      .transform((editor) =>
         editor.add({
           name,
-          // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
-          // pinned so the Code Mode catalog always lists it, however many other tools there are.
-          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: description(undefined, codeMode),
-          input: codeMode ? CodeModeInput : Input,
+          options: { codemode: false },
+          description: description(undefined, false),
+          input: Input,
+          // When placed in Code Mode, shell is pinned so the catalog always lists it, however many other tools there are.
+          codemode: {
+            pinned: true,
+            description: description(undefined, true),
+            input: CodeModeInput,
+          },
           output: StructuredOutput,
           execute: (input, context) => {
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
-            // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
-            const timeout = background ? (input.timeout ?? 0) : foreground
-            let finalTimeout = timeout
+            let finalTimeout = 0
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
               Effect.gen(function* () {
+                const codeMode = Option.isSome(yield* Effect.serviceOption(CodeModeExecution.Service))
+                // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
+                const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+                const timeout = background ? (input.timeout ?? 0) : foreground
+                finalTimeout = timeout
                 // Listens for the user's stop for the whole call, starting before the command does, so a stop always
                 // reaches this tool through `cancel` instead of interrupting it, even while the command starts.
                 const stopped = yield* Deferred.make<void>()
@@ -514,8 +513,8 @@ export const Plugin = {
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
 
     const hook = (event: SessionHooks["context"]) =>

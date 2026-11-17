@@ -65,6 +65,30 @@ describe("McpInstructions", () => {
     ),
   )
 
+  it.effect("omits the execute instruction when Code Mode is off", () =>
+    Effect.gen(function* () {
+      const service = yield* McpInstructions.Service
+      const generation = yield* service.load([], { codemode: false }).pipe(Effect.flatMap(readInitial))
+
+      expect(generation.text).toBe(
+        [
+          "<mcp_instructions>",
+          '  <server name="alpha">',
+          "    Alpha instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(
+        layer(
+          () => [instructions("alpha", "Alpha instructions")],
+          () => [tool("alpha")],
+        ),
+      ),
+    ),
+  )
+
   it.effect("lists Code Mode servers as direct tools when the agent cannot use execute", () =>
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service

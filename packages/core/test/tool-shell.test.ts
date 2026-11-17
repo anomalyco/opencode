@@ -180,7 +180,6 @@ const replacements = [
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
 const it = testEffect(shellLayer)
-const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
 const daemonIt = testEffect(
   AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
@@ -891,12 +890,13 @@ describe("ShellTool", () => {
     }),
   )
 
-  codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
+  it.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
     withTempDir((tmp) => {
       reset()
+      const policy = { tools: { codemode: new Set(["shell"]) } }
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const snapshot = yield* registry.snapshot()
+          const snapshot = yield* registry.snapshot(undefined, policy)
           // Pinned: listed even when the catalog has no room for other tools, with the result contract in the field
           // annotations.
           const pinned = CodeModeCatalog.summarize(snapshot.codeModeCatalog!, { budget: 0 }).namespaces.flatMap(
@@ -925,16 +925,20 @@ describe("ShellTool", () => {
           )
           const quick = JSON.stringify({ command: bodyExitCommand })
           const long = JSON.stringify({ command: progressOverflowCommand(6, "release"), timeout: 10 })
-          const result = yield* executeTool(registry, {
-            sessionID,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-parallel-shells",
-              name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
+          const result = yield* executeTool(
+            registry,
+            {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-parallel-shells",
+                name: "execute",
+                input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
+              },
             },
-          }).pipe(Effect.timeout("3 seconds"))
+            policy,
+          ).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")
           const [completed, running] = JSON.parse(result.output.output)
           expect(completed).toEqual({

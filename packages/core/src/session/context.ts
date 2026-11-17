@@ -22,6 +22,8 @@ import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
+import { modelTools } from "../tool/model-policy.js"
+import { WebSearch } from "../websearch.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
@@ -95,7 +97,8 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
-    const codeMode = yield* CodeModeTool.services
+    const services = yield* CodeModeTool.services
+    const websearch = yield* WebSearch.Service
 
     const resolveModel = (
       session: SessionSchema.Info,
@@ -150,14 +153,30 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      const [selected, hasWebSearch] = yield* Effect.all(
+        [
+          models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
+          Effect.all({
+            disabled: websearch.default().pipe(
+              Effect.as(false),
+              Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
+            ),
+            providers: websearch.providers(),
+          }).pipe(Effect.map((result) => !result.disabled && result.providers.length > 0)),
+        ],
+        { concurrency: "unbounded" },
+      )
+      const tools = yield* registry.snapshot(permissions, {
+        services,
+        tools: modelTools({ model: selected?.info, websearch: hasWebSearch }),
+      })
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions, codeMode),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(permissions),
+          mcp: mcpInstructions.load(permissions, { codemode: tools.codeModeCatalog !== undefined }),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
@@ -169,7 +188,7 @@ const layer = Layer.effect(
         // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
         // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
-          CodeModeInstructions.make(loaded.tools.codeModeCatalog),
+          CodeModeInstructions.make(tools.codeModeCatalog),
           loaded.mcp,
           loaded.references,
           loaded.skills,
@@ -177,7 +196,7 @@ const layer = Layer.effect(
           loaded.builtins,
           loaded.entries,
         ]),
-        tools: loaded.tools,
+        tools,
       }
     })
 
@@ -241,5 +260,6 @@ export const node = makeLocationNode({
     SessionStore.node,
     SkillInstructions.node,
     Tool.node,
+    WebSearch.node,
   ],
 })

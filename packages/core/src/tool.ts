@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { CodeMode, Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
@@ -43,16 +43,23 @@ type Data = {
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
 
-export interface Interface extends State.Transformable<Editor> {
-  readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
+export interface Policy {
+  readonly hidden?: ReadonlySet<string>
+  readonly codemode?: ReadonlySet<string>
+}
+
+export interface SnapshotOptions {
   /**
-   * With `full_codemode`, Code Mode gets the experimental `path` and `Bun` globals, which act through `codeMode`: the
+   * With `full_codemode`, Code Mode gets the experimental `path` and `Bun` globals, which act through `services`: the
    * session's Location and file services.
    */
-  readonly snapshot: (
-    permissions?: Permission.Ruleset,
-    codeMode?: Context.Context<CodeModeTool.Services>,
-  ) => Effect.Effect<Snapshot>
+  readonly services?: Context.Context<CodeModeTool.Services>
+  readonly tools?: Policy
+}
+
+export interface Interface extends State.Transformable<Editor> {
+  readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
+  readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -205,16 +212,13 @@ const layer = Layer.effect(
       return yield* executeTool(selected, event.tool, event.input, context)
     })
 
-    let catalog:
-      | {
-          data: Data
-          names: string
-          full: boolean
-          inventory: CodeModeTool.Inventory
-          value: CodeModeCatalog.Inventory
-          definition: ToolDefinition
-        }
-      | undefined
+    type CachedCatalog = {
+      readonly inventory: CodeModeTool.Inventory
+      readonly value: CodeModeCatalog.Inventory
+      readonly definition: ToolDefinition
+    }
+    let catalogData: Data | undefined
+    const catalogs = new Map<string, CachedCatalog>()
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
@@ -236,12 +240,21 @@ const layer = Layer.effect(
         },
         add: (tool) => {
           const id = effectiveName(tool)
-          commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } })
+          commit(editor, id, {
+            ...tool,
+            id,
+            options: tool.options && { ...tool.options },
+            codemode: tool.codemode && { ...tool.codemode },
+          })
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
           if (!current) return
-          const tool = { ...current, options: current.options && { ...current.options } }
+          const tool = {
+            ...current,
+            options: current.options && { ...current.options },
+            codemode: current.codemode && { ...current.codemode },
+          }
           update(tool)
           tool.name = current.name
           tool.id = id
@@ -255,7 +268,8 @@ const layer = Layer.effect(
         },
       }),
       notify: (value) => {
-        catalog = undefined
+        catalogData = undefined
+        catalogs.clear()
         return Effect.forEach(
           value.errors,
           ({ kind, name, namespace, error }) =>
@@ -273,57 +287,75 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, codeMode) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
         Effect.map(flags.enabled("full_codemode"), (enabled) => {
-          const full = enabled && codeMode !== undefined
           const data = state.get()
+          if (catalogData !== data) {
+            catalogData = data
+            catalogs.clear()
+          }
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
+          const hidden = options?.tools?.hidden
+          const promoted = options?.tools?.codemode
           for (const [name, tool] of data.tools) {
+            if (hidden?.has(name)) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
           const codeModeEnabled = !whollyDisabled("execute", rules)
+          const inCodeMode = (name: string, tool: Tool.Info) =>
+            tool.options?.codemode !== false || Boolean(promoted?.has(name))
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const direct = codeModeEnabled
-            ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+            ? new Map(Array.from(active).filter(([name, tool]) => !inCodeMode(name, tool)))
             : active
-          const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const names = Array.from(codeModeTools.keys()).join("\0")
-          // Discovery is immutable for a registry revision and visible tool set. Keep executors
-          // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
-          // are cached by identity, and the execute tool's definition across steps.
-          const cached =
-            catalog?.data === data && catalog.names === names && catalog.full === full ? catalog : undefined
-          const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
-          const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(
-                codeModeInventory,
-                (name, tool, input, context) => run(codeModeInventory.tools, tool, name, input, context),
-                permission,
-                full ? codeMode : undefined,
-              )
-            : undefined
-          const codeModeCatalog = !codeModeEnabled
+          const codeMode = !codeModeEnabled
             ? undefined
-            : (cached?.value ?? CodeModeTool.catalog(codeModeInventory))
-          const codeModeDefinition = codeModeTool && (cached?.definition ?? definition(codeModeTool))
-          if (codeModeCatalog && codeModeDefinition)
-            catalog = {
-              data,
-              names,
-              full,
-              inventory: codeModeInventory,
-              value: codeModeCatalog,
-              definition: codeModeDefinition,
-            }
+            : (() => {
+                const full = enabled && options?.services !== undefined
+                const codeModeTools = new Map(
+                  Array.from(active)
+                    .filter(([name, tool]) => inCodeMode(name, tool))
+                    .map(([name, tool]) => [name, toCodeModeTool(tool)]),
+                )
+                const key = `${full ? "1" : "0"}\0${Array.from(codeModeTools.keys()).join("\0")}`
+                // Discovery is immutable for a registry revision and visible tool set. Keep executors
+                // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
+                // are cached by identity, and the execute tool's definition across steps.
+                const cached = catalogs.get(key)
+                if (cached) {
+                  catalogs.delete(key)
+                  catalogs.set(key, cached)
+                }
+                const inventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
+                const tool = CodeModeTool.create(
+                  inventory,
+                  (name, item, input, context) => run(inventory.tools, item, name, input, context),
+                  permission,
+                  full ? options.services : undefined,
+                )
+                const entry = cached ?? {
+                  inventory,
+                  value: CodeModeTool.catalog(inventory),
+                  definition: definition(tool),
+                }
+                if (!cached) {
+                  if (catalogs.size >= CATALOG_CACHE_LIMIT) {
+                    const oldest = catalogs.keys().next().value
+                    if (oldest !== undefined) catalogs.delete(oldest)
+                  }
+                  catalogs.set(key, entry)
+                }
+                return { tool, catalog: entry.value, definition: entry.definition }
+              })()
           return {
-            ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
+            ...(codeMode === undefined ? {} : { codeModeCatalog: codeMode.catalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
                 .map(([name]) => data.definitions.get(name)!),
-              ...(codeModeDefinition ? [codeModeDefinition] : []),
+              ...(codeMode ? [codeMode.definition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
@@ -337,11 +369,11 @@ const layer = Layer.effect(
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
+              if (!requested && input.definitions && (direct.has(event.tool) || codeMode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool) {
-                const run = (ctx: Tool.Context) => executeTool(codeModeTool, name, event.input, ctx)
+              if (name === "execute" && codeMode) {
+                const run = (ctx: Tool.Context) => executeTool(codeMode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background ? background(context, run) : run(context)
               }
@@ -416,6 +448,22 @@ const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   return rule?.resource === "*" && rule.effect === "deny"
 }
 
+const CATALOG_CACHE_LIMIT = 5
+
+function toCodeModeTool(tool: Tool.Info): Tool.Info {
+  if (!tool.codemode) return tool
+  return {
+    ...tool,
+    ...(tool.codemode.description === undefined ? {} : { description: tool.codemode.description }),
+    ...(tool.codemode.input === undefined ? {} : { input: tool.codemode.input }),
+    options: {
+      ...tool.options,
+      codemode: true,
+      ...(tool.codemode.pinned === undefined ? {} : { pinned: tool.codemode.pinned }),
+    },
+  }
+}
+
 const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
 
 function schemaMakeError(error: unknown) {
@@ -440,6 +488,22 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
     return Result.fail(
       new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
     )
+  if (
+    tool.codemode?.input !== undefined &&
+    typeof tool.codemode.input !== "object" &&
+    typeof tool.codemode.input !== "function"
+  )
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
+  if (tool.codemode) {
+    const variant = Result.try({
+      try: () => ToolDefinition.make(definition(toCodeModeTool(tool))),
+      catch: (error) =>
+        new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
+    })
+    if (Result.isFailure(variant)) return variant
+  }
   return Result.try({
     try: () => ToolDefinition.make(definition(tool)),
     catch: (error) =>

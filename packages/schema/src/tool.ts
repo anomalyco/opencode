@@ -106,6 +106,12 @@ export interface Result<Output extends ValueSchema<any> | undefined = ValueSchem
   readonly metadata?: Metadata
 }
 
+export interface CodeMode {
+  readonly description?: string
+  readonly input?: ValueSchema<any>
+  readonly pinned?: boolean
+}
+
 export type Info<
   Input extends ValueSchema<any> = ValueSchema<any>,
   Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
@@ -117,4 +123,6 @@ export type Info<
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
   readonly output?: Output
   readonly options?: Options
+  /** Overrides applied when the tool is exposed through Code Mode instead of directly. */
+  readonly codemode?: CodeMode
 }

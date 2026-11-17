@@ -80,7 +80,7 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
 describe("Code Mode path and Bun", () => {
   const types = Effect.gen(function* () {
     const tools = yield* Tool.Service
-    const snapshot = yield* tools.snapshot(undefined, codeModeServices("/session/dir"))
+    const snapshot = yield* tools.snapshot(undefined, { services: codeModeServices("/session/dir") })
     const result = yield* snapshot.execute({
       ...call("execute"),
       call: {
@@ -750,6 +750,119 @@ describe("Tool", () => {
       const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
       expect(denied.definitions).toEqual([])
       expect(denied.codeModeCatalog).toBeUndefined()
+    }),
+  )
+
+  it.effect(
+    "applies model tool policy and Code Mode variants, falling back to direct variants when execute is denied",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* Tool.Service
+        yield* service.transform((editor) => {
+          editor.add({
+            name: "shell",
+            description: "Direct shell",
+            input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
+            codemode: {
+              pinned: true,
+              description: "Code Mode shell",
+              input: Schema.Struct({ command: Schema.String }),
+            },
+            output: Schema.String,
+            options: { codemode: false },
+            execute: (input) =>
+              Effect.succeed({
+                output: `${input.command}:${"background" in input ? String(input.background) : "omitted"}`,
+              }),
+          })
+          editor.add({ ...make(), name: "glob", options: { codemode: false } })
+          editor.add({ ...make(), name: "mcp_search" })
+        })
+
+        const direct = yield* service.snapshot()
+        expect(direct.definitions.map((tool) => tool.name)).toEqual(["glob", "shell", "execute"])
+        expect(direct.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
+        expect(direct.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
+          "background",
+        )
+        expect(codeModeListings(direct.codeModeCatalog!).map((tool) => tool.path)).toEqual(["mcp_search"])
+
+        const policy = { hidden: new Set(["glob"]), codemode: new Set(["shell"]) }
+        const promoted = yield* service.snapshot(undefined, { tools: policy })
+        expect(promoted.definitions.map((tool) => tool.name)).toEqual(["execute"])
+        const listings = codeModeListings(promoted.codeModeCatalog!)
+        expect(listings.map((tool) => tool.path)).toEqual(["mcp_search", "shell"])
+        const shellListing = listings.find((tool) => tool.path === "shell")!
+        expect(shellListing.line).toContain("Code Mode shell")
+        expect(shellListing.line).not.toContain("background")
+        expect(promoted.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
+
+        // Decodes Code Mode calls with the Code Mode input schema, stripping direct-only fields.
+        const executed = yield* promoted.execute({
+          ...call("execute"),
+          call: {
+            type: "tool-call",
+            id: "call-cm-shell",
+            name: "execute",
+            input: { code: 'return await tools.shell({ command: "ls", background: true })' },
+          },
+        })
+        expect(executed.output).toMatchObject({ output: "ls:omitted" })
+
+        // When execute is denied, promoted tools fall back to their direct form while hidden tools stay hidden.
+        const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }], {
+          tools: policy,
+        })
+        expect(denied.codeModeCatalog).toBeUndefined()
+        expect(denied.definitions.map((tool) => tool.name)).toEqual(["mcp_search", "shell"])
+        expect(denied.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
+        expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
+          "background",
+        )
+      }),
+  )
+
+  it.effect("caches the 5 most recently used Code Mode catalogs and invalidates on registry changes", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, {
+        t1: make(),
+        t2: make(),
+        t3: make(),
+        t4: make(),
+        t5: make(),
+        t6: make(),
+      })
+      const deny = (action: string): Permission.Ruleset => [{ action, resource: "*", effect: "deny" }]
+
+      const s1 = yield* service.snapshot(deny("t1"))
+      const s2 = yield* service.snapshot(deny("t2"))
+      const s3 = yield* service.snapshot(deny("t3"))
+      const s4 = yield* service.snapshot(deny("t4"))
+      const s5 = yield* service.snapshot(deny("t5"))
+
+      // Touch s1 so s2 becomes least recently used, then insert a 6th distinct tool set.
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).toBe(s1.codeModeCatalog)
+      const s6 = yield* service.snapshot(deny("t6"))
+
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).toBe(s1.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t3"))).codeModeCatalog).toBe(s3.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t4"))).codeModeCatalog).toBe(s4.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t5"))).codeModeCatalog).toBe(s5.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t6"))).codeModeCatalog).toBe(s6.codeModeCatalog)
+      expect((yield* service.snapshot(deny("t2"))).codeModeCatalog).not.toBe(s2.codeModeCatalog)
+
+      // Invalidates inside State.batch before notify runs, as well as on reload.
+      const beforeBatch = yield* service.snapshot(deny("t1"))
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* transform(service, { extra: make() })
+          expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).not.toBe(beforeBatch.codeModeCatalog)
+        }),
+      )
+      const afterBatch = yield* service.snapshot(deny("t1"))
+      yield* service.reload()
+      expect((yield* service.snapshot(deny("t1"))).codeModeCatalog).not.toBe(afterBatch.codeModeCatalog)
     }),
   )
 

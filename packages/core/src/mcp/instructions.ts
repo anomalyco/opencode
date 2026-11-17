@@ -44,7 +44,10 @@ const update = Instructions.listUpdate<Summary>({
 
 export interface Interface {
   /** Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions. */
-  readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
+  readonly load: (
+    permissions: Permission.Ruleset,
+    options?: { readonly codemode?: boolean },
+  ) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpInstructions") {}
@@ -55,7 +58,7 @@ export const layer = Layer.effect(
     const mcp = yield* Mcp.Service
 
     return Service.of({
-      load: Effect.fn("McpInstructions.load")(function* (permissions) {
+      load: Effect.fn("McpInstructions.load")(function* (permissions, options) {
         const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
           Instructions.make<ReadonlyArray<Summary>>({
             key: Instructions.Key.make("core/mcp-guidance"),
@@ -70,7 +73,8 @@ export const layer = Layer.effect(
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
-        const canExecute = Permission.evaluate("execute", "*", permissions).effect !== "deny"
+        const canExecute =
+          options?.codemode !== false && Permission.evaluate("execute", "*", permissions).effect !== "deny"
         // Instructions are useful only when this Session can reach at least one server tool.
         const visible = instructions
           .flatMap((item) => {

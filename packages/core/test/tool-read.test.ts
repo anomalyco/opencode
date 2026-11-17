@@ -195,7 +195,14 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* Tool.Service
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["read", "execute"])
+      const direct = yield* toolDefinitions(registry)
+      expect(direct.map((tool) => tool.name)).toEqual(["read", "execute"])
+      expect(direct[0]?.description).toContain("Each text line is prefixed by its 1-based line number")
+      const promoted = yield* registry.snapshot(undefined, { tools: { codemode: new Set(["read"]) } })
+      expect(promoted.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(promoted.codeModeCatalog?.tools[0]?.description).toContain(
+        "Reading an image or PDF automatically attaches it to the execute result",
+      )
       expect(
         (yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).map(
           (tool) => tool.name,
