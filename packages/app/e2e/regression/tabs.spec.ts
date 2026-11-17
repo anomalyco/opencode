@@ -824,7 +824,7 @@ test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching
   await expect(more).toBeHidden()
 })
 
-test("Recent keeps the server's order from its last reload, which a run end or window focus triggers", async ({
+test("Recent keeps the server's order through renames, run ends and window focus, and reloads for a new session", async ({
   page,
 }) => {
   const t = Date.now() - 60_000
@@ -841,6 +841,11 @@ test("Recent keeps the server's order from its last reload, which a run end or w
     },
   })
 
+  let pageOneLoads = 0
+  page.on("request", (request) => {
+    if (/\/api\/session\?.*archived=false/.test(request.url())) pageOneLoads++
+  })
+  await page.clock.install()
   await page.goto(
     `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref(a.id, "sidecar") })}`,
   )
@@ -874,22 +879,57 @@ test("Recent keeps the server's order from its last reload, which a run end or w
   await expect(rows.first()).toContainText("Tab B session")
   await expect(rows.last()).toContainText("Renamed A session")
 
-  // The window coming back reloads the list, as the iOS app does when it returns to the foreground.
-  await page.evaluate(() => window.dispatchEvent(new Event("focus")))
-  await expect(rows).toHaveText([/Renamed A session/, /Tab B session/])
-
-  advance(b.id, { updated: t + 3, idle: t + 3 })
+  // A run end and the window coming back leave the order alone; the rename after the run end shows it arrived.
+  advance(a.id, { updated: t + 3, idle: t + 3 }, "Finished A session")
   await workspace.push([
     {
       id: "evt_recent_order_run_end",
       created: t + 3,
       type: "session.execution.succeeded",
       location: { directory: workspace.directory },
-      durable: { aggregateID: b.id, seq: 1, version: 1 },
-      data: { sessionID: b.id },
+      durable: { aggregateID: a.id, seq: 2, version: 1 },
+      data: { sessionID: a.id },
     } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+    {
+      id: "evt_recent_order_rename_after_run",
+      created: t + 3,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 3, version: 1 },
+      data: { sessionID: a.id, title: "Finished A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
   ])
-  await expect(rows).toHaveText([/Tab B session/, /Renamed A session/])
+  await expect(rows).toHaveText([/Tab B session/, /Finished A session/])
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("focus"))
+    document.dispatchEvent(new Event("visibilitychange"))
+  })
+  // Past the reload debounce, so a reload either trigger had queued would have requested page one by now.
+  await page.clock.runFor(1_000)
+  await expect(rows).toHaveText([/Tab B session/, /Finished A session/])
+  expect(pageOneLoads).toBe(1)
+
+  // A new root session reloads page one, which brings in A's newer server time too.
+  const created = session({ id: "ses_tab_new", title: "Fresh session", directory: workspace.directory, created: t + 4 })
+  workspace.sessions.push(created)
+  await workspace.push([
+    {
+      id: "evt_recent_order_created",
+      created: t + 4,
+      type: "session.created",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: created.id, seq: 1, version: 1 },
+      data: {
+        sessionID: created.id,
+        projectID: workspace.projectID,
+        location: { directory: workspace.directory },
+        slug: created.slug,
+        version: created.version,
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "session.created" }>,
+  ])
+  await expect(rows).toHaveText([/Fresh session/, /Finished A session/, /Tab B session/])
+  expect(pageOneLoads).toBe(2)
 })
 
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
