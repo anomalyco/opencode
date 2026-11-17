@@ -6,13 +6,15 @@
 // `<text>`, and a span's `style` and `href` its only props. An intrinsic the contract has no node for throws as it is
 // created, so the plugin's boundary reports it as TS reports a crash in a render.
 import { createRenderer } from "solid-js/universal"
-import { catchError, createComponent, createContext, createMemo, createRenderEffect, useContext } from "solid-js"
+import { catchError, createComponent, createContext, createMemo, createRenderEffect, onCleanup, useContext } from "solid-js"
 import { createTextAttributes, RGBA, TextAttributes } from "./core"
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
 const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", ...SPANS])
 // The intrinsics of OpenTUI's catalogue the contract has no node for.
 const UNSUPPORTED = new Set(["select", "tab_select", "ascii_font", "diff", "line_number", "image", "video"])
+// The events of a field the layer maps (CT-11).
+const FIELD_EVENTS = new Set(["onInput", "onChange", "onSubmit", "onKeyDown"])
 
 type Listener = (...args: any[]) => unknown
 
@@ -38,6 +40,8 @@ export class VNode {
   owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls }
   // It has the focus, as the layer last said ([`VNode.focusChanged`]).
   focused = false
+  // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
+  typed?: string
   // CT-2: an OpenTUI renderable is an event emitter, which a plugin listens to by a ref (file-browser's search field):
   // the layer emits `focused` and `blurred` as OpenTUI's renderables do; other names are heard and never come.
   private listeners = new Map<string, Listener[]>()
@@ -129,6 +133,17 @@ export class VNode {
 
   scrollBy(by: number | { y?: number }) {
     this.scrollTo(this.scrollTop + (typeof by === "number" ? by : (by?.y ?? 0)))
+  }
+
+  // A field's text, as OpenTUI's `InputRenderable.value`: what was typed in the host's field, else the plugin's.
+  get value() {
+    return this.typed ?? String(this.props.value ?? this.props.initialValue ?? "")
+  }
+
+  set value(value: string) {
+    this.typed = undefined
+    this.props.value = value
+    touch(this)
   }
 
   // The node gained or lost the focus: it emits as an OpenTUI renderable does.
@@ -300,8 +315,23 @@ function unavailable(name: string) {
     missing.add(name)
   }
 }
-export const useKeyboard = unavailable("useKeyboard")
-export const useKeyHandler = unavailable("useKeyboard")
+// As OpenTUI's: `handler` hears the renderer's key presses while the component lives (CT-11); a release never comes.
+export function useKeyboard(handler: Listener, options?: { release?: boolean }) {
+  const keys = useContext(ScreenContext)?.renderer.keyInput as
+    | { on(name: string, listener: Listener): unknown; off(name: string, listener: Listener): unknown }
+    | undefined
+  if (!keys) {
+    missing.add("useKeyboard")
+    return
+  }
+  keys.on("keypress", handler)
+  if (options?.release) keys.on("keyrelease", handler)
+  onCleanup(() => {
+    keys.off("keypress", handler)
+    keys.off("keyrelease", handler)
+  })
+}
+export const useKeyHandler = useKeyboard
 export const usePaste = unavailable("usePaste")
 export const onFocus = unavailable("onFocus")
 export const onBlur = unavailable("onBlur")
@@ -455,7 +485,9 @@ function node(at: VNode, reading: Reading): Json {
       })
     case "input":
     case "textarea":
-      reading.dropped.add(`<${at.tag}> events`)
+      // Its edits, its submit and its keys reach the plugin (CT-11); its other events do not.
+      for (const name of Object.keys(props).filter((name) => /^on[A-Z]/.test(name) && !FIELD_EVENTS.has(name)))
+        if (typeof props[name] === "function") reading.dropped.add(`<${at.tag}> ${name}`)
       return compact({
         type: "input",
         id: idOf(at),

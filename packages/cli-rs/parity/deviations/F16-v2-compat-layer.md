@@ -49,11 +49,27 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   base64 and their envelopes fill the JS host's 8 MiB overflow) arrive whole, in parts of a frame each, while nothing
   waits before them; behind a backlog, less (CT-5). One past that fails with "the reply is N bytes, more than the JS
   host takes", where TS has no limit.
-- **Elements** (CT-2) are event emitters, as OpenTUI's renderables are: `focus()` and `blur()` of an `<input>`, a
-  `<textarea>` or a `<scrollbox>` are the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's
-  do, and other events are heard and never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the
-  host's state of the scroll once it came (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by
-  it), and `scrollTo` and `scrollBy` are the host's scroll verb. Other renderable members are undefined.
+- **Elements** (CT-2) are event emitters, as OpenTUI's renderables are: `focus()` and `blur()` of a `<scrollbox>` are
+  the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's do, and other events are heard and
+  never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the host's state of the scroll once it came
+  (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by it), and `scrollTo` and `scrollBy` are
+  the host's scroll verb. Other renderable members are undefined.
+- **Fields** (CT-11): an `<input>` or `<textarea>` hears the host's field: `onInput` each edit, `onChange` and
+  `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. The contract's focus takes
+  only a node with `interact.focusable`, so the host refuses a field's `focus()`, which is reported once: the plugin
+  holds its own focus of it, but what the user types goes elsewhere until the user moves into the field. It would
+  need `Host::focus` to accept a field (`Node::Input`). While the plugin's focused field sits in a route or a panel,
+  each key there is its `onKeyDown`, through a listener layer of the surface: the key also goes on to the host's
+  field and keys, as a listener cannot take it (`preventDefault` says so once in the JS host's log). It would need the
+  contract to answer a listener's key after the JS host does. TS's `<scrollbox>` draws a scrollbar beside its content
+  and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
+  Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
+- **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
+  through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
+  registrations once). `useKeyboard` listens on it while its component lives. As a listener, the plugin cannot take a
+  key: it hears it and the key goes on (`preventDefault` says so once in the log), where TS stops it. It hears keys in
+  the base mode only, and none while another plugin's overlay has the focus, as the contract's global layer holds.
+  `keyrelease` and `paste` never come.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
   `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
@@ -74,10 +90,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.listen`, `data.project`,
   `data.shell`, `data.session.permission`, `data.session.form`, the
   location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
-  `requestRender`, `width` and `height` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's returns the
-  renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside; `keyInput` is
-  an emitter whose listeners hear no key), `useKeyboard`, `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`,
-  `onAnimationTick`, `useTimeline`, `<input>` and `<textarea>` events, `minWidth` other than 0, `maxWidth`,
+  `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
+  returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside),
+  `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
+  `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
   and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
