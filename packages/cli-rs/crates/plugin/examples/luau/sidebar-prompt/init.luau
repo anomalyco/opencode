@@ -84,7 +84,7 @@ local function show(host: plugin.Host, prompt: Prompt)
         key = DIALOG,
         size = "large",
         title = {},
-        -- A panel body is a 1.x node (`V1Node`); the helpers build 2.0 nodes of the kinds the two share.
+        -- A panel body is a render tree (`RenderNode`); the helpers build 2.0 nodes of the kinds the two share.
         body = body :: any,
         centered = true,
         bare = true,

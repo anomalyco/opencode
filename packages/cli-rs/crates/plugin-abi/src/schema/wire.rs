@@ -15,9 +15,9 @@ use crate::{
     SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
-/// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, older than a surface's
-/// keyed tree; its schema name is the one it has had since ABI 1.x.
-type V1Node = crate::Node;
+/// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, beside a surface's keyed
+/// tree (`Node`).
+type RenderNode = crate::Node;
 type ClaimTarget = claim::Target;
 type ClaimEntry = claim::Entry;
 type ClaimPart = claim::Part;
@@ -412,8 +412,8 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         ),
         (
             "Panel",
-            object!(Panel, "A panel dialog, whose body is a `V1Node`.", {
-                key: string(), title: array(reference("Span")), body: reference("V1Node"),
+            object!(Panel, "A panel dialog, whose body is a `RenderNode`.", {
+                key: string(), title: array(reference("Span")), body: reference("RenderNode"),
             } {
                 size: reference("PanelSize"), subtitle: nullable(string()), actions: array(reference("PanelAction")),
                 binds: array(reference("PanelBind")), bleed: boolean(), centered: boolean(), bare: boolean(),
@@ -571,18 +571,18 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 json!({ "oneOf": [
                     object(&[], &[], Some("keep"), ""),
                     object(&[], &[], Some("hide"), ""),
-                    object(&[("node", reference("V1Node"))], &[], Some("show"), ""),
+                    object(&[("node", reference("RenderNode"))], &[], Some("show"), ""),
                 ] }),
                 "What a `render` and a `render-route` request answer.",
             )
         }),
         (
-            "V1Node",
-            tagged!(V1Node, "The node tree a render and a dialog body draw.", {
+            "RenderNode",
+            tagged!(RenderNode, "The node tree a render and a dialog body draw.", {
                 Box { } {
                     row: boolean(), gap: uint16(), padding: pair(uint16(), uint16()), justify: reference("Justify"),
                     align: reference("Align"), bg: nullable(reference("Color")), layout: reference("Layout"),
-                    on_click: nullable(reference("Click")), children: array(reference("V1Node")),
+                    on_click: nullable(reference("Click")), children: array(reference("RenderNode")),
                     border: nullable(reference("Border")), padding_sides: nullable(reference("Edges")), wrap: boolean(),
                     overflow: reference("Overflow"),
                 },

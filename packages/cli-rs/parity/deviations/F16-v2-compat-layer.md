@@ -138,7 +138,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `description` are reported, not mapped: TS draws a select's actions under its rows, so its select is taller, and a
   centered one sits higher (`P.8/session-time`'s timeline). `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
-  a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not
+  a render that throws closes it. A panel's body is a render tree (`RenderNode`): a `<scrollbox>` in it is a box that does not
   scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
 - **Pointer**: `onMouseDown`, `onMouseUp` and `onClick` on a box or a text run as a click of the node, with an event
   that has its kind and the left button but no position; a node with both a press and a release handler keeps the

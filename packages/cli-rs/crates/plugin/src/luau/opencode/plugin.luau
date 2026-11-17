@@ -965,11 +965,11 @@ export type Palette = {
     colors: { [string]: Rgba },
 }
 
---- A panel dialog, whose body is a `V1Node`.
+--- A panel dialog, whose body is a `RenderNode`.
 export type Panel = {
     key: string,
     title: { Span },
-    body: V1Node,
+    body: RenderNode,
     size: PanelSize?,
     subtitle: string?,
     actions: { PanelAction }?,
@@ -1064,13 +1064,50 @@ export type Render = ({
 } | {
     type: "hide",
 } | {
-    node: V1Node,
+    node: RenderNode,
     type: "show",
 })
 
 --- A fence, with the index of its render.
 export type RenderFence = (Fence & {
     index: number?,
+})
+
+--- The node tree a render and a dialog body draw.
+export type RenderNode = ({
+    row: boolean?,
+    gap: number?,
+    padding: { number }?,
+    justify: Justify?,
+    align: Align?,
+    bg: Color?,
+    layout: Layout?,
+    on_click: Click?,
+    children: { RenderNode }?,
+    border: Border?,
+    padding_sides: Edges?,
+    wrap: boolean?,
+    overflow: Overflow?,
+    type: "box",
+} | {
+    spans: { Span },
+    fg: Color?,
+    wrap: Wrap?,
+    truncate: boolean?,
+    selectable: boolean?,
+    hover_fg: Color?,
+    layout: Layout?,
+    on_click: Click?,
+    type: "text",
+} | {
+    path: string,
+    type: "slot",
+} | {
+    text: string,
+    type: "markdown",
+} | {
+    label: string,
+    type: "spinner",
 })
 
 --- A request the host sends a plugin's `call`.
@@ -1481,43 +1518,6 @@ export type TranscriptView = {
 }
 
 export type Unread = ("activity" | "error")
-
---- The node tree a render and a dialog body draw.
-export type V1Node = ({
-    row: boolean?,
-    gap: number?,
-    padding: { number }?,
-    justify: Justify?,
-    align: Align?,
-    bg: Color?,
-    layout: Layout?,
-    on_click: Click?,
-    children: { V1Node }?,
-    border: Border?,
-    padding_sides: Edges?,
-    wrap: boolean?,
-    overflow: Overflow?,
-    type: "box",
-} | {
-    spans: { Span },
-    fg: Color?,
-    wrap: Wrap?,
-    truncate: boolean?,
-    selectable: boolean?,
-    hover_fg: Color?,
-    layout: Layout?,
-    on_click: Click?,
-    type: "text",
-} | {
-    path: string,
-    type: "slot",
-} | {
-    text: string,
-    type: "markdown",
-} | {
-    label: string,
-    type: "spinner",
-})
 
 export type Variant = ("info" | "success" | "warning" | "error")
 
