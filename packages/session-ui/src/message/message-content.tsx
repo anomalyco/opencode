@@ -1232,11 +1232,7 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div
-        data-slot="text-part-copy-wrapper"
-        data-interrupted={interrupted() ? "" : undefined}
-        data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
-      >
+      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
         <MessageActionButton
           copied={copy.copied()}
           size="small"
