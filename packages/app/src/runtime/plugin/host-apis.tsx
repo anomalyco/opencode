@@ -1,4 +1,3 @@
-import { fitsSidePane } from "../../session/session-panel-width"
 import {
   batch,
   createComputed,
@@ -54,6 +53,7 @@ import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { sessionPaneTab, sessionTabPane, type SessionPane } from "@/shell/state/session-tabs"
 import { terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
+import { fitsSidePane } from "@/session/session-panel-width"
 import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useIsRouting, useLocation } from "@solidjs/router"
