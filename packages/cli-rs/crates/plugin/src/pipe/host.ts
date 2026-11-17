@@ -730,6 +730,17 @@ function resolveEntry(dir: string): { entry: string } | { error: string } | { mi
   return own ? { entry } : { error: `its TUI module ${entry} is outside the plugin's directory` }
 }
 
+// The package a plugin imports that its directory does not hold, said so (js-no-install): Bun runs with auto-install off
+// (`--no-install`, and `install.auto = "disable"` in the JS host's bunfig), so nothing is fetched from npm, and the
+// plugin fails rather than running code nobody installed. Other errors, and a missing relative file, read as Bun says.
+function notInstalled(error: unknown) {
+  const found = /Cannot find (?:package|module) '([^']+)'/.exec(message(error))
+  const name = found?.[1]
+  if (!name || name.startsWith(".") || path.isAbsolute(name) || name.startsWith("file:")) return undefined
+  const pkg = name.startsWith("@") ? name.split("/").slice(0, 2).join("/") : name.split("/")[0]
+  return `it imports the package '${pkg}', which is not installed with the plugin, and opencode-native installs nothing: install the plugin's dependencies in its directory`
+}
+
 // Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
 // routes to it until the host deactivates it, once it registered the candidate. A candidate whose setup throws is
 // dropped, and the running one stays (a reload that fails keeps the previous version).
@@ -837,7 +848,7 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
     // A URL, so a drive letter, `#` or `%` in the path is not read as one.
     module = await import(`${pathToFileURL(entry).href}?generation=${seq}`)
   } catch (error) {
-    return send({ type: "done", seq, error: `cannot load ${target}: ${message(error)}` })
+    return send({ type: "done", seq, error: `cannot load ${target}: ${notInstalled(error) ?? message(error)}` })
   }
   const definition = module?.default
   if (!definition || typeof definition.id !== "string" || !definition.id || typeof definition.setup !== "function")
