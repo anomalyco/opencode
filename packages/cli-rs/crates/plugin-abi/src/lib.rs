@@ -64,6 +64,7 @@ pub mod claim;
 pub mod interact;
 pub mod mail;
 mod schema;
+pub mod task;
 pub mod v2;
 
 pub use mail::{BOUND, SendError, Sender, Spawner, Stop};
@@ -4002,6 +4003,18 @@ impl Setup<'_> {
         Spawner::new(&self.registered.manifest.id, self.registered.link.clone())
     }
 
+    /// What starts the plugin's tasks ([`task`]): handlers that wait for a dialog's answer or a reply in a straight
+    /// line. The first call registers what drives them: two hidden commands, `<id>.task.answer` and
+    /// `<id>.task.closed`, a reply handler, a wake handler and a dispose callback; a later call returns the same tasks.
+    pub fn tasks(&mut self) -> task::Tasks {
+        if let Some(shared) = &self.registered.tasks {
+            return task::tasks(shared);
+        }
+        let shared = task::register(self);
+        self.registered.tasks = Some(shared.clone());
+        task::tasks(&shared)
+    }
+
     /// The host's optional features, for a plugin that uses one when it is there.
     pub fn features(&self) -> &[String] {
         &self.registered.features
@@ -4084,6 +4097,8 @@ pub struct Registered {
     claims: Vec<claim::Claim>,
     /// What the host of the C ABI serves the plugin, read once; `None` in process.
     abi: Option<Abi>,
+    /// The plugin's tasks, once [`Setup::tasks`] registered them.
+    tasks: Option<Rc<task::Shared>>,
 }
 
 /// A registered handler of [`Setup::messages`].

@@ -3,7 +3,8 @@
 //! views ran, how many cards they built, and how many messages arrived. A meter, a canvas below the header, draws the
 //! cards' total as a bar, with the frame it drew for: its version follows the total, and it animates on request,
 //! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
-//! and start threads: one that floods the mailbox, waiting on `Full`, and one that panics. Keys of the route (P2) bump
+//! start a task that awaits a confirm and then a fetch, and start threads: one that floods the mailbox, waiting on
+//! `Full`, and one that panics. Keys of the route (P2) bump
 //! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
 //! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
 //! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
@@ -26,10 +27,11 @@ use std::time::Duration;
 use opencode_plugin_abi::canvas::{List, Style};
 use opencode_plugin_abi::claim::{Claim, Part, State};
 use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Layer, LayerScope, OpenPanel, Overlay};
+use opencode_plugin_abi::task::Cx;
 use opencode_plugin_abi::types::SessionMessageAssistantToolState;
 use opencode_plugin_abi::{
-    Action, Command, Dialog, Host, Layout, Rgba, Select, SelectOption, SendError, Setup, Span, Toast, Variant, Width,
-    v2,
+    Action, Command, Confirm, Dialog, Fetch, Host, Layout, Rgba, Select, SelectOption, SendError, Setup, Span, Toast,
+    Variant, Width, v2,
 };
 
 pub const CARDS: usize = 6;
@@ -105,6 +107,11 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         let _ = spawner.spawn("boom", |_| panic!("the board's thread panicked"));
     });
     setup.command(command("board.toast"), |host, _| host.toast(Toast::new(Variant::Info, "the board says hi")));
+    let (tasks, asked) = (setup.tasks(), board.clone());
+    setup.command(command("board.ask"), move |host, _| {
+        let board = asked.clone();
+        tasks.spawn(host, move |cx| ask(cx, board));
+    });
     setup.command(command("board.panic"), |_, _| panic!("the board's command panicked"));
     let animated = board.clone();
     setup.command(command("board.animate"), move |_, _| {
@@ -159,6 +166,20 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.claim(Claim::tool("board", claimed));
     setup.claim(Claim::fence("board", fenced));
     Ok(())
+}
+
+/// A task: asks whether to count the sessions, waits for the answer, then for the session list, and bumps the last
+/// card for each answer it got; a toast says what each wait gave.
+async fn ask(cx: Cx, board: Rc<RefCell<Board>>) {
+    let answer = cx.confirm(Confirm::ask("Count the sessions?", "The board asks the server.")).await;
+    if answer != Some(true) {
+        return cx.toast(Toast::new(Variant::Info, format!("asked {answer:?}")));
+    }
+    board.borrow_mut().values[CARDS - 1] += 1;
+    let reply = cx.fetch(Fetch::new("GET", "/api/session")).await;
+    let counted = reply.map(|body| body["data"].as_array().map_or(0, Vec::len));
+    board.borrow_mut().values[CARDS - 1] += 1;
+    cx.toast(Toast::new(Variant::Info, format!("asked {answer:?}, counted {counted:?}")));
 }
 
 /// The `files` route and its commands.

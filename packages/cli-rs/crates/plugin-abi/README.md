@@ -138,6 +138,11 @@ start, and its reply is dropped, also when the surface opens again under the sam
 command, an event, a wake, or the mount's begin and end (`Event::Mount`, which the plugin hears, not the mount) is the
 activation's, and its reply comes unless the plugin is disposed first.
 
+A handler that waits for a dialog's answer or a reply can do it in a straight line: `Setup::tasks` starts tasks,
+`async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground` and `blocking` (module
+`task`). Until the host tells a plugin of a request a closed mount cancelled, a task that a mount's call started and
+that waits on that mount's fetch stays parked once the mount closes.
+
 ### The source promise of 2.x
 
 A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carbon-4, big-boi 14). So every type of
