@@ -27,6 +27,7 @@ import { EventEmitter } from "node:events"
 import { homedir } from "node:os"
 import { OpenCode } from "../../../../../../client/src/promise/generated/index"
 import { RGBA, hexToRgb } from "./core"
+import { eventTypes } from "./events.gen"
 import { rendererMethods, rendererPromises } from "./opentui.gen"
 import {
   idOf,
@@ -214,11 +215,22 @@ export function context(base: Base, carrier: Carrier) {
   }
   const routeData = new Map<string, Json>()
 
+  // `data.listen`: every event, as `{ details }`, through one subscription of the plugin to every type the client names,
+  // made with its first listener.
+  const everything = new Set<(event: Json) => unknown>()
+  let subscribed = false
   const data = {
     on: base.data.on,
-    listen() {
-      unsupported("data.listen")
-      return () => {}
+    listen(handler: (event: Json) => unknown) {
+      everything.add(handler)
+      if (!subscribed) {
+        subscribed = true
+        carrier.on(eventTypes, (event) => {
+          for (const listener of [...everything]) listener({ details: event })
+        })
+        carrier.changed()
+      }
+      return () => void everything.delete(handler)
     },
     session: {
       list: () => sessions().map((item) => item.info),

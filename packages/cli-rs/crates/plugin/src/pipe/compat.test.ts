@@ -46,7 +46,10 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     },
     uncommand() {},
     storage() {},
-    on() {},
+    subscriptions: [] as Json[],
+    on(types: string[], handler: (event: Json) => unknown) {
+      fake.subscriptions.push({ types, handler })
+    },
     async effect(request: Json) {
       fake.effects.push(request)
       await turn()
@@ -419,6 +422,23 @@ test("a border draws as OpenTUI's box draws it", () => {
     { color: "#ff0000" },
     undefined,
   ])
+})
+
+// `data.listen` hears every event the client names, as `{ details }`, through one subscription made with its first
+// listener (tokscope marks a session dirty on each); it said it was not supported and heard nothing.
+test("data.listen hears every event", () => {
+  const fake = host()
+  const ctx = plugin("t.listen", fake)
+  const heard: string[] = []
+  const off = ctx.data.listen((event: Json) => heard.push(`a ${event.details.type}`))
+  ctx.data.listen((event: Json) => heard.push(`b ${event.details.data.sessionID}`))
+  expect(fake.subscriptions.length).toBe(1)
+  expect(fake.subscriptions[0].types).toEqual(expect.arrayContaining(["session.deleted", "session.step.ended", "session.status"]))
+  fake.subscriptions[0].handler({ type: "session.step.ended", data: { sessionID: "ses_a" } })
+  off()
+  fake.subscriptions[0].handler({ type: "session.deleted", data: { sessionID: "ses_b" } })
+  expect(heard).toEqual(["a session.step.ended", "b ses_a", "b ses_b"])
+  expect(fake.toasts()).toEqual([])
 })
 
 // CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
