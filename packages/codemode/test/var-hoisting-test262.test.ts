@@ -270,6 +270,20 @@ describe("function declarations and expressions", () => {
       `),
     ).toEqual([true, true, false, "object", "undefined"])
   })
+
+  test("generator and async functions inherit from their own non-callable function prototypes", async () => {
+    expect(
+      await value(`
+        const proto = Object.getPrototypeOf
+        const kinds = [function* () {}, async function* () {}, async function () {}, async () => {}]
+        const protos = kinds.map(proto)
+        let failure
+        try { protos[0]() } catch (error) { failure = error.name }
+        return [protos.map((p) => typeof p), protos.map((p) => proto(p) === Function.prototype), protos[2] === protos[3],
+          protos[0].prototype === proto(kinds[0].prototype), Object.hasOwn(protos[2], "prototype"), failure]
+      `),
+    ).toEqual([["object", "object", "object", "object"], [true, true, true, true], true, true, false, "TypeError"])
+  })
 })
 
 describe("switch case function hoisting", () => {

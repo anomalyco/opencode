@@ -492,16 +492,27 @@ export class Position implements TableCursor {
 
 /** A built-in iterator: a live cursor over a host collection or an iterator helper, yielding program values. */
 export class IteratorObj extends Opaque {
-  override readonly tag = "Iterator"
+  /** The `@@toStringTag` of what it walks: `[object Array Iterator]`, or `[object Iterator]` for a helper. */
+  override readonly tag: string
   constructor(
     proto: Obj,
     readonly cursor: Cursor,
   ) {
     super(proto)
+    this.tag = cursor instanceof Position ? `${iteratedKind(cursor.source)} Iterator` : "Iterator"
   }
   override get describe() {
     return "an iterator"
   }
+}
+
+const iteratedKind = (source: PositionSource): string => {
+  if (typeof source === "string") return "String"
+  if (source instanceof MapObj) return "Map"
+  if (source instanceof SetObj) return "Set"
+  if (source instanceof HeadersObj) return "Headers"
+  if (source instanceof URLSearchParamsObj) return "URLSearchParams"
+  return "Array"
 }
 
 /** A built-in iterator over a collection, e.g. `array.values()`. */

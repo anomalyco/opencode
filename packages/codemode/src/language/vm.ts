@@ -1922,11 +1922,13 @@ export class Vm {
       }
       childCells = arr
     }
-    const fn = new Fn(this.ctx.builtins.Function, childCode, childCells)
-    if ((childCode.flags & CodeFlags.GENERATOR) !== 0) {
-      const isAsync = (childCode.flags & CodeFlags.ASYNC) !== 0
-      define(fn, "prototype", new Obj(isAsync ? this.ctx.builtins.AsyncGenerator : this.ctx.builtins.Generator), hidden)
+    const builtins = this.ctx.builtins
+    const isAsync = (childCode.flags & CodeFlags.ASYNC) !== 0
+    if ((childCode.flags & CodeFlags.GENERATOR) === 0) {
+      return new Fn(isAsync ? builtins.AsyncFunction : builtins.Function, childCode, childCells)
     }
+    const fn = new Fn(isAsync ? builtins.AsyncGeneratorFunction : builtins.GeneratorFunction, childCode, childCells)
+    define(fn, "prototype", new Obj(isAsync ? builtins.AsyncGenerator : builtins.Generator), hidden)
     return fn
   }
 

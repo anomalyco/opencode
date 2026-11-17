@@ -232,7 +232,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
     obj: true,
     constants: { tag: "Generator" },
   },
-  { name: "IteratorObj", ctor: IteratorObj, fields: ["cursor"], obj: true, constants: { tag: "Iterator" } },
+  { name: "IteratorObj", ctor: IteratorObj, fields: ["cursor", "tag"], obj: true },
   { name: "DateObj", ctor: DateObj, fields: ["time"], obj: true, constants: { tag: "Date" } },
   {
     name: "RegExpObj",

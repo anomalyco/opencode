@@ -181,8 +181,10 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
 - [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
 - [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
       `g() instanceof g` holds. Plain functions have none, since they cannot construct.
-- [ ] `GeneratorFunction.prototype`: every function, generator or not, inherits directly from `Function.prototype`,
-      and a generator whose `prototype` was replaced by a non-object still creates from the shared generator prototype.
+- [x] `GeneratorFunction.prototype`, `AsyncGeneratorFunction.prototype`, and `AsyncFunction.prototype`: generator,
+      async generator, and async functions (arrows included) inherit from these non-callable objects, which inherit
+      `Function.prototype`; the generator ones link to the shared generator prototypes through `prototype` and
+      `constructor`. A generator whose `prototype` was replaced by a non-object creates from the shared one.
 - [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
       body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -310,7 +312,7 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
 - [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
-reject }` object.
+reject }` object. The resolvers are anonymous (`name` is `""`) with `length` 1, as every resolving function is.
 - [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
       thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
@@ -396,7 +398,8 @@ reject }` object.
       with `next()` and `[Symbol.iterator]`, as in JS. Iterator objects are opaque references: they print as
       `[opaque reference]`, serialize to `{}`, and cannot be passed to extensions. Every built-in collection iterator
       shares one prototype, where JavaScript gives each collection its own; `Object.getPrototypeOf` shows the
-      difference.
+      difference. `Object.prototype.toString` still reports each one's kind: `[object Array Iterator]`,
+      `[object Map Iterator]`, `[object String Iterator]`, and so on.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] `Array.prototype.toSpliced`.
 - [x] Canonical array/string index parsing: keys such as `"01"` are ordinary properties rather than aliases of index
@@ -543,7 +546,7 @@ reject }` object.
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
-      may return any iterator or an array.
+      may return any iterator or an array. `Set.prototype.keys` is the same function as `values`.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
@@ -668,7 +671,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, and `URIError`, callable with
       or without `new`.
 - [x] `AggregateError` with the `(errors, message?)` signature and an own `errors` array, constructed directly or by
-      an all-rejected `Promise.any`; direct construction accepts custom synchronous iterators and generators.
+      an all-rejected `Promise.any`; direct construction accepts custom synchronous iterators and generators. Without
+      a message it has no own `message`, as in JS, and inherits `""`.
 - [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. `message` is an own
       non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` for a plain error. The
       result boundary still emits `{ name, message, ...own enumerable }`, so a field such as `code` crosses. `cause` is

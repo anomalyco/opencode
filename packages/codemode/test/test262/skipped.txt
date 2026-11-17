@@ -1,4 +1,3 @@
-built-ins/AggregateError/message-undefined-no-prop.js  # explicit Expected SameValue(«true», «false») to be true
 built-ins/Array/S15.4.5.2_A3_T3.js  # RangeError: Invalid array length
 built-ins/Array/from/Array.from_forwards-length-for-array-likes.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/Array/from/elements-deleted-after.js  # TypeError: Cannot read properties of undefined (reading '…').
@@ -872,9 +871,7 @@ built-ins/Array/prototype/values/returns-iterator-from-object.js  # TypeError: A
 built-ins/Array/prototype/with/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/with/length-tolength.js  # TypeError: Array.prototype.with called on incompatible receiver a data object.
 built-ins/Array/prototype/with/this-value-boolean.js  # TypeError: Array.prototype.with called on incompatible receiver a boolean.
-built-ins/ArrayIteratorPrototype/Symbol.toStringTag/value-from-to-string.js  # Expected SameValue(«"[object Array Iterator]"», «"[object Iterator]"») to be true
 built-ins/AsyncFunction/AsyncFunction-construct.js  # TypeError: The Function constructor is not supported; write the function inline.
-built-ins/AsyncFunction/AsyncFunctionPrototype-is-not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
 built-ins/AsyncFunction/instance-construct-throws.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/has-instance.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/instance-await-expr-in-param.js  # TypeError: The Function constructor is not supported; write the function inline.
@@ -931,7 +928,6 @@ built-ins/GeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeError:
 built-ins/GeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
-built-ins/GeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
 built-ins/GeneratorPrototype/throw/from-state-completed.js  # Expected a E but got a TypeError
 built-ins/GeneratorPrototype/throw/from-state-suspended-start.js  # Expected a E but got a TypeError
 built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
@@ -1273,7 +1269,6 @@ built-ins/Promise/resolve/ctx-ctor-throws.js  # Expected a Test262Error to be th
 built-ins/Promise/resolve/resolve-from-promise-capability.js  # callCount after call to resolve() Expected SameValue(«0», «1») to be true
 built-ins/Promise/resolve/resolve-self.js  # $DONE was never called
 built-ins/Promise/try/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-built-ins/Promise/withResolvers/resolvers.js  # Expected SameValue(«"resolve"», «""») to be true
 built-ins/RegExp/S15.10.3.1_A1_T1.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
 built-ins/RegExp/S15.10.3.1_A1_T2.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
 built-ins/RegExp/S15.10.3.1_A1_T3.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
@@ -1309,7 +1304,6 @@ built-ins/Set/prototype/isDisjointFrom/size-is-a-number.js  # TypeError: BigInt 
 built-ins/Set/prototype/isSubsetOf/size-is-a-number.js  # TypeError: BigInt literals are not supported.
 built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js  # Expected SameValue(«4», «1») to be true
 built-ins/Set/prototype/isSupersetOf/size-is-a-number.js  # TypeError: BigInt literals are not supported.
-built-ins/Set/prototype/keys/keys.js  # The value of `Set.prototype.keys` is `Set.prototype.values` Expected SameValue(«keys», «values») to 
 built-ins/Set/prototype/symmetricDifference/size-is-a-number.js  # TypeError: BigInt literals are not supported.
 built-ins/Set/prototype/union/size-is-a-number.js  # TypeError: BigInt literals are not supported.
 built-ins/Set/set-iterable-calls-add.js  # `Set.prototype.add` called twice. Expected SameValue(«0», «2») to be true

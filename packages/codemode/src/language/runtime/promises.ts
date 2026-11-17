@@ -11,8 +11,8 @@ import { finishAwaitReturn } from "../generators.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
-  resolve: new Resolver(ctx.builtins.Function, "resolve", resolving, "resolve"),
-  reject: new Resolver(ctx.builtins.Function, "reject", resolving, "reject"),
+  resolve: new Resolver(ctx.builtins.Function, "", resolving, "resolve"),
+  reject: new Resolver(ctx.builtins.Function, "", resolving, "reject"),
 })
 
 /**
