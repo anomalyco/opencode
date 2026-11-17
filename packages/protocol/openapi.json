@@ -494,14 +494,7 @@
                       "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "ready": {
-                      "anyOf": [
-                        {
-                          "type": "boolean"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "type": "boolean"
                     },
                     "data": {
                       "type": "array",

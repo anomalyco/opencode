@@ -9,6 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { PersistentPty } from "./persistent-pty.js"
 import { Cause, Context, Effect, Exit, Latch, Layer, Logger, Queue, References, Scope, Semaphore } from "effect"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { PluginHost } from "./plugin/host.js"
 import { type Failure, type Generation, Service } from "./plugin/service.js"
 import { State } from "./state.js"
@@ -19,6 +20,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const location = yield* Location.Service
     const scope = yield* Scope.make()
     // One slot per requested definition in activation order, including ones whose setup failed, so
     // the prefix diff below stays index-aligned and a failed revision is not retried until it changes.
@@ -27,8 +29,21 @@ const layer = Layer.effect(
     const ready = yield* Latch.make(true)
     const pending = new Set<object>()
     let closed = false
-    // `plugin.list` reports readiness, so its flips are announced like inventory changes.
-    const announce = bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid)
+    // `plugin.list` reports readiness, so its flips are announced like inventory changes. A failing listener must not
+    // keep a hold pending or end the worker that releases one.
+    const announce = bus
+      .publish(
+        Plugin.Event.Updated,
+        {},
+        { location: { directory: location.directory, workspaceID: location.workspaceID } },
+      )
+      .pipe(
+        Effect.asVoid,
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterrupts(cause),
+          (cause) => Effect.logError("failed to announce plugin readiness", { cause }),
+        ),
+      )
     const holdUnsafe = () => {
       if (closed) return Effect.void
       const token = {}
@@ -42,11 +57,13 @@ const layer = Layer.effect(
     }
     const isReady = Effect.sync(() => pending.size === 0)
     const hold = () =>
-      Effect.suspend(() => {
-        const settled = pending.size === 0
-        const release = holdUnsafe()
-        return settled && !closed ? announce.pipe(Effect.as(release)) : Effect.succeed(release)
-      })
+      Effect.uninterruptible(
+        Effect.suspend(() => {
+          const settled = pending.size === 0
+          const release = holdUnsafe()
+          return settled && !closed ? announce.pipe(Effect.as(release)) : Effect.succeed(release)
+        }),
+      )
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []

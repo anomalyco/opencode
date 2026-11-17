@@ -3333,7 +3333,7 @@ export type AgentGetOutput = { location: LocationPublicRef; data: AgentInfo }
 
 export type PluginListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
-export type PluginListOutput = { location: LocationPublicRef; ready?: boolean | null; data: Array<PluginInfo> }
+export type PluginListOutput = { location: LocationPublicRef; ready?: boolean; data: Array<PluginInfo> }
 
 export type PluginGuiInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined

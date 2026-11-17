@@ -467,8 +467,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     },
     plugin: {
       list: () =>
-        Effect.all([response(plugin.list()), plugin.ready]).pipe(
-          Effect.map(([listed, ready]) => ({ ...listed, ready })),
+        // Readiness first, so a list read after it is never older than a `true`.
+        Effect.all([plugin.ready, response(plugin.list())]).pipe(
+          Effect.map(([ready, listed]) => ({ ...listed, ready })),
         ),
     },
     reference: {

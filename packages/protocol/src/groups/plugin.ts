@@ -1,5 +1,6 @@
 import { Location } from "@opencode/schema/location"
 import { Plugin } from "@opencode/schema/plugin"
+import { optional } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { InvalidRequestError, PluginNotFoundError, ServiceUnavailableError } from "../errors.js"
@@ -15,7 +16,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
          * False while the location's plugins are still loading; lists such as models and agents may be partial. Servers
          * from before this field omit it.
          */
-        ready: Schema.optional(Schema.Boolean),
+        ready: optional(Schema.Boolean),
         data: Schema.Array(Plugin.Info),
       }),
     })
