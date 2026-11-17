@@ -10,7 +10,9 @@ import { Permission } from "../../permission.js"
 export const name = "skill"
 
 export const Input = Schema.Struct({
-  id: Skill.ID.annotate({ description: "The ID of an available skill or a skill explicitly referenced by the user" }),
+  id: Skill.ID.annotate({
+    description: "The ID or name of an available skill or of a skill explicitly referenced by the user",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -20,7 +22,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
   "",
-  "The skill ID must match an available skill or a skill explicitly referenced by the user.",
+  "The skill ID or name must match an available skill or a skill explicitly referenced by the user.",
 ].join("\n")
 
 export const toModelOutput = Skill.toModelOutput

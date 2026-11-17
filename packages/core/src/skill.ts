@@ -107,6 +107,7 @@ export type Editor = {
 }
 
 export interface Interface extends State.Transformable<Editor> {
+  /** Resolves by ID first, then by exact name when exactly one skill carries it. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly files: (id: ID) => Effect.Effect<ReadonlyMap<string, string> | undefined>
   readonly list: () => Effect.Effect<Info[]>
@@ -164,7 +165,15 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        return state.get().skills.get(id)
+        const skills = state.get().skills
+        const byID = skills.get(id)
+        if (byID) return byID
+        // A skill also answers to the name it advertises, so a display name
+        // (e.g. `acme:my-skill`) loads wherever the skill is nested. A name is
+        // not a key: ambiguity resolves to nothing rather than to a guess.
+        const name = String(id)
+        const matches = Array.from(skills.values()).filter((skill) => String(skill.name) === name)
+        return matches.length === 1 ? matches[0] : undefined
       }),
       files: Effect.fn("Skill.files")(function* (id) {
         const current = state.get()
