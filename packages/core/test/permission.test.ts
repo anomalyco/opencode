@@ -381,6 +381,25 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("rejects sibling requests in the same step and leaves another step's request pending", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const ask = (call: string, messageID: string) =>
+        service.ask(
+          assertion({
+            id: Permission.ID.create(`per_${call}`),
+            source: { type: "tool", messageID, id: `call_${call}` },
+          }),
+        )
+      const first = yield* ask("first", "msg_one")
+      yield* ask("sibling", "msg_one")
+      const other = yield* ask("other", "msg_two")
+      yield* service.reply({ requestID: first.id, reply: "reject" })
+      expect((yield* service.list()).map((request) => request.id)).toEqual([other.id])
+    }),
+  )
+
   it.effect("stores and removes saved resources for a project", () =>
     Effect.gen(function* () {
       yield* setup()

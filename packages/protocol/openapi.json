@@ -13659,7 +13659,7 @@
                   "$ref": "#/components/schemas/Job.Kind"
                 }
               ],
-              "description": "Filter by background job kind (shell, subagent, or image)."
+              "description": "Filter by background job kind."
             },
             "required": false
           },
@@ -20812,6 +20812,32 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "Job.CodeMode": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["codemode"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time"],
+        "additionalProperties": false
+      },
       "Job.Image": {
         "type": "object",
         "properties": {
@@ -20854,12 +20880,15 @@
           },
           {
             "$ref": "#/components/schemas/Job.Image"
+          },
+          {
+            "$ref": "#/components/schemas/Job.CodeMode"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image"]
+        "enum": ["shell", "subagent", "image", "codemode"]
       },
       "Job.Shell": {
         "type": "object",

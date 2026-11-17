@@ -20,6 +20,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionEvent } from "@opencode/core/session/event"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -42,7 +43,8 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Effect, Exit, Layer, Logger, Ref, Schedule, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Ref, Schedule, Schema, Scope, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -303,6 +305,99 @@ const waitForReports = Effect.fnUntraced(function* (
     `Session ${sessionID}: expected at least ${count} reports, got ${reports.length}`,
   ).toBeGreaterThanOrEqual(count)
   yield* app.sessions.wait(sessionID)
+})
+
+describe("Code Mode session jobs", () => {
+  const launch = Effect.fnUntraced(function* (enabled: boolean) {
+    const h = yield* harness({ config: { experimental: { full_codemode: enabled } } })
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    yield* h.registry.transform((editor) =>
+      editor.add({
+        name: "hold",
+        description: "Wait for release",
+        input: Schema.Struct({}),
+        execute: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.as({ content: "done" }),
+          ),
+      }),
+    )
+    yield* h.llm.push(
+      TestLLM.toolCall("call-execute", "execute", {
+        code: 'const prefix = "result: "; return prefix + await tools.hold({})',
+      }),
+      TestLLM.text("Finished the step", "receipt"),
+      TestLLM.text("Received the result", "ack"),
+    )
+    yield* h.sessions.prompt({ sessionID: h.parent.id, text: "Run the script" })
+    yield* Deferred.await(started)
+    const state = h.sessions
+      .context(h.parent.id)
+      .pipe(
+        Effect.map((messages) =>
+          messages
+            .flatMap((message) => (message.type === "assistant" ? message.content : []))
+            .find((part) => part.type === "tool" && part.id === "call-execute"),
+        ),
+      )
+    return { h, state, release: Deferred.succeed(release, undefined), idle: h.sessions.wait(h.parent.id) }
+  })
+
+  for (const [name, enabled] of [
+    ["a fast script returns normally", true],
+    ["a slow script stays in the foreground with the flag off", false],
+  ] as const) {
+    e2e.effect(name, () =>
+      Effect.gen(function* () {
+        const s = yield* launch(enabled)
+        if (!enabled) {
+          yield* TestClock.adjust("11 seconds")
+          expect(yield* s.state).toMatchObject({ state: { status: "running" } })
+        }
+        yield* s.release
+        yield* s.idle
+        expect(yield* s.state).toMatchObject({
+          state: { status: "completed", content: [{ type: "text", text: "result: done" }] },
+        })
+        expect(yield* s.h.jobs.pendingBackground).toEqual([])
+      }),
+    )
+  }
+
+  e2e.effect("a slow script returns a receipt, then wakes its session with the result", () =>
+    Effect.gen(function* () {
+      const s = yield* launch(true)
+      yield* TestClock.adjust("10 seconds")
+      yield* s.idle
+      const [job] = yield* s.h.jobs.pendingBackground
+      expect(job).toMatchObject({ status: "running", recovery: { kind: "codemode", sessionID: s.h.parent.id } })
+      expect(yield* s.state).toMatchObject({
+        state: {
+          status: "completed",
+          content: [
+            { type: "text", text: `Script ${job.id} is still running; its result will arrive in this session.` },
+          ],
+        },
+      })
+      const delivered = yield* Context.get(s.h.context, Bus.Service)
+        .subscribe(SessionEvent.InboxDelivered)
+        .pipe(
+          Stream.filter((event) => event.data.inboxID === job.notificationID),
+          Stream.runHead,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      yield* s.release
+      yield* Fiber.join(delivered)
+      yield* s.idle
+      expect(yield* s.h.jobs.pendingBackground).toEqual([])
+      const text = `<codemode id="${job.id}" state="completed">\nresult: done\n</codemode>`
+      expect((yield* s.h.llm.requests()).at(-1)?.messages).toContainEqual(
+        expect.objectContaining({ content: expect.arrayContaining([expect.objectContaining({ type: "text", text })]) }),
+      )
+    }),
+  )
 })
 
 describe("subagent idle reports end to end", () => {

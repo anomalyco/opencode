@@ -43,10 +43,10 @@ export function formatBody(
 ): string {
   if (!background || background.length === 0) return body
   const lines = background.map((item) => {
-    if (item.kind === "shell")
-      return `- shell (${item.shellID}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${clean(item.command)}`
-    if (item.kind === "image")
-      return `- image (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
+    const location = item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""
+    if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
+    if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
+    if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
     return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
   })
   return `${body}${STILL_RUNNING}${lines.join("\n")}`
