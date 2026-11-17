@@ -28,8 +28,5 @@ const measure = async (name: string, work: () => unknown) => {
   )
 }
 
-await measure(
-  "runtime",
-  () => new Interpreter({ builtins: createBuiltins() }),
-)
+await measure("runtime", () => new Interpreter({ builtins: createBuiltins() }))
 await measure("trivial program", () => Effect.runPromise(runtime.execute("return 1")))

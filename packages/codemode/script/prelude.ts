@@ -23,5 +23,8 @@ export const compileBuiltins = () =>
   )
 
 if (import.meta.main) {
-  await Bun.write(new URL("../src/language/prelude/bytecode.json", import.meta.url), `${JSON.stringify(compileBuiltins())}\n`)
+  await Bun.write(
+    new URL("../src/language/prelude/bytecode.json", import.meta.url),
+    `${JSON.stringify(compileBuiltins())}\n`,
+  )
 }

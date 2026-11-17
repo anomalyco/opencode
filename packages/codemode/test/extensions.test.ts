@@ -655,7 +655,10 @@ describe("configuration", () => {
       "contains a function, which cannot be passed to the host",
     )
     expect(
-      await value(`const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`, tools),
+      await value(
+        `const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`,
+        tools,
+      ),
     ).toEqual({ status: 200, ok: true })
   })
 

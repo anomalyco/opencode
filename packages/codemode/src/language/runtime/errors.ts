@@ -1,4 +1,12 @@
-import { type AstNode, type Diagnostic, formatLocation, HostFailure, PendingThrow, Throw, sourceLocation } from "./model.js"
+import {
+  type AstNode,
+  type Diagnostic,
+  formatLocation,
+  HostFailure,
+  PendingThrow,
+  Throw,
+  sourceLocation,
+} from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"

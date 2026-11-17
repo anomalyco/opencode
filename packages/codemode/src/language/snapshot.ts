@@ -195,9 +195,7 @@ export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snap
     )
   }
   if (header.hosts !== hostsId(ctx)) {
-    throw new SnapshotError(
-      "This state was saved by a runtime with other host globals; resume it with the same ones.",
-    )
+    throw new SnapshotError("This state was saved by a runtime with other host globals; resume it with the same ones.")
   }
   for (const source of header.sources) {
     if (hash(source.code) !== source.hash) throw new SnapshotError(`Source ${source.id} does not match its hash.`)

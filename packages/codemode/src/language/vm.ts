@@ -100,13 +100,7 @@ import {
   resumeVmGenerator,
   unwindGenerator,
 } from "./generators.js"
-import {
-  BLOCK,
-  ENTERED,
-  type HostResult,
-  HostCalls,
-  VISIT_BUDGET,
-} from "./host.js"
+import { BLOCK, ENTERED, type HostResult, HostCalls, VISIT_BUDGET } from "./host.js"
 import {
   getInternalPrelude,
   internalCode,

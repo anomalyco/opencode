@@ -70,7 +70,10 @@ describe("Host.fn", () => {
       }),
     })
     expect(
-      await value(runtime, `const r = keep({ at: new Date(5), m: new Map([["k", 1]]) }); return [r.when.getTime(), r.tags.has("a"), r.read()]`),
+      await value(
+        runtime,
+        `const r = keep({ at: new Date(5), m: new Map([["k", 1]]) }); return [r.when.getTime(), r.tags.has("a"), r.read()]`,
+      ),
     ).toEqual([0, true, "called"])
     expect(seen).toEqual({ at: new Date(5), m: new Map([["k", 1]]) })
   })
@@ -97,12 +100,9 @@ describe("Host.namespace and Host.fail", () => {
   })
 
   test("a namespace is a lazy, path-addressed object of functions", async () => {
-    expect(await value(runtime, `return [await api.issues.list(), Object.keys(api), Object.keys(api.issues), typeof api.x]`)).toEqual([
-      ["#1"],
-      ["issues"],
-      ["list"],
-      "function",
-    ])
+    expect(
+      await value(runtime, `return [await api.issues.list(), Object.keys(api), Object.keys(api.issues), typeof api.x]`),
+    ).toEqual([["#1"], ["issues"], ["list"], "function"])
   })
 
   test("a missing function and a host failure keep their kind and suggestions", async () => {

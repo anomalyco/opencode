@@ -20,7 +20,6 @@ import { isNamespace, type Namespace } from "./namespace.js"
 import { type Durable, type ExecuteFn, isTool, type Tool, type ToolContext } from "./tool.js"
 import type { Tools } from "./tools.js"
 
-
 export type Services<T> = ServicesOf<T, []>
 
 type ServicesOf<T, Depth extends ReadonlyArray<unknown>> = Depth["length"] extends 8
@@ -580,7 +579,9 @@ const toolRuntimeError = (
 
 // A ToolError (a tool's failure, or a hook's) is reported as `ToolFailure`.
 const diagnosed = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
-  Effect.mapError(effect, (error) => (error instanceof ToolError ? new HostFailure("ToolFailure", error.message) : error))
+  Effect.mapError(effect, (error) =>
+    error instanceof ToolError ? new HostFailure("ToolFailure", error.message) : error,
+  )
 
 /** What a run keeps in `run.metadata`: its tool-call budget and the calls admitted so far, by key. */
 type State = {
@@ -612,7 +613,10 @@ export const globals = <R>(
   const admit = (name: string, key: string, again: boolean): void => {
     if (again && state.calls.some((call) => call.key === key)) return
     if (state.maxToolCalls !== null && state.calls.length >= state.maxToolCalls) {
-      throw toolRuntimeError("ToolCallLimitExceeded", `Execution exceeded its tool-call limit of ${state.maxToolCalls}.`)
+      throw toolRuntimeError(
+        "ToolCallLimitExceeded",
+        `Execution exceeded its tool-call limit of ${state.maxToolCalls}.`,
+      )
     }
     state.calls.push({ name, key })
   }

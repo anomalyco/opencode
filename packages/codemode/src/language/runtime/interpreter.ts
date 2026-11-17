@@ -130,5 +130,4 @@ export class Interpreter<R> {
   node(id: NodeId): AstNode | undefined {
     return this.sources.get(id.source)?.node(id)
   }
-
 }

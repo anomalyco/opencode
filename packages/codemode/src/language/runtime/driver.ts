@@ -180,7 +180,10 @@ export class Driver<R> {
   private wait(call: HostCall): void {
     const fn = this.function(call)
     if (!(fn instanceof DurableFn)) return
-    this.fork(call.id, Effect.suspend(() => fn.wait(call.data as Json, this.context(call))))
+    this.fork(
+      call.id,
+      Effect.suspend(() => fn.wait(call.data as Json, this.context(call))),
+    )
   }
 
   // The call's host function: the one it was made with, or, in a restored run, the one at its path now.

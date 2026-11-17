@@ -103,7 +103,6 @@ export const hostGlobals = <R>(
     return copied
   }
 
-
   const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), place: Place = {}): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
@@ -115,7 +114,8 @@ export const hostGlobals = <R>(
       }
     }
     if (value instanceof Fn || value instanceof DurableFn) {
-      const owner = value instanceof Fn && value.snapshot !== undefined && place.global !== undefined ? label : undefined
+      const owner =
+        value instanceof Fn && value.snapshot !== undefined && place.global !== undefined ? label : undefined
       return wrap(value, label, { label, path: place.global, owner })
     }
     if (typeof value === "function") {
@@ -264,7 +264,8 @@ export const hostGlobals = <R>(
     const named = source ?? (fn instanceof Fn ? fn.run : undefined)
     const own: unknown = named?.name
     // A host function made inline has no name of its own: it is named by where it is.
-    const name = source === undefined && (typeof own !== "string" || own === "") ? label.slice(label.lastIndexOf(".") + 1) : own
+    const name =
+      source === undefined && (typeof own !== "string" || own === "") ? label.slice(label.lastIndexOf(".") + 1) : own
     const length: unknown = named?.length ?? 0
     return native(builtins, {
       runtime: "host",
@@ -354,7 +355,9 @@ export const hostGlobals = <R>(
     decode: (owner, data) => {
       const root = hostStep(owner, "restore", () => hooks(owner).decode(data))
       if ((typeof root !== "object" && typeof root !== "function") || root === null) {
-        throw new SnapshotError(`The host function ${owner} restored a value it returned as ${typeof root}, not an object.`)
+        throw new SnapshotError(
+          `The host function ${owner} restored a value it returned as ${typeof root}, not an object.`,
+        )
       }
       return root
     },

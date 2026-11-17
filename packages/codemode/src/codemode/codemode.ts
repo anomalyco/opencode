@@ -296,7 +296,12 @@ export function make<
  * An extension's global as host functions: each function, at any depth of a global object, fires the extension hooks
  * around its calls and saves the values it returns with the extension's `snapshot` hooks. Other values pass as they are.
  */
-const extensionValue = <R>(extension: Extension, label: string, value: unknown, hooks: ToolRuntime.Hooks<R>): unknown => {
+const extensionValue = <R>(
+  extension: Extension,
+  label: string,
+  value: unknown,
+  hooks: ToolRuntime.Hooks<R>,
+): unknown => {
   if (typeof value === "function") return extensionFunction(extension, label, value, hooks)
   if (typeof value !== "object" || value === null) return value
   const prototype = Object.getPrototypeOf(value)

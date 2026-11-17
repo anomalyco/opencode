@@ -85,7 +85,12 @@ export class HostCalls {
    * call is queued and the program gets its promise; a failure crossing rejects it. Any other is called now: its value
    * crosses back at once, a Promise it returned is a promise, and an Effect blocks the job until it completes.
    */
-  call(fn: Fn<unknown> | DurableFn<unknown>, values: Array<Value>, site: AstNode | undefined, target: HostTarget): HostResult {
+  call(
+    fn: Fn<unknown> | DurableFn<unknown>,
+    values: Array<Value>,
+    site: AstNode | undefined,
+    target: HostTarget,
+  ): HostResult {
     const hosts = this.ctx.hosts!
     if (fn instanceof DurableFn || fn.type === "async") {
       const resolving = this.promises.resolving(this.promises.newPromise(), site)
