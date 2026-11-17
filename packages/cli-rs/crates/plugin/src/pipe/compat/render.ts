@@ -254,11 +254,23 @@ export class VNode {
     return [...this.children]
   }
 
-  // OpenTUI's renderables take the props a plugin assigns to a ref as their own. A renderable the plugin built itself
-  // (`new BoxRenderable(…)`) is inert and draws nothing, so adding one adds nothing (CT-15: opencode-quick-quote).
+  // OpenTUI's renderables take the props a plugin assigns to a ref as their own, and the children it adds. A renderable
+  // the plugin built with `new` is one of the layer's (`renderables.ts`, contract 2.x, step D) and draws; anything
+  // else is no renderable, and adding it adds nothing.
   add(child: VNode, index?: number) {
     if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("a renderable built with new")
     insertNode(this, child, index === undefined ? undefined : this.children[index])
+  }
+
+  insertBefore(child: VNode, anchor?: VNode) {
+    if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("a renderable built with new")
+    insertNode(this, child, anchor instanceof VNode ? anchor : undefined)
+  }
+
+  // OpenTUI's `remove(id)`: the child with that id goes.
+  remove(id: string) {
+    const child = this.children.find((node) => node.props.id === id)
+    if (child) remove(this, child)
   }
 }
 
@@ -276,6 +288,29 @@ for (const name of [
   "title",
   "wrapMode",
   "truncate",
+  // A renderable built with `new` takes its layout and look the same way (contract 2.x, step D).
+  "flexDirection",
+  "flexGrow",
+  "flexShrink",
+  "alignItems",
+  "justifyContent",
+  "gap",
+  "padding",
+  "paddingX",
+  "paddingY",
+  "paddingLeft",
+  "paddingRight",
+  "paddingTop",
+  "paddingBottom",
+  "margin",
+  "marginLeft",
+  "marginRight",
+  "marginTop",
+  "marginBottom",
+  "border",
+  "borderStyle",
+  "filetype",
+  "placeholder",
 ]) {
   Object.defineProperty(VNode.prototype, name, {
     // A renderable's `width` and `height` are its layout, as the host laid it out, once the host said (CT-24): a
@@ -541,6 +576,14 @@ export function serialize(root: VNode, reading: Reading): Json {
   })
 }
 
+// A code block's tree (contract 2.x, step D): the renderable a renderer returned, as the node it is.
+export function claimTree(root: VNode, reading: Reading): Json {
+  return root.props.visible === false ? compact({ type: "box", children: [] }) : node(root, reading)
+}
+
+// The props of a node's layout ([`layoutOf`]).
+const LAYOUT = new Set(["width", "height", "minWidth", "minHeight", "maxHeight", "flexGrow", "flexShrink", "margin", "marginX", "marginY", "marginLeft", "marginRight", "marginTop", "marginBottom", "position", "top", "right", "bottom", "left", "zIndex"])
+
 // A 2.0 tree as the nodes of ABI 1.x a panel dialog's body takes: a scroll is a box (the panel's body scrolls), a code
 // view and a field their text, and the ids go.
 export function legacy(node: Json): Json {
@@ -600,6 +643,11 @@ function node(at: VNode, reading: Reading): Json {
       })
     case "markdown":
       return compact({ type: "markdown", source: { text: String(props.content ?? "") } })
+    // A code block's `defaultRender()` (contract 2.x, step D): the host's own code view of the fence, in `bg`.
+    case "fence":
+      for (const name of Object.keys(props).filter((name) => name !== "bg" && !LAYOUT.has(name)))
+        reading.dropped.add(`a code block's default render ${name}`)
+      return compact({ type: "fence", bg: color(props.bg), layout })
     // The TS TUI's `<spinner>` (CT-14) is the contract's, without a label: the host's frames, pace and color.
     case "spinner":
       for (const name of ["frames", "interval", "color", "backgroundColor", "autoplay"])
@@ -784,7 +832,9 @@ function clickOf(at: VNode, reading: Reading) {
   if (typeof handler !== "function") return undefined
   // The contract runs one click a node: the press, when there is one (carbon-4).
   if (down && up) reading.dropped.add("onMouseUp beside onMouseDown")
-  return { action: reading.press(at, handler, down ? "down" : "up"), on: down ? "down" : "up" }
+  // A tree with no handler (a code block's) has no click to run.
+  const action = reading.press(at, handler, down ? "down" : "up")
+  return action === undefined ? undefined : { action, on: down ? "down" : "up" }
 }
 
 function layoutOf(props: Json, reading: Reading) {

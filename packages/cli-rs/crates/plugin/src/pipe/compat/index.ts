@@ -9,6 +9,7 @@ import * as core from "./core"
 import { exports } from "./inert"
 import * as jsx from "./jsx"
 import * as render from "./render"
+import { BoxRenderable, CodeRenderable, InputRenderable, MarkdownRenderable, ScrollBoxRenderable, TextRenderable } from "./renderables"
 import { context, PluginContext, reported } from "./v2"
 
 // `@opentui/solid`'s `Dynamic`: a component or an intrinsic, chosen by `component`.
@@ -87,7 +88,16 @@ export const modules: Record<string, Record<string, unknown>> = {
   // A local module without the pragma compiles for React's runtime; it gets OpenTUI's (TS compiles it with Solid's).
   "react/jsx-runtime": jsx,
   "react/jsx-dev-runtime": jsx,
-  "@opentui/core": exports("core", core),
+  // With the renderables a plugin builds with `new` (contract 2.x, step D).
+  "@opentui/core": exports("core", {
+    ...core,
+    BoxRenderable,
+    TextRenderable,
+    MarkdownRenderable,
+    CodeRenderable,
+    ScrollBoxRenderable,
+    InputRenderable,
+  }),
   "@opencode/plugin/tui": plugin,
   // The definition of a plugin's own server RPC, which its TUI part calls through `client.rpc` (CT-4).
   "@opencode/plugin/rpc": { Rpc },

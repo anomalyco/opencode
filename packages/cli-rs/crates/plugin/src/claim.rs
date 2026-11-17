@@ -13,6 +13,10 @@
 //! - for every part of the plugin, once a view panicked: the plugin fails, and the host mounts the route again
 //!   without its claims, as it does when the user disables or reloads it.
 //!
+//! A view on the pipe answers after the frame (contract 2.x, step D): it says "not yet" ([`Viewed::Pending`]), what
+//! shows stays (the host's row for a part's first view), and the tree is taken in a later view, which the JS host's
+//! answer asks for by waking the plugin's parts; a view at a paint that takes it swaps the rows as below.
+//!
 //! A revision that changes the part's phase ([`abi::claim::Phase`]) is viewed at once, as is a part's first. One that
 //! only streams new content is viewed as the next paint starts, with the newest content then, and the row that shows
 //! stays until then; a wake of the plugin or a handler of it that ran before that paint joins that one view, which
@@ -42,6 +46,8 @@ use opencode_plugin_abi::v2::{self, ContentRef, Node, Source};
 use opencode_plugin_abi::{self as abi};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
+use opentui::style::Color;
+use opentui::widget::MarkdownColors;
 
 use crate::Host;
 use crate::activation::{Activation, Drawn};
@@ -80,6 +86,9 @@ pub(crate) enum Viewed {
     Overran,
     /// It panicked, its result was refused, or its plugin is no longer called.
     Failed,
+    /// Not yet: the view answers after the frame, and what shows stays until it does (the pipe's, contract 2.x, step D).
+    #[cfg_attr(not(feature = "ts"), allow(dead_code))]
+    Pending,
 }
 
 /// A claim's view in process: the plugin's own function, as one call of it, on the mount's memo table in the host.
@@ -464,6 +473,11 @@ impl Core {
         for full in [whole, true] {
             let attempt = self.call_view(host, &theme, full);
             let accepted = match attempt.viewed {
+                // What shows stays: the host's row, or the tree the last answer gave, until the answer comes.
+                Viewed::Pending => {
+                    self.state.borrow_mut().memo = attempt.memo;
+                    return self.shows.get();
+                }
                 Viewed::Failed => None,
                 Viewed::Overran => {
                     log::warn!("claim {} took over the call limit on part {}", self.id.surface, self.id.key);
@@ -666,11 +680,14 @@ impl Core {
         // A fence claim's tree may show the host's code view of its part once, with the newest revision.
         // Read as the node is built, with no copy of the part: a tool call's mount has no code view.
         let code = self.fence.borrow().clone();
-        let fence_view = || match (&code, &*self.part.borrow()) {
-            (Some(code), Some(Part::Fence(fence))) => Some(code.show(fence).as_any()),
+        let fence_view = |bg: Option<Color>| match (&code, &*self.part.borrow()) {
+            (Some(code), Some(Part::Fence(fence))) => {
+                code.bg.set(bg);
+                Some(code.show(fence).as_any())
+            }
             _ => None,
         };
-        let fence: Option<&dyn Fn() -> Option<AnyWidget>> = code.is_some().then_some(&fence_view);
+        let fence: Option<&dyn Fn(Option<Color>) -> Option<AnyWidget>> = code.is_some().then_some(&fence_view);
         // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
         // and hover events reach none, and its clicks run through `act` (P1).
         let env = Env {
@@ -930,14 +947,18 @@ struct FenceCode {
     app: App,
     holder: View,
     look: RefCell<(Theme, bool)>,
+    /// The background its code is on: a fence node's (TS's `defaultRender().bg`, contract 2.x, step D: good-fences
+    /// moves it onto its box's), else the transcript's.
+    bg: Cell<Option<Color>>,
     code: RefCell<Option<Code>>,
 }
 
-/// The source a code view shows, in a theme and a concealment.
+/// The source a code view shows, in a theme, a concealment and a background.
 struct Code {
     markdown: opentui::widget::Markdown,
     source: String,
     look: (Theme, bool),
+    bg: Option<Color>,
 }
 
 impl FenceCode {
@@ -946,19 +967,26 @@ impl FenceCode {
             app: app.clone(),
             holder: View::new(app).column().shrink(0.0),
             look: RefCell::new(look),
+            bg: Cell::new(None),
             code: RefCell::default(),
         })
     }
 
-    /// The holder, showing `fence` in the last look.
+    /// The holder, showing `fence` in the last look, on the background last given.
     fn show(&self, fence: &FencePart) -> View {
         let marker = delimiter(&fence.info, &fence.code);
         let close = if fence.closed { format!("\n{marker}") } else { String::new() };
         let source = format!("{marker}{}\n{}{close}", fence.info, fence.code);
-        let look = self.look.borrow().clone();
+        let (look, bg) = (self.look.borrow().clone(), self.bg.get());
         let mut code = self.code.borrow_mut();
         match code.as_mut() {
             Some(code) if code.look == look => {
+                if code.bg != bg {
+                    let (theme, _) = &look;
+                    let colors = opencode_ui::markdown::view_colors(theme, &opencode_ui::code::syntax_theme(theme));
+                    code.markdown.colors(MarkdownColors { code_bg: bg.unwrap_or(colors.code_bg), ..colors });
+                    code.bg = bg;
+                }
                 if code.source != source {
                     code.markdown.set_markdown(source.clone());
                     code.source = source;
@@ -969,12 +997,15 @@ impl FenceCode {
                 let (theme, conceal) = &look;
                 let syntax = opencode_ui::code::syntax_theme(theme);
                 let renderers = opencode_ui::markdown::CodeBlockRenderers::default();
-                let markdown = opencode_ui::markdown::view(&self.app, theme, &syntax, &renderers, *conceal, true)
-                    .set_markdown(source.clone())
-                    .streaming(fence.streaming);
+                let markdown = opencode_ui::markdown::view(&self.app, theme, &syntax, &renderers, *conceal, true);
+                if let Some(bg) = bg {
+                    let colors = opencode_ui::markdown::view_colors(theme, &syntax);
+                    markdown.colors(MarkdownColors { code_bg: bg, ..colors });
+                }
+                let markdown = markdown.set_markdown(source.clone()).streaming(fence.streaming);
                 self.holder.clear();
                 self.holder.add(&markdown);
-                *code = Some(Code { markdown, source, look });
+                *code = Some(Code { markdown, source, look, bg });
             }
         }
         self.holder.clone()
@@ -1011,6 +1042,10 @@ impl Fence {
         }
         let part = self.core.part.borrow();
         let Some(Part::Fence(fence)) = &*part else { return };
+        // The host's own row is on the transcript's background; a fence node's on the one its tree gave.
+        if !shows {
+            self.code.bg.set(None);
+        }
         let holder = self.code.show(fence);
         if shows {
             return;

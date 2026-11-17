@@ -644,8 +644,19 @@ trees (`memo`, nested too, `content`, `release`, a box's `visible`, a keep of th
 route, a slot, a panel or an overlay, and whose `on` hears each mount begin and end with `mounts` (P6a). A view's
 input has a slot surface's `slot` and no `changed`: the JS host views again when what the plugin watches changes;
 `layer(layer, handler)`;
+`claim(target, view)`, a renderer claim (contract 2.x, step D), whose `view(part)` returns a whole tree for the part,
+`null` to decline, or throws to fall the part back, and which the returned function ends;
 `command`, `on`, `storage(keys)`, `effect` (any host request, P2's `open-panel`, `overlay`, `focus`, `set-mode`,
 `release-keys` among them), `watch`/`unwatch`/`read` (snapshots, at most 128), `invalidate`, `fetch`.
+
+A renderer claim on the JS host answers after the frame (`Down::Claim` carries the part; the JS host answers with a
+revision of the part's mount, one in flight a mount). The claim core's third answer, "not yet"
+(`claim::Viewed::Pending`), keeps what shows: the host's code view of a fence until the first tree comes, then the last
+tree while a newer part is in flight; the tree is adopted in a later view, which the JS host's revision asks for by
+waking the plugin's parts. A renderer that throws falls that part back for its mount, and the plugin stays active. The
+host's bounds: 256 claims a plugin, and a fence over 256 KiB keeps the host's code view; a part waits, unsent, while
+the queue to the JS host is backed up, and goes as it drains. The layer's `markdown.registerCodeBlockRenderer` is such
+a fence claim; a `fence` node's `bg` is its code's background too, as TS's `defaultRender().bg`.
 `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file.
 
 To debug a TypeScript plugin, read the log (`opencode.log` in the `log` directory that `opencode-native debug paths`

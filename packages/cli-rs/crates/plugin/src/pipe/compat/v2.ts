@@ -27,10 +27,12 @@ import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { EventEmitter } from "node:events"
 import { homedir } from "node:os"
 import { OpenCode } from "../../../../../../client/src/promise/generated/index"
-import { RGBA, hexToRgb } from "./core"
+import { RGBA, hexToRgb, infoStringToFiletype } from "./core"
 import { eventTypes } from "./events.gen"
 import { rendererMethods, rendererPromises } from "./opentui.gen"
+import { FenceRenderable } from "./renderables"
 import {
+  claimTree,
   idOf,
   legacy,
   missing,
@@ -41,7 +43,7 @@ import {
   type Mounted,
   type Screen,
   type Scrolls,
-  type VNode,
+  VNode,
 } from "./render"
 
 type Json = any
@@ -107,6 +109,9 @@ export interface Carrier {
   fetch(request: Json): Promise<Json>
   palette(): { mode: string; colors: Record<string, string> }
   changed(): void
+  // A renderer claim (contract 2.x, step D): `view` draws a part of `target`, a whole tree each time, or declines
+  // (`null`); a throw falls the part back. The returned function ends the claim.
+  claim?(target: Json, view: (part: Json) => Json): () => void
 }
 
 export interface Base {
@@ -131,6 +136,43 @@ export function context(base: Base, carrier: Carrier) {
     if (seen.has(feature)) return
     seen.add(feature)
     void carrier.effect({ type: "log", level: "warn", message })
+  }
+
+  // Contract 2.x, step D: the code blocks the plugin renders, by filetype, and one part's tree. The renderer gets the
+  // fence as OpenTUI's Markdown gives it (`token`: `lang`, `text`, `raw`) and a context whose `defaultRender()` is the
+  // host's own code view of it. It returns a renderable the layer built (`renderables.ts`), or nothing to decline. What
+  // the layer reports, and a throw's toast, go once its view returned: a claim's view asks the host for nothing.
+  const codeBlocks = new Set<string>()
+  const codeBlock = (language: string, render: (token: Json, context: Json) => unknown, part: Json) => {
+    const info = String(part.info ?? "")
+    const raw = "```" + info + "\n" + String(part.code ?? "") + (part.closed ? "\n```" : "")
+    const token = { type: "code", raw, lang: info.trim() || undefined, text: String(part.code ?? "") }
+    const context = { conceal: true, concealCode: false, defaultRender: () => new FenceRenderable() }
+    let drawn: unknown
+    try {
+      drawn = render(token, context)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      queueMicrotask(() => {
+        void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in code block ${language}: ${message}` })
+      })
+      throw error
+    }
+    if (drawn === undefined || drawn === null) return null
+    if (!(drawn instanceof VNode)) {
+      queueMicrotask(() => unsupported("a code block's renderable built outside @opentui/core's classes"))
+      return null
+    }
+    const dropped = new Set<string>()
+    const tree = claimTree(drawn, {
+      press: () => {
+        dropped.add("a click in a code block")
+        return undefined
+      },
+      dropped,
+    })
+    if (dropped.size) queueMicrotask(() => dropped.forEach((feature) => unsupported(feature)))
+    return tree
   }
 
   // Reads: a watch per key, a signal per key that a snapshot bumps, and whether the render that runs read one the host
@@ -1208,10 +1250,22 @@ export function context(base: Base, carrier: Carrier) {
     get themeMode() {
       return base.themeMode
     },
+    // Contract 2.x, step D: a renderer of the fences whose info string resolves to `language`, as TS's, a fence claim
+    // of the host's. A language registered twice by the plugin throws, as in TS; across plugins the last wins.
     markdown: {
-      registerCodeBlockRenderer() {
-        unsupported("markdown.registerCodeBlockRenderer")
-        return () => {}
+      registerCodeBlockRenderer(language: string, render: (token: Json, context: Json) => unknown) {
+        const name = infoStringToFiletype(language)
+        if (!name) throw new Error("Markdown code-block language is required")
+        if (codeBlocks.has(name)) throw new Error(`Markdown code-block renderer already registered: ${name}`)
+        if (!carrier.claim) {
+          unsupported("markdown.registerCodeBlockRenderer")
+          return () => {}
+        }
+        codeBlocks.add(name)
+        const end = carrier.claim({ type: "fence", name }, (part) => codeBlock(name, render, part))
+        return () => {
+          if (codeBlocks.delete(name)) end()
+        }
       },
     },
     keymap: {

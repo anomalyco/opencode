@@ -229,8 +229,9 @@ pub struct Env<'a> {
     /// The tree is a list item's: the list's tree counted its nodes, so it counts only the rows it builds.
     pub item: bool,
     /// The host's own code view of the claimed fence, for a [`Node::Fence`] of a fence claim's tree, which the host
-    /// keeps current with no view; `None` elsewhere, where the host refuses a fence node.
-    pub fence: Option<&'a dyn Fn() -> Option<AnyWidget>>,
+    /// keeps current with no view, on the node's background (its code's too, as TS's `defaultRender().bg`); `None`
+    /// elsewhere, where the host refuses a fence node.
+    pub fence: Option<&'a dyn Fn(Option<Color>) -> Option<AnyWidget>>,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -2301,12 +2302,13 @@ impl Pass<'_, '_> {
             }
             Node::Fence { bg, layout, .. } => {
                 let view = View::new(app).column().shrink(0.0);
-                if let Some(bg) = color(theme, bg.as_ref()) {
+                let bg = color(theme, bg.as_ref());
+                if let Some(bg) = bg {
                     view.bg(bg);
                 }
                 lay_out(&view, layout);
                 // Validation admitted the node only where the host has the fence's code view.
-                if let Some(code) = env.fence.and_then(|fence| fence()) {
+                if let Some(code) = env.fence.and_then(|fence| fence(bg)) {
                     view.add(&code);
                 }
                 (view.as_any(), Extra::Fence(view))
