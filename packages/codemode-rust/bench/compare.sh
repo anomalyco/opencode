@@ -28,7 +28,7 @@ ratio() { # numerator, denominator, [printf format]
 }
 
 echo "building release binaries" >&2
-cargo build --release -p psychoscript-bench --bin psychoscript-bench --example embed >&2 || echo "Rust build failed" >&2
+cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --example embed >&2 || echo "Rust build failed" >&2
 
 # (a) Per-case median and min.
 echo "(a) reference bench" >&2
@@ -204,7 +204,7 @@ $TABLE_F
 
 \`\`\`sh
 bash bench/compare.sh  # reference at ../codemode, or CODEMODE_REF=<codemode package dir>
-cargo build --release -p psychoscript-bench --bin psychoscript-bench --example embed
+cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --example embed
 # (a)
 (cd ../codemode && bun run script/bench.ts --iterations $ITERATIONS)
 target/release/psychoscript-bench --filter <slug> --iterations $ITERATIONS --json
