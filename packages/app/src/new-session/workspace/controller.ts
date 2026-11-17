@@ -16,7 +16,16 @@ import {
   workspaceSelectionDirectories,
 } from "@/workspaces/paths"
 
-export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
+export function resolveNewSessionWorktree(input: {
+  enabled: boolean
+  selected?: string
+  directory?: string
+  fallback?: string
+}) {
+  // An explicitly placed draft (for example from an automation) can start in a subdirectory,
+  // including a non-Git folder. Its initial destination is not the user's default worktree.
+  if (input.selected && input.directory && sameDirectory(input.selected, input.directory)) return input.directory
+
   if (!input.enabled) return "main"
 
   if (input.selected) return input.selected
@@ -140,7 +149,11 @@ export function createNewSessionWorkspaceController(input: {
     const project = currentProject()
     const worktree = input.selectedWorktree()
 
-    if (!project || !worktree) return
+    if (!worktree) return
+
+    if (sameDirectory(worktree, sdk().directory)) return worktree
+
+    if (!project) return
 
     if (isWorkspaceSelection(project, worktree)) return worktree
 
@@ -165,6 +178,7 @@ export function createNewSessionWorkspaceController(input: {
   const value = createMemo(() =>
     resolveNewSessionWorktree({
       enabled: visible(),
+      directory: sdk().directory,
       selected: selected(),
       fallback: fallback(),
     }),
