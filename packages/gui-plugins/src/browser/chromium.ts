@@ -357,17 +357,25 @@ export function createBrowserPage(
 
   if (detachNetwork) constructing.defer(detachNetwork)
   let nativeMenu = true
-  // Tab focus and browser chrome commands also update activity.userInputAt. Neither is input to this document.
+  // Tab focus and browser chrome commands also reclaim the tab for the person. Neither is input to this document.
   let documentInput = false
+  // Presses the agent sent through the debugger that the page has not reported yet.
+  let agentPresses = 0
   contents.on("before-mouse-event", (_event, mouse) => {
-    // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
-    if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
-      documentInput = true
-      nativeMenu = true
-      recordPageInput(activity, "user")
-      options.userInput()
-      void choosers.update().catch(() => undefined)
-    }
+    if (mouse.type !== "mouseDown") return
+
+    // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events, so a press carries no
+    // debugger provenance. Each press the agent sent is counted out here, even one reported after its command ended;
+    // any other press while the agent acts stays the agent's. A press during the agent's `wait`, which sends no
+    // input and is not counted as acting, is the person's.
+    if (agentPresses > 0) return void agentPresses--
+
+    if (activity.agentRuns > 0) return
+    documentInput = true
+    nativeMenu = true
+    recordPageInput(activity, "user")
+    options.userInput()
+    void choosers.update().catch(() => undefined)
   })
   contents.on("before-input-event", (event, input) => {
     const hardware = hardwareInput(input)
@@ -684,7 +692,8 @@ export function createBrowserPage(
       if (!asker.mainFrame && (!asker.origin || asker.origin !== contents.mainFrame.origin)) return
       const address = URL.parse(displayURL(contents.getURL()))
 
-      if (activity.agentRuns > 0 && !passkeyPage.interrupted) {
+      // Any agent command in flight stops, a `wait` included, which `agentRuns` leaves out.
+      if (!passkeyPage.interrupted && Array.from(runs.values()).some((run) => run.origin === "agent")) {
         passkeyPage.interrupted = true
         prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(address?.host)))
       }
@@ -1320,10 +1329,13 @@ export function createBrowserPage(
       const cancel = () => dispatchDialog({ type: "run.cancelled", runID })
       signal.addEventListener("abort", cancel, { once: true })
 
-      if (origin === "agent") {
-        activity.agentRuns++
-        recordPageInput(activity, origin)
-      }
+      // A `wait` is the agent's command but only observes: the page gets no input from it, for up to 30 s. It is not
+      // counted as the agent acting, so the person's own press, download or app link during it stays theirs.
+      const acting = origin === "agent" && command.action.type !== "wait"
+
+      if (origin === "agent") recordPageInput(activity, origin)
+
+      if (acting) activity.agentRuns++
 
       // The user's navigation may stop for "Leave site?"; the agent's stops when the site asks the user to sign in.
       if (origin === "user" && leavable.includes(command.action.type)) prompts.intend(command.action)
@@ -1355,10 +1367,9 @@ export function createBrowserPage(
         runs.delete(runID)
         dispatchDialog({ type: "run.finished", runID })
 
-        if (origin === "agent") {
-          activity.agentRuns--
-          void choosers.update().catch(() => undefined)
-        }
+        if (acting) activity.agentRuns--
+
+        if (origin === "agent") void choosers.update().catch(() => undefined)
       }
     },
     async dispose() {
@@ -2262,6 +2273,10 @@ export function createBrowserPage(
 
         if (!inputDocument(contents.mainFrame.url, contents.mainFrame.origin)) throw new Error(changed)
         abortError(signal)
+
+        // Counted before it is sent and never taken back: a press that fails to arrive costs the person one press
+        // read as the agent's, never the reverse.
+        if ("type" in params && params.type === "mousePressed") agentPresses++
 
         return cdp.send(method, { ...params, ...position })
       }

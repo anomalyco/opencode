@@ -156,13 +156,35 @@ void electron.app.whenReady().then(async () => {
     return report()
   }
 
+  const personClick = async () => {
+    const reported = menu()
+    page.contents.sendInputEvent({ type: "mouseDown", x: 100, y: 100, button: "right", clickCount: 1 })
+    page.contents.sendInputEvent({ type: "mouseUp", x: 100, y: 100, button: "right", clickCount: 1 })
+    await reported
+
+    return report()
+  }
+
   const agent = await rightClick()
-  const reported = menu()
-  page.contents.sendInputEvent({ type: "mouseDown", x: 100, y: 100, button: "right", clickCount: 1 })
-  page.contents.sendInputEvent({ type: "mouseUp", x: 100, y: 100, button: "right", clickCount: 1 })
-  await reported
-  const person = report()
+  const person = await personClick()
   const after = await rightClick()
+  // The agent's `wait` sends the page nothing. The person takes the tab back first, so the wait starting shows as the
+  // tab becoming the agent's again; their right-click while it is still held is then their own.
+  await personClick()
+  const waited = { done: false }
+
+  const wait = page
+    .execute({ action: { type: "wait", tabID, condition: "delay", timeoutMs: 3_000 }, files: [], agent: "build" }, signal, "agent")
+    .finally(() => {
+      waited.done = true
+    })
+
+  const started = (): Promise<void> =>
+    activityOwner(activity) === "agent" || waited.done ? Promise.resolve() : new Promise<void>((resolve) => setImmediate(resolve)).then(started)
+
+  await started()
+  const waiting = { ...(await personClick()), during: !waited.done }
+  await wait
   await page.dispose()
 
   // The session's server never answers, so the binding stays registered to its window with no tab and no network.
@@ -216,7 +238,7 @@ void electron.app.whenReady().then(async () => {
     ])
 
   const windows = { owner: await calls(win.id), other: await calls(win.id + 1) }
-  process.stdout.write(`${JSON.stringify({ booted, agent, person, after, windows })}\n`)
+  process.stdout.write(`${JSON.stringify({ booted, agent, person, after, waiting, windows })}\n`)
   await pane.dispose()
   held.closeAllConnections()
   held.close()

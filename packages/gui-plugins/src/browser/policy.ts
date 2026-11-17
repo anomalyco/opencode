@@ -112,7 +112,10 @@ export function pagePermission(permission: string, origin: string, declared: (id
   )
 }
 
-/** Absent on a person's untouched tab; reclaimed only by input or a person-issued command, never by elapsed time. */
+/**
+ * `control` is absent on a person's untouched tab; reclaimed only by input or a person-issued command, never by elapsed
+ * time. `agentRuns` counts the agent's commands in flight that act on the page; its `wait` only observes and is left out.
+ */
 export type TabActivity = { agentRuns: number; control?: "agent" | "reclaimed"; agent?: string }
 
 export function recordPageInput(activity: TabActivity, origin: "agent" | "user") {
