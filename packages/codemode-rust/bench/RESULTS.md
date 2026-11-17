@@ -7,24 +7,24 @@ mins and means are shown for spread, never compared.
 
 ## Environment
 
-- CPU: AMD EPYC 9554P 64-Core Processor, 8 cores, 31 GiB RAM, Linux 6.12.115
-- Reference: anomalyco/opencode e992c253aab199cc9df1d5e8ce6ff3735c996d9d, `packages/codemode`
-- PsychoScript: e992c253aab199cc9df1d5e8ce6ff3735c996d9d
-- bun 1.4.4; rustc 1.100.0 (0ef1bc386 2026-11-09); cargo 1.100.0 (3acc79c0c 2026-11-05)
+- CPU: Apple M5 Max, 18 cores, 48 GiB RAM, macOS 26.7.1 arm64
+- Reference: anomalyco/opencode b314a625c58416c4a8ca25fa6f69d23b65e21491, `packages/codemode`
+- PsychoScript: b314a625c58416c4a8ca25fa6f69d23b65e21491
+- bun 1.4.3; rustc 1.100.0 (0ef1bc386 2026-11-09); cargo 1.100.0 (3acc79c0c 2026-11-05)
 
 ## (a) Per-case wall time, 11 iterations after one warm-up
 
 | Case                       | Reference median ms | Reference min ms | Rust median ms | Rust min ms | Median speedup |
 | -------------------------- | ------------------: | ---------------: | -------------: | ----------: | -------------: |
-| numeric loop               |                14.3 |             13.9 |            9.2 |         9.2 |           1.5x |
-| closure recursion (fib 22) |                 5.0 |              4.7 |            3.4 |         3.3 |           1.5x |
-| array callbacks (50k)      |                81.7 |             77.2 |           25.0 |        24.1 |           3.3x |
-| promise fan-out (5k)       |                10.9 |              7.1 |            2.7 |         2.7 |           4.0x |
-| tool fan-out (1k) ¹        |                 8.4 |              7.5 |            0.7 |         0.6 |          12.5x |
-| JSON round-trip            |                49.8 |             47.5 |           23.2 |        22.0 |           2.1x |
-| generator iteration        |                 5.0 |              5.0 |            4.4 |         4.3 |           1.1x |
-| string building            |                17.3 |             15.0 |            7.5 |         7.2 |           2.3x |
-| Map/Set ops                |                14.9 |             13.5 |           12.8 |        12.5 |           1.2x |
+| numeric loop               |                12.0 |              7.3 |            5.2 |         5.0 |           2.3x |
+| closure recursion (fib 22) |                 2.5 |              2.3 |            2.1 |         1.7 |           1.2x |
+| array callbacks (50k)      |                44.1 |             40.8 |           13.3 |        12.9 |           3.3x |
+| promise fan-out (5k)       |                 4.9 |              3.2 |            1.0 |         1.0 |           5.0x |
+| tool fan-out (1k) ¹        |                 3.2 |              2.7 |            0.6 |         0.6 |           5.2x |
+| JSON round-trip            |                27.3 |             25.4 |           14.4 |        13.9 |           1.9x |
+| generator iteration        |                 2.8 |              2.6 |            1.3 |         1.3 |           2.2x |
+| string building            |                10.5 |              9.1 |            3.8 |         3.8 |           2.7x |
+| Map/Set ops                |                 9.2 |              7.6 |            7.7 |         7.3 |           1.2x |
 
 ¹ Not like for like yet: the reference `echo` tool decodes its input and output through Effect Schema
 (`{ id: number }` in, `number` out), and the Rust tools do not validate. Once the Rust host API takes tool schemas,
@@ -34,29 +34,29 @@ mins and means are shown for spread, never compared.
 
 | Implementation                     | Median wall ms (20 runs) |
 | ---------------------------------- | -----------------------: |
-| Reference (bun bench/ref/embed.ts) |                    225.9 |
-| Rust (embed example)               |                      1.4 |
+| Reference (bun bench/ref/embed.ts) |                    101.4 |
+| Rust (embed example)               |                      2.9 |
 
 ## (c) Peak RSS, each case once in a fresh process
 
 | Case                       | Reference peak RSS MiB | Rust peak RSS MiB |
 | -------------------------- | ---------------------: | ----------------: |
-| numeric loop               |                   82.1 |               4.0 |
-| closure recursion (fib 22) |                   79.7 |               4.0 |
-| array callbacks (50k)      |                  102.5 |               6.6 |
-| promise fan-out (5k)       |                   91.3 |               8.6 |
-| tool fan-out (1k)          |                   87.9 |               5.2 |
-| JSON round-trip            |                  111.6 |              20.1 |
-| generator iteration        |                   79.3 |               4.1 |
-| string building            |                  103.6 |               7.1 |
-| Map/Set ops                |                   91.0 |               8.2 |
+| numeric loop               |                   91.8 |               3.6 |
+| closure recursion (fib 22) |                   85.3 |               3.6 |
+| array callbacks (50k)      |                  110.4 |               7.5 |
+| promise fan-out (5k)       |                   96.0 |               7.9 |
+| tool fan-out (1k)          |                   96.5 |               5.7 |
+| JSON round-trip            |                  122.0 |              20.0 |
+| generator iteration        |                   85.5 |               3.7 |
+| string building            |                  114.5 |               7.8 |
+| Map/Set ops                |                  103.2 |              11.2 |
 
 ## (d) Binary size
 
-| Artifact                                 |     Bytes |    MiB |
-| ---------------------------------------- | --------: | -----: |
-| Rust embed example, release, stripped    |   6033016 |   5.75 |
-| bun executable (what you ship otherwise) | 107308936 | 102.34 |
+| Artifact                                 |    Bytes |   MiB |
+| ---------------------------------------- | -------: | ----: |
+| Rust embed example, release, stripped    |  5905176 |  5.63 |
+| bun executable (what you ship otherwise) | 70469776 | 67.21 |
 
 ## (e) Perturbed variants, 11 iterations after one warm-up
 
@@ -66,15 +66,15 @@ variant / original ratio far from the reference's on one side only points at a s
 
 | Case                       | Reference original median ms | Reference variant median ms | Reference variant / original | Rust original median ms | Rust variant median ms | Rust variant / original | Rust ratio / reference ratio |
 | -------------------------- | ---------------------------: | --------------------------: | ---------------------------: | ----------------------: | ---------------------: | ----------------------: | ---------------------------: |
-| numeric loop               |                         17.2 |                        16.7 |                         0.97 |                    11.8 |                   11.9 |                    1.01 |                        1.04x |
-| closure recursion (fib 22) |                          5.2 |                         4.9 |                         0.94 |                     3.6 |                    3.8 |                    1.04 |                        1.11x |
-| array callbacks (50k)      |                         83.4 |                        83.1 |                         1.00 |                    24.6 |                   26.9 |                    1.10 |                        1.10x |
-| promise fan-out (5k)       |                         11.4 |                         7.3 |                         0.64 |                     4.0 |                    2.8 |                    0.71 |                        1.11x |
-| tool fan-out (1k)          |                          8.7 |                         7.3 |                         0.84 |                     0.6 |                    0.6 |                    1.07 |                        1.27x |
-| JSON round-trip            |                         55.0 |                        47.8 |                         0.87 |                    22.6 |                   24.2 |                    1.07 |                        1.24x |
-| generator iteration        |                          4.9 |                         4.9 |                         1.00 |                     4.3 |                    4.6 |                    1.05 |                        1.05x |
-| string building            |                         16.8 |                        17.1 |                         1.02 |                     7.2 |                  724.7 |                  100.65 |                       99.15x |
-| Map/Set ops                |                         14.0 |                        18.2 |                         1.30 |                    13.7 |                   12.6 |                    0.93 |                        0.71x |
+| numeric loop               |                         11.6 |                         8.6 |                         0.74 |                     4.8 |                    6.3 |                    1.31 |                        1.77x |
+| closure recursion (fib 22) |                          2.4 |                         2.4 |                         0.97 |                     1.7 |                    1.7 |                    1.01 |                        1.05x |
+| array callbacks (50k)      |                         46.1 |                        48.6 |                         1.05 |                    14.3 |                   13.7 |                    0.96 |                        0.91x |
+| promise fan-out (5k)       |                          5.2 |                         3.9 |                         0.75 |                     1.0 |                    1.2 |                    1.16 |                        1.54x |
+| tool fan-out (1k)          |                          3.9 |                         3.3 |                         0.84 |                     0.6 |                    0.7 |                    1.24 |                        1.48x |
+| JSON round-trip            |                         29.9 |                        30.8 |                         1.03 |                    13.3 |                   13.2 |                    0.99 |                        0.96x |
+| generator iteration        |                          3.2 |                         3.2 |                         0.99 |                     1.3 |                    1.3 |                    1.04 |                        1.05x |
+| string building            |                         11.1 |                        10.8 |                         0.98 |                     4.1 |                    4.7 |                    1.16 |                        1.19x |
+| Map/Set ops                |                          8.3 |                        11.3 |                         1.36 |                     7.0 |                    7.2 |                    1.03 |                        0.76x |
 
 ## (f) Plugin event: µs per execute, 2000 runs after 2000 warm-up runs
 
@@ -85,8 +85,8 @@ and the Rust one does not validate, as in (a).
 
 | Source                           | Bytes | Reference median µs | Reference min µs | Reference mean µs | Rust median µs | Rust min µs | Rust mean µs | Median speedup |
 | -------------------------------- | ----: | ------------------: | ---------------: | ----------------: | -------------: | ----------: | -----------: | -------------: |
-| `bench/plugin/reducer.js`        |   226 |               377.1 |            296.5 |             470.7 |           31.5 |        30.2 |         68.5 |          12.0x |
-| `bench/plugin/reducer-padded.js` |  2957 |               640.8 |            487.0 |             870.8 |          185.5 |       133.4 |        768.9 |           3.5x |
+| `bench/plugin/reducer.js`        |   226 |               145.0 |            122.6 |             171.9 |           23.3 |        22.5 |         24.3 |           6.2x |
+| `bench/plugin/reducer-padded.js` |  2957 |               279.2 |            208.3 |             404.6 |           84.6 |        66.8 |         95.4 |           3.3x |
 
 ## Commands
 
@@ -96,13 +96,13 @@ cargo build --release --locked -p psychoscript-bench --bin psychoscript-bench --
 # (a)
 (cd ../codemode && bun run script/bench.ts --iterations 11)
 target/release/psychoscript-bench --filter <slug> --iterations 11 --json
-# (b) 20 timed runs each after one untimed run, wall time from bash $EPOCHREALTIME
+# (b) 20 timed runs each after one untimed run, wall time from bash $EPOCHREALTIME (perl's clock without it)
 bun bench/ref/embed.ts
 target/release/examples/embed
-# (c)
+# (c) -l instead of -v on macOS
 /usr/bin/time -v bun bench/ref/run-case.ts <slug>
 /usr/bin/time -v target/release/psychoscript-bench --filter <slug> --iterations 0
-# (d)
+# (d) stat -f %z on macOS
 strip -o embed target/release/examples/embed && stat -c %s embed
 stat -c %s "$(readlink -f "$(command -v bun)")"
 # (e) values must match their originals, on both sides
