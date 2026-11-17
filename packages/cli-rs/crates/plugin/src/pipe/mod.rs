@@ -2022,12 +2022,19 @@ impl Scripts {
     }
 }
 
-/// The page theme's colors, which the V2 context's `theme` reads (P8).
+/// The page theme's colors, which the V2 context's `theme` reads (P8): its tokens, and the steps of its hue scales as
+/// `hue.<name>.<step>` and `categorical.<index>.<step>` (CT-9), which the context's `theme.hue` and
+/// `theme.categorical` are.
 fn palette(host: &dyn Host) -> proto::Palette {
-    let colors = host
-        .theme()
-        .list()
-        .into_iter()
+    let theme = host.theme();
+    let steps = |name: String, scale: &opencode_ui::theme::Scale| {
+        let steps = opencode_ui::theme::STEPS.into_iter().zip(scale.0);
+        steps.map(move |(step, color)| (format!("{name}.{step}"), color)).collect::<Vec<_>>()
+    };
+    let hues = theme.hues().iter().flat_map(|(name, scale)| steps(format!("hue.{name}"), scale));
+    let categorical = theme.categorical().iter().enumerate();
+    let categorical = categorical.flat_map(|(index, scale)| steps(format!("categorical.{index}"), scale));
+    let colors = (theme.list().into_iter().chain(hues).chain(categorical))
         .map(|(token, color)| (token, format!("#{:02x}{:02x}{:02x}{:02x}", color.r, color.g, color.b, color.a)))
         .collect();
     proto::Palette { mode: theme_mode(host), colors }

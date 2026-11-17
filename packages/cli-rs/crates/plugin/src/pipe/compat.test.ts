@@ -329,6 +329,46 @@ test("theme.surface answers the page theme", () => {
   expect(fake.toasts()).toEqual(["t.surface: theme.surface is not supported by opencode-native yet"])
 })
 
+// CT-9: TS's raw hue scales, the categorical list, the stateful colors' `state` and the step functions, from the host's
+// palette. A step carries the contract's token (`accent.500`), so the host restyles it; opencode-sesh read
+// `theme.hue.accent` and crashed.
+test("theme carries the hue scales, categorical list and states", () => {
+  const fake = host()
+  const steps = (name: string, shade: (step: number) => number) =>
+    Object.fromEntries([100, 200, 300, 400, 500, 600, 700, 800, 900].map((step) => [`${name}.${step}`, `#${shade(step).toString(16).padStart(2, "0").repeat(3)}ff`]))
+  fake.palette = () => ({
+    mode: "dark",
+    colors: {
+      ...steps("hue.accent", (step) => step / 5),
+      ...steps("hue.neutral", (step) => step / 4),
+      ...steps("categorical.1", (step) => step / 4),
+      ...steps("categorical.0", (step) => step / 5),
+      "text.base": "#3c3c3cff",
+      "text.action.primary.base": "#010101ff",
+      "text.action.primary.hovered": "#020202ff",
+      "text.action.primary.disabled": "#030303ff",
+      "background.formfield.base": "#040404ff",
+      "background.formfield.hovered": "#050505ff",
+    },
+  })
+  const ctx = plugin("t.hue", fake)
+  const theme = ctx.theme
+  expect(theme.hue.accent[500].token).toBe("accent.500")
+  expect(theme.hue.accent[500].toInts()).toEqual([100, 100, 100, 255])
+  expect(theme.categorical.map((scale: Json) => scale[300].token)).toEqual(["categorical.0.300", "categorical.1.300"])
+  const primary = theme.text.action.primary
+  expect(primary.state({}).token).toBe("text.action.primary.base")
+  expect(primary.state({ hovered: true, disabled: true }).token).toBe("text.action.primary.disabled")
+  expect(theme.background.formfield.state({ hovered: true }).token).toBe("background.formfield.hovered")
+  expect(theme.source(theme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
+  // By value: `text.base` is accent's step 300 here.
+  expect(theme.source(theme.text.base)).toEqual({ hue: "accent", step: 300 })
+  expect(theme.increase(theme.hue.accent[800], 3).token).toBe("accent.900")
+  expect(theme.decrease(theme.text.base).token).toBe("accent.200")
+  expect(theme.increase(theme.text.action.primary.base)).toBe(theme.text.action.primary.base)
+  expect(fake.toasts()).toEqual([])
+})
+
 // Big-boi's catalog review (CT-1): commands without an `id` in two live layers, a global and a base one, with the same
 // keys and title but other slash names and callbacks, stay two commands, each listed with its slash name and running its
 // own callback; it was one command, the second callback's. Each keeps its name as its layer mounts again.

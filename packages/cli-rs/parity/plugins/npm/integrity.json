@@ -4,5 +4,6 @@
   "opencode-session-usage.tgz": "sha512-x8nNJJpMaYNSaAIVcLXl+RXItK5MuVVOB8t99nsYuZXAsAw4GtwufQLzoxDRaedVIIHYWw54Bxdrg+pEbmiTow==",
   "opencode-sidebar-tokens.tgz": "sha512-tx/FBEbZJJ1mwdYMg3rKvUdthtkETLHYqeg26cM3f1Z1a0yzlM1kCG2ymp1GbjevLrNUWqUEparQJFG6CfeLzQ==",
   "opencode-sidebar-prompt.tgz": "sha512-QgSndS0jbpI7ZC9qf59XqzX5xcaSyA8xTyBwSV2XUJAELRA0tsLlg9ILYSvIimAgmn7PFOVJgWCiHqux98gUiA==",
-  "opencode-subagents-sidebar.tgz": "sha512-Six0zMfLg3zSwkC5Wrflxj+/KtSv7D/iTfZH8xE1znZ7xvcmj30+oxY0hnfYxMfz8lkveYjiuqQrXT3BClq69A=="
+  "opencode-subagents-sidebar.tgz": "sha512-Six0zMfLg3zSwkC5Wrflxj+/KtSv7D/iTfZH8xE1znZ7xvcmj30+oxY0hnfYxMfz8lkveYjiuqQrXT3BClq69A==",
+  "opencode-plugin-context.tgz": "sha512-6rDmEGNqO+7ozS0lYoa1Hw6srd3hFLy8IXexd8xugmvsTw43wnUB5C3tj/30FjlCCfsUpp+R3HdgfvSelxyhSA=="
 }
