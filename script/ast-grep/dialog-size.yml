@@ -1,0 +1,18 @@
+id: dialog-size
+language: css
+severity: error
+message: Choose a Dialog size preset instead of sizing its container or content here.
+ignores:
+  - packages/ui/src/overlays/dialog/dialog.css
+rule:
+  kind: declaration
+  has:
+    kind: property_name
+    regex: '^(min-|max-)?(width|height|inline-size|block-size)$'
+  inside:
+    kind: block
+    inside:
+      kind: rule_set
+      has:
+        kind: selectors
+        regex: '\[data-slot=["'']dialog-(container|content)["'']\][^\s>+~]*\s*(,|$)'

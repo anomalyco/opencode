@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "הבא",
   "releaseNotes.action.hideFuture": "אל תציג אותם בעתיד",
   "releaseNotes.media.alt": "תצוגה מקדימה של הגרסה",
+  "action.reload": "טען מחדש כדי לעדכן",
+  "action.reloading": "טוען מחדש…",
+  "web.ready.title": "העדכון מוכן",
+  "web.ready.message": "גרסה חדשה של OpenCode מוכנה. טען מחדש כדי להשתמש בה בכל חלון פתוח.",
+  "web.reload": "טען מחדש",
+  "web.reset.title": "טען מחדש מהשרת",
+  "web.reset.description": "נקה את העותק השמור של האפליקציה וטען את הגרסה הנוכחית מהשרת",
+  "web.reset.action": "טען מחדש מהשרת",
 }

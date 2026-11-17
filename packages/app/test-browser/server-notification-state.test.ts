@@ -49,9 +49,9 @@ const preferences = {
 }
 
 // Each test fakes only the parts of the SDK, data store and coordinator that the notification state reads.
-const createState = (input: { sdk: object; data: object; coordinator: object }) =>
+const createState = (input: { sdk: object; data: object; coordinator: object; muted?: (id: string) => boolean }) =>
   // SAFETY: the fakes cover every member the notification state reaches in that test.
-  createServerNotificationState({ key: server, ...input } as never)
+  createServerNotificationState({ key: server, muted: () => false, ...input } as never)
 
 beforeAll(async () => {
   // Fakes replace only the hooks this test controls. Spreading the real module keeps every other export, such as
@@ -142,6 +142,7 @@ test.each(
       "resolved",
       "auto approve",
       "root tab",
+      "muted root",
       "no tab",
       "disposed",
     ].map((scenario) => ({ ...request, scenario })),
@@ -170,6 +171,7 @@ test.each(
 
   const dispose = createRoot((dispose) => {
     createState({
+      muted: (id) => options.scenario === "muted root" && id === "root",
       sdk: {
         scope: ServerScope.local,
         connection: { status: () => "connected" },
@@ -237,7 +239,7 @@ test.each(
     await Promise.all(deliveries.map((run) => run()))
 
     const suppressed =
-      ["resolved", "disposed", "no tab"].includes(options.scenario) ||
+      ["resolved", "disposed", "no tab", "muted root"].includes(options.scenario) ||
       (options.scenario === "auto approve" && options.kind === "permission")
 
     expect(alerts).toEqual(!suppressed && options.scenario !== "notifications disabled" ? [options.title] : [])

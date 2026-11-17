@@ -39,7 +39,7 @@ function ClosedTabVisual(props: { entry: ClosedSideTab }): JSX.Element {
     <span class="flex min-w-0 items-center gap-1.5">
       <Show
         when={props.entry.file}
-        fallback={<Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
+        fallback={<Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />}
       >
         {(file) => (
           <FileIcon
@@ -112,7 +112,7 @@ export function ClosedTabsSection(props: { entries: readonly ClosedSideTab[]; on
             }}
           >
             {language.t("session.tab.showMore")}
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </button>
         </Show>
       </section>

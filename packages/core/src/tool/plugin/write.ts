@@ -9,7 +9,10 @@ export * as WriteTool from "./write.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { FileWrite } from "../../file-write.js"
+import { Flag } from "../../flag.js"
 
 export const name = "write"
 
@@ -21,16 +24,8 @@ export const Input = Schema.Struct({
   content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
 
-export const Output = Schema.Struct({
-  operation: Schema.Literal("write"),
-  target: Schema.String,
-  resource: Schema.String,
-  existed: Schema.Boolean,
-})
+export const Output = Schema.String
 export type Output = typeof Output.Type
-
-export const toModelContent = (output: Output) =>
-  `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred write UX integrations remain visible at the model-facing seam. */
 // TODO: Publish watcher/file-edit events after watcher integration exists.
@@ -41,27 +36,24 @@ export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
     const fileWrite = yield* FileWrite.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false, permission: "edit" },
+          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled, permission: "edit" },
           description:
             "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
           input: Input,
           output: Output,
           execute: (input, context) =>
-            Effect.gen(function* () {
-              const written = yield* fileWrite.write(input, context)
-              return {
-                operation: written.operation,
-                target: written.target,
-                resource: written.resource,
-                existed: written.existed,
-              }
-            }).pipe(
-              Effect.map((output) => ({ output, content: toModelContent(output) })),
+            fileWrite.write(input, context).pipe(
+              Effect.map((written) => ({
+                output: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
+              })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),

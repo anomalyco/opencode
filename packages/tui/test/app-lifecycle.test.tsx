@@ -770,7 +770,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
               type: "assistant",
               agent: session.agent,
               model: session.model,
-              time: { created: 2000, streamed: 3000, completed: 5000 },
+              time: { created: 2000, firstToken: 2500, streamed: 3000, completed: 5000 },
               finish: "stop",
               cost: 0,
               tokens: { ...session.tokens, output: 20 },
@@ -792,10 +792,11 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
 
   const initial = await waitForHighlightedFrame(
     setup,
-    (frame) => frame.includes("Original answer") && frame.includes("20.0 tok/s"),
+    (frame) => frame.includes("Original answer") && frame.includes("40.0 tok/s"),
   )
   expect(initial).toContain("Current input")
-  expect(initial).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(initial).toContain("4.0s \u00b7 40.0 tok/s")
+  expect(initial).not.toContain("ttft")
   expect(initial).not.toContain("Prepended input")
 
   setup.mockInput.pressKey("g", { ctrl: true })
@@ -805,12 +806,12 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
       frame.includes("Prepended input") &&
       frame.includes("Prepended instructions") &&
       frame.includes("Original answer") &&
-      frame.includes("20.0 tok/s") &&
+      frame.includes("40.0 tok/s") &&
       !frame.includes("Loading session history…"),
   )
   expect(prepended).toContain("Current input")
   expect(prepended).toContain("Original answer")
-  expect(prepended).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(prepended).toContain("4.0s \u00b7 40.0 tok/s")
 
   // Refresh the latest page: length stays four, but the retained assistant moves from index three to one.
   refresh = true
@@ -826,7 +827,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   )
   expect(refreshed).toContain("Current input")
   expect(refreshed).toContain("Original answer")
-  expect(refreshed).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(refreshed).toContain("4.0s \u00b7 40.0 tok/s")
   expect(refreshed).toContain("3.0s \u00b7 50.0 tok/s")
 
   setup.events.emit({
@@ -841,7 +842,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
     (frame) => frame.includes("Original answer") && !frame.includes("Later input") && !frame.includes("Later answer"),
   )
   expect(reverted).toContain("Current input")
-  expect(reverted).toContain("4.0s \u00b7 20.0 tok/s")
+  expect(reverted).toContain("4.0s \u00b7 40.0 tok/s")
   expect(reverted).not.toContain("50.0 tok/s")
 })
 
@@ -2844,4 +2845,3 @@ test.each([44, 100])(
   },
   15_000,
 )
-

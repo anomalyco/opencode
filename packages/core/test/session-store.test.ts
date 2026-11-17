@@ -36,7 +36,7 @@ const partRows = Config.testLayer([
   }),
 ])
 
-const seedSessions = (rows: { id: string; updated: number }[]) =>
+const seedSessions = (rows: { id: string; updated: number; title?: string }[]) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
@@ -58,11 +58,62 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
           aggregateID: sessionID,
           seq: 1,
           type: Bus.versionedType(SessionEvent.Renamed.type, 1),
-          data: { sessionID, title: row.id },
+          data: { sessionID, title: row.title ?? row.id },
         })
       }),
     )
     return bus
+  })
+
+const model = { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") }
+
+/**
+ * Writes an assistant row the way the projector does: text in `session_part`, an empty
+ * envelope in `session_message`. `inline` writes the legacy shape instead.
+ */
+const insertAssistant = (input: {
+  sessionID: Session.ID
+  id: string
+  seq: number
+  text: string
+  completed?: boolean
+  error?: boolean
+  inline?: boolean
+}) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    const id = SessionMessage.ID.make(input.id)
+    yield* database.db
+      .insert(SessionMessageTable)
+      .values({
+        id,
+        session_id: input.sessionID,
+        seq: input.seq,
+        type: "assistant",
+        time_created: input.seq,
+        time_updated: input.seq,
+        data: {
+          agent: Agent.ID.make("build"),
+          model,
+          content: input.inline ? [{ type: "text", text: input.text }] : [],
+          time: { created: input.seq, ...(input.completed ? { completed: input.seq + 1 } : {}) },
+          ...(input.error ? { error: { type: "test", message: "boom" } } : {}),
+        },
+      })
+      .run()
+    if (input.inline) return
+    yield* database.db
+      .insert(SessionPartTable)
+      .values({
+        message_id: id,
+        session_id: input.sessionID,
+        ordinal: 0,
+        type: "text",
+        time_created: input.seq,
+        time_updated: input.seq,
+        data: SessionHistory.encodePart({ type: "text", text: input.text }),
+      })
+      .run()
   })
 
 describe("SessionStore", () => {
@@ -112,6 +163,32 @@ describe("SessionStore", () => {
           expect(sessions.map((session) => String(session.id))).toEqual(page.ids)
         }),
       )
+    }),
+  )
+
+  it.effect("searches titles case-insensitively beyond ASCII and keeps LIKE wildcard semantics", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_cyrillic", updated: 10, title: "Тестова сесия" },
+        { id: "ses_ascii", updated: 20, title: "OpenCode notes" },
+        { id: "ses_percent", updated: 30, title: "100% done" },
+        { id: "ses_underscore", updated: 40, title: "file_name [draft]" },
+      ])
+      const store = yield* SessionStore.Service
+      const search = (text: string) =>
+        store.list({ search: text }).pipe(Effect.map((sessions) => sessions.map((session) => String(session.id))))
+
+      expect(yield* search("тестова")).toEqual(["ses_cyrillic"])
+      expect(yield* search("ТЕСТОВА СЕСИЯ")).toEqual(["ses_cyrillic"])
+      expect(yield* search("opencode")).toEqual(["ses_ascii"])
+      expect(yield* search("OPENCODE")).toEqual(["ses_ascii"])
+      expect(yield* search("тест%сия")).toEqual(["ses_cyrillic"])
+      expect(yield* search("OP_NCODE")).toEqual(["ses_ascii"])
+      expect(yield* search("100%")).toEqual(["ses_percent"])
+      expect(yield* search("file_name")).toEqual(["ses_underscore"])
+      expect(yield* search("[DRAFT]")).toEqual(["ses_underscore"])
+      expect(yield* search("*")).toEqual([])
+      expect(yield* search("?")).toEqual([])
     }),
   )
 
@@ -381,5 +458,86 @@ describe("SessionStore", () => {
         .all()
       expect(yield* SessionHistory.decodeMessageRows(database.db, rows)).toEqual(hydrated)
     }).pipe(Effect.provide(partRows)),
+  )
+
+  it.effect(
+    "lastAssistantAfter returns the newest completed error-free assistant after the boundary with parts hydrated",
+    () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_last_assistant")
+        yield* seedSessions([{ id: sessionID, updated: 0 }])
+        const store = yield* SessionStore.Service
+        yield* insertAssistant({
+          sessionID,
+          id: "msg_before",
+          seq: 4,
+          text: "before the boundary",
+          completed: true,
+          inline: true,
+        })
+        yield* insertAssistant({ sessionID, id: "msg_answer", seq: 6, text: "hydrated answer", completed: true })
+        yield* insertAssistant({ sessionID, id: "msg_incomplete", seq: 9, text: "still streaming" })
+        yield* insertAssistant({
+          sessionID,
+          id: "msg_error",
+          seq: 10,
+          text: "failed answer",
+          completed: true,
+          error: true,
+        })
+
+        expect(yield* store.lastAssistantAfter({ sessionID, afterSeq: 5 })).toMatchObject({
+          id: SessionMessage.ID.make("msg_answer"),
+          type: "assistant",
+          content: [{ type: "text", text: "hydrated answer" }],
+        })
+      }),
+  )
+
+  it.effect("lastAssistantAfter pages past more than twenty incomplete or errored assistant messages", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_last_assistant_pages")
+      yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const store = yield* SessionStore.Service
+      yield* insertAssistant({ sessionID, id: "msg_target", seq: 5, text: "older answer", completed: true })
+      yield* Effect.forEach(
+        Array.from({ length: 23 }, (_, index) => index),
+        (index) =>
+          insertAssistant({
+            sessionID,
+            id: `msg_noise_${index}`,
+            seq: 10 + index,
+            text: `noise ${index}`,
+            completed: index % 2 === 1,
+            error: index % 2 === 1,
+          }),
+      )
+
+      expect(yield* store.lastAssistantAfter({ sessionID, afterSeq: 0 })).toMatchObject({
+        id: SessionMessage.ID.make("msg_target"),
+        content: [{ type: "text", text: "older answer" }],
+      })
+    }),
+  )
+
+  it.effect("lastAssistantAfter returns undefined without a qualifying assistant after the boundary", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_last_assistant_missing")
+      yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const store = yield* SessionStore.Service
+      yield* insertAssistant({ sessionID, id: "msg_settled", seq: 2, text: "before the boundary", completed: true })
+      yield* insertAssistant({ sessionID, id: "msg_pending", seq: 8, text: "still streaming" })
+      yield* insertAssistant({
+        sessionID,
+        id: "msg_failed",
+        seq: 9,
+        text: "failed answer",
+        completed: true,
+        error: true,
+      })
+
+      expect(yield* store.lastAssistantAfter({ sessionID, afterSeq: 5 })).toBeUndefined()
+      expect(yield* store.lastAssistantAfter({ sessionID, afterSeq: 9 })).toBeUndefined()
+    }),
   )
 })

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const dev = mode === "dev"
   return {
     // Anomaly
-    accountId: "15d29c8639fd3733b1b5486a2acfd968",
+    accountId: dev ? "d8e944f537ceef3f06a5bd3aec1d7a53" : "15d29c8639fd3733b1b5486a2acfd968",
     worker: {
       name: dev ? "opencode-legacy-dev" : "opencode-legacy-production",
       compatibilityDate: "2026-07-25",
@@ -17,14 +17,14 @@ export default defineConfig(({ mode }) => {
       compatibilityFlags: ["nodejs_compat"],
       entrypoint: "./src/index.ts",
       domains: dev ? ["dev.opncd.ai", "api.dev.opencode.ai"] : ["opncd.ai", "api.opencode.ai"],
-      // Set from AWS Secrets Manager (opencode/<stage>/GITHUB_APP_*) by the deploy job with --secrets-file.
-      env: {
+      // The production deploy supplies these from AWS Secrets Manager with --secrets-file.
+      env: mode !== "production" ? undefined : {
         GITHUB_APP_ID: bindings.secret(),
         GITHUB_APP_PRIVATE_KEY: bindings.secret(),
       },
       workersDev: false,
       previewUrls: false,
-      logpush: true,
+      logpush: !dev,
       observability: { enabled: true },
     },
   }

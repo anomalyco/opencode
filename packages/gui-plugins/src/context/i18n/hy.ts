@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Նիստը պահվել է {{filename}}-ում",
   "export.failed.title": "Չհաջողվեց արտահանել նիստը",
   "export.failed.description": "Սխալ է տեղի ունեցել նիստը արտահանելիս",
+  "usage.toggle": "Ցուցադրել/թաքցնել նիստի համատեքստը",
 }

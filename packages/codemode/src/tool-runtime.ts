@@ -22,10 +22,7 @@ export type Services<T> = ServicesOf<T, []>
 
 type ServicesOf<T, Depth extends ReadonlyArray<unknown>> = Depth["length"] extends 8
   ? never
-  : T extends {
-        readonly _tag: "CodeModeTool"
-        readonly execute: (input: unknown, context?: ToolContext) => Effect.Effect<unknown, unknown, infer R>
-      }
+  : T extends Tool<infer R>
     ? R
     : T extends object
       ? string extends keyof T
@@ -476,7 +473,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
 /** Exact callable signature of the built-in `search` function, for host-owned instructions. */
 export const searchSignature = (() => {
   const tool = makeSearchTool([])
-  return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
+  return `search(query: string | ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
 const toSearchEntry = <R>(visible: VisibleTool<R>, position: number): SearchEntry => {
@@ -548,7 +545,24 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: Reado
     )
   }
   if (node.tool === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
+    const name = segments.join(".")
+    const under = index.filter((entry) => entry.description.path.startsWith(`${name}.`))
+    const ranked = rank(under, segments.at(-1) ?? "", index)
+    const shown = [...ranked, ...under.filter((entry) => !ranked.includes(entry))]
+      .slice(0, 3)
+      .map((entry) => toolExpression(entry.description.path))
+    const more = under.length - shown.length
+    throw new ToolRuntimeError(
+      "UnknownTool",
+      shown.length === 0
+        ? `Tool '${name}' is not callable.`
+        : `Tool '${name}' is not callable, it is a namespace. Did you mean ${new Intl.ListFormat("en", { type: "disjunction" }).format(shown)}?`,
+      [
+        more > 0
+          ? `${more} more under '${name}'. Use search({ namespace: ${JSON.stringify(name)} }) to list them.`
+          : "Use search to find available tools.",
+      ],
+    )
   }
   return node.tool
 }
@@ -568,8 +582,8 @@ export class ToolRuntimeError extends Error {
 }
 
 export type ExecuteCallOptions = {
-  readonly key?: string | undefined
-  readonly admit?: ((name: string) => void) | undefined
+  readonly key: string
+  readonly admit: (name: string) => void
   readonly detaching?: (() => boolean) | undefined
 }
 
@@ -582,11 +596,11 @@ export type ToolRuntime<R = never> = {
   readonly execute: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
-    options?: ExecuteCallOptions,
+    options: ExecuteCallOptions,
   ) => Effect.Effect<Json | undefined, unknown, R>
   readonly search: (
     args: Array<Json | undefined>,
-    options?: ExecuteCallOptions,
+    options: ExecuteCallOptions,
   ) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   /** How the tool at `path` executes on suspend (`undefined` when unknown or plain). */
@@ -598,7 +612,7 @@ export type ToolRuntime<R = never> = {
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
     key: string,
-    admit?: (name: string) => void,
+    admit: (name: string) => void,
   ) => Effect.Effect<Json, unknown, R>
   /**
    * Waits for a durable tool's running work: its output, as `execute` gives it. `detaching` says whether an
@@ -625,8 +639,6 @@ export const make = <R>(
   const calls: Array<ToolCall> = []
   const invocations = new Map<string, ToolInvocation>()
   const root = prepared.root
-  const runId = crypto.randomUUID()
-  let nextCallId = 0
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -648,7 +660,11 @@ export const make = <R>(
           new ToolRuntimeError(
             "InvalidToolInput",
             `Invalid input for tool '${name}': ${String(cause)}`,
-            name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
+            name === "search"
+              ? [
+                  'Pass search a query string or an object, such as search("issues") or search({ namespace: "github" }).',
+                ]
+              : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
     })
@@ -678,23 +694,35 @@ export const make = <R>(
       catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
     })
 
-  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, options?: ExecuteCallOptions) =>
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>, options: ExecuteCallOptions) =>
     Effect.gen(function* () {
-      const key = options?.key ?? `${runId}:${nextCallId++}`
+      if ("_tag" in tool.execute && tool.execute._tag === "CodeModeDurable") {
+        throw new TypeError(`Tool '${name}' is a durable tool; start it with ToolRuntime.start.`)
+      }
+      const run = "_tag" in tool.execute ? tool.execute.execute : tool.execute
+      const key = options.key
       const input = yield* decode(name, tool, args)
-      const admit = options?.admit
-      yield* Effect.sync(() => (admit !== undefined ? admit(name) : recordCall({ name })))
+      yield* Effect.sync(() => options.admit(name))
       return yield* hooked(
         { name, input, key },
         hooks["tool.before"],
         hooks["tool.after"],
         Effect.gen(function* () {
-          const raw = yield* failure(Effect.suspend(() => tool.execute(input, { key })))
+          const raw = yield* failure(Effect.suspend(() => run(input, { key })))
           return yield* output(name, tool, raw)
         }),
-        options?.detaching,
+        options.detaching,
       )
     })
+
+  // `search("notes")` is shorthand for `search({ query: "notes" })`.
+  const search = (args: Array<Json | undefined>, options: ExecuteCallOptions) =>
+    executeTool(
+      "search",
+      makeSearchTool(prepared.searchIndex),
+      typeof args[0] === "string" ? [{ query: args[0] }, ...args.slice(1)] : args,
+      options,
+    )
 
   const durableTool = (
     path: ReadonlyArray<string>,
@@ -706,10 +734,10 @@ export const make = <R>(
     const segments = canonicalSegments(path)
     const name = segments.join(".")
     const tool = lookup(root, segments)?.tool
-    if (tool?.mode?._tag !== "CodeModeDurable") {
+    if (tool === undefined || !("_tag" in tool.execute) || tool.execute._tag !== "CodeModeDurable") {
       throw new TypeError(`Tool '${name}' is not a durable tool.`)
     }
-    return { name, tool, durable: tool.mode }
+    return { name, tool, durable: tool.execute }
   }
 
   return {
@@ -718,27 +746,27 @@ export const make = <R>(
     invocations,
     record: (name) => recordCall({ name }),
     keys: (path) => namespaceKeys(root, path),
-    search: (args, options) =>
-      Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args, options)),
+    search: (args, options) => Effect.suspend(() => search(args, options)),
     execute: (path, args, options) =>
       Effect.suspend(() => {
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", makeSearchTool(prepared.searchIndex), args, options)
+          return search(args, options)
         return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args, options)
       }),
     mode: (path) => {
       const segments = canonicalSegments(path)
       if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined) return undefined
-      return lookup(root, segments)?.tool?.mode
+      const execute = lookup(root, segments)?.tool?.execute
+      return execute !== undefined && "_tag" in execute ? execute : undefined
     },
     start: (path, args, key, admit) =>
       Effect.suspend(() => {
         const found = durableTool(path)
         return Effect.gen(function* () {
           const input = yield* decode(found.name, found.tool, args)
-          yield* Effect.sync(() => (admit !== undefined ? admit(found.name) : recordCall({ name: found.name })))
+          yield* Effect.sync(() => admit(found.name))
           const invocation: ToolInvocation = { name: found.name, input, key }
           invocations.set(key, invocation)
           const before = hooks["tool.before"]

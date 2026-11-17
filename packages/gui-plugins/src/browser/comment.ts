@@ -61,7 +61,7 @@ export function pageNote(input: {
     origin: input.origin,
     commentID: uuid(),
     label: input.label,
-    icon: "outline-globe",
+    icon: "globe",
     subject: `the page in browser tab ${input.tabID} at ${input.url}${title}`,
     comment: input.comment,
     href: input.tabID,

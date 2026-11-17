@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Tālāk",
   "releaseNotes.action.hideFuture": "Turpmāk nerādīt",
   "releaseNotes.media.alt": "Versijas priekšskatījums",
+  "action.reload": "Pārlādēt, lai atjauninātu",
+  "action.reloading": "Pārlādē…",
+  "web.ready.title": "Atjauninājums gatavs",
+  "web.ready.message": "Jauna OpenCode versija ir gatava. Pārlādējiet, lai to izmantotu visos atvērtajos logos.",
+  "web.reload": "Pārlādēt",
+  "web.reset.title": "Pārlādēt no servera",
+  "web.reset.description": "Notīrīt saglabāto lietotnes kopiju un ielādēt servera pašreizējo versiju",
+  "web.reset.action": "Pārlādēt no servera",
 }

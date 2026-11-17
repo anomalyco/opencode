@@ -58,8 +58,8 @@
 
     &[data-type="image"] {
       position: relative;
-      width: 58px;
-      height: 46px;
+      height: 88px;
+      aspect-ratio: 3 / 2;
       border: none;
 
       /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */

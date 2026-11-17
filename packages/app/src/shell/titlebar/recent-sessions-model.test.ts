@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import type { SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
 import { resolveServerList, ServerConnection } from "@/runtime/server/registry"
 import {
   addPin,
@@ -7,15 +7,22 @@ import {
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_TIMEOUT_MS,
   RECENT_PAGE_LIMIT,
+  RECENT_VISIBLE_LIMIT,
+  RECENT_WINDOW_MS,
   mergeRecentSessions,
   partitionRecentSessions,
+  recentPageHasMore,
+  recentPageLoadingMore,
+  recentReloadsOn,
   recentSessionEndpoints,
   recentSessionKey,
+  recentRowUnread,
   removePin,
   reorderPins,
   sortRecentSessions,
   transitionRecentPage,
   splitRecentSessionKey,
+  windowRecentSessions,
   type RecentSession,
 } from "./recent-sessions-model"
 
@@ -34,6 +41,33 @@ const item = (server: string, value: SessionInfo): RecentSession => ({
   key: recentSessionKey(server, value.id),
   server,
   session: value,
+})
+
+test("hiding filters hydrated pins and recent rows only on their server", () => {
+  const pin = item("local", session("pinned", 1))
+  const recent = item("local", session("recent", 2))
+  const remote = item("remote", recent.session)
+
+  const input = {
+    items: [recent, remote],
+    pins: [pin.key],
+    endpoints: new Map<string, string>(),
+    open: new Set<string>(),
+    archived: () => false,
+    resolvePin: () => pin,
+  }
+
+  expect(partitionRecentSessions({ ...input, hidden: (server) => server === "local" })).toEqual({
+    pinned: [],
+    recent: [remote],
+  })
+  expect(partitionRecentSessions(input).pinned).toEqual([pin])
+})
+
+test("muting hides the unread dot until unmuted", () => {
+  expect(recentRowUnread(true, false, true)).toBe(false)
+  expect(recentRowUnread(true, false, false)).toBe(true)
+  expect(recentRowUnread(true, true, false)).toBe(false)
 })
 
 test("pin keys round trip server keys that contain the separator's neighbours", () => {
@@ -88,8 +122,51 @@ test("merging prefers the live store and keeps root, unarchived sessions", () =>
     item("server", session("ses_a", 10, { title: "loaded" })),
     item("server", session("ses_live", 5)),
   ])
-  const ended = session("ses_a", 30, { time: { created: 1, updated: 30, idle: 29 } })
-  expect(mergeRecentSessions("server", [session("ses_a", 10)], [ended])).toEqual([item("server", ended)])
+})
+
+// Like the iOS app, only a reload of the list or the user's own send moves a row.
+test.each([
+  ["a rename", session("ses_b", 30, { title: "Renamed" })],
+  ["a model selection", session("ses_b", 30, { model: { providerID: "provider", id: "other" } })],
+  ["an agent selection", session("ses_b", 30, { agent: "plan" })],
+  ["a step", session("ses_b", 30, { time: { created: 1, updated: 30, busy: 30 } })],
+  ["a run end", session("ses_b", 30, { time: { created: 1, updated: 30, idle: 30 } })],
+])("%s does not move a row until the next reload, which re-sorts it", (_, live) => {
+  const order = (fetched: readonly SessionInfo[]) =>
+    mergeRecentSessions("server", fetched, [live]).map((entry) => entry.session.id)
+
+  const snapshot = readyPage([session("ses_a", 20), session("ses_b", 10)])
+  expect(order(snapshot.sessions)).toEqual(["ses_a", "ses_b"])
+  expect(mergeRecentSessions("server", snapshot.sessions, [live])[1]?.session).toEqual({
+    ...live,
+    time: { ...live.time, updated: 10 },
+  })
+
+  const started = transitionRecentPage(snapshot, { type: "reload", attempt: 1 })
+
+  const reloaded = transitionRecentPage(started.state, {
+    type: "succeeded",
+    attempt: 1,
+    sessions: [session("ses_b", 30), session("ses_a", 20)],
+    next: undefined,
+  })
+
+  expect(order(reloaded.state.sessions)).toEqual(["ses_b", "ses_a"])
+})
+
+test("a session created since the last reload ranks by its live time, an older one outside the pages never above them", () => {
+  // Another client renamed an old session, and the live store loaded it with the rename time.
+  const renamed = session("ses_renamed", 300, { time: { created: 5, updated: 300 } })
+  const created = session("ses_created", 200, { time: { created: 200, updated: 200 } })
+
+  const merged = mergeRecentSessions("server", [session("ses_a", 100), session("ses_b", 90)], [renamed, created])
+
+  expect(merged.map((entry) => [entry.session.id, entry.session.time.updated])).toEqual([
+    ["ses_created", 200],
+    ["ses_a", 100],
+    ["ses_b", 90],
+    ["ses_renamed", 90],
+  ])
 })
 
 test("sessions with equal timestamps order by id, and missing updates fall back to creation", () => {
@@ -122,6 +199,88 @@ test("pins keep their order, leave Recent, and hide archived sessions without dr
 
   expect(result.pinned).toEqual([a])
   expect(result.recent).toEqual([c])
+})
+
+const now = 1_000 * RECENT_WINDOW_MS
+
+const hour = 60 * 60 * 1000
+
+// Newest first, one hour apart, ending `older` rows past the 7-day cutoff.
+const timeline = (recent: number, older: number) =>
+  sortRecentSessions([
+    ...Array.from({ length: recent }, (_, index) => item("server", session(`ses_r${index}`, now - index * hour))),
+    ...Array.from({ length: older }, (_, index) =>
+      item("server", session(`ses_o${index}`, now - RECENT_WINDOW_MS - (index + 1) * hour)),
+    ),
+  ])
+
+const ids = (rows: readonly RecentSession[]) => rows.map((row) => row.session.id)
+
+test("Recent shows only the last 7 days, newest first", () => {
+  const items = timeline(3, 4)
+  const result = windowRecentSessions({ items, now, revealed: 0, serversHaveMore: false })
+
+  expect(ids(result.visible)).toEqual(["ses_r0", "ses_r1", "ses_r2"])
+  expect(result.hasMore).toBe(true)
+
+  // The window moves with time: the oldest recent row ages out once it is more than 7 days old.
+  const later = windowRecentSessions({
+    items,
+    now: now + RECENT_WINDOW_MS - 2 * hour + 1,
+    revealed: 0,
+    serversHaveMore: false,
+  })
+
+  expect(ids(later.visible)).toEqual(["ses_r0", "ses_r1"])
+})
+
+test("Recent caps the last 7 days at 30 rows", () => {
+  const result = windowRecentSessions({ items: timeline(45, 0), now, revealed: 0, serversHaveMore: false })
+
+  expect(result.visible).toHaveLength(RECENT_VISIBLE_LIMIT)
+  expect(result.visible.at(-1)?.session.id).toBe("ses_r29")
+  expect(result.hasMore).toBe(true)
+})
+
+test("Show more reveals 30 more rows regardless of age", () => {
+  const items = timeline(5, 40)
+  const result = windowRecentSessions({ items, now, revealed: RECENT_VISIBLE_LIMIT, serversHaveMore: false })
+
+  expect(result.visible).toHaveLength(5 + RECENT_VISIBLE_LIMIT)
+  expect(result.visible.at(-1)?.session.id).toBe("ses_o29")
+  expect(result.hasMore).toBe(true)
+
+  const all = windowRecentSessions({ items, now, revealed: 2 * RECENT_VISIBLE_LIMIT, serversHaveMore: false })
+  expect(all.visible).toHaveLength(45)
+  expect(all.hasMore).toBe(false)
+  // More rows than are loaded tells the driver to fetch further pages.
+  expect(all.limit).toBe(65)
+})
+
+test("Show more stays while a server still has pages, even when every loaded row shows", () => {
+  const items = timeline(10, 0)
+
+  expect(windowRecentSessions({ items, now, revealed: 0, serversHaveMore: false }).hasMore).toBe(false)
+  expect(windowRecentSessions({ items, now, revealed: 0, serversHaveMore: true }).hasMore).toBe(true)
+})
+
+test("pinned sessions do not count toward the Recent limit", () => {
+  const items = timeline(40, 0)
+  const pins = items.slice(0, 5).map((entry) => entry.key)
+
+  const partition = partitionRecentSessions({
+    items,
+    endpoints: new Map(),
+    open: new Set(),
+    pins,
+    resolvePin: () => undefined,
+    archived: () => false,
+  })
+
+  const result = windowRecentSessions({ items: partition.recent, now, revealed: 0, serversHaveMore: false })
+
+  expect(partition.pinned).toHaveLength(5)
+  expect(ids(result.visible)).toEqual(ids(items.slice(5, 5 + RECENT_VISIBLE_LIMIT)))
 })
 
 test("opening a sidecar pin excludes its HTTP alias while keeping a different server's session", () => {
@@ -365,6 +524,148 @@ test("a reconnect snapshot drops page-one ghosts and keeps older rows and the ad
   expect(page.state.sessions.map((session) => session.id).toSorted()).toEqual([...incoming, older].map(s => s.id).toSorted())
   expect(page.state.cursor).toBe("cursor-old")
   expect(page.state.olderLoaded).toBe(true)
+})
+
+test("a reload waits for the first page, and otherwise starts page one again", () => {
+  expect(transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "reload", attempt: 1 }).state).toBe(
+    INITIAL_RECENT_PAGE_STATE,
+  )
+
+  const first = transitionRecentPage(INITIAL_RECENT_PAGE_STATE, { type: "load", kind: "first", attempt: 1 })
+  expect(transitionRecentPage(first.state, { type: "reload", attempt: 2 }).state).toMatchObject({
+    kind: "first",
+    attempt: 2,
+  })
+
+  const reconnect = transitionRecentPage(readyPage([session("ses_a", 20)]), {
+    type: "load",
+    kind: "refresh",
+    attempt: 3,
+  })
+
+  expect(transitionRecentPage(reconnect.state, { type: "reload", attempt: 4 }).state).toMatchObject({
+    kind: "refresh",
+    attempt: 4,
+  })
+
+  const reloaded = transitionRecentPage(readyPage([session("ses_a", 20)], { cursor: "cursor-2" }), {
+    type: "reload",
+    attempt: 5,
+  })
+
+  expect(reloaded.state).toMatchObject({ status: "loading", kind: "reload", cursor: "cursor-2" })
+  expect(reloaded.effects[0]).toEqual({ type: "fetch", attempt: 5, cursor: undefined })
+  expect(recentPageLoadingMore(reloaded.state)).toBe(false)
+})
+
+test("Show more stays while a snapshot reload runs, and gives way to the loader for its own page", () => {
+  const state = readyPage([session("ses_a", 20)], { cursor: "cursor-2" })
+  const reload = transitionRecentPage(state, { type: "reload", attempt: 1 })
+  const refresh = transitionRecentPage(state, { type: "load", kind: "refresh", attempt: 2 })
+  const next = transitionRecentPage(state, { type: "load", kind: "next", attempt: 3 })
+
+  expect([state, reload.state, refresh.state, next.state].map(recentPageHasMore)).toEqual([true, true, true, false])
+})
+
+test("a reload supersedes Show more's page and keeps the older rows already loaded", () => {
+  const first = session("ses_first", 100)
+  const older = session("ses_older", 10)
+  const state = readyPage([first, older], { cursor: "cursor-3", olderLoaded: true })
+  const next = transitionRecentPage(state, { type: "load", kind: "next", attempt: 1 })
+  expect(recentPageLoadingMore(next.state)).toBe(true)
+
+  const reload = transitionRecentPage(next.state, { type: "reload", attempt: 2 })
+
+  // The superseded page cannot land after the reload started.
+  expect(
+    transitionRecentPage(reload.state, { type: "succeeded", attempt: 1, sessions: [session("ses_x", 5)], next: "x" })
+      .state,
+  ).toBe(reload.state)
+
+  const incoming = [
+    session("ses_moved", 200),
+    first,
+    ...Array.from({ length: RECENT_PAGE_LIMIT - 2 }, (_, i) => session(`ses_new${i}`, 99 - i)),
+  ]
+
+  const page = transitionRecentPage(reload.state, {
+    type: "succeeded",
+    attempt: 2,
+    sessions: incoming,
+    next: "cursor-2",
+  })
+
+  expect(page.state).toMatchObject({ status: "ready", cursor: "cursor-3", olderLoaded: true })
+  expect(page.state.sessions.map((entry) => entry.id).toSorted()).toEqual(
+    [...incoming, older].map((entry) => entry.id).toSorted(),
+  )
+
+  const failed = transitionRecentPage(transitionRecentPage(page.state, { type: "reload", attempt: 3 }).state, {
+    type: "failed",
+    attempt: 3,
+  })
+
+  expect(transitionRecentPage(failed.state, { type: "retry", attempt: 4 }).state).toMatchObject({
+    kind: "reload",
+    sessions: page.state.sessions,
+  })
+})
+
+test("run ends reload Recent except a known subagent's or a shutdown, as do new root sessions and archiving", () => {
+  const sessions = new Map([
+    ["ses_root", session("ses_root", 10)],
+    ["ses_child", session("ses_child", 10, { parentID: "ses_root" })],
+  ])
+
+  const envelope = (sessionID: string) => ({
+    id: `evt_${sessionID}`,
+    created: 1,
+    durable: { aggregateID: sessionID, seq: 1, version: 1 as const },
+  })
+
+  const ended = (sessionID: string) => ({
+    ...envelope(sessionID),
+    type: "session.execution.succeeded" as const,
+    data: { sessionID },
+  })
+
+  const failed = (sessionID: string) => ({
+    ...envelope(sessionID),
+    type: "session.execution.failed" as const,
+    data: { sessionID, error: { type: "unknown", message: "failed" } },
+  })
+
+  const interrupted = (sessionID: string, reason: "user" | "shutdown") => ({
+    ...envelope(sessionID),
+    type: "session.execution.interrupted" as const,
+    data: { sessionID, reason },
+  })
+
+  const created = (sessionID: string, parentID?: string) => ({
+    ...envelope(sessionID),
+    type: "session.created" as const,
+    data: { sessionID, projectID: "project", location: { directory: "/project" }, slug: sessionID, version: "1", parentID },
+  })
+
+  const cases: [OpenCodeEvent, boolean][] = [
+    [ended("ses_root"), true],
+    [failed("ses_root"), true],
+    [interrupted("ses_root", "user"), true],
+    [ended("ses_unknown"), true],
+    [ended("ses_child"), false],
+    [failed("ses_child"), false],
+    [interrupted("ses_child", "user"), false],
+    [interrupted("ses_root", "shutdown"), false],
+    [created("ses_new"), true],
+    [created("ses_sub", "ses_root"), false],
+    [{ ...envelope("ses_root"), type: "session.archived", data: { sessionID: "ses_root" } }, true],
+    [{ ...envelope("ses_root"), type: "session.unarchived", data: { sessionID: "ses_root" } }, true],
+    [{ ...envelope("ses_root"), type: "session.renamed", data: { sessionID: "ses_root", title: "Renamed" } }, false],
+  ]
+
+  expect(cases.map(([value]) => recentReloadsOn(value, (id) => sessions.get(id)))).toEqual(
+    cases.map(([, expected]) => expected),
+  )
 })
 
 test("removing a server clears its page", () => {

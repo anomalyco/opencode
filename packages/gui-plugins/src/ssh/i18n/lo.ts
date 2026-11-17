@@ -35,4 +35,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "ເພີ່ມເຊີບເວີ",
   "menu.delete": "ລຶບ",
+  "error.unavailable": "SSH ບໍ່ສາມາດໃຊ້ໄດ້",
 }

@@ -12,7 +12,7 @@ export function PageIcon(props: { icon: string | undefined; class?: string }) {
   return (
     <Show
       when={props.icon !== broken() ? props.icon : undefined}
-      fallback={<Icon name="outline-globe" class={`pointer-events-none size-4 shrink-0 ${props.class ?? ""}`} />}
+      fallback={<Icon name="globe" class={`pointer-events-none size-4 shrink-0 ${props.class ?? ""}`} />}
     >
       {(icon) => (
         <img

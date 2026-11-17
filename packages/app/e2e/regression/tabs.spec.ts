@@ -707,14 +707,16 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
   page,
 }) => {
   const d = { id: "ses_tab_d", title: "Tab D session" }
+  // Recent lists only the last 7 days.
+  const t = Date.now() - 60_000
 
   await mockWorkspace(page, {
     name: "RecentUnread",
     sessions: [
-      { ...a, time: { created: T0 + 3, updated: T0 + 3 } },
-      { ...b, outcome: "failed", time: { created: T0 + 1, updated: T0 + 1, idle: T0 + 1 } },
-      { ...c, outcome: "succeeded", time: { created: T0 + 2, updated: T0 + 2, idle: T0 + 2 } },
-      { ...d, time: { created: T0, updated: T0 } },
+      { ...a, time: { created: t + 3, updated: t + 3 } },
+      { ...b, outcome: "failed", time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+      { ...c, outcome: "succeeded", time: { created: t + 2, updated: t + 2, idle: t + 2 } },
+      { ...d, time: { created: t, updated: t } },
     ],
     sessionStatus: { [d.id]: { type: "running" } },
     sessionPermissions: {
@@ -755,6 +757,129 @@ test("Recent and Pinned rows show the side tabs' status dots and shortcuts for s
   await expect(link(a.id)).toHaveAttribute("aria-current", "page")
   await expect(row(c.id).locator('[data-mark="unread"]')).toBeHidden()
   await expect(row(b.id).locator('[data-mark="failed"]')).toBeVisible()
+
+  // The hover preview sits level with the hovered row, as on side tabs, rather than clamped inside the row.
+  const preview = page.locator('[data-component="session-tab-popover"]')
+
+  for (const id of [b.id, c.id]) {
+    await row(id).hover()
+    await expect(preview).toBeVisible()
+    await expect
+      .poll(async () => {
+        const card = await preview.boundingBox()
+        const box = await row(id).boundingBox()
+
+        return card && box ? Math.round(card.y - box.y) : undefined
+      })
+      .toBe(0)
+  }
+})
+
+test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching pages on demand", async ({ page }) => {
+  const day = 24 * 60 * 60 * 1000
+  const now = Date.now()
+
+  // The mock lists sessions newest last; 10 are from today and 55 are over a week old.
+  const sessions = Array.from({ length: 65 }, (_, index) => {
+    const updated = index < 55 ? now - 8 * day - (55 - index) * 60_000 : now - (65 - index) * 60_000
+
+    return { id: `ses_cap_${index}`, title: `Cap session ${index}`, time: { created: updated, updated } }
+  })
+
+  await mockWorkspace(page, {
+    name: "RecentCap",
+    sessions,
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref("ses_cap_64", "sidecar") })}`,
+  )
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+  const more = recent.getByRole("button", { name: "Show more", exact: true })
+
+  await expect(rows).toHaveCount(10)
+  await expect(rows.first()).toContainText("Cap session 64")
+  await expect(rows.last()).toContainText("Cap session 55")
+  await more.click()
+  await expect(rows).toHaveCount(40)
+  await expect(rows.last()).toContainText("Cap session 25")
+  // The first page held 50 sessions, so the next 30 need the server's second page.
+  await more.click()
+  await expect(rows).toHaveCount(65)
+  await expect(rows.last()).toContainText("Cap session 0")
+  await expect(more).toBeHidden()
+})
+
+test("Recent keeps the server's order from its last reload, which a run end or window focus triggers", async ({
+  page,
+}) => {
+  const t = Date.now() - 60_000
+
+  const workspace = await mockWorkspace(page, {
+    name: "RecentOrder",
+    sessions: [
+      { ...a, time: { created: t, updated: t, idle: t } },
+      { ...b, time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+    ],
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref(a.id, "sidecar") })}`,
+  )
+
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+
+  // The mock serves these records, so changing one changes what the next list reload returns.
+  const advance = (id: string, time: { updated: number; idle?: number }, title?: string) => {
+    const session = workspace.sessions.find((item) => item.id === id)
+
+    if (!session) throw new Error(`Unknown session ${id}`)
+
+    Object.assign(session, { title: title ?? session.title, time: { ...session.time, ...time } })
+  }
+
+  await expect(rows).toHaveText([/Tab B session/, /Tab A session/])
+
+  // Renaming advances the server's time, but the row stays where the last reload put it.
+  advance(a.id, { updated: t + 2 }, "Renamed A session")
+  await workspace.push([
+    {
+      id: "evt_recent_order_rename",
+      created: t + 2,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 1, version: 1 },
+      data: { sessionID: a.id, title: "Renamed A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
+  ])
+  await expect(rows.first()).toContainText("Tab B session")
+  await expect(rows.last()).toContainText("Renamed A session")
+
+  // The window coming back reloads the list, as the iOS app does when it returns to the foreground.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+  await expect(rows).toHaveText([/Renamed A session/, /Tab B session/])
+
+  advance(b.id, { updated: t + 3, idle: t + 3 })
+  await workspace.push([
+    {
+      id: "evt_recent_order_run_end",
+      created: t + 3,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: b.id, seq: 1, version: 1 },
+      data: { sessionID: b.id },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+  await expect(rows).toHaveText([/Tab B session/, /Renamed A session/])
 })
 
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
@@ -1735,6 +1860,91 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(paste).toHaveText("PasteCtrl+V")
   await paste.click()
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
+})
+
+// #63095: hovering down the parent items left every submenu open, stacked on top of each other. Closing each one as
+// soon as the pointer left it then showed no submenu until the next opened, so the menu blinked on every item.
+test("the Windows titlebar menu swaps one submenu for the next as the pointer moves down its parent items", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const parents = ["File", "Edit", "View"].map((name) => page.getByRole("menuitem", { name, exact: true }))
+  const submenus = page.locator('[role="menu"].desktop-app-menu-sub')
+
+  // Keep the hover delay from elapsing while Playwright moves the pointer and checks the old submenu.
+  await holdClock(page)
+
+  for (const [index, parent] of parents.entries()) {
+    const box = (await parent.boundingBox())!
+    // Down and to the left, away from the open submenu, so the pointer isn't heading for it.
+    await page.mouse.move(box.x + box.width / 2 - index * 20, box.y + box.height / 2, { steps: 4 })
+    await expect(parent).toHaveAttribute("data-highlighted", "")
+
+    if (index > 0) await expect(parents[index - 1]).toHaveAttribute("aria-expanded", "true")
+    await expect(parent).toHaveAttribute("aria-expanded", "false")
+    // Kobalte's hover delay.
+    await page.clock.runFor(100)
+    await expect(parent).toHaveAttribute("aria-expanded", "true")
+    await expect(submenus).toHaveCount(1)
+  }
+})
+
+// #59613: crossing the other parent items on the way to a submenu's lower items closed it and opened theirs.
+test("the Windows titlebar menu keeps a submenu open while the pointer crosses other parent items to reach it", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const fileBox = (await file.boundingBox())!
+  const from = { x: fileBox.x + fileBox.width / 2, y: fileBox.y + fileBox.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  const closeWindow = page.getByRole("menuitem", { name: /^Close Window/ })
+  const target = (await closeWindow.boundingBox())!
+  const to = { x: target.x + 20, y: target.y + target.height / 2 }
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 4)
+
+  // A slow, straight move at 125px a second: it stays longer than the hover delay on each item it crosses, and the
+  // whole trip takes longer than the 300ms that Kobalte keeps the way to a submenu open.
+  for (let step = 1; step <= steps; step++) {
+    await page.mouse.move(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps)
+    await page.clock.runFor(32)
+  }
+
+  await expect(closeWindow).toHaveAttribute("data-highlighted", "")
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[role="menu"].desktop-app-menu-sub')).toHaveCount(1)
+})
+
+// Moving down the parent items while drifting right kept the way to the open submenu alive, so the highlight stayed on
+// the item that opened it while the pointer crossed the next ones.
+test("the Windows titlebar menu highlights each parent item the pointer drifts down across", async ({ page }) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+  const box = (await view.boundingBox())!
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  const go = page.getByRole("menuitem", { name: "Go", exact: true })
+  const target = (await go.boundingBox())!
+
+  // 1px right for every 4px down, a frame at a time, until the pointer is a few pixels inside Go.
+  for (let step = 1; from.y + step * 4 < target.y + 8; step++) {
+    await page.mouse.move(from.x + step, from.y + step * 4)
+    await page.clock.runFor(16)
+  }
+
+  await expect(go).toHaveAttribute("data-highlighted", "")
 })
 
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {

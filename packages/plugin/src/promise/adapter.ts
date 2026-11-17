@@ -441,17 +441,23 @@ export function fromPromise(plugin: Plugin) {
                           ...input,
                           authorize: (answer) =>
                             Effect.promise(() => input.authorize(answer)).pipe(
-                              Effect.map((authorization) =>
-                                authorization.mode === "auto"
-                                  ? {
-                                      ...authorization,
-                                      callback: Effect.promise(() => authorization.callback),
-                                    }
-                                  : {
-                                      ...authorization,
-                                      callback: (code) => Effect.promise(() => authorization.callback(code)),
-                                    },
-                              ),
+                              Effect.map((authorization) => {
+                                if (authorization.mode === "code")
+                                  return {
+                                    ...authorization,
+                                    callback: (code: string) => Effect.promise(() => authorization.callback(code)),
+                                  }
+                                const submit = authorization.submit
+                                return {
+                                  ...authorization,
+                                  callback: Effect.promise(() => authorization.callback),
+                                  // A rejected paste keeps its own error, which the dialog shows as is.
+                                  submit: submit
+                                    ? (redirect: string) =>
+                                        Effect.tryPromise({ try: () => submit(redirect), catch: (error) => error })
+                                    : undefined,
+                                }
+                              }),
                             ),
                           refresh:
                             refresh === undefined
@@ -666,7 +672,8 @@ export function fromPromise(plugin: Plugin) {
 
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
-          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          // JavaScript plugins may return anything, such as a v1-style hooks object; only a function is a cleanup.
+          (cleanup) => (typeof cleanup === "function" ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
         )
       }),
   })
