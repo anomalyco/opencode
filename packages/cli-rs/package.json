@@ -10,6 +10,7 @@
     "fixtures": "bun run parity/fixtures.ts",
     "check:drift": "bun run script/drift.ts",
     "check:deny": "cargo deny --workspace --frozen check --hide-inclusion-graph licenses bans sources",
+    "check:luau-types": "bun run script/check-luau-types.ts",
     "check:advisories": "cargo deny --workspace --locked check --hide-inclusion-graph advisories",
     "parity:acp": "bun run parity/acp/run.ts",
     "parity:cli": "bun run parity/cli/run.ts",

@@ -581,7 +581,7 @@ local function header(count: number)
 end
 
 local function searchRow(count: number, filtered: boolean)
-    local row = {
+    local row: { plugin.Node } = {
         nowrap("/", { fg = if state.searching then "text.action.primary.base" else "text.muted" }),
         { type = "input", id = SEARCH, value = state.query, placeholder = t().placeholder, layout = { grow = true } },
     }
@@ -635,7 +635,7 @@ local function row(index: number, row: Row, selected: boolean)
     return plugin.row(line, { id = rowId(index), gap = 1, padding_sides = { left = 2 }, bg = bg, on_click = click })
 end
 
-local function body(groups: { grouping.Group }, rows: { Row }, filtered: boolean)
+local function body(groups: { grouping.Group }, rows: { Row }, filtered: boolean): plugin.Node
     if state.loading then
         return plugin.text(t().loading, { fg = "text.muted" })
     elseif state.error then

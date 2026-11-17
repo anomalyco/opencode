@@ -6,7 +6,7 @@ local shout = require("./shout")
 
 local COUNT = "count"
 
-local function stored(read): number
+local function stored(read: plugin.Read): number
     local value = read:storageGet(COUNT)
     return if value and value.value then value.value else 0
 end
