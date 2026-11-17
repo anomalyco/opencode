@@ -509,14 +509,14 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         nodes.add(node)
         node.addEventListener("scroll", schedule, { passive: true })
         sizes.observe(node)
-        changes.observe(node, { attributes: true, childList: true })
+        changes.observe(node, { attributes: true, childList: node !== box })
 
         for (const sibling of node.parentElement?.children ?? []) {
           if (sibling === node) continue
           neighbors.add(sibling)
           sizes.observe(sibling)
           const portal = sibling.parentElement === document.body
-          changes.observe(sibling, { attributes: true, childList: portal, subtree: portal })
+          changes.observe(sibling, { attributes: true, childList: portal, characterData: portal, subtree: portal })
         }
       }
     }
@@ -558,6 +558,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
         }
 
         nodes.forEach(track)
+        neighbors.forEach(track)
         schedule()
 
         if (motions.size) {

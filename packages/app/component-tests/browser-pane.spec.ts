@@ -159,6 +159,53 @@ story("a spinner inside a persistent floating surface does not measure the pane 
   await expect(native).toHaveAttribute("data-visible", "true")
 })
 
+story("does not measure when the pane's own still enters or leaves its box", async ({ page }) => {
+  const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
+    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const rect = box.getBoundingClientRect.bind(box)
+    const count = { reads: 0 }
+    box.getBoundingClientRect = () => {
+      count.reads++
+
+      return rect()
+    }
+    const frames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const still = document.createElement("div")
+    still.className = "absolute inset-0 pointer-events-none"
+    box.prepend(still)
+    await frames()
+    still.remove()
+    await frames()
+
+    return count.reads
+  })
+
+  expect(reads).toBe(0)
+})
+
+story("hides the page when a portalled surface grows over it by a text edit alone", async ({ page }) => {
+  const native = page.getByTestId("native-Alpha")
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  const text = await page.locator("#browser-panel").evaluateHandle((panel) => {
+    const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
+    // A portal's wrapper keeps its size while the fixed surface inside it grows, as a toast region's does.
+    const wrapper = document.createElement("div")
+    const surface = document.createElement("div")
+    surface.dataset.floatingOverlay = ""
+    surface.style.cssText = `position:fixed; top:${pane.top + 8}px; left:${pane.left - 40}px; white-space:pre; font:16px monospace`
+    const text = document.createTextNode("x")
+    surface.append(text)
+    wrapper.append(surface)
+    document.body.append(wrapper)
+
+    return text
+  })
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await text.evaluate((node) => { node.data = "x".repeat(400) })
+  await expect(native).toHaveAttribute("data-visible", "false")
+})
+
 story("covers the page with unmarked portalled surfaces but not tooltips or transparent wrappers", async ({ page }) => {
   const native = page.getByTestId("native-Alpha")
   const portal = await page.locator("#browser-panel").evaluateHandle((panel) => {
