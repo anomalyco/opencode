@@ -1,7 +1,8 @@
-// Writes crates/plugin/src/luau/opencode.d.luau: the types of a Luau plugin (spike `luau-spike`). Every definition of
-// contract 2.0's schema (crates/plugin-abi/schema/v2.json, which plugin-schema.ts writes first) becomes an `export
-// type`, so a Luau plugin's tables are the contract's own shapes; the module `@opencode/plugin` and the `setup`,
-// `read`, `host` and `view` objects are written here by hand, as crates/plugin/src/luau/bind.rs binds them.
+// Writes crates/plugin/src/luau/opencode/plugin.luau: the types of a Luau plugin, as a stub of the module
+// `@opencode/plugin` that luau-analyze and luau-lsp resolve through a `.luaurc` alias (a definitions file cannot type a
+// `require`). Every definition of contract 2.0's schema (crates/plugin-abi/schema/v2.json, which plugin-schema.ts
+// writes first) becomes an `export type`, so a Luau plugin's tables are the contract's own shapes; the module and the
+// `setup`, `read`, `host` and `view` objects are written here by hand, as crates/plugin/src/luau/bind.rs binds them.
 type Schema = {
   $ref?: string
   type?: string | string[]
@@ -26,7 +27,9 @@ const schema = (await Bun.file(`${root}crates/plugin-abi/schema/v2.json`).json()
 
 // Luau's reserved words, which a table type names in brackets.
 const reserved = new Set(
-  "and break do else elseif end false for function if in local nil not or repeat return then true until while".split(" "),
+  "and break do else elseif end false for function if in local nil not or repeat return then true until while".split(
+    " ",
+  ),
 )
 
 function key(name: string) {
@@ -58,9 +61,14 @@ function luau(schema: Schema, indent: string): string {
   if (alternatives) {
     const present = alternatives.filter((alternative) => !nullable(alternative))
     const type = union(present.map((alternative) => luau(alternative, indent)))
-    return present.length < alternatives.length ? `${type}?` : type
+    // `any` holds `nil` already, and `any?` as a read-write field is invariant: a table built in a local fails it.
+    return present.length < alternatives.length && type !== "any" ? `${type}?` : type
   }
-  if (schema.allOf) return schema.allOf.map((part) => luau(part, indent)).join(" & ")
+  // Parenthesized, because Luau refuses `A & B` beside `|` in one type.
+  if (schema.allOf) {
+    const parts = schema.allOf.map((part) => luau(part, indent))
+    return parts.length === 1 ? parts[0] : `(${parts.join(" & ")})`
+  }
   const type = Array.isArray(schema.type) ? schema.type[0] : schema.type
   switch (type) {
     case "string":
@@ -83,17 +91,33 @@ function luau(schema: Schema, indent: string): string {
           return `{ [string]: ${luau(schema.additionalProperties, indent)} }`
         return type === "object" ? "{ [string]: any }" : "any"
       }
-      const required = new Set(schema.required ?? [])
-      const inner = indent + "    "
-      const fields = Object.entries(schema.properties).map(([name, field]) => {
-        const type = luau(field, inner)
-        const optional = required.has(name) || type.endsWith("?") ? "" : "?"
-        return `${inner}${key(name)}: ${type}${optional},`
-      })
-      return `{\n${fields.join("\n")}\n${indent}}`
+      return fields(schema.properties, new Set(schema.required ?? []), indent)
     }
   }
   return "any"
+}
+
+// A table type of `properties`, each optional unless `required` names it.
+function fields(properties: Record<string, Schema>, required: Set<string>, indent: string) {
+  const inner = indent + "    "
+  const lines = Object.entries(properties).map(([name, field]) => {
+    const type = luau(field, inner)
+    const optional = required.has(name) || type.endsWith("?") || type === "any" ? "" : "?"
+    return `${inner}${key(name)}: ${type}${optional},`
+  })
+  return `{\n${lines.join("\n")}\n${indent}}`
+}
+
+// What a helper's `props` may set: the fields of `schema` (or of its `oneOf` variant whose `type` is `kind`) but
+// `omit`, all optional.
+function props(schema: Schema, omit: string[], kind?: string) {
+  const variant = kind ? schema.oneOf?.find((variant) => variant.properties?.type?.const === kind) : schema
+  if (!variant?.properties) throw new Error(`plugin-types-luau: no ${kind ?? "object"} in the schema for the helpers`)
+  return fields(
+    Object.fromEntries(Object.entries(variant.properties).filter(([name]) => !omit.includes(name))),
+    new Set(),
+    "",
+  )
 }
 
 function comment(text: string | undefined, indent = "") {
@@ -103,14 +127,15 @@ function comment(text: string | undefined, indent = "") {
 
 const generated = Object.keys(schema.$defs)
   .toSorted()
-  .flatMap((name) => [...comment(schema.$defs[name].description), `export type ${name} = ${luau(schema.$defs[name], "")}`, ""])
+  .flatMap((name) => [
+    ...comment(schema.$defs[name].description),
+    `export type ${name} = ${luau(schema.$defs[name], "")}`,
+    "",
+  ])
 
-// The module and the objects a plugin's calls are handed, as bind.rs binds them.
-const api = `-- The plugin's objects -------------------------------------------------------------------------------------------
-
---- What a render or a view reads; every read of one call sees one store snapshot.
-export type Read = {
-    themeMode: (self: Read) -> "dark" | "light",
+// The reads, as `Read` and `Host` both carry them. `Host` repeats them with `self: Read` instead of being `Read & {…}`:
+// one table type is a subtype of `Read` by width, where an intersection of method tables trips the solver.
+const reads = `    themeMode: (self: Read) -> "dark" | "light",
     color: (self: Read, token: string) -> Rgba?,
     storageGet: (self: Read, key: string) -> any,
     session: (self: Read, id: string) -> Session?,
@@ -148,15 +173,22 @@ export type Read = {
     abi: (self: Read) -> Abi,
     --- Whether the host has optional feature \`name\` (\`plugin.FOCUS_INPUT\`, \`plugin.FENCE_NODE\`).
     hasFeature: (self: Read, name: string) -> boolean,
-}
+`
+
+// The module and the objects a plugin's calls are handed, as bind.rs binds them.
+const api = `-- The plugin's objects -------------------------------------------------------------------------------------------
+
+--- What a render or a view reads; every read of one call sees one store snapshot.
+export type Read = {
+${reads}}
 
 --- The version a host serves the plugin: its major, its minor of that major, and its optional features.
 export type Abi = { major: number, minor: number, features: { string } }
 
 --- What a handler acts with: the reads, and effects, which wait until the outermost call returns. A render or a view
 --- that calls an effect fails.
-export type Host = Read & {
-    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
+export type Host = {
+${reads}    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
     dispatch: (self: Host, name: string, input: string?) -> (),
     toast: (self: Host, toast: Toast) -> (),
@@ -225,6 +257,15 @@ export type Setup = {
     surface: (self: Setup, surface: SurfaceSpec, view: (view: View) -> Node, handler: ((host: Host, event: InputEvent) -> Handled?)?) -> (),
 }
 
+--- The style \`plugin.span\` adds to a span's text.
+export type SpanStyle = ${props(schema.$defs.Span, ["text"])}
+
+--- The fields \`plugin.text\` adds to a text node.
+export type TextProps = ${props(schema.$defs.Node, ["type", "spans"], "text")}
+
+--- The fields \`plugin.column\` and \`plugin.row\` add to a box.
+export type BoxProps = ${props(schema.$defs.Node, ["type", "row", "children"], "box")}
+
 --- \`require("@opencode/plugin")\`.
 export type Plugin = {
     contract: string,
@@ -234,23 +275,35 @@ export type Plugin = {
     KEEP: Render,
     HIDE: Render,
     define: (setup: (setup: Setup) -> ()) -> any,
-    span: (text: string, style: { [string]: any }?) -> Span,
-    text: (content: string | { Span }, props: { [string]: any }?) -> V1Node,
-    column: (children: { V1Node }, props: { [string]: any }?) -> V1Node,
-    row: (children: { V1Node }, props: { [string]: any }?) -> V1Node,
-    show: (node: V1Node) -> Render,
+    span: (text: string, style: SpanStyle?) -> Span,
+    text: (content: string | { Span }, props: TextProps?) -> Node,
+    column: (children: { Node }, props: BoxProps?) -> Node,
+    row: (children: { Node }, props: BoxProps?) -> Node,
+    --- A slot or route render of \`node\`; the host draws it with the node kinds a render takes (box, text, slot,
+    --- markdown and spinner).
+    show: (node: Node) -> Render,
     command: (name: string, input: string?) -> Action,
     click: (name: string, input: string?) -> Click,
 }
 `
 
-const header = `-- OpenCode plugin contract ${schema["x-abi"].major}.${schema["x-abi"].minor}: the types of a Luau plugin (spike luau-spike).
+const header = `--!strict
+-- OpenCode plugin contract ${schema["x-abi"].major}.${schema["x-abi"].minor}: the types of a Luau plugin, as the module \`@opencode/plugin\`.
 -- Generated from crates/plugin-abi/schema/v2.json by \`bun run generate\` (script/gen/plugin-types-luau.ts). Do not edit.
--- Load it with \`luau-lsp analyze --definitions=@opencode=crates/plugin/src/luau/opencode.d.luau\`.
+--
+-- The host registers the real module; this file only types it for luau-analyze and luau-lsp. Point the alias
+-- \`opencode\` at this directory in a \`.luaurc\` beside your plugin or above it:
+--   { "languageMode": "strict", "aliases": { "opencode": "<path to crates/plugin/src/luau/opencode>" } }
+-- then \`luau-analyze --formatter=gnu <your .luau files>\` or open the plugin in luau-lsp.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 `
 
-const file = `${root}crates/plugin/src/luau/opencode.d.luau`
-await Bun.write(file, `${header}\n${generated.join("\n")}\n${api}`)
+const footer = `
+local plugin: Plugin = nil :: any
+return plugin
+`
+
+const file = `${root}crates/plugin/src/luau/opencode/plugin.luau`
+await Bun.write(file, `${header}\n${generated.join("\n")}\n${api}${footer}`)
 console.log(`plugin-types-luau: ${Object.keys(schema.$defs).length} definitions`)

@@ -1,6 +1,11 @@
--- OpenCode plugin contract 2.0: the types of a Luau plugin (spike luau-spike).
+--!strict
+-- OpenCode plugin contract 2.0: the types of a Luau plugin, as the module `@opencode/plugin`.
 -- Generated from crates/plugin-abi/schema/v2.json by `bun run generate` (script/gen/plugin-types-luau.ts). Do not edit.
--- Load it with `luau-lsp analyze --definitions=@opencode=crates/plugin/src/luau/opencode.d.luau`.
+--
+-- The host registers the real module; this file only types it for luau-analyze and luau-lsp. Point the alias
+-- `opencode` at this directory in a `.luaurc` beside your plugin or above it:
+--   { "languageMode": "strict", "aliases": { "opencode": "<path to crates/plugin/src/luau/opencode>" } }
+-- then `luau-analyze --formatter=gnu <your .luau files>` or open the plugin in luau-lsp.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 
@@ -102,11 +107,11 @@ export type ClaimEntry = {
 }
 
 --- A claimed part as it is now.
-export type ClaimPart = (ToolPart & {
+export type ClaimPart = ((ToolPart & {
     type: "tool",
-} | FencePart & {
+}) | (FencePart & {
     type: "fence",
-})
+}))
 
 --- What a `claim` request answers; a null node leaves the part to the host.
 export type ClaimReply = {
@@ -130,8 +135,8 @@ export type ClaimTool = {
     type: any,
     id: any,
     name: any,
-    executed: any?,
-    native: any?,
+    executed: any,
+    native: any,
     state: (any | {
         status: "completed",
         input: { [string]: any },
@@ -213,19 +218,19 @@ export type Dialog = ({
     dialog: Dialog,
     dismissed: Action,
     type: "dismissable",
-} | Panel & {
+} | (Panel & {
     type: "panel",
-} | Select & {
+}) | (Select & {
     type: "select",
-} | Confirm & {
+}) | (Confirm & {
     type: "confirm",
-} | Alert & {
+}) | (Alert & {
     type: "alert",
-} | ErrorDetails & {
+}) | (ErrorDetails & {
     type: "error-details",
-} | Images & {
+}) | (Images & {
     type: "images",
-})
+}))
 
 export type DiffView = ("unified" | "split")
 
@@ -310,7 +315,7 @@ export type Fetch = {
     method: string,
     path: string,
     query: { { string } }?,
-    body: any?,
+    body: any,
     bytes: boolean?,
 }
 
@@ -557,17 +562,17 @@ export type HostRequest = ({
 } | {
     id: string,
     type: "pending",
-} | Attention & {
+} | (Attention & {
     type: "attention",
-} | Fetch & {
+}) | (Fetch & {
     type: "fetch",
-} | Foreground & {
+}) | (Foreground & {
     type: "foreground",
-} | OpenPanel & {
+}) | (OpenPanel & {
     type: "open-panel",
-} | Overlay & {
+}) | (Overlay & {
     type: "overlay",
-})
+}))
 
 --- An image, in base64.
 export type Image = {
@@ -622,11 +627,11 @@ export type InputEvent = ({
     mounted: boolean,
     slot: SlotInput?,
     type: "mount",
-} | Key & {
+} | (Key & {
     type: "key",
-} | Pointer & {
+}) | (Pointer & {
     type: "pointer",
-})
+}))
 
 --- Whose handler an input request calls.
 export type InputTo = ({
@@ -1071,9 +1076,9 @@ export type Render = ({
 })
 
 --- A fence, with the index of its render.
-export type RenderFence = Fence & {
+export type RenderFence = (Fence & {
     index: number?,
-}
+})
 
 --- A request the host sends a plugin's `call`.
 export type Request = ({
@@ -1171,9 +1176,9 @@ export type Request = ({
     type: "search",
 } | {
     type: "plugins",
-} | RenderFence & {
+} | (RenderFence & {
     type: "render-fence",
-})
+}))
 
 --- What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which names no request. One the host does not take, as when its queue of effects is full, answers an error, and no reply comes.
 export type RequestId = number
@@ -1605,7 +1610,45 @@ export type Abi = { major: number, minor: number, features: { string } }
 
 --- What a handler acts with: the reads, and effects, which wait until the outermost call returns. A render or a view
 --- that calls an effect fails.
-export type Host = Read & {
+export type Host = {
+    themeMode: (self: Read) -> "dark" | "light",
+    color: (self: Read, token: string) -> Rgba?,
+    storageGet: (self: Read, key: string) -> any,
+    session: (self: Read, id: string) -> Session?,
+    sessions: (self: Read) -> { Session },
+    family: (self: Read, id: string) -> Family,
+    messages: (self: Read, id: string) -> { any },
+    --- The inbox items of session `id` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
+    pending: (self: Read, id: string) -> { any },
+    --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
+    models: (self: Read, location: LocationRef?) -> { any }?,
+    --- The providers where the TUI works; `nil` while they are not loaded.
+    providers: (self: Read) -> { any }?,
+    --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
+    limits: (self: Read) -> any,
+    model: (self: Read) -> any,
+    info: (self: Read) -> Info,
+    route: (self: Read) -> Route,
+    interactive: (self: Read) -> boolean,
+    shortcut: (self: Read, name: string) -> string?,
+    dialogOpen: (self: Read, key: string) -> boolean,
+    composer: (self: Read) -> Composer?,
+    tabs: (self: Read) -> { Tab },
+    --- Whether session tabs are on in this TUI.
+    tabsEnabled: (self: Read) -> boolean,
+    theme: (self: Read) -> string?,
+    themes: (self: Read) -> { string },
+    selection: (self: Read) -> string?,
+    rect: (self: Read, id: string) -> NodeRect?,
+    focused: (self: Read) -> Focused,
+    mode: (self: Read) -> string?,
+    mount: (self: Read) -> MountId?,
+    setting: (self: Read, name: string) -> any,
+    plugins: (self: Read) -> { PluginEntry },
+    --- The host's version and its optional features.
+    abi: (self: Read) -> Abi,
+    --- Whether the host has optional feature `name` (`plugin.FOCUS_INPUT`, `plugin.FENCE_NODE`).
+    hasFeature: (self: Read, name: string) -> boolean,
     storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
     dispatch: (self: Host, name: string, input: string?) -> (),
@@ -1675,6 +1718,55 @@ export type Setup = {
     surface: (self: Setup, surface: SurfaceSpec, view: (view: View) -> Node, handler: ((host: Host, event: InputEvent) -> Handled?)?) -> (),
 }
 
+--- The style `plugin.span` adds to a span's text.
+export type SpanStyle = {
+    fg: Color?,
+    bg: Color?,
+    bold: boolean?,
+    italic: boolean?,
+    underline: boolean?,
+    dim: boolean?,
+    strikethrough: boolean?,
+    link: string?,
+}
+
+--- The fields `plugin.text` adds to a text node.
+export type TextProps = {
+    id: string?,
+    fg: Color?,
+    wrap: Wrap?,
+    truncate: boolean?,
+    selectable: boolean?,
+    hover_fg: Color?,
+    layout: Layout?,
+    on_click: Click?,
+    hover_events: boolean?,
+}
+
+--- The fields `plugin.column` and `plugin.row` add to a box.
+export type BoxProps = {
+    id: string?,
+    gap: number?,
+    padding: { number }?,
+    justify: Justify?,
+    align: Align?,
+    bg: Color?,
+    layout: Layout?,
+    on_click: Click?,
+    border: Border?,
+    padding_sides: Edges?,
+    wrap: boolean?,
+    overflow: Overflow?,
+    sticky: Edge?,
+    anchor: Anchor?,
+    split: Split?,
+    visible: boolean?,
+    focusable: boolean?,
+    pointer: boolean?,
+    hover: Color?,
+    hover_events: boolean?,
+}
+
 --- `require("@opencode/plugin")`.
 export type Plugin = {
     contract: string,
@@ -1684,11 +1776,16 @@ export type Plugin = {
     KEEP: Render,
     HIDE: Render,
     define: (setup: (setup: Setup) -> ()) -> any,
-    span: (text: string, style: { [string]: any }?) -> Span,
-    text: (content: string | { Span }, props: { [string]: any }?) -> V1Node,
-    column: (children: { V1Node }, props: { [string]: any }?) -> V1Node,
-    row: (children: { V1Node }, props: { [string]: any }?) -> V1Node,
-    show: (node: V1Node) -> Render,
+    span: (text: string, style: SpanStyle?) -> Span,
+    text: (content: string | { Span }, props: TextProps?) -> Node,
+    column: (children: { Node }, props: BoxProps?) -> Node,
+    row: (children: { Node }, props: BoxProps?) -> Node,
+    --- A slot or route render of `node`; the host draws it with the node kinds a render takes (box, text, slot,
+    --- markdown and spinner).
+    show: (node: Node) -> Render,
     command: (name: string, input: string?) -> Action,
     click: (name: string, input: string?) -> Click,
 }
+
+local plugin: Plugin = nil :: any
+return plugin
