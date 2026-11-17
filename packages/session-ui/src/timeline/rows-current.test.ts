@@ -1795,4 +1795,54 @@ describe("current session timeline rows", () => {
       ),
     ).toBe(false)
   })
+
+  test("pins a keyed timeline row accessor across row-type replacement at the same index", () => {
+    const initial = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
+        { id: "msg_2", type: "user", text: "steer", time: { created: 2 } },
+      ] satisfies SessionMessageInfo[],
+      true,
+      { type: "busy" },
+    )
+    const replaced = Timeline.constructSessionMessageRows(
+      [
+        { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
+        {
+          id: "msg_3",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            { type: "reasoning", text: "thinking" },
+            { type: "text", text: "reply" },
+          ],
+          time: { created: 3 },
+        },
+      ] satisfies SessionMessageInfo[],
+      true,
+      { type: "busy" },
+    )
+
+    const rowKey = "user-message:msg_2"
+    const index = initial.rows.findIndex((item) => TimelineRow.key(item) === rowKey)
+    const initialByKey = new Map(initial.rows.map((entry) => [TimelineRow.key(entry), entry] as const))
+    const replacedByKey = new Map(replaced.rows.map((entry) => [TimelineRow.key(entry), entry] as const))
+    const initialRow = initialByKey.get(rowKey)!
+    let currentRows = initial.rows
+    let currentRowByKey = initialByKey
+
+    // Simulate a virtualized row accessor that falls back to the item index when its key disappears.
+    const rawRow = () => currentRowByKey.get(rowKey) ?? currentRows[index] ?? initialRow
+    const pinned = TimelineRow.pin(rawRow, initialRow, rowKey)
+
+    expect(Predicate.isTagged(pinned(), "UserMessage")).toBe(true)
+
+    currentRows = replaced.rows
+    currentRowByKey = replacedByKey
+
+    expect(Predicate.isTagged(rawRow(), "UserMessage")).toBe(false)
+    expect(Predicate.isTagged(pinned(), "UserMessage")).toBe(true)
+    expect(pinned()).toBe(initialRow)
+  })
 })

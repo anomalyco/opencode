@@ -687,7 +687,9 @@ export function createSessionTimelineRowRenderer(input: {
   const Frame = (props: { row: FramedTimelineRow; grow?: boolean; children: JSX.Element }) => (
     <div
       ref={(el) => {
-        if (props.grow) growIn(el, () => grown(props.row.userMessageID))
+        if (!props.grow) return
+        const userMessageID = props.row.userMessageID
+        growIn(el, () => grown(userMessageID))
       }}
       id={Predicate.isTagged(props.row, "UserMessage") ? input.anchor?.(props.row.userMessageID) : undefined}
       data-message-id={props.row.userMessageID}
@@ -1423,7 +1425,7 @@ export function createSessionTimelineRowRenderer(input: {
   function Row(props: { row: Accessor<TimelineRow.TimelineRow>; onSizeChange?: () => void }) {
     return (
       <Show when={TimelineRow.key(props.row())} keyed>
-        {(_key) => render(props.row, props.onSizeChange)}
+        {(key) => render(TimelineRow.pin(props.row, untrack(props.row), key), props.onSizeChange)}
       </Show>
     )
   }
