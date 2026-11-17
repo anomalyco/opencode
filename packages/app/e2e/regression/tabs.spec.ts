@@ -2683,3 +2683,90 @@ async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox
     attempts: () => attempts.count,
   }
 }
+
+test("tab groups collapse and auto-expand on navigation, reopen closed matches from sidebar search, and Shift-drag combine into manual groups", async ({
+  page,
+}) => {
+  const dirA = "C:/OpenCode/TabGroupsA"
+  const dirB = "/srv/tab-groups-b"
+  const localOne = session({ id: "ses_tg_local_1", directory: dirA, title: "Local alpha" })
+  const localTwo = session({ id: "ses_tg_local_2", directory: dirA, title: "Local beta" })
+  const localClosed = session({ id: "ses_tg_closed", directory: dirA, title: "Archived lookup target" })
+  const remoteOne = session({ id: "ses_tg_remote_1", directory: dirB, title: "Remote gamma" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      hostname: "local",
+      directory: dirA,
+      project: project({ id: "proj_tg_a", directory: dirA, name: "opencode" }),
+      provider: NO_PROVIDER,
+      sessions: [localOne, localTwo, localClosed],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      hostname: "blade",
+      directory: dirB,
+      project: project({ id: "proj_tg_b", directory: dirB, name: "blade-repo" }),
+      provider: NO_PROVIDER,
+      sessions: [remoteOne],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "blade" }],
+    tabs: [localOne.id, localTwo.id, { session: remoteOne.id, server: REMOTE_SERVER }],
+    settings: {
+      appearance: { tabLayout: "vertical", sidebarOpen: true },
+      general: { tabGroups: true, sidebarOrganize: "list" },
+    },
+  })
+
+  await page.goto(sessionHref(localOne.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
+  const remoteTab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remoteOne.id, REMOTE_SERVER)}"])`)
+
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(2)
+  await expect(remoteTab).toBeVisible()
+
+  // Collapsing the remote group hides its tab; navigating into that session auto-expands the group.
+  await remoteHeader.locator("button").first().click()
+  await expect(remoteTab).toHaveCount(0)
+  await expect(remoteHeader).toContainText("1")
+  await page.evaluate((href) => window.history.pushState({}, "", href), sessionHref(remoteOne.id, REMOTE_SERVER))
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")))
+  await expect(remoteTab).toBeVisible()
+
+  // Inline sidebar search filters open tabs and surfaces closed server sessions to reopen in place.
+  const searchInput = sidebar.getByRole("textbox", { name: "Search sessions", exact: true })
+  await searchInput.fill("Archived lookup")
+  const closedMatch = sidebar.locator('[data-slot="closed-search-match"]').filter({ hasText: "Archived lookup target" })
+  await expect(closedMatch).toBeVisible()
+  await closedMatch.click()
+  await expectPath(page, sessionHref(localClosed.id))
+  await expect(searchInput).toHaveValue("")
+
+  // Turning off automatic grouping flattens the strip; Shift-dragging one tab onto another creates a manual group.
+  await sidebar.locator('[data-action="tab-groups-menu"]').click()
+  await page.getByRole("menuitemradio", { name: "None", exact: true }).click()
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(0)
+
+  const slotOne = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)
+  const slotTwo = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localTwo.id)}"])`)
+  const [boxOne, boxTwo] = await Promise.all([slotOne.boundingBox(), slotTwo.boundingBox()])
+
+  if (!boxOne || !boxTwo) throw new Error("tab slots have no bounding box")
+  await page.keyboard.down("Shift")
+  await page.mouse.move(boxTwo.x + 40, boxTwo.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(boxOne.x + 40, boxOne.y + 14, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up("Shift")
+
+  const manualGroup = sidebar.locator("[data-tab-group]")
+  await expect(manualGroup).toHaveCount(1)
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+})

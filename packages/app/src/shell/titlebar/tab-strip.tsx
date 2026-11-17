@@ -92,6 +92,8 @@ function SessionTabSlot(
     shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
+    combineTarget?: boolean
+    contextMenuExtra?: () => JSX.Element
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -103,6 +105,7 @@ function SessionTabSlot(
     get index() {
       return props.index
     },
+    group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
     get type() {
       return props.group
@@ -120,6 +123,7 @@ function SessionTabSlot(
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
+      data-combine-target={props.combineTarget ? "true" : undefined}
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
@@ -152,6 +156,7 @@ function SessionTabSlot(
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
+        contextMenuExtra={props.contextMenuExtra}
       />
       {props.footer}
     </div>
@@ -174,6 +179,8 @@ function SessionTabEntry(
     serverCtx: ServerCtx | undefined
     view: SessionTabView
     shortcut?: number
+    combineTarget?: boolean
+    contextMenuExtra?: () => JSX.Element
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -318,6 +325,8 @@ function SessionTabEntry(
           }[props.view.fallbackTitle]
         }
         fallbackDirectory={props.view.fallbackDirectory}
+        combineTarget={props.combineTarget}
+        contextMenuExtra={props.contextMenuExtra}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
@@ -495,6 +504,8 @@ function DraftTabSlot(
     orientation: "horizontal" | "vertical"
     title: string
     shortcut?: number
+    combineTarget?: boolean
+    contextMenuExtra?: () => JSX.Element
     onNavigate: (element: HTMLDivElement) => void
   },
 ) {
@@ -505,6 +516,7 @@ function DraftTabSlot(
     get index() {
       return props.index
     },
+    group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
     get type() {
       return props.group
@@ -522,6 +534,7 @@ function DraftTabSlot(
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
+      data-combine-target={props.combineTarget ? "true" : undefined}
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
@@ -545,6 +558,7 @@ function DraftTabSlot(
         active={props.active}
         dragging={sortable.isDragSource()}
         orientation={props.orientation}
+        contextMenuExtra={props.contextMenuExtra}
       />
       {props.footer}
     </div>
@@ -559,14 +573,90 @@ export type TabStripSection = {
   footer?: JSX.Element
   /** The header already names the project, so session tabs leave out their project avatar. */
   hideAvatars?: boolean
+  /** Optional browser-style tab group chrome for vertical and horizontal strips. */
+  groupMeta?: {
+    color: string
+    collapsed: boolean
+    ungrouped?: boolean
+  }
+}
+
+function SortableTabGroupContainer(props: {
+  sectionKey: string
+  index: number
+  vertical: boolean
+  color: string
+  collapsed: boolean
+  ungrouped?: boolean
+  enabled: boolean
+  header?: JSX.Element
+  children: JSX.Element
+}) {
+  const sortable = useSortable({
+    get id() {
+      return `tab-section:${props.sectionKey}`
+    },
+    get index() {
+      return props.index
+    },
+    group: "tab-sections",
+    type: "tab-section",
+    accept: "tab-section",
+    get disabled() {
+      return !props.enabled
+    },
+  })
+
+  if (props.ungrouped) {
+    return (
+      <div
+        ref={sortable.ref}
+        class="flex min-w-0"
+        classList={{
+          "flex-row items-center gap-1.5 shrink": !props.vertical,
+          "flex-col items-stretch gap-0.5 shrink-0": props.vertical,
+        }}
+      >
+        <span ref={sortable.handleRef} hidden aria-hidden="true" />
+        {props.header}
+        {props.children}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={sortable.ref}
+      data-tab-group
+      data-group-key={props.sectionKey}
+      data-group-color={props.color}
+      data-collapsed={props.collapsed ? "" : undefined}
+      data-dragging={sortable.isDragSource() ? "true" : undefined}
+      data-orientation={props.vertical ? "vertical" : "horizontal"}
+    >
+      <div ref={sortable.handleRef} class="shrink-0">
+        {props.header}
+      </div>
+      {props.children}
+    </div>
+  )
 }
 
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   highlightActive?: boolean
   tabs: Tab[]
-  /** Vertical only: groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
+  /** Groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
   sections?: TabStripSection[]
+  /** Allows dragging tabs across section boundaries (e.g. manual browser tab groups). */
+  allowCrossSectionDrag?: boolean
+  /** Allows holding Shift or dwelling on another tab to combine them into a group. */
+  allowCombineToGroup?: boolean
+  onMoveTabToGroup?: (tabKey: string, targetGroupKey: string | undefined) => void
+  onCombineTabs?: (sourceTabKey: string, targetTabKey: string) => void
+  onDropTargetChange?: (groupKey: string | undefined) => void
+  onReorderSections?: (fromIndex: number, toIndex: number) => void
+  tabContextMenu?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: extra content rendered right after a tab row (e.g. its subagent sessions). */
   tabFooter?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: a faint trailing label on a tab row (e.g. its server). */
@@ -607,6 +697,33 @@ export function TitlebarTabStrip(props: {
     if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
   })
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
+
+  const [combine, setCombine] = createStore<{ key: string | undefined; candidate: string | undefined }>({
+    key: undefined,
+    candidate: undefined,
+  })
+
+  let combineTimer: ReturnType<typeof setTimeout> | undefined
+  let shiftHeld = false
+  const initialSlotRects = new Map<string, DOMRect>()
+
+  createEventListener(
+    window,
+    ["keydown", "keyup", "pointerdown", "pointermove"],
+    (event) => {
+      shiftHeld = event.shiftKey
+    },
+    { capture: true, passive: true },
+  )
+
+  const clearCombine = () => {
+    clearTimeout(combineTimer)
+    combineTimer = undefined
+    initialSlotRects.clear()
+    setCombine({ key: undefined, candidate: undefined })
+  }
+
+  onCleanup(clearCombine)
   const [tabLoads, setTabLoads] = createSignal(INITIAL_SESSION_TAB_LOADS_STATE)
   const loadTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
@@ -746,7 +863,8 @@ export function TitlebarTabStrip(props: {
   function renderTab(tab: Tab, section?: TabStripSection) {
     const id = tabKey(tab)
 
-    const group = section?.key
+    const group = props.allowCrossSectionDrag ? "manual-tab" : section ? `tab:${section.key}` : undefined
+    const menuExtra = props.tabContextMenu ? () => props.tabContextMenu!(tab) : undefined
     let ref!: HTMLDivElement
     const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
 
@@ -791,6 +909,8 @@ export function TitlebarTabStrip(props: {
           serverCtx={serverCtx()}
           view={views().get(id) ?? hiddenTabView}
           shortcut={shortcut(visibleIndex())}
+          combineTarget={combine.key === id}
+          contextMenuExtra={menuExtra}
           onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
             ref = element
@@ -815,6 +935,8 @@ export function TitlebarTabStrip(props: {
         orientation={vertical() ? "vertical" : "horizontal"}
         title={language.t("session.tab.session")}
         shortcut={shortcut(visibleIndex())}
+        combineTarget={combine.key === id}
+        contextMenuExtra={menuExtra}
         onNavigate={(element) => {
           ref = element
           props.onNavigate(tab, element)
@@ -861,7 +983,7 @@ export function TitlebarTabStrip(props: {
               preventActivation: (event) =>
                 event.target instanceof Element &&
                 !!event.target.closest(
-                  '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                  '[data-slot="tab-close"], [data-group-menu-trigger], [contenteditable="true"], [contenteditable="plaintext-only"]',
                 ),
             }),
           ]}
@@ -878,7 +1000,18 @@ export function TitlebarTabStrip(props: {
             const source = event.operation.source
 
             if (!source) return
-            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+            const sourceId = source.id.toString()
+
+            if (props.allowCombineToGroup && !sourceId.startsWith("tab-section:")) {
+              initialSlotRects.clear()
+              listRef.querySelectorAll<HTMLElement>("[data-titlebar-tab-slot][data-tab-key]").forEach((el) => {
+                const key = el.dataset.tabKey
+
+                if (key && key !== sourceId) initialSlotRects.set(key, el.getBoundingClientRect())
+              })
+            }
+
+            const tab = props.tabs.find((item) => tabKey(item) === sourceId)
 
             if (!tab) return
 
@@ -886,16 +1019,120 @@ export function TitlebarTabStrip(props: {
             const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
             props.onNavigate(tab, tabEl ?? undefined)
           }}
+          onDragMove={(event) => {
+            const sourceId = event.operation.source?.id.toString() ?? ""
+
+            if (sourceId.startsWith("tab-section:")) return
+            const point = event.operation.position.current
+
+            if (props.allowCrossSectionDrag) {
+              const hit =
+                typeof document !== "undefined"
+                  ? document
+                      .elementFromPoint(point.x, point.y)
+                      ?.closest<HTMLElement>("[data-tab-group-header][data-group-key]")
+                  : undefined
+
+              props.onDropTargetChange?.(hit?.dataset.groupKey)
+
+              if (hit?.dataset.groupKey) {
+                clearTimeout(combineTimer)
+                combineTimer = undefined
+                setCombine({ key: undefined, candidate: undefined })
+
+                return
+              }
+            }
+
+            if (!props.allowCombineToGroup) return
+
+            const targetKey = [...initialSlotRects.entries()].find(([, rect]) => {
+              const insetX = rect.width * 0.15
+              const insetY = rect.height * 0.2
+
+              return (
+                point.x >= rect.left + insetX &&
+                point.x <= rect.right - insetX &&
+                point.y >= rect.top + insetY &&
+                point.y <= rect.bottom - insetY
+              )
+            })?.[0]
+
+            if (shiftHeld && targetKey) {
+              clearTimeout(combineTimer)
+              combineTimer = undefined
+              setCombine({ key: targetKey, candidate: targetKey })
+
+              return
+            }
+
+            if (targetKey === combine.candidate) return
+            clearTimeout(combineTimer)
+            combineTimer = undefined
+            setCombine({ key: undefined, candidate: targetKey })
+
+            if (!targetKey) return
+            combineTimer = setTimeout(() => setCombine("key", targetKey), 380)
+          }}
           onDragEnd={(event) => {
-            const current = visibleTabIds()
+            const armedCombine = combine.key
+            clearCombine()
+            props.onDropTargetChange?.(undefined)
             const source = event.operation.source
 
             if (event.canceled || !isSortable(source)) return
+            const movedKey = source.id.toString()
+
+            if (movedKey.startsWith("tab-section:")) {
+              if (source.initialIndex !== source.index) {
+                props.onReorderSections?.(source.initialIndex, source.index)
+              }
+
+              return
+            }
+
+            if (props.allowCombineToGroup && armedCombine && armedCombine !== movedKey) {
+              props.onCombineTabs?.(movedKey, armedCombine)
+
+              return
+            }
+
+            const current = visibleTabIds()
+
+            if (props.allowCrossSectionDrag) {
+              const point = event.operation.position.current
+
+              const hit =
+                typeof document !== "undefined"
+                  ? document
+                      .elementFromPoint(point.x, point.y)
+                      ?.closest<HTMLElement>("[data-tab-group-header][data-group-key]")
+                  : undefined
+
+              if (hit?.dataset.groupKey) {
+                props.onMoveTabToGroup?.(movedKey, hit.dataset.groupKey)
+
+                return
+              }
+            }
 
             const { initialIndex, index } = source
 
             if (initialIndex === index) return
             const next = arrayMove(current, initialIndex, index)
+
+            if (props.allowCrossSectionDrag) {
+              const targetNeighborKey = current[index]
+              const targetSection = targetNeighborKey ? sectionOf().get(targetNeighborKey) : undefined
+
+              if (targetSection && targetSection !== sectionOf().get(movedKey)) {
+                props.onMoveTabToGroup?.(movedKey, targetSection)
+              }
+
+              props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
+
+              return
+            }
 
             // Sections are contiguous, so a move within one keeps every position's section.
             if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
@@ -912,12 +1149,42 @@ export function TitlebarTabStrip(props: {
             <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
               {(list) => (
                 <Key each={list()} by={(section) => section.key}>
-                  {(section) => (
-                    <>
-                      {section().header}
-                      <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                      {section().footer}
-                    </>
+                  {(section, sectionIndex) => (
+                    <Show
+                      when={section().groupMeta}
+                      fallback={
+                        <>
+                          {section().header}
+                          <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                          {section().footer}
+                        </>
+                      }
+                    >
+                      {(meta) => (
+                        <SortableTabGroupContainer
+                          sectionKey={section().key}
+                          index={sectionIndex()}
+                          vertical={vertical()}
+                          color={meta().color}
+                          collapsed={meta().collapsed}
+                          ungrouped={meta().ungrouped}
+                          enabled={!!props.onReorderSections}
+                          header={section().header}
+                        >
+                          <Show
+                            when={!meta().ungrouped}
+                            fallback={<For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>}
+                          >
+                            <Show when={section().tabs.length > 0}>
+                              <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
+                                <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                              </div>
+                            </Show>
+                          </Show>
+                          {section().footer}
+                        </SortableTabGroupContainer>
+                      )}
+                    </Show>
                   )}
                 </Key>
               )}
