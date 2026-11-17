@@ -619,6 +619,83 @@ fn session_manager_groups_searches_and_deletes_alike_in_ts_rust_and_luau() {
     });
 }
 
+// --- opencode-queue-manager (complex): a chain of dialogs over stored drafts, the session's queue and its inbox
+
+fn queue_server(seen: &Seen) -> Option<Reply> {
+    let pending = json!([
+        { "id": "msg_p1", "sessionID": "ses_p", "time": { "created": 3000 }, "type": "user", "payload": { "text": "Write the tests" }, "delivery": "queue" },
+        { "id": "msg_p2", "sessionID": "ses_p", "time": { "created": 3001 }, "type": "synthetic", "payload": { "text": "Continue" }, "delivery": "queue" },
+    ]);
+    match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": session("ses_p", "Queue", None, 1) }))),
+        ("GET", "/api/session/ses_p/message") => Some((200, json!({ "data": [], "cursor": {} }))),
+        ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": pending }))),
+        ("DELETE", "/api/session/ses_p/inbox/msg_p1") => Some((204, Value::Null)),
+        _ => None,
+    }
+}
+
+// Expected: on each column, `/qm` opens the menu with the drafts and the pending count; a custom count of 0 is refused
+// in TS's error alert; two drafts added through the prompt sort A-Z in the stored list; clearing the native queue
+// asks, then cancels the one queued user prompt; clearing the drafts asks, then empties them; and a file's lines are
+// staged after a confirm. A Luau plugin reads no files, so the Luau column leaves the import out.
+#[test]
+fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
+    let file = std::env::temp_dir().join(format!("ports-trio-queue-{}.txt", std::process::id()));
+    std::fs::write(&file, "\u{feff}first line\r\n\n  second line \n").unwrap();
+    let path = file.to_string_lossy().into_owned();
+    trio("@bybrawe/opencode-queue-manager", "queue-manager", |carrier| {
+        let h = open_with(&[carrier], 120, queue_server, true, None, None)?;
+        h.settle();
+        let mut steps = Vec::new();
+        let mut step = |name: &str, keys: &[&str], text: Option<&str>, until: &str| {
+            keys.iter().for_each(|key| h.app.press(key));
+            if let Some(text) = text {
+                h.app.type_text(text);
+                h.app.press("return");
+            }
+            h.wait_for(until);
+            h.settle();
+            steps.push((name.to_owned(), screen(&h)));
+        };
+        h.app.type_text("/qm");
+        h.wait_for("Queue Manager");
+        step("menu", &["return"], None, "native pending");
+        step("count", &["return"], None, "Custom (1-500)");
+        step("how many", &["down", "down", "down", "down", "down", "return"], None, "e.g. 150");
+        step("refused", &[], Some("0"), "between 1 and 500");
+        step("back", &["return"], None, "0 drafts");
+        step("first", &["down", "return"], Some("zeta task"), "1 drafts");
+        step("second", &["down", "return"], Some("Alpha task"), "2 drafts");
+        step("sort", &["down", "down", "down", "down", "return"], None, "Sort A-Z");
+        step("sorted", &["down", "return"], None, "2 drafts");
+        step("drafts", &["down", "down", "down", "return"], None, "001. Alpha task");
+        step("listed", &["escape"], None, "2 drafts");
+        step(
+            "clear native",
+            &["down", "down", "down", "down", "down", "down", "down", "down", "return"],
+            None,
+            "Cancel 1 queued",
+        );
+        step("cleared native", &["return"], None, "cancellation requested");
+        step(
+            "clear drafts",
+            &["down", "down", "down", "down", "down", "down", "down", "return"],
+            None,
+            "Delete 2 draft",
+        );
+        step("cleared drafts", &["return"], None, "0 drafts");
+        if !matches!(carrier, Carrier::Luau(_)) {
+            step("import", &["down", "down", "return"], Some(&path), "Stage 2 messages");
+            step("imported", &["return"], None, "2 messages staged");
+        }
+        drop(step);
+        let requests = requests(&h, &["/api/session/ses_p/inbox", "/api/session/ses_p/prompt"]);
+        Some(Observed { steps, requests })
+    });
+    let _ = std::fs::remove_file(file);
+}
+
 /// The reads the server saw that `keep` keeps, each once, sorted.
 fn requests_of(h: &Port, keep: impl Fn(&Seen) -> bool) -> Vec<String> {
     let log = h.log.lock().unwrap();
