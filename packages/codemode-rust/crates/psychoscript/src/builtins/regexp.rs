@@ -70,6 +70,8 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
         unicode_sets: seen[6],
         ..Default::default()
     };
+    let expanded = rewrite_named_refs(pattern, rflags.unicode_sets)?;
+    let pattern = expanded.as_deref().unwrap_or(pattern);
     // Without the unicode flags a pattern is code units, like the text it matches.
     let compiled = if rflags.unicode || rflags.unicode_sets {
         regress::Regex::with_flags(pattern, rflags)
@@ -81,6 +83,111 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
         Ok(r) => Ok((r, ordered)),
         Err(e) => Err(CompileError::Pattern(e.to_string())),
     }
+}
+
+/// What a pattern holds that `regress` gets wrong around `\\k`: its named groups (name and capture index), its
+/// `\\k<name>` references outside classes (span and name), and whether a class contains `\\k`.
+struct NamedRefs {
+    groups: Vec<(String, usize)>,
+    refs: Vec<(usize, usize, String)>,
+    k_in_class: bool,
+}
+
+fn scan_named_refs(chars: &[char], nested_classes: bool) -> NamedRefs {
+    let mut found = NamedRefs {
+        groups: Vec::new(),
+        refs: Vec::new(),
+        k_in_class: false,
+    };
+    let (mut i, mut depth, mut count) = (0, 0usize, 0usize);
+    let name_at = |from: usize| {
+        let end = chars[from..]
+            .iter()
+            .position(|c| *c == '>')
+            .map(|n| from + n)?;
+        Some((end, chars[from..end].iter().collect::<String>()))
+    };
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => {
+                if chars.get(i + 1) == Some(&'k') {
+                    if depth > 0 {
+                        found.k_in_class = true;
+                    } else if chars.get(i + 2) == Some(&'<')
+                        && let Some((end, name)) = name_at(i + 3)
+                    {
+                        found.refs.push((i, end + 1, name));
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            '[' if depth == 0 || nested_classes => depth += 1,
+            ']' if depth > 0 => depth -= 1,
+            '(' if depth == 0 => {
+                if chars.get(i + 1) != Some(&'?') {
+                    count += 1;
+                } else if chars.get(i + 2) == Some(&'<')
+                    && !matches!(chars.get(i + 3), Some('=') | Some('!'))
+                    && let Some((_, name)) = name_at(i + 3)
+                {
+                    count += 1;
+                    found.groups.push((name, count));
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    found
+}
+
+/// Fixes up `\\k` before `regress` sees the pattern. With named groups, `\\k` inside a class is a syntax error,
+/// which `regress` accepts. And `regress` binds `\\k<name>` to the first group of that name only: when a name is
+/// duplicated at most one of its groups participates, and a reference to a group that did not participate matches
+/// empty, so the reference becomes the sequence of back-references to every group of that name, `(?:\\1\\2)`.
+fn rewrite_named_refs(pattern: &str, nested_classes: bool) -> Result<Option<String>, CompileError> {
+    if !pattern.contains("\\k") {
+        return Ok(None);
+    }
+    let chars: Vec<char> = pattern.chars().collect();
+    let found = scan_named_refs(&chars, nested_classes);
+    if found.groups.is_empty() {
+        return Ok(None);
+    }
+    if found.k_in_class {
+        return Err(CompileError::Pattern(
+            "invalid \\k<> named backreference".into(),
+        ));
+    }
+    let indexes = |name: &str| -> Vec<usize> {
+        found
+            .groups
+            .iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, i)| *i)
+            .collect()
+    };
+    let mut out = String::new();
+    let mut last = 0;
+    for (start, end, name) in &found.refs {
+        let indexes = indexes(name);
+        if indexes.len() < 2 {
+            continue;
+        }
+        out.extend(&chars[last..*start]);
+        out.push_str("(?:");
+        for i in indexes {
+            out.push_str(&format!("\\{i}"));
+        }
+        out.push(')');
+        last = *end;
+    }
+    if last == 0 {
+        return Ok(None);
+    }
+    out.extend(&chars[last..]);
+    Ok(Some(out))
 }
 
 /// The source as `RegExp.prototype.source` spells it: `/` and line terminators escaped outside classes.

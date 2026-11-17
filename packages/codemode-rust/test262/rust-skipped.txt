@@ -97,9 +97,6 @@ built-ins/Promise/race/iter-returns-string-reject.js  # async: wrong result
 built-ins/Promise/race/iter-returns-true-reject.js  # async: wrong result
 built-ins/Promise/race/iter-returns-undefined-reject.js  # async: wrong result
 built-ins/RegExp/escape/escaped-surrogates.js  # wrong result
-built-ins/RegExp/named-groups/duplicate-names-exec.js  # wrong result
-built-ins/RegExp/named-groups/duplicate-names-match.js  # wrong result
-built-ins/RegExp/named-groups/duplicate-names-test.js  # wrong result
 built-ins/RegExp/prototype/exec/S15.10.6.2_A9.js  # wrong result
 built-ins/RegExp/prototype/test/S15.10.6.3_A9.js  # wrong result
 built-ins/RegExp/prototype/toString/S15.10.6.4_A9.js  # wrong result

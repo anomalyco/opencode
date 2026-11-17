@@ -1,0 +1,23 @@
+const out = []
+const t = (src, flags, s) => { try { const m = new RegExp(src, flags).exec(s); out.push(m ? [...m].map(String).join("|") + " " + JSON.stringify(m.groups) : "null") } catch (e) { out.push(e.name) } }
+t("(?:(?<a>x)|(?<a>y))\\k<a>", "", "xx")
+t("(?:(?<a>x)|(?<a>y))\\k<a>", "", "yy")
+t("(?:(?<a>x)|(?<a>y))\\k<a>", "", "xy")
+t("(?:(?<a>x)|(?<a>y))\\k<a>", "i", "YY")
+t("\\k<a>(?:(?<a>x)|(?<a>y))", "", "y")
+t("(?<a>x)|(?<a>y)", "", "y")
+t("(?:(?:(?<a>x)|(?<a>y))\\k<a>){2}", "", "xxyy")
+t("(?:(?<a>x)|(?<a>y)|(?<b>z))\\k<a>\\k<b>", "", "z")
+t("(?<=\\k<a>(?:(?<a>x)|(?<a>y)))z", "", "yyz")
+t("(?<=(?:(?<a>x)|(?<a>y))\\k<a>)z", "", "xxz")
+t("(?:(?<a>x)|(?<a>y))[\\k<a>]", "", "xk")
+t("\\((?<a>x)|(?<a>y)\\)\\k<a>", "", "y)y")
+t("(?:(?<a>x)|(?<a>y))[[a-z]--[x]]\\k<a>", "v", "yzy")
+t("(?:(?<a>x)|(?<a>y))\\k<a>", "u", "yy")
+t("(?:(?<a>x)|(?<a>y))\\k<a>0", "", "yy0")
+t("(.)(?:(?<a>x)|(?<a>y))\\k<a>\\1", "", "qyyq")
+t("(?<a>x)\\k<a>", "", "xx")
+t("(?:(?<a>x)|(?<a>y))\\k<b>", "", "xx")
+t("(?<a>x)(?<a>y)", "", "xy")
+out.push("xyyx".replace(/(?:(?<a>x)|(?<a>y))\k<a>/g, "[$<a>]"))
+return out
