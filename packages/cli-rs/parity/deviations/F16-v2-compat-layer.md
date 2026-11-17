@@ -51,7 +51,20 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   past that command and any that declined it before, to the host's own keys and the composer (CT-8: linear's `r`,
   `P.8/linear-keys`; CT-19: rundev's space and Enter, `P.8/rundev-keys`; `P.8/host-keys` has the same keys with no
   plugin). The key reaches the composer a round trip to the JS host later than TS's, and the host lists a disabled
-  command, where TS does not bind it. A command the palette or a slash runs declines nothing.
+  command, where TS does not bind it: every key a JS command binds is held so, also while its `enabled` says no
+  (linear's `r` on every keystroke, quota's Enter). Not binding it would need the contract to carry a command's
+  `enabled` as state the host reads, not a manifest change, which reloads the plugin's registrations. Keys no JS
+  command binds are never held. A command the palette or a slash runs declines nothing.
+- **The hold's bound**: a hold lasts at most 50 ms (`Config::hold`). If the JS host has not answered by then, the
+  key that ran the command goes on as declined, first, then the keys after it, and the log says so once. A late
+  answer still applies its effects but does not put the key back, so a command that would have taken the key after
+  the limit also typed it. Declined rather than handled, so that no key is lost behind a slow JS host, and none lands
+  after the keys typed since (a late Enter after more text). Until the JS host sends anything again (its
+  acknowledgement of a read aside), a key that runs a JS command is not held: it goes on at once, as declined, and its
+  command runs late, in its order. A
+  JS host that ends, or a call it never reads, releases what it holds at once, its bound key as declined, and such
+  a call is not sent again to the next JS host (`plugin_compat::a_stalled_js_host_holds_keys_no_longer_than_the_limit`,
+  `plugin_compat::a_js_host_that_ends_while_keys_are_held_releases_them`).
 - **`data.listen`** hears every event as `{ details }`, through one subscription of the plugin to each type the generated
   client names (`EventSubscribeInput`), made with its first listener; a type the client does not name, as a plugin's
   own `rpc.*` events, never comes. The streaming deltas (`session.*.delta`) do not come, as the host's store sends no

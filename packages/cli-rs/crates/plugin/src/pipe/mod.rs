@@ -28,7 +28,7 @@ mod tree;
 pub mod wire;
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
@@ -662,6 +662,11 @@ pub struct Scripts {
     hold: RefCell<Hold>,
     /// The commands the key put back now goes past ([`Keyed`]).
     aside: RefCell<Vec<String>>,
+    /// The key commands whose hold ran out, whose key went on as declined then: their answer puts nothing back.
+    late: RefCell<HashSet<u64>>,
+    /// A key command's hold ran out and the JS host has sent nothing since: a key that runs a JS command goes on at once
+    /// as declined, and the command runs late, so typing never waits on a JS host that is stalled.
+    stalled: Cell<bool>,
     /// What the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
     held: RefCell<Option<Vec<Up>>>,
     /// The fault armed for the next handler's message, and a message a swap holds back.
@@ -681,6 +686,9 @@ struct Hold {
     seq: Option<u64>,
     /// Each with the commands it goes past as it is put back: those that declined it ([`Keyed`]).
     keys: VecDeque<(KeyEvent, Vec<String>)>,
+    /// The key that ran the command that holds, and that command's sequence: it goes on as declined if the hold runs
+    /// out or the JS host ends first.
+    bound: Option<(u64, Keyed)>,
     timer: Option<TimerId>,
     /// Keys put back now, which the intercept lets through.
     replaying: bool,
@@ -743,6 +751,8 @@ impl Scripts {
             pong: Cell::new(None),
             hold: RefCell::default(),
             aside: RefCell::default(),
+            late: RefCell::default(),
+            stalled: Cell::new(false),
             held: RefCell::default(),
             fault: Cell::new(None),
             swapped: RefCell::default(),
@@ -1129,7 +1139,11 @@ impl Scripts {
         // answer it, and the loader would read it as starting for good (bigboi's pipe sign-off).
         let why = || format!("the JS host has no room for a load of {size} bytes");
         match waiting {
-            Some(Waiting::Call(_)) => self.release_hold(seq),
+            // A key's command the JS host never runs declines its key.
+            Some(Waiting::Call(call)) => {
+                self.declined(&call);
+                self.release_hold(seq)
+            }
             Some(Waiting::Load(_)) => self.answered_load(seq, Loading::Failed(why())),
             // After the turn: the activation that asks for the setup is still at work.
             Some(Waiting::Activate(guest)) => {
@@ -1484,6 +1498,11 @@ impl Scripts {
     }
 
     fn up(self: &Rc<Self>, up: Up) {
+        // The JS host answers again: a key's command is sent to it again. Not by an acknowledgement or a start, which it
+        // sends as it reads a message, before the handler that stalls it runs.
+        if !matches!(up, Up::Ack { .. } | Up::Started { .. }) {
+            self.stalled.set(false);
+        }
         match up {
             Up::Hello { .. } | Up::Ack { .. } => {}
             Up::Started { seq } => {
@@ -1546,7 +1565,8 @@ impl Scripts {
                         if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
                             guest.done(seq, &call, effects, error);
                         }
-                        if declined {
+                        // A key whose hold ran out went on as declined then: a late answer does not put it back.
+                        if !self.late.borrow_mut().remove(&seq) && declined {
                             self.declined(&call);
                         }
                         // The keys it held go on once its effects applied: they are deferred, and so is this, after
@@ -1829,6 +1849,8 @@ impl Scripts {
         }
         let over = ends.len() >= self.config.ends;
         drop(ends);
+        // What the JS host held goes on at once, and the key that ran the command it held for, as declined.
+        self.decline_bound();
         self.release_all_holds();
         if over {
             let stopped =
@@ -1850,7 +1872,13 @@ impl Scripts {
         for guest in guests {
             guest.restart();
         }
+        self.late.borrow_mut().clear();
         for call in calls {
+            // A key's command went on as declined as the JS host ended (`release_all_holds` above): it is not run again,
+            // as its key reached the host already.
+            if call.key.is_some() {
+                continue;
+            }
             if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()) {
                 self.call_as(&guest, call.export, call.request, false, call.user, (call.owner, call.mount), call.key);
             }
@@ -1897,11 +1925,19 @@ impl Scripts {
         let seq = self.next();
         let (id, activation, route) = (guest.id().to_owned(), guest.activation(), guest.unwatched_route());
         let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
-        let guest = Rc::downgrade(guest);
+        let (guest, bound) = (Rc::downgrade(guest), key.clone());
         let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
         self.send(message, Some(Waiting::Call(Box::new(call))));
-        if hold {
-            self.start_hold(seq);
+        match bound {
+            // The JS host has not answered since a hold ran out: the key goes on at once, as declined, after the turn,
+            // and the keys after it wait for it alone. The command still runs, late, in its order on the JS host.
+            Some(keyed) if self.stalled.get() => {
+                self.late.borrow_mut().insert(seq);
+                self.hold.borrow_mut().keys.push_front((keyed.key, keyed.aside));
+                self.start_hold(seq, None, Duration::ZERO);
+            }
+            bound if hold => self.start_hold(seq, bound, self.config.hold),
+            _ => {}
         }
     }
 
@@ -1950,12 +1986,13 @@ impl Scripts {
         }
     }
 
-    fn start_hold(self: &Rc<Self>, seq: u64) {
+    /// Holds the keys after command `seq` for at most `limit`; `bound` is the key that ran it.
+    fn start_hold(self: &Rc<Self>, seq: u64, bound: Option<Keyed>, limit: Duration) {
         let Some(host) = self.host.upgrade() else { return };
         let weak = Rc::downgrade(self);
-        let timer = host.app().set_timeout(self.config.hold, move |_| {
+        let timer = host.app().set_timeout(limit, move |_| {
             if let Some(scripts) = weak.upgrade() {
-                scripts.release_hold(seq);
+                scripts.ran_out(seq);
             }
         });
         let mut hold = self.hold.borrow_mut();
@@ -1963,6 +2000,38 @@ impl Scripts {
             host.app().cancel_timer(old);
         }
         hold.seq = Some(seq);
+        if let Some(keyed) = bound {
+            hold.bound = Some((seq, keyed));
+        }
+    }
+
+    /// The hold of `seq` ran out before the JS host answered: the key that ran its command goes on as declined, first,
+    /// then the keys it held, and the log says so once until the JS host answers again. Declined, not handled: the
+    /// user's key reaches the host in its place and none is lost, where a key taken as handled would be lost if the
+    /// command declines, and put back late it would land after the keys typed since (an Enter after more text). A
+    /// command that answers later still has its effects; only its key went on already.
+    fn ran_out(&self, seq: u64) {
+        if self.hold.borrow().seq != Some(seq) {
+            return;
+        }
+        if self.hold.borrow().bound.is_some() && !self.stalled.replace(true) {
+            log::warn!(
+                "the JS host did not answer a key's command within {} ms: its key went on, and keys are not held \
+                 until it answers",
+                self.config.hold.as_millis()
+            );
+        }
+        self.decline_bound();
+        self.release_all_holds();
+    }
+
+    /// The key that ran the command that holds goes on first, as declined; that command's answer puts nothing back.
+    fn decline_bound(&self) {
+        let mut hold = self.hold.borrow_mut();
+        let Some((seq, keyed)) = hold.bound.take() else { return };
+        hold.keys.push_front((keyed.key, keyed.aside));
+        drop(hold);
+        self.late.borrow_mut().insert(seq);
     }
 
     /// The command `seq` returned, or its time ran out: the keys it held go on, in order. One that holds again keeps
@@ -1981,6 +2050,7 @@ impl Scripts {
         let Some(host) = self.host.upgrade() else { return };
         let mut hold = self.hold.borrow_mut();
         hold.seq = None;
+        hold.bound = None;
         if let Some(timer) = hold.timer.take() {
             host.app().cancel_timer(timer);
         }
