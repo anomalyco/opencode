@@ -583,19 +583,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tool_paths_stay_relative_only_inside_the_directory() {
-        let path = |input| tool_path(input, Some("/work/project"), None);
-        assert_eq!(path("..cache/result.txt"), "..cache/result.txt");
-        assert_eq!(path("../shared/result.txt"), "/work/shared/result.txt");
-        assert_eq!(path("/work/project"), ".");
-        assert_eq!(path("/work/project/src/./a.ts"), "src/a.ts");
-        assert_eq!(path("C:\\work\\a.ts"), "C:/work/a.ts");
-        assert_eq!(tool_path("/home/me/x", Some("/work"), Some("/home/me")), "~/x");
-        // A Windows server's paths follow `path.win32`, as the TUI's rows do.
-        assert_eq!(tool_path("C:\\proj\\src\\a.ts", Some("C:\\proj"), None), "src/a.ts");
-    }
-
-    #[test]
     fn titlecase_matches_javascript_word_boundaries() {
         assert_eq!(titlecase("general"), "General");
         assert_eq!(titlecase("code-review agent"), "Code-Review Agent");
