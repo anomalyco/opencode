@@ -280,12 +280,26 @@ const programs = [
   `return await tools.context7["resolve-library-id"]({ libraryName: "ts" })`,
   `return await tools.adapter.call({ id: 42 })`,
   `return [Object.keys(tools), Object.keys(tools.slack), Object.keys(tools.issues)]`,
+  `Promise.reject(new Error("x")); return 1`,
+  `const p = Promise.reject(1); await null; p.catch(() => 0); return 2`,
+  `tools.orders.lookup({ id: 1 }); return 3`,
+  `async function f() { throw new TypeError("bad") }\nf(); f(); return 4`,
+  `tools.orders.lookup({ id: "o" }); return 5`,
+  `Promise.reject("plain"); Promise.reject({ a: [1] }); return 6`,
+  `Promise.reject(new Error("unseen")); throw new Error("seen")`,
+  `async function g() { null.x }\ng(); return 7`,
+  `tools.issues.missing({}); return 8`,
 ]
 
 const outcome = async (code: string) => {
   const result = await Effect.runPromise(runtime.execute(code))
   return result.ok
-    ? { ok: true, value: result.value, toolCalls: result.toolCalls.length }
+    ? {
+        ok: true,
+        value: result.value,
+        toolCalls: result.toolCalls.length,
+        ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
+      }
     : { ok: false, error: result.error, toolCalls: result.toolCalls.length }
 }
 

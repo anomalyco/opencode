@@ -136,6 +136,8 @@ pub struct RunHost<'rt> {
     promise_like: Option<Id>,
     /// Whether a call interrupted the run.
     pub interrupted: bool,
+    /// Rejected promises nothing handled yet, with their reasons, for the run's warnings.
+    pub unhandled: Vec<(Id, Value)>,
     modules: FxHashMap<String, Value>,
     namespaces: FxHashMap<String, Value>,
 }
@@ -152,6 +154,7 @@ impl<'rt> RunHost<'rt> {
             suggestions: FxHashMap::default(),
             promise_like: None,
             interrupted: false,
+            unhandled: Vec::new(),
             modules: FxHashMap::default(),
             namespaces: FxHashMap::default(),
         }
@@ -546,6 +549,21 @@ fn disjunction(items: &[String]) -> String {
         [a] => a.clone(),
         [a, b] => format!("{a} or {b}"),
         [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
+    }
+}
+
+/// A promise was rejected with nothing to handle it: a warning, unless something handles it before the run ends.
+pub fn unhandled(vm: &mut Vm, p: Id, reason: Value) {
+    if vm.fatal.is_none() {
+        vm.host.unhandled.push((p, reason));
+    }
+}
+
+/// A reaction was attached to a rejected promise, so its rejection is handled after all.
+#[inline]
+pub fn handled(vm: &mut Vm, p: Id) {
+    if !vm.host.unhandled.is_empty() {
+        vm.host.unhandled.retain(|(q, _)| *q != p);
     }
 }
 

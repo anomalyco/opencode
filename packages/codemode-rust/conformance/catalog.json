@@ -2092,6 +2092,117 @@
         ]
       ],
       "toolCalls": 0
+    },
+    {
+      "code": "Promise.reject(new Error(\"x\")); return 1",
+      "ok": true,
+      "value": 1,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: Error: x"
+        }
+      ]
+    },
+    {
+      "code": "const p = Promise.reject(1); await null; p.catch(() => 0); return 2",
+      "ok": true,
+      "value": 2,
+      "toolCalls": 0
+    },
+    {
+      "code": "tools.orders.lookup({ id: 1 }); return 3",
+      "ok": true,
+      "value": 3,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "InvalidToolInput",
+          "message": "Unhandled rejection from an un-awaited promise: Invalid input for tool 'orders.lookup': SchemaError(Expected string\n  at [\"id\"])",
+          "suggestions": [
+            "The signature may have changed. Use search to get the current signature."
+          ]
+        }
+      ]
+    },
+    {
+      "code": "async function f() { throw new TypeError(\"bad\") }\nf(); f(); return 4",
+      "ok": true,
+      "value": 4,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: TypeError: bad"
+        },
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: TypeError: bad"
+        }
+      ]
+    },
+    {
+      "code": "tools.orders.lookup({ id: \"o\" }); return 5",
+      "ok": true,
+      "value": 5,
+      "toolCalls": 1
+    },
+    {
+      "code": "Promise.reject(\"plain\"); Promise.reject({ a: [1] }); return 6",
+      "ok": true,
+      "value": 6,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: Uncaught: plain"
+        },
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: Uncaught: {\"a\":[1]}"
+        }
+      ]
+    },
+    {
+      "code": "Promise.reject(new Error(\"unseen\")); throw new Error(\"seen\")",
+      "ok": false,
+      "error": {
+        "kind": "ExecutionFailure",
+        "message": "Error: seen"
+      },
+      "toolCalls": 0
+    },
+    {
+      "code": "async function g() { null.x }\ng(); return 7",
+      "ok": true,
+      "value": 7,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "ExecutionFailure",
+          "message": "Unhandled rejection from an un-awaited promise: TypeError: Cannot read properties of null (reading 'x'). (line 1, col 22)",
+          "location": {
+            "line": 1,
+            "column": 22
+          }
+        }
+      ]
+    },
+    {
+      "code": "tools.issues.missing({}); return 8",
+      "ok": true,
+      "value": 8,
+      "toolCalls": 0,
+      "warnings": [
+        {
+          "kind": "UnknownTool",
+          "message": "Unhandled rejection from an un-awaited promise: Unknown tool 'issues.missing'.",
+          "suggestions": [
+            "Use search to find available tools."
+          ]
+        }
+      ]
     }
   ],
   "openapi": [

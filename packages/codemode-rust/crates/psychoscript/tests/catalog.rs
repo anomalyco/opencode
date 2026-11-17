@@ -97,7 +97,27 @@ fn search_and_tool_call_diagnostics_match_the_reference() {
         let outcome = rt.execute(code, &serde_json::Map::new());
         let actual = match &outcome.result {
             Ok(value) => {
-                serde_json::json!({ "ok": true, "value": value, "toolCalls": outcome.tool_calls.len() })
+                let mut ok = serde_json::json!({ "ok": true, "value": value, "toolCalls": outcome.tool_calls.len() });
+                if !outcome.warnings.is_empty() {
+                    let warnings: Vec<Json> = outcome
+                        .warnings
+                        .iter()
+                        .map(|w| {
+                            let mut j =
+                                serde_json::json!({ "kind": w.kind.name(), "message": w.message });
+                            if let Some((line, column)) = w.location {
+                                j["location"] =
+                                    serde_json::json!({ "line": line, "column": column });
+                            }
+                            if !w.suggestions.is_empty() {
+                                j["suggestions"] = w.suggestions.clone().into();
+                            }
+                            j
+                        })
+                        .collect();
+                    ok["warnings"] = warnings.into();
+                }
+                ok
             }
             Err(d) => {
                 let mut error = serde_json::json!({ "kind": d.kind.name(), "message": d.message });

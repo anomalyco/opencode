@@ -182,18 +182,62 @@ pub fn finish(r: Running<'_>) -> Outcome {
         (Some((kind, message)), Ok(_)) => Err(diagnostic(kind, message)),
         (_, r) => r,
     };
+    let warnings = if result.is_ok() {
+        warnings(vm, code)
+    } else {
+        Vec::new()
+    };
     let logs = std::mem::take(&mut vm.logs);
     let tool_calls = std::mem::take(&mut vm.tool_calls);
     bound_output(
         Outcome {
             result,
-            warnings: Vec::new(),
+            warnings,
             logs,
             truncated: false,
             tool_calls,
         },
         vm.limits.max_output_bytes,
     )
+}
+
+/// Rejections nothing handled, in promise creation order, once completed host calls have settled their promises.
+fn warnings(vm: &mut Vm, code: &str) -> Vec<Diagnostic> {
+    while let Some((p, s)) = vm.inbox.pop_front() {
+        if !matches!(s, host::Settlement::Interrupted) {
+            host::settle(vm, p, s);
+        }
+    }
+    let mut unhandled = std::mem::take(&mut vm.host.unhandled);
+    unhandled.sort_by_key(|(p, _)| *p);
+    unhandled
+        .into_iter()
+        .map(|(_, reason)| {
+            let mut d = diagnose(vm, &reason, code);
+            d.message = format!(
+                "Unhandled rejection from an un-awaited promise: {}",
+                d.message
+            );
+            d
+        })
+        .collect()
+}
+
+/// The JSON a diagnostic crosses the reference's boundary as, for the output budget.
+fn diagnostic_json(d: &Diagnostic) -> Json {
+    let mut map = serde_json::Map::new();
+    map.insert("kind".into(), d.kind.name().into());
+    map.insert("message".into(), d.message.clone().into());
+    if let Some((line, column)) = d.location {
+        map.insert(
+            "location".into(),
+            serde_json::json!({ "line": line, "column": column }),
+        );
+    }
+    if !d.suggestions.is_empty() {
+        map.insert("suggestions".into(), d.suggestions.clone().into());
+    }
+    Json::Object(map)
 }
 
 fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
@@ -271,6 +315,25 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
             )));
             outcome.truncated = true;
         }
+    }
+    // Warnings have a budget of their own, so result data cannot starve them.
+    let mut used = 0;
+    let fit = outcome
+        .warnings
+        .iter()
+        .take_while(|w| {
+            used += crate::schema::js_stringify(&diagnostic_json(w)).len() + 1;
+            used <= max
+        })
+        .count();
+    if fit < outcome.warnings.len() {
+        let omitted = outcome.warnings.len() - fit;
+        outcome.warnings.truncate(fit);
+        outcome.warnings.push(diagnostic(
+            DiagnosticKind::Truncated,
+            format!("{omitted} additional warnings omitted by the output limit."),
+        ));
+        outcome.truncated = true;
     }
     let budget = max.saturating_sub(value_bytes.min(max));
     let mut used = 0;

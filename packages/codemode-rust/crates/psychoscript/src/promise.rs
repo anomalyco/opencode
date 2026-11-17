@@ -39,6 +39,11 @@ impl<'rt> Vm<'rt> {
             Err(e) => PromiseState::Rejected(*e),
         };
         let reactions = std::mem::take(&mut d.reactions);
+        if let Err(e) = outcome
+            && reactions.is_empty()
+        {
+            crate::host::unhandled(self, p, e);
+        }
         for r in reactions {
             self.jobs.push_back(Job::Reaction(r, outcome));
         }
@@ -64,6 +69,9 @@ impl<'rt> Vm<'rt> {
             PromiseState::Fulfilled(v) => Ok(*v),
             PromiseState::Rejected(e) => Err(*e),
         };
+        if outcome.is_err() {
+            crate::host::handled(self, p);
+        }
         self.jobs.push_back(Job::Reaction(reaction, outcome));
     }
 
