@@ -478,7 +478,7 @@ test("a built renderable adds nothing and the renderer has a root", () => {
   expect(typeof renderer.root.add).toBe("function")
   expect(renderer.currentFocusedEditor).toBeUndefined()
   expect(fake.toasts()).toEqual([
-    "t.built: add() of a renderable built with new is not supported by opencode-native yet",
+    "t.built: a renderable built with new is not supported by opencode-native yet",
     "t.built: renderer.root is not supported by opencode-native yet",
     "t.built: renderer.currentFocusedEditor is not supported by opencode-native yet",
   ])
@@ -554,6 +554,36 @@ test("a mount a reload begins again adopts the one it ended", async () => {
   expect(text(surface.view(cx(3)))).toBe("run 2")
   surface.options.unmount(cx(3).mount)
   expect(text(surface.view(cx(4)))).toBe("run 3")
+})
+
+// CT-15: a render that returns a renderable it built itself (opencode-quick-quote's slot marker) draws nothing and says
+// so, where it crashed on `e.children.indexOf`. CT-15, CT-24: a node's `getLayout()`, `width` and `onSizeChange` are the
+// host's layout of it (`Read::rect`), once the host said: the node carries an id from its next view.
+test("a built renderable returned draws nothing, and a node's layout is the host's", () => {
+  const fake = host()
+  const ctx = plugin("t.layout", fake)
+  const core = modules["@opentui/core"] as Json
+  ctx.ui.slot({ append: "home.footer", render: () => new core.BoxRenderable({}, {}) })
+  expect(view(fake, 0, "a").draw().children ?? []).toEqual([])
+  expect(fake.toasts()).toEqual(["t.layout: a renderable built with new is not supported by opencode-native yet"])
+  const refs: Json = {}
+  const sizes: number[] = []
+  ctx.ui.slot({
+    append: "sidebar.content",
+    render: () =>
+      h("box", { ref: (el: Json) => (refs.box = el), onSizeChange: () => sizes.push(refs.box.width), children: h("text", { children: "x" }) }),
+  })
+  const mount = view(fake, 1, "b")
+  const tree = mount.draw()
+  const id = tree.children[0].id
+  expect(id).toMatch(/^opentui-box-/)
+  const key = `rect:slot#1:${id}`
+  expect(fake.watches.has(key)).toBe(true)
+  expect(refs.box.getLayout()).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  fake.push(key, { x: 2, y: 3, width: 30, height: 4 })
+  expect(sizes).toEqual([30])
+  expect(refs.box.getLayout()).toEqual({ x: 2, y: 3, width: 30, height: 4 })
+  expect(refs.box.height).toBe(4)
 })
 
 // CT-8, CT-22: a raised surface's theme is the host's: a color the dialog or its footer gives differently from the page
