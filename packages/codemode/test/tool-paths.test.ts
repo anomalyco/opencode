@@ -481,3 +481,49 @@ describe("tool references under ==", () => {
     ).toEqual([false, false, false, 0])
   })
 })
+
+describe("unknown tool calls reject their promise", () => {
+  const runtime = CodeMode.make({ tools: { shop: { show: echo("Show", "shown"), list: echo("List", "listed") } } })
+
+  test("try/await catches the rejection", async () => {
+    expect(
+      await value(runtime, `try { await tools.shop.nope({}) } catch (error) { return error.message }`),
+    ).toBe("Unknown tool 'shop.nope'.")
+  })
+
+  test(".catch on the call sees the rejection", async () => {
+    expect(await value(runtime, `return await tools.shop.nope({}).catch((error) => error.message)`)).toBe(
+      "Unknown tool 'shop.nope'.",
+    )
+  })
+
+  test("Promise.allSettled settles an unknown tool as rejected", async () => {
+    expect(
+      await value(
+        runtime,
+        `const settled = await Promise.allSettled([tools.shop.show({}), tools.shop.nope({})])
+         return settled.map((result) => result.status)`,
+      ),
+    ).toEqual(["fulfilled", "rejected"])
+  })
+
+  test("calling a namespace rejects too", async () => {
+    expect(await value(runtime, `return await tools.shop({}).catch((error) => error.message)`)).toBe(
+      "Tool 'shop' is not callable, it is a namespace. Did you mean tools.shop.list or tools.shop.show?",
+    )
+  })
+
+  test("an unhandled rejection keeps its diagnostic", async () => {
+    const unknown = await failure(runtime, `return await tools.shop.shows({})`)
+    expect(unknown.kind).toBe("UnknownTool")
+    expect(unknown.message).toBe("Unknown tool 'shop.shows'. Did you mean tools.shop.show?")
+    expect(unknown.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("reading an unknown path is unchanged", async () => {
+    expect(await value(runtime, `return [typeof tools.shop.nope, Object.keys(tools.shop)]`)).toEqual([
+      "function",
+      ["show", "list"],
+    ])
+  })
+})
