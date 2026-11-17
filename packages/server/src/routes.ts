@@ -157,7 +157,6 @@ function makeRoutes<AuthError, AuthServices>(
       InstructionDiscovery.configured({
         project: options.config?.project,
         claude: options.instructions?.claude,
-        claudeGlobal: options.instructions?.claudeGlobal,
       }),
     ),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
