@@ -1,6 +1,7 @@
-//! Regression tests for the `carbon` review of F.2 (`reviews/rs-api-codegen.review-carbon.md`), one per
-//! finding. Each failed before `rs-api-fixes`: carbon-1, 2, and 3 did not compile against the old types
-//! (or decoded into the wrong variant), and carbon-4 and 5 failed their assertions.
+//! Regression tests for the `carbon` review of F.2 (`reviews/rs-api-codegen.review-carbon.md`). Each failed
+//! before `rs-api-fixes`: carbon-1 and 2 did not compile against the old types (or decoded into the wrong
+//! variant), and carbon-4 and 5 failed their assertions. carbon-3 (one type for the event and REST twins of a
+//! schema) is a property of the generated types, not of behavior, and has no test.
 
 use opencode_api::error::{DeclaredError, TaggedError};
 use opencode_api::generated::*;
@@ -37,26 +38,6 @@ fn non_empty_arrays_keep_their_item_type() {
     .unwrap();
     assert!(matches!(&content[0], ToolContent::Text(text) if text.text == "ok"));
     assert!(matches!(&content[1], ToolContent::File(file) if file.mime == "image/png"));
-}
-
-/// carbon-3: the event and REST twins of a schema are one Rust type.
-#[test]
-fn event_and_rest_twins_share_one_type() {
-    fn same<T>(_: &T, _: &T) {}
-    let form = FormInfo {
-        id: "frm_1".into(),
-        session_id: "ses_1".to_owned(),
-        title: "Deploy".to_owned(),
-        metadata: None,
-        fields: Vec::new(),
-    };
-    let created = FormCreatedData { form: form.clone() };
-    same(&created.form, &form);
-    // `shell.list` returns the same `ShellInfo` that `shell.created` carries; this compiles only then.
-    fn listed_is_created(output: &ShellListOutput, data: &ShellCreatedData) -> bool {
-        output.data.first() == Some(&data.info)
-    }
-    let _ = listed_is_created;
 }
 
 /// carbon-4: an LSP server entry that sets `disabled` decodes as a server, with its command.

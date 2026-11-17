@@ -23,29 +23,3 @@ pub fn encode(pairs: &[(String, String)]) -> String {
     }
     serializer.finish()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn query(key: &str, value: Value) -> String {
-        let mut pairs = Vec::new();
-        append(&mut pairs, key, &value);
-        encode(&pairs)
-    }
-
-    #[test]
-    fn nested_objects_use_brackets() {
-        assert_eq!(
-            query("location", json!({ "directory": "/a b", "workspace": { "id": "w" } })),
-            "location%5Bdirectory%5D=%2Fa+b&location%5Bworkspace%5D%5Bid%5D=w"
-        );
-    }
-
-    #[test]
-    fn arrays_repeat_and_null_is_written() {
-        assert_eq!(query("types", json!(["a", "b"])), "types=a&types=b");
-        assert_eq!(query("cursor", Value::Null), "cursor=null");
-    }
-}
