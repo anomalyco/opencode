@@ -5,7 +5,7 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Select } from "@opencode/ui/select"
 import { TextInput } from "@opencode/ui/text-input"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { createMemo, createSignal, createUniqueId, For, Show, untrack } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createKeyed, createLatest, usePlugin } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, profileChoices, type Choice } from "./choices"
@@ -50,6 +50,16 @@ export function SiteChooser(props: {
   // Lists read while the dialog is open, by profile; a failure is not kept, so Try again reads again.
   const lists = new Map<string, SiteList>()
   const elements: ChooserElements = {}
+
+  // The list's viewport mounts when "Choose sites" reveals the list or its loading ends, either of which can come after
+  // the sites did. The virtualizer follows it as a signal, or it would never see the list scroll.
+  const [viewport, setViewport] = createSignal<HTMLDivElement>()
+
+  // A new element belongs to no window until it is in the page, and the virtualizer needs its window to watch it.
+  const followViewport = (element: HTMLDivElement) => {
+    onMount(() => setViewport(element))
+    onCleanup(() => setViewport(undefined))
+  }
   const numbers = createMemo(() => new Intl.NumberFormat(ctx.locale.locale()))
   const number = (value: number) => numbers().format(value)
 
@@ -170,7 +180,9 @@ export function SiteChooser(props: {
     setState("active", 0)
     virtualizer.scrollOffset = 0
 
-    if (elements.viewport) elements.viewport.scrollTop = 0
+    const list = viewport()
+
+    if (list) list.scrollTop = 0
   }
 
   const search = (query: string) => {
@@ -236,7 +248,7 @@ export function SiteChooser(props: {
     get count() {
       return shown().length
     },
-    getScrollElement: () => elements.viewport ?? null,
+    getScrollElement: () => viewport() ?? null,
     initialRect: { width: 0, height: 10 * ROW_HEIGHT },
     estimateSize: () => ROW_HEIGHT,
     // The list's inset above its first row and below its last, which a row moved to keeps too, so its focus ring stays
@@ -272,7 +284,7 @@ export function SiteChooser(props: {
   }
 
   const onListKey = (event: KeyboardEvent) => {
-    const page = Math.floor((elements.viewport?.clientHeight ?? 0) / ROW_HEIGHT)
+    const page = Math.floor((viewport()?.clientHeight ?? 0) / ROW_HEIGHT)
     const move = siteListMove(event.key, state.active, shown().length, page)
 
     if (move !== undefined && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -434,7 +446,7 @@ export function SiteChooser(props: {
           <Show
             when={status()}
             fallback={
-              <MenuScroll class="min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-1" viewportRef={(element) => (elements.viewport = element)}>
+              <MenuScroll class="min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-1" viewportRef={followViewport}>
                 <div
                   ref={(element) => (elements.listbox = element)}
                   id={`${id}-list`}
@@ -550,7 +562,7 @@ type ChooserState = {
 }
 
 /** The list's scrolling viewport and the listbox in it, once they mount. */
-type ChooserElements = { viewport?: HTMLDivElement; listbox?: HTMLDivElement }
+type ChooserElements = { listbox?: HTMLDivElement }
 
 function listedOrder(list: SiteList | undefined) {
   return list?.type === "listed" ? list.order : undefined

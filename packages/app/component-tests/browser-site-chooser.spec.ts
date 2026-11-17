@@ -295,6 +295,18 @@ story("Choose sites shows the list in place, every site ticked, and the button t
   expect(sent.sites).not.toContain("github.com")
 })
 
+story("a list that Choose sites revealed after its sites loaded still draws the rows it scrolls to", async ({ page }) => {
+  const view = await open(page, { sites: 5_000, reveal: false })
+
+  await view.dialog.getByRole("button", { name: "Choose sites" }).click()
+  await expect(view.dialog.getByText("5,000 of 5,000 selected")).toBeVisible()
+  await view.list.hover()
+  await page.mouse.wheel(0, 4_000)
+  await expect(view.dialog.locator('[data-site="github.com"]')).not.toBeInViewport()
+  // 4,000 px down a list of 32 px rows.
+  await expect(view.dialog.locator('[role="option"][aria-posinset="130"]')).toBeInViewport()
+})
+
 story("keeps site names left to right in a right-to-left layout, the box at the start and long names cut at their start", async ({ page }) => {
   const view = await open(page, { sites: 6 }, "rtl")
   const row = view.dialog.locator('[data-site="xn--mnchen-3ya.de"]')
