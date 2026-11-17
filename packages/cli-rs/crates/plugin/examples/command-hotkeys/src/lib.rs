@@ -4,14 +4,16 @@
 //! Options are `{ "bindings": [{ "id", "key", "title", "command", "text"? }, { "id", "key", "title", "action":
 //! "goal-toggle" }] }`, checked whole before anything registers: an unknown field, a repeated `id` or key, or a bad
 //! value toasts and registers nothing, and no value is echoed. A key holds in the base mode on a session's route; off
-//! one it goes on to the host, as TS's disabled command lets it. One request per session and binding runs at a time.
+//! one it goes on to the host, as TS's disabled command lets it. One run per session and binding goes at a time, a task
+//! that awaits each of its requests as TS does.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
-use opencode_plugin_abi::{Command, Fetch, Host, RequestId, Route, Setup, Toast, Variant, plugin};
+use opencode_plugin_abi::task::{Cx, Tasks};
+use opencode_plugin_abi::{Command, Fetch, Host, Read, Route, Setup, Toast, Variant, plugin};
 use serde_json::{Value, json};
 
 const TITLE: &str = "Command Hotkeys";
@@ -32,23 +34,11 @@ enum Action {
     GoalToggle,
 }
 
-/// A request in flight, by what its reply moves on to.
-enum Step {
-    /// A command ran; its reply ends the run.
-    Command,
-    /// The goal toggle read the session, for its location.
-    Session,
-    /// It read the goal.
-    Goal,
-    /// It asked the goal to pause or resume; a reply that it already had is no failure.
-    Toggle { race: &'static str },
-}
-
-/// The runs in flight: the request each waits on, with its session and binding.
-#[derive(Default)]
+/// What runs a binding: its tasks, and the session and binding of each run in flight.
+#[derive(Clone)]
 struct Runs {
-    locks: HashSet<(String, String)>,
-    waiting: HashMap<RequestId, (Step, String, String)>,
+    tasks: Tasks,
+    locks: Rc<RefCell<HashSet<(String, String)>>>,
 }
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
@@ -60,15 +50,15 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     if bindings.is_empty() {
         return Ok(());
     }
-    let bindings = Rc::new(bindings);
-    let runs = Rc::new(RefCell::new(Runs::default()));
-    for (index, binding) in bindings.iter().enumerate() {
+    let bindings: Rc<Vec<Rc<Binding>>> = Rc::new(bindings.into_iter().map(Rc::new).collect());
+    let runs = Runs { tasks: setup.tasks(), locks: Rc::default() };
+    for binding in bindings.iter() {
         let command = Command::new(format!("command-hotkeys.{}", binding.id)).title(&binding.title).palette();
-        let (bindings, runs) = (bindings.clone(), runs.clone());
+        let (binding, runs) = (binding.clone(), runs.clone());
         setup.command(command, move |host, _| {
             // The palette closed before the command runs, so the keyboard is in its base mode again.
             if host.mode().is_none() {
-                execute(host, &bindings[index], &runs);
+                runs.execute(host, &binding);
             }
         });
     }
@@ -77,99 +67,70 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         let title = binding.title.clone();
         binding.key.split(',').map(move |key| Bind::new(key.trim(), index.to_string()).title(title.clone()))
     });
-    let (pressed, ran) = (bindings.clone(), runs.clone());
     setup.layer(Layer::default().scope(LayerScope::Global).keys(keys), move |host, event| {
         let Event::Key(key) = event else { return Handled::Pass };
-        let Some(binding) = key.bind.as_deref().and_then(|index| pressed.get(index.parse::<usize>().ok()?)) else {
+        let Some(binding) = key.bind.as_deref().and_then(|index| bindings.get(index.parse::<usize>().ok()?)) else {
             return Handled::Pass;
         };
         if !matches!(host.route(), Route::Session { .. }) {
             return Handled::Pass;
         }
-        execute(host, binding, &ran);
+        runs.execute(host, binding);
         Handled::Consume
     });
-    setup.on_reply(move |host, id, reply| answered(host, &runs, id, reply));
     Ok(())
 }
 
-/// TS `execute`: one run per session and binding at a time.
-fn execute(host: &dyn Host, binding: &Binding, runs: &RefCell<Runs>) {
-    let Route::Session { id: session } = host.route() else { return };
-    let lock = (session.clone(), binding.id.clone());
-    if !runs.borrow_mut().locks.insert(lock) {
-        return;
-    }
-    let (fetch, step) = match &binding.action {
-        Action::Command { command, text } => (command_fetch(&session, command, text), Step::Command),
-        Action::GoalToggle => {
-            let fetch = Fetch::new("GET", format!("/api/session/{session}"));
-            (fetch, Step::Session)
+impl Runs {
+    /// TS `execute`: one run per session and binding at a time; a failure toasts.
+    fn execute(&self, host: &dyn Host, binding: &Rc<Binding>) {
+        let Route::Session { id: session } = host.route() else { return };
+        let lock = (session.clone(), binding.id.clone());
+        if !self.locks.borrow_mut().insert(lock.clone()) {
+            return;
         }
-    };
-    send(host, runs, fetch, step, session, binding.id.clone());
-}
-
-/// The reply to a request of a run: the run's next request, its end, or its failure.
-fn answered(host: &dyn Host, runs: &RefCell<Runs>, id: RequestId, reply: Result<Value, String>) {
-    let Some((step, session, binding)) = runs.borrow_mut().waiting.remove(&id) else { return };
-    let current = || host.mode().is_none() && host.route() == Route::Session { id: session.clone() };
-    let next = match (step, reply) {
-        (Step::Command, Ok(_)) => Ok(None),
-        (Step::Toggle { .. }, Ok(_)) => Ok(None),
-        (Step::Toggle { race }, Err(error)) if error.contains(race) => Ok(None),
-        (_, Err(_)) => Err(()),
-        (_, Ok(_)) if !current() => Ok(None),
-        (Step::Session, Ok(body)) => {
-            let directory =
-                body.pointer("/data/location/directory").and_then(Value::as_str).filter(|path| !path.trim().is_empty());
-            match directory {
-                Some(directory) => {
-                    let fetch = Fetch::new("POST", "/api/rpc/opencode.goal/get")
-                        .query([("location[directory]", directory)])
-                        .body(json!({ "input": { "sessionID": session } }));
-                    Ok(Some((fetch, Step::Goal)))
-                }
-                None => Err(()),
+        let (binding, locks) = (binding.clone(), self.locks.clone());
+        self.tasks.spawn(host, move |cx| async move {
+            let ran = match &binding.action {
+                Action::Command { command, text } => cx.fetch(command_fetch(&session, command, text)).await.map(drop),
+                Action::GoalToggle => toggle(&cx, &session).await,
+            };
+            locks.borrow_mut().remove(&lock);
+            if ran.is_err() {
+                cx.toast(Toast::new(Variant::Error, FAILED).title(TITLE).session(session));
             }
-        }
-        (Step::Goal, Ok(body)) => match body.get("output") {
-            None | Some(Value::Null) => Ok(None),
-            Some(goal) => match (goal.get("id").and_then(Value::as_str), goal.get("status").and_then(Value::as_str)) {
-                (Some(id), Some(status)) if !id.trim().is_empty() => match status {
-                    "complete" => Ok(None),
-                    "active" => Ok(Some((
-                        command_fetch(&session, "goal", "pause"),
-                        Step::Toggle { race: "No active goal to pause." },
-                    ))),
-                    "paused" => Ok(Some((
-                        command_fetch(&session, "goal", "resume"),
-                        Step::Toggle { race: "No paused goal to resume." },
-                    ))),
-                    _ => Err(()),
-                },
-                _ => Err(()),
-            },
-        },
-    };
-    match next {
-        Ok(Some((fetch, step))) => send(host, runs, fetch, step, session, binding),
-        Ok(None) => drop(runs.borrow_mut().locks.remove(&(session, binding))),
-        Err(()) => {
-            runs.borrow_mut().locks.remove(&(session.clone(), binding));
-            host.toast(Toast::new(Variant::Error, FAILED).title(TITLE).session(session));
-        }
+        });
     }
 }
 
-/// Sends `fetch` for a run, or ends the run as failed when the host does not take it.
-fn send(host: &dyn Host, runs: &RefCell<Runs>, fetch: Fetch, step: Step, session: String, binding: String) {
-    match host.try_fetch(fetch) {
-        Ok(id) => drop(runs.borrow_mut().waiting.insert(id, (step, session, binding))),
-        Err(_) => {
-            runs.borrow_mut().locks.remove(&(session.clone(), binding));
-            host.toast(Toast::new(Variant::Error, FAILED).title(TITLE).session(session));
-        }
+/// TS's goal toggle: the session's location, its goal, then a pause or a resume. A step whose session is no longer
+/// in view, in the base mode, ends the run; an answer that the goal already was so is no failure.
+async fn toggle(cx: &Cx, session: &str) -> Result<(), String> {
+    let current = || cx.mode().is_none() && cx.route() == Route::Session { id: session.to_owned() };
+    let body = cx.fetch(Fetch::new("GET", format!("/api/session/{session}"))).await?;
+    if !current() {
+        return Ok(());
+    }
+    let directory =
+        body.pointer("/data/location/directory").and_then(Value::as_str).filter(|path| !path.trim().is_empty());
+    let fetch = Fetch::new("POST", "/api/rpc/opencode.goal/get")
+        .query([("location[directory]", directory.ok_or("no directory")?)])
+        .body(json!({ "input": { "sessionID": session } }));
+    let body = cx.fetch(fetch).await?;
+    if !current() {
+        return Ok(());
+    }
+    let Some(goal) = body.get("output").filter(|goal| !goal.is_null()) else { return Ok(()) };
+    let id = goal.get("id").and_then(Value::as_str).filter(|id| !id.trim().is_empty());
+    let (text, race) = match (id, goal.get("status").and_then(Value::as_str)) {
+        (Some(_), Some("complete")) => return Ok(()),
+        (Some(_), Some("active")) => ("pause", "No active goal to pause."),
+        (Some(_), Some("paused")) => ("resume", "No paused goal to resume."),
+        _ => return Err("no goal".to_owned()),
+    };
+    match cx.fetch(command_fetch(session, "goal", text)).await {
+        Err(error) if !error.contains(race) => Err(error),
+        _ => Ok(()),
     }
 }
 

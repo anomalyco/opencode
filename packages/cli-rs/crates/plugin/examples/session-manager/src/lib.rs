@@ -21,10 +21,11 @@ use std::time::{Duration, Instant, SystemTime};
 use grouping::{Group, Mode, Row, Session};
 use i18n::{LOCALES, Locale, Messages};
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
+use opencode_plugin_abi::task::{Cx, Tasks};
 use opencode_plugin_abi::v2::{self, Scroll, ScrollAlign, Target};
 use opencode_plugin_abi::{
-    Action, Click, Command, Confirm, Dialog, Edges, Fetch, Host, Layout, Prompt, Read, RequestId, Route, Setup, Span,
-    TabEdit, Toast, Variant, Waker, Wrap, plugin,
+    Click, Command, Confirm, Edges, Fetch, Host, Layout, Prompt, Read, Route, Setup, Span, TabEdit, Toast, Variant,
+    Waker, Wrap, plugin,
 };
 use serde_json::{Value, json};
 
@@ -74,6 +75,7 @@ const SEARCH_KEYS: [(&str, &str); 7] = [
 
 fn setup(setup: &mut Setup) -> Result<(), String> {
     let state = Rc::new(RefCell::new(State::default()));
+    let page = Page { state: state.clone(), tasks: setup.tasks() };
     // The session `/session-manager` was opened from (TS's route data `from`).
     let open = Command::new("session-manager.open")
         .title("Session Manager")
@@ -95,22 +97,13 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         host.open_route(ROUTE);
     });
     setup.storage_key(SETTINGS);
-    // The page's clicks and the dialogs' answers come back as commands.
+    // The page's clicks come back as commands.
     for (name, run) in [
         ("session-manager.row", State::clicked as fn(&mut State, &dyn Host, &str)),
         ("session-manager.mode", State::clicked_mode),
         ("session-manager.locale", State::clicked_locale),
         ("session-manager.children", |state, host, _| state.toggle_children(host)),
         ("session-manager.search", |state, host, _| state.start_search(host)),
-        ("session-manager.renamed", State::renamed),
-        // The prompt closed: without an answer (escape), the page takes keys again.
-        ("session-manager.rename-closed", |state, _, _| {
-            if state.renaming.take().is_some() {
-                state.busy = false;
-            }
-        }),
-        ("session-manager.removed", State::confirmed_remove),
-        ("session-manager.group-removed", State::confirmed_group),
     ] {
         let state = state.clone();
         setup.command(Command::new(name), move |host, input| {
@@ -121,58 +114,189 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         let binds = keys.iter().map(|(key, name)| Bind::new(*key, format!("{prefix}{name}")));
         Layer::default().scope(LayerScope::Surface).priority(100).keys(binds)
     };
-    let (viewed, heard) = (state.clone(), state.clone());
-    let page = v2::Surface::new(ROUTE, v2::Place::Route(ROUTE.to_owned()), move |view| viewed.borrow().view(view.read))
-        .mounts()
-        .layers(vec![layer(&LIST_KEYS, "list:"), layer(&SEARCH_KEYS, "search:")])
-        .on(move |host, event| heard.borrow_mut().event(host, event));
-    setup.surface(page);
+    let (viewed, heard) = (state.clone(), page.clone());
+    let surface =
+        v2::Surface::new(ROUTE, v2::Place::Route(ROUTE.to_owned()), move |view| viewed.borrow().view(view.read))
+            .mounts()
+            .layers(vec![layer(&LIST_KEYS, "list:"), layer(&SEARCH_KEYS, "search:")])
+            .on(move |host, event| {
+                let handled = heard.state.borrow_mut().event(host, event);
+                heard.start(host);
+                handled
+            });
+    setup.surface(surface);
     let events = ["session.created", "session.deleted", "session.renamed", "session.archived"];
     let changed = state.clone();
     setup.on_event(&events, move |_, _| changed.borrow_mut().schedule_refresh());
-    let replied = state.clone();
-    setup.on_reply(move |host, id, reply| replied.borrow_mut().reply(host, id, reply));
     // TS refreshes 300 ms after the last change it heard; a thread keeps that time and wakes the host.
     if let Some(waker) = setup.waker() {
         let timer = Timer::start(waker.clone());
         state.borrow_mut().timer = Some(timer.clone());
         state.borrow_mut().waker = Some(waker);
-        let woken = state.clone();
         setup.on_wake(move |host| {
-            let mut state = woken.borrow_mut();
-            if std::mem::take(&mut state.focus) && state.searching {
-                host.focus(SEARCH);
+            {
+                let mut state = page.state.borrow_mut();
+                if std::mem::take(&mut state.focus) && state.searching {
+                    host.focus(SEARCH);
+                }
+                if state.timer.as_ref().is_some_and(Timer::take) {
+                    state.refresh();
+                }
             }
-            if state.timer.as_ref().is_some_and(Timer::take) {
-                state.refresh(host);
-            }
+            page.start(host);
         });
         setup.on_dispose(move |_| timer.stop());
     }
     Ok(())
 }
 
-/// What a request in flight is for.
-enum Want {
-    /// A page of the session list.
-    Page,
-    Projects,
-    Rename {
-        id: String,
-        title: String,
-    },
-    /// One deletion of a run of them: the sessions still to delete, and what is known so far.
+/// The page's state and what starts its flows.
+#[derive(Clone)]
+struct Page {
+    state: Rc<RefCell<State>>,
+    tasks: Tasks,
+}
+
+impl Page {
+    /// Starts the flow a handler asked for, once it no longer holds the state.
+    fn start(&self, host: &dyn Host) {
+        let Some(flow) = self.state.borrow_mut().start.take() else { return };
+        let state = self.state.clone();
+        match flow {
+            Flow::Refresh => self.tasks.spawn(host, move |cx| refresh(cx, state)),
+            Flow::Rename { id, prompt } => self.tasks.spawn(host, move |cx| rename(cx, state, id, prompt)),
+            Flow::Remove(removal) => self.tasks.spawn(host, move |cx| remove(cx, state, removal)),
+        }
+    }
+}
+
+/// A flow of the page, which awaits its dialogs and requests.
+enum Flow {
+    Refresh,
+    Rename { id: String, prompt: Prompt },
     Remove(Removal),
 }
 
+/// What a confirm asks to delete: top-level sessions, one after another.
 struct Removal {
-    left: Vec<String>,
-    current: String,
-    done: Vec<String>,
-    failed: usize,
+    confirm: Confirm,
+    ids: Vec<String>,
+    /// The sessions it deletes, their descendants included.
     total: usize,
     /// The group's label, for a whole group.
     group: Option<String>,
+}
+
+/// TS `refresh`: every page of the session list, and the projects. A later refresh replaces it.
+async fn refresh(cx: Cx, state: Rc<RefCell<State>>) {
+    let generation = {
+        let mut state = state.borrow_mut();
+        state.refreshes += 1;
+        state.refreshes
+    };
+    let current = || state.borrow().refreshes == generation;
+    let mut next = cx.fetch(page(None));
+    let projects = cx.fetch(Fetch::new("GET", "/api/project"));
+    let mut sessions = Vec::new();
+    let listed = loop {
+        let body = match next.await {
+            Ok(body) => body,
+            Err(error) => break Err(error),
+        };
+        if !current() {
+            return;
+        }
+        let data = body.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
+        sessions.extend(data.iter().filter_map(Session::from_json));
+        let cursor = body.pointer("/cursor/next").and_then(Value::as_str).filter(|next| !next.is_empty());
+        match cursor.filter(|_| !data.is_empty()) {
+            Some(cursor) => next = cx.fetch(page(Some(cursor))),
+            None => break projects.await,
+        }
+    };
+    let mut state = state.borrow_mut();
+    if state.refreshes != generation {
+        return;
+    }
+    let list = match listed {
+        Ok(body) => body.get("data").unwrap_or(&body).as_array().cloned().unwrap_or_default(),
+        Err(error) => {
+            state.error = Some(error);
+            state.loading = false;
+            return;
+        }
+    };
+    state.projects = list
+        .iter()
+        .filter_map(|project| {
+            let id = project.get("id")?.as_str()?.to_owned();
+            let name = project.get("name").and_then(Value::as_str).map(str::trim).filter(|name| !name.is_empty());
+            let canonical = project.get("canonical").and_then(Value::as_str).unwrap_or_default();
+            Some((id, name.map_or_else(|| format_path(canonical), str::to_owned)))
+        })
+        .collect();
+    // TS's `setSessions`, with the selection on the session it came from.
+    state.sessions = sessions;
+    if state.selected.is_none()
+        && let Some(from) = &state.from
+    {
+        state.selected = Some(format!("s:{from}"));
+    }
+    state.now = now();
+    state.error = None;
+    state.loading = false;
+}
+
+/// TS `rename`: a prompt for session `id`'s new title, then the title saved.
+async fn rename(cx: Cx, state: Rc<RefCell<State>>, id: String, prompt: Prompt) {
+    let title = cx.prompt(prompt).await.map(|text| text.trim().to_owned()).filter(|title| !title.is_empty());
+    let current =
+        state.borrow().sessions.iter().find(|session| session.id == id).and_then(|session| session.title.clone());
+    if let Some(title) = title.filter(|title| Some(title) != current.as_ref()) {
+        let fetch = Fetch::new("PATCH", format!("/api/session/{id}")).body(json!({ "title": title }));
+        let saved = cx.fetch(fetch).await;
+        let mut state = state.borrow_mut();
+        match saved {
+            Ok(_) => {
+                if let Some(session) = state.sessions.iter_mut().find(|session| session.id == id) {
+                    session.title = Some(title.clone());
+                }
+                cx.toast(Toast::new(Variant::Success, (state.t().renamed)(&title)));
+            }
+            Err(error) => cx.toast(Toast::new(Variant::Error, error)),
+        }
+    }
+    state.borrow_mut().busy = false;
+}
+
+/// TS `removeOne` and `removeGroup`: asks, then deletes, one after another; the deleted ones go, and a toast says
+/// so. A session already gone is deleted.
+async fn remove(cx: Cx, state: Rc<RefCell<State>>, removal: Removal) {
+    if cx.confirm(removal.confirm).await == Some(true) {
+        let (mut done, mut failed) = (Vec::new(), 0);
+        for id in removal.ids {
+            match cx.fetch(Fetch::new("DELETE", format!("/api/session/{id}"))).await {
+                Err(error) if !not_found(&error) && removal.group.is_none() => {
+                    state.borrow_mut().busy = false;
+                    return cx.toast(Toast::new(Variant::Error, error));
+                }
+                Err(error) if !not_found(&error) => failed += 1,
+                _ => done.push(id),
+            }
+        }
+        let mut state = state.borrow_mut();
+        state.forget(&cx, &done);
+        let t = state.t();
+        match (&removal.group, failed) {
+            (None, _) => cx.toast(Toast::new(Variant::Success, (t.removed)(removal.total))),
+            (Some(_), failed) if failed > 0 => cx.toast(Toast::new(Variant::Error, (t.group_failed)(failed))),
+            (Some(label), _) => cx.toast(Toast::new(Variant::Success, (t.group_removed)(label, removal.total))),
+        }
+        if removal.group.is_some() {
+            state.schedule_refresh();
+        }
+    }
+    state.borrow_mut().busy = false;
 }
 
 /// TS `SessionManagerPage`'s signals.
@@ -180,8 +304,6 @@ struct State {
     origin: Option<String>,
     from: Option<String>,
     sessions: Vec<Session>,
-    /// The sessions read so far by a refresh.
-    pages: Vec<Session>,
     projects: HashMap<String, String>,
     loading: bool,
     error: Option<String>,
@@ -195,16 +317,15 @@ struct State {
     mode: Mode,
     children: bool,
     locale: Locale,
-    waiting: HashMap<RequestId, Want>,
+    /// The refreshes started; the last one's list is the page's.
+    refreshes: u64,
+    /// The flow a handler asked for, which starts once it returns.
+    start: Option<Flow>,
     timer: Option<Timer>,
     /// Wakes the host for a focus that must wait for the next view: the field shows only once searching.
     waker: Option<Waker>,
     /// The search field takes the focus at the next wake.
     focus: bool,
-    /// The session the rename prompt asks about, until it answers or closes.
-    renaming: Option<String>,
-    /// What the confirm asks about, until it answers.
-    removing: Option<Removal>,
 }
 
 impl Default for State {
@@ -213,7 +334,6 @@ impl Default for State {
             origin: None,
             from: None,
             sessions: Vec::new(),
-            pages: Vec::new(),
             projects: HashMap::new(),
             loading: true,
             error: None,
@@ -227,12 +347,11 @@ impl Default for State {
             mode: Mode::Directory,
             children: false,
             locale: Locale::En,
-            waiting: HashMap::new(),
+            refreshes: 0,
+            start: None,
             timer: None,
             waker: None,
             focus: false,
-            renaming: None,
-            removing: None,
         }
     }
 }
@@ -254,6 +373,7 @@ impl State {
         *self = State {
             from: self.origin.clone(),
             origin: self.origin.take(),
+            refreshes: self.refreshes,
             timer: self.timer.take(),
             waker: self.waker.take(),
             mode: stored.get("mode").and_then(Value::as_str).and_then(Mode::parse).unwrap_or(Mode::Directory),
@@ -261,120 +381,18 @@ impl State {
             locale: stored.get("locale").and_then(Value::as_str).and_then(Locale::parse).unwrap_or(Locale::En),
             ..State::default()
         };
-        self.refresh(host);
+        self.refresh();
     }
 
-    /// TS `refresh`: every page of the session list, and the projects.
-    fn refresh(&mut self, host: &dyn Host) {
-        self.waiting.retain(|_, want| !matches!(want, Want::Page | Want::Projects));
-        self.pages.clear();
-        self.ask(host, page(None), Want::Page);
-        self.ask(host, Fetch::new("GET", "/api/project"), Want::Projects);
+    /// TS `refresh`, once the handler returns.
+    fn refresh(&mut self) {
+        self.start = Some(Flow::Refresh);
     }
 
     fn schedule_refresh(&mut self) {
         if let Some(timer) = &self.timer {
             timer.arm(Duration::from_millis(300));
         }
-    }
-
-    fn ask(&mut self, host: &dyn Host, fetch: Fetch, want: Want) {
-        match host.try_fetch(fetch) {
-            Ok(id) => drop(self.waiting.insert(id, want)),
-            Err(error) => self.failed(host, want, error),
-        }
-    }
-
-    fn reply(&mut self, host: &dyn Host, id: RequestId, reply: Result<Value, String>) {
-        let Some(want) = self.waiting.remove(&id) else { return };
-        let body = match reply {
-            Ok(body) => body,
-            Err(error) => return self.failed(host, want, error),
-        };
-        match want {
-            Want::Page => {
-                let data = body.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
-                self.pages.extend(data.iter().filter_map(Session::from_json));
-                let next = body.pointer("/cursor/next").and_then(Value::as_str).filter(|next| !next.is_empty());
-                match next.filter(|_| !data.is_empty()) {
-                    Some(next) => {
-                        let next = next.to_owned();
-                        self.ask(host, page(Some(&next)), Want::Page);
-                    }
-                    None => self.listed(),
-                }
-            }
-            Want::Projects => {
-                let list = body.get("data").unwrap_or(&body).as_array().cloned().unwrap_or_default();
-                self.projects = list
-                    .iter()
-                    .filter_map(|project| {
-                        let id = project.get("id")?.as_str()?.to_owned();
-                        let name =
-                            project.get("name").and_then(Value::as_str).map(str::trim).filter(|name| !name.is_empty());
-                        let canonical = project.get("canonical").and_then(Value::as_str).unwrap_or_default();
-                        Some((id, name.map_or_else(|| format_path(canonical), str::to_owned)))
-                    })
-                    .collect();
-                if !self.waiting.values().any(|want| matches!(want, Want::Page)) {
-                    self.listed();
-                }
-            }
-            Want::Rename { id, title } => {
-                if let Some(session) = self.sessions.iter_mut().find(|session| session.id == id) {
-                    session.title = Some(title.clone());
-                }
-                self.busy = false;
-                host.toast(Toast::new(Variant::Success, (self.t().renamed)(&title)));
-            }
-            Want::Remove(mut removal) => {
-                removal.done.push(removal.current.clone());
-                self.next_removal(host, removal);
-            }
-        }
-    }
-
-    /// A request failed: TS's `catch` of what asked for it.
-    fn failed(&mut self, host: &dyn Host, want: Want, error: String) {
-        match want {
-            Want::Page | Want::Projects => {
-                self.waiting.retain(|_, want| !matches!(want, Want::Page | Want::Projects));
-                self.error = Some(error);
-                self.loading = false;
-            }
-            Want::Rename { .. } => {
-                self.busy = false;
-                host.toast(Toast::new(Variant::Error, error));
-            }
-            Want::Remove(mut removal) => {
-                // A session already gone is deleted.
-                match not_found(&error) {
-                    true => removal.done.push(removal.current.clone()),
-                    false if removal.group.is_none() => {
-                        self.busy = false;
-                        return host.toast(Toast::new(Variant::Error, error));
-                    }
-                    false => removal.failed += 1,
-                }
-                self.next_removal(host, removal);
-            }
-        }
-    }
-
-    /// The list is read: TS's `setSessions` with the selection on the session it came from.
-    fn listed(&mut self) {
-        if self.waiting.values().any(|want| matches!(want, Want::Page | Want::Projects)) {
-            return;
-        }
-        self.sessions = std::mem::take(&mut self.pages);
-        if self.selected.is_none()
-            && let Some(from) = &self.from
-        {
-            self.selected = Some(format!("s:{from}"));
-        }
-        self.now = now();
-        self.error = None;
-        self.loading = false;
     }
 
     fn listed_now(&self) -> Listed {
@@ -470,10 +488,10 @@ impl State {
             "next-mode" => self.set_mode(host, self.mode.step(1)),
             "previous-mode" => self.set_mode(host, self.mode.step(-1)),
             "children" => self.toggle_children(host),
-            "rename" => self.rename(host, &listed),
-            "delete" => self.remove_one(host, &listed),
-            "delete-group" => self.remove_group(host, &listed),
-            "refresh" => self.refresh(host),
+            "rename" => self.rename(&listed),
+            "delete" => self.remove_one(&listed),
+            "delete-group" => self.remove_group(&listed),
+            "refresh" => self.refresh(),
             "search" => self.start_search(host),
             "language" => self.set_locale(host, self.locale.next()),
             "back" => match self.query.trim().is_empty() {
@@ -605,31 +623,16 @@ impl State {
     }
 
     /// TS `rename`: a prompt for the selected session's new title.
-    fn rename(&mut self, host: &dyn Host, listed: &Listed) {
+    fn rename(&mut self, listed: &Listed) {
         let Some(Row::Session { session, .. }) = self.index(listed).map(|index| &listed.rows[index]) else { return };
         let session = &self.sessions[*session];
         self.busy = true;
-        let prompt = Prompt::new(self.t().rename_title, Action::command("session-manager.renamed"))
-            .placeholder(session.title.clone().unwrap_or_default());
-        let dismissed = Action::command("session-manager.rename-closed").input(session.id.clone());
-        self.renaming = Some(session.id.clone());
-        host.dialog(Dialog::Dismissable { dialog: Box::new(Dialog::Prompt(prompt)), dismissed });
-    }
-
-    fn renamed(&mut self, host: &dyn Host, text: &str) {
-        let Some(id) = self.renaming.take() else { return };
-        let title = text.trim();
-        let current = self.sessions.iter().find(|session| session.id == id).and_then(|session| session.title.clone());
-        if title.is_empty() || Some(title) == current.as_deref() {
-            self.busy = false;
-            return;
-        }
-        let fetch = Fetch::new("PATCH", format!("/api/session/{id}")).body(json!({ "title": title }));
-        self.ask(host, fetch, Want::Rename { id, title: title.to_owned() });
+        let prompt = Prompt::ask(self.t().rename_title).placeholder(session.title.clone().unwrap_or_default());
+        self.start = Some(Flow::Rename { id: session.id.clone(), prompt });
     }
 
     /// TS `removeOne`: asks, then deletes the selected session.
-    fn remove_one(&mut self, host: &dyn Host, listed: &Listed) {
+    fn remove_one(&mut self, listed: &Listed) {
         let Some(Row::Session { session, .. }) = self.index(listed).map(|index| &listed.rows[index]) else { return };
         let session = &self.sessions[*session];
         let t = self.t();
@@ -643,19 +646,12 @@ impl State {
         }
         lines.push(t.irreversible.to_owned());
         self.busy = true;
-        self.removing = Some(Removal {
-            left: vec![session.id.clone()],
-            current: String::new(),
-            done: Vec::new(),
-            failed: 0,
-            total,
-            group: None,
-        });
-        host.dialog(confirm(t.remove_title, lines, t.confirm, t.cancel, "session-manager.removed"));
+        let confirm = confirm(t.remove_title, lines, t.confirm, t.cancel);
+        self.start = Some(Flow::Remove(Removal { confirm, ids: vec![session.id.clone()], total, group: None }));
     }
 
     /// TS `removeGroup`: asks, then deletes the selected group's top-level sessions, one after another.
-    fn remove_group(&mut self, host: &dyn Host, listed: &Listed) {
+    fn remove_group(&mut self, listed: &Listed) {
         let Some(row) = self.index(listed).map(|index| &listed.rows[index]) else { return };
         let group = &listed.groups[group_of(row)];
         let ids: Vec<String> = group.roots.iter().map(|tree| self.sessions[tree.session].id.clone()).collect();
@@ -674,21 +670,8 @@ impl State {
         }
         lines.push(t.irreversible.to_owned());
         self.busy = true;
-        self.removing = Some(Removal {
-            left: ids,
-            current: String::new(),
-            done: Vec::new(),
-            failed: 0,
-            total,
-            group: Some(group.label.clone()),
-        });
-        host.dialog(confirm(
-            &(t.group_title)(&group.label),
-            lines,
-            &(t.group_confirm)(total),
-            t.cancel,
-            "session-manager.group-removed",
-        ));
+        let confirm = confirm(&(t.group_title)(&group.label), lines, &(t.group_confirm)(total), t.cancel);
+        self.start = Some(Flow::Remove(Removal { confirm, ids, total, group: Some(group.label.clone()) }));
     }
 
     /// TS `containsSession`: whether `target` is one of `roots` or under one.
@@ -703,45 +686,6 @@ impl State {
             cursor = session.parent.as_deref().and_then(|parent| by_id.get(parent));
         }
         false
-    }
-
-    fn confirmed_remove(&mut self, host: &dyn Host, answer: &str) {
-        self.confirmed(host, answer);
-    }
-
-    fn confirmed_group(&mut self, host: &dyn Host, answer: &str) {
-        self.confirmed(host, answer);
-    }
-
-    /// The confirm's answer: `true` deletes what it asked about.
-    fn confirmed(&mut self, host: &dyn Host, answer: &str) {
-        let Some(removal) = self.removing.take() else { return };
-        if answer != "true" {
-            self.busy = false;
-            return;
-        }
-        self.next_removal(host, removal);
-    }
-
-    /// Deletes the next session of `removal`, or ends it: the deleted ones go, and a toast says so.
-    fn next_removal(&mut self, host: &dyn Host, mut removal: Removal) {
-        if let Some(next) = removal.left.first().cloned() {
-            removal.left.remove(0);
-            removal.current = next.clone();
-            let fetch = Fetch::new("DELETE", format!("/api/session/{next}"));
-            return self.ask(host, fetch, Want::Remove(removal));
-        }
-        self.forget(host, &removal.done);
-        self.busy = false;
-        let t = self.t();
-        match (&removal.group, removal.failed) {
-            (None, _) => host.toast(Toast::new(Variant::Success, (t.removed)(removal.total))),
-            (Some(_), failed) if failed > 0 => host.toast(Toast::new(Variant::Error, (t.group_failed)(failed))),
-            (Some(label), _) => host.toast(Toast::new(Variant::Success, (t.group_removed)(label, removal.total))),
-        }
-        if removal.group.is_some() {
-            self.schedule_refresh();
-        }
     }
 
     /// TS `forgetDeleted`: the deleted sessions and their descendants go, and their tabs close.
@@ -979,9 +923,9 @@ fn hints(t: &Messages) -> v2::Node {
     v2::Node::row(hints).gap(2).flex_wrap().layout(Layout::default().shrink(false))
 }
 
-/// A confirm with its own labels, whose answer runs command `answer`.
-fn confirm(title: &str, lines: Vec<String>, yes: &str, no: &str, answer: &str) -> Dialog {
-    Dialog::Confirm(Confirm::new(title, lines.join("\n"), Action::command(answer)).labels(yes, no))
+/// A confirm of `lines` with its own labels.
+fn confirm(title: &str, lines: Vec<String>, yes: &str, no: &str) -> Confirm {
+    Confirm::ask(title, lines.join("\n")).labels(yes, no)
 }
 
 fn group_of(row: &Row) -> usize {
