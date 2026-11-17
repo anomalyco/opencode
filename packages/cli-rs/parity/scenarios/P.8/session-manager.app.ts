@@ -48,7 +48,8 @@ export default defineApp({
     { keys: ["shift+tab"] },
     { keys: ["/"] },
     { type: "theme" },
-    // Contract 2.0 refuses the focus of a field, so the typing goes elsewhere (F16-plugin-contract-gaps).
+    // The field the same key shows is not in the host's tree as its focus applies, so the typing goes elsewhere
+    // (F16-plugin-contract-gaps).
     { checkpoint: "search", until: "1 match", deviation: [{ file: "F16-plugin-contract-gaps", cells: 400 }] },
     { keys: ["escape"] },
     { checkpoint: "cleared", until: "Draft the notes" },

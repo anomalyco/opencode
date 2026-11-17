@@ -4,8 +4,9 @@
 //! delete one or a whole group, each after asking. The grouping, the subsessions and the language are kept.
 //!
 //! Where it differs from TS: the rename prompt cannot be filled with the session's title or show its directory (a
-//! prompt has a title and a placeholder only), so it shows the title as the placeholder; dates are read in UTC; and a
-//! command has one slash name, so TS's `/sm` alias is not there.
+//! prompt has a title and a placeholder only), so it shows the title as the placeholder; the search field takes the
+//! focus at the next wake, once the host's tree holds it, so keys typed in the same burst as `/` are lost; dates are
+//! read in UTC; and a command has one slash name, so TS's `/sm` alias is not there.
 
 mod grouping;
 mod i18n;
@@ -134,13 +135,17 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.on_reply(move |host, id, reply| replied.borrow_mut().reply(host, id, reply));
     // TS refreshes 300 ms after the last change it heard; a thread keeps that time and wakes the host.
     if let Some(waker) = setup.waker() {
-        let timer = Timer::start(waker);
+        let timer = Timer::start(waker.clone());
         state.borrow_mut().timer = Some(timer.clone());
+        state.borrow_mut().waker = Some(waker);
         let woken = state.clone();
         setup.on_wake(move |host| {
-            let due = woken.borrow().timer.as_ref().is_some_and(Timer::take);
-            if due {
-                woken.borrow_mut().refresh(host);
+            let mut state = woken.borrow_mut();
+            if std::mem::take(&mut state.focus) && state.searching {
+                host.focus(SEARCH);
+            }
+            if state.timer.as_ref().is_some_and(Timer::take) {
+                state.refresh(host);
             }
         });
         setup.on_dispose(move |_| timer.stop());
@@ -193,6 +198,10 @@ struct State {
     locale: Locale,
     waiting: HashMap<RequestId, Want>,
     timer: Option<Timer>,
+    /// Wakes the host for a focus that must wait for the next view: the field shows only once searching.
+    waker: Option<Waker>,
+    /// The search field takes the focus at the next wake.
+    focus: bool,
     /// The session the rename prompt asks about, until it answers or closes.
     renaming: Option<String>,
     /// What the confirm asks about, until it answers.
@@ -221,6 +230,8 @@ impl Default for State {
             locale: Locale::En,
             waiting: HashMap::new(),
             timer: None,
+            waker: None,
+            focus: false,
             renaming: None,
             removing: None,
         }
@@ -245,6 +256,7 @@ impl State {
             from: self.origin.clone(),
             origin: self.origin.take(),
             timer: self.timer.take(),
+            waker: self.waker.take(),
             mode: stored.get("mode").and_then(Value::as_str).and_then(Mode::parse).unwrap_or(Mode::Directory),
             children: stored.get("showChildren") == Some(&Value::Bool(true)),
             locale: stored.get("locale").and_then(Value::as_str).and_then(Locale::parse).unwrap_or(Locale::En),
@@ -552,9 +564,17 @@ impl State {
         }
     }
 
+    /// TS `startSearch`: the field shows, and takes the focus once it does (`focus-input`): a focus asked in this call
+    /// would name a field the host's tree does not hold yet.
     fn start_search(&mut self, host: &dyn Host) {
         self.searching = true;
-        host.focus(SEARCH);
+        match &self.waker {
+            Some(waker) => {
+                self.focus = true;
+                waker.wake();
+            }
+            None => host.focus(SEARCH),
+        }
     }
 
     fn finish_search(&mut self, host: &dyn Host) {
