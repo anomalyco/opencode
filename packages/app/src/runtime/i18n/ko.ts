@@ -1224,8 +1224,6 @@ export const dict = {
   "sidebar.recent.unpin": "고정 해제",
   "sidebar.recent.moveUp": "위로 이동",
   "sidebar.recent.moveDown": "아래로 이동",
-  "settings.experimental.row.newIcons.title": "새 아이콘",
-  "settings.experimental.row.newIcons.description": "업데이트된 아이콘 세트 미리 보기",
   "settings.experimental.row.newTimeline.title": "새 타임라인",
   "settings.experimental.row.newTimeline.description":
     "에이전트가 한 일을 그룹으로 묶고 턴 아래에 상태 줄 하나를 표시하는 새로 디자인된 세션 타임라인",

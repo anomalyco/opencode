@@ -1229,8 +1229,6 @@ export const dict = {
   "sidebar.recent.unpin": "अनपिन करें",
   "sidebar.recent.moveUp": "ऊपर ले जाएँ",
   "sidebar.recent.moveDown": "नीचे ले जाएँ",
-  "settings.experimental.row.newIcons.title": "नए आइकन",
-  "settings.experimental.row.newIcons.description": "अपडेट किए गए आइकन सेट का पूर्वावलोकन करें",
   "settings.experimental.row.newTimeline.title": "नई टाइमलाइन",
   "settings.experimental.row.newTimeline.description":
     "नए डिज़ाइन वाली सेशन टाइमलाइन जो एजेंट के कार्यों को समूहित करती है, और टर्न के नीचे एक स्थिति पंक्ति दिखाती है",

@@ -1233,8 +1233,6 @@ export const dict = {
   "sidebar.recent.unpin": "پِن ہٹاؤ",
   "sidebar.recent.moveUp": "اُتے لے جاؤ",
   "sidebar.recent.moveDown": "تھلے لے جاؤ",
-  "settings.experimental.row.newIcons.title": "نویں آئیکن",
-  "settings.experimental.row.newIcons.description": "اپ ڈیٹ کیتے آئیکن سیٹ دا پیش نظارہ ویکھو",
   "settings.experimental.row.newTimeline.title": "نویں ٹائم لائن",
   "settings.experimental.row.newTimeline.description":
     "نویں ڈیزائن آلی سیشن ٹائم لائن جیہڑی ایجنٹ دے کیتے کم نوں گروپ کردی اے، واری دے تھلے اک سٹیٹس لائن نال",

@@ -1241,8 +1241,6 @@ export const dict = {
   "sidebar.recent.unpin": "Losmaken",
   "sidebar.recent.moveUp": "Omhoog verplaatsen",
   "sidebar.recent.moveDown": "Omlaag verplaatsen",
-  "settings.experimental.row.newIcons.title": "Nieuwe pictogrammen",
-  "settings.experimental.row.newIcons.description": "Bekijk de vernieuwde pictogramset",
   "settings.experimental.row.newTimeline.title": "Nieuwe tijdlijn",
   "settings.experimental.row.newTimeline.description":
     "Een vernieuwde sessietijdlijn die groepeert wat de agent deed, met één statusregel onder de beurt",

@@ -1236,8 +1236,6 @@ export const dict = {
   "sidebar.recent.unpin": "ပင်ဖြုတ်ရန်",
   "sidebar.recent.moveUp": "အပေါ်သို့ ရွှေ့ရန်",
   "sidebar.recent.moveDown": "အောက်သို့ ရွှေ့ရန်",
-  "settings.experimental.row.newIcons.title": "အိုင်ကွန်အသစ်များ",
-  "settings.experimental.row.newIcons.description": "အပ်ဒိတ်လုပ်ထားသော အိုင်ကွန်အစုံကို အစမ်းကြည့်ပါ",
   "settings.experimental.row.newTimeline.title": "အချိန်ဇယားအသစ်",
   "settings.experimental.row.newTimeline.description":
     "အေးဂျင့်လုပ်ဆောင်ခဲ့သည်များကို အုပ်စုဖွဲ့ပြီး အလှည့်အောက်တွင် အခြေအနေလိုင်းတစ်ကြောင်းပြသသော ပြန်လည်ဒီဇိုင်းထားသည့် စက်ရှင်အချိန်ဇယား",

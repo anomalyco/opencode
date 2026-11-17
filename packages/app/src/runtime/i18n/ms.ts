@@ -1229,8 +1229,6 @@ export const dict = {
   "sidebar.recent.unpin": "Nyahsemat",
   "sidebar.recent.moveUp": "Alih ke atas",
   "sidebar.recent.moveDown": "Alih ke bawah",
-  "settings.experimental.row.newIcons.title": "Ikon baharu",
-  "settings.experimental.row.newIcons.description": "Pratonton set ikon yang dikemas kini",
   "settings.experimental.row.newTimeline.title": "Garis masa baharu",
   "settings.experimental.row.newTimeline.description":
     "Garis masa sesi yang direka semula yang mengumpulkan perkara yang dilakukan ejen, dengan satu baris status di bawah giliran",

@@ -1220,8 +1220,6 @@ export const dict = {
   "sidebar.recent.unpin": "برداشتن سنجاق",
   "sidebar.recent.moveUp": "انتقال به بالا",
   "sidebar.recent.moveDown": "انتقال به پایین",
-  "settings.experimental.row.newIcons.title": "نمادهای جدید",
-  "settings.experimental.row.newIcons.description": "پیش‌نمایش مجموعه نمادهای به‌روزشده",
   "settings.experimental.row.newTimeline.title": "خط زمانی جدید",
   "settings.experimental.row.newTimeline.description":
     "خط زمانی بازطراحی‌شده جلسه که کارهای عامل را گروه‌بندی می‌کند و یک خط وضعیت زیر هر نوبت دارد",

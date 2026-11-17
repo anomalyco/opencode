@@ -1268,8 +1268,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odpni",
   "sidebar.recent.moveUp": "Premakni gor",
   "sidebar.recent.moveDown": "Premakni dol",
-  "settings.experimental.row.newIcons.title": "Nove ikone",
-  "settings.experimental.row.newIcons.description": "Predogled posodobljenega nabora ikon",
   "settings.experimental.row.newTimeline.title": "Nova časovnica",
   "settings.experimental.row.newTimeline.description":
     "Prenovljena časovnica seje, ki združi, kaj je agent naredil, z eno vrstico stanja pod korakom",

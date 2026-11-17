@@ -1259,8 +1259,6 @@ export const dict = {
   "sidebar.recent.unpin": "Deixa de fixar",
   "sidebar.recent.moveUp": "Mou amunt",
   "sidebar.recent.moveDown": "Mou avall",
-  "settings.experimental.row.newIcons.title": "Icones noves",
-  "settings.experimental.row.newIcons.description": "Previsualitza el conjunt d'icones actualitzat",
   "settings.experimental.row.newTimeline.title": "Cronologia nova",
   "settings.experimental.row.newTimeline.description":
     "Una cronologia de sessió redissenyada que agrupa el que ha fet l'agent, amb una sola línia d'estat sota el torn",

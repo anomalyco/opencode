@@ -1232,8 +1232,6 @@ export const dict = {
   "sidebar.recent.unpin": "取消釘選",
   "sidebar.recent.moveUp": "上移",
   "sidebar.recent.moveDown": "下移",
-  "settings.experimental.row.newIcons.title": "新圖示",
-  "settings.experimental.row.newIcons.description": "預覽更新後的圖示集",
   "settings.experimental.row.newTimeline.title": "新時間軸",
   "settings.experimental.row.newTimeline.description":
     "重新設計的工作階段時間軸，會將代理程式的動作分組，並在每一輪下方顯示一行狀態",

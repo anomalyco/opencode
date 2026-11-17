@@ -617,7 +617,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <Show when={!props.changeSummary || !diffCanRender()}>{changes()}</Show>
                                 <Show when={diffCanRender()}>
                                   <span data-slot="session-review-diff-chevron">
-                                    <Icon name="chevron-down" size="small" />
+                                    <Icon name="chevron-down" />
                                   </span>
                                 </Show>
                               </div>

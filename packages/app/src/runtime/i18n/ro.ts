@@ -1255,8 +1255,6 @@ export const dict = {
   "sidebar.recent.unpin": "Anulează fixarea",
   "sidebar.recent.moveUp": "Mută în sus",
   "sidebar.recent.moveDown": "Mută în jos",
-  "settings.experimental.row.newIcons.title": "Pictograme noi",
-  "settings.experimental.row.newIcons.description": "Previzualizează setul de pictograme actualizat",
   "settings.experimental.row.newTimeline.title": "Cronologie nouă",
   "settings.experimental.row.newTimeline.description":
     "O cronologie a sesiunii reproiectată, care grupează ce a făcut agentul, cu o singură linie de stare sub rundă",

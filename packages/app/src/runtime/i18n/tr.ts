@@ -1301,8 +1301,6 @@ export const dict = {
   "sidebar.recent.unpin": "Sabitlemeyi kaldır",
   "sidebar.recent.moveUp": "Yukarı taşı",
   "sidebar.recent.moveDown": "Aşağı taşı",
-  "settings.experimental.row.newIcons.title": "Yeni simgeler",
-  "settings.experimental.row.newIcons.description": "Güncellenmiş simge setini önizleyin",
   "settings.experimental.row.newTimeline.title": "Yeni zaman çizelgesi",
   "settings.experimental.row.newTimeline.description":
     "Ajanın yaptıklarını gruplayan ve turun altında tek bir durum satırı gösteren yeniden tasarlanmış oturum zaman çizelgesi",

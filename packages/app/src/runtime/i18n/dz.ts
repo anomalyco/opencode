@@ -1252,8 +1252,6 @@ export const dict = {
   "sidebar.recent.unpin": "སྦྱར་བཞག་བཏོན།",
   "sidebar.recent.moveUp": "ཡར་སྤོ།",
   "sidebar.recent.moveDown": "མར་སྤོ།",
-  "settings.experimental.row.newIcons.title": "ངོས་དཔར་གསརཔ།",
-  "settings.experimental.row.newIcons.description": "དུས་མཐུན་བཟོ་ཡོད་པའི་ངོས་དཔར་ཚོ་སྡེ་ སྔོན་ལྟ་འབད།",
   "settings.experimental.row.newTimeline.title": "དུས་ཚོད་ཐིག་གསརཔ།",
   "settings.experimental.row.newTimeline.description":
     "ལས་ཚབ་ཀྱིས་འབད་མི་ཚུ་ སྡེ་ཚན་བཟོ་ཡོད་པའི་ ལཱ་ཡུན་དུས་ཚོད་ཐིག་ལོག་བཟོ་ཡོད་མི་ཅིག་ཨིན་ ཐེངས་ཀྱི་འོག་ལུ་ གནས་སྟངས་གྲལ་ཐིག་གཅིག་ཡོདཔ།",

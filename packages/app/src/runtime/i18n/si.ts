@@ -1228,8 +1228,6 @@ export const dict = {
   "sidebar.recent.unpin": "ගළවන්න",
   "sidebar.recent.moveUp": "ඉහළට ගෙන යන්න",
   "sidebar.recent.moveDown": "පහළට ගෙන යන්න",
-  "settings.experimental.row.newIcons.title": "නව අයිකන",
-  "settings.experimental.row.newIcons.description": "යාවත්කාලීන කළ අයිකන කට්ටලය පෙරදසුන් කරන්න",
   "settings.experimental.row.newTimeline.title": "නව කාලරේඛාව",
   "settings.experimental.row.newTimeline.description":
     "නියෝජිතයා කළ දේ සමූහගත කරන, වාරයට පහළින් එක් තත්ත්ව පේළියක් සහිත නැවත සැලසුම් කළ සැසි කාලරේඛාවක්",

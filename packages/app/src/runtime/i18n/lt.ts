@@ -1272,8 +1272,6 @@ export const dict = {
   "sidebar.recent.unpin": "Atsegti",
   "sidebar.recent.moveUp": "Perkelti aukštyn",
   "sidebar.recent.moveDown": "Perkelti žemyn",
-  "settings.experimental.row.newIcons.title": "Naujos piktogramos",
-  "settings.experimental.row.newIcons.description": "Išbandykite atnaujintą piktogramų rinkinį",
   "settings.experimental.row.newTimeline.title": "Nauja laiko juosta",
   "settings.experimental.row.newTimeline.description":
     "Pertvarkyta seanso laiko juosta, grupuojanti agento veiksmus, su viena būsenos eilute po etapu",

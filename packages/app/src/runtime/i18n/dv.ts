@@ -1266,8 +1266,6 @@ export const dict = {
   "sidebar.recent.unpin": "ޕިން ނަގާ",
   "sidebar.recent.moveUp": "މައްޗަށް ގެންދާ",
   "sidebar.recent.moveDown": "ތިރިއަށް ގެންދާ",
-  "settings.experimental.row.newIcons.title": "އާ އައިކޮންތައް",
-  "settings.experimental.row.newIcons.description": "އަޕްޑޭޓްކުރި އައިކޮން ސެޓް ޕްރިވިއު ކުރާ",
   "settings.experimental.row.newTimeline.title": "އާ ޓައިމްލައިން",
   "settings.experimental.row.newTimeline.description":
     "އޭޖެންޓް ކުރި ކަންތައްތައް ގްރޫޕްކޮށް، ޓަރނުގެ ތިރީގައި އެއް ސްޓޭޓަސް ލައިން ދައްކާ އަލުން ޑިޒައިންކުރި ސެޝަން ޓައިމްލައިން",

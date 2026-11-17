@@ -1231,8 +1231,6 @@ export const dict = {
   "sidebar.recent.unpin": "Sancağı götür",
   "sidebar.recent.moveUp": "Yuxarı köçür",
   "sidebar.recent.moveDown": "Aşağı köçür",
-  "settings.experimental.row.newIcons.title": "Yeni ikonlar",
-  "settings.experimental.row.newIcons.description": "Yenilənmiş ikon dəstinə önizləmə",
   "settings.experimental.row.newTimeline.title": "Yeni zaman xətti",
   "settings.experimental.row.newTimeline.description":
     "Agentin etdiklərini qruplaşdıran və gedişin altında bir status sətri göstərən yenidən dizayn edilmiş sessiya zaman xətti",

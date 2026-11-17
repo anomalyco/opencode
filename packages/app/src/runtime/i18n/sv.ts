@@ -1229,8 +1229,6 @@ export const dict = {
   "sidebar.recent.unpin": "Lösgör",
   "sidebar.recent.moveUp": "Flytta upp",
   "sidebar.recent.moveDown": "Flytta ned",
-  "settings.experimental.row.newIcons.title": "Nya ikoner",
-  "settings.experimental.row.newIcons.description": "Förhandsgranska den uppdaterade ikonuppsättningen",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En omgjord sessionstidslinje som grupperar vad agenten gjorde, med en statusrad under turen",

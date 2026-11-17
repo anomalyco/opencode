@@ -1172,8 +1172,6 @@ export const dict = {
   "sidebar.recent.unpin": "ንቀል",
   "sidebar.recent.moveUp": "ወደ ላይ አንቀሳቅስ",
   "sidebar.recent.moveDown": "ወደ ታች አንቀሳቅስ",
-  "settings.experimental.row.newIcons.title": "አዲስ አዶዎች",
-  "settings.experimental.row.newIcons.description": "የተዘመነውን የአዶ ስብስብ ቅድመ እይታ ይመልከቱ",
   "settings.experimental.row.newTimeline.title": "አዲስ የጊዜ መስመር",
   "settings.experimental.row.newTimeline.description":
     "ወኪሉ ያደረገውን የሚያቧድን፣ ከዙሩ በታች አንድ የሁኔታ መስመር ያለው በአዲስ መልክ የተነደፈ የክፍለ ጊዜ የጊዜ መስመር",

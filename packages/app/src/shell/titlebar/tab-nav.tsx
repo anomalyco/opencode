@@ -596,7 +596,7 @@ export function TabNavItem(
               event.stopPropagation()
             }}
             onClick={closeTab}
-            icon={<Icon name="xmark-small" />}
+            icon={<Icon name="close" />}
             aria-label={language.t("common.closeTab")}
           />
         </Show>
@@ -845,7 +845,7 @@ export function DraftTabItem(
             }}
             class="hover-reveal relative z-10"
             onClick={closeTab}
-            icon={<Icon name="xmark-small" />}
+            icon={<Icon name="close" />}
             aria-label={language.t("common.closeTab")}
           />
         </div>

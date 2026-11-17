@@ -1252,8 +1252,6 @@ export const dict = {
   "sidebar.recent.unpin": "Otkvači",
   "sidebar.recent.moveUp": "Pomakni gore",
   "sidebar.recent.moveDown": "Pomakni dolje",
-  "settings.experimental.row.newIcons.title": "Nove ikone",
-  "settings.experimental.row.newIcons.description": "Isprobajte ažurirani skup ikona",
   "settings.experimental.row.newTimeline.title": "Nova vremenska traka",
   "settings.experimental.row.newTimeline.description":
     "Redizajnirana vremenska traka sesije koja grupira ono što je agent učinio, s jednim retkom statusa ispod koraka",

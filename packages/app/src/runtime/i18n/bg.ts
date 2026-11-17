@@ -1238,8 +1238,6 @@ export const dict = {
   "sidebar.recent.unpin": "Откачане",
   "sidebar.recent.moveUp": "Преместване нагоре",
   "sidebar.recent.moveDown": "Преместване надолу",
-  "settings.experimental.row.newIcons.title": "Нови икони",
-  "settings.experimental.row.newIcons.description": "Предварителен преглед на обновения набор икони",
   "settings.experimental.row.newTimeline.title": "Нова хронология",
   "settings.experimental.row.newTimeline.description":
     "Преработена хронология на сесията, която групира действията на агента, с един ред за състояние под хода",

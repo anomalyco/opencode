@@ -49,7 +49,7 @@ export function SidebarViewMenu(props: {
         variant="ghost-muted"
         size="small"
         aria-label={language.t("sidebar.view.options")}
-        icon={<Icon name="outline-sliders" size="small" />}
+        icon={<Icon name="sliders" />}
       />
       <Menu.Portal>
         <Menu.Content class="min-w-[200px]">

@@ -1208,8 +1208,6 @@ export const dict = {
   "sidebar.recent.unpin": "ຖອນປັກໝຸດ",
   "sidebar.recent.moveUp": "ຍ້າຍຂຶ້ນ",
   "sidebar.recent.moveDown": "ຍ້າຍລົງ",
-  "settings.experimental.row.newIcons.title": "ໄອຄອນໃໝ່",
-  "settings.experimental.row.newIcons.description": "ສະແດງຕົວຢ່າງຊຸດໄອຄອນທີ່ອັບເດດແລ້ວ",
   "settings.experimental.row.newTimeline.title": "ທາມລາຍໃໝ່",
   "settings.experimental.row.newTimeline.description":
     "ທາມລາຍເຊດຊັນທີ່ອອກແບບໃໝ່ ເຊິ່ງຈັດກຸ່ມສິ່ງທີ່ຕົວແທນໄດ້ເຮັດ, ພ້ອມແຖວສະຖານະດຽວຢູ່ລຸ່ມຮອບ",

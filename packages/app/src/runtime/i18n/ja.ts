@@ -1237,8 +1237,6 @@ export const dict = {
   "sidebar.recent.unpin": "ピン留めを外す",
   "sidebar.recent.moveUp": "上へ移動",
   "sidebar.recent.moveDown": "下へ移動",
-  "settings.experimental.row.newIcons.title": "新しいアイコン",
-  "settings.experimental.row.newIcons.description": "更新されたアイコンセットをプレビュー",
   "settings.experimental.row.newTimeline.title": "新しいタイムライン",
   "settings.experimental.row.newTimeline.description":
     "エージェントの作業をグループ化し、ターンの下に1行のステータスを表示する、再設計されたセッションタイムライン",

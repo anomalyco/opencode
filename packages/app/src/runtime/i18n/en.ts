@@ -879,8 +879,6 @@ export const dict = {
   "settings.tab.extensions": "Extensions",
   "settings.tab.experimental": "Experimental",
   "settings.experimental.description": "Try experimental features",
-  "settings.experimental.row.newIcons.title": "New icons",
-  "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.newTimeline.title": "New timeline",
   "settings.experimental.row.newTimeline.description":
     "A redesigned session timeline that groups what the agent did, with one status line below the turn",

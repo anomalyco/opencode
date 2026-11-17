@@ -1230,8 +1230,6 @@ export const dict = {
   "sidebar.recent.unpin": "Shfikso",
   "sidebar.recent.moveUp": "Lëviz lart",
   "sidebar.recent.moveDown": "Lëviz poshtë",
-  "settings.experimental.row.newIcons.title": "Ikona të reja",
-  "settings.experimental.row.newIcons.description": "Shikoni paraprakisht grupin e përditësuar të ikonave",
   "settings.experimental.row.newTimeline.title": "Rrjedhë kohore e re",
   "settings.experimental.row.newTimeline.description":
     "Një rrjedhë kohore e ridizajnuar e sesionit që grupon atë që bëri agjenti, me një rresht statusi poshtë raundit",

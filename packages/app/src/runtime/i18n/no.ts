@@ -1289,8 +1289,6 @@ export const dict = {
   "sidebar.recent.unpin": "Løsne",
   "sidebar.recent.moveUp": "Flytt opp",
   "sidebar.recent.moveDown": "Flytt ned",
-  "settings.experimental.row.newIcons.title": "Nye ikoner",
-  "settings.experimental.row.newIcons.description": "Forhåndsvis det oppdaterte ikonsettet",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En redesignet økttidslinje som grupperer det agenten gjorde, med én statuslinje under runden",

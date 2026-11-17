@@ -1336,8 +1336,6 @@ export const dict = {
   "sidebar.recent.unpin": "Відкріпити",
   "sidebar.recent.moveUp": "Перемістити вгору",
   "sidebar.recent.moveDown": "Перемістити вниз",
-  "settings.experimental.row.newIcons.title": "Нові іконки",
-  "settings.experimental.row.newIcons.description": "Попередній перегляд оновленого набору іконок",
   "settings.experimental.row.newTimeline.title": "Нова хронологія",
   "settings.experimental.row.newTimeline.description":
     "Перероблена хронологія сесії, що групує дії агента, з одним рядком статусу під кроком",

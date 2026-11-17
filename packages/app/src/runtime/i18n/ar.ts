@@ -1296,8 +1296,6 @@ export const dict = {
   "sidebar.recent.unpin": "إلغاء التثبيت",
   "sidebar.recent.moveUp": "نقل لأعلى",
   "sidebar.recent.moveDown": "نقل لأسفل",
-  "settings.experimental.row.newIcons.title": "أيقونات جديدة",
-  "settings.experimental.row.newIcons.description": "معاينة مجموعة الأيقونات المحدّثة",
   "settings.experimental.row.newTimeline.title": "مخطط زمني جديد",
   "settings.experimental.row.newTimeline.description":
     "مخطط زمني للجلسة بتصميم جديد يجمع ما قام به الوكيل، مع سطر حالة واحد أسفل الدور",

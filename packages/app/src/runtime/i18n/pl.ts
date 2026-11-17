@@ -1282,8 +1282,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odepnij",
   "sidebar.recent.moveUp": "Przenieś w górę",
   "sidebar.recent.moveDown": "Przenieś w dół",
-  "settings.experimental.row.newIcons.title": "Nowe ikony",
-  "settings.experimental.row.newIcons.description": "Wypróbuj zaktualizowany zestaw ikon",
   "settings.experimental.row.newTimeline.title": "Nowa oś czasu",
   "settings.experimental.row.newTimeline.description":
     "Przeprojektowana oś czasu sesji, która grupuje działania agenta, z jednym wierszem statusu pod turą",

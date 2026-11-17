@@ -80,7 +80,7 @@ const surfaces: Surface[] = [
               </div>
               <div data-slot="text-part-copy-wrapper">
                 <IconButton
-                  icon={<Icon name="outline-copy" size="small" />}
+                  icon={<Icon name="copy" size="small" />}
                   size="small"
                   variant="ghost-muted"
                   aria-label="Copy response"
@@ -249,7 +249,7 @@ const surfaces: Surface[] = [
                           variant="ghost-muted"
                           size="small"
                           aria-label="Delete “opencode-dialogs”?"
-                          icon={<Icon name="outline-trash" size="small" />}
+                          icon={<Icon name="trash" size="small" />}
                         />
                       </div>
                     </div>
