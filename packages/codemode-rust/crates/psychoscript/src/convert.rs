@@ -241,22 +241,73 @@ pub struct Stringify {
 }
 
 /// How `JSON.stringify` runs in the reference, for its fuel: a native walk, or its internal bytecode walk
-/// (`$vmJsonWalk`), which a replacer, a property list, a `toJSON` other than Date's and URL's, or a promise needs.
-/// The native walk stops (`restart`) at the first value that needs the other, before it calls anything, and the
-/// stringify starts over as that walk.
+/// (`$vmJsonWalk`), which a replacer, a property list, a `toJSON` other than Date's and URL's, a promise, or more than
+/// `REVISITS` visits of objects it has seen already need. The native walk stops (`restart`) at the first value that
+/// needs the other, before it calls anything, and the stringify starts over as that walk.
 struct Mode {
     walk: bool,
     restart: std::cell::Cell<bool>,
+    /// The stamp of a native walk (see `Vm::start_json_walk`); one nested in another keeps the objects it has seen.
+    stamp: u32,
+    seen: std::cell::RefCell<rustc_hash::FxHashSet<Id>>,
+    revisits: std::cell::Cell<u32>,
+}
+
+/// The visits of objects seen already the reference's native walk allows (its `VISIT_BUDGET`): it gives up at the
+/// last.
+const REVISITS: u32 = 2048;
+
+impl Mode {
+    fn new(vm: &mut Vm, walk: bool) -> Self {
+        Self {
+            walk,
+            restart: std::cell::Cell::new(false),
+            stamp: if walk {
+                0
+            } else {
+                vm.start_json_walk().unwrap_or(0)
+            },
+            seen: Default::default(),
+            revisits: std::cell::Cell::new(REVISITS),
+        }
+    }
+
+    /// Counts a native walk's visit of `id`; whether the walk gives up there. A function is not counted, and a promise
+    /// makes the walk give up anyway.
+    #[inline(always)]
+    fn revisited(&self, vm: &mut Vm, id: Id) -> bool {
+        let first = if self.stamp != 0 {
+            let o = &mut vm.heap[id as usize];
+            std::mem::replace(&mut o.visit, self.stamp) != self.stamp
+        } else {
+            self.seen.borrow_mut().insert(id)
+        };
+        if first
+            || vm.heap[id as usize].is_callable()
+            || matches!(vm.heap[id as usize].kind, Kind::Promise(_))
+        {
+            return false;
+        }
+        let left = self.revisits.get() - 1;
+        self.revisits.set(left);
+        left == 0
+    }
+
+    /// Ends the walk, so another native walk may stamp objects.
+    fn end(&self, vm: &mut Vm) {
+        if self.stamp != 0 {
+            vm.json_walk = 0;
+        }
+    }
 }
 
 pub fn stringify(vm: &mut Vm, v: &Value, opts: &Stringify) -> Result<Option<String>, Value> {
     let walk = opts.replacer_fn.is_some() || opts.allow.is_some();
     if !walk {
-        let mode = Mode {
-            walk: false,
-            restart: std::cell::Cell::new(false),
-        };
-        let out = stringify_in(vm, v, opts, &mode)?;
+        let mode = Mode::new(vm, false);
+        let out = stringify_in(vm, v, opts, &mode);
+        mode.end(vm);
+        let out = out?;
         if !mode.restart.get() {
             return Ok(out);
         }
@@ -267,10 +318,7 @@ pub fn stringify(vm: &mut Vm, v: &Value, opts: &Stringify) -> Result<Option<Stri
     vm.fuel(1);
     vm.fuel(1);
     vm.fuel(crate::vm::NATIVE_FUEL);
-    let mode = Mode {
-        walk: true,
-        restart: std::cell::Cell::new(false),
-    };
+    let mode = Mode::new(vm, true);
     let out = stringify_in(vm, v, opts, &mode)?;
     vm.bytecode_builtin();
     Ok(out)
@@ -326,6 +374,13 @@ fn write_json(
     if mode.restart.get() {
         return Ok(false);
     }
+    if !mode.walk
+        && let Value::Obj(id) = v
+        && mode.revisited(vm, id)
+    {
+        mode.restart.set(true);
+        return Ok(false);
+    }
     let mut v = apply_to_json(vm, &v, key, Some(mode))?;
     if let Some(f) = &opts.replacer_fn {
         let kv = key_value(vm, key);
@@ -343,11 +398,10 @@ fn write_json(
                 replacer_fn: None,
                 allow: opts.allow.clone(),
             };
-            let mode = Mode {
-                walk: false,
-                restart: std::cell::Cell::new(false),
-            };
-            return write_json(vm, out, holder, key, v, &plain, &mode, stack, gap);
+            let mode = Mode::new(vm, false);
+            let r = write_json(vm, out, holder, key, v, &plain, &mode, stack, gap);
+            mode.end(vm);
+            return r;
         }
     }
     match &v {

@@ -462,6 +462,9 @@ programs.push(
   after(doc, "JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); JSON.stringify(doc, (k, v) => v)"),
   after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
   after("const err = new TypeError('boom'); err.extra = [1, 2]", "JSON.stringify({ err, n: [new Date(5)], h: new Headers({ a: 'b' }) }, (k, v) => v)"),
+  // The native walk gives up at its 2,048th visit of an object it has seen already.
+  after("const x = { a: 1 }; const many = Array(2049).fill(x); const fewer = Array(2048).fill(x)", "JSON.stringify(many); JSON.stringify(fewer)"),
+  after("const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })", "JSON.stringify(nest); JSON.stringify(nest.slice(0, 600))"),
   during("const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }",
     "for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }"),
   during("const t = new Date(0); const e = {}; const arr = [1]", "for (let i = 0; i < 3000; i++) { t - 0; t + 1; t < 5; 'a' + e; arr == 1; see(i) }"),

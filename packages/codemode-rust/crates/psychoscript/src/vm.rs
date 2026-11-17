@@ -257,6 +257,10 @@ pub struct Vm<'rt> {
     pub snapshot_base: crate::snapshot::Base,
     /// Restored from a snapshot: the program's body already started.
     pub resumed: bool,
+    /// The native `JSON.stringify` walk running now, which stamps the objects it visits (`Obj::visit`), or 0. One
+    /// nested in it keeps a set instead.
+    pub(crate) json_walk: u32,
+    json_walks: u32,
 }
 
 impl<'rt> Vm<'rt> {
@@ -319,6 +323,8 @@ impl<'rt> Vm<'rt> {
             fatal: None,
             outcome: None,
             native_depth: 0,
+            json_walk: 0,
+            json_walks: 0,
             stack_base: 0,
             stack_budget: usize::MAX,
             arg_pool: Vec::new(),
@@ -681,6 +687,22 @@ impl<'rt> Vm<'rt> {
         self.spend(cost);
         let next = self.record_next_of(v, &it)?;
         Ok((it, next))
+    }
+
+    /// Starts a native `JSON.stringify` walk that stamps the objects it visits, unless one runs already: its stamp.
+    pub(crate) fn start_json_walk(&mut self) -> Option<u32> {
+        if self.json_walk != 0 {
+            return None;
+        }
+        if self.json_walks == u32::MAX {
+            self.json_walks = 0;
+            for o in &mut self.heap {
+                o.visit = 0;
+            }
+        }
+        self.json_walks += 1;
+        self.json_walk = self.json_walks;
+        Some(self.json_walk)
     }
 
     /// Whether the reference iterates `v` itself, with no call of its `Symbol.iterator` method: a string, a

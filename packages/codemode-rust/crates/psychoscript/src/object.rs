@@ -352,6 +352,8 @@ pub struct Obj {
     pub props: Props,
     pub kind: Kind,
     pub flags: u8,
+    /// The native `JSON.stringify` walk that last visited it (`Vm::json_walk`); it fits in the padding.
+    pub visit: u32,
 }
 
 impl Obj {
@@ -361,6 +363,7 @@ impl Obj {
             props: Props::default(),
             kind,
             flags: 0,
+            visit: 0,
         }
     }
 

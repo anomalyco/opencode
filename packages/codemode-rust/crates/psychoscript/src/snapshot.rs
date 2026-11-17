@@ -1378,6 +1378,7 @@ impl Dec<'_> {
             props: Props::from_items(items),
             kind,
             flags,
+            visit: 0,
         })
     }
 

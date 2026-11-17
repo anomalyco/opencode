@@ -6085,6 +6085,48 @@
       ]
     },
     {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const x = { a: 1 }; const many = Array(2049).fill(x); const fewer = Array(2048).fill(x)\n   JSON.stringify(many); JSON.stringify(fewer); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4266
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })\n   JSON.stringify(nest); JSON.stringify(nest.slice(0, 600)); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 618
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }\n   const p = r.text(); for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
