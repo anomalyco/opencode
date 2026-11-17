@@ -135,6 +135,43 @@ story("renders task-list boxes but never authored form controls or embedded docu
   await expect(md.locator("figcaption")).toHaveText("Caption")
 })
 
+story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown([
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" onload="alert(1)">',
+      '<path d="M5 12h14" fill="url(#paint)" stroke="#ff0000" opacity="0.5" stroke-dasharray="2 2"></path>',
+      '<use href="#paint"></use><image href="https://example.invalid/a.png"></image><foreignObject><p>embedded</p></foreignObject>',
+      '<a href="https://example.invalid/"><path d="M0 0"></path></a></svg>',
+      '<svg width="99999" height="10%"></svg>',
+      '<a href="https://example.invalid/" aria-label="Home" aria-describedby="x">home</a><img alt="" aria-label="Chart" src="https://example.invalid/b.png"><div aria-label="Region">text</div>',
+    ].join(""))
+    const [icon, large] = box.querySelectorAll("svg")
+    const attributes = (node: Element | null) => Object.fromEntries(Array.from(node?.attributes ?? [], (a) => [a.name, a.value]))
+
+    return {
+      icon: attributes(icon),
+      path: attributes(icon.querySelector("path")),
+      children: Array.from(icon.children, (child) => child.localName),
+      large: attributes(large),
+      link: attributes(box.querySelector("a")),
+      image: box.querySelector("img")?.getAttribute("aria-label"),
+      region: box.querySelector("div")?.hasAttribute("aria-label"),
+    }
+  }, fixture)
+
+  expect(result).toEqual({
+    icon: { width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", "data-markdown-contain": "" },
+    path: { d: "M5 12h14", stroke: "#ff0000", opacity: "0.5", "stroke-dasharray": "2 2", "data-markdown-contain": "" },
+    children: ["path"],
+    large: { width: "2048", height: "10%", "data-markdown-contain": "" },
+    link: { href: "https://example.invalid/", "aria-label": "Home" },
+    image: "Chart",
+    region: false,
+  })
+})
+
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)

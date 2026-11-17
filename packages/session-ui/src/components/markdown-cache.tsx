@@ -55,6 +55,20 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ),
   )
 
+  const paint = [
+    "fill",
+    "fill-opacity",
+    "stroke",
+    "stroke-width",
+    "stroke-opacity",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-miterlimit",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "opacity",
+  ]
+
   const style = document.createElement("span").style
   const allowedStyle = document.createElement("span").style
 
@@ -76,19 +90,39 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
   }
 
-  purifier.setConfig({ ...config, ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false,
-    ALLOWED_TAGS: [...prose, ..."math mrow mi mn mo ms mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mmultiscripts mprescripts none menclose merror mfenced mpadded mphantom mstyle semantics annotation".split(" ")],
+  purifier.setConfig({
+    ...config,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+    ADD_ATTR: [...config.ADD_ATTR, "aria-label", "aria-hidden"],
+    ALLOWED_TAGS: [
+      ...prose,
+      ..."math mrow mi mn mo ms mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mmultiscripts mprescripts none menclose merror mfenced mpadded mphantom mstyle semantics annotation".split(
+        " ",
+      ),
+    ],
   })
   // These fragments still pass DOMPurify's structural/URI checks, but their renderer owns their inline geometry.
   rendered.setConfig({ ...config, USE_PROFILES: { html: true, mathMl: true }, RETURN_DOM_FRAGMENT: true })
+  purifier.addHook("uponSanitizeElement", (node) => {
+    // `a`, `use`, `image` and `foreignObject` inside SVG would link, reference or embed; drop them with their contents.
+    if (node instanceof SVGElement && node.localName !== "svg" && node.localName !== "path") node.remove()
+  })
   purifier.addHook("uponSanitizeAttribute", (node, attr) => {
     // Never import identifiers from the app's styling, focus, shortcut, form or plugin protocols. This allowlist
     // is for document content only. DOMPurify still validates every value and namespaces id and name.
     const tag = node.localName
     const name = attr.attrName
 
+    if (node instanceof SVGElement && paint.includes(name)) {
+      attr.keepAttr = svgPaint(name, attr.attrValue)
+
+      return
+    }
+
     const allowed =
       /^(style|id|dir|lang|title|align)$/.test(name) ||
+      ((tag === "a" || tag === "img") && name === "aria-label") ||
       (tag === "a" &&
         (name === "href" ||
           name === "download" ||
@@ -100,7 +134,8 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       (tag === "ol" && /^(start|reversed|type)$/.test(name)) ||
       (tag === "li" && name === "value") ||
       (tag === "details" && name === "open") ||
-      (tag === "svg" && /^(viewbox|preserveaspectratio|xmlns)$/.test(name)) ||
+      (tag === "svg" && /^(viewbox|preserveaspectratio|xmlns|width|height)$/.test(name)) ||
+      (tag === "svg" && name === "aria-hidden" && /^(true|false)$/.test(attr.attrValue)) ||
       (tag === "path" && name === "d")
 
     if (!allowed) {
@@ -109,9 +144,9 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       return
     }
 
-    const sized = /^(?:IMG|TABLE|TH|TD|COL)$/.test(node.nodeName)
+    const sized = /^(?:img|table|th|td|col|svg)$/.test(tag)
 
-    if (attr.attrName === "width" && sized) {
+    if ((name === "width" || (tag === "svg" && name === "height")) && sized) {
       const width = contentWidth(attr.attrValue, true)
       attr.keepAttr = !!width
       attr.attrValue = width
@@ -236,6 +271,18 @@ function contentWidth(value: string, attribute: boolean) {
   const unit = match[2] === "%" ? "%" : attribute ? "" : "px"
 
   return `${Math.min(Number(match[1]), unit === "%" ? 100 : 2048)}${unit}`
+}
+
+// Colors and plain numbers only: a paint value can reference another element (`url(#id)`), which may be outside the message.
+function svgPaint(name: string, value: string) {
+  if (name === "fill" || name === "stroke")
+    return /^(?:[a-z]+|#[\da-f]{3,8}|(?:rgba?|hsla?)\([\d.%, /+-]{1,64}\))$/i.test(value)
+
+  if (name === "stroke-linecap" || name === "stroke-linejoin") return /^(?:butt|round|square|bevel|miter)$/.test(value)
+
+  if (name === "stroke-dasharray" || name === "stroke-dashoffset") return /^(?:none|[\d., -]{1,128})$/.test(value)
+
+  return /^\d*\.?\d+$/.test(value) && Number(value) <= (name.endsWith("opacity") ? 1 : 64)
 }
 
 export function sanitizeMarkdown(html: MarkdownHTML) {
