@@ -188,9 +188,9 @@ mins and means are shown for spread, never compared.
 
 $TABLE_A
 
-¹ Not like for like yet: the reference \`echo\` tool decodes its input and output through Effect Schema
-(\`{ id: number }\` in, \`number\` out), and the Rust tools do not validate. Once the Rust host API takes tool schemas,
-\`tools()\` in \`bench/src/main.rs\` registers the equivalent schemas, and this row compares the same work.
+¹ Both sides validate: the reference \`echo\` tool decodes its input and output through Effect Schema
+(\`{ id: number }\` in, \`number\` out), and the Rust tools (\`tools()\` in \`bench/src/main.rs\`) validate the same JSON
+Schemas those Effect Schemas render to.
 
 ## (b) Cold start: process start to the result of \`return 1\`
 
@@ -216,8 +216,8 @@ $TABLE_E
 
 The conformance reducer (\`plugin-reducer-*\`) handling \`{ type: "command", name: "git.status" }\` with a \`git.status\`
 tool, through \`execute\` once per event. \`reducer.js\` is its command path; \`reducer-padded.js\` is the whole reducer
-with eleven more command handlers before the matching one. The reference's \`git.status\` decodes through Effect Schema
-and the Rust one does not validate, as in (a).
+with eleven more command handlers before the matching one. The reference's \`git.status\` decodes through Effect Schema,
+and the Rust one validates the same JSON Schemas those render to, as in (a).
 
 $TABLE_F
 
