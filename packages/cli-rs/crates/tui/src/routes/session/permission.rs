@@ -3,8 +3,8 @@
 //! `:1615-1622`).
 //!
 //! The session route owns one [`Permission`] in the region above the prompt. A root session prompts for the
-//! first pending request of itself and its descendants; a child session prompts for none. The prompt hides the
-//! session prompt while it shows. Ctrl+F (`permission.prompt.fullscreen`) moves it to a full-screen overlay. In
+//! first pending request of itself and its descendants; a child session for its own. The prompt hides the
+//! session prompt and the composer while it shows. Ctrl+F (`permission.prompt.fullscreen`) moves it to a full-screen overlay. In
 //! `autoaccept` mode (`session.permissions` in `cli.json`, or `--auto`) every request is answered `once`
 //! instead.
 
@@ -140,7 +140,7 @@ impl Permission {
         inner.render();
     }
 
-    /// Whether a request is prompted; the session prompt hides meanwhile.
+    /// Whether a request is prompted; the session prompt and the composer hide meanwhile.
     pub fn active(&self) -> bool {
         self.0.shown()
     }
@@ -216,10 +216,10 @@ pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -
         .is_some_and(|source| source.r#type == "tool" && source.id == part)
 }
 
-/// The sessions whose requests a session prompts for: a root and its descendants, a child none.
+/// The sessions whose requests a session prompts for: a root and its descendants, a child itself.
 fn family(state: &State, session: &SessionID) -> Vec<SessionID> {
     if state.session(session).is_some_and(|info| info.parent_id.is_some()) {
-        return Vec::new();
+        return vec![session.clone()];
     }
     std::iter::once(session.clone()).chain(state.family(session).iter().filter(|id| *id != session).cloned()).collect()
 }

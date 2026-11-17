@@ -5,7 +5,7 @@
 //! queued        queued::Queued (E.10b), the queued prompts dock; it hides while the composer shows
 //! composer top  the `session.composer.top` plugin slot (P.1)
 //! composer      composer::Composer (E.13b); while it shows, it replaces everything below it
-//! permission    permission::Permission (E.9a); the prompt hides while it shows
+//! permission    permission::Permission (E.9a); the prompt and the composer hide while it shows
 //! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
 //! prompt        prompt::editor::mount (E.2)
 //! ```
@@ -161,10 +161,8 @@ impl RouteView for Session {
         self.permission.sync(tui, changes);
         self.form.sync(tui, changes, self.permission.active());
         self.location.sync(tui);
-        self.composer.sync(tui, self.form.active(), !self.frame.session_active());
-        let blocked = self.permission.active() || self.form.active() || self.composer.open();
-        self.queued.sync(tui, changes, blocked);
-        crate::plugins::host::changed(tui, changes, |changed| self.slot.borrow().sync(tui, changed));
+        // Before the composer follows: a composer that closes as a request shows must not focus the prompt it hides,
+        // and one that opens as the last request goes takes the keys from the prompt shown here.
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
             // An open dialog keeps the keys; the prompt takes them when it closes.
@@ -174,6 +172,10 @@ impl RouteView for Session {
                 self.prompt.focus(tui);
             }
         }
+        self.composer.sync(tui, self.form.active(), self.permission.active(), !self.frame.session_active());
+        let blocked = self.permission.active() || self.form.active() || self.composer.open();
+        self.queued.sync(tui, changes, blocked);
+        crate::plugins::host::changed(tui, changes, |changed| self.slot.borrow().sync(tui, changed));
         self.prompt.sync(tui, changes);
         self.sidebar.sync(tui, changes);
     }
