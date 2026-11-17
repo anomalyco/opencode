@@ -220,23 +220,6 @@ The database normally lives at:
 
 `OPENCODE_DB` can override the database location.
 
-### Databases on NFS
-
-OpenCode uses rollback journaling for database files on Linux NFS mounts. Other filesystems retain WAL by default.
-[SQLite WAL requires all processes accessing a database to run on the same host](https://www.sqlite.org/wal.html).
-For an undetected shared filesystem, disable WAL in the environment that starts the server.
-
-```bash
-OPENCODE_DB_WAL=false opencode
-```
-
-Stop every server using the database before changing its journal mode, including servers on other hosts. Setting the
-variable on a client does not reconfigure an already-running server. `OPENCODE_DB_WAL=true` forces WAL, and leaving it
-unset enables automatic detection. If detection fails, OpenCode logs a warning and retains WAL.
-
-Rollback journaling still requires reliable filesystem locking and can reduce write throughput. This setting does
-not repair a damaged database or change shared service registration behavior.
-
 <Callout type="warning">
   Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the
   daemon, and make a backup before inspecting persistent data with external tools.

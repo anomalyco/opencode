@@ -20,7 +20,6 @@ export interface Interface {
 
 export const Options = Schema.Struct({
   path: Schema.optional(Schema.String),
-  wal: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -72,16 +71,16 @@ function lockFor(filename: string) {
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const provide = (filename: string, wal: boolean) =>
+      const provide = (filename: string, wal = true) =>
         (filename === ":memory:"
           ? databaseLayer(Semaphore.make(1), false, wal)
           : databaseLayer(Effect.succeed(lockFor(filename)), true, wal)
         ).pipe(Layer.provide(sqliteLayer({ filename, disableWAL: !wal })))
       const filename = options.path ?? ":memory:"
-      if (filename === ":memory:") return provide(filename, false)
+      if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
       yield* Effect.promise(() => restrictToOwner(file))
-      return provide(file, options.wal ?? (yield* defaultWAL(file)))
+      return provide(file, yield* defaultWAL(file))
     }),
   )
 }
