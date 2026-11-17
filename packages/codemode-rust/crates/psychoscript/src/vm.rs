@@ -144,6 +144,7 @@ pub struct Realm {
     pub generator_proto: Id,
     pub iter_proto: Id,
     pub tools: Id,
+    pub std: crate::builtins::StdProtos,
 }
 
 pub struct Vm<'rt> {
@@ -1390,6 +1391,16 @@ impl<'rt> Vm<'rt> {
                         let a = self.pop();
                         let x = tri!(self.number_of(&a));
                         self.push(Value::Num(!to_i32(x) as f64));
+                    }
+                    Op::RegExp => {
+                        let flags = self.pop();
+                        let pattern = self.pop();
+                        let (Value::Str(p), Value::Str(f)) = (pattern, flags) else {
+                            continue;
+                        };
+                        let (p, f) = (self.text(p).to_owned(), self.text(f).to_owned());
+                        let r = tri!(crate::builtins::regexp::new_regexp(self, &p, &f));
+                        self.push(r);
                     }
                     Op::Typeof => {
                         let a = self.pop();

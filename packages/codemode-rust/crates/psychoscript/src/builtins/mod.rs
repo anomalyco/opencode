@@ -2,12 +2,20 @@
 
 mod array;
 mod collections;
+pub mod exotic;
 mod object;
+pub mod regexp;
 mod string;
 
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{NativeFn, Vm};
+
+/// Prototypes of the standard-library kinds beyond the core ones in `Realm`.
+#[derive(Default)]
+pub struct StdProtos {
+    pub regexp: Id,
+}
 
 /// Global names a program cannot assign to.
 pub const GLOBAL_NAMES: &[&str] = &[
@@ -31,6 +39,7 @@ pub const GLOBAL_NAMES: &[&str] = &[
     "EvalError",
     "URIError",
     "AggregateError",
+    "RegExp",
     "console",
     "parseInt",
     "parseFloat",
@@ -156,6 +165,7 @@ impl<'rt> Vm<'rt> {
         array::setup(self);
         string::setup(self);
         collections::setup(self);
+        regexp::setup(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);
@@ -183,4 +193,67 @@ pub fn to_index(vm: &mut Vm, v: &Value, len: usize, default: usize) -> Result<us
     } else {
         n.min(len as f64) as usize
     })
+}
+
+/// ToString without consulting program-defined methods, as the reference's `coerceToString`: an array joins its
+/// elements, a RegExp or Error uses its built-in form, any other object is `[object Tag]`.
+pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
+    let Value::Obj(id) = v else {
+        let s = vm.string_of(v)?;
+        return Ok(vm.text(s).to_owned());
+    };
+    let id = *id;
+    Ok(match &vm.heap[id as usize].kind {
+        Kind::Array(items) => {
+            let items = items.clone();
+            let mut out = String::new();
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                if !item.is_nullish() {
+                    out.push_str(&builtin_string(vm, item)?);
+                }
+                if out.len() > crate::ops::MAX_STRING_LEN {
+                    return Err(vm.range_error("Invalid string length"));
+                }
+            }
+            out
+        }
+        Kind::RegExp(_) => regexp::inspect(vm, id),
+        Kind::Error(_) => {
+            let (nk, mk) = (vm.names.name, vm.names.message);
+            let name = match vm.get_obj(id, nk) {
+                Value::Str(s) => vm.text(s).to_owned(),
+                _ => "Error".to_owned(),
+            };
+            let message = match vm.get_obj(id, mk) {
+                Value::Str(s) => vm.text(s).to_owned(),
+                _ => String::new(),
+            };
+            if message.is_empty() {
+                name
+            } else if name.is_empty() {
+                message
+            } else {
+                format!("{name}: {message}")
+            }
+        }
+        Kind::ToolRef(_) => "[object Object]".to_owned(),
+        _ => format!("[object {}]", object::tag_of(vm, v)),
+    })
+}
+
+/// ToNumber without consulting program-defined methods, as the reference's `coerceToNumber`.
+pub fn builtin_number(vm: &mut Vm, v: &Value) -> Result<f64, Value> {
+    match v {
+        Value::Obj(id) => {
+            if let Kind::ToolRef(_) = vm.heap[*id as usize].kind {
+                return Ok(f64::NAN);
+            }
+            let s = builtin_string(vm, v)?;
+            Ok(crate::value::str_to_num(&s))
+        }
+        v => vm.number_of(v),
+    }
 }

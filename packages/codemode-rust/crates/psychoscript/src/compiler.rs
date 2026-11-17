@@ -1909,7 +1909,20 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
             }
             Expression::ClassExpression(c) => return Err(unsupported("Classes", c.span)),
-            Expression::RegExpLiteral(r) => return Err(unsupported("Regular expressions", r.span)),
+            Expression::RegExpLiteral(r) => {
+                let pattern = r.regex.pattern.text.as_str();
+                let flags = r.regex.flags.to_string();
+                if let Err(message) = crate::builtins::regexp::validate_literal(pattern, &flags) {
+                    return Err(CompileError {
+                        kind: DiagnosticKind::ParseError,
+                        message: format!("SyntaxError: {message}"),
+                        offset: Some(r.span.start),
+                    });
+                }
+                self.push_str(pattern);
+                self.push_str(&flags);
+                self.emit(Op::RegExp);
+            }
             Expression::BigIntLiteral(_) => {
                 let msg = self.str_const("BigInt literals are not supported.");
                 self.emit(Op::ThrowType(msg));

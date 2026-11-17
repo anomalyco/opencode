@@ -1,6 +1,6 @@
 //! String, Number and Math.
 
-use super::{arg, to_index};
+use super::{arg, regexp, to_index};
 use crate::object::*;
 use crate::ops::MAX_STRING_LEN;
 use crate::strings::{StrId, StrRef};
@@ -54,6 +54,9 @@ pub fn setup(vm: &mut Vm) {
             ("valueOf", 0, s_to_string),
             ("localeCompare", 1, s_locale_compare),
             ("normalize", 0, s_to_string),
+            ("match", 1, s_match),
+            ("matchAll", 1, s_match_all),
+            ("search", 1, s_search),
         ],
     );
     let iter = vm.native_fn("[Symbol.iterator]", 0, s_iterator, Value::Undef);
@@ -327,8 +330,19 @@ fn s_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
+/// `includes`, `startsWith` and `endsWith` reject a RegExp before converting their arguments.
+fn reject_regexp(vm: &mut Vm, args: &[Value], name: &str) -> Result<(), Value> {
+    if regexp::as_regexp(vm, &arg(args, 0)).is_some() {
+        return Err(vm.type_error(&format!(
+            "String.{name} cannot take a regular expression; use regex.test(string) or String.search instead."
+        )));
+    }
+    Ok(())
+}
+
 fn s_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
+    reject_regexp(vm, args, "includes")?;
     let n = arg_str(vm, args, 0)?;
     let len = vm.atoms.sref(s).len16() as f64;
     let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
@@ -339,6 +353,7 @@ fn s_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
+    reject_regexp(vm, args, "startsWith")?;
     let n = arg_str(vm, args, 0)?;
     let len = vm.atoms.sref(s).len16() as f64;
     let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
@@ -354,6 +369,7 @@ fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn s_ends_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
+    reject_regexp(vm, args, "endsWith")?;
     let n = arg_str(vm, args, 0)?;
     let len = vm.atoms.sref(s).len16();
     let end = match arg(args, 1) {
@@ -484,12 +500,16 @@ fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn s_split(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = this_str(vm, &this)?;
+    if let Some(re) = regexp::as_regexp(vm, &arg(args, 0)) {
+        return regexp::string_split(vm, s, re, arg(args, 1));
+    }
     let limit = match arg(args, 1) {
         Value::Undef => u32::MAX as usize,
         v => to_uint32(vm.number_of(&v)?) as usize,
     };
     let sep = arg(args, 0);
     let parts: Vec<Value> = match sep {
+        Value::Undef if limit == 0 => Vec::new(),
         Value::Undef => vec![Value::Str(s)],
         _ => {
             let sep = vm.string_of(&sep)?;
@@ -543,6 +563,9 @@ fn expand_replacement(template: &str, matched: &str, pos: usize, subject: &str) 
 
 fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
     let s = this_str(vm, &this)?;
+    if let Some(re) = regexp::as_regexp(vm, &arg(args, 0)) {
+        return regexp::string_replace(vm, s, re, &arg(args, 1), all);
+    }
     let pat = arg_str(vm, args, 0)?;
     let rep = arg(args, 1);
     let callable = vm.is_callable(&rep);
@@ -640,6 +663,33 @@ fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         std::cmp::Ordering::Equal => 0.0,
         std::cmp::Ordering::Greater => 1.0,
     }))
+}
+
+/// A pattern argument: a RegExp as is, anything else converted with the string hint first.
+fn pattern_value(vm: &mut Vm, args: &[Value]) -> Res {
+    let p = arg(args, 0);
+    if regexp::as_regexp(vm, &p).is_some() {
+        return Ok(p);
+    }
+    vm.primitive_of(&p, crate::ops::Hint::String)
+}
+
+fn s_match(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let s = this_str(vm, &this)?;
+    let p = pattern_value(vm, args)?;
+    regexp::string_match(vm, s, &p)
+}
+
+fn s_match_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let s = this_str(vm, &this)?;
+    let p = pattern_value(vm, args)?;
+    regexp::string_match_all(vm, s, &p)
+}
+
+fn s_search(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let s = this_str(vm, &this)?;
+    let p = pattern_value(vm, args)?;
+    regexp::string_search(vm, s, &p)
 }
 
 fn s_iterator(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {

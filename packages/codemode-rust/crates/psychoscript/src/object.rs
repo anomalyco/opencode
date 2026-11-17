@@ -243,6 +243,7 @@ pub enum Kind {
     Combinator(Box<Combinator>),
     /// A generator `return()` travelling through `finally` blocks.
     ReturnSignal(Value),
+    RegExp(Box<crate::builtins::regexp::RegExpData>),
 }
 
 pub struct Combinator {

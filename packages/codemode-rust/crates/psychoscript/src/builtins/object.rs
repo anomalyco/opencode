@@ -365,6 +365,7 @@ pub fn tag_of(vm: &Vm, v: &Value) -> &'static str {
             Kind::ArrayIter { .. } => "Array Iterator",
             Kind::MapIter { .. } => "Map Iterator",
             Kind::StrIter { .. } => "String Iterator",
+            Kind::RegExp(_) => "RegExp",
             _ => "Object",
         },
     }

@@ -1,5 +1,6 @@
 //! Property access, conversions, operators and iteration on program values.
 
+use crate::builtins::exotic;
 use crate::object::*;
 use crate::strings::StrId;
 use crate::value::{Id, Value, num_to_string, str_to_num};
@@ -108,6 +109,11 @@ impl<'rt> Vm<'rt> {
                         format!("{path}.{k}")
                     };
                     return self.tool_ref(&child);
+                }
+                k if cur == id && exotic::is_exotic(k) => {
+                    if let Some(v) = exotic::get(self, id, key) {
+                        return v;
+                    }
                 }
                 _ => {}
             }
@@ -260,6 +266,11 @@ impl<'rt> Vm<'rt> {
                 return Err(self.read_only(key));
             }
             Kind::ToolRef(_) => return Err(self.type_error("Cannot assign to a tool reference")),
+            k if exotic::is_exotic(k) => {
+                if let Some(r) = exotic::set(self, id, key, val) {
+                    return r;
+                }
+            }
             _ => {}
         }
         let o = &mut self.heap[id as usize];
@@ -426,6 +437,7 @@ impl<'rt> Vm<'rt> {
                 {
                     return true;
                 }
+                k if exotic::is_exotic(k) && exotic::has_own(self, cur, key) => return true,
                 _ => {}
             }
             if o.props.find(key).is_some() {
@@ -454,6 +466,7 @@ impl<'rt> Vm<'rt> {
             {
                 return true;
             }
+            k if exotic::is_exotic(k) && exotic::has_own(self, id, key) => return true,
             _ => {}
         }
         o.props.find(key).is_some()
@@ -489,6 +502,7 @@ impl<'rt> Vm<'rt> {
         let mut out = Vec::new();
         let len = match &self.heap[id as usize].kind {
             Kind::Array(items) | Kind::Arguments(items) => items.len(),
+            k if exotic::is_exotic(k) => exotic::index_len(self, id),
             _ => 0,
         };
         for i in 0..len {
@@ -724,6 +738,11 @@ impl<'rt> Vm<'rt> {
     pub fn primitive_of(&mut self, v: &Value, hint: Hint) -> Res {
         let Value::Obj(id) = v else {
             return Ok(*v);
+        };
+        let hint = if hint == Hint::Default && exotic::prefers_string(self, *id) {
+            Hint::String
+        } else {
+            hint
         };
         let order = if hint == Hint::String {
             [self.names.to_string, self.names.value_of]

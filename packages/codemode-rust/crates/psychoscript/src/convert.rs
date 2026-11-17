@@ -54,6 +54,7 @@ fn to_json_inner(
     stack: &mut Vec<Id>,
 ) -> Result<Option<Json>, Value> {
     let v = apply_to_json(vm, v, key)?;
+    let v = crate::builtins::exotic::json_value(vm, &v, true)?;
     Ok(Some(match &v {
         Value::Null => Json::Null,
         Value::Bool(b) => Json::Bool(*b),
@@ -152,7 +153,14 @@ fn key_value(vm: &mut Vm, key: Key) -> Value {
 
 fn apply_to_json(vm: &mut Vm, v: &Value, key: Key) -> Res {
     if let Value::Obj(id) = v
-        && matches!(vm.heap[*id as usize].kind, Kind::Ordinary | Kind::Array(_))
+        && !matches!(
+            vm.heap[*id as usize].kind,
+            Kind::Promise(_)
+                | Kind::Closure(_)
+                | Kind::Native { .. }
+                | Kind::Bound(_)
+                | Kind::ToolRef(_)
+        )
     {
         let k = vm.names.to_json;
         let f = vm.get_obj(*id, k);
@@ -238,6 +246,7 @@ fn write_json(
         let kv = key_value(vm, key);
         v = vm.call(f, holder, &[kv, v])?;
     }
+    let v = crate::builtins::exotic::json_value(vm, &v, false)?;
     match &v {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -748,7 +757,10 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                     out.push(']');
                 }
                 Kind::Promise(_) => out.push_str("[Promise (await it to get its value)]"),
-                _ => out.push_str("[opaque reference]"),
+                _ => match crate::builtins::exotic::inspect(vm, id) {
+                    Some(s) => out.push_str(&s),
+                    None => out.push_str("[opaque reference]"),
+                },
             }
             seen.pop();
         }

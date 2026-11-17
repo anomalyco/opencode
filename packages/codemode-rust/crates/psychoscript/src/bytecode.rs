@@ -99,6 +99,8 @@ pub enum Op {
     Not,
     BitNot,
     Typeof,
+    /// Pops the pattern and flags strings, pushes a new RegExp.
+    RegExp,
     Inc,
     Dec,
     ToStr,
