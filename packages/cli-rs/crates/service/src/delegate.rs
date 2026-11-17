@@ -1,10 +1,11 @@
 //! Delegation of commands to the TypeScript binary (D.1).
 //!
-//! `serve`, `upgrade`, `uninstall`, and `plugin *` depend on the server, the installer, npm, and
-//! `Host.resolve`, which exist only in TypeScript (user Q4). The Rust client runs the TypeScript
-//! `opencode` ([`TsCommand`]) with the same arguments, stdio, and exit code. Remote access
-//! (`service set remote true`, `pair --remote`) needs the OpenTunnel SDK, so [`enable_remote`] runs the
-//! TypeScript command that creates the tunnel, and [`tunnel_hostname`] reads what the SDK stored.
+//! `serve`, `uninstall`, and `plugin *` depend on the server, the installer, npm, and `Host.resolve`, which
+//! exist only in TypeScript (user Q4). `upgrade` is not delegated: it upgrades nothing (deviation D01-upgrade).
+//! The Rust client runs the TypeScript `opencode` ([`TsCommand`]) with the same arguments, stdio, and exit
+//! code. Remote access (`service set remote true`, `pair --remote`) needs the OpenTunnel SDK, so
+//! [`enable_remote`] runs the TypeScript command that creates the tunnel, and [`tunnel_hostname`] reads what the
+//! SDK stored.
 
 use std::ffi::OsString;
 use std::io;
