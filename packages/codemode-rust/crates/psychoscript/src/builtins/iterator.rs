@@ -145,8 +145,7 @@ fn direct(vm: &mut Vm, v: &Value) -> Result<(Value, Value), Value> {
 fn step(vm: &mut Vm, iter: &Value, next: &Value) -> Result<Option<Value>, Value> {
     let r = vm.call(next, *iter, &[])?;
     let Value::Obj(rid) = r else {
-        let d = super::describe_value(vm, &r);
-        return Err(vm.type_error(&format!("Iterator result {d} is not an object")));
+        return Err(vm.type_error("Iterator next() result must be an object."));
     };
     let (dk, vk) = (vm.names.done, vm.names.value);
     let done = vm.get_obj(rid, dk);

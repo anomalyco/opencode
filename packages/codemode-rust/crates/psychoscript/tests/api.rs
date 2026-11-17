@@ -73,14 +73,11 @@ fn tool_input_is_a_json_copy() {
 
 #[test]
 fn unsupported_syntax_has_a_location() {
-    let d = run(
-        &Runtime::new(),
-        "const a = 1\nconst o = { get x() { return a } }",
-    )
-    .result
-    .unwrap_err();
+    let d = run(&Runtime::new(), "const a = 1\nconst B = class {}")
+        .result
+        .unwrap_err();
     assert_eq!(d.kind, DiagnosticKind::UnsupportedSyntax);
-    assert_eq!(d.location, Some((2, 13)));
+    assert_eq!(d.location, Some((2, 11)));
 }
 
 #[test]

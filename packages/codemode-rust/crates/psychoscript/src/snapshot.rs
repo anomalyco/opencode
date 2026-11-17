@@ -797,8 +797,8 @@ fn bytes_hex(b: &[u8]) -> String {
 }
 
 fn hex_bytes(s: &str) -> R<Vec<u8>> {
-    if !s.len().is_multiple_of(2) {
-        return Err(invalid("a byte string has an odd length."));
+    if !s.is_ascii() || !s.len().is_multiple_of(2) {
+        return Err(invalid("a byte string is not hex."));
     }
     (0..s.len())
         .step_by(2)

@@ -14,6 +14,8 @@ pub const ENUMERABLE: u8 = 1;
 pub const WRITABLE: u8 = 2;
 pub const DEFAULT_FLAGS: u8 = ENUMERABLE | WRITABLE;
 pub const HIDDEN: u8 = WRITABLE;
+/// Not configurable, so `delete` refuses it: the reference's frozen built-in constants and prototypes.
+pub const FIXED: u8 = 4;
 
 #[derive(Clone)]
 pub struct Prop {

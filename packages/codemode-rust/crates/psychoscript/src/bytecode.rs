@@ -161,9 +161,10 @@ pub enum Op {
     /// that follows, or at that instruction's target when done.
     DelegateCall(u32, u8, u32),
     /// `result` -> `value`, jumping when the iterator result is done.
-    DelegateResult(u32),
-    /// Opens an async iterator: `Symbol.asyncIterator`, or a sync iterator adapted to async.
-    GetAsyncIter(u32),
+    DelegateResult(u32, u8),
+    /// Opens an async iterator into a slot: `Symbol.asyncIterator`, or a sync iterator adapted to async; the
+    /// context is `ITER_FOR_AWAIT` or `ITER_DELEGATE`.
+    GetAsyncIter(u32, u8),
     /// Pushes the result of calling the iterator's `return()`, or jumps when it has none.
     AsyncClose(u32, u32),
     /// Throws a `TypeError` unless the top is an object.

@@ -331,8 +331,7 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         } else {
             let r = vm.call(&next, iterator, &[])?;
             let Value::Obj(rid) = r else {
-                let d = vm.describe(&r);
-                return Err(vm.type_error(&format!("Iterator result {d} is not an object")));
+                return Err(vm.type_error("Iterator next() result must be an object."));
             };
             let (dk, vk) = (vm.names.done, vm.names.value);
             let done = vm.get_obj(rid, dk);

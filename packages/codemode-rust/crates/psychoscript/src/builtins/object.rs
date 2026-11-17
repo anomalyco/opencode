@@ -488,7 +488,7 @@ pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {
     let Value::Obj(id) = v else {
         return Ok(Vec::new());
     };
-    if let Kind::Array(items) | Kind::Arguments(items) = &vm.heap[*id as usize].kind {
+    if let Kind::Array(items) = &vm.heap[*id as usize].kind {
         return Ok(crate::ops::without_holes(items));
     }
     let lk = vm.names.length;

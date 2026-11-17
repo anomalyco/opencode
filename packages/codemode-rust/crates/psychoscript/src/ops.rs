@@ -97,14 +97,13 @@ impl<'rt> Vm<'rt> {
                     }
                 }
                 Kind::Arguments(items) => {
-                    // An arguments object is ordinary: an index past its arguments is a plain property.
+                    // An arguments object is ordinary: an index past its arguments is a plain property, and its
+                    // `length` is a hidden one.
                     if let Some(i) = self.atoms.index(key)
                         && let Some(v) = items.get(i as usize)
+                        && !matches!(v, Value::Uninit)
                     {
                         return *v;
-                    }
-                    if key == self.names.length {
-                        return Value::Num(items.len() as f64);
                     }
                 }
                 Kind::Closure(c) if o.props.find(key).is_none() => {
@@ -387,9 +386,15 @@ impl<'rt> Vm<'rt> {
             }
             Kind::Arguments(items) => {
                 if let Some(i) = index
-                    && (i as usize) < items.len()
+                    && let Some(slot) = items.get_mut(i as usize)
                 {
-                    items[i as usize] = val;
+                    if flags & FROZEN != 0 {
+                        return Err(self.read_only(key));
+                    }
+                    if matches!(slot, Value::Uninit) && flags & NON_EXTENSIBLE != 0 {
+                        return Err(self.not_extensible(key));
+                    }
+                    *slot = val;
                     return Ok(());
                 }
             }
@@ -499,13 +504,7 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     pub fn delete(&mut self, v: &Value, key: Atom) -> Result<bool, Value> {
         let Value::Obj(id) = v else {
-            if v.is_nullish() {
-                let k = self.key_text(key);
-                return Err(self.type_error(&format!(
-                    "Cannot convert undefined or null to object (deleting '{k}')"
-                )));
-            }
-            return Ok(true);
+            return self.delete_primitive(v, key);
         };
         let id = *id;
         if exotic::is_exotic(&self.heap[id as usize].kind)
@@ -515,42 +514,74 @@ impl<'rt> Vm<'rt> {
         }
         let flags = self.heap[id as usize].flags;
         let index = self.atoms.index(key);
-        if let Kind::Closure(_) | Kind::Native { .. } = self.heap[id as usize].kind
-            && self.own_name_or_length(flags, key)
-        {
-            if flags & (FROZEN | SEALED) != 0 {
-                let k = self.key_text(key);
-                return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
-            }
-            let deleted = if key == self.names.name {
-                NAME_DELETED
-            } else {
-                LENGTH_DELETED
-            };
-            self.heap[id as usize].flags |= deleted;
-            return Ok(true);
-        }
-        if let Kind::Array(items) = &mut self.heap[id as usize].kind {
-            if key == self.names.length {
-                return Err(self.type_error("Cannot delete property 'length'."));
-            }
-            if let Some(i) = index {
-                if flags & (FROZEN | SEALED) != 0 {
-                    let k = self.key_text(key);
-                    return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
+        let (name, length) = (self.names.name, self.names.length);
+        let fixed = flags & (FROZEN | SEALED) != 0;
+        let own_fn_key = self.own_name_or_length(flags, key);
+        // Whether an own property is there that cannot be deleted; a missing one deletes fine.
+        let o = &mut self.heap[id as usize];
+        let refused = match &mut o.kind {
+            Kind::ToolRef(_) => return Err(self.invalid_data("Only data fields may be deleted.")),
+            Kind::Array(_) if key == length => true,
+            Kind::Array(items) | Kind::Arguments(items) if index.is_some() => {
+                match items.get_mut(index.unwrap_or_default() as usize) {
+                    Some(Value::Uninit) | None => false,
+                    Some(_) if fixed => true,
+                    Some(slot) => {
+                        *slot = Value::Uninit;
+                        return Ok(true);
+                    }
                 }
-                if let Some(slot) = items.get_mut(i as usize) {
-                    *slot = Value::Uninit;
-                }
-                return Ok(true);
             }
-        }
-        if self.heap[id as usize].props.find(key).is_some() && flags & (FROZEN | SEALED) != 0 {
+            Kind::Closure(_) | Kind::Native { .. } if own_fn_key && o.props.find(key).is_none() => {
+                if !fixed {
+                    o.flags |= if key == name {
+                        NAME_DELETED
+                    } else {
+                        LENGTH_DELETED
+                    };
+                    return Ok(true);
+                }
+                true
+            }
+            _ => o
+                .props
+                .find(key)
+                .is_some_and(|i| fixed || o.props.items[i].flags & FIXED != 0),
+        };
+        if refused {
             let k = self.key_text(key);
             return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
         }
         self.heap[id as usize].props.remove(key);
         Ok(true)
+    }
+
+    /// `delete` on a primitive deletes from its wrapper, whose only own properties are a string's indexes and
+    /// length.
+    fn delete_primitive(&mut self, v: &Value, key: Atom) -> Result<bool, Value> {
+        let k = self.key_text(key);
+        match v {
+            Value::Undef | Value::Null | Value::Uninit => {
+                let t = if let Value::Null = v {
+                    "null"
+                } else {
+                    "undefined"
+                };
+                Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")))
+            }
+            Value::Str(s)
+                if key == self.names.length
+                    || self
+                        .atoms
+                        .index(key)
+                        .is_some_and(|i| (i as usize) < self.atoms.sref(*s).len16()) =>
+            {
+                let mut quoted = String::new();
+                crate::convert::quote(&mut quoted, self.text(*s));
+                Err(self.type_error(&format!("Cannot delete property '{k}' of {quoted}.")))
+            }
+            _ => Ok(true),
+        }
     }
 
     #[inline(never)]
@@ -580,7 +611,7 @@ impl<'rt> Vm<'rt> {
                         {
                             return true;
                         }
-                    } else if key == self.names.length {
+                    } else if key == self.names.length && matches!(o.kind, Kind::Array(_)) {
                         return true;
                     }
                 }
@@ -615,7 +646,7 @@ impl<'rt> Vm<'rt> {
                         .get(i as usize)
                         .is_some_and(|v| !matches!(v, Value::Uninit));
                 }
-                if key == self.names.length {
+                if key == self.names.length && matches!(o.kind, Kind::Array(_)) {
                     return true;
                 }
             }
@@ -1113,6 +1144,24 @@ impl<'rt> Vm<'rt> {
         Ok(out)
     }
 
+    /// Calls an iterator method that is present, which must be a function returning an object with a `next`
+    /// method.
+    fn open_with(&mut self, f: &Value, v: &Value) -> Res {
+        if !self.is_callable(f) {
+            return Err(self.type_error("Iterator method must be a function."));
+        }
+        let it = self.call(f, *v, &[])?;
+        let Value::Obj(id) = it else {
+            return Err(self.type_error("Iterator method result must be an object."));
+        };
+        let nk = self.names.next;
+        let next = self.get_obj(id, nk);
+        if !self.is_callable(&next) {
+            return Err(self.type_error("Iterator next must be a function."));
+        }
+        Ok(it)
+    }
+
     /// GetIterator, with the error for a value that is not iterable worded for where it is iterated.
     pub fn get_iterator_in(&mut self, v: &Value, ctx: u8) -> Res {
         if !self.is_iterable(v) {
@@ -1188,8 +1237,15 @@ impl<'rt> Vm<'rt> {
         let proto = self.realm.iter_proto;
         match v {
             Value::Obj(id) => {
+                if let Kind::Arguments(_) = self.heap[*id as usize].kind {
+                    // Like the reference: the values of its enumerable own keys when iteration starts.
+                    let items: std::rc::Rc<[Value]> =
+                        self.own_entries(*id).into_iter().map(|(_, v)| v).collect();
+                    let it = Kind::ListIter { items, pos: 0 };
+                    return Ok(Value::Obj(self.alloc(Obj::new(Some(proto), it))));
+                }
                 let kind = match &self.heap[*id as usize].kind {
-                    Kind::Array(_) | Kind::Arguments(_) => Some(Kind::ArrayIter {
+                    Kind::Array(_) => Some(Kind::ArrayIter {
                         target: *id,
                         pos: 0,
                         kind: IterKind::Values,
@@ -1215,15 +1271,8 @@ impl<'rt> Vm<'rt> {
                     return Ok(Value::Obj(self.alloc(Obj::new(Some(proto), k))));
                 }
                 let f = self.get_obj(*id, SYM_ITERATOR);
-                if self.is_callable(&f) {
-                    let it = self.call(&f, *v, &[])?;
-                    if !matches!(it, Value::Obj(_)) {
-                        return Err(self.type_error("Iterator method result must be an object."));
-                    }
-                    return Ok(it);
-                }
                 if !f.is_nullish() {
-                    return Err(self.type_error("Iterator method must be a function."));
+                    return self.open_with(&f, v);
                 }
             }
             Value::Str(s) => {
@@ -1296,6 +1345,11 @@ impl<'rt> Vm<'rt> {
         if kind != REQ_NEXT && m.is_nullish() {
             return Ok(None);
         }
+        if kind != REQ_NEXT && !self.is_callable(&m) {
+            let name = self.request_name(kind);
+            let name = self.atoms.text(name).to_owned();
+            return Err(self.type_error(&format!("Iterator {name} must be a function.")));
+        }
         let args: &[Value] = match &arg {
             Some(a) => std::slice::from_ref(a),
             None => &[],
@@ -1311,11 +1365,13 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// The `value` and `done` of an iterator result, which must be an object.
-    pub fn iter_result_parts(&mut self, r: &Value) -> Result<(Value, bool), Value> {
+    /// The `value` and `done` of the result of an iterator's `next`, `throw` or `return` (`REQ_*`), which must be
+    /// an object.
+    pub fn iter_result_parts(&mut self, r: &Value, kind: u8) -> Result<(Value, bool), Value> {
         let Value::Obj(rid) = r else {
-            let d = self.describe(r);
-            return Err(self.type_error(&format!("Iterator result {d} is not an object")));
+            let name = self.request_name(kind);
+            let name = self.atoms.text(name).to_owned();
+            return Err(self.type_error(&format!("Iterator {name}() result must be an object.")));
         };
         let (dk, vk) = (self.names.done, self.names.value);
         let d = self.get_obj(*rid, dk);
@@ -1325,22 +1381,15 @@ impl<'rt> Vm<'rt> {
 
     /// GetIterator with the async hint: `[Symbol.asyncIterator]()`, or the sync iterator adapted.
     #[inline(never)]
-    pub fn get_async_iterator(&mut self, v: &Value) -> Res {
+    /// GetIterator for `for await` (`ITER_FOR_AWAIT`) or an async generator's `yield*` (`ITER_DELEGATE`).
+    pub fn get_async_iterator(&mut self, v: &Value, ctx: u8) -> Res {
         if let Value::Obj(id) = v {
             let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
             if !f.is_nullish() {
-                if !self.is_callable(&f) {
-                    return Err(self.type_error("Iterator method must be a function."));
-                }
-                let it = self.call(&f, *v, &[])?;
-                if !matches!(it, Value::Obj(_)) {
-                    return Err(self.type_error("Iterator method result must be an object."));
-                }
-                return Ok(it);
+                return self.open_with(&f, v);
             }
         }
-        let sync = self.get_iterator_in(v, crate::bytecode::ITER_FOR_AWAIT)?;
-        let Value::Obj(sync) = sync else {
+        let Value::Obj(sync) = self.get_iterator_in(v, ctx)? else {
             return Err(self.type_error("Iterator method result must be an object."));
         };
         let next = self.record_next(&Value::Obj(sync))?;
@@ -1381,7 +1430,7 @@ impl<'rt> Vm<'rt> {
                     None => &[],
                 };
                 self.call(&m, sv, args)
-                    .and_then(|r| self.iter_result_parts(&r))
+                    .and_then(|r| self.iter_result_parts(&r, kind))
             }
         };
         match step {
@@ -1413,16 +1462,29 @@ impl<'rt> Vm<'rt> {
         let r = self
             .delegate_call(it, REQ_NEXT, arg, next)?
             .unwrap_or_default();
-        self.iter_result_parts(&r)
+        self.iter_result_parts(&r, REQ_NEXT)
     }
 
     /// Starts closing an async iterator: the result of its `return()`, or `None` when it has none.
     #[inline(never)]
     pub fn async_close(&mut self, it: Value) -> Result<Option<Value>, Value> {
-        if it.is_nullish() {
-            return Ok(None);
+        match it {
+            Value::Undef | Value::Null => Ok(None),
+            Value::Obj(id)
+                if !matches!(self.heap[id as usize].kind, Kind::AsyncFromSync { .. }) =>
+            {
+                let rk = self.names.return_;
+                let m = self.get(&it, rk)?;
+                if m.is_nullish() {
+                    return Ok(None);
+                }
+                if !self.is_callable(&m) {
+                    return Err(self.type_error("Iterator return must be a function."));
+                }
+                self.call(&m, it, &[]).map(Some)
+            }
+            _ => self.delegate_call(it, REQ_RETURN, None, Value::Undef),
         }
-        self.delegate_call(it, REQ_RETURN, None, Value::Undef)
     }
 
     #[inline(never)]
@@ -1544,8 +1606,7 @@ impl<'rt> Vm<'rt> {
                 };
                 let r = self.call(&f, *it, &[])?;
                 let Value::Obj(rid) = r else {
-                    let d = self.describe(&r);
-                    return Err(self.type_error(&format!("Iterator result {d} is not an object")));
+                    return Err(self.type_error("Iterator next() result must be an object."));
                 };
                 let done = self.names.done;
                 let d = self.get_obj(rid, done);
@@ -1575,11 +1636,15 @@ impl<'rt> Vm<'rt> {
             _ => {
                 let ret = self.names.return_;
                 let f = self.get_obj(id, ret);
-                if self.is_callable(&f) {
-                    let r = self.call(&f, *it, &[])?;
-                    if !matches!(r, Value::Obj(_)) {
-                        return Err(self.type_error("Iterator result is not an object"));
-                    }
+                if f.is_nullish() {
+                    return Ok(());
+                }
+                if !self.is_callable(&f) {
+                    return Err(self.type_error("Iterator return must be a function."));
+                }
+                let r = self.call(&f, *it, &[])?;
+                if !matches!(r, Value::Obj(_)) {
+                    return Err(self.type_error("Iterator return() result must be an object."));
                 }
                 Ok(())
             }

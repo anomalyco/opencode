@@ -17,11 +17,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::DiagnosticKind;
 use crate::bytecode::{
-    Arith, Capture, FuncProto, ITER_DELEGATE, ITER_DESTRUCTURE, ITER_FOR_OF, Op, Program,
-    TemplateSite,
+    Arith, Capture, FuncProto, ITER_DELEGATE, ITER_DESTRUCTURE, ITER_FOR_AWAIT, ITER_FOR_OF, Op,
+    Program, TemplateSite,
 };
 use crate::strings::{Atom, Strings};
 use crate::value::{Value, num_to_string};
+use crate::vm::{REQ_NEXT, REQ_RETURN, REQ_THROW};
 
 pub struct CompileError {
     pub kind: DiagnosticKind,
@@ -57,9 +58,29 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         preserve_parens: false,
         ..ParseOptions::default()
     };
-    let mut parsed = Parser::new(&allocator, source, SourceType::mjs())
-        .with_options(options)
-        .parse();
+    let parse = |source_type| {
+        Parser::new(&allocator, source, source_type)
+            .with_options(options)
+            .parse()
+    };
+    let mut parsed = parse(SourceType::mjs());
+    // The reference parses a script that allows top-level `await`: `await` is a plain name there, read as the
+    // operator only where an expression starts with it. A program whose first error is naming something `await` is
+    // parsed again as a script, unless it also uses `await` as an expression at the top level.
+    if parsed
+        .diagnostics
+        .errors()
+        .next()
+        .is_some_and(|d| names_await(source, d))
+    {
+        let script = parse(SourceType::script());
+        if script.diagnostics.errors().next().is_none()
+            && !script.fatal_error
+            && !TopLevelAwait::uses(&script.program)
+        {
+            parsed = script;
+        }
+    }
     if let Some(d) = parsed.diagnostics.errors().next() {
         return Err(parse_error(d));
     }
@@ -74,6 +95,17 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     // `var`s share one scope, so redeclaring one as the other is allowed.
     parsed.program.source_type = SourceType::script();
     let program = &parsed.program;
+    if let Some(export) = program
+        .body
+        .iter()
+        .find(|s| s.is_module_declaration() && !matches!(s, Statement::ImportDeclaration(_)))
+    {
+        return Err(CompileError {
+            kind: DiagnosticKind::ParseError,
+            message: "SyntaxError: Exports aren't available. Return the result instead.".into(),
+            offset: Some(export.span().start),
+        });
+    }
     let mut depth = DepthCheck {
         depth: 0,
         deepest: None,
@@ -103,6 +135,82 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         globals: c.globals,
         templates: c.templates,
     })
+}
+
+/// Whether a parse error is only about `await` used as a name, which a module rejects and a script allows.
+fn names_await(source: &str, d: &oxc_diagnostics::OxcDiagnostic) -> bool {
+    if d.message == "Cannot use `await` as an identifier in an async context" {
+        return true;
+    }
+    let Some(label) = d.labels.first() else {
+        return false;
+    };
+    d.message == "Keywords cannot contain escape characters"
+        && source
+            .get(label.offset() as usize..(label.offset() + label.len()) as usize)
+            .is_some_and(|word| unescape_identifier(word) == "await")
+}
+
+/// An identifier's text with its `\uXXXX` and `\u{X}` escapes decoded.
+fn unescape_identifier(word: &str) -> String {
+    let mut out = String::new();
+    let mut rest = word;
+    while let Some(at) = rest.find("\\u") {
+        out.push_str(&rest[..at]);
+        rest = &rest[at + 2..];
+        let (hex, after) = match rest.strip_prefix('{') {
+            Some(braced) => match braced.find('}') {
+                Some(end) => (&braced[..end], &braced[end + 1..]),
+                None => return word.to_owned(),
+            },
+            None if rest.len() >= 4 && rest.is_char_boundary(4) => (&rest[..4], &rest[4..]),
+            None => return word.to_owned(),
+        };
+        match u32::from_str_radix(hex, 16).ok().and_then(char::from_u32) {
+            Some(c) => out.push(c),
+            None => return word.to_owned(),
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Finds `await` read as a name outside every function, where the reference reads it as the operator.
+struct TopLevelAwait {
+    functions: u32,
+    found: bool,
+}
+
+impl TopLevelAwait {
+    fn uses(program: &oxc_ast::ast::Program) -> bool {
+        let mut v = TopLevelAwait {
+            functions: 0,
+            found: false,
+        };
+        v.visit_program(program);
+        v.found
+    }
+}
+
+impl<'a> Visit<'a> for TopLevelAwait {
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        self.functions += 1;
+        walk::walk_function(self, it, flags);
+        self.functions -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.functions += 1;
+        walk::walk_arrow_function_expression(self, it);
+        self.functions -= 1;
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if self.functions == 0 && it.name == "await" {
+            self.found = true;
+        }
+    }
 }
 
 /// Measures nesting without recursing past the limit.
@@ -424,7 +532,7 @@ impl<'a, 's> Compiler<'a, 's> {
             Op::YieldDrop(_) => Op::YieldDrop(target),
             Op::YieldStar(_) => Op::YieldStar(target),
             Op::DelegateCall(s, k, _) => Op::DelegateCall(s, k, target),
-            Op::DelegateResult(_) => Op::DelegateResult(target),
+            Op::DelegateResult(_, k) => Op::DelegateResult(target, k),
             Op::AsyncClose(s, _) => Op::AsyncClose(s, target),
             other => other,
         };
@@ -853,6 +961,21 @@ impl<'a, 's> Compiler<'a, 's> {
     fn store_ident(&mut self, id: &IdentifierReference) -> R<()> {
         match self.ident_symbol(id) {
             Some(s) => self.store_symbol(s, BindMode::Assign, id.span.start),
+            // `arguments` is a mutable binding of its function.
+            None if id.name == "arguments"
+                && (self.f().args_store.is_some()
+                    || (self.f().is_arrow && self.args_depth().is_some())) =>
+            {
+                match self.f().args_store {
+                    Some(Store::Cell(c)) => self.emit(Op::SetCell(c)),
+                    Some(Store::Local(l)) => self.emit(Op::SetLocal(l)),
+                    None => {
+                        let u = self.resolve_args_upval(self.depth())?;
+                        self.emit(Op::SetUpval(u))
+                    }
+                };
+                Ok(())
+            }
             None => {
                 let a = self.atom(id.name.as_str());
                 self.emit(Op::Pop);
@@ -1051,6 +1174,14 @@ impl<'a, 's> Compiler<'a, 's> {
             };
             self.f().args_store = Some(store);
         }
+        // A named function expression's own name is bound outside its parameters, so their defaults see it too.
+        if let Some(s) = spec.self_sym
+            && self.syms.get(&s).is_some_and(|i| i.depth == self.depth())
+        {
+            self.readonly.insert(s);
+            self.emit(Op::Callee);
+            self.store_symbol(s, BindMode::Init, 0)?;
+        }
         for (i, p) in params.items.iter().enumerate() {
             if simple
                 && let BindingPattern::BindingIdentifier(id) = &p.pattern
@@ -1076,13 +1207,6 @@ impl<'a, 's> Compiler<'a, 's> {
         if let Some(rest) = &params.rest {
             self.emit(Op::Rest(nparams));
             self.bind_pattern(&rest.rest.argument, BindMode::Init)?;
-        }
-        if let Some(s) = spec.self_sym
-            && self.syms.get(&s).is_some_and(|i| i.depth == self.depth())
-        {
-            self.readonly.insert(s);
-            self.emit(Op::Callee);
-            self.store_symbol(s, BindMode::Init, 0)?;
         }
         if spec.is_generator {
             self.emit(Op::GeneratorStart);
@@ -1288,7 +1412,7 @@ impl<'a, 's> Compiler<'a, 's> {
         let flag = if is_async { DELEGATE_ASYNC } else { 0 };
         let it = self.iter_slot();
         self.emit(if is_async {
-            Op::GetAsyncIter(it)
+            Op::GetAsyncIter(it, ITER_DELEGATE)
         } else {
             Op::GetIter(it, ITER_DELEGATE)
         });
@@ -1298,7 +1422,7 @@ impl<'a, 's> Compiler<'a, 's> {
         if is_async {
             self.emit(Op::Await);
         }
-        let mut dones = vec![self.emit(Op::DelegateResult(0))];
+        let mut dones = vec![self.emit(Op::DelegateResult(0, REQ_NEXT))];
         let ys = self.here();
         self.emit(Op::YieldStar(lp));
         let to_ret = self.emit(Op::Jump(0));
@@ -1307,7 +1431,7 @@ impl<'a, 's> Compiler<'a, 's> {
         if is_async {
             self.emit(Op::Await);
         }
-        dones.push(self.emit(Op::DelegateResult(0)));
+        dones.push(self.emit(Op::DelegateResult(0, REQ_THROW)));
         self.emit(Op::Jump(ys));
         self.patch(no_throw);
         self.emit(Op::Pop);
@@ -1322,7 +1446,7 @@ impl<'a, 's> Compiler<'a, 's> {
         if is_async {
             self.emit(Op::Await);
         }
-        let ret_done = self.emit(Op::DelegateResult(0));
+        let ret_done = self.emit(Op::DelegateResult(0, REQ_RETURN));
         self.emit(Op::Jump(ys));
         self.patch(plain);
         self.patch(ret_done);
@@ -1660,12 +1784,12 @@ impl<'a, 's> Compiler<'a, 's> {
         self.init_scope(&syms);
         self.loop_head_expr(&f.right, &syms)?;
         let slot = self.iter_slot();
-        self.emit(Op::GetAsyncIter(slot));
+        self.emit(Op::GetAsyncIter(slot, ITER_FOR_AWAIT));
         let top = self.here();
         self.emit(Op::Undef);
         self.emit(Op::DelegateCall(slot, DELEGATE_ASYNC | DELEGATE_NO_ARG, 0));
         self.emit(Op::Await);
-        let exit = self.emit(Op::DelegateResult(0));
+        let exit = self.emit(Op::DelegateResult(0, REQ_NEXT));
         let handler = self.emit(Op::PushFinally(0));
         self.push_loop(labels, Some((slot, true)));
         self.bind_for_left(&f.left, &syms)?;
@@ -2432,8 +2556,12 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.emit(Op::ObjectSpread);
                 }
                 ObjectPropertyKind::ObjectProperty(p) => {
+                    // Like the reference, an accessor fails when the literal runs, after the properties before it.
                     if p.kind != PropertyKind::Init {
-                        return Err(unsupported("Getters and setters", p.span));
+                        let msg = self.str_const("Only init object properties are supported.");
+                        self.pos = p.span.start;
+                        self.emit(Op::ThrowType(msg));
+                        continue;
                     }
                     self.pos = p.span.start;
                     match static_key(&p.key, p.computed) {
@@ -2485,6 +2613,64 @@ impl<'a, 's> Compiler<'a, 's> {
             }
         }
         Ok(None)
+    }
+
+    /// `delete`: a member expression deletes, optionally; an identifier fails when it runs, as in the reference;
+    /// anything else is evaluated and gives true.
+    fn delete(&mut self, argument: &'a Expression<'a>) -> R<()> {
+        let argument = argument.without_parentheses();
+        if let Expression::Identifier(id) = argument {
+            let msg = self.str_const("Only data fields may be deleted.");
+            self.pos = id.span.start;
+            self.emit(Op::ThrowType(msg));
+            return Ok(());
+        }
+        let member = match argument {
+            Expression::ChainExpression(c) => c.expression.as_member_expression(),
+            other => other.as_member_expression(),
+        };
+        let Some(member) = member else {
+            self.expr(argument)?;
+            self.emit(Op::Pop);
+            self.emit(Op::True);
+            return Ok(());
+        };
+        self.chains.push(Vec::new());
+        match member {
+            MemberExpression::StaticMemberExpression(m) => {
+                self.expr(&m.object)?;
+                if m.optional {
+                    self.opt_chain();
+                }
+                let a = self.atom(m.property.name.as_str());
+                self.pos = m.span.start;
+                self.emit(Op::DelProp(a));
+            }
+            MemberExpression::ComputedMemberExpression(m) => {
+                self.expr(&m.object)?;
+                if m.optional {
+                    self.opt_chain();
+                }
+                self.expr(&m.expression)?;
+                self.pos = m.span.start;
+                self.emit(Op::DelElem);
+            }
+            MemberExpression::PrivateFieldExpression(p) => {
+                return Err(unsupported("Private fields", p.span));
+            }
+        }
+        // A short-circuited chain deletes nothing and gives true.
+        let patches = self.chains.pop().unwrap_or_default();
+        if !patches.is_empty() {
+            let end = self.emit(Op::Jump(0));
+            for p in patches {
+                self.patch(p);
+            }
+            self.emit(Op::Pop);
+            self.emit(Op::True);
+            self.patch(end);
+        }
+        Ok(())
     }
 
     fn call(&mut self, c: &'a CallExpression<'a>) -> R<()> {
@@ -2543,26 +2729,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.expr(&u.argument)?;
                 self.emit(Op::Typeof);
             }
-            UnaryOperator::Delete => match &u.argument {
-                Expression::StaticMemberExpression(m) => {
-                    self.expr(&m.object)?;
-                    let a = self.atom(m.property.name.as_str());
-                    self.emit(Op::DelProp(a));
-                }
-                Expression::ComputedMemberExpression(m) => {
-                    self.expr(&m.object)?;
-                    self.expr(&m.expression)?;
-                    self.emit(Op::DelElem);
-                }
-                Expression::ChainExpression(c) => {
-                    return Err(unsupported("Optional delete", c.span));
-                }
-                other => {
-                    self.expr(other)?;
-                    self.emit(Op::Pop);
-                    self.emit(Op::True);
-                }
-            },
+            UnaryOperator::Delete => self.delete(&u.argument)?,
             UnaryOperator::Void => {
                 self.expr(&u.argument)?;
                 self.emit(Op::Pop);

@@ -209,7 +209,7 @@ impl<'rt> Vm<'rt> {
 
     fn constant(&mut self, target: Id, name: &'static str, v: Value) {
         let key = self.atoms.intern_static(name);
-        self.heap[target as usize].props.insert(key, v, 0);
+        self.heap[target as usize].props.insert(key, v, FIXED);
     }
 
     /// A constructor whose `prototype` is `proto`; `data` reaches the native as its callee data.
@@ -227,7 +227,9 @@ impl<'rt> Vm<'rt> {
             },
         ));
         let (pk, ck) = (self.names.prototype, self.names.constructor);
-        self.heap[c as usize].props.insert(pk, Value::Obj(proto), 0);
+        self.heap[c as usize]
+            .props
+            .insert(pk, Value::Obj(proto), FIXED);
         self.define_hidden(proto, ck, Value::Obj(c));
         self.global(name, Value::Obj(c));
         c

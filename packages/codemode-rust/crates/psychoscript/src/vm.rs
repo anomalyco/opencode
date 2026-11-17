@@ -1078,7 +1078,7 @@ impl<'rt> Vm<'rt> {
                 let Some(f) = self.frames.last_mut() else {
                     return;
                 };
-                if let Some(Op::DelegateResult(exit)) = f.func.code.get(f.pc) {
+                if let Some(Op::DelegateResult(exit, _)) = f.func.code.get(f.pc) {
                     f.pc = *exit as usize;
                 }
                 self.push(v);
@@ -1233,7 +1233,7 @@ impl<'rt> Vm<'rt> {
         let strings = self.new_array(cooked);
         if let Value::Obj(id) = strings {
             let rk = self.atoms.intern_static("raw");
-            self.heap[id as usize].props.push_new(rk, raw, 0);
+            self.heap[id as usize].props.push_new(rk, raw, FIXED);
             if let Some(slot) = self.template_objs.get_mut(i) {
                 *slot = Some(id);
             }
@@ -1603,7 +1603,10 @@ impl<'rt> Vm<'rt> {
                         }
                         items.extend(f.extra.iter().cloned());
                         let proto = self.realm.object_proto;
+                        let len = Value::Num(items.len() as f64);
                         let id = self.alloc(Obj::new(Some(proto), Kind::Arguments(items)));
+                        let lk = self.names.length;
+                        self.define_hidden(id, lk, len);
                         self.push(Value::Obj(id));
                     }
                     Op::Rest(_) => {
@@ -2367,7 +2370,7 @@ impl<'rt> Vm<'rt> {
                                     Some((v, done)) => {
                                         self.push(v);
                                         match code.get(pc) {
-                                            Some(Op::DelegateResult(exit)) if done => {
+                                            Some(Op::DelegateResult(exit, _)) if done => {
                                                 pc = *exit as usize
                                             }
                                             _ => pc += 1,
@@ -2391,18 +2394,18 @@ impl<'rt> Vm<'rt> {
                             }
                         }
                     }
-                    Op::DelegateResult(exit) => {
+                    Op::DelegateResult(exit, kind) => {
                         let r = self.pop();
-                        let (v, done) = tri!(self.iter_result_parts(&r));
+                        let (v, done) = tri!(self.iter_result_parts(&r, kind));
                         self.push(v);
                         if done {
                             pc = exit as usize;
                         }
                     }
-                    Op::GetAsyncIter(slot) => {
+                    Op::GetAsyncIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
-                        let it = tri!(self.get_async_iterator(&v));
+                        let it = tri!(self.get_async_iterator(&v, ctx));
                         let next = tri!(self.record_next(&it));
                         self.stack[base + slot as usize] = Slot::pack(it);
                         self.stack[base + slot as usize + 1] = Slot::pack(next);
@@ -2418,10 +2421,7 @@ impl<'rt> Vm<'rt> {
                     Op::CheckObject => {
                         let v = self.top();
                         if !matches!(v, Value::Obj(_)) {
-                            let d = self.describe(&v);
-                            throw!(
-                                self.type_error(&format!("Iterator result {d} is not an object"))
-                            );
+                            throw!(self.type_error("Iterator return() result must be an object."));
                         }
                     }
                     Op::IterStep(slot) => {

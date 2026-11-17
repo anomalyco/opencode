@@ -487,6 +487,11 @@ fn a_state_is_refused_by_another_build_other_extensions_or_a_changed_source() {
             .message
             .contains("Invalid snapshot")
     );
+    for bad in ["é", "abc", "zz"] {
+        let mut bytes = state.clone();
+        bytes.0["state"]["buffers"] = json!([bad]);
+        assert!(rt.resume(&bytes).is_err(), "{bad}");
+    }
 }
 
 #[test]

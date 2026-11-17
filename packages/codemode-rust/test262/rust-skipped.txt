@@ -22,7 +22,6 @@ built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
-built-ins/Object/isFrozen/15.2.3.12-2-a-11.js  # wrong result
 built-ins/RegExp/escape/escaped-surrogates.js  # wrong result
 built-ins/String/prototype/codePointAt/return-first-code-unit.js  # wrong result
 built-ins/String/prototype/codePointAt/return-single-code-unit.js  # wrong result
@@ -30,20 +29,6 @@ built-ins/String/prototype/isWellFormed/returns-boolean.js  # wrong result
 built-ins/String/prototype/localeCompare/15.5.4.9_CE.js  # wrong result
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
 built-ins/global/10.2.1.1.3-4-18-s.js  # missing global: undefined
-language/arguments-object/10.5-7-b-4-s.js  # wrong result
-language/arguments-object/S10.6_A5_T4.js  # wrong result
-language/expressions/delete/11.4.1-4.a-17.js  # wrong result
-language/expressions/delete/11.4.1-4.a-9-s.js  # error not thrown: TypeError
-language/expressions/function/scope-name-var-open-strict.js  # error not thrown: TypeError
-language/expressions/generators/scope-name-var-open-strict.js  # error not thrown: TypeError
 language/expressions/greater-than/S11.8.2_A4.12_T1.js  # wrong result
 language/expressions/less-than/S11.8.1_A4.12_T1.js  # wrong result
-language/global-code/export.js  # unsupported syntax: `export`
 language/global-code/import.js  # missing global: %import
-language/reserved-words/await-script.js  # spurious parse error: Cannot use `…` as an identifier in an async context
-language/statements/for-of/iterator-close-non-throw-get-method-non-callable.js  # error not thrown: TypeError
-language/statements/function/S13_A11_T4.js  # wrong result
-language/statements/function/S13_A13_T1.js  # wrong result
-language/statements/function/S13_A13_T2.js  # wrong result
-language/statements/function/S13_A13_T3.js  # wrong result
-language/statements/labeled/value-await-non-module-escaped.js  # spurious parse error: Keywords cannot contain escape characters
