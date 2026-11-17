@@ -94,6 +94,11 @@ function $vmBinary(op, lhs, rhs) {
   return $ApplyBinary(op, l, r)
 }
 
+function $vmSetLength(o, v) {
+  o.length = $vmToPrimitive(v, "number")
+  return v
+}
+
 function $vmGetElem(o, k) {
   return o[$vmToKey(k)]
 }

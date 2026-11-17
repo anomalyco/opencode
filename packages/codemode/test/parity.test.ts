@@ -1877,6 +1877,45 @@ describe("computed property keys convert through the object's own toString", () 
   })
 })
 
+describe("Array method arguments, lengths, and elements convert through ToPrimitive", () => {
+  test("integer arguments use the object's own valueOf, in order, before the method reads the array", async () => {
+    expect(
+      await value(`
+        const n = (value) => ({ valueOf() { return value } })
+        const log = []
+        const at = (value) => ({ valueOf() { log.push(value); return value } })
+        const items = [0, 1, 2, 3, 4]
+        const live = [1, 2, 3]
+        const removed = { valueOf() { live.length = 1; return 0 } }
+        return [items.at(n(1)), items.indexOf(3, n(2)), items.lastIndexOf(1, n(0)), items.includes(0, n(1)),
+          items.slice(n(1), n(3)), [0, 0, 0].fill(7, n(1), n(2)), [...items].splice(at(1), at(2)), log,
+          items.with(n(0), "x")[0], items.flat(n(0)).length, live.indexOf(2, removed)]
+      `),
+    ).toEqual([1, 3, -1, false, [1, 2], [0, 7, 0], [1, 2], [1, 2], "x", 5, -1])
+  })
+
+  test("conversion failures surface, and an empty array answers before fromIndex converts", async () => {
+    expect((await error(`[1].at({ valueOf() { throw new RangeError("at") } })`)).message).toContain("at")
+    expect((await error(`[1].fill(0, { valueOf() { return {} }, toString() { return {} } })`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect(await value(`return [].indexOf(1, { valueOf() { throw new Error("never") } })`)).toBe(-1)
+  })
+
+  test("length = object converts through valueOf, and a default sort converts each element through toString", async () => {
+    expect(
+      await value(`
+        const resized = [1, 2, 3]
+        resized.length = { valueOf() { return 1 } }
+        let calls = 0
+        const named = (name) => ({ name, toString() { calls++; return name } })
+        const sorted = [named("c"), named("a"), 2, undefined, named("b")].sort()
+        return [resized, sorted.map((item) => item?.name ?? item), calls]
+      `),
+    ).toEqual([[1], [2, "a", "b", "c", null], 3])
+  })
+})
+
 describe("String and Number method arguments convert through ToPrimitive", () => {
   test("string positions use the string hint and numeric positions the number hint", async () => {
     expect(
@@ -1954,6 +1993,17 @@ describe("String and Number method arguments convert through ToPrimitive", () =>
       1,
       "abc",
     ])
+  })
+
+  test("fromCharCode, fromCodePoint, JSON.parse, and the string iterator convert objects; repeat counts NaN as 0", async () => {
+    expect(
+      await value(`
+        const n = (value) => ({ valueOf() { return value } })
+        const text = (value) => ({ toString() { return value } })
+        return [String.fromCharCode(n(65), "66"), String.fromCodePoint(n(31)), JSON.parse(text("[1]")),
+          [...String.prototype[Symbol.iterator].call(text("xy"))], "ab".repeat(NaN), "ab".repeat(0.9)]
+      `),
+    ).toEqual(["AB", "\x1f", [1], ["x", "y"], "", ""])
   })
 
   test("conversion failures surface and opaque arguments still reject", async () => {

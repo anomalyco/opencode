@@ -265,7 +265,13 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       hint (`"abc".indexOf({ toString() { return "b" } })` is `1`, `(255).toString({ valueOf() { return 16 } })` is
       `"ff"`, `String.prototype.trim.call({ toString() { return " a " } })` is `"a"`). Only consumed positions
       convert; a RegExp pattern is used as is, and `includes`/`startsWith`/`endsWith` reject one before converting.
-- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the Array and
+- [x] Array methods, lengths, and elements convert through ToPrimitive: the integer arguments of `at`, `indexOf`,
+      `lastIndexOf`, `includes`, `slice`, `splice`, `toSpliced`, `fill`, `copyWithin`, `with`, and `flat` (in order,
+      before the array is read, and not at all for an empty array's `indexOf`/`lastIndexOf`/`includes`),
+      `length = object` (number hint), and the elements a default `sort` compares (one ToString each). So do
+      `String.fromCharCode`/`fromCodePoint` arguments, `JSON.parse(text)`, and a `String.prototype[Symbol.iterator]`
+      receiver; `repeat(NaN)` is `""`.
+- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the
       Uint8Array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
       ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
@@ -415,8 +421,8 @@ reject }` object. The resolvers are anonymous (`name` is `""`) with `length` 1, 
       `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
       (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
       promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, `parseInt`,
-      and the String and Number methods consult a program object's own `valueOf`/`toString`; the array methods do not
-      yet (see ToPrimitive above).
+      and the String, Number, and Array methods consult a program object's own `valueOf`/`toString`; the Uint8Array
+      methods do not yet (see ToPrimitive above).
 
 ## Strings
 

@@ -100,7 +100,8 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const codeUnits = (name: string, op: (...codes: Array<number>) => string): Method => [
     name,
     1,
-    (_, args) => op(...args.map(coerceToNumber)),
+    // Each argument's ToNumber, through its own valueOf or toString, in order.
+    (_, args) => withPrimitives("number", args, (numbers) => op(...numbers.map(coerceToNumber)), true),
   ]
   methods(builtins, string, [
     codeUnits("fromCharCode", String.fromCharCode),
@@ -321,7 +322,8 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
       "repeat",
       1,
       (value, args) => {
-        const count = num("repeat", args, 0)
+        // ToIntegerOrInfinity: NaN counts as 0.
+        const count = coerceToInteger(requireDataArgument("repeat", 0, args[0]))
         if (!Number.isFinite(count) || count < 0) {
           throw rangeError("String.repeat expects a finite non-negative count.")
         }
@@ -377,9 +379,12 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   define(
     builtins.String,
     IteratorSymbol,
-    fn(builtins, "[Symbol.iterator]", 0, (thisValue) =>
-      positionIterator(builtins, self(thisValue, "[Symbol.iterator]"), "values"),
-    ),
+    fn(builtins, "[Symbol.iterator]", 0, (thisValue) => {
+      if (thisValue === null || thisValue === undefined) self(thisValue, "[Symbol.iterator]")
+      return withPrimitives("string", [thisValue], ([value]) =>
+        positionIterator(builtins, self(value, "[Symbol.iterator]"), "values"),
+      )
+    }),
     hidden,
   )
   return string

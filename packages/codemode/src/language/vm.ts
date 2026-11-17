@@ -736,9 +736,11 @@ export class Vm {
             // Op.PUT_PROP
             const v = regs[--sp] as Value
             const o = regs[sp - 1] as Value
+            const key = consts[w >>> 16] as string
             frame.pc = pc
             frame.sp = sp
-            this.execPutProp(fcode, o, consts[w >>> 16] as string, v, pc)
+            if (key === "length" && this.execSetLength(frame, o, v, pc, sp)) continue outer
+            this.execPutProp(fcode, o, key, v, pc)
             regs[sp - 1] = v
             pc++
             continue
@@ -774,6 +776,7 @@ export class Vm {
             }
             frame.pc = pc
             frame.sp = sp
+            if (keyVal === "length" && this.execSetLength(frame, o, v, pc, sp)) continue outer
             this.execPutElem(fcode, o, keyVal, v, pc)
             regs[sp - 1] = v
             pc++
@@ -2088,6 +2091,14 @@ export class Vm {
     }
   }
 
+  // ArraySetLength converts an object through its own valueOf/toString: `[o, v] -> [v]` once the prelude has set it.
+  private execSetLength(frame: Frame, o: Value, v: Value, pc: number, sp: number): boolean {
+    if (!(o instanceof Arr) || !(v instanceof Obj)) return false
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmSetLength", [o, v], frame.code.siteAt(pc) ?? frame.origin)
+    return true
+  }
+
   private execPutElem(fcode: Code, o: Value, keyVal: Value, v: Value, pc: number): void {
     this.execPutProp(fcode, o, propertyKey(keyVal), v, pc)
   }
@@ -2698,6 +2709,7 @@ export class Vm {
       case Op.PUT_PROP: {
         const v = regs[--sp] as Value
         frame.sp = sp
+        if (consts[bx] === "length" && this.execSetLength(frame, regs[sp - 1] as Value, v, pc, sp)) return -1
         this.execPutProp(fcode, regs[sp - 1] as Value, consts[bx] as string, v, pc)
         regs[sp - 1] = v
         return pc + 1
@@ -2706,6 +2718,7 @@ export class Vm {
         const v = regs[--sp] as Value
         const keyVal = regs[--sp] as Value
         frame.sp = sp
+        if (keyVal === "length" && this.execSetLength(frame, regs[sp - 1] as Value, v, pc, sp)) return -1
         this.execPutElem(fcode, regs[sp - 1] as Value, keyVal, v, pc)
         regs[sp - 1] = v
         return pc + 1

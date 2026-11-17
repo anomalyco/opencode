@@ -18,6 +18,7 @@ import {
   coerceToNumber,
   coerceToString,
   rejectAddition,
+  type NativeResult,
   type Value,
 } from "../runtime/objects.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
@@ -82,29 +83,30 @@ export const sortArray = <R>(
   target: Arr | Bytes,
   comparator: Value,
   into: SortInto,
-): Value | Invoke => {
+): NativeResult => {
   const builtins = ctx.builtins
   const items = target instanceof Arr ? [...target.items] : [...target.bytes]
   // Counted before any comparator runs; a comparator that changes the array does not change where holes go.
   let holes = 0
   if (target instanceof Arr) for (let index = 0; index < items.length; index++) if (!(index in target.items)) holes++
   const callback = comparator === undefined ? undefined : requireCallback(comparator, into)
-  if (callback === undefined && items.length <= SORT_RUN) {
-    return sorted(
-      builtins,
-      target,
-      into,
-      holes,
-      items.sort((a, b) => compareText(coerceToString(a), coerceToString(b))),
-    )
-  }
   const defined = new Arr(
     builtins.Array,
     items.filter((item) => item !== undefined),
   )
   const undefs = items.length - defined.items.length
   if (callback === undefined) {
-    return new Invoke(ctx.prelude.fn("sortDefault"), undefined, [target, into, holes, defined, undefs], undefined)
+    // Each value's ToString, through its own toString or valueOf, once; equal keys keep their order.
+    return withPrimitives("string", defined.items, (primitives) => {
+      const keys = primitives.map(coerceToString)
+      if (keys.length > SORT_RUN) {
+        const args = [target, into, holes, defined, undefs, new Arr(builtins.Array, keys)]
+        return new Invoke(ctx.prelude.fn("sortDefault"), undefined, args, undefined)
+      }
+      const order = keys.map((_, at) => at).sort((left, right) => compareText(keys[left]!, keys[right]!))
+      const result = [...order.map((at) => defined.items[at]), ...Array.from({ length: undefs }, () => undefined)]
+      return sorted(builtins, target, into, holes, result)
+    })
   }
   const merges: Array<number> = []
   const plan = (low: number, high: number) => {
@@ -185,6 +187,19 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     return target
   }
   const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
+  // ToIntegerOrInfinity's ToPrimitive step for the arguments at `positions`, in order, before `body` reads them.
+  const integers = (args: Array<Value>, positions: ReadonlyArray<number>, body: (args: Array<Value>) => NativeResult) =>
+    withPrimitives(
+      "number",
+      positions.map((at) => args[at]),
+      (primitives) => {
+        const converted = [...args]
+        positions.forEach((at, index) => {
+          if (at < args.length) converted[at] = primitives[index]
+        })
+        return body(converted)
+      },
+    )
 
   methods(builtins, proto, [
     [
@@ -214,24 +229,48 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "includes",
       1,
       (thisValue, args) => {
-        return self(thisValue, "includes").items.includes(args[0], optNumber(args[1]))
+        const target = self(thisValue, "includes").items
+        // An empty array answers before fromIndex converts.
+        if (target.length === 0) return false
+        return integers(args, [1], (args) => target.includes(args[0], optNumber(args[1])))
       },
     ],
-    ["indexOf", 1, (thisValue, args) => self(thisValue, "indexOf").items.indexOf(args[0], optNumber(args[1]))],
+    [
+      "indexOf",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "indexOf").items
+        if (target.length === 0) return -1
+        return integers(args, [1], (args) => target.indexOf(args[0], optNumber(args[1])))
+      },
+    ],
     [
       "lastIndexOf",
       1,
       (thisValue, args) => {
         const target = self(thisValue, "lastIndexOf").items
+        if (target.length === 0) return -1
         // An explicit undefined is a fromIndex of 0, unlike omitting it.
-        return args.length < 2 ? target.lastIndexOf(args[0]) : target.lastIndexOf(args[0], optNumber(args[1]))
+        return integers(args, [1], (args) =>
+          args.length < 2 ? target.lastIndexOf(args[0]) : target.lastIndexOf(args[0], optNumber(args[1])),
+        )
       },
     ],
-    ["at", 1, (thisValue, args) => self(thisValue, "at").items.at(optNumber(args[0]) ?? 0)],
+    [
+      "at",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "at").items
+        return integers(args, [0], (args) => target.at(optNumber(args[0]) ?? 0))
+      },
+    ],
     [
       "slice",
       2,
-      (thisValue, args) => wrap(self(thisValue, "slice").items.slice(optNumber(args[0]), optNumber(args[1]))),
+      (thisValue, args) => {
+        const target = self(thisValue, "slice").items
+        return integers(args, [0, 1], (args) => wrap(target.slice(optNumber(args[0]), optNumber(args[1]))))
+      },
     ],
     [
       "concat",
@@ -250,9 +289,12 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         const flatten = (items: Array<Value>, depth: number): Array<Value> =>
           items.flatMap((item) => (item instanceof Arr && depth > 0 ? flatten(item.items, depth - 1) : [item]))
-        const flattened = flatten(self(thisValue, "flat").items, optNumber(args[0]) ?? 1)
-        checkArrayLength(flattened.length)
-        return wrap(flattened)
+        const target = self(thisValue, "flat").items
+        return integers(args, [0], (args) => {
+          const flattened = flatten(target, optNumber(args[0]) ?? 1)
+          checkArrayLength(flattened.length)
+          return wrap(flattened)
+        })
       },
     ],
     [
@@ -274,12 +316,14 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       2,
       (thisValue, args) => {
         const target = self(thisValue, "with").items
-        const index = optNumber(args[0]) ?? 0
-        const resolved = index < 0 ? target.length + index : index
-        if (resolved < 0 || resolved >= target.length) throw rangeError("Array.with index is out of range.")
-        const copied = [...target]
-        copied[resolved] = args[1]
-        return wrap(copied)
+        return integers(args, [0], (args) => {
+          const index = optNumber(args[0]) ?? 0
+          const resolved = index < 0 ? target.length + index : index
+          if (resolved < 0 || resolved >= target.length) throw rangeError("Array.with index is out of range.")
+          const copied = [...target]
+          copied[resolved] = args[1]
+          return wrap(copied)
+        })
       },
     ],
     [
@@ -308,46 +352,57 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       2,
       (thisValue, args) => {
         const target = self(thisValue, "splice")
-        const length = target.items.length
-        const start = optNumber(args[0]) ?? 0
-        const from = start < 0 ? Math.max(length + start, 0) : Math.min(start, length)
-        const deleteCount =
-          args.length === 1 ? length - from : Math.min(Math.max(optNumber(args[1]) ?? 0, 0), length - from)
-        const inserted = args.slice(2)
-        for (const item of inserted) rejectCircularInsertion(target, item, "Array.splice result")
-        mutable(target, inserted.length - deleteCount)
-        return wrap(target.items.splice(from, deleteCount, ...inserted))
+        return integers(args, [0, 1], (args) => {
+          const length = target.items.length
+          const start = optNumber(args[0]) ?? 0
+          const from = start < 0 ? Math.max(length + start, 0) : Math.min(start, length)
+          const deleteCount =
+            args.length === 1 ? length - from : Math.min(Math.max(optNumber(args[1]) ?? 0, 0), length - from)
+          const inserted = args.slice(2)
+          for (const item of inserted) rejectCircularInsertion(target, item, "Array.splice result")
+          mutable(target, inserted.length - deleteCount)
+          return wrap(target.items.splice(from, deleteCount, ...inserted))
+        })
       },
     ],
     [
       "toSpliced",
       2,
       (thisValue, args) => {
-        const copied = [...self(thisValue, "toSpliced").items]
-        if (args.length === 0) return wrap(copied)
-        const start = optNumber(args[0]) ?? 0
-        if (args.length === 1) copied.splice(start)
-        else copied.splice(start, optNumber(args[1]) ?? 0, ...args.slice(2))
-        return wrap(copied)
+        const target = self(thisValue, "toSpliced").items
+        return integers(args, [0, 1], (args) => {
+          const copied = [...target]
+          if (args.length === 0) return wrap(copied)
+          const start = optNumber(args[0]) ?? 0
+          if (args.length === 1) copied.splice(start)
+          else copied.splice(start, optNumber(args[1]) ?? 0, ...args.slice(2))
+          return wrap(copied)
+        })
       },
     ],
     [
       "fill",
       1,
       (thisValue, args) => {
-        const target = mutable(self(thisValue, "fill"))
-        rejectCircularInsertion(target, args[0], "Array.fill result")
-        target.items.fill(args[0], optNumber(args[1]), optNumber(args[2]))
-        return target
+        const target = self(thisValue, "fill")
+        return integers(args, [1, 2], (args) => {
+          mutable(target)
+          rejectCircularInsertion(target, args[0], "Array.fill result")
+          target.items.fill(args[0], optNumber(args[1]), optNumber(args[2]))
+          return target
+        })
       },
     ],
     [
       "copyWithin",
       2,
       (thisValue, args) => {
-        const target = mutable(self(thisValue, "copyWithin"))
-        target.items.copyWithin(optNumber(args[0]) ?? 0, optNumber(args[1]) ?? 0, optNumber(args[2]))
-        return target
+        const target = self(thisValue, "copyWithin")
+        return integers(args, [0, 1, 2], (args) => {
+          mutable(target)
+          target.items.copyWithin(optNumber(args[0]) ?? 0, optNumber(args[1]) ?? 0, optNumber(args[2]))
+          return target
+        })
       },
     ],
     ...iteratorMethods(builtins, self),
