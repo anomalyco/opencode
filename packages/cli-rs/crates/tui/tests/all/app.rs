@@ -189,6 +189,10 @@ fn run(
             ..Args::default()
         },
     );
+    // The replay compares cells, not speed, and TS has no slow-plugin report: on the wall clock a run under load could
+    // charge a built-in a slow frame and toast "Plugin is slow" over a checkpoint (file-browser-flake).
+    let still = std::time::Instant::now();
+    tui.plugins.monitor().set_clock(move || still);
     // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
     match recording.env.get("OPENCODE_PARITY_PLUGIN").map(String::as_str) {
         Some("slot") => opencode_tui::plugins::host::add(&tui, slot_plugin().into()),
