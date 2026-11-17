@@ -56,7 +56,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   client names (`EventSubscribeInput`), made with its first listener; a type the client does not name, as a plugin's
   own `rpc.*` events, never comes. The streaming deltas (`session.*.delta`) do not come, as the host's store sends no
   plugin a delta.
-- **Server RPC** (CT-4): `@opencode/plugin/rpc` gives `Rpc.define`, and `client.rpc(definition)` calls each method as
+- **Server RPC** (CT-4): `@opencode/plugin/rpc` gives `Rpc.define`, and so does `@opencode/plugin/effect`, whose other
+  names (the server's Effect schemas, `Agent`, `Tool` and the rest) link but are undefined (CT-23:
+  opencode-superagent's TUI); and `client.rpc(definition)` calls each method as
   TS's client does (`/api/rpc/<id>/<method>`, the output answered), with its events heard as the host's events of type
   `rpc.<id>.<name>`. An error the server gives an RPC reaches the plugin as the client's error, not as TS's
   `{ type, message, data }`, as the host's fetch answers an error as text. Every module the layer serves is also
