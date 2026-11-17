@@ -234,15 +234,30 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let items = vm.iterate_to_vec(&arg(args, 0))?;
+    // The reference's for...of over the entries: each entry is read as it comes, and a bad one closes the iterator.
+    let it = vm.get_iterator_in(&arg(args, 0), crate::bytecode::ITER_FOR_OF)?;
     let id = vm.new_object();
-    for item in items {
-        let k = vm.get_elem(&item, &Value::Num(0.0))?;
-        let v = vm.get_elem(&item, &Value::Num(1.0))?;
-        let a = vm.key_of(&k)?;
-        vm.define(id, a, v);
+    while let Some(item) = vm.iter_step(&it)? {
+        if let Err(e) = from_entry(vm, id, &item) {
+            if vm.fatal.is_none() {
+                let _ = vm.iter_close(&it);
+            }
+            return Err(e);
+        }
     }
     Ok(Value::Obj(id))
+}
+
+fn from_entry(vm: &mut Vm, id: Id, item: &Value) -> Result<(), Value> {
+    if !matches!(item, Value::Obj(_)) || contains_opaque(vm, item, &mut Vec::new()) {
+        return Err(vm.type_error("Object.fromEntries expects [key, value] entry objects."));
+    }
+    let k = vm.get_elem(item, &Value::Num(0.0))?;
+    let v = vm.get_elem(item, &Value::Num(1.0))?;
+    let k = vm.string_of(&k)?;
+    let a = vm.atoms.intern_id(k);
+    vm.define(id, a, v);
+    Ok(())
 }
 
 fn object_has_own(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -271,8 +286,10 @@ fn has_flags(vm: &mut Vm, args: &[Value], flags: u8, primitive: bool) -> Res {
     Ok(Value::Bool(match arg(args, 0) {
         Value::Obj(id) => {
             let o = &vm.heap[id as usize];
-            let empty =
-                o.props.len() == 0 && !matches!(&o.kind, Kind::Array(items) if !items.is_empty());
+            // An arguments object always has its own `length`, so it is never empty.
+            let empty = o.props.len() == 0
+                && !matches!(&o.kind, Kind::Array(items) if !items.is_empty())
+                && !matches!(&o.kind, Kind::Arguments(_));
             o.flags & flags == flags
                 || (flags != NON_EXTENSIBLE && empty && o.flags & NON_EXTENSIBLE != 0)
         }

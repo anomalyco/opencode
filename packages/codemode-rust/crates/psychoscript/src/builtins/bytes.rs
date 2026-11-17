@@ -612,12 +612,13 @@ fn u_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 fn u_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_bytes(vm, &this, "sort")?;
     let cmp = arg(args, 0);
+    super::array::sort_comparator(vm, &cmp, "Uint8Array.sort")?;
     let mut data = bytes_ref(vm, id).to_vec();
     if let Value::Undef = cmp {
         data.sort_unstable();
     } else {
         let list: Vec<Value> = data.iter().map(|b| Value::Num(*b as f64)).collect();
-        let sorted = super::array::sort_values(vm, list, &cmp, "Uint8Array.sort")?;
+        let sorted = super::array::sort_values(vm, list, &cmp)?;
         data = sorted
             .iter()
             .map(|v| match v {

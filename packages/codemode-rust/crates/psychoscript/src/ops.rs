@@ -158,13 +158,29 @@ impl<'rt> Vm<'rt> {
     /// An array's element that is a hole or past its end, which its prototypes may still have.
     #[cold]
     pub(crate) fn missing_elem(&mut self, id: Id, i: usize) -> Value {
-        let Some(proto) = self.heap[id as usize].proto else {
-            return Value::Undef;
-        };
-        match self.atoms.lookup(&i.to_string()) {
-            Some(key) => self.get_obj(proto, key),
-            None => Value::Undef,
+        self.inherited_elem(id, i).unwrap_or_default()
+    }
+
+    /// Element `i` of `id`'s prototypes, if one has it. An index never used as a key can still sit in an array
+    /// prototype's items (`Array.prototype[0] = x`), which store it without interning it.
+    #[cold]
+    pub(crate) fn inherited_elem(&mut self, id: Id, i: usize) -> Option<Value> {
+        let proto = self.heap[id as usize].proto?;
+        if let Some(key) = self.atoms.lookup(&i.to_string()) {
+            return self.has_key(proto, key).then(|| self.get_obj(proto, key));
         }
+        let mut cur = Some(proto);
+        while let Some(p) = cur {
+            let o = &self.heap[p as usize];
+            if let Kind::Array(items) = &o.kind
+                && let Some(v) = items.get(i)
+                && !matches!(v, Value::Uninit)
+            {
+                return Some(*v);
+            }
+            cur = o.proto;
+        }
+        None
     }
 
     #[inline(never)]

@@ -116,15 +116,41 @@ fn present(vm: &mut Vm, id: Id, i: usize) -> Option<Value> {
 
 #[cold]
 fn inherited(vm: &mut Vm, id: Id, i: usize) -> Option<Value> {
-    let key = vm.atoms.lookup(&i.to_string())?;
-    vm.has_key(id, key).then(|| vm.get_obj(id, key))
+    vm.inherited_elem(id, i)
 }
 
-fn items_mut<'a>(vm: &'a mut Vm, id: Id, growing: bool) -> Result<&'a mut Vec<Value>, Value> {
+/// The array's items for a mutating method, after `check_mutable`.
+fn items_mut<'a>(vm: &'a mut Vm, id: Id, growth: Option<i64>) -> Result<&'a mut Vec<Value>, Value> {
+    check_mutable(vm, id, growth)?;
+    array_items(vm, id)
+}
+
+/// The reference's check of what a mutating method's first write would hit on a frozen, sealed or non-extensible
+/// array. `growth` is given by the methods that always write `length`: how many items they add (or remove, when
+/// negative).
+fn check_mutable(vm: &mut Vm, id: Id, growth: Option<i64>) -> Result<(), Value> {
     let flags = vm.heap[id as usize].flags;
-    if flags & FROZEN != 0 || (growing && flags & NON_EXTENSIBLE != 0) {
-        return Err(vm.type_error("Cannot modify a frozen or non-extensible array"));
+    if flags & (NON_EXTENSIBLE | SEALED | FROZEN) == 0 {
+        return Ok(());
     }
+    let n = len(vm, id);
+    let g = growth.unwrap_or(0);
+    if g > 0 && flags & NON_EXTENSIBLE != 0 {
+        return Err(vm.type_error(&format!(
+            "Cannot add property {n}, object is not extensible."
+        )));
+    }
+    if g < 0 && n > 0 && flags & SEALED != 0 {
+        return Err(vm.type_error(&format!("Cannot delete property '{}'.", n - 1)));
+    }
+    if flags & FROZEN != 0 && (n > 0 || growth.is_some()) {
+        let k = if n > 0 { "0" } else { "length" };
+        return Err(vm.type_error(&format!("Cannot assign to read only property '{k}'.")));
+    }
+    Ok(())
+}
+
+fn array_items<'a>(vm: &'a mut Vm, id: Id) -> Result<&'a mut Vec<Value>, Value> {
     if !matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
         return Err(vm.type_error("not an array"));
     }
@@ -134,8 +160,8 @@ fn items_mut<'a>(vm: &'a mut Vm, id: Id, growing: bool) -> Result<&'a mut Vec<Va
     }
 }
 
-fn callback(vm: &mut Vm, args: &[Value], method: &str) -> Result<Value, Value> {
-    super::require_callback(vm, &arg(args, 0), &format!("Array.{method}"))
+fn callback(vm: &mut Vm, args: &[Value], name: &str) -> Result<Value, Value> {
+    super::require_callback(vm, &arg(args, 0), name)
 }
 
 fn array_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -162,62 +188,80 @@ fn array_of(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let src = arg(args, 0);
-    if src.is_nullish() {
-        return Err(vm.type_error("Array.from requires an array-like or iterable object"));
-    }
-    let iterable = match &src {
-        Value::Str(_) => true,
-        Value::Obj(id) => {
-            !matches!(vm.heap[*id as usize].kind, Kind::Ordinary | Kind::Live(_))
-                || vm.has_key(*id, SYM_ITERATOR)
-        }
-        _ => false,
+    let mapper = match arg(args, 1) {
+        Value::Undef => None,
+        f => Some(super::require_callback(vm, &f, "Array.from")?),
     };
-    let mut list = if iterable {
-        vm.iterate_to_vec(&src)?
-    } else if let Value::Obj(id) = src {
-        let lk = vm.names.length;
-        let lv = vm.get_obj(id, lk);
-        let n = to_integer(vm.number_of(&lv)?).max(0.0);
-        if n > MAX_ARRAY_LEN as f64 {
-            return Err(vm.range_error("Invalid array length."));
-        }
-        let n = n as usize;
-        let has_indexes = vm.heap[id as usize]
-            .props
-            .items
-            .iter()
-            .any(|p| vm.atoms.index(p.key).is_some());
-        if has_indexes {
-            let mut out = Vec::with_capacity(n);
-            for i in 0..n {
-                out.push(vm.get_elem(&src, &Value::Num(i as f64))?);
+    let this_arg = arg(args, 2);
+    if vm.is_iterable(&src) {
+        let Some(f) = mapper else {
+            let list = vm.iterate_to_vec(&src)?;
+            return Ok(vm.new_array(list));
+        };
+        // Each value is mapped as it is read, and a mapper that throws closes the iterator.
+        let it = vm.get_iterator(&src)?;
+        let mut out = Vec::new();
+        while let Some(x) = vm.iter_step(&it)? {
+            let mapped = if out.len() >= MAX_ARRAY_LEN {
+                Err(vm.range_error("Invalid array length."))
+            } else {
+                vm.call(&f, this_arg, &[x, Value::Num(out.len() as f64)])
+            };
+            match mapped {
+                Ok(v) => out.push(v),
+                Err(e) => {
+                    if vm.fatal.is_none() {
+                        let _ = vm.iter_close(&it);
+                    }
+                    return Err(e);
+                }
             }
-            out
-        } else {
-            vec![Value::Undef; n]
         }
-    } else {
-        Vec::new()
-    };
-    let f = arg(args, 1);
-    if !matches!(f, Value::Undef) {
-        super::require_callback(vm, &f, "Array.from")?;
-        let this_arg = arg(args, 2);
-        for (i, v) in list.iter_mut().enumerate() {
-            let x = std::mem::take(v);
-            *v = vm.call(&f, this_arg, &[x, Value::Num(i as f64)])?;
-        }
+        return Ok(vm.new_array(out));
     }
-    Ok(vm.new_array(list))
+    let id = match src {
+        Value::Obj(id) if !matches!(vm.heap[id as usize].kind, Kind::Promise(_)) => id,
+        _ => {
+            let d = vm.describe_data(&src);
+            return Err(vm.invalid_data(&format!(
+                "Array.from expects an iterable or array-like value, received {d}."
+            )));
+        }
+    };
+    let lk = vm.names.length;
+    let lv = vm.get_obj(id, lk);
+    let n = to_integer(vm.number_of(&lv)?).max(0.0);
+    if n > MAX_ARRAY_LEN as f64 {
+        return Err(vm.range_error("Invalid array length."));
+    }
+    let n = n as usize;
+    let has_indexes = vm.heap[id as usize]
+        .props
+        .items
+        .iter()
+        .any(|p| vm.atoms.index(p.key).is_some());
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let v = if has_indexes {
+            vm.get_elem(&src, &Value::Num(i as f64))?
+        } else {
+            Value::Undef
+        };
+        out.push(match mapper {
+            Some(f) => vm.call(&f, this_arg, &[v, Value::Num(i as f64)])?,
+            None => v,
+        });
+    }
+    Ok(vm.new_array(out))
 }
 
 fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    check_mutable(vm, id, Some(args.len() as i64))?;
     for a in args {
         vm.reject_circular(id, a, "Array.push result")?;
     }
-    let items = items_mut(vm, id, true)?;
+    let items = array_items(vm, id)?;
     if items.len() + args.len() > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
     }
@@ -227,12 +271,14 @@ fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    Ok(undef(items_mut(vm, id, false)?.pop().unwrap_or_default()))
+    Ok(undef(
+        items_mut(vm, id, Some(-1))?.pop().unwrap_or_default(),
+    ))
 }
 
 fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    let items = items_mut(vm, id, false)?;
+    let items = items_mut(vm, id, Some(-1))?;
     if items.is_empty() {
         return Ok(Value::Undef);
     }
@@ -241,10 +287,11 @@ fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    check_mutable(vm, id, Some(args.len() as i64))?;
     for a in args {
         vm.reject_circular(id, a, "Array.unshift result")?;
     }
-    let items = items_mut(vm, id, true)?;
+    let items = array_items(vm, id)?;
     items.splice(0..0, args.iter().cloned());
     Ok(Value::Num(items.len() as f64))
 }
@@ -280,7 +327,7 @@ fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     for a in &insert {
         vm.reject_circular(id, a, "Array.splice result")?;
     }
-    let items = items_mut(vm, id, !insert.is_empty())?;
+    let items = items_mut(vm, id, Some(insert.len() as i64 - count as i64))?;
     let removed: Vec<Value> = items.splice(start..start + count, insert).collect();
     Ok(vm.new_array(removed))
 }
@@ -388,7 +435,10 @@ fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
-    items_mut(vm, id, false)?.reverse();
+    // Fewer than two items means no writes at all, so a frozen one-item array reverses fine.
+    if len(vm, id) > 1 {
+        items_mut(vm, id, None)?.reverse();
+    }
     Ok(this)
 }
 
@@ -466,12 +516,12 @@ fn each<T>(
     vm: &mut Vm,
     this: &Value,
     args: &[Value],
-    method: &str,
+    name: &str,
     reverse: bool,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
     let id = arr_id(vm, this)?;
-    let f = callback(vm, args, method)?;
+    let f = callback(vm, args, name)?;
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     for k in 0..n {
@@ -490,11 +540,11 @@ fn each_present<T>(
     vm: &mut Vm,
     this: &Value,
     args: &[Value],
-    method: &str,
+    name: &str,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
     let id = arr_id(vm, this)?;
-    let f = callback(vm, args, method)?;
+    let f = callback(vm, args, name)?;
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     for i in 0..n {
@@ -510,36 +560,43 @@ fn each_present<T>(
 }
 
 fn a_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(each(vm, &this, args, "find", false, |vm, _, v, r| {
+    Ok(each(vm, &this, args, "Array.find", false, |vm, _, v, r| {
         vm.truthy(&r).then_some(v)
     })?
     .unwrap_or_default())
 }
 
 fn a_find_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(vm, &this, args, "findIndex", false, |vm, i, _, r| {
+    let r = each(vm, &this, args, "Array.findIndex", false, |vm, i, _, r| {
         vm.truthy(&r).then_some(i)
     })?;
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
 fn a_find_last(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(each(vm, &this, args, "findLast", true, |vm, _, v, r| {
-        vm.truthy(&r).then_some(v)
-    })?
-    .unwrap_or_default())
+    Ok(
+        each(vm, &this, args, "Array.findLast", true, |vm, _, v, r| {
+            vm.truthy(&r).then_some(v)
+        })?
+        .unwrap_or_default(),
+    )
 }
 
 fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(vm, &this, args, "findLastIndex", true, |vm, i, _, r| {
-        vm.truthy(&r).then_some(i)
-    })?;
+    let r = each(
+        vm,
+        &this,
+        args,
+        "Array.findLastIndex",
+        true,
+        |vm, i, _, r| vm.truthy(&r).then_some(i),
+    )?;
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
 fn a_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each_present(vm, &this, args, "some", |vm, _, _, r| {
+        each_present(vm, &this, args, "Array.some", |vm, _, _, r| {
             vm.truthy(&r).then_some(())
         })?
         .is_some(),
@@ -548,7 +605,7 @@ fn a_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each_present(vm, &this, args, "every", |vm, _, _, r| {
+        each_present(vm, &this, args, "Array.every", |vm, _, _, r| {
             (!vm.truthy(&r)).then_some(())
         })?
         .is_none(),
@@ -556,13 +613,13 @@ fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    each_present(vm, &this, args, "forEach", |_, _, _, _| None::<()>)?;
+    each_present(vm, &this, args, "Array.forEach", |_, _, _, _| None::<()>)?;
     Ok(Value::Undef)
 }
 
 fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let mut out = Vec::new();
-    each_present(vm, &this, args, "filter", |vm, _, v, r| {
+    each_present(vm, &this, args, "Array.filter", |vm, _, v, r| {
         if vm.truthy(&r) {
             out.push(v);
         }
@@ -575,7 +632,7 @@ fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     // Skipped indexes stay holes.
     let mut out = vec![Value::Uninit; len(vm, id)];
-    each_present(vm, &this, args, "map", |_, i, _, r| {
+    each_present(vm, &this, args, "Array.map", |_, i, _, r| {
         out[i] = r;
         None::<()>
     })?;
@@ -584,7 +641,15 @@ fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     let id = arr_id(vm, &this)?;
-    let f = callback(vm, args, if reverse { "reduceRight" } else { "reduce" })?;
+    let f = callback(
+        vm,
+        args,
+        if reverse {
+            "Array.reduceRight"
+        } else {
+            "Array.reduce"
+        },
+    )?;
     let n = len(vm, id);
     let index = |k: usize| if reverse { n - 1 - k } else { k };
     let mut k = 0;
@@ -622,16 +687,15 @@ fn a_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     reduce(vm, this, args, true)
 }
 
-/// Sorts `list` for `method` (`Array.sort`), with the comparator `cmp` or by string when it is undefined.
-pub(super) fn sort_values(
-    vm: &mut Vm,
-    list: Vec<Value>,
-    cmp: &Value,
-    method: &str,
-) -> Result<Vec<Value>, Value> {
+/// Checks a sort's comparator as the reference does, naming the method (`Array.sort`) in the error.
+pub(super) fn sort_comparator(vm: &mut Vm, cmp: &Value, name: &str) -> Result<(), Value> {
     if !matches!(cmp, Value::Undef) {
-        super::require_callback(vm, cmp, method)?;
+        super::require_callback(vm, cmp, name)?;
     }
+    Ok(())
+}
+
+pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<Vec<Value>, Value> {
     let (mut defined, undefs): (Vec<Value>, Vec<Value>) =
         list.into_iter().partition(|v| !matches!(v, Value::Undef));
     if let Value::Undef = cmp {
@@ -717,13 +781,15 @@ fn merge_sort<T: Clone>(
 fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     // Holes sort last, after undefined, and stay holes; a comparator that throws leaves the array as it was.
-    let list = items_mut(vm, id, false)?.clone();
+    let cmp = arg(args, 0);
+    let list = items_mut(vm, id, None)?.clone();
+    sort_comparator(vm, &cmp, "Array.sort")?;
     let holes = list.iter().filter(|v| matches!(v, Value::Uninit)).count();
     let list = list
         .into_iter()
         .filter(|v| !matches!(v, Value::Uninit))
         .collect();
-    let mut sorted = sort_values(vm, list, &arg(args, 0), "Array.sort")?;
+    let mut sorted = sort_values(vm, list, &cmp)?;
     sorted.resize(sorted.len() + holes, Value::Uninit);
     if let Kind::Array(items) = &mut vm.heap[id as usize].kind {
         *items = sorted;
@@ -733,8 +799,9 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
+    sort_comparator(vm, &arg(args, 0), "Array.toSorted")?;
     let list = without_holes(items(vm, id));
-    let sorted = sort_values(vm, list, &arg(args, 0), "Array.toSorted")?;
+    let sorted = sort_values(vm, list, &arg(args, 0))?;
     Ok(vm.new_array(sorted))
 }
 
@@ -770,7 +837,7 @@ fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     // A returned array is read like the callback methods read theirs: live, skipping indexes not in it.
     let mut out = Vec::new();
-    each_present(vm, &this, args, "flatMap", |vm, _, _, r| {
+    each_present(vm, &this, args, "Array.flatMap", |vm, _, _, r| {
         match r {
             Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
                 let mut at = 0;
@@ -794,8 +861,9 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let s = to_index(vm, &arg(args, 1), n, 0)?;
     let e = to_index(vm, &arg(args, 2), n, n)?;
     let v = arg(args, 0);
+    check_mutable(vm, id, None)?;
     vm.reject_circular(id, &v, "Array.fill result")?;
-    let items = items_mut(vm, id, false)?;
+    let items = array_items(vm, id)?;
     for slot in items.iter_mut().take(e).skip(s) {
         *slot = v;
     }
@@ -808,7 +876,7 @@ fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let target = to_index(vm, &arg(args, 0), n, 0)?;
     let start = to_index(vm, &arg(args, 1), n, 0)?;
     let end = to_index(vm, &arg(args, 2), n, n)?;
-    let items = items_mut(vm, id, false)?;
+    let items = items_mut(vm, id, None)?;
     if start < end && target < n {
         let count = (end - start).min(n - target);
         let copy: Vec<Value> = items[start..start + count].to_vec();

@@ -277,7 +277,8 @@ impl<'rt> Vm<'rt> {
             },
         ));
         self.realm.function_proto = function_proto;
-        self.realm.array_proto = self.plain(object_proto);
+        // Array.prototype is itself an array, as in the reference.
+        self.realm.array_proto = self.alloc(Obj::new(Some(object_proto), Kind::Array(Vec::new())));
         self.realm.string_proto = self.plain(object_proto);
         self.realm.number_proto = self.plain(object_proto);
         self.realm.boolean_proto = self.plain(object_proto);
