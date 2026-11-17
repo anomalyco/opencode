@@ -1,22 +1,26 @@
 /** One package update on its way; `id` tells it apart from an update of the same package on an earlier server. */
 export type RunningPluginUpdate = { readonly id: number; readonly target: string }
 
+/** What a check or update learned about one package; `at` is that operation's id, so an older result never wins. */
+export type PluginUpdateFinding = { readonly outdated: boolean; readonly at: number }
+
 /**
- * Checking for and installing plugin package updates from Settings › Extensions. `outdated` holds what the latest
- * check or update learned per package, which is fresher than the listed plugins until the list loads again.
+ * Checking for and installing plugin package updates from Settings › Extensions. `findings` holds what checks and
+ * updates learned per package. The server reloads its plugins after both return, so a list read in between still
+ * carries the old flags; a finding stays until a settled list agrees with it.
  */
 export type PluginUpdateState =
   | {
       readonly status: "idle"
       readonly nextId: number
-      readonly outdated: Readonly<Record<string, boolean>>
+      readonly findings: Readonly<Record<string, PluginUpdateFinding>>
       readonly updating: readonly RunningPluginUpdate[]
     }
   | {
       readonly status: "checking"
       readonly attempt: number
       readonly nextId: number
-      readonly outdated: Readonly<Record<string, boolean>>
+      readonly findings: Readonly<Record<string, PluginUpdateFinding>>
       readonly updating: readonly RunningPluginUpdate[]
     }
   | { readonly status: "disposed" }
@@ -29,8 +33,11 @@ export type PluginUpdateEvent =
   | { readonly type: "update.requested"; readonly target: string }
   | { readonly type: "update.succeeded"; readonly id: number }
   | { readonly type: "update.failed"; readonly id: number; readonly message: string }
-  /** The plugin list loaded again, so its own flags are current. */
-  | { readonly type: "list.loaded" }
+  /**
+   * The plugin list loaded again. `ready` is false while the server is still reloading its plugins, when the list's
+   * flags may predate the latest check or update; `outdated` maps each listed package to its flag.
+   */
+  | { readonly type: "list.loaded"; readonly ready: boolean; readonly outdated: Readonly<Record<string, boolean>> }
   /** Another server: forget what this one's checks and updates learned. */
   | { readonly type: "server.changed" }
   | { readonly type: "disposed" }
@@ -51,7 +58,7 @@ const none: readonly PluginUpdateEffect[] = []
 const step = (state: PluginUpdateState, effects = none): PluginUpdateTransition => ({ state, effects })
 
 export function createPluginUpdateState(): PluginUpdateState {
-  return { status: "idle", nextId: 0, outdated: {}, updating: [] }
+  return { status: "idle", nextId: 0, findings: {}, updating: [] }
 }
 
 export function transitionPluginUpdate(state: PluginUpdateState, event: PluginUpdateEvent): PluginUpdateTransition {
@@ -59,12 +66,22 @@ export function transitionPluginUpdate(state: PluginUpdateState, event: PluginUp
 
   if (event.type === "disposed") return step({ status: "disposed" })
 
-  if (event.type === "server.changed") return step({ status: "idle", nextId: state.nextId, outdated: {}, updating: [] })
+  if (event.type === "server.changed") return step({ status: "idle", nextId: state.nextId, findings: {}, updating: [] })
 
   if (event.type === "list.loaded") {
-    if (Object.keys(state.outdated).length === 0) return step(state)
+    if (!event.ready) return step(state)
 
-    return step({ ...state, outdated: {} })
+    const settled = Object.keys(state.findings).filter(
+      (target) => !(target in event.outdated) || event.outdated[target] === state.findings[target]?.outdated,
+    )
+
+    if (settled.length === 0) return step(state)
+
+    const findings = { ...state.findings }
+
+    for (const target of settled) delete findings[target]
+
+    return step({ ...state, findings })
   }
 
   if (event.type === "check.requested") {
@@ -78,11 +95,21 @@ export function transitionPluginUpdate(state: PluginUpdateState, event: PluginUp
   if (event.type === "check.succeeded" || event.type === "check.failed") {
     if (state.status !== "checking" || state.attempt !== event.attempt) return step(state)
 
-    const idle = { status: "idle", nextId: state.nextId, outdated: state.outdated, updating: state.updating } as const
+    const idle = { status: "idle", nextId: state.nextId, findings: state.findings, updating: state.updating } as const
 
     if (event.type === "check.failed") return step(idle, [{ type: "failed", message: event.message }])
 
-    return step({ ...idle, outdated: event.outdated })
+    // An update that started or finished after this check began knows more about its package than the check does.
+    const findings = { ...state.findings }
+
+    for (const [target, outdated] of Object.entries(event.outdated)) {
+      const newer =
+        (findings[target]?.at ?? -1) > event.attempt || state.updating.some((item) => item.target === target)
+
+      if (!newer) findings[target] = { outdated, at: event.attempt }
+    }
+
+    return step({ ...idle, findings })
   }
 
   if (event.type === "update.requested") {
@@ -103,7 +130,10 @@ export function transitionPluginUpdate(state: PluginUpdateState, event: PluginUp
 
   if (event.type === "update.failed") return step({ ...state, updating }, [{ type: "failed", message: event.message }])
 
-  return step({ ...state, updating, outdated: { ...state.outdated, [running.target]: false } }, [{ type: "refresh" }])
+  return step(
+    { ...state, updating, findings: { ...state.findings, [running.target]: { outdated: false, at: running.id } } },
+    [{ type: "refresh" }],
+  )
 }
 
 export type PluginUpdateView = { readonly outdated: boolean; readonly updating: boolean }
@@ -117,7 +147,7 @@ export function pluginUpdateView(
 
   const updating = source.updating === true || state.updating.some((item) => item.target === source.target)
 
-  return { outdated: state.outdated[source.target] ?? source.outdated === true, updating }
+  return { outdated: state.findings[source.target]?.outdated ?? source.outdated === true, updating }
 }
 
 export const pluginUpdateChecking = (state: PluginUpdateState) => state.status === "checking"

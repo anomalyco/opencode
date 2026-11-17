@@ -1,4 +1,4 @@
-import type { McpServer } from "@opencode/client/promise"
+import type { McpServer, PluginInfo } from "@opencode/client/promise"
 import {
   Component,
   For,
@@ -90,7 +90,7 @@ export const SettingsExtensions: Component<{
 
   const plugins = createExtensionLoad({
     key: () => serverSdk.scope,
-    task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }).then((result) => result.data),
+    task: (_, signal) => serverSdk.api.plugin.list(undefined, { signal }),
   })
 
   // Plugin registries are per Location, so every `plugin.updated` names one; the default Location's names its resolved
@@ -100,7 +100,7 @@ export const SettingsExtensions: Component<{
   const pluginList = createMemo(() => {
     const current = plugins.view()
 
-    return current.status === "ready" ? current.value : undefined
+    return current.status === "ready" ? current.value.data : undefined
   })
 
   const [updateState, setUpdateState] = createSignal(createPluginUpdateState())
@@ -130,11 +130,7 @@ export const SettingsExtensions: Component<{
           dispatchUpdate({
             type: "check.succeeded",
             attempt,
-            outdated: Object.fromEntries(
-              result.data.flatMap((plugin) =>
-                plugin.source.type === "package" ? [[plugin.source.target, plugin.source.outdated === true]] : [],
-              ),
-            ),
+            outdated: packageFlags(result.data),
           }),
         (error) => dispatchUpdate({ type: "check.failed", attempt, message: formatServerError(error, language.t) }),
       )
@@ -155,7 +151,30 @@ export const SettingsExtensions: Component<{
       { defer: true },
     ),
   )
-  createEffect(on(pluginList, (list) => list && dispatchUpdate({ type: "list.loaded" }), { defer: true }))
+
+  const packageFlags = (list: readonly PluginInfo[]) =>
+    Object.fromEntries(
+      list.flatMap((plugin) =>
+        plugin.source.type === "package" ? [[plugin.source.target, plugin.source.outdated === true]] : [],
+      ),
+    )
+
+  createEffect(
+    on(
+      () => plugins.view(),
+      (current) => {
+        if (current.status !== "ready") return
+        dispatchUpdate({
+          type: "list.loaded",
+          ready: current.value.ready !== false,
+          outdated: packageFlags(current.value.data),
+        })
+      },
+      { defer: true },
+    ),
+  )
+
+  const hasPackages = () => pluginList()?.some((plugin) => plugin.source.type === "package") ?? false
   onCleanup(() => dispatchUpdate({ type: "disposed" }))
 
   const pluginUpdates = {
@@ -322,7 +341,7 @@ export const SettingsExtensions: Component<{
 
           <Tabs.Content value="plugins">
             <div class="settings-section">
-              <div class="flex items-center justify-between">
+              <div class="flex flex-wrap items-center justify-between gap-2">
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
@@ -330,17 +349,20 @@ export const SettingsExtensions: Component<{
                   <span class="text-13-regular text-v2-text-text-muted">
                     {language.t("settings.extensions.manageConfig")}
                   </span>
-                  <Button
-                    size="small"
-                    variant="ghost-muted"
-                    disabled={pluginUpdateChecking(updateState())}
-                    aria-busy={pluginUpdateChecking(updateState())}
-                    onClick={() => dispatchUpdate({ type: "check.requested" })}
-                  >
-                    {language.t(
-                      pluginUpdateChecking(updateState()) ? "settings.plugins.checking" : "settings.plugins.check",
-                    )}
-                  </Button>
+                  <Show when={hasPackages()}>
+                    <Button
+                      size="small"
+                      variant="ghost-muted"
+                      class="shrink-0 whitespace-nowrap"
+                      disabled={pluginUpdateChecking(updateState())}
+                      aria-busy={pluginUpdateChecking(updateState())}
+                      onClick={() => dispatchUpdate({ type: "check.requested" })}
+                    >
+                      {language.t(
+                        pluginUpdateChecking(updateState()) ? "settings.plugins.checking" : "settings.plugins.check",
+                      )}
+                    </Button>
+                  </Show>
                 </div>
               </div>
               {/* The desktop's own server also lists the plugins main runs, so its rows stay while the list loads. */}
