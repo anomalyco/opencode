@@ -137,6 +137,7 @@ export function transitionFileSelection(state: FileSelectionState, event: FileSe
     const line: SelectedLineRange = { start: state.line, end: state.line }
 
     if (state.side) line.side = state.side
+
     const range =
       state.selected && isSingleLineSelection(state.selected) && sameLine(state.selected, line) ? null : line
 

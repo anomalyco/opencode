@@ -138,6 +138,7 @@ describe("comment selection toolbar", () => {
       [{ type: "layout.changed" }, { type: "place.sampled", attempt: 3, sample: undefined }],
       away.state,
     )
+
     expect(gone.state.status).toBe("idle")
   })
 

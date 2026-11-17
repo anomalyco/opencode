@@ -57,23 +57,25 @@ export function findCodeSelectionSide(node: Node | null): SelectedLineRange["sid
   return "additions"
 }
 
+type ComposedSelection = {
+  getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => StaticRange[]
+  direction?: string
+}
+
 /** The lines under the browser's text selection in a viewer's shadow root, with the selected text's DOM range. */
 export function readShadowLineSelection(opts: {
   root: ShadowRoot
   lineForNode: (node: Node | null) => number | undefined
   sideForNode?: (node: Node | null) => SelectedLineRange["side"]
 }) {
-  const selection =
-    (opts.root as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? window.getSelection()
+  // Chromium exposes `getSelection` on shadow roots and `getComposedRanges` on selections; the DOM types do not list them.
+  const root: ShadowRoot & { getSelection?: () => Selection | null } = opts.root
+  const selection: (Selection & ComposedSelection) | null = root.getSelection?.() ?? window.getSelection()
 
   if (!selection || selection.isCollapsed) return
 
   const domRange =
-    (
-      selection as unknown as {
-        getComposedRanges?: (options?: { shadowRoots?: ShadowRoot[] }) => StaticRange[]
-      }
-    ).getComposedRanges?.({ shadowRoots: [opts.root] })?.[0] ??
+    selection.getComposedRanges?.({ shadowRoots: [opts.root] })?.[0] ??
     (selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined)
 
   if (!domRange) return
@@ -105,7 +107,7 @@ export function readShadowLineSelection(opts: {
   return {
     range,
     text: toRange(domRange),
-    backward: (selection as Selection & { direction?: string }).direction === "backward",
+    backward: selection.direction === "backward",
   }
 }
 

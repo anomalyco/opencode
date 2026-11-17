@@ -803,6 +803,7 @@ function fillMouseHit(
 /** The part of `el` left on screen by the window and every ancestor that clips it. */
 function visibleBounds(el: HTMLElement) {
   const box = el.getBoundingClientRect()
+
   const bounds = {
     top: Math.max(box.top, 0),
     bottom: Math.min(box.bottom, window.innerHeight),
