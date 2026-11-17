@@ -14,6 +14,7 @@ import { Global } from "@opencode/util/global"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Environment } from "@opencode/core/environment/index"
 import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
@@ -50,6 +51,7 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    InstructionDiscovery.node,
     Skill.node,
     FSUtil.node,
     Environment.node,
@@ -193,6 +195,31 @@ describe("SessionInstructions", () => {
       expect(secondInjected[1]!.description).toBe(`Loaded ${path.relative(dir, otherPath)}`)
       expect(secondInjected[1]!.metadata).toEqual({ instruction: { paths: [otherPath] } })
       expect(secondInjected.some((message) => message.text.includes("root-instructions"))).toBe(false)
+    }),
+  )
+
+  it.live("falls back to CLAUDE.md above a read where a directory has no AGENTS.md", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const subAgents = path.resolve(dir, "sub", "AGENTS.md")
+      const deepClaude = path.resolve(dir, "sub", "deep", "CLAUDE.md")
+      yield* mkdir(path.resolve(dir, "sub", "deep"))
+      yield* writeAgents(subAgents, "sub-agents")
+      yield* writeAgents(path.resolve(dir, "sub", "CLAUDE.md"), "sub-claude")
+      yield* writeAgents(deepClaude, "deep-claude")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "deep", "file.txt"), "content"))
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+      yield* executeTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
+
+      const injected = yield* synthetics(sessionID)
+      expect(injected).toHaveLength(1)
+      expect(injected[0]!.text).toBe(
+        `Instructions from: ${deepClaude}\ndeep-claude\n\nInstructions from: ${subAgents}\nsub-agents`,
+      )
     }),
   )
 

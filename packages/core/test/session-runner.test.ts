@@ -391,6 +391,7 @@ const layer = Layer.unwrap(
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,
       global: true,
+      claude: true,
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
