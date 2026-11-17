@@ -145,37 +145,6 @@ static int has_features(const opencode_host_api *host) {
     return host->major >= 2 && host->size >= offsetof(opencode_host_api, features) + sizeof(host->features);
 }
 
-/* Appends code point `point` to `out` as UTF-8, while `room` lasts; 0 when it did not fit. */
-static int utf8(unsigned long point, char *out, size_t *len, size_t room) {
-    unsigned char bytes[4];
-    size_t count;
-    if (point < 0x80) {
-        bytes[0] = (unsigned char)point;
-        count = 1;
-    } else if (point < 0x800) {
-        bytes[0] = (unsigned char)(0xc0 | (point >> 6));
-        bytes[1] = (unsigned char)(0x80 | (point & 0x3f));
-        count = 2;
-    } else if (point < 0x10000) {
-        bytes[0] = (unsigned char)(0xe0 | (point >> 12));
-        bytes[1] = (unsigned char)(0x80 | ((point >> 6) & 0x3f));
-        bytes[2] = (unsigned char)(0x80 | (point & 0x3f));
-        count = 3;
-    } else {
-        bytes[0] = (unsigned char)(0xf0 | (point >> 18));
-        bytes[1] = (unsigned char)(0x80 | ((point >> 12) & 0x3f));
-        bytes[2] = (unsigned char)(0x80 | ((point >> 6) & 0x3f));
-        bytes[3] = (unsigned char)(0x80 | (point & 0x3f));
-        count = 4;
-    }
-    if (*len + count >= room) {
-        return 0;
-    }
-    memcpy(out + *len, bytes, count);
-    *len += count;
-    return 1;
-}
-
 /* The four hex digits at `at`, or -1. */
 static long hex4(const uint8_t *at, const uint8_t *end) {
     long value = 0;
@@ -195,91 +164,118 @@ static long hex4(const uint8_t *at, const uint8_t *end) {
     return value;
 }
 
-/* Decodes the JSON string that starts after its opening quote at `*at` into `out`, NUL-terminated, and moves `*at`
- * past its closing quote; 0 when it is malformed or longer than `room`. */
-static int json_string(const uint8_t **at, const uint8_t *end, char *out, size_t room) {
-    size_t len = 0;
+/* Compares the next byte of a decoded string with `name` at `*matched`, which counts the bytes of `name` matched so
+ * far, or is past its length once one differed. */
+static void match_byte(const char *name, size_t len, size_t *matched, uint8_t byte) {
+    *matched = *matched < len && (uint8_t)name[*matched] == byte ? *matched + 1 : len + 1;
+}
+
+/* Reads the JSON string after its opening quote at `*at` to past its closing quote, decoding every escape (a NUL as
+ * well), and whether its bytes, decoded as UTF-8, are exactly `name`'s: the same bytes and the same length. It keeps
+ * nothing but the count of bytes matched, so a string of any length is read whole. Returns -1 when it is malformed. */
+static int json_string_is(const uint8_t **at, const uint8_t *end, const char *name) {
+    size_t len = strlen(name), matched = 0;
     while (*at < end && **at != '"') {
         unsigned long point = **at;
         *at += 1;
-        if (point == '\\') {
-            if (*at >= end) {
-                return 0;
+        if (point < 0x20) {
+            return -1;
+        }
+        if (point != '\\') {
+            match_byte(name, len, &matched, (uint8_t)point);
+            continue;
+        }
+        if (*at >= end) {
+            return -1;
+        }
+        uint8_t escape = **at;
+        *at += 1;
+        switch (escape) {
+        case '"': case '\\': case '/': point = escape; break;
+        case 'b': point = '\b'; break;
+        case 'f': point = '\f'; break;
+        case 'n': point = '\n'; break;
+        case 'r': point = '\r'; break;
+        case 't': point = '\t'; break;
+        case 'u': {
+            long unit = hex4(*at, end);
+            if (unit < 0) {
+                return -1;
             }
-            uint8_t escape = **at;
-            *at += 1;
-            switch (escape) {
-            case '"': case '\\': case '/': point = escape; break;
-            case 'b': point = '\b'; break;
-            case 'f': point = '\f'; break;
-            case 'n': point = '\n'; break;
-            case 'r': point = '\r'; break;
-            case 't': point = '\t'; break;
-            case 'u': {
-                long high = hex4(*at, end);
-                if (high < 0) {
-                    return 0;
+            *at += 4;
+            point = (unsigned long)unit;
+            /* A surrogate pair is one code point; a lone surrogate is kept as its own three bytes. */
+            if (unit >= 0xd800 && unit < 0xdc00 && end - *at >= 6 && (*at)[0] == '\\' && (*at)[1] == 'u') {
+                long low = hex4(*at + 2, end);
+                if (low >= 0xdc00 && low < 0xe000) {
+                    point = 0x10000 + (((unsigned long)unit - 0xd800) << 10) + ((unsigned long)low - 0xdc00);
+                    *at += 6;
                 }
-                *at += 4;
-                point = (unsigned long)high;
-                /* A surrogate pair is one code point. */
-                if (high >= 0xd800 && high < 0xdc00 && end - *at >= 6 && (*at)[0] == '\\' && (*at)[1] == 'u') {
-                    long low = hex4(*at + 2, end);
-                    if (low >= 0xdc00 && low < 0xe000) {
-                        point = 0x10000 + (((unsigned long)high - 0xd800) << 10) + ((unsigned long)low - 0xdc00);
-                        *at += 6;
-                    }
-                }
-                break;
             }
-            default: return 0;
-            }
-            if (!utf8(point, out, &len, room)) {
-                return 0;
-            }
+            break;
+        }
+        default: return -1;
+        }
+        /* The code point as UTF-8, byte by byte. */
+        if (point < 0x80) {
+            match_byte(name, len, &matched, (uint8_t)point);
+        } else if (point < 0x800) {
+            match_byte(name, len, &matched, (uint8_t)(0xc0 | (point >> 6)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | (point & 0x3f)));
+        } else if (point < 0x10000) {
+            match_byte(name, len, &matched, (uint8_t)(0xe0 | (point >> 12)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | ((point >> 6) & 0x3f)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | (point & 0x3f)));
         } else {
-            if (len + 1 >= room) {
-                return 0;
-            }
-            out[len++] = (char)point;
+            match_byte(name, len, &matched, (uint8_t)(0xf0 | (point >> 18)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | ((point >> 12) & 0x3f)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | ((point >> 6) & 0x3f)));
+            match_byte(name, len, &matched, (uint8_t)(0x80 | (point & 0x3f)));
         }
     }
     if (*at >= end) {
-        return 0;
+        return -1;
     }
     *at += 1;
-    out[len] = '\0';
-    return 1;
+    return matched == len;
 }
 
-/* Whether the host states feature `name`: an element of its `features` array, decoded, equals it exactly. */
+static const uint8_t *skip_space(const uint8_t *at, const uint8_t *end) {
+    while (at < end && (*at == ' ' || *at == '\t' || *at == '\n' || *at == '\r')) {
+        at++;
+    }
+    return at;
+}
+
+/* Whether the host states feature `name`: an element of its `features` array, a JSON array of strings, decodes to
+ * exactly `name`. A malformed array states nothing past the point it breaks. */
 static int has_feature(const opencode_host_api *host, const char *name) {
     if (!has_features(host) || host->features.ptr == NULL) {
         return 0;
     }
     const uint8_t *at = host->features.ptr, *end = host->features.ptr + host->features.len;
-    while (at < end && (*at == ' ' || *at == '\t' || *at == '\n' || *at == '\r')) {
-        at++;
-    }
+    at = skip_space(at, end);
     if (at >= end || *at != '[') {
         return 0;
     }
-    at++;
+    at = skip_space(at + 1, end);
+    if (at < end && *at == ']') {
+        return 0;
+    }
     for (;;) {
-        while (at < end && (*at == ' ' || *at == '\t' || *at == '\n' || *at == '\r' || *at == ',')) {
-            at++;
-        }
         if (at >= end || *at != '"') {
             return 0;
         }
         at++;
-        char feature[128];
-        if (!json_string(&at, end, feature, sizeof feature)) {
+        int is = json_string_is(&at, end, name);
+        if (is != 0) {
+            return is > 0;
+        }
+        at = skip_space(at, end);
+        if (at >= end || *at != ',') {
             return 0;
         }
-        if (strcmp(feature, name) == 0) {
-            return 1;
-        }
+        at = skip_space(at + 1, end);
     }
 }
 
