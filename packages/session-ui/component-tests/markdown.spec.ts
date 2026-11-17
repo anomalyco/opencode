@@ -172,6 +172,18 @@ story("keeps safe presentation and labels on inline SVG, images and links", asyn
   })
 })
 
+story("keeps a formula inside an application link label", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: "[See $x^2$ <b>bold</b>](obsidian://open?file=a)" })
+  }, fixture)
+  const link = page.getByTestId("markdown-fixture").locator("a[data-app-link]")
+  await expect(link).toHaveAttribute("data-app-link", "obsidian://open?file=a")
+  await expect(link.locator(".katex")).toHaveCount(1)
+  await expect(link.locator("b")).toHaveCount(0)
+  await expect(link).toContainText("bold")
+})
+
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)

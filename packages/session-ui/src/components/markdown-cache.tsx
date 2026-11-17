@@ -194,7 +194,6 @@ if (typeof window !== "undefined" && purifier.isSupported) {
         // A card or an entire paragraph is not a link label. Keep its contents, but don't arm that hit area.
         if (node.querySelector(":not(b,i,em,strong,s,span,code)")) return node.removeAttribute("href")
 
-        if (node.childElementCount) node.textContent = node.textContent
         appLinks.set(node, href)
       }
 
@@ -245,6 +244,12 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     // URL parser might trim: the desktop policy checks exactly what the author wrote.
     if (href !== undefined) {
       node.dataset.appLink = href
+
+      // Strip authored inline styling from the label, but retain inert renderer slots; they contain no author HTML.
+      for (const child of Array.from(node.querySelectorAll("*")).reverse()) {
+        if (child.localName === "span" && /^[0-9a-f]{32}$/.test(child.id) && !child.hasChildNodes()) continue
+        child.replaceWith(...child.childNodes)
+      }
 
       if (!node.hasAttribute("href")) {
         node.removeAttribute("tabindex")
