@@ -1,0 +1,12 @@
+{
+  "id": "B8",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "refactor the payment retry logic" },
+    { "kind": "decision", "text": "idempotency keys for all payment retries" },
+    { "kind": "user_correction", "text": "never retry declined payments; only timeouts" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": true,
+  "notes": "requires runtime evidence: consolidation (consolidateAfterRecords=2) overlaps extraction; consolidation must only invalidate snapshot records (T8)."
+}

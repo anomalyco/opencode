@@ -1,0 +1,57 @@
+{
+  "scenario": "B7",
+  "mode": "experimental",
+  "ok": true,
+  "tokens": {
+    "input": 71635,
+    "output": 160,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "peakContextTokens": 7221,
+  "llmCalls": 16,
+  "extractionCalls": 6,
+  "consolidationCalls": 0,
+  "extractionMs": 124,
+  "consolidationMs": 0,
+  "swapLatenciesMs": [
+    2,
+    3
+  ],
+  "contextReductions": [
+    {
+      "before": 21267,
+      "after": 192
+    },
+    {
+      "before": 42421,
+      "after": 201
+    }
+  ],
+  "rollovers": {
+    "ok": 2,
+    "deferred": 0,
+    "failed": 0
+  },
+  "epochs": 2,
+  "sessionIDs": [
+    "ses_e1d093a2effeFUSKwqYfJmqeFM"
+  ],
+  "artifacts": {
+    "records": [
+      {
+        "id": "o1",
+        "type": "objective",
+        "text": "Confirm the service is healthy via the background health check."
+      },
+      {
+        "id": "i1",
+        "type": "open_item",
+        "text": "Background health check 'sleep 3 && echo healthy' running; closes when it reports."
+      }
+    ],
+    "invalidated": [],
+    "renderText": "<rollover_context epoch='1'>\nEarlier conversation history was replaced by this record to save context. Treat it as reliable memory of earlier work in this session. Earlier tool outputs and file contents are no longer visible: re-read a file if you need its exact current contents.\n\n## Open items\n- [i1] Background health check 'sleep 3 && echo healthy' running; closes when it reports. | background process: `sleep 3 && echo healthy` (purpose: service health probe). When its result arrives: close the open item with the probe outcome\n## Recent objectives\n- [o1] Confirm the service is healthy via the background health check.\n## Last assistant reply before this message\nok\n</rollover_context>"
+  }
+}

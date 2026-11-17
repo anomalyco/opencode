@@ -1,0 +1,87 @@
+{
+  "scenario": "B2",
+  "mode": "experimental",
+  "ok": true,
+  "tokens": {
+    "input": 56194,
+    "output": 150,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "peakContextTokens": 6865,
+  "llmCalls": 15,
+  "extractionCalls": 6,
+  "consolidationCalls": 0,
+  "extractionMs": 231,
+  "consolidationMs": 0,
+  "swapLatenciesMs": [
+    4,
+    3,
+    3,
+    3,
+    2
+  ],
+  "contextReductions": [
+    {
+      "before": 14512,
+      "after": 221
+    },
+    {
+      "before": 21353,
+      "after": 245
+    },
+    {
+      "before": 28218,
+      "after": 238
+    },
+    {
+      "before": 35076,
+      "after": 226
+    },
+    {
+      "before": 41922,
+      "after": 227
+    }
+  ],
+  "rollovers": {
+    "ok": 5,
+    "deferred": 0,
+    "failed": 0
+  },
+  "epochs": 5,
+  "sessionIDs": [
+    "ses_e1d09b40bffeaS7QsP1VYnnaQ0"
+  ],
+  "artifacts": {
+    "records": [
+      {
+        "id": "o1",
+        "type": "objective",
+        "text": "Migrate the deploy script from bash to bun (deploy.ts mirrors dist/ via rsync)."
+      },
+      {
+        "id": "d1",
+        "type": "decision",
+        "text": "Keep rsync; drop scp. CI-free local deploy flow."
+      },
+      {
+        "id": "c1",
+        "type": "user_correction",
+        "text": "Never deploy straight to production; staging first, production after staging passes."
+      },
+      {
+        "id": "i1",
+        "type": "open_item",
+        "text": "Staging server credentials still missing."
+      },
+      {
+        "id": "v1",
+        "type": "verification",
+        "text": "Dry-run of bun deploy.ts passed locally."
+      }
+    ],
+    "invalidated": [],
+    "renderText": "<rollover_context epoch='4'>\nEarlier conversation history was replaced by this record to save context. Treat it as reliable memory of earlier work in this session. Earlier tool outputs and file contents are no longer visible: re-read a file if you need its exact current contents.\n\n## Standing rules and user corrections (must follow)\n- [c1] Never deploy straight to production; staging first, production after staging passes.\n## Decisions\n- [d1] Keep rsync; drop scp. CI-free local deploy flow.\n## Verification state\n- [v1] pass: Dry-run of bun deploy.ts passed locally.\n## Recent objectives\n- [o1] Migrate the deploy script from bash to bun (deploy.ts mirrors dist/ via rsync).\n## Last assistant reply before this message\nDone. deploy.ts now uses Bun.$ rsync to mirror dist/ to the server.\n</rollover_context>"
+  }
+}

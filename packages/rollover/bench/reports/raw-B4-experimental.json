@@ -1,0 +1,67 @@
+{
+  "scenario": "B4",
+  "mode": "experimental",
+  "ok": true,
+  "tokens": {
+    "input": 60983,
+    "output": 140,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "peakContextTokens": 6953,
+  "llmCalls": 14,
+  "extractionCalls": 4,
+  "consolidationCalls": 0,
+  "extractionMs": 127,
+  "consolidationMs": 0,
+  "swapLatenciesMs": [
+    3,
+    3,
+    3
+  ],
+  "contextReductions": [
+    {
+      "before": 14508,
+      "after": 240
+    },
+    {
+      "before": 28319,
+      "after": 224
+    },
+    {
+      "before": 42099,
+      "after": 219
+    }
+  ],
+  "rollovers": {
+    "ok": 3,
+    "deferred": 0,
+    "failed": 0
+  },
+  "epochs": 3,
+  "sessionIDs": [
+    "ses_e1d096c06ffewdn4qfIncIumK7"
+  ],
+  "artifacts": {
+    "records": [
+      {
+        "id": "o1",
+        "type": "objective",
+        "text": "Build a fix plan for the db errors seen in server.log (connection-refused, retry-queue-full, pool-timeout)."
+      },
+      {
+        "id": "d1",
+        "type": "decision",
+        "text": "Cap the db pool at 20 and add exponential backoff."
+      },
+      {
+        "id": "v1",
+        "type": "verification",
+        "text": "Log classes confirmed by read+grep: connection-refused, retry-queue-full, pool-timeout."
+      }
+    ],
+    "invalidated": [],
+    "renderText": "<rollover_context epoch='2'>\nEarlier conversation history was replaced by this record to save context. Treat it as reliable memory of earlier work in this session. Earlier tool outputs and file contents are no longer visible: re-read a file if you need its exact current contents.\n\n## Decisions\n- [d1] Cap the db pool at 20 and add exponential backoff.\n## Verification state\n- [v1] pass: Log classes confirmed by read+grep: connection-refused, retry-queue-full, pool-timeout.\n## Recent objectives\n- [o1] Build a fix plan for the db errors seen in server.log (connection-refused, retry-queue-full, pool-timeout).\n## Last assistant reply before this message\nAcknowledged. Decision: pool cap 20, exponential backoff. Log error classes: connection-refused, retry-queue-full, pool-timeout.\n</rollover_context>"
+  }
+}

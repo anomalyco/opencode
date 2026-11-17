@@ -1,0 +1,6 @@
+{
+  "currency": "USD",
+  "unit": "per 1M tokens",
+  "models": {},
+  "note": "Model price table: {\"provider/model\": {\"input\": x, \"output\": y, \"cacheRead\": z, \"cacheWrite\": w}}. Unknown models yield cost = null per spec §7.6 — do not invent prices."
+}

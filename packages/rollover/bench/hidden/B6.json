@@ -1,0 +1,11 @@
+{
+  "id": "B6",
+  "expectsRollover": false,
+  "expectsDeferred": true,
+  "facts": [
+    { "kind": "objective", "text": "migrate the queue worker to cron" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "Extraction fails deterministically (invalid JSON): swaps defer with extraction_lagging; the objective stays in intact history."
+}

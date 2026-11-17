@@ -1,0 +1,6 @@
+Frontend objective: ship the dark-mode toggle this sprint. Acknowledge.
+Backend objective: cut p99 latency below 200ms. Acknowledge.
+Filler for frontend: list two theme approaches.
+Filler for backend: name two caching layers.
+What is the frontend objective?
+What is the backend objective?

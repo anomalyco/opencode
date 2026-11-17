@@ -1,0 +1,15 @@
+{
+  "id": "B2",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "migrate the deploy script from bash to bun" },
+    { "kind": "decision", "text": "keep rsync instead of scp" },
+    { "kind": "user_correction", "text": "never deploy straight to production; staging first" },
+    { "kind": "open_item", "text": "staging server credentials missing" },
+    { "kind": "verification", "text": "dry-run of the new script passed" },
+    { "kind": "files", "text": "deploy.ts" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "Primary retention scenario; all five fact kinds plus a touched file."
+}

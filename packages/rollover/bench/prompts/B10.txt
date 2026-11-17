@@ -1,0 +1,4 @@
+Objective: migrate the storage layer to sqlite. Acknowledge.
+Decision: keep the JSON export path for backups. Acknowledge.
+Filler: compare sqlite WAL vs delete journal modes.
+After the restart: state the storage objective and the backup decision.

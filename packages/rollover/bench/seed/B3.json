@@ -1,0 +1,33 @@
+{
+  "id": "B3",
+  "title": "Repeated rollover across multiple epochs",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Set the long-term objective: rewrite the auth module to use passkeys. Acknowledge.",
+      "script": { "match": "passkeys", "content": "Acknowledged. Objective: rewrite the auth module to use passkeys." }
+    },
+    {
+      "prompt": "Filler work: summarize what a passkey registration flow looks like.",
+      "script": { "match": "registration flow", "content": "Registration: user requests a passkey challenge, WebAuthn creates the credential, server stores the credential id and public key." }
+    },
+    {
+      "prompt": "More filler: compare passkeys against TOTP in three bullets.",
+      "script": { "match": "TOTP", "content": "Passkeys: phishing-resistant, hardware-backed, no shared secret. TOTP: shared secret, simpler, weaker." }
+    },
+    {
+      "prompt": "Even more filler: sketch the data model for storing passkeys.",
+      "script": { "match": "data model", "content": "Tables: users(id), passkeys(user_id, credential_id, public_key, sign_count, created_at)." }
+    },
+    {
+      "prompt": "After all the filler: what is the long-term objective we set at the very beginning?",
+      "script": { "match": "long-term objective", "content": "The long-term objective is to rewrite the auth module to use passkeys." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Rewrite the auth module to use passkeys (WebAuthn credentials, per-user credential table)." }
+  ],
+  "notes": "Objective introduced in epoch 0 must survive several later rollovers."
+}

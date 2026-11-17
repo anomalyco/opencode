@@ -1,0 +1,42 @@
+{
+  "id": "B9",
+  "title": "Multiple sessions",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "multiSession": [
+    { "label": "frontend", "turnIndexes": [0, 2, 4] },
+    { "label": "backend", "turnIndexes": [1, 3, 5] }
+  ],
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Frontend objective: ship the dark-mode toggle this sprint. Acknowledge.",
+      "script": { "match": "dark-mode toggle", "content": "Acknowledged. Frontend objective: ship the dark-mode toggle this sprint." }
+    },
+    {
+      "prompt": "Backend objective: cut p99 latency below 200ms. Acknowledge.",
+      "script": { "match": "p99 latency", "content": "Acknowledged. Backend objective: p99 latency below 200ms." }
+    },
+    {
+      "prompt": "Filler for frontend: list two theme approaches.",
+      "script": { "match": "theme approaches", "content": "Approaches: CSS custom properties, or a compiled theme token map." }
+    },
+    {
+      "prompt": "Filler for backend: name two caching layers.",
+      "script": { "match": "caching layers", "content": "Layers: in-process LRU, and a shared Redis tier." }
+    },
+    {
+      "prompt": "What is the frontend objective?",
+      "script": { "match": "frontend objective", "content": "Ship the dark-mode toggle this sprint." }
+    },
+    {
+      "prompt": "What is the backend objective?",
+      "script": { "match": "backend objective", "content": "Cut p99 latency below 200ms." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Frontend: ship the dark-mode toggle this sprint." },
+    { "type": "objective", "text": "Backend: cut p99 latency below 200ms." }
+  ],
+  "notes": "Two sessions interleaved in one sandbox; state, ledger and epoch must stay fully isolated (T9)."
+}

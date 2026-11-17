@@ -1,0 +1,3 @@
+Remember this objective: migrate the deploy script from bash to bun. Just acknowledge.
+We decided to use GitHub Actions for CI. Acknowledge the decision.
+What is the current objective?

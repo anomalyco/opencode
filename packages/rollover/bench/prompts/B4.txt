@@ -1,0 +1,4 @@
+Read the file ./server.log and tell me the distinct error classes. This objective stays open until we have a fix plan.
+The fix decision: cap the db pool at 20 and add exponential backoff. Acknowledge, then list the error classes you saw in the log.
+Grep the log again and check whether retry-queue-full correlates with connection-refused.
+Summarize the fix plan for the db errors, referencing the log classes.

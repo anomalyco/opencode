@@ -1,0 +1,23 @@
+{
+  "id": "B1",
+  "title": "Short conversation below threshold",
+  "thresholdTokens": 100000,
+  "tailN": 2,
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Remember this objective: migrate the deploy script from bash to bun. Just acknowledge.",
+      "script": { "match": "migrate the deploy script", "content": "Acknowledged. Objective stored: migrate the deploy script from bash to bun." }
+    },
+    {
+      "prompt": "We decided to use GitHub Actions for CI. Acknowledge the decision.",
+      "script": { "match": "GitHub Actions", "content": "Acknowledged. Decision: CI runs on GitHub Actions." }
+    },
+    {
+      "prompt": "What is the current objective?",
+      "script": { "match": "current objective", "content": "The objective is: migrate the deploy script from bash to bun." }
+    }
+  ],
+  "extractionRecords": [],
+  "notes": "Stays below threshold in both modes; no rollover expected."
+}

@@ -1,0 +1,21 @@
+{
+  "sessionID": "ses_e1f8d3f79ffetuoo7yxzVNQwss",
+  "model": {
+    "id": "test-model",
+    "providerID": "mockllm",
+    "variant": "default"
+  },
+  "count": 1,
+  "messages": [
+    {
+      "id": "msg_1e072c23e001gOvKo2V4pHLYFe",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "/p0"
+        }
+      ]
+    }
+  ]
+}

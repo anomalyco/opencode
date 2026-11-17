@@ -1,0 +1,5 @@
+Set the long-term objective: rewrite the auth module to use passkeys. Acknowledge.
+Filler work: summarize what a passkey registration flow looks like.
+More filler: compare passkeys against TOTP in three bullets.
+Even more filler: sketch the data model for storing passkeys.
+After all the filler: what is the long-term objective we set at the very beginning?

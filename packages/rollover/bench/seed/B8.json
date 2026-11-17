@@ -1,0 +1,36 @@
+{
+  "id": "B8",
+  "title": "Extraction and consolidation concurrency",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "consolidateAfterRecords": 2,
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Objective: refactor the payment retry logic. Acknowledge.",
+      "script": { "match": "payment retry", "content": "Acknowledged. Objective: refactor the payment retry logic." }
+    },
+    {
+      "prompt": "Decision: use idempotency keys for all payment retries. Acknowledge.",
+      "script": { "match": "idempotency keys", "content": "Acknowledged. Decision: idempotency keys on all payment retries." }
+    },
+    {
+      "prompt": "Correction: never retry declined payments; only retry timeouts. Acknowledge.",
+      "script": { "match": "declined payments", "content": "Acknowledged. Correction: retry timeouts only, never declines." }
+    },
+    {
+      "prompt": "Filler: compare retry backoff shapes briefly.",
+      "script": { "match": "backoff shapes", "content": "Shapes: fixed, exponential with jitter, deadline-bounded exponential." }
+    },
+    {
+      "prompt": "State the payment decisions and the correction we agreed on.",
+      "script": { "match": "payment decisions", "content": "Idempotency keys on retries; retry timeouts only, never declines." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Refactor the payment retry logic." },
+    { "type": "decision", "text": "Idempotency keys for all payment retries." },
+    { "type": "user_correction", "text": "Never retry declined payments; only retry timeouts." }
+  ],
+  "notes": "requires runtime evidence: consolidation runs mid-stream (consolidateAfterRecords=2); races with extraction are timing-dependent (T8)."
+}

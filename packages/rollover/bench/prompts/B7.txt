@@ -1,0 +1,3 @@
+Open item: start a background health check 'sleep 3 && echo healthy' and keep it as an open item until it finishes. Also our objective is to confirm the service is healthy.
+Filler while the check runs: list two health endpoints worth probing.
+Once the background check reports back, does the service look healthy, and what open item does that close?

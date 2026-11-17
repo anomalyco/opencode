@@ -1,0 +1,10 @@
+{
+  "id": "B5",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "ship the v2 API gateway by Friday" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "Render budget pressure from 120 legacy ledger records; the fresh objective must remain in the render."
+}

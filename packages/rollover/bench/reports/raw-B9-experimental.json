@@ -1,0 +1,68 @@
+{
+  "scenario": "B9",
+  "mode": "experimental",
+  "ok": true,
+  "tokens": {
+    "input": 48747,
+    "output": 140,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "peakContextTokens": 6766,
+  "llmCalls": 14,
+  "extractionCalls": 6,
+  "consolidationCalls": 0,
+  "extractionMs": 123,
+  "consolidationMs": 0,
+  "swapLatenciesMs": [
+    4,
+    3,
+    3,
+    4
+  ],
+  "contextReductions": [
+    {
+      "before": 7186,
+      "after": 147
+    },
+    {
+      "before": 13952,
+      "after": 143
+    },
+    {
+      "before": 7180,
+      "after": 143
+    },
+    {
+      "before": 13941,
+      "after": 143
+    }
+  ],
+  "rollovers": {
+    "ok": 4,
+    "deferred": 0,
+    "failed": 0
+  },
+  "epochs": 2,
+  "sessionIDs": [
+    "ses_e1d090428ffeGwKR8hh83Wb6Vh",
+    "ses_e1d090420ffeB5MpsCHu67np4A"
+  ],
+  "artifacts": {
+    "records": [
+      {
+        "id": "o1",
+        "type": "objective",
+        "text": "Frontend: ship the dark-mode toggle this sprint."
+      },
+      {
+        "id": "o2",
+        "type": "objective",
+        "text": "Backend: cut p99 latency below 200ms."
+      }
+    ],
+    "invalidated": [],
+    "renderText": "<rollover_context epoch='1'>\nEarlier conversation history was replaced by this record to save context. Treat it as reliable memory of earlier work in this session. Earlier tool outputs and file contents are no longer visible: re-read a file if you need its exact current contents.\n\n## Recent objectives\n- [o1] Frontend: ship the dark-mode toggle this sprint.\n- [o2] Backend: cut p99 latency below 200ms.\n## Last assistant reply before this message\nAcknowledged. Frontend objective: ship the dark-mode toggle this sprint.\n</rollover_context>"
+  }
+}

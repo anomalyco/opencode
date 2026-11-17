@@ -1,0 +1,34 @@
+{
+  "scenario": "B6",
+  "mode": "experimental",
+  "ok": true,
+  "tokens": {
+    "input": 28201,
+    "output": 100,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  },
+  "cost": null,
+  "peakContextTokens": 6713,
+  "llmCalls": 10,
+  "extractionCalls": 6,
+  "consolidationCalls": 0,
+  "extractionMs": 0,
+  "consolidationMs": 0,
+  "swapLatenciesMs": [],
+  "contextReductions": [],
+  "rollovers": {
+    "ok": 0,
+    "deferred": 2,
+    "failed": 3
+  },
+  "epochs": 0,
+  "sessionIDs": [
+    "ses_e1d094ef7ffegoe14zPd5ypdFF"
+  ],
+  "artifacts": {
+    "records": [],
+    "invalidated": [],
+    "renderText": null
+  }
+}

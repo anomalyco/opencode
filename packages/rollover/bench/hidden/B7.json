@@ -1,0 +1,12 @@
+{
+  "id": "B7",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "confirm the service is healthy" },
+    { "kind": "open_item", "text": "background health check sleep 3 && echo healthy" },
+    { "kind": "process", "text": "sleep 3 && echo healthy" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": true,
+  "notes": "requires runtime evidence: background wake-up delivery shape is runtime-dependent (T6/P0-6); open_item closure via the ledger process record."
+}

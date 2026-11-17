@@ -1,0 +1,47 @@
+{
+  "id": "B2",
+  "title": "Long conversation with successful rollover",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {
+    "deploy.sh": "#!/bin/bash\nrsync -a ./dist/ server:/var/www/app\n"
+  },
+  "turns": [
+    {
+      "prompt": "Our objective for today: migrate the deploy script from bash to bun. Please read the file ./deploy.sh first so you know the current state.",
+      "script": {
+        "match": "deploy.sh",
+        "content": "",
+        "toolCalls": [{ "id": "call_read_deploy", "name": "read", "args": "{\"path\":\"./deploy.sh\"}" }]
+      }
+    },
+    {
+      "prompt": "Now write the bun version to ./deploy.ts with the same rsync behaviour.",
+      "script": { "match": "deploy.ts", "content": "Done. deploy.ts now uses Bun.$ rsync to mirror dist/ to the server." }
+    },
+    {
+      "prompt": "Important correction: never deploy straight to production; always deploy to staging first. Acknowledge.",
+      "script": { "match": "staging first", "content": "Acknowledged. Corrections stored: staging-first deploy, production only after staging passes." }
+    },
+    {
+      "prompt": "Open item: the staging server credentials are still missing. Keep that open. Also we decided to keep rsync instead of scp. Acknowledge both.",
+      "script": { "match": "rsync instead of scp", "content": "Acknowledged. Open item: staging credentials missing. Decision: keep rsync, drop scp." }
+    },
+    {
+      "prompt": "Verification: run a dry-run of the new script; it passed locally. Then summarize the plan.",
+      "script": { "match": "dry-run", "content": "Dry-run passed. Plan: bun deploy.ts mirrors dist/ to staging; production only after staging verification." }
+    },
+    {
+      "prompt": "Given everything decided so far, what is the deploy plan and which correction must we respect?",
+      "script": { "match": "deploy plan", "content": "Plan: bun deploy.ts -> staging via rsync; production later. Respect the staging-first correction." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Migrate the deploy script from bash to bun (deploy.ts mirrors dist/ via rsync)." },
+    { "type": "decision", "text": "Keep rsync; drop scp. CI-free local deploy flow." },
+    { "type": "user_correction", "text": "Never deploy straight to production; staging first, production after staging passes." },
+    { "type": "open_item", "text": "Staging server credentials still missing." },
+    { "type": "verification", "text": "Dry-run of bun deploy.ts passed locally.", "status": "pass" }
+  ],
+  "notes": "Primary retention scenario: objective/decision/correction/open_item/verification all introduced before the first rollover."
+}

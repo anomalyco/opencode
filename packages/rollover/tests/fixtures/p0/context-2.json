@@ -1,0 +1,51 @@
+{
+  "sessionID": "ses_e1f8da674ffekKlbi738W66nki",
+  "model": {
+    "id": "test-model",
+    "providerID": "mockllm",
+    "variant": "default"
+  },
+  "count": 3,
+  "messages": [
+    {
+      "id": "msg_1e0725b44001LIj8xQpohCnDsi",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Read the file ./sample.txt (variant-B) using your read tool, then say what you saw."
+        }
+      ]
+    },
+    {
+      "id": "msg_1e0725c1f001olIxMgdCqORBoi",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "id": "call_read_1",
+          "name": "read",
+          "input": {
+            "path": "./sample.txt"
+          },
+          "providerExecuted": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "id": "call_read_1",
+          "name": "read",
+          "result": {
+            "type": "text",
+            "value": "Read file ./sample.txt, lines 1-2\n1: alpha line\n2: beta line"
+          },
+          "providerExecuted": false
+        }
+      ]
+    }
+  ]
+}

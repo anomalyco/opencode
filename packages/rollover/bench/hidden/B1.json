@@ -1,0 +1,11 @@
+{
+  "id": "B1",
+  "expectsRollover": false,
+  "facts": [
+    { "kind": "objective", "text": "migrate the deploy script from bash to bun" },
+    { "kind": "decision", "text": "CI runs on GitHub Actions" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "No rollover in either mode; full history stays intact."
+}

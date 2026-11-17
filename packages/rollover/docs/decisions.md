@@ -1,0 +1,14 @@
+# Rollover — Implementation Decisions
+
+Format: decision — reason — date/phase. Only decisions not already fixed by the spec (Part A/B).
+
+- **D1** Test runner is `bun test` (not spec §3's vitest); zod stays as validation lib — repo convention (fork AGENTS.md: bun test per package), avoids dual test infra — 2026-11-15, M1.
+- **D2** Extraction/consolidation run via `ctx.experimental.generate.text({ prompt, model? })` (stateless, tool-less) instead of spec §7.3's child-session lifecycle — 2.x equivalent that removes child-session create/delete/abort and recursion guards; consequence: usage/cost unavailable for extraction calls → metrics tokens/cost stay null (allowed by spec B §4.1); timeout via race — 2026-11-15, M0 (verified P0-7) / M4.
+- **D3** Toast via companion TUI plugin (`./tui` entry) polling `<dataDir>/<sid>/state.json` (1 s) and calling `context.toast.show` — 2.x effect plugins have no server→TUI push; spec contract "toast on every rollover" preserved — 2026-11-15, M0/M5.
+- **D4** Message identity: `message.id` when present, else fingerprint `sha1(role | firstTextPart[0..200] | totalContentChars)` — 2.x `Message.id` is optional; cursors need cross-step stability; P0-4 decides primary branch — 2026-11-15, M0/M3.
+- **D5** Only the `session.context` hook is registered (not generate/compaction/title) — title/compaction/auxiliary requests must see true history; harness compaction untouched (spec §1.7) — 2026-11-15, M0.
+- **D6** Package location `packages/rollover/`, name `@opencode/rollover` — repo conventions (spec Part B §1.2) — 2026-11-15, M1.
+- **D7** Plugin config sources stay file-based (`~/.config/opencode/rollover.json` → sandboxed config dir in tests, `.opencode/rollover.json`, `ROLLOVER_MODE`); `ctx.options` unused — spec §4.1 is explicit — 2026-11-15, M1.
+- **D8** `shouldIgnore` reduces to (a) sessions with parentID (subagents), (b) mode off/metrics_only filtering — D2 removed child sessions — 2026-11-15, M0.
+- **D9** Rollover-injected content detected by text-part prefix `<rollover_context epoch='` — 2.x parts have no `synthetic` flag — 2026-11-15, M0.
+- **D10** `/rollover` command replies via `ctx.session.synthetic` (P0-3 verified `synthetic` in the 2.x `ctx.session` domain), not `session.prompt` — a synthetic message adds no model turn, so a status/settings reply cannot trigger another swap cycle or pollute history — 2026-11-16, M6.

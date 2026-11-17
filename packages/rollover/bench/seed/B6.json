@@ -1,0 +1,24 @@
+{
+  "id": "B6",
+  "title": "Extraction failure and retry",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {},
+  "extractionOverride": "INVALID_JSON",
+  "turns": [
+    {
+      "prompt": "Objective: migrate the queue worker to cron. Acknowledge.",
+      "script": { "match": "queue worker", "content": "Acknowledged. Objective: migrate the queue worker to cron." }
+    },
+    {
+      "prompt": "Filler: explain cron expression fields briefly.",
+      "script": { "match": "cron expression", "content": "Fields: minute hour day-of-month month day-of-week." }
+    },
+    {
+      "prompt": "What is the objective about the queue worker?",
+      "script": { "match": "objective about the queue", "content": "Objective: migrate the queue worker to cron." }
+    }
+  ],
+  "extractionRecords": [],
+  "notes": "Extraction model returns invalid JSON every time; swaps must defer (extraction_lagging) and the conversation must stay intact. Rollover count 0, deferred > 0."
+}

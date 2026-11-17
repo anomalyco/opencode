@@ -1,0 +1,11 @@
+{
+  "id": "B9",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "frontend: ship the dark-mode toggle this sprint" },
+    { "kind": "objective", "text": "backend: cut p99 latency below 200ms" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "Two interleaved sessions; each must retain only its own objective (T9 isolation)."
+}

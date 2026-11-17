@@ -1,0 +1,11 @@
+{
+  "id": "B10",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "migrate the storage layer to sqlite" },
+    { "kind": "decision", "text": "keep the JSON export path for backups" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": true,
+  "notes": "requires runtime evidence: serve restart mid-scenario exercises T5 persistence/replay; epoch must not duplicate."
+}

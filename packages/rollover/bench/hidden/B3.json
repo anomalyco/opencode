@@ -1,0 +1,10 @@
+{
+  "id": "B3",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "rewrite the auth module to use passkeys" }
+  ],
+  "mustNotAppear": [],
+  "requiresRuntimeEvidence": false,
+  "notes": "Epoch-0 objective must survive repeated rollovers; asks after multiple swaps."
+}

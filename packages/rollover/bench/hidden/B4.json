@@ -1,0 +1,12 @@
+{
+  "id": "B4",
+  "expectsRollover": true,
+  "facts": [
+    { "kind": "objective", "text": "fix plan for the db errors in server.log" },
+    { "kind": "decision", "text": "cap the db pool at 20 and add exponential backoff" },
+    { "kind": "verification", "text": "error classes connection-refused, retry-queue-full, pool-timeout" }
+  ],
+  "mustNotAppear": ["x1200 lines of stack traces"],
+  "requiresRuntimeEvidence": false,
+  "notes": "Tool-output-heavy: raw log bulk must NOT survive into the rendered context; distilled classes must."
+}

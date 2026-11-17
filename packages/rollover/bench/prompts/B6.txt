@@ -1,0 +1,3 @@
+Objective: migrate the queue worker to cron. Acknowledge.
+Filler: explain cron expression fields briefly.
+What is the objective about the queue worker?

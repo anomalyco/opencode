@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "context-rollover",
+  "version": "0.1.2",
+  "description": "Ledger-based context rollover for OpenCode sessions",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omeryasirkucuk/context-rollover.git"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "context",
+    "context-management",
+    "memory",
+    "ledger",
+    "ai",
+    "agent"
+  ],
+  "files": [
+    "src",
+    "gui-experimental.cjs",
+    "README.md",
+    "docs/spec.md"
+  ],
+  "exports": {
+    ".": "./src/plugin-entry.ts",
+    "./tui": "./src/tui-entry.ts",
+    "./gui-experimental": "./gui-experimental.cjs"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun check --no-script",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": "^2.3.0",
+    "effect": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3"
+  }
+}

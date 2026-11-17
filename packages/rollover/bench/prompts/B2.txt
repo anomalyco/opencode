@@ -1,0 +1,6 @@
+Our objective for today: migrate the deploy script from bash to bun. Please read the file ./deploy.sh first so you know the current state.
+Now write the bun version to ./deploy.ts with the same rsync behaviour.
+Important correction: never deploy straight to production; always deploy to staging first. Acknowledge.
+Open item: the staging server credentials are still missing. Keep that open. Also we decided to keep rsync instead of scp. Acknowledge both.
+Verification: run a dry-run of the new script; it passed locally. Then summarize the plan.
+Given everything decided so far, what is the deploy plan and which correction must we respect?

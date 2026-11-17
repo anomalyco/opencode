@@ -1,0 +1,34 @@
+{
+  "id": "B5",
+  "title": "Large ledger with render budget constraints",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {},
+  "initialLedgerSpec": {
+    "count": 120,
+    "types": ["objective", "decision", "user_correction", "open_item", "verification"],
+    "textPrefix": "legacy record"
+  },
+  "turns": [
+    {
+      "prompt": "Current objective: ship the v2 API gateway by Friday. Acknowledge.",
+      "script": { "match": "v2 API gateway", "content": "Acknowledged. Objective: ship the v2 API gateway by Friday." }
+    },
+    {
+      "prompt": "Filler: list three gateway rate-limit strategies.",
+      "script": { "match": "rate-limit", "content": "Strategies: token bucket, sliding window, fixed window with jitter." }
+    },
+    {
+      "prompt": "Filler: compare the strategies for cold-start latency.",
+      "script": { "match": "cold-start", "content": "Token bucket: instant headroom. Sliding window: accurate but heavier. Fixed window: cheapest, bursty at edges." }
+    },
+    {
+      "prompt": "Despite the huge legacy ledger: what ship date and product are in the current objective?",
+      "script": { "match": "ship date", "content": "Ship the v2 API gateway by Friday." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Ship the v2 API gateway by Friday." }
+  ],
+  "notes": "120 pre-seeded ledger records stress the render budget; the fresh objective must survive packing alongside legacy records."
+}

@@ -1,0 +1,41 @@
+{
+  "id": "B4",
+  "title": "Large tool-output-heavy conversation",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {
+    "server.log": "ERROR db connection refused (x1200 lines of stack traces)\nWARN retry queue full\nERROR timeout waiting for pool\n"
+  },
+  "turns": [
+    {
+      "prompt": "Read the file ./server.log and tell me the distinct error classes. This objective stays open until we have a fix plan.",
+      "script": {
+        "match": "server.log",
+        "content": "",
+        "toolCalls": [{ "id": "call_read_log", "name": "read", "args": "{\"path\":\"./server.log\"}" }]
+      }
+    },
+    {
+      "prompt": "The fix decision: cap the db pool at 20 and add exponential backoff. Acknowledge, then list the error classes you saw in the log.",
+      "script": { "match": "exponential backoff", "content": "Acknowledged. Decision: pool cap 20, exponential backoff. Log error classes: connection-refused, retry-queue-full, pool-timeout." }
+    },
+    {
+      "prompt": "Grep the log again and check whether retry-queue-full correlates with connection-refused.",
+      "script": {
+        "match": "correlates",
+        "content": "",
+        "toolCalls": [{ "id": "call_grep_log", "name": "grep", "args": "{\"pattern\":\"retry-queue-full\",\"path\":\"./server.log\"}" }]
+      }
+    },
+    {
+      "prompt": "Summarize the fix plan for the db errors, referencing the log classes.",
+      "script": { "match": "fix plan", "content": "Fix plan: pool cap 20 + exponential backoff addresses connection-refused and pool-timeout; retry-queue-full should disappear once the pool is capped." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Build a fix plan for the db errors seen in server.log (connection-refused, retry-queue-full, pool-timeout)." },
+    { "type": "decision", "text": "Cap the db pool at 20 and add exponential backoff." },
+    { "type": "verification", "text": "Log classes confirmed by read+grep: connection-refused, retry-queue-full, pool-timeout.", "status": "pass" }
+  ],
+  "notes": "Heavy tool output inflates context between swaps; ledger keeps the distilled facts."
+}

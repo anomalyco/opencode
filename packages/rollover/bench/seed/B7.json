@@ -1,0 +1,30 @@
+{
+  "id": "B7",
+  "title": "Background process completion",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Open item: start a background health check 'sleep 3 && echo healthy' and keep it as an open item until it finishes. Also our objective is to confirm the service is healthy.",
+      "script": {
+        "match": "background health check",
+        "content": "Started the background health check. Open item: service health unconfirmed until the check completes. Objective: confirm service health.",
+        "toolCalls": [{ "id": "call_bg_health", "name": "shell", "args": "{\"command\":\"sleep 3 && echo healthy\",\"background\":true}" }]
+      }
+    },
+    {
+      "prompt": "Filler while the check runs: list two health endpoints worth probing.",
+      "script": { "match": "health endpoints", "content": "Endpoints: /healthz for liveness, /readyz for readiness." }
+    },
+    {
+      "prompt": "Once the background check reports back, does the service look healthy, and what open item does that close?",
+      "script": { "match": "service look healthy", "content": "The check output decides health; a completed healthy probe closes the open service-health item." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Confirm the service is healthy via the background health check." },
+    { "type": "open_item", "text": "Background health check 'sleep 3 && echo healthy' running; closes when it reports.", "process": { "command": "sleep 3 && echo healthy", "purpose": "service health probe", "onResult": "close the open item with the probe outcome" } }
+  ],
+  "notes": "requires runtime evidence: wake-up delivery shape depends on the runtime (T6/P0-6)."
+}

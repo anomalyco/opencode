@@ -1,0 +1,5 @@
+Objective: refactor the payment retry logic. Acknowledge.
+Decision: use idempotency keys for all payment retries. Acknowledge.
+Correction: never retry declined payments; only retry timeouts. Acknowledge.
+Filler: compare retry backoff shapes briefly.
+State the payment decisions and the correction we agreed on.

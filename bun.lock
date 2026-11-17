@@ -606,6 +606,20 @@
         "typescript": "catalog:",
       },
     },
+    "packages/rollover": {
+      "name": "context-rollover",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.3",
+      },
+      "peerDependencies": {
+        "@opencode/plugin": "^2.3.0",
+        "effect": "^4.1.0",
+      },
+    },
     "packages/schema": {
       "name": "@opencode/schema",
       "version": "2.3.0",
@@ -2792,6 +2806,8 @@
     "content-disposition": ["content-disposition@2.0.1", "", {}, "sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog=="],
 
     "content-type": ["content-type@1.0.5", "", {}, "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA=="],
+
+    "context-rollover": ["context-rollover@workspace:packages/rollover"],
 
     "convert-source-map": ["convert-source-map@2.0.0", "", {}, "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="],
 

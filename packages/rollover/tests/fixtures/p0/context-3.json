@@ -1,0 +1,93 @@
+{
+  "sessionID": "ses_e1f8ef6bbffe3lH2IfCYntEEG1",
+  "model": {
+    "id": "test-model",
+    "providerID": "mockllm",
+    "variant": "default"
+  },
+  "count": 5,
+  "messages": [
+    {
+      "id": "msg_1e0710b3b0014wrsOHo6p3zS6U",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Start a shell command 'sleep 3 && echo done' in the background, then tell me it started."
+        }
+      ]
+    },
+    {
+      "id": "msg_1e0710bd4001z9eX2SIz4cGQ66",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Starting the background command now."
+        },
+        {
+          "type": "tool-call",
+          "id": "call_shell_bg",
+          "name": "shell",
+          "input": {
+            "command": "sleep 3 && echo done",
+            "background": true
+          },
+          "providerExecuted": false
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "id": "call_shell_bg",
+          "name": "shell",
+          "result": {
+            "type": "content",
+            "value": [
+              {
+                "type": "text",
+                "text": "Command moved to the background (shell ID: sh_1e0710c1c001KaPrpYY4Trhjgb).\nPID: 66538\nOutput is streaming to: /tmp/opencode-rollover-p0-XKK9/data/opencode/shell/e03040aa32c259b89d62377e40b01f879a61d5bc/sh_1e0710c1c001KaPrpYY4Trhjgb.out"
+              },
+              {
+                "type": "text",
+                "text": "You will be notified automatically when the command finishes. The notification will include the command's output. Unless the user explicitly asks otherwise, DO NOT poll for completion, even if you need the final result to continue. Repeatedly sleeping and reading or searching the output file is polling, not useful work. You may read the current output if it lets you do useful work now, but do not repeatedly check it while waiting for the command to finish. Keep working on anything that does not depend on the result. If you have nothing else to do, end your response; you will be resumed automatically when the command finishes."
+              }
+            ]
+          },
+          "providerExecuted": false
+        }
+      ]
+    },
+    {
+      "id": "msg_1e0710e51001yIVtBbDrjd4DOw",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "ok"
+        }
+      ]
+    },
+    {
+      "id": "msg_1e0710e42001Fesm60BgTJeuTD",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<shell id=\"sh_1e0710c1c001KaPrpYY4Trhjgb\" state=\"completed\" command=\"sleep 3 && echo done\">\ndone\n\n</shell>"
+        }
+      ],
+      "metadata": {
+        "source": "shell",
+        "shellID": "sh_1e0710c1c001KaPrpYY4Trhjgb",
+        "jobID": "sh_1e0710c1c001KaPrpYY4Trhjgb",
+        "state": "completed",
+        "truncated": false,
+        "exit": 0
+      }
+    }
+  ]
+}

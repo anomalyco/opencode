@@ -1,0 +1,4 @@
+Current objective: ship the v2 API gateway by Friday. Acknowledge.
+Filler: list three gateway rate-limit strategies.
+Filler: compare the strategies for cold-start latency.
+Despite the huge legacy ledger: what ship date and product are in the current objective?

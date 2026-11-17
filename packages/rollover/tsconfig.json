@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig.json",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "noUnusedLocals": true,
+    "noUncheckedIndexedAccess": false,
+    "lib": ["ESNext"],
+    "strict": true
+  },
+  "include": ["src", "tests", "scripts", "spike", "bench"]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "B10",
+  "title": "Runtime restart and state recovery",
+  "thresholdTokens": 1000,
+  "tailN": 0,
+  "restartAfterTurn": 2,
+  "files": {},
+  "turns": [
+    {
+      "prompt": "Objective: migrate the storage layer to sqlite. Acknowledge.",
+      "script": { "match": "storage layer", "content": "Acknowledged. Objective: migrate the storage layer to sqlite." }
+    },
+    {
+      "prompt": "Decision: keep the JSON export path for backups. Acknowledge.",
+      "script": { "match": "JSON export", "content": "Acknowledged. Decision: JSON export stays for backups." }
+    },
+    {
+      "prompt": "Filler: compare sqlite WAL vs delete journal modes.",
+      "script": { "match": "WAL", "content": "WAL: better concurrent reads, larger files. Delete: simpler, slower under concurrency." }
+    },
+    {
+      "prompt": "After the restart: state the storage objective and the backup decision.",
+      "script": { "match": "storage objective", "content": "Objective: sqlite migration. Backup decision: keep the JSON export path." }
+    }
+  ],
+  "extractionRecords": [
+    { "type": "objective", "text": "Migrate the storage layer to sqlite." },
+    { "type": "decision", "text": "Keep the JSON export path for backups." }
+  ],
+  "notes": "requires runtime evidence: serve restart between turn 2 and 3 exercises T5 persistence/replay."
+}
