@@ -1118,6 +1118,8 @@ fn the_image_preview_ends_with_the_viewer() {
     for abi in [false, true] {
         for replaced in [false, true] {
             let h = image_route(png.clone(), abi);
+            // The image is read after the route draws: "Loading image…" until it comes.
+            h.wait_for("Click to enlarge");
             let (x, y) = h.find("Click to enlarge");
             h.app.click(x, y);
             h.wait("the preview did not open", || h.tui.dialogs.key() == preview);
