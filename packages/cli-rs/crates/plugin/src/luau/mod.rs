@@ -31,6 +31,9 @@ pub const FLAG: &str = "OPENCODE_PLUGIN_LUAU";
 /// A Luau plugin's manifest file.
 pub const MANIFEST: &str = "plugin.toml";
 
+/// The configuration file of Luau's require-by-string (aliases), which a plugin's `require` reads inside the plugin.
+pub const LUAURC: &str = ".luaurc";
+
 /// The most a plugin's sources may hold.
 pub const SOURCES: u64 = 4 << 20;
 
@@ -79,15 +82,16 @@ pub fn is_plugin(dir: &Path) -> bool {
     dir.join(MANIFEST).is_file()
 }
 
-/// A Luau plugin's files, read once: `plugin.toml` and every `.luau` file, by their path in the plugin with `/`. The
-/// VM loads from these bytes, never from the disk.
+/// A Luau plugin's files, read once: `plugin.toml`, every `.luau` file and every `.luaurc`, by their path in the plugin
+/// with `/`. The VM loads from these bytes, never from the disk.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Sources {
     files: BTreeMap<String, Vec<u8>>,
 }
 
 impl Sources {
-    /// Reads the plugin in `dir`: at most [`SOURCES`] bytes, [`DEPTH`] directories deep. Hidden entries are skipped. A
+    /// Reads the plugin in `dir`: at most [`SOURCES`] bytes, [`DEPTH`] directories deep. Hidden entries but
+    /// [`LUAURC`] are skipped. A
     /// link is followed only to a file or directory inside `dir`: one out of it is refused, so what loads is the
     /// plugin's own (`dir` itself may be a link).
     pub fn read(dir: &Path) -> Result<Self, String> {
@@ -141,7 +145,7 @@ fn read(
     for entry in std::fs::read_dir(dir).map_err(error)? {
         let entry = entry.map_err(error)?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        if name.starts_with('.') && name != LUAURC {
             continue;
         }
         let path = format!("{relative}{name}");
@@ -158,7 +162,7 @@ fn read(
             read(root, &real, &format!("{path}/"), files, total, depth + 1)?;
             continue;
         }
-        if !(name.ends_with(".luau") || path == MANIFEST) {
+        if !(name.ends_with(".luau") || name == LUAURC || path == MANIFEST) {
             continue;
         }
         *total += metadata.len();

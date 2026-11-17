@@ -1,12 +1,14 @@
-//! One Luau VM a plugin activation: the sources compiled once a build, the sandbox, `require` held to the plugin's own
-//! files, the budget's interrupt and the memory cap (`steps/luau-spike.md` 1.3, 1.4).
+//! One Luau VM a plugin activation: the sources compiled once a build, the sandbox, `require` by Luau's
+//! require-by-string rules over the plugin's own files, the budget's interrupt and the memory cap
+//! (`steps/luau-spike.md` 1.3, 1.4; `luau/steps/better-audit.md` 2).
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use mlua::chunk::ChunkMode;
+use mlua::luau::{NavigateError, Require};
 use mlua::{Function, Lua, Table, Value, VmState};
 
 use super::Sources;
@@ -17,9 +19,13 @@ pub const MEMORY: usize = 32 << 20;
 /// How many interrupts pass between two reads of the clock, as rune-luau's watchdog does.
 const TICKS: u32 = 256;
 
-/// The modules of a build, compiled once: bytecode by module name (`init`, `lib/util`), and the entry's name.
+/// The modules of a build, compiled once: bytecode by module name (`init`, `lib/util`, `x/init`), the plugin's
+/// `.luaurc` files by their directory (`""` is the plugin's root), every directory that holds either, and the entry's
+/// name.
 pub(crate) struct Compiled {
     modules: BTreeMap<String, Vec<u8>>,
+    configs: BTreeMap<String, Vec<u8>>,
+    dirs: BTreeSet<String>,
     entry: String,
 }
 
@@ -27,25 +33,47 @@ impl Compiled {
     /// Compiles every `.luau` file of `sources`; a syntax error is the build's, before any setup.
     pub(crate) fn new(sources: &Sources, entry: &str) -> Result<Self, String> {
         let compiler = mlua::chunk::Compiler::new().set_optimization_level(1).set_debug_level(1);
-        let mut modules = BTreeMap::new();
+        let (mut modules, mut configs) = (BTreeMap::new(), BTreeMap::new());
         for (path, bytes) in sources.files() {
+            if let Some(dir) = path.strip_suffix(super::LUAURC).filter(|dir| dir.is_empty() || dir.ends_with('/')) {
+                configs.insert(dir.trim_end_matches('/').to_owned(), bytes.clone());
+                continue;
+            }
             let Some(name) = path.strip_suffix(".luau") else { continue };
             let code = compiler.compile(bytes).map_err(|error| format!("{path}: {error}"))?;
             modules.insert(name.to_owned(), code);
         }
+        let dirs = modules
+            .keys()
+            .filter_map(|name| name.rsplit_once('/').map(|(dir, _)| dir))
+            .chain(configs.keys().map(String::as_str))
+            .flat_map(|dir| dir.match_indices('/').map(|(at, _)| &dir[..at]).chain([dir]))
+            .chain([""])
+            .map(str::to_owned)
+            .collect();
         let entry = entry.strip_suffix(".luau").unwrap_or(entry).to_owned();
         if !modules.contains_key(&entry) {
             return Err(format!("plugin.toml names the entry {entry}.luau, which the plugin does not have"));
         }
-        Ok(Self { modules, entry })
+        Ok(Self { modules, configs, dirs, entry })
     }
 
-    /// The module `name` resolves to: `name` itself, or `name/init`.
-    fn module(&self, name: &str) -> Option<(&str, &[u8])> {
-        let init = format!("{name}/init");
-        [name, init.as_str()]
+    /// The module at `path` (`""` is the plugin's root), as Luau's require-by-string finds one: `path.luau` or
+    /// `path/init.luau`, and both is an ambiguity; `None` for a directory with neither. A path whose last part is
+    /// `init` names no module of its own: its directory is the module.
+    fn resolve(&self, path: &str) -> Result<Option<&str>, NavigateError> {
+        let init = if path.is_empty() { "init".to_owned() } else { format!("{path}/init") };
+        let file = (!path.is_empty() && path.rsplit('/').next() != Some("init")).then_some(path);
+        let mut found = [file, Some(init.as_str())]
             .into_iter()
-            .find_map(|key| self.modules.get_key_value(key).map(|(key, code)| (key.as_str(), code.as_slice())))
+            .flatten()
+            .filter_map(|key| self.modules.get_key_value(key).map(|(key, _)| key.as_str()));
+        match (found.next(), found.next()) {
+            (Some(_), Some(_)) => Err(NavigateError::Ambiguous),
+            (Some(key), None) => Ok(Some(key)),
+            _ if self.dirs.contains(path) => Ok(None),
+            _ => Err(NavigateError::NotFound),
+        }
     }
 }
 
@@ -98,22 +126,13 @@ impl Budget {
 pub(crate) struct Vm {
     pub(crate) lua: Lua,
     budget: Rc<Budget>,
-    modules: Rc<Modules>,
-}
-
-/// The plugin's modules as `require` loads them: each once, by the module it resolves to, so `./x`, `@self/x` and
-/// `./x/init` are one module, and the entry is `init` to the others.
-struct Modules {
-    compiled: Rc<Compiled>,
-    /// What each module returned, by its key in [`Compiled`].
-    loaded: Table,
     /// The modules being loaded, outermost first: one asked for again is a cycle.
-    loading: RefCell<Vec<String>>,
+    loading: Rc<RefCell<Vec<String>>>,
 }
 
 impl Vm {
-    /// A new VM for `compiled`, with the host's module `plugin` as `@opencode/plugin`, CPU time limited to `limit` a call
-    /// and the heap to `memory`. The globals are frozen; nothing of the plugin has run yet.
+    /// A new VM for `compiled`, CPU time limited to `limit` a call and the heap to `memory`. The globals are frozen
+    /// once it starts; nothing of the plugin has run yet.
     pub(crate) fn new(compiled: &Rc<Compiled>, limit: Duration, memory: usize) -> mlua::Result<Self> {
         let lua = Lua::new();
         lua.set_memory_limit(memory)?;
@@ -123,20 +142,30 @@ impl Vm {
         lua.set_interrupt(move |_| interrupt.interrupt());
         // What a binding reaches to fail the call ([`refuse`]).
         lua.set_app_data(budget.clone());
-        let modules =
-            Rc::new(Modules { compiled: compiled.clone(), loaded: lua.create_table()?, loading: RefCell::default() });
+        let loading = Rc::default();
+        let files =
+            Files { compiled: compiled.clone(), loading: Rc::clone(&loading), requirer: String::new(), at: None };
         let globals = lua.globals();
         // Luau has no `io`; `os` reads clocks. What mlua adds that reaches beyond the plugin goes: the file system's
         // `require`, and `loadstring`, which would compile code the sandbox never saw.
         globals.raw_set("loadstring", Value::Nil)?;
-        globals.raw_set("require", require(&lua, &modules)?)?;
-        Ok(Self { lua, budget, modules })
+        globals.raw_set("require", lua.create_require_function(files)?)?;
+        Ok(Self { lua, budget, loading })
     }
 
-    /// Runs the entry module and returns what it returned. Freezes the globals first (`Lua::sandbox`).
+    /// Runs the entry module and returns what it returned. Freezes the globals first (`Lua::sandbox`). The entry is
+    /// `require`'s too: a module that requires it while it runs is a cycle, and once it ran it is what it returned.
     pub(crate) fn start(&self, compiled: &Compiled) -> Result<Value, String> {
         self.lua.sandbox(true).map_err(|error| error.to_string())?;
-        self.call(|| module(&self.lua, &self.modules, &compiled.entry))
+        let entry = &compiled.entry;
+        let loader = load(&self.lua, compiled, &self.loading, entry).map_err(|error| error.to_string())?;
+        let module = self.call(|| loader.call::<Value>(()))?;
+        // mlua's `require` keeps what each module returned in this registry table, by its cache key.
+        let cached = self.lua.named_registry_value::<Option<Table>>("__MLUA_LOADER_CACHE");
+        if let Ok(Some(cached)) = cached {
+            cached.raw_set(entry.as_str(), &module).map_err(|error| error.to_string())?;
+        }
+        Ok(module)
     }
 
     /// Calls into the VM within the budget: the outermost call arms it. A Luau error, the budget's interrupt (also
@@ -174,51 +203,112 @@ pub(crate) fn refuse(lua: &Lua, reason: &str) {
     }
 }
 
-/// The plugin's `require`: `@opencode/plugin`, which the host registers, or a module of the plugin by `./name` or
-/// `@self/name` from its root. Anything else is an error; nothing is read from the disk after load.
-fn require(lua: &Lua, modules: &Rc<Modules>) -> mlua::Result<Function> {
-    let modules = modules.clone();
-    lua.create_function(move |lua, name: String| {
-        // What the host registered (`Lua::register_module` keeps the names in lower case).
-        let registered: Option<Table> = lua.named_registry_value("_REGISTEREDMODULES")?;
-        let module = registered.map(|known| known.raw_get::<Option<Value>>(name.to_ascii_lowercase())).transpose()?;
-        if let Some(module) = module.flatten() {
-            return Ok(module);
-        }
-        let Some(path) = name.strip_prefix("./").or_else(|| name.strip_prefix("@self/")) else {
-            return Err(mlua::Error::runtime(format!(
-                "require({name:?}): a plugin requires @opencode/plugin, or its own modules as ./name or @self/name"
-            )));
-        };
-        if path.split('/').any(|part| part.is_empty() || part == "." || part == "..") {
-            return Err(mlua::Error::runtime(format!("require({name:?}): no module outside the plugin")));
-        }
-        self::module(lua, &modules, path)
-    })
+/// The plugin's files as Luau's require-by-string sees them (mlua's [`Require`]), from the bytes read at load: the
+/// disk is never read again. `./x` is beside the requiring module and `@self/x` inside it, so in `init.luau`, which
+/// is the plugin's root module, `./x` is outside the plugin and `@self/x` is `x.luau`. Nothing above the root is
+/// reached, only a `.luaurc` inside the plugin is read, and `@opencode` is always the host's, whatever a `.luaurc`
+/// says: `@opencode/plugin` is registered (`Lua::register_module`), and anything else under it is not found.
+struct Files {
+    compiled: Rc<Compiled>,
+    loading: Rc<RefCell<Vec<String>>>,
+    /// The requiring module, by its path in the plugin: `""` is the root, the module of `init.luau`.
+    requirer: String,
+    /// Where navigation is: a path in the plugin, or `None` for the host's `@opencode`, which holds no file.
+    at: Option<String>,
 }
 
-/// What module `name` returned, loaded at its first `require`: `true` for a module that returned nothing. One asked for
-/// while it loads is a cycle, an error naming it.
-fn module(lua: &Lua, modules: &Modules, name: &str) -> mlua::Result<Value> {
-    let (key, code) = modules
-        .compiled
-        .module(name)
-        .ok_or_else(|| mlua::Error::runtime(format!("the plugin has no module {name}.luau")))?;
-    if let Some(module) = modules.loaded.raw_get::<Option<Value>>(key)? {
-        return Ok(module);
+impl Files {
+    fn module(&self) -> Option<&str> {
+        self.at.as_deref().and_then(|at| self.compiled.resolve(at).ok().flatten())
     }
-    if modules.loading.borrow().iter().any(|loading| loading == key) {
-        let chain = modules.loading.borrow().join(" -> ");
-        return Err(mlua::Error::runtime(format!("require cycle: {chain} -> {key}")));
+}
+
+impl Require for Files {
+    fn is_require_allowed(&self, chunk_name: &str) -> bool {
+        chunk_name.starts_with('@')
     }
-    let function = lua.load(code).set_name(format!("@{key}.luau")).set_mode(ChunkMode::Binary).into_function()?;
-    modules.loading.borrow_mut().push(key.to_owned());
-    let module = function.call::<Value>(());
-    modules.loading.borrow_mut().pop();
-    let module = match module? {
-        Value::Nil => Value::Boolean(true),
-        module => module,
-    };
-    modules.loaded.raw_set(key, &module)?;
-    Ok(module)
+
+    fn reset(&mut self, chunk_name: &str) -> Result<(), NavigateError> {
+        let name = chunk_name.strip_prefix('@').and_then(|name| name.strip_suffix(".luau"));
+        let name = name.filter(|name| self.compiled.modules.contains_key(*name)).ok_or(NavigateError::NotFound)?;
+        let path = if name == "init" { "" } else { name.strip_suffix("/init").unwrap_or(name) };
+        self.requirer = path.to_owned();
+        self.at = Some(path.to_owned());
+        Ok(())
+    }
+
+    /// An alias whose path is not relative to its `.luaurc` leaves the plugin.
+    fn jump_to_alias(&mut self, _path: &str) -> Result<(), NavigateError> {
+        Err(NavigateError::NotFound)
+    }
+
+    fn to_alias_override(&mut self, alias: &str) -> Result<(), NavigateError> {
+        self.at = match alias {
+            "opencode" => None,
+            // Luau 747's rule already: `@self` is the requiring module, which no `.luaurc` overrides.
+            "self" => Some(self.requirer.clone()),
+            _ => return Err(NavigateError::NotFound),
+        };
+        Ok(())
+    }
+
+    fn to_parent(&mut self) -> Result<(), NavigateError> {
+        let parent = match self.at.as_deref() {
+            None | Some("") => return Err(NavigateError::NotFound),
+            Some(at) => at.rsplit_once('/').map_or("", |(parent, _)| parent).to_owned(),
+        };
+        self.compiled.resolve(&parent)?;
+        self.at = Some(parent);
+        Ok(())
+    }
+
+    fn to_child(&mut self, name: &str) -> Result<(), NavigateError> {
+        let child = match self.at.as_deref() {
+            None => return Err(NavigateError::NotFound),
+            Some("") => name.to_owned(),
+            Some(at) => format!("{at}/{name}"),
+        };
+        self.compiled.resolve(&child)?;
+        self.at = Some(child);
+        Ok(())
+    }
+
+    fn has_module(&self) -> bool {
+        self.module().is_some()
+    }
+
+    fn cache_key(&self) -> String {
+        self.module().unwrap_or_default().to_owned()
+    }
+
+    fn has_config(&self) -> bool {
+        self.at.as_ref().is_some_and(|at| self.compiled.configs.contains_key(at))
+    }
+
+    fn config(&self) -> std::io::Result<Vec<u8>> {
+        Ok(self.at.as_ref().and_then(|at| self.compiled.configs.get(at)).cloned().unwrap_or_default())
+    }
+
+    fn loader(&self, lua: &Lua) -> mlua::Result<Function> {
+        load(lua, &self.compiled, &self.loading, self.module().unwrap_or_default())
+    }
+}
+
+/// What runs module `key` of `compiled`: its bytecode, named `@<key>.luau`, within the record of the modules being
+/// loaded. A module asked for while it loads is a cycle, an error naming it. The check is the loader's own, because
+/// Luau's `require` keeps the loader by its cache key and calls it again until mlua's cache holds the module.
+fn load(lua: &Lua, compiled: &Compiled, loading: &Rc<RefCell<Vec<String>>>, key: &str) -> mlua::Result<Function> {
+    let code = compiled.modules.get(key).ok_or_else(|| mlua::Error::runtime(format!("no module {key}.luau")))?;
+    let chunk = lua.load(code).set_name(format!("@{key}.luau")).set_mode(ChunkMode::Binary).into_function()?;
+    let (loading, key) = (loading.clone(), key.to_owned());
+    lua.create_function(move |_, ()| {
+        if loading.borrow().contains(&key) {
+            let chain = loading.borrow().join(" -> ");
+            return Err(mlua::Error::runtime(format!("require cycle: {chain} -> {key}")));
+        }
+        loading.borrow_mut().push(key.clone());
+        let module = chunk.call::<Value>(());
+        loading.borrow_mut().pop();
+        module
+    })
 }
