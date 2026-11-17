@@ -7,7 +7,7 @@
 // created, so the plugin's boundary reports it as TS reports a crash in a render.
 import { createRenderer } from "solid-js/universal"
 import { catchError, createComponent, createContext, createMemo, createRenderEffect, onCleanup, useContext } from "solid-js"
-import { createTextAttributes, RGBA, TextAttributes } from "./core"
+import { createTextAttributes, isStyledText, RGBA, TextAttributes } from "./core"
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
 const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", "spinner", ...SPANS])
@@ -598,8 +598,15 @@ function textSpans(at: VNode, reading: Reading) {
     for (const child of node.children) walk(child, node === at ? style : inner(node, style))
   }
   walk(at, { attributes: base, bg: at.props.bg })
-  if (at.props.content !== undefined && at.children.length === 0)
-    spans.push(span(String(at.props.content), { attributes: base, bg: at.props.bg }))
+  const content = at.props.content
+  if (content === undefined || at.children.length > 0) return spans
+  // A `StyledText` content (CT-27): a span of each chunk, its attributes over the node's.
+  if (isStyledText(content))
+    for (const chunk of content.chunks) {
+      const style = { attributes: base | (chunk.attributes ?? 0), fg: chunk.fg, bg: chunk.bg ?? at.props.bg, link: chunk.link?.url }
+      if (chunk.text) spans.push(span(chunk.text, style))
+    }
+  else spans.push(span(String(content), { attributes: base, bg: at.props.bg }))
   return spans
 }
 

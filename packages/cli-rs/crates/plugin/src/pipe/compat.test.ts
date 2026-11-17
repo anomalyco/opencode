@@ -272,6 +272,29 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
   expect(() => echo.events.on("unknown", () => {})).toThrow("Unknown RPC event: echo.unknown")
 })
 
+// CT-27: a text node's `content` may be OpenTUI's `StyledText`, built with `t`, `bold` and `fg`, as
+// @encoredigitalgroup/opencode's panels set it: a span of each chunk, where it drew "[object Object]".
+test("a StyledText content draws its chunks", () => {
+  const fake = host()
+  const ctx = plugin("t.styled", fake)
+  const core = modules["@opentui/core"] as Json
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () => {
+      const node = h("text", {}) as Json
+      node.content = new core.StyledText([core.bold("Panel"), core.fg("#ff0000")(" red"), ...core.t`, ${core.bold("x")}!`.chunks])
+      return node
+    },
+  })
+  const tree = view(fake, 0, "a").draw()
+  const spans = tree.children[0].spans as Json[]
+  expect(spans.map((at) => at.text).join("")).toBe("Panel red, x!")
+  expect(spans[0].bold).toBe(true)
+  expect(spans[1].fg).toEqual(expect.anything())
+  expect(spans[1].bold).toBeUndefined()
+  expect(core.isStyledText(core.stringToStyledText("s"))).toBe(true)
+})
+
 // CT-23: `@opencode/plugin/effect` is served, its `Rpc` the same as `@opencode/plugin/rpc`'s (opencode-superagent's TUI
 // defines its RPC by it and failed to load); its server schemas link, undefined.
 test("@opencode/plugin/effect serves Rpc", () => {
