@@ -244,9 +244,17 @@ const nodeError = (error: unknown, syscall: string, file: string) => {
       path: file,
     })
   if (error instanceof Environment.Failed && error.cause instanceof Error) return error.cause
-  // The feedback is the user talking to the model, so it must reach the program as the error's message.
-  if (error instanceof Permission.CorrectedError)
-    return new Error(`The user rejected ${syscall} ${file}: ${error.feedback}`)
+  // A denial carries Node's EACCES, so a program can tell it from a missing file. The feedback is the user talking to
+  // the model, so it must reach the program as the error's message.
+  if (error instanceof Permission.BlockedError || error instanceof Permission.CorrectedError)
+    return Object.assign(
+      new Error(
+        error instanceof Permission.CorrectedError
+          ? `The user rejected ${syscall} ${file}: ${error.feedback}`
+          : `EACCES: ${error.message}, ${syscall} '${file}'`,
+      ),
+      { code: "EACCES", errno: -os.errno.EACCES, syscall, path: file },
+    )
   return error
 }
 

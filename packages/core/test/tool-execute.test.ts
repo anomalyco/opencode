@@ -533,7 +533,7 @@ describe("fs", () => {
       createCodeMode(new Map(), permissionService(denyEdits), fileServices(tmp.path, denyEdits)).execute(
         {
           code: `let thrown
-            try { fs.writeFileSync("a.txt", "x") } catch (e) { thrown = e.message }
+            try { fs.writeFileSync("a.txt", "x") } catch (e) { thrown = [e.message, e.code] }
             const [rejected] = await Promise.allSettled([fs.promises.writeFile("b.txt", "x")])
             return [thrown, rejected.status, fs.existsSync("a.txt")]`,
         },
@@ -542,7 +542,9 @@ describe("fs", () => {
     )
 
     const [thrown, status, exists] = JSON.parse(result.output.output)
-    expect(thrown).toContain("Permission denied")
+    expect(thrown[0]).toContain("Permission denied")
+    // EACCES, as Node reports a denied file, so a program can tell it from ENOENT.
+    expect(thrown[1]).toBe("EACCES")
     expect([status, exists]).toEqual(["rejected", false])
     expect(await fs.readdir(tmp.path)).toEqual([])
   })
