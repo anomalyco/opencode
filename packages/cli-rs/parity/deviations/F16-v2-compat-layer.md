@@ -69,9 +69,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the host's focus of the node, any node emits `focused` and `blurred` as OpenTUI's do, and other events are heard and
   never come. A scroll box's `scrollTop`, `scrollHeight` and `viewport` are the host's state of the scroll once it came
   (before, the viewport's height is `Infinity`, so a plugin scrolls nothing by it), and `scrollTo` and `scrollBy` are
-  the host's scroll verb. Other renderable members are undefined: `getLayout()`, which opencode-tokscope's sidebar
-  measures itself by within a few timer ticks and draws nothing without, would need the node's layout as the plugin
-  asks; the contract's `Read::rect` answers from the last settled frame, which reaches the JS host later.
+  the host's scroll verb. A node's `getLayout()`, `width` and `height` are where the host laid it out in its last
+  settled frame (`Read::rect`), and `onSizeChange` runs as that changes (CT-15, CT-24: @jasonencode/opencode-context
+  sized its dividers by it, `P.8/sessionwatch-width`); the node carries an id from the view after the plugin first
+  asked. OpenTUI answers the layout at once, where the host's comes after a frame: until then `getLayout()` is all zero
+  and `width` the prop, so a plugin that measures itself only within a few timer ticks (opencode-tokscope's sidebar,
+  opencode-llm-vibe) draws nothing. That would need the node's layout as the plugin asks. Other renderable members are
+  undefined.
 - **Fields** (CT-11): an `<input>` or `<textarea>` hears the host's field: `onInput` each edit, `onChange` and
   `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. The contract's focus takes
   only a node with `interact.focusable`, so the host refuses a field's `focus()`, which is reported once: the plugin
@@ -132,7 +136,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does
   nothing, and the first use of each warns once in the JS host's log, not in a toast, as the module cannot tell which
   plugin used it. A renderable a plugin builds itself (`new BoxRenderable(…)`) draws nothing, and adding one to a node
-  by its ref adds nothing and is reported (CT-15: opencode-quick-quote). A call of a method any of OpenTUI's
+  by its ref, or returning one from a render, adds nothing and is reported (CT-15: opencode-quick-quote returns one as
+  its slot's element; opencode-gpt-live and opencode-task-completion-loop the same). A call of a method any of OpenTUI's
   declarations returns a promise from answers a resolved promise of an inert value, so a chain such as
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not

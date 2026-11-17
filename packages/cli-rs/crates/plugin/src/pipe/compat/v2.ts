@@ -666,8 +666,21 @@ export function context(base: Base, carrier: Carrier) {
     return {
       state: (node) => read(`scroll:${surface}:${idOf(node)}`, { type: "scroll-state", target: target(node) }) ?? undefined,
       to: (node, offset) => void carrier.effect({ type: "scroll", target: target(node), verb: { type: "offset", offset } }),
+      rect(node) {
+        const key = `rect:${surface}:${idOf(node)}`
+        measuring.set(key, node)
+        return read(key, { type: "rect", node: idOf(node) }) ?? undefined
+      },
     }
   }
+  // The nodes whose layout the plugin asked for, by their read: one with `onSizeChange` hears each new layout (CT-24).
+  const measuring = new Map<string, VNode>()
+  carrier.listen((key) => {
+    const node = measuring.get(key)
+    if (!node) return
+    if (!node.parent) return void measuring.delete(key)
+    node.props.onSizeChange?.()
+  })
   const surface = (name: string, place: Json, input: (cx: Json) => Json, render: (input: Json) => unknown, where: string) => {
     let removed = false
     const key = (cx: Json) => `${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`
@@ -746,6 +759,9 @@ export function context(base: Base, carrier: Carrier) {
       }
       if (retry(entry)) return undefined
       const reading = pressing(key(cx))
+      // What reading the tree reads (where a node is) the mount keeps watching.
+      const before = rendering
+      rendering = { pending: false, keys: entry.keys }
       try {
         const tree = serialize(entry.root, reading)
         for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
@@ -757,6 +773,8 @@ export function context(base: Base, carrier: Carrier) {
         entry.dispose()
         entry.root.children = []
         return { type: "box" }
+      } finally {
+        rendering = before
       }
     }
     // No palette input: the colors carry their tokens, so a theme change restyles the last tree in place, and the

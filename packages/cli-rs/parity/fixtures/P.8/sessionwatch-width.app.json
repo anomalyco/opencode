@@ -1,0 +1,60 @@
+{
+ "scenario": "P.8/sessionwatch-width",
+ "width": 140,
+ "height": 34,
+ "directory": "/tmp/opencode/packages/tui",
+ "config": {
+  "experimental": {"new-designs":true},
+  "plugins": ["./out/npm/node_modules/@jasonencode/opencode-context"],
+  "animations": false
+ },
+ "args": {
+  "sessionID": "ses_w"
+ },
+ "env": {
+  "OPENCODE_PARITY_PLUGIN": "npm"
+ },
+ "routes": [
+  {"path":"/api/session/ses_w","json":{"data":{"id":"ses_w","title":"Watch the session","projectID":"proj_test","cost":0.02,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+  {"path":"/api/session","json":{"data":[{"id":"ses_w","title":"Watch the session","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+  {"path":"/api/session/ses_w/message","json":{"data":[{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"text","text":"Watched."}],"finish":"stop","time":{"created":2000,"completed":2001},"cost":0.02,"tokens":{"input":6900,"output":20,"reasoning":0,"cache":{"read":0,"write":0}}},{"id":"msg_1","type":"user","text":"Watch it","time":{"created":1000}}],"cursor":{}}},
+  {"path":"/api/session/ses_w/inbox","json":{"data":[]}},
+  {"path":"/api/model","json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[{"id":"model","modelID":"model","providerID":"provider","name":"Model","capabilities":{"tools":true,"input":["text"],"output":["text"]},"variants":[],"time":{"released":0},"cost":[{"input":3,"output":15,"cache":{"read":0.3,"write":3.75}}],"status":"active","enabled":true,"limit":{"context":200000,"output":32000}}]}}
+ ],
+ "steps": [
+  {"checkpoint":"panel","until":"SessionWatch","masks":[{"x":100,"y":5,"width":37,"height":1,"reason":"the hit rate: counted from events in TS, none here"},{"x":100,"y":11,"width":37,"height":1,"reason":"the request counts: counted from events in TS, none here"},{"x":0,"y":14,"width":140,"height":20,"reason":"what follows the counts, and the footer's context use"}],"deviation":[{"file":"F16-v2-compat-layer","cells":10}],"fixture":"P.8/sessionwatch-width/panel"}
+ ],
+ "requests": {
+  "writes": [],
+  "reads": [
+   {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
+   {"method":"GET","path":"/api/experimental/session/ses_w/terminal","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
+   {"method":"GET","path":"/api/integration","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/location","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}}},
+   {"method":"GET","path":"/api/mcp","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/mcp/resource","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"resources":[],"templates":[]}}},
+   {"method":"GET","path":"/api/model","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[{"id":"model","modelID":"model","providerID":"provider","name":"Model","capabilities":{"tools":true,"input":["text"],"output":["text"]},"variants":[],"time":{"released":0},"cost":[{"input":3,"output":15,"cache":{"read":0.3,"write":3.75}}],"status":"active","enabled":true,"limit":{"context":200000,"output":32000}}]}},
+   {"method":"GET","path":"/api/plugin","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/project","query":{},"status":200,"json":[]},
+   {"method":"GET","path":"/api/provider","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/reference","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode/packages/tui","canonical":"/tmp/opencode/packages/tui"}},"data":[]}},
+   {"method":"GET","path":"/api/session","query":{"limit":["200"],"order":["desc"],"parentID":["ses_w"]},"status":200,"json":{"data":[{"id":"ses_w","title":"Watch the session","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/active","query":{},"status":200,"json":{"data":{}}},
+   {"method":"GET","path":"/api/session/ses_w","query":{},"status":200,"json":{"data":{"id":"ses_w","title":"Watch the session","projectID":"proj_test","cost":0.02,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+   {"method":"GET","path":"/api/session/ses_w/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_w/inbox","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_w/message","query":{"limit":["20"],"order":["desc"]},"status":200,"json":{"data":[{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"text","text":"Watched."}],"finish":"stop","time":{"created":2000,"completed":2001},"cost":0.02,"tokens":{"input":6900,"output":20,"reasoning":0,"cache":{"read":0,"write":0}}},{"id":"msg_1","type":"user","text":"Watch it","time":{"created":1000}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/ses_w/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/shell","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/skill","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/vcs","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"branch":{"current":"main","default":"main"}}}},
+   {"method":"POST","path":"/api/rpc/opencode.goal/get","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"body":{"input":{"sessionID":"ses_w"}},"status":200,"json":{"output":null}}
+  ]
+ }
+}

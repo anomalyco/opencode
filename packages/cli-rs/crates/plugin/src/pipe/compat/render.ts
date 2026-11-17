@@ -26,10 +26,19 @@ export interface Focus {
   blur(node: VNode): void
 }
 
-// A mount's scrolls, as the host keeps them: where one is, once the host said, and a move of one.
+// A mount's scrolls, as the host keeps them: where one is, once the host said, and a move of one. And where a node
+// is, as the host's last settled frame laid it out (`Read::rect`), once the host said.
 export interface Scrolls {
   state(node: VNode): { offset: number; viewport: number; extent: number } | undefined
   to(node: VNode, offset: number): void
+  rect?(node: VNode): Rect | undefined
+}
+
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export class VNode {
@@ -44,6 +53,8 @@ export class VNode {
   focused = false
   // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
   typed?: string
+  // The plugin asked where it is (CT-15, CT-24): it carries an id, and the host's layout of it is watched.
+  measured = false
   // CT-2: an OpenTUI renderable is an event emitter, which a plugin listens to by a ref (file-browser's search field):
   // the layer emits `focused` and `blurred` as OpenTUI's renderables do; other names are heard and never come.
   private listeners = new Map<string, Listener[]>()
@@ -148,6 +159,22 @@ export class VNode {
     touch(this)
   }
 
+  // Where the host laid it out in its last settled frame, once the host said (CT-15, CT-24): OpenTUI's renderables
+  // answer their layout at once, but the host's comes after a frame, so the first read answers nothing and the node
+  // carries an id from its next view. `onSizeChange` runs as the host's layout of it changes.
+  measure(): Rect | undefined {
+    if (!this.measured) {
+      this.measured = true
+      touch(this)
+    }
+    return rootOf(this).owner?.scrolls?.rect?.(this)
+  }
+
+  getLayout() {
+    const rect = this.measure()
+    return { x: rect?.x ?? 0, y: rect?.y ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0 }
+  }
+
   // The node gained or lost the focus: it emits as an OpenTUI renderable does.
   focusChanged(focused: boolean) {
     if (this.focused === focused) return
@@ -162,7 +189,7 @@ export class VNode {
   // OpenTUI's renderables take the props a plugin assigns to a ref as their own. A renderable the plugin built itself
   // (`new BoxRenderable(…)`) is inert and draws nothing, so adding one adds nothing (CT-15: opencode-quick-quote).
   add(child: VNode, index?: number) {
-    if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("add() of a renderable built with new")
+    if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("a renderable built with new")
     insertNode(this, child, index === undefined ? undefined : this.children[index])
   }
 }
@@ -183,8 +210,10 @@ for (const name of [
   "truncate",
 ]) {
   Object.defineProperty(VNode.prototype, name, {
+    // A renderable's `width` and `height` are its layout, as the host laid it out, once the host said (CT-24).
     get(this: VNode) {
-      return this.props[name]
+      if (name !== "width" && name !== "height") return this.props[name]
+      return this.measure()?.[name] ?? this.props[name]
     },
     set(this: VNode, value: unknown) {
       if (this.props[name] === value) return
@@ -256,11 +285,14 @@ const renderer = createRenderer<VNode>({
     else node.props[name === "text" ? "content" : name] = value
     touch(node)
   },
+  // A renderable the plugin built itself (`new BoxRenderable(…)`), which a render returned or a ref added, is inert and
+  // draws nothing: it goes nowhere, and says so (CT-15: opencode-quick-quote returns one as its slot's element).
   insertNode(parent, node, anchor) {
-    insertNode(parent, node, anchor)
+    if (!(node instanceof VNode)) return rootOf(parent).owner?.report?.("a renderable built with new")
+    insertNode(parent, node, anchor instanceof VNode ? anchor : undefined)
   },
   removeNode(parent, node) {
-    remove(parent, node)
+    if (node instanceof VNode) remove(parent, node)
   },
   getParentNode(node) {
     return node.parent
@@ -530,8 +562,11 @@ function boxOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
   const props = at.props
   const pad = edges(props, "padding")
   const symmetric = pad && pad.left === pad.right && pad.top === pad.bottom && pad.left >= 0 && pad.top >= 0
+  // A box whose size the plugin follows carries an id, by which the host answers where it is.
+  if (typeof props.onSizeChange === "function") at.measure()
   return compact({
     type: "box",
+    id: at.measured ? idOf(at) : undefined,
     row: String(props.flexDirection ?? "column").startsWith("row") ? true : undefined,
     gap: cells(props.gap ?? (String(props.flexDirection ?? "").startsWith("row") ? props.columnGap : props.rowGap)),
     padding: pad && symmetric ? [pad.left, pad.top] : undefined,
