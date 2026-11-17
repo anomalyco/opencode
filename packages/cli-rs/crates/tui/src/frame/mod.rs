@@ -104,6 +104,20 @@ impl Frame {
     fn session(&self) -> Option<Rc<SessionState>> {
         self.session.borrow().as_ref().and_then(Weak::upgrade)
     }
+
+    /// Mounts the plugin panel on screen again where it is, from the plugin's current registration: a reload of its
+    /// registrations replaced the one the mount was of (CT-29).
+    pub fn remount_panel(&self, tui: &Tui) {
+        let Some(state) = self.session() else { return };
+        let Some(old) = state.host.borrow_mut().take() else { return };
+        let target = old.target().clone();
+        old.root.detach();
+        drop(old);
+        state.mount_host(tui, target);
+        if state.active.get() == Pane::Right {
+            state.focus_right(tui);
+        }
+    }
 }
 
 fn tabs_rules() -> Rules {
