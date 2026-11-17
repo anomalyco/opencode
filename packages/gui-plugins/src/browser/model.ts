@@ -1,6 +1,7 @@
 import { FileVerificationError } from "@opencode/util/file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
+import { ACTIVATION_DELAY_MS } from "./activation-delay"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -130,6 +131,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const registrations = new Map<string, { attempt: number; registration: Registration }>()
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const revealTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   // Each tab's last recorded page, so a state that repeats it does not write the history again.
@@ -173,6 +175,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const run = (effect: MachineEffect) => {
+    if (effect.type === "expire-reveal")
+      return schedule(revealTimers, effect.sessionKey, ACTIVATION_DELAY_MS, () =>
+        dispatch({ type: "reveal.elapsed", sessionKey: effect.sessionKey, token: effect.token }),
+      )
+
     if (effect.type === "present-file") {
       const view = sessions.current()
       const files = filesPanel()
@@ -452,6 +459,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const detach = (sessionKey: string) => {
+    cancel(revealTimers, sessionKey)
     const drive = drives.get(sessionKey)
     drives.delete(sessionKey)
     drive?.dispose()
@@ -693,7 +701,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
     seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
-    revealElapsed: (sessionKey: string, token: number) => dispatch({ type: "reveal.elapsed", sessionKey, token }),
+    /** The pane would now draw the page an agent's show request revealed, which starts its delay. */
+    revealDrawn: (session: Session, token: number) => dispatch({ type: "reveal.drawn", sessionKey: session.key, token }),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
       return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))
     },

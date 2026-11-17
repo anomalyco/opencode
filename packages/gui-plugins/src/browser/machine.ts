@@ -73,7 +73,11 @@ export type Attachment = {
   readonly addressFocus: AddressFocus
   readonly side: "unobserved" | "open" | "closed" | "dismissed"
   readonly unseen: readonly Browser.TabID[]
-  readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number }
+  /**
+   * The tab an agent's show request opened the pane on. Its page stays hidden until the delay ends, which runs
+   * (`timing`) from the moment the pane would draw the page, so a click aimed at the chat cannot land in it.
+   */
+  readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
 }
 
 /**
@@ -94,6 +98,8 @@ export type Event =
   | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
   | { readonly type: "execution.ended"; readonly sessionKey: string }
   | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
+  /** The pane would now draw the revealed page. */
+  | { readonly type: "reveal.drawn"; readonly sessionKey: string; readonly token: number }
   | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "pane.activity"
@@ -179,6 +185,8 @@ export type Event =
 
 export type MachineEffect =
   | { readonly type: "present-file"; readonly sessionKey: string; readonly path: string; readonly select: boolean }
+  /** Starts the delay after which `reveal.elapsed` shows the revealed page. */
+  | { readonly type: "expire-reveal"; readonly sessionKey: string; readonly token: number }
   | {
       readonly type: "open-registration"
       readonly sessionKey: string
@@ -477,6 +485,16 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
 
     case "execution.ended":
       return attachment.side === "dismissed" ? put(state, key, { ...attachment, side: "closed" }) : { state, effects: [] }
+    case "reveal.drawn": {
+      const reveal = attachment.reveal
+
+      if (!reveal || reveal.token !== event.token || reveal.timing) return { state, effects: [] }
+
+      return put(state, key, { ...attachment, reveal: { ...reveal, timing: true } }, [
+        { type: "expire-reveal", sessionKey: key, token: reveal.token },
+      ])
+    }
+
     case "reveal.elapsed":
       return attachment.reveal?.token === event.token ? put(state, key, { ...attachment, reveal: undefined }) : { state, effects: [] }
     case "activity.seen":
@@ -496,7 +514,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       if (select) {
         const token = state.issued + 1
 
-        return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID } }, [
+        return put(state, key, { ...attachment, reveal: { token, tabID: event.tabID, timing: false } }, [
           { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID },
         ], token)
       }
@@ -529,8 +547,17 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return wake(state, key, attachment, false)
     case "session.created":
       return wake(state, key, attachment, true)
-    case "session.command":
-      return command(state, key, attachment, event)
+    case "session.command": {
+      const reveal = attachment.reveal
+
+      // The person's own command ends the guard, so their navigation or tab switch is never held. Selecting the
+      // revealed tab in the strip answers with tabs.focus for it, which is the reveal itself, not the person.
+      if (!reveal || (event.action.type === "tabs.focus" && event.action.tabID === reveal.tabID))
+        return command(state, key, attachment, event)
+
+      return command(state, key, { ...attachment, reveal: undefined }, event)
+    }
+
     case "command.settled": {
       const focus = attachment.addressFocus
 

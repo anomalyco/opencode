@@ -143,6 +143,29 @@ describe("browser pane machine", () => {
     expect(revealGuard(elapsed, key, tabA)).toBeUndefined()
   })
 
+  test("the reveal delay starts once, when the pane draws the page", () => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const token = revealGuard(reveal, key, tabA) ?? -1
+    const drawn = transition(reveal, { type: "reveal.drawn", sessionKey: key, token })
+    expect(drawn.effects).toEqual([{ type: "expire-reveal", sessionKey: key, token }])
+    expect(revealGuard(drawn.state, key, tabA)).toBe(token)
+    expect(transition(drawn.state, { type: "reveal.drawn", sessionKey: key, token })).toEqual({ state: drawn.state, effects: [] })
+    expect(transition(reveal, { type: "reveal.drawn", sessionKey: key, token: token + 1 })).toEqual({ state: reveal, effects: [] })
+  })
+
+  test.each([
+    ["navigating the revealed blank tab", { type: "navigate", tabID: tabA, url: "https://example.com" }, false],
+    ["selecting another tab", { type: "tabs.focus", tabID: tabB }, false],
+    ["the strip selecting the revealed tab", { type: "tabs.focus", tabID: tabA }, true],
+  ] as const)("a reveal the pane never drew does not hold the person's own command: %s", (_label, action, guarded) => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const next = transition(reveal, { type: "session.command", sessionKey: key, action, focusAddress: false })
+    expect(types(next.effects)).toEqual(["send-command"])
+    expect(revealGuard(next.state, key, tabA) !== undefined).toBe(guarded)
+  })
+
   test("starting with a closed pane does not dismiss the run; file previews use the same rule without replay", () => {
     const start = ready()
     const observed = transition(start, { type: "side.changed", sessionKey: key, open: false, running: true }).state

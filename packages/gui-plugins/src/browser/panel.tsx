@@ -25,7 +25,6 @@ import {
 } from "@opencode/plugin/gui"
 import { addressParts, connection, externalAction, externalPage } from "./address"
 import { hostDisplay } from "./host-display"
-import { ACTIVATION_DELAY_MS } from "./activation-delay"
 import { FileSource } from "../file/contract"
 import { remotePath, workspacePrefix } from "./remote-address"
 import {
@@ -260,12 +259,8 @@ export default function SessionBrowserPane(props: {
   createKeyed(() => visible() && state()?.id, id => props.model.seen(props.session, id))
   const revealGuard = () => props.model.revealGuard(props.session, props.tab().id)
 
-  // Start the guard when this panel would actually show the native view, not while its chunk is still loading.
-  createKeyed(() => drawn() && revealGuard(), token => {
-    const key = props.session.key
-    const timer = setTimeout(() => props.model.revealElapsed(key, token), ACTIVATION_DELAY_MS)
-    onCleanup(() => clearTimeout(timer))
-  })
+  // The guard's delay starts when this panel would show the native view, not while its chunk is still loading.
+  createKeyed(() => drawn() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
 
   // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
   const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
