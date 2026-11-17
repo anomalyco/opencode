@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { Plugin, Store } from "@opencode/plugin/gui"
 import en from "./i18n/en"
+import ru from "./i18n/ru"
 
 const ChatModel = Schema.Struct({
   providerID: Schema.String,
@@ -27,5 +28,5 @@ export default Plugin.define({
     // Each open /btw tab's chat (its question and answer), kept until its tab closes.
     chats: Store.session(Chats, { chats: [] }),
   },
-  i18n: { en },
+  i18n: { en, ru },
 })
