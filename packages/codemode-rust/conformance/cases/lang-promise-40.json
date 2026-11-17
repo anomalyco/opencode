@@ -1,0 +1,6 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": "Unknown tool 'host.echo'. Did you mean tools.echo?",
+  "logs": []
+}

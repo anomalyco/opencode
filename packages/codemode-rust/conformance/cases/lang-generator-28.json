@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    true,
+    "async",
+    {
+      "value": "sync",
+      "done": false
+    }
+  ],
+  "logs": []
+}

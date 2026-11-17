@@ -1,0 +1,16 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "param",
+      "created",
+      "body"
+    ],
+    [
+      "TypeError",
+      "TypeError"
+    ]
+  ],
+  "logs": []
+}
