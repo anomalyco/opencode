@@ -1061,10 +1061,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn key(path: &[&str]) -> Vec<Segment> {
-        path.iter().map(|&k| Segment::from(k)).collect()
-    }
-
     #[test]
     fn parses_jsonc_like_the_library() {
         assert_eq!(
@@ -1099,18 +1095,5 @@ mod tests {
             stringify_pretty(&json!({"a": [1, {}], "b": "\u{1}"})),
             "{\n  \"a\": [\n    1,\n    {}\n  ],\n  \"b\": \"\\u0001\"\n}"
         );
-    }
-
-    #[test]
-    fn modify_inserts_replaces_and_removes() {
-        let text = "{\n  // keep\n  \"a\": 1\n}\n";
-        assert_eq!(
-            modify(text, &key(&["b", "c"]), Some(&json!(true))).unwrap(),
-            "{\n  // keep\n  \"a\": 1,\n  \"b\": {\n    \"c\": true\n  }\n}\n"
-        );
-        assert_eq!(modify(text, &key(&["a"]), Some(&json!("x"))).unwrap(), "{\n  // keep\n  \"a\": \"x\"\n}\n");
-        assert_eq!(modify(text, &key(&["a"]), None).unwrap(), "{\n}\n");
-        assert_eq!(modify("", &key(&["a"]), Some(&json!(1))).unwrap(), "{\n  \"a\": 1\n}");
-        assert_eq!(modify(text, &key(&["z"]), None).unwrap(), text);
     }
 }

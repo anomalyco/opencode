@@ -139,27 +139,12 @@ mod tests {
         .unwrap()
     }
 
+    // The schema is `channel_and_registration_match_typescript`'s (tests/interop.rs).
     #[test]
-    fn parse_follows_the_schema() {
-        let ok = Registration::parse(r#"{"id":"a","version":"1","url":"http://x","pid":3,"password":"p","extra":1}"#)
-            .unwrap();
-        assert_eq!(ok.pid, 3);
-        assert_eq!(ok.password.as_deref(), Some("p"));
-        assert!(!format!("{ok:?}").contains("\"p\""));
-        assert!(Registration::parse(r#"{"url":"http://x","pid":1}"#).is_some());
-        assert_eq!(Registration::parse(r#"{"url":"http://x","pid":3.0}"#).unwrap().pid, 3);
-        for bad in [
-            r#"{"url":"http://x","pid":0}"#,
-            r#"{"url":"http://x","pid":1.5}"#,
-            r#"{"url":"http://x","pid":"1"}"#,
-            r#"{"url":"http://x","pid":1,"password":null}"#,
-            r#"{"pid":1}"#,
-            "[]",
-            "{",
-            "",
-        ] {
-            assert!(Registration::parse(bad).is_none(), "{bad}");
-        }
+    fn debug_redacts_the_password() {
+        let ok = Registration::parse(r#"{"url":"http://x","pid":3,"password":"hunter2"}"#).unwrap();
+        assert_eq!(ok.password.as_deref(), Some("hunter2"));
+        assert!(!format!("{ok:?}").contains("hunter2"), "{ok:?}");
     }
 
     #[test]
