@@ -568,7 +568,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -643,8 +642,12 @@ jobs:
           fi
           gh release upload "v${{ needs.version.outputs.version }}" "${files[@]}" --clobber --repo "${{ needs.version.outputs.repo }}"
 
-      - run: ./script/publish.ts
+      - run: |
+          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
+          ./script/publish.ts
         env:
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/v1-publish.npmrc
+          NPM_CONFIG_LOGLEVEL: verbose
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GITHUB_TOKEN: ${{ github.token }}
