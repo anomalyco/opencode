@@ -180,6 +180,10 @@ pub struct Realm {
     pub set_proto: Id,
     pub generator_proto: Id,
     pub async_generator_proto: Id,
+    /// What generator, async and async generator functions inherit from, below `Function.prototype`.
+    pub generator_function_proto: Id,
+    pub async_function_proto: Id,
+    pub async_generator_function_proto: Id,
     pub async_from_sync_proto: Id,
     /// The built-in `next` of generators, which calls from bytecode resume without a nested run.
     pub generator_next: Id,
@@ -1114,7 +1118,12 @@ impl<'rt> Vm<'rt> {
         } else {
             Value::Undef
         };
-        let fp = self.realm.function_proto;
+        let fp = match (proto.is_generator, proto.is_async) {
+            (true, true) => self.realm.async_generator_function_proto,
+            (true, false) => self.realm.generator_function_proto,
+            (false, true) => self.realm.async_function_proto,
+            (false, false) => self.realm.function_proto,
+        };
         let generator = proto.is_generator.then_some(proto.is_async);
         let id = self.alloc(Obj::new(
             Some(fp),

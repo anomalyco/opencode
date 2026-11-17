@@ -262,7 +262,18 @@ impl<'rt> Vm<'rt> {
     pub fn setup(&mut self) {
         let object_proto = self.alloc(Obj::new(None, Kind::Ordinary));
         self.realm.object_proto = object_proto;
-        let function_proto = self.plain(object_proto);
+        // Function.prototype is itself a function that accepts anything and returns undefined, as in JS.
+        let name = self.atoms.intern_static("");
+        let function_proto = self.alloc(Obj::new(
+            Some(object_proto),
+            Kind::Native {
+                f: function_proto_call,
+                data: Value::Undef,
+                name,
+                length: 0,
+                ctor: false,
+            },
+        ));
         self.realm.function_proto = function_proto;
         self.realm.array_proto = self.plain(object_proto);
         self.realm.string_proto = self.plain(object_proto);
@@ -298,6 +309,10 @@ impl<'rt> Vm<'rt> {
         self.global("Infinity", Value::Num(f64::INFINITY));
         self.global("undefined", Value::Undef);
     }
+}
+
+fn function_proto_call(_vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> crate::vm::Res {
+    Ok(Value::Undef)
 }
 
 pub fn this_obj(vm: &mut Vm, this: &Value, what: &str) -> Result<Id, Value> {

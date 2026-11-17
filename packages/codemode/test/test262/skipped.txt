@@ -855,7 +855,6 @@ built-ins/AsyncGeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeE
 built-ins/AsyncGeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
-built-ins/AsyncGeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
 built-ins/AsyncGeneratorPrototype/next/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/AsyncGeneratorPrototype/return/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/AsyncGeneratorPrototype/throw/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
@@ -1388,7 +1387,6 @@ language/expressions/generators/dstr/ary-init-iter-get-err-array-prototype.js  #
 language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/expressions/generators/prototype-relation-to-function.js  # Expected SameValue(«object», «») to be true
 language/expressions/in/S8.12.6_A2_T2.js  # TypeError: Robin cannot be constructed: user-defined constructors and classes are not supported. Cal
 language/expressions/logical-assignment/lgcl-and-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
 language/expressions/logical-assignment/lgcl-nullish-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
@@ -1543,7 +1541,6 @@ language/statements/generators/dstr/ary-init-iter-get-err-array-prototype.js  # 
 language/statements/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all

@@ -376,6 +376,10 @@ impl<'rt> Vm<'rt> {
         self.method(agp, "throw", 1, async_gen_throw);
         self.realm.async_generator_proto = agp;
         self.realm.async_from_sync_proto = self.alloc(Obj::new(Some(aip), Kind::Ordinary));
+        let fp = self.realm.function_proto;
+        self.realm.generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
+        self.realm.async_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
+        self.realm.async_generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
     }
 
     fn async_gen(&mut self, g: Id) -> Option<&mut AsyncGen> {
