@@ -19,7 +19,7 @@ use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 /// The example plugin `name` (`crates/plugin/examples/<name>`), built once per test run.
-fn build(name: &str) -> Vec<u8> {
+pub(crate) fn build(name: &str) -> Vec<u8> {
     static BUILT: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
     let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((_, library)) = built.iter().find(|(known, _)| known == name) {
@@ -87,10 +87,10 @@ impl Transport for Server {
     }
 }
 
-struct Port {
+pub(crate) struct Port {
     harness: Harness,
-    events: Memory,
-    log: Log,
+    pub(crate) events: Memory,
+    pub(crate) log: Log,
     hold: Hold,
     _root: opencode_util::temp::TempDir,
 }
@@ -115,7 +115,7 @@ fn open_in(
 /// What a row loads: a port's library, or the published package of the plugin it ports, unmodified, on the JS host
 /// through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
 #[derive(Clone, Copy, Debug)]
-enum Carrier<'a> {
+pub(crate) enum Carrier<'a> {
     Port(&'a str),
     Npm(&'a str),
     /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), added to the TUI as it loads.
@@ -149,12 +149,24 @@ pub(crate) fn pinned(tarball: &Path) {
 
 /// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins, over `handler`; `None` without Bun for
 /// a package.
-fn open_as(
+pub(crate) fn open_as(
     carriers: &[Carrier<'_>],
     width: u16,
     handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
     stored: bool,
     first: Option<Route>,
+) -> Option<Port> {
+    open_with(carriers, width, handler, stored, first, None)
+}
+
+/// [`open_as`], with `options` as each plugin's `options` (its `plugins` entry's, or its Luau setup's).
+pub(crate) fn open_with(
+    carriers: &[Carrier<'_>],
+    width: u16,
+    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
+    stored: bool,
+    first: Option<Route>,
+    options: Option<&Value>,
 ) -> Option<Port> {
     let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
         true => Some(crate::plugin_pipe::config()?),
@@ -162,18 +174,34 @@ fn open_as(
     };
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
+    let mut entries = Vec::new();
     for carrier in carriers {
-        match *carrier {
+        let plugin = match *carrier {
             Carrier::Port(name) => {
                 let plugin = config.join("plugins").join(name);
                 std::fs::create_dir_all(&plugin).unwrap();
                 std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
+                plugin
             }
-            Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
+            Carrier::Npm(name) => {
+                let plugin = config.join("plugins").join(name.replace('/', "__"));
+                unpack(name, &plugin);
+                plugin
+            }
             #[cfg(feature = "luau")]
-            Carrier::Luau(_) => {}
+            Carrier::Luau(_) => continue,
+        };
+        if let Some(options) = options {
+            entries.push(json!({ "package": plugin.to_string_lossy(), "options": options }));
         }
     }
+    let info = match entries.is_empty() {
+        true => support::still(),
+        false => opencode_local::cli_config::Info {
+            animations: Some(false),
+            ..support::decode(&json!({ "plugins": entries }).to_string())
+        },
+    };
     let server = Server {
         events: Memory::new(Vec::new()),
         log: Log::default(),
@@ -181,7 +209,7 @@ fn open_as(
         hold: Hold::default(),
     };
     let deps = Deps {
-        config: support::config(support::still()),
+        config: support::config(info),
         route: first.unwrap_or_else(|| support::session_route("ses_p")),
         events: true,
         roots: stored.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten(),
@@ -203,7 +231,9 @@ fn open_as(
         if let Carrier::Luau(name) = *carrier {
             let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name);
             let sources = opencode_plugin::luau::Sources::read(&dir).unwrap();
-            opencode_tui::plugins::host::add(&harness.tui, opencode_plugin::luau::define(&sources, None).unwrap().0);
+            let options = options.map(Value::to_string);
+            let definition = opencode_plugin::luau::define(&sources, options.as_deref()).unwrap().0;
+            opencode_tui::plugins::host::add(&harness.tui, definition);
         }
     }
     Some(Port { harness, events: server.events, log: server.log, hold: server.hold, _root: root })
@@ -211,7 +241,7 @@ fn open_as(
 
 impl Port {
     /// Lets what the input started finish: the JS host's answers when it runs, then a few frames.
-    fn settle(&self) {
+    pub(crate) fn settle(&self) {
         let scripts = self.tui.plugins.scripts.borrow().clone();
         match scripts {
             Some(scripts) => crate::plugin_pipe::settle(&self.harness, &scripts),
@@ -220,7 +250,7 @@ impl Port {
     }
 
     /// The interrupts and prompts the server saw, in order.
-    fn wire(&self) -> Vec<String> {
+    pub(crate) fn wire(&self) -> Vec<String> {
         self.log
             .lock()
             .unwrap()
@@ -233,7 +263,7 @@ impl Port {
     }
 
     /// The rows of the sidebar, right of column `from`, trimmed, without blank rows.
-    fn sidebar(&self, from: usize) -> Vec<String> {
+    pub(crate) fn sidebar(&self, from: usize) -> Vec<String> {
         self.app
             .text()
             .lines()
@@ -243,13 +273,13 @@ impl Port {
     }
 
     /// The foreground of the cell `offset` cells right of where `needle` starts.
-    fn fg(&self, needle: &str, offset: u16) -> opentui::prelude::Color {
+    pub(crate) fn fg(&self, needle: &str, offset: u16) -> opentui::prelude::Color {
         let (x, y) = self.find(needle);
         self.app.render().cell(u32::from(x + offset), u32::from(y)).unwrap().fg
     }
 
     /// The requests to `path`, as `METHOD path?query`.
-    fn sent(&self, path: &str) -> Vec<String> {
+    pub(crate) fn sent(&self, path: &str) -> Vec<String> {
         let log = self.log.lock().unwrap();
         log.iter()
             .filter(|seen| seen.path.starts_with(path))
@@ -258,13 +288,13 @@ impl Port {
     }
 }
 
-fn session(id: &str, title: &str, parent: Option<&str>, updated: u64) -> Value {
+pub(crate) fn session(id: &str, title: &str, parent: Option<&str>, updated: u64) -> Value {
     let session = support::merge(support::session(id, title), json!({ "agent": "build", "parentID": parent }));
     support::merge(session, json!({ "time": { "created": 1, "updated": updated } }))
 }
 
 /// `/api/session/active` with `running`.
-fn active(running: &[&str]) -> Reply {
+pub(crate) fn active(running: &[&str]) -> Reply {
     let data: serde_json::Map<String, Value> =
         running.iter().map(|id| ((*id).to_owned(), json!({ "type": "running" }))).collect();
     (200, json!({ "data": data }))
@@ -274,7 +304,7 @@ fn active(running: &[&str]) -> Reply {
 
 /// Twelve children of `ses_p` in shuffled update order, `ses_c03` and `ses_c07` running, `ses_c05` untitled; a
 /// running grandchild under `ses_c01` and an unrelated root, which are no direct children.
-fn family() -> Vec<Value> {
+pub(crate) fn family() -> Vec<Value> {
     let mut sessions = vec![session("ses_p", "Parent", None, 1), session("ses_x", "Other root", None, 2)];
     for index in 1..=12u64 {
         let title = if index == 5 { String::new() } else { format!("Child {index:02}") };
@@ -284,7 +314,7 @@ fn family() -> Vec<Value> {
     sessions
 }
 
-fn subagents(seen: &Seen) -> Option<Reply> {
+pub(crate) fn subagents(seen: &Seen) -> Option<Reply> {
     let sessions = family();
     let list = |parent: Option<&str>| {
         let data: Vec<&Value> = sessions.iter().filter(|session| session["parentID"].as_str() == parent).collect();
@@ -309,7 +339,7 @@ fn subagents(seen: &Seen) -> Option<Reply> {
 
 /// What the TS plugin lists for [`family`]: the direct children by `time.updated`, newest first, as ID, title and
 /// state.
-fn by_update() -> Vec<(String, String, &'static str)> {
+pub(crate) fn by_update() -> Vec<(String, String, &'static str)> {
     let mut children: Vec<(u64, String, String, &str)> = (1..=12u64)
         .map(|index| {
             let title = if index == 5 { "Subagent".to_owned() } else { format!("Child {index:02}") };
@@ -519,7 +549,7 @@ fn the_published_sidebar_prompt_shows_a_queued_prompt() {
 
 // --- @mynameistito/opencode-force-input
 
-fn running(seen: &Seen) -> Option<Reply> {
+pub(crate) fn running(seen: &Seen) -> Option<Reply> {
     match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session/active") => Some(active(&["ses_p"])),
         ("GET", "/api/session") => Some((
@@ -753,7 +783,7 @@ fn priced_model() -> Value {
 /// `ses_p` has 150 messages at $0.01 reported, over two pages; its child `ses_c` reports nothing, so it is priced from
 /// the catalog: one message of a million input tokens, and a second once `grown` is set. With `paged`, `ses_p`'s
 /// children come on a second page, after an empty first one.
-fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> Option<Reply> + Send + Sync {
+pub(crate) fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> Option<Reply> + Send + Sync {
     let resets = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
         + (4 * 24 + 9) * 3_600_000
         + 1_800_000;
