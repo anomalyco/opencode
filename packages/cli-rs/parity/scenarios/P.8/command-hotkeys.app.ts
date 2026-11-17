@@ -37,8 +37,12 @@ export default defineApp({
     { keys: ["alt+r"] },
     { wait: 300 },
     { keys: ["ctrl+p"] },
-    // The palette's own list is not the plugin's to compare; its search is.
-    { wait: 500 },
+    // Waited for before the search is typed. The palette's own list is not the plugin's to compare: its search is.
+    {
+      checkpoint: "palette",
+      until: "Search commands",
+      masks: [{ x: 40, y: 9, width: 62, height: 24, reason: "the host's palette list, which the plugin does not draw" }],
+    },
     { type: "Run the review" },
     { checkpoint: "found", until: "Run the review" },
     { keys: ["enter"] },
