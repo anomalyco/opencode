@@ -85,36 +85,26 @@ const CodeModeInput = Schema.Struct({
 })
 
 const StructuredOutput = Schema.Struct({
-  output: Schema.String,
-  exitCode: Schema.NullOr(Schema.Number),
-  wallTimeSeconds: Schema.Number,
-  outputPath: Schema.optionalKey(Schema.String),
-  signal: Schema.optionalKey(Schema.String),
-  shellID: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(NonNegativeInt),
-})
-
-const CodeModeOutput = Schema.Struct({
-  status: Schema.Literals(["completed", "running"]).annotate({
+  shellID: Schema.optionalKey(Schema.String).annotate({
     description:
-      "completed: the command exited. running: it outlived timeout and moved to the background; output is partial and you will be notified when it exits.",
+      "Present only while the command is still running in the background, because it outlived timeout or used background: true. You will be notified when it exits. A result without shellID is final.",
   }),
   exitCode: Schema.NullOr(Schema.Number).annotate({
     description:
-      "The exit code once completed: 0 means success. null while running, or when a signal killed the command.",
+      "The exit code once the command has exited: 0 means success. null while it is still running, or when a signal ended it.",
   }),
+  signal: Schema.optionalKey(Schema.String).annotate({ description: "The signal that ended the command, if any" }),
   output: Schema.String.annotate({
     description:
-      "Combined stdout and stderr as one string; there are no separate stdout or stderr fields. Parse it in your script and return only what the task needs.",
+      "Combined stdout and stderr as one string; there are no separate stdout or stderr fields. While shellID is present it is a notice instead, and the output streams to outputPath.",
   }),
   outputPath: Schema.optionalKey(Schema.String).annotate({
-    description: "File with the full output when output was truncated",
+    description: "File with the full output, when output was truncated or the command is running in the background",
   }),
-  signal: Schema.optionalKey(Schema.String).annotate({ description: "The signal that killed the command, if any" }),
-  shellID: Schema.optionalKey(Schema.String).annotate({
-    description: "Set while the command is running in the background",
+  pid: Schema.optionalKey(NonNegativeInt).annotate({
+    description: "Process ID while the command is running in the background",
   }),
-  wallTimeSeconds: Schema.Number,
+  wallTimeSeconds: Schema.Number.annotate({ description: "Seconds since the command started" }),
 })
 
 type Output = ReturnType<typeof ShellResult.output> & {
@@ -130,17 +120,11 @@ const resultMessages = (output: Output, timeout?: number) => {
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
-const toolResult = (output: Output, timeout: number, codeMode: boolean) => {
+const toolResult = (output: Output, timeout?: number) => {
   return {
     output: {
-      ...Struct.omit(
-        output,
-        codeMode
-          ? ["exit", "status", "truncated", "timeout", "killed", "pid"]
-          : ["exit", "status", "truncated", "timeout", "killed"],
-      ),
+      ...Struct.omit(output, ["exit", "status", "truncated", "timeout", "killed"]),
       exitCode: output.exit ?? null,
-      ...(codeMode ? { status: output.status } : {}),
     },
     content: resultMessages(output, timeout).map((text) => ({
       type: "text" as const,
@@ -405,7 +389,7 @@ export const Plugin = {
           options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
           description: codeMode ? CODE_MODE_DESCRIPTION : description(),
           input: codeMode ? CodeModeInput : Input,
-          output: codeMode ? CodeModeOutput : StructuredOutput,
+          output: StructuredOutput,
           execute: (input, context) => {
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
             const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
@@ -531,7 +515,7 @@ export const Plugin = {
                 "gen_ai.tool.call.id": context.id,
                 ...(input.background === true ? { "opencode.shell.background": true } : {}),
               }),
-              Effect.map((output) => toolResult(output, finalTimeout, codeMode)),
+              Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
