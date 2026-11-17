@@ -9,6 +9,11 @@ import {
 describe("new session workspace selection", () => {
   test.each([
     {
+      name: "the explicitly requested draft directory without a workspace bar",
+      input: { enabled: false, selected: "/project/docs", directory: "/project/docs", fallback: "create" },
+      expected: "/project/docs",
+    },
+    {
       name: "main when the workspace bar is unavailable",
       input: { enabled: false, selected: "/project/feature" },
       expected: "main",

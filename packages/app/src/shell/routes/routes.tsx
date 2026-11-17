@@ -132,7 +132,9 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <PluginAttachment>
-            <AutomationSourceProvider><Shell>{props.children}</Shell></AutomationSourceProvider>
+            <AutomationSourceProvider>
+              <Shell>{props.children}</Shell>
+            </AutomationSourceProvider>
           </PluginAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>

@@ -15,14 +15,12 @@ export function AutomationsScreen() {
   const dialog = useDialog()
   const language = controller.language
 
-  const filters = createMemo(
-    (): { id: AutomationFilter; label: string; count: number }[] => [
-      { id: "all", label: language.t("automations.filter.all"), count: controller.counts().all },
-      { id: "active", label: language.t("automations.filter.active"), count: controller.counts().active },
-      { id: "paused", label: language.t("automations.filter.paused"), count: controller.counts().paused },
-      { id: "done", label: language.t("automations.filter.done"), count: controller.counts().done },
-    ],
-  )
+  const filters = createMemo((): { id: AutomationFilter; label: string; count: number }[] => [
+    { id: "all", label: language.t("automations.filter.all"), count: controller.counts().all },
+    { id: "active", label: language.t("automations.filter.active"), count: controller.counts().active },
+    { id: "paused", label: language.t("automations.filter.paused"), count: controller.counts().paused },
+    { id: "done", label: language.t("automations.filter.done"), count: controller.counts().done },
+  ])
 
   function confirmDelete(entry: AutomationItem) {
     const name = entry.row.name
@@ -127,29 +125,48 @@ export function AutomationsScreen() {
             />
           </Tooltip>
 
-          <Show when={controller.available()}><Button
-            type="button"
-            variant="contrast"
-            size="small"
-            data-action="automations-new"
-            onClick={() => controller.openNewAutomation()}
-          >
-            <Icon name="plus-small" size="small" />
-            <span>{language.t("automations.new")}</span>
-          </Button></Show>
+          <Show when={controller.available()}>
+            <Button
+              type="button"
+              variant="contrast"
+              size="small"
+              data-action="automations-new"
+              onClick={() => controller.openNewAutomation()}
+            >
+              <Icon name="plus-small" size="small" />
+              <span>{language.t("automations.new")}</span>
+            </Button>
+          </Show>
         </div>
       </div>
 
       <Show
         when={controller.entries().length > 0}
-        fallback={<div class="mx-auto flex max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-          <Icon name="clock" class="text-v2-icon-icon-muted" />
-          <h2 class="text-14-medium text-v2-text-text-base">{language.t(!controller.available() ? "automations.unavailable" : controller.failed() ? "automations.failed" : controller.loading() ? "automations.loading" : "automations.empty.title")}</h2>
-          <Show when={controller.available() && !controller.loading() && !controller.failed()}>
-            <p class="text-13-regular text-v2-text-text-muted">{language.t("automations.empty.description")}</p>
-            <Button size="small" onClick={() => controller.openNewAutomation(`/automation ${language.t("automations.example")}`)}>{language.t("automations.example")}</Button>
-          </Show>
-        </div>}
+        fallback={
+          <div class="mx-auto flex max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <Icon name="clock" class="text-v2-icon-icon-muted" />
+            <h2 class="text-14-medium text-v2-text-text-base">
+              {language.t(
+                !controller.available()
+                  ? "automations.unavailable"
+                  : controller.failed()
+                    ? "automations.failed"
+                    : controller.loading()
+                      ? "automations.loading"
+                      : "automations.empty.title",
+              )}
+            </h2>
+            <Show when={controller.available() && !controller.loading() && !controller.failed()}>
+              <p class="text-13-regular text-v2-text-text-muted">{language.t("automations.empty.description")}</p>
+              <Button
+                size="small"
+                onClick={() => controller.openNewAutomation(`/automation ${language.t("automations.example")}`)}
+              >
+                {language.t("automations.example")}
+              </Button>
+            </Show>
+          </div>
+        }
       >
         <div class="grid min-h-0 flex-1 grid-cols-1 divide-y divide-v2-border-border-base lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:divide-x lg:divide-y-0 rtl:divide-x-reverse">
           <div data-scrollable class="min-h-0 overflow-y-auto">
