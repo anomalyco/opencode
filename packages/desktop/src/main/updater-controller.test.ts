@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   createUpdaterController,
   LAUNCH_WINDOW,
+  supportsMajor,
   type MajorUpdaterBackend,
   type UpdaterBackend,
   type UpdaterReadyRecord,
@@ -270,6 +271,66 @@ describe("major updater", () => {
     await app.settled()
 
     expect(app.controller.major.getState()).toEqual({ status: "ready", quit: true })
+  })
+
+  test("a download that keeps failing stops until the user checks for updates", async () => {
+    const failure = { fail: true }
+    const app = setupMajor({
+      download: async () => {
+        if (failure.fail) throw new Error("sha512 checksum mismatch")
+      },
+    })
+    await app.offer()
+    await app.controller.check()
+    await app.settled()
+    await app.controller.check()
+    await app.settled()
+    expect(app.calls.filter((call) => call === "major download")).toHaveLength(3)
+
+    await app.controller.check()
+    await app.settled()
+    await app.controller.check()
+    await app.settled()
+
+    expect(app.calls.filter((call) => call === "major download")).toHaveLength(3)
+    expect(app.calls.filter((call) => call === "major check")).toHaveLength(3)
+    expect(app.controller.major.getState()).toEqual({ status: "unavailable" })
+    expect(app.updates).not.toContain("error")
+
+    failure.fail = false
+    await app.controller.checkNow()
+
+    expect(app.controller.major.getState()).toEqual({ status: "ready", quit: true })
+  })
+
+  test("a feed that cannot be reached is not counted as a failed download", async () => {
+    const feed = { down: true }
+    const app = setupMajor({
+      feed: () => {
+        if (feed.down) throw new Error("net::ERR_INTERNET_DISCONNECTED")
+        return { isUpdateAvailable: true, updateInfo: { version: "2.2.7" } }
+      },
+    })
+    await app.offer()
+    for (const _ of Array.from({ length: 5 })) {
+      await app.controller.check()
+      await app.settled()
+    }
+    expect(app.calls).not.toContain("major download")
+
+    feed.down = false
+    await app.controller.check()
+    await app.settled()
+
+    expect(app.controller.major.getState()).toEqual({ status: "ready", quit: true })
+  })
+
+  test("only offers OpenCode 2 where it can run", () => {
+    expect(supportsMajor("darwin", "12.7.6")).toBe(false)
+    expect(supportsMajor("darwin", "13.0")).toBe(true)
+    expect(supportsMajor("darwin", "27.0.1")).toBe(true)
+    expect(supportsMajor("win32", "10.0.19045")).toBe(true)
+    expect(supportsMajor("linux", "6.8.0")).toBe(true)
   })
 
   test("stays unavailable when the feed has no OpenCode 2 release", async () => {

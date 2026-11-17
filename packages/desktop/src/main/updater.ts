@@ -3,6 +3,7 @@ import pkg, { type AppUpdater, type CancellationToken } from "electron-updater"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import {
   createUpdaterController,
+  supportsMajor,
   type MajorUpdaterBackend,
   type UpdaterBackend,
   type UpdaterReadyRecord,
@@ -159,7 +160,10 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     currentVersion: app.getVersion(),
     backend,
     // Only the release channel ships OpenCode 1 desktop builds.
-    major: UPDATER_ENABLED && CHANNEL === "prod" ? majorBackend() : undefined,
+    major:
+      UPDATER_ENABLED && CHANNEL === "prod" && supportsMajor(process.platform, process.getSystemVersion())
+        ? majorBackend()
+        : undefined,
     persistence: {
       get() {
         const value = store.get(key)

@@ -10,6 +10,19 @@ export const LAUNCH_WINDOW = 30 * 1000
 // OpenCode 1 only offers the next major release. A feed that answers with anything older is ignored.
 const MAJOR_VERSION = 2
 
+// OpenCode 2 runs on macOS 13 and later, and its feed does not say so. On an older macOS it would install and then
+// not start, with OpenCode 1 gone.
+const MAJOR_MACOS = 13
+
+// A download that keeps failing would otherwise start again at every 10 minute check, about 300 MB each time. After
+// this many failures the app waits for its next launch, or for the user to check for updates.
+const MAJOR_ATTEMPTS = 3
+
+export function supportsMajor(platform: string, system: string) {
+  if (platform !== "darwin") return true
+  return Number(system.split(".")[0]) >= MAJOR_MACOS
+}
+
 export type UpdaterBackend = {
   checkForUpdates(): Promise<{ isUpdateAvailable?: boolean; updateInfo?: { version?: string } } | null | undefined>
   downloadUpdate(): Promise<unknown>
@@ -58,6 +71,7 @@ export function createUpdaterController(input: {
   let installing: Promise<void> | undefined
   let prompted = false
   let asked = false
+  let failures = 0
   const listeners = new Set<(state: UpdaterState) => void>()
   const majorListeners = new Set<(state: MajorUpdateState) => void>()
 
@@ -82,7 +96,7 @@ export function createUpdaterController(input: {
   // check tries again, because the user has not asked for anything yet.
   const prepare = () => {
     const backend = input.major
-    if (!backend || preparing || major.status !== "unavailable") return
+    if (!backend || preparing || major.status !== "unavailable" || failures >= MAJOR_ATTEMPTS) return
     transitionMajor({ status: "downloading" })
     preparing = backend
       .checkForUpdates()
@@ -90,7 +104,13 @@ export function createUpdaterController(input: {
         if (!result?.isUpdateAvailable || !isMajor(result.updateInfo?.version)) return false
         // A newer OpenCode 1 release can withdraw the offer while the feed answers.
         if (major.status !== "downloading") return false
-        await backend.downloadUpdate()
+        await backend.downloadUpdate().catch((error) => {
+          // An OpenCode 1 release that withdraws the offer cancels the download. Only a download that failed by itself
+          // counts.
+          if (major.status === "downloading") failures++
+          throw error
+        })
+        failures = 0
         return true
       })
       .catch((error) => {
@@ -168,6 +188,8 @@ export function createUpdaterController(input: {
     // A check the user asked for. It also waits for OpenCode 2 to finish downloading, so the answer is never "up to
     // date" while the upgrade is still on its way.
     async checkNow() {
+      // The user asked, so a download that gave up gets another try.
+      failures = 0
       await check()
       await preparing
       return state
