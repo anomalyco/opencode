@@ -91,6 +91,9 @@ export const make = (
     // top-level `tools`: after compacting a history whose tools were only in `additional_tools`, small models lost
     // track of them more often.
     const folded = foldToolUpdates(stripEffortUpdates(request))
+    // The system prompt stays in `instructions` here: `/compact` echoes a leading developer message back in its
+    // output window, and with `instructions` OpenAI still reads the prefix cached by requests that lead `input`
+    // with it.
     const native = yield* OpenResponses.lowerConversation(folded, adapter)
     const generation = OpenResponses.lowerGeneration(request)
     const tools = folded.tools.length === 0 ? undefined : yield* lowerTools(folded)

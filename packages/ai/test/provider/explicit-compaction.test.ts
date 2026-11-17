@@ -438,6 +438,7 @@ for (const model of [
         }
         expect(new URL(request.url).pathname.endsWith("/responses")).toBe(true)
         expect(body.input).toEqual([
+          ...(model.provider === "xai" ? [] : [{ type: "message", role: "developer", content: "system" }]),
           ...output,
           { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
         ])
