@@ -3185,19 +3185,27 @@ fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
 // and the fetch took its relay, whose reply reached nobody.
 #[test]
 fn a_new_builds_first_command_and_fetch_reach_it() {
-    new_build_registers_and_fetches(true);
+    new_build_registers_and_fetches(true, 0);
 }
 
 // Expected (big-boi's catalog recheck, the control): the same once the host registered the new build.
 #[test]
 fn a_new_builds_command_and_fetch_after_its_adoption_reach_it() {
-    new_build_registers_and_fetches(false);
+    new_build_registers_and_fetches(false, 0);
 }
 
-/// A plugin's second build registers a command and fetches, `early` right after its setup, its `Loaded`, manifest and
-/// effects held until all three came, so the host reads them before its deferred registration; else from a command
-/// once the host registered it.
-fn new_build_registers_and_fetches(early: bool) {
+// Expected (big-boi's catalog review, final): a new build that, before the host registers it, sends more messages than
+// the host keeps (300 notices, then a command and a fetch) loses nothing silently: the fetch settles, refused, and the
+// build fails, saying why. The fetch waited for good, and the build stayed active without its command.
+#[test]
+fn a_new_build_past_the_early_bound_settles_its_fetch_and_fails() {
+    new_build_registers_and_fetches(true, 300);
+}
+
+/// A plugin's second build sends `notices` unwatch notices, then registers a command and fetches, `early` right after
+/// its setup, its `Loaded`, manifest and effects held until all three came, so the host reads them before its deferred
+/// registration; else from a command once the host registered it.
+fn new_build_registers_and_fetches(early: bool, notices: usize) {
     let Some(config) = config() else { return };
     let root = opencode_util::temp::tempdir().unwrap();
     let log = root.path().join("built");
@@ -3205,7 +3213,7 @@ fn new_build_registers_and_fetches(early: bool) {
     std::fs::create_dir_all(&plugin).unwrap();
     let module = |build: &str| {
         format!(
-            "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  const late = () => {{\n    carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n    carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
+            "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  const late = () => {{\n    for (let index = 0; index < {notices}; index++) carrier.unwatch(`notice${{index}}`)\n    carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n    carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
         )
     };
     std::fs::write(plugin.join("tui.ts"), module("one")).unwrap();
@@ -3257,6 +3265,17 @@ fn new_build_registers_and_fetches(early: bool) {
         h.app.advance(Duration::from_millis(1));
         std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
     });
+    if notices > 256 {
+        // Its batch was answered as refused, and the build failed once registered.
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err 0\n");
+        h.wait("the build failed", || {
+            h.app.advance(Duration::from_millis(1));
+            matches!(pipe.status("example.build"), Some(opencode_plugin::Status::Failed(_)))
+        });
+        let Some(opencode_plugin::Status::Failed(error)) = pipe.status("example.build") else { unreachable!() };
+        assert!(error.contains("more than 256 messages"), "{error}");
+        return;
+    }
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
     h.wait("the late command is registered", || {
         h.app.advance(Duration::from_millis(1));
