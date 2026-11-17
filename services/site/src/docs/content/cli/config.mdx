@@ -47,6 +47,22 @@ OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
 OpenCode merges the inline settings over the global `cli.json`. Nested objects are merged, while arrays and scalar
 values from the environment replace global values. Inline settings remain authoritative while the variable is set.
 
+## Plugin activation timeout
+
+Endpoints that need the model catalog wait for a location's plugins to activate, and answer `503` when activation
+exceeds the budget. A `--standalone` call starts a private server, so every call pays the cold activation cost, and
+slow plugin setups can exceed the default budget of five seconds.
+
+Set `OPENCODE_PLUGIN_ACTIVATION_TIMEOUT` to raise the budget:
+
+```sh
+OPENCODE_PLUGIN_ACTIVATION_TIMEOUT="30 seconds" opencode serve
+```
+
+The value is a duration such as `500ms`, `10 seconds`, or `2 minutes`; a bare number counts as milliseconds. The
+variable is read per request, so a server that inherits it picks it up without a restart. An unreadable or
+non-positive value keeps the five-second default.
+
 ## Appearance
 Choose a theme, control interface motion, and override the terminal cursor:
 

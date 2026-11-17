@@ -24,7 +24,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
-        yield* awaitPlugins
+        yield* awaitPlugins()
         const generate = yield* Generate.Service
         return { data: { text: yield* generate.text(request.payload).pipe(Effect.mapError(generateError)) } }
       },
@@ -33,7 +33,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     )
     const image = Effect.fn("server.generate.image")(
       function* (request: { readonly payload: ImageRequest }) {
-        yield* awaitPlugins
+        yield* awaitPlugins()
         const generate = yield* Generate.Service
         return { data: yield* generate.image(request.payload).pipe(Effect.mapError(generateError)) }
       },
@@ -48,7 +48,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
             message: "Decision question names must be unique",
             field: "questions",
           })
-        yield* awaitPlugins
+        yield* awaitPlugins()
         const generate = yield* Generate.Service
         return { data: yield* generate.decisions(request.payload).pipe(Effect.mapError(generateError)) }
       },

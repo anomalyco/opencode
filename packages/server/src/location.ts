@@ -36,18 +36,49 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
 // Temporary: managed policy is applied by the last internal plugin, and State shows each registration as soon as it is
 // made, so until activation finishes a provider the policy denies is still listed and usable. Only the endpoints that
 // list or use providers wait. Remove once a plugin batch becomes visible only when it ends.
-export const awaitPlugins = Plugin.awaitActivation.pipe(
-  Effect.timeoutOrElse({
-    duration: "5 seconds",
-    orElse: () =>
-      Effect.fail(
-        new ServiceUnavailableError({
-          message: "Location plugins did not finish activating",
-          service: "plugin",
-        }),
-      ),
-  }),
-)
+
+const DEFAULT_PLUGIN_ACTIVATION_TIMEOUT_MS = 5_000
+
+const DURATION_UNITS: Record<string, number> = {
+	ms: 1,
+	millisecond: 1,
+	milliseconds: 1,
+	s: 1_000,
+	sec: 1_000,
+	secs: 1_000,
+	second: 1_000,
+	seconds: 1_000,
+	m: 60_000,
+	min: 60_000,
+	mins: 60_000,
+	minute: 60_000,
+	minutes: 60_000,
+}
+
+export function pluginActivationTimeoutMs() {
+	const raw = process.env.OPENCODE_PLUGIN_ACTIVATION_TIMEOUT
+	if (!raw) return DEFAULT_PLUGIN_ACTIVATION_TIMEOUT_MS
+	const match = /^\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\s*$/i.exec(raw)
+	const scale = DURATION_UNITS[(match?.[2] ?? "ms").toLowerCase()]
+	const value = match && scale !== undefined ? Number(match[1]) * scale : undefined
+	// An unreadable or non-positive value keeps the default rather than failing every request.
+	return value !== undefined && Number.isFinite(value) && value > 0 ? value : DEFAULT_PLUGIN_ACTIVATION_TIMEOUT_MS
+}
+
+// Read per request so a server that inherits the variable from its parent picks it up without a restart.
+export const awaitPlugins = () =>
+	Plugin.awaitActivation.pipe(
+		Effect.timeoutOrElse({
+			duration: pluginActivationTimeoutMs(),
+			orElse: () =>
+				Effect.fail(
+					new ServiceUnavailableError({
+						message: "Location plugins did not finish activating",
+						service: "plugin",
+					}),
+				),
+		}),
+	)
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {

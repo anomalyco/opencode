@@ -19,7 +19,7 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
         "voice.models",
         Effect.fn("server.voice.models")(
           function* () {
-            yield* awaitPlugins
+            yield* awaitPlugins()
             const voice = yield* Voice.Service
             return { data: yield* voice.models() }
           },
@@ -31,7 +31,7 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
         "voice.session",
         Effect.fn("server.voice.session")(
           function* (request) {
-            yield* awaitPlugins
+            yield* awaitPlugins()
             const voice = yield* Voice.Service
             const transport = yield* voice
               .session(request.payload)

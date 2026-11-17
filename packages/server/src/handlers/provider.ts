@@ -11,7 +11,7 @@ export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (han
       .handle(
         "provider.list",
         Effect.fn(function* () {
-          yield* awaitPlugins
+          yield* awaitPlugins()
           const providers = yield* Provider.Service
           return yield* response(providers.available())
         }),

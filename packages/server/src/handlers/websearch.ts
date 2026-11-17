@@ -19,7 +19,7 @@ export const WebSearchHandler = HttpApiBuilder.group(Api, "server.websearch", (h
         "websearch.query",
         Effect.fn("server.websearch.query")(function* (request) {
           // A cold Location must finish activating plugins before their providers can be resolved.
-          yield* awaitPlugins
+          yield* awaitPlugins()
           const websearch = yield* WebSearch.Service
           return yield* response(
             websearch.query(request.payload).pipe(
