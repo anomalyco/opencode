@@ -1112,6 +1112,56 @@ fn measure_idle_memory_and_compile() {
     println!("compile counter: {:?}", start.elapsed());
 }
 
+/// A VM under the carrier's cap that keeps about `mib` MiB of strings, then makes 2M small tables of garbage in one
+/// call with no budget to speak of: the live bytes after a full collection, and how the garbage call ended. Luau's
+/// collector goal is set to `goal`, or left as [`vm::Vm::new`] sets it.
+fn churn(goal: Option<i32>, mib: usize) -> (usize, Result<(), String>) {
+    let init = r#"
+        local keep = {}
+        return {
+            build = function(mib) for i = 1, mib * 1024 do keep[i] = string.rep("x", 1000) .. i end end,
+            churn = function() for i = 1, 2000000 do local t = { i } end end,
+        }
+    "#;
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
+    let vm = vm::Vm::new(&compiled, Duration::from_secs(600), MEMORY).unwrap();
+    if let Some(goal) = goal {
+        vm.lua.gc_set_mode(mlua::state::GcMode::Incremental(mlua::state::GcIncParams::default().goal(goal)));
+    }
+    let mlua::Value::Table(module) = vm.start(&compiled).unwrap() else { panic!("the module returns a table") };
+    let (build, garbage): (mlua::Function, mlua::Function) =
+        (module.get("build").unwrap(), module.get("churn").unwrap());
+    vm.call(|| build.call::<()>(mib)).unwrap();
+    vm.lua.gc_collect().unwrap();
+    (vm.memory(), vm.call(|| garbage.call::<()>(())))
+}
+
+// Expected (luau-safety 4, safety-audit #10): with the carrier's collector goal, a plugin with 20 MiB of its 32 MiB
+// live makes garbage without running out of memory; at Luau's default goal it runs out with 14 MiB live.
+#[test]
+fn a_plugin_with_most_of_its_cap_live_can_make_garbage() {
+    let (live, churned) = churn(None, 19);
+    assert!(live > 20 << 20, "{live} bytes live");
+    assert_eq!(churned, Ok(()));
+}
+
+// The effective heap cap, printed (luau-safety 4, safety-audit #10): the most live data with which a plugin that makes
+// garbage still runs, at Luau's default goal and at the carrier's. Run with `--ignored --nocapture`.
+#[test]
+#[ignore]
+fn measure_the_effective_heap_cap() {
+    for goal in [200, vm::GOAL] {
+        for mib in 10..=30 {
+            let start = Instant::now();
+            let (live, churned) = churn(Some(goal), mib);
+            println!("goal {goal}: {live} bytes live, {:?}: {churned:?}", start.elapsed());
+            if churned.is_err() {
+                break;
+            }
+        }
+    }
+}
+
 // Expected (contract 2.x additions on the Luau carrier): a Luau plugin reads the host's version and features, and asks
 // for one by the prelude's name; it shows a centered select, and an alert and a confirm with their size and centering,
 // which reach the host as the contract's dialogs.
