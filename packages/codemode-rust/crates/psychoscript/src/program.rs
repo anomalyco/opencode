@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::exec;
 use crate::run;
 use crate::vm::Vm;
-use crate::{Json, Outcome, Runtime};
+use crate::{Interrupted, Json, Outcome, Runtime};
 
 enum State<'a> {
     Running(Box<Running<'a>>),
@@ -48,24 +48,25 @@ impl<'a> Program<'a> {
         }
     }
 
-    /// Runs the program to its end on the calling thread, blocking on asynchronous host work.
-    pub fn run(mut self) -> Outcome {
+    /// Runs the program to its end on the calling thread, blocking on asynchronous host work. A tool can interrupt
+    /// the run instead, with [`ToolError::interrupt`](crate::ToolError::interrupt).
+    pub fn run(mut self) -> Result<Outcome, Interrupted> {
         exec::block_on(std::future::poll_fn(|cx| self.advance(cx)))
     }
 
     /// Runs the program as a future on any executor. Asynchronous host calls run on that executor; a timeout wakes
     /// the run from a shared timer thread. Dropping the future interrupts the run and every host call in flight.
-    pub async fn run_async(mut self) -> Outcome {
+    pub async fn run_async(mut self) -> Result<Outcome, Interrupted> {
         std::future::poll_fn(|cx| self.advance(cx)).await
     }
 
-    fn advance(&mut self, cx: &mut Context<'_>) -> Poll<Outcome> {
+    fn advance(&mut self, cx: &mut Context<'_>) -> Poll<Result<Outcome, Interrupted>> {
         let probe = 0u8;
         if let State::Failed(_) = self.state {
             let State::Failed(outcome) = std::mem::replace(&mut self.state, State::Done) else {
                 unreachable!()
             };
-            return Poll::Ready(*outcome);
+            return Poll::Ready(Ok(*outcome));
         }
         let State::Running(r) = &mut self.state else {
             return Poll::Pending;
@@ -82,6 +83,9 @@ impl<'a> Program<'a> {
                 run::call_main(&mut r.vm);
             }
             for (p, s) in r.vm.host.tasks.poll_ready() {
+                if let crate::host::Settlement::Interrupted = s {
+                    crate::host::interrupt(&mut r.vm);
+                }
                 r.vm.inbox.push_back((p, s));
             }
             let _ = r.vm.drive();
@@ -110,7 +114,11 @@ impl<'a> Program<'a> {
         let State::Running(r) = std::mem::replace(&mut self.state, State::Done) else {
             unreachable!()
         };
-        Poll::Ready(run::finish(*r))
+        if r.vm.host.interrupted {
+            drop(r);
+            return Poll::Ready(Err(Interrupted));
+        }
+        Poll::Ready(Ok(run::finish(*r)))
     }
 }
 

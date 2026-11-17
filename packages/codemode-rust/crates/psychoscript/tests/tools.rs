@@ -463,7 +463,10 @@ fn tool_context_carries_the_run_key() {
         &serde_json::Map::new(),
         Some("run-1"),
     );
-    assert_eq!(program.run().result.unwrap(), json!(["run-1:0", "run-1:1"]));
+    assert_eq!(
+        program.run().unwrap().result.unwrap(),
+        json!(["run-1:0", "run-1:1"])
+    );
     let generated = value(&rt, "return await tools.key()");
     assert_eq!(
         generated.as_str().unwrap().len(),

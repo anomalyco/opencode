@@ -37,19 +37,46 @@ impl ToolContext {
     }
 }
 
-/// A tool's refusal or failure, reported as `ToolFailure` and thrown into the program as an `Error`.
+/// A tool's refusal or failure, reported as `ToolFailure` and thrown into the program as an `Error`; or, made with
+/// [`ToolError::interrupt`], the interruption of the whole run, as a tool interrupts its fiber in the reference.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToolError {
     pub message: String,
+    interrupt: bool,
 }
 
 impl ToolError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            interrupt: false,
         }
     }
+
+    /// Interrupts the run the call belongs to: the run ends with [`Interrupted`] instead of an outcome.
+    pub fn interrupt() -> Self {
+        Self {
+            message: "interrupted".into(),
+            interrupt: true,
+        }
+    }
+
+    pub fn is_interrupt(&self) -> bool {
+        self.interrupt
+    }
 }
+
+/// A run that was interrupted, by a tool or a hook, instead of ending with an outcome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Interrupted;
+
+impl fmt::Display for Interrupted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("The run was interrupted.")
+    }
+}
+
+impl std::error::Error for Interrupted {}
 
 impl fmt::Display for ToolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -61,7 +88,7 @@ impl std::error::Error for ToolError {}
 
 impl From<String> for ToolError {
     fn from(message: String) -> Self {
-        Self { message }
+        Self::new(message)
     }
 }
 

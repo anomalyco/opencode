@@ -24,7 +24,7 @@ const THREAD_STACK_BUDGET: usize = 64 << 20;
 
 pub fn execute(rt: &Runtime, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
     if code.len() <= INLINE_SOURCE_BYTES && bracket_depth(code) <= INLINE_BRACKET_DEPTH {
-        let run = AssertUnwindSafe(|| rt.program(code, bindings, None).run());
+        let run = AssertUnwindSafe(|| settled(rt.program(code, bindings, None).run()));
         return std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error());
     }
     std::thread::scope(|s| {
@@ -33,11 +33,11 @@ pub fn execute(rt: &Runtime, code: &str, bindings: &serde_json::Map<String, Json
             .spawn_scoped(s, || {
                 let mut program = rt.program(code, bindings, None);
                 program.stack_budget = THREAD_STACK_BUDGET;
-                program.run()
+                settled(program.run())
             });
         match spawned {
             Ok(handle) => handle.join().unwrap_or_else(|_| internal_error()),
-            Err(_) => rt.program(code, bindings, None).run(),
+            Err(_) => settled(rt.program(code, bindings, None).run()),
         }
     })
 }
@@ -56,6 +56,11 @@ fn bracket_depth(code: &str) -> usize {
         }
     }
     max
+}
+
+/// The outcome of a run, or for an interrupted one, an `ExecutionFailure` that says so.
+fn settled(run: Result<Outcome, crate::Interrupted>) -> Outcome {
+    run.unwrap_or_else(|i| failed(diagnostic(DiagnosticKind::ExecutionFailure, i.to_string())))
 }
 
 /// A defect in the interpreter, reported instead of unwinding into the host.

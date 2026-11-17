@@ -37,7 +37,8 @@ pub use program::Program;
 pub use schema::Schema;
 pub use serde_json::Value as Json;
 pub use tool::{
-    BoxFuture, ConfigError, Execute, Tool, ToolContext, ToolDescription, ToolError, tool_expression,
+    BoxFuture, ConfigError, Execute, Interrupted, Tool, ToolContext, ToolDescription, ToolError,
+    tool_expression,
 };
 
 /// A host tool: plain data in, plain data out. A failure is thrown into the program as an error.
@@ -243,17 +244,19 @@ impl Runtime {
     }
 
     /// Parses, compiles and runs `code` on the calling thread, blocking on asynchronous host work. `bindings` become
-    /// top-level constants.
+    /// top-level constants. An interrupted run ends with an `ExecutionFailure` saying so; [`Program::run`] tells the
+    /// two apart.
     pub fn execute(&self, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
         run::execute(self, code, bindings)
     }
 
-    /// Runs `code` as a future on any executor. Dropping it interrupts the run and every host call in flight.
+    /// Runs `code` as a future on any executor. Dropping it interrupts the run and every host call in flight; a tool
+    /// can interrupt it too, and then it ends with [`Interrupted`].
     pub async fn execute_async(
         &self,
         code: &str,
         bindings: &serde_json::Map<String, Json>,
-    ) -> Outcome {
+    ) -> Result<Outcome, Interrupted> {
         self.program(code, bindings, None).run_async().await
     }
 

@@ -84,6 +84,8 @@ pub enum Settlement {
     Failure(Box<Failed>),
     /// An extension call's value, or what it threw, with the label that names it in conversion errors.
     Host(Box<(HostResult, String)>),
+    /// The call interrupts the whole run.
+    Interrupted,
 }
 
 /// A host call's failure. Boxed, so the common successful settlement stays small.
@@ -132,6 +134,8 @@ pub struct RunHost<'rt> {
     /// Suggestions attached to failure values, by error object.
     pub suggestions: FxHashMap<Id, Vec<String>>,
     promise_like: Option<Id>,
+    /// Whether a call interrupted the run.
+    pub interrupted: bool,
     modules: FxHashMap<String, Value>,
     namespaces: FxHashMap<String, Value>,
 }
@@ -147,6 +151,7 @@ impl<'rt> RunHost<'rt> {
             functions: Vec::new(),
             suggestions: FxHashMap::default(),
             promise_like: None,
+            interrupted: false,
             modules: FxHashMap::default(),
             namespaces: FxHashMap::default(),
         }
@@ -281,6 +286,9 @@ fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: &[Value]) {
     {
         let raw = f(admitted.input, vm.host.sync_context(admitted.call));
         let s = finish(path, admitted.tool, raw);
+        if let Settlement::Interrupted = s {
+            interrupt(vm);
+        }
         vm.inbox.push_back((p, s));
         return;
     }
@@ -381,6 +389,7 @@ fn admit_call(vm: &mut Vm, path: &str, input: &Json) -> Result<(), Box<Failed>> 
 #[inline]
 fn finish(name: &str, tool: &Tool, raw: Result<Json, crate::ToolError>) -> Settlement {
     match raw {
+        Err(e) if e.is_interrupt() => Settlement::Interrupted,
         Err(e) => Settlement::failure(DiagnosticKind::ToolFailure, e.message),
         Ok(raw) => match &tool.output {
             None => Settlement::Undefined,
@@ -411,6 +420,7 @@ impl AfterGuard<'_> {
             Settlement::Json(v) => after(&call, CallResult::Success(v)),
             Settlement::Undefined => after(&call, CallResult::Success(&null)),
             Settlement::Failure(f) => after(&call, CallResult::Failure(&f.message)),
+            Settlement::Interrupted => after(&call, CallResult::Interrupted),
             Settlement::Host(_) => {}
         }
     }
@@ -539,10 +549,22 @@ fn disjunction(items: &[String]) -> String {
     }
 }
 
+/// Stops the run at once: it ends interrupted, and calls still running are interrupted with it.
+pub fn interrupt(vm: &mut Vm) {
+    vm.host.interrupted = true;
+    if vm.fatal.is_none() {
+        vm.fatal = Some((
+            DiagnosticKind::ExecutionFailure,
+            crate::Interrupted.to_string(),
+        ));
+    }
+}
+
 /// Settles a host call's promise with what it ended with.
 #[inline]
 pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
     match s {
+        Settlement::Interrupted => interrupt(vm),
         Settlement::Json(json) => {
             let v = crate::convert::from_json(vm, &json);
             vm.fulfill(p, v);

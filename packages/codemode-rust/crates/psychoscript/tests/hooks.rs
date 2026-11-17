@@ -434,7 +434,7 @@ fn execute_async_runs_on_any_executor() {
         });
     let outcome =
         drive(rt.execute_async("return (await tools.slow()) * 21", &serde_json::Map::new()));
-    assert_eq!(outcome.result.unwrap(), json!(42));
+    assert_eq!(outcome.unwrap().result.unwrap(), json!(42));
     let timeout = Runtime::new()
         .with_tool(
             "never",
@@ -447,7 +447,7 @@ fn execute_async_runs_on_any_executor() {
     let outcome =
         drive(timeout.execute_async("return await tools.never()", &serde_json::Map::new()));
     assert_eq!(
-        outcome.result.unwrap_err().kind,
+        outcome.unwrap().result.unwrap_err().kind,
         DiagnosticKind::TimeoutExceeded
     );
 }
@@ -475,6 +475,49 @@ fn dropping_a_run_cancels_its_calls() {
         [
             r#"tool.before {"name":"never","input":{}}"#,
             "tool.after never interrupted"
+        ]
+    );
+}
+
+#[test]
+fn a_tool_can_interrupt_its_run() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let stop = Tool::new("Interrupt", |_, _| Err(ToolError::interrupt())).input(empty());
+    let later_stop = Tool::new_async("Interrupt later", |_, _| async {
+        later(10, ()).await;
+        Err(ToolError::interrupt())
+    })
+    .input(empty());
+    let pending = Tool::new_async("Pending", |_, _| std::future::pending()).input(empty());
+    let rt = Runtime::new()
+        .with_tool("host.call", stop.clone())
+        .with_tool("host.later", later_stop)
+        .with_tool("host.pending", pending);
+    let bindings = serde_json::Map::new();
+    let interrupted = |code: &str| drive(rt.execute_async(code, &bindings));
+    assert_eq!(
+        interrupted("try { await tools.host.call({}) } catch { return 'caught' }").err(),
+        Some(psychoscript::Interrupted)
+    );
+    assert_eq!(
+        interrupted("tools.host.pending({}); return await tools.host.later({})").err(),
+        Some(psychoscript::Interrupted)
+    );
+    let d = run(&rt, "return await tools.host.call({})")
+        .result
+        .unwrap_err();
+    assert_eq!(d.kind, DiagnosticKind::ExecutionFailure);
+    assert_eq!(d.message, "The run was interrupted.");
+
+    let observed = Runtime::new()
+        .with_tool("host.call", stop)
+        .hooks(observe(&events));
+    assert!(drive(observed.execute_async("return await tools.host.call({})", &bindings)).is_err());
+    assert_eq!(
+        *events.lock().unwrap(),
+        [
+            r#"tool.before {"name":"host.call","input":{}}"#,
+            "tool.after host.call interrupted"
         ]
     );
 }
