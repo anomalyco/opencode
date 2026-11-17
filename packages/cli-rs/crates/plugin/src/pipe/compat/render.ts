@@ -666,7 +666,14 @@ function layoutOf(props: Json, reading: Reading) {
   const layout = compact({
     width: length(props.width),
     grow: Number(props.flexGrow) > 0 ? true : undefined,
-    shrink: props.flexShrink === undefined ? undefined : Number(props.flexShrink) > 0,
+    // As OpenTUI's renderable: one with a fixed width or height does not shrink unless it says so (CT-25:
+    // @wpro-eng/opencode-config's 14-cell agent names shrank, and their models wrapped elsewhere).
+    shrink:
+      props.flexShrink !== undefined
+        ? Number(props.flexShrink) > 0
+        : typeof props.width === "number" || typeof props.height === "number"
+          ? false
+          : undefined,
     min_width_zero: props.minWidth === 0 ? true : undefined,
     height: length(props.height),
     min_height: length(props.minHeight),

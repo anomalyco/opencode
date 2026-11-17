@@ -154,6 +154,12 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `getTreeSitterClient().initialize().then(…)` runs on (CT-16, `P.8/shell-highlighting`): the grammar it registers is
   not the host's, which would need the contract to take a plugin's tree-sitter grammar. The `effect` package is not
   among the modules the layer serves (CT-13), where TS's runtime provides it.
+- **Shrink and wrap**: a node with a fixed `width` or `height` does not shrink unless its `flexShrink` says so, as
+  OpenTUI's renderables (CT-25: @wpro-eng/opencode-config's 14-cell agent names shrank to their text; its tarball is
+  unlicensed, so a layer test pins it). Where a long word breaks is the host's text wrap: TS's breaks
+  `github-copilot/gemini-3.8-flash` after the `/`, the host's after `gemini-`, which is OpenTUI's Rust wrap, not the
+  layer's. A panel sized by its box's width (CT-28: opencode-tui-context's gauges and legend, `P.8/context-gauge`)
+  draws as TS once the host's layout reaches it (above).
 - **Border titles**: a box's `title` and `titleAlignment` are the contract border's; its `bottomTitle` and
   `bottomTitleAlignment` are not drawn, which would need the contract's border to carry a bottom title
   (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
