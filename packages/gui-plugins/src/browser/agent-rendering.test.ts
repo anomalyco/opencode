@@ -42,16 +42,38 @@ test("overlapping commands await the same first frame", async () => {
   second[Symbol.dispose]()
 })
 
-test("a missing frame never prevents acting; dialog and navigation bypass even a pending wake", async () => {
+test("idle past the deadline with a dialog open, the dialog command un-throttles without waiting for a frame", () => {
+  const timers: (() => void)[] = []
+  const throttles: boolean[] = []
+
+  const render = agentRendering(new AbortController().signal, value => throttles.push(value), (_, run) => {
+    timers.push(run)
+
+    return () => {}
+  })
+
+  render.hold()[Symbol.dispose]()
+  timers.forEach(run => run())
+  expect(throttles).toEqual([false, true])
+
+  // An open alert pauses the page's animation frames, so no command waits for one, including the one that answers it.
+  for (const method of ["dialog", "snapshot", "click", "navigate"] as const) expect(needsWakeFrame(method, true, true)).toBe(false)
+
+  const answer = render.hold(needsWakeFrame("dialog", true, true) ? () => new Promise(() => {}) : undefined)
+  expect(answer.painted).toBeUndefined()
+  expect(throttles).toEqual([false, true, false])
+})
+
+test("a renderer that never paints neither blocks navigation nor fails the command that waited for it", async () => {
   const render = agentRendering(new AbortController().signal, () => {}, () => () => {})
   const frame = Promise.withResolvers<void>()
-  const shot = render.hold(() => frame.promise)
-  expect(needsWakeFrame("dialog", true, true)).toBe(false)
-  expect(needsWakeFrame("navigate", true, false)).toBe(false)
-  expect(needsWakeFrame("click", true, true)).toBe(false)
+  const snapshot = render.hold(needsWakeFrame("snapshot", true, false) ? () => frame.promise : undefined)
+  expect(snapshot.painted).toBeDefined()
+
+  for (const method of ["navigate", "reload", "stop", "back", "dialog", "tabs.close"] as const) expect(needsWakeFrame(method, true, false)).toBe(false)
   expect(needsWakeFrame("snapshot", false, false)).toBe(false)
-  expect(needsWakeFrame("evaluate", true, false)).toBe(true)
-  expect(render.hold().painted).toBeUndefined()
+  expect(render.hold(needsWakeFrame("navigate", true, false) ? () => frame.promise : undefined).painted).toBeUndefined()
+  // The capture deadline rejects the wake; the snapshot then proceeds as it would without one.
   frame.reject(new Error("no frame"))
-  await expect(shot.painted).resolves.toBeUndefined()
+  await expect(snapshot.painted).resolves.toBeUndefined()
 })

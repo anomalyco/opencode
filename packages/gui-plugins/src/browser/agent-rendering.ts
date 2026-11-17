@@ -2,7 +2,9 @@ import type { Browser } from "@opencode/plugin-browser/rpc"
 
 /** A paused page cannot paint the frame that its dialog or a recovery navigation would unblock. */
 export function needsWakeFrame(method: Browser.Method, loaded: boolean, dialog: boolean) {
-  return loaded && !dialog && ["snapshot", "find", "wait", "evaluate", "click", "check", "fill", "fill_form", "select", "press", "type", "hover", "drag", "scroll", "screenshot"].includes(method)
+  const painting: Browser.Method[] = ["snapshot", "find", "wait", "evaluate", "click", "check", "fill", "fill_form", "select", "press", "hover", "drag", "scroll", "screenshot"]
+
+  return loaded && !dialog && painting.includes(method)
 }
 
 // Long enough to cover thinking between a snapshot and its follow-up; a forgotten tab doesn't animate indefinitely.
