@@ -31,6 +31,9 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `@joe-broadhead__opencode-linear.tgz` | `@joe-broadhead/opencode-linear@0.0.9` (catalog CT-8) | `sha512-JKi7qnHOXusxcPFb8jcrsKj/6zVMsWSLv0P3PWVTFOb+aGf3yaHUwR+8RL7wny8Unfbo6HzdqojEbT2L44K10g==` |
 | `opencode-command-hotkeys.tgz` | `opencode-command-hotkeys@0.1.1` (ports-trio) | `sha512-n5BMlNWD3/8bNtP2HeQjq8uyQX6ypROO+Vh3xUqbSl5wkVobHWQIriAp9WQkL3JMxwMHWvOJi6dMfCGNq/YXUA==` |
 | `@khaosoigai__oc-context-grid.tgz` | `@khaosoigai/oc-context-grid@0.3.2` (ports-trio) | `sha512-gKUXa1JTMIYjiY/1tHLv+HIEMa2jqOLcn5zS45CXgK6PooDjjvDRxx2IkSMbY8da8spj4NYRAFYOwFmw7nrutw==` |
+| `@0xuwui__opencode-session-manager.tgz` | `@0xuwui/opencode-session-manager@0.1.2` (ports-trio) | `sha512-04lz0UKrAtU7eA4WrjZAhQD3qhDH0QbJzHDTGhkCTQvOcs91U4niovOeTxkMf2RFjBeo2mdDJbm8vQi5THiiZg==` |
+| `@bybrawe__opencode-queue-manager.tgz` | `@bybrawe/opencode-queue-manager@0.3.5` (ports-trio) | `sha512-rrRhrULk2R35EU4hpklzLfXxC0TA6SPPWGVfmDAcftjVF2TIsqpEswgEaW051+Z3X0n+9zzUYWsATbT6Lijj4w==` |
+| `@prevalentware__opencode-goal-plugin.tgz` | `@prevalentware/opencode-goal-plugin@0.1.98` (ports-trio) | `sha512-XjpdkZYOo4RHYgLOC6OW6mod4j5BtO6I0YATgpwDJATx+p9+Dvj/Mam6/DS/X1SjNPYt8Sk5/9lQG/EFCHmFgQ==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
 (`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
