@@ -241,8 +241,9 @@ fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res 
     let open = vm.open_fuel(&source, crate::bytecode::ITER_FOR_OF);
     let it = vm.get_iterator_in(&source, crate::bytecode::ITER_FOR_OF)?;
     vm.fuel(open);
+    let next = vm.record_next_of(&source, &it)?;
     let id = vm.new_object();
-    while let Some(item) = vm.iter_step(&it)? {
+    while let Some(item) = vm.iter_step_with(&it, next)? {
         if let Err(e) = from_entry(vm, id, &item) {
             if vm.fatal.is_none() {
                 let close = vm.close_fuel(&it);

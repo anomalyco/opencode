@@ -672,6 +672,61 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// GetIterator for an iterator record, at what opening `v` costs: the iterator and the `next` the record keeps.
+    #[inline(never)]
+    fn open_record(&mut self, v: &Value, ctx: u8) -> Result<(Value, Value), Value> {
+        let it = self.get_iterator_in(v, ctx)?;
+        let cost = self.open_fuel(v, ctx);
+        self.spend(cost);
+        let next = self.record_next_of(v, &it)?;
+        Ok((it, next))
+    }
+
+    /// Whether the reference iterates `v` itself, with no call of its `Symbol.iterator` method: a string, a
+    /// collection or a built-in iterator.
+    fn walks(&self, v: &Value) -> bool {
+        match v {
+            Value::Str(_) => true,
+            Value::Obj(id) => matches!(
+                self.heap[*id as usize].kind,
+                Kind::Array(_)
+                    | Kind::Arguments(_)
+                    | Kind::Map(_)
+                    | Kind::Set(_)
+                    | Kind::SearchParams(_)
+                    | Kind::Headers(_)
+                    | Kind::Bytes(_)
+                    | Kind::ArrayIter { .. }
+                    | Kind::MapIter { .. }
+                    | Kind::StrIter { .. }
+                    | Kind::ListIter { .. }
+                    | Kind::ExoticIter { .. }
+            ),
+            _ => false,
+        }
+    }
+
+    /// The `next` an iterator record over `it`, opened from `source`, keeps (see `record_next`). The reference
+    /// steps a built-in iterator itself only when it opens the iterable directly; one that a `Symbol.iterator` method
+    /// returned has its `next` read and called each step, as bytecode calls it.
+    pub(crate) fn record_next_of(&mut self, source: &Value, it: &Value) -> Res {
+        if let Value::Obj(id) = it
+            && matches!(
+                self.heap[*id as usize].kind,
+                Kind::ArrayIter { .. }
+                    | Kind::MapIter { .. }
+                    | Kind::StrIter { .. }
+                    | Kind::ListIter { .. }
+                    | Kind::ExoticIter { .. }
+            )
+            && !self.walks(source)
+        {
+            let nk = self.names.next;
+            return self.get(it, nk);
+        }
+        self.record_next(it)
+    }
+
     /// What closing `it` early costs the reference: the call of a generator's or custom iterator's native `return`.
     pub(crate) fn close_fuel(&mut self, it: &Value) -> i32 {
         let Value::Obj(id) = it else { return 0 };
@@ -2561,10 +2616,7 @@ impl<'rt> Vm<'rt> {
                     Op::GetIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
-                        let it = tri!(self.get_iterator_in(&v, ctx));
-                        let cost = self.open_fuel(&v, ctx);
-                        self.spend(cost);
-                        let next = tri!(self.record_next(&it));
+                        let (it, next) = tri!(self.open_record(&v, ctx));
                         self.stack[base + slot as usize] = Slot::pack(it);
                         self.stack[base + slot as usize + 1] = Slot::pack(next);
                     }

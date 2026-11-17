@@ -65,7 +65,8 @@ pub fn for_of(
     let open = vm.open_fuel(source, ITER_FOR_OF);
     let it = vm.get_iterator(source)?;
     vm.fuel(open);
-    while let Some(x) = vm.iter_step(&it)? {
+    let next = vm.record_next_of(source, &it)?;
+    while let Some(x) = vm.iter_step_with(&it, next)? {
         match body(vm, x) {
             Ok(true) => step(vm),
             Ok(false) => {

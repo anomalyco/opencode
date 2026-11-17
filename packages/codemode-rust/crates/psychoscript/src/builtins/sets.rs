@@ -460,7 +460,8 @@ fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], name: &str, pairs: bool) 
     let open = vm.open_fuel(&src, crate::bytecode::ITER_FOR_OF);
     let it = vm.get_iterator(&src)?;
     vm.fuel(open);
-    while let Some(item) = vm.iter_step(&it)? {
+    let next = vm.record_next_of(&src, &it)?;
+    while let Some(item) = vm.iter_step_with(&it, next)? {
         let r = (|| -> Result<(), Value> {
             if pairs {
                 fuel::native(vm);

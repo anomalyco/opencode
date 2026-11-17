@@ -385,6 +385,10 @@ programs.push(
 
 // Iterator helpers are prelude generators there, and the consumers prelude functions.
 const gen = "function* g(n) { for (let i = 0; i < n; i++) yield i }"
+// A built-in iterator a custom `Symbol.iterator` returns is stepped through its native `next`.
+const wrapped =
+  "const w = (x) => ({ [Symbol.iterator]: () => x[Symbol.iterator]() }); const A = w([1, 2, 3]), M = w(new Map([[1, 2]])), S = w('ab'), T = w(new Set([3, 4]))\n" +
+  "   const H = w(new Headers([['a', 'b']])); const L = (function () { return w(arguments) })(5, 6)"
 programs.push(
   during("", "d.values().map(see).toArray()"),
   during("", "d.values().filter((x) => see(x) % 3).toArray()"),
@@ -403,6 +407,8 @@ programs.push(
   during(gen, "for (let j = 0; j < 3000; j++) { for (const x of g(4).map(see)) if (x > 1) break; see(j) }"),
   during("const it = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }; const it2 = { ...it, next: Object }",
     "for (let j = 0; j < 3000; j++) { for (const x of it) {} const [y] = it; see(j) }"),
+  during(wrapped, "for (let j = 0; j < 1000; j++) { for (const x of A) {} const [y, z] = M; [...S]; for (const x of T) break; const [h] = H; [...L]; see(j) }"),
+  during(wrapped, "for (let j = 0; j < 1000; j++) { Array.from(A); new Map(M); Object.fromEntries(M); new Set(S); Promise.all(T); new Headers(H); see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }"),
   during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
 )

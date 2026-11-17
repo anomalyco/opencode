@@ -1287,8 +1287,9 @@ impl<'rt> Vm<'rt> {
             return Ok(out);
         }
         let it = self.get_iterator(v)?;
+        let next = self.record_next_of(v, &it)?;
         let mut out = Vec::new();
-        while let Some(x) = self.iter_step(&it)? {
+        while let Some(x) = self.iter_step_with(&it, next)? {
             if out.len() >= MAX_ARRAY_LEN {
                 return Err(self.range_error("Invalid array length"));
             }
@@ -1656,6 +1657,7 @@ impl<'rt> Vm<'rt> {
             | Kind::MapIter { .. }
             | Kind::StrIter { .. }
             | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
             | Kind::Generator(_)
             | Kind::AsyncFromSync { .. } => Ok(Value::Undef),
             _ => {
@@ -1665,13 +1667,15 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// One iterator step, calling `next` (when not `Undef`) instead of reading the iterator's `next` again.
+    /// One iterator step, calling `next` (when not `Undef`) instead of reading the iterator's `next` again. A built-in
+    /// iterator is stepped directly only when its record keeps no `next` (see `Vm::record_next_of`).
     #[inline(never)]
     pub fn iter_step_with(&mut self, it: &Value, next: Value) -> Result<Option<Value>, Value> {
         let Value::Obj(id) = it else { return Ok(None) };
         let id = *id;
+        let direct = next.is_nullish();
         match &self.heap[id as usize].kind {
-            Kind::ArrayIter { target, pos, kind } => {
+            Kind::ArrayIter { target, pos, kind } if direct => {
                 let (target, pos, kind) = (*target, *pos as usize, *kind);
                 let item = match &self.heap[target as usize].kind {
                     Kind::Array(items) | Kind::Arguments(items) => {
@@ -1701,7 +1705,7 @@ impl<'rt> Vm<'rt> {
                     IterKind::Entries => self.new_array(vec![Value::Num(pos as f64), v]),
                 }))
             }
-            Kind::MapIter { target, pos, kind } => {
+            Kind::MapIter { target, pos, kind } if direct => {
                 let (target, mut pos, kind) = (*target, *pos as usize, *kind);
                 let (entry, is_set) = match &self.heap[target as usize].kind {
                     Kind::Map(m) | Kind::Set(m) => {
@@ -1730,7 +1734,7 @@ impl<'rt> Vm<'rt> {
                     IterKind::Entries => self.new_array(vec![k, v]),
                 }))
             }
-            Kind::StrIter { s, pos } => {
+            Kind::StrIter { s, pos } if direct => {
                 let p = *pos as usize;
                 let Some(cp) = crate::strings::code_point_at(self.atoms.get(*s), p) else {
                     return Ok(None);
@@ -1748,7 +1752,7 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(Some(v))
             }
-            Kind::ListIter { items, pos } => {
+            Kind::ListIter { items, pos } if direct => {
                 let v = items.get(*pos as usize).cloned();
                 if v.is_some()
                     && let Kind::ListIter { pos, .. } = &mut self.heap[id as usize].kind
@@ -1770,10 +1774,11 @@ impl<'rt> Vm<'rt> {
                 };
                 // The reference steps its own iterators and helpers without a call; any other `next` is called as
                 // bytecode calls it.
-                let r = if matches!(
-                    self.heap[id as usize].kind,
-                    Kind::IterHelper(_) | Kind::ExoticIter { .. }
-                ) {
+                let r = if match self.heap[id as usize].kind {
+                    Kind::IterHelper(_) => true,
+                    Kind::ExoticIter { .. } => direct,
+                    _ => false,
+                } {
                     self.call(&f, *it, &[])?
                 } else {
                     self.call_counted(&f, *it, &[])?
