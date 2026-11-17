@@ -21,6 +21,7 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `opencode-rundev.tgz` | `opencode-rundev@0.1.5` (catalog CT-19) | `sha512-fHiuKD7BhD8CC6Xh1sZLjTxPJYDIJSDHFiIRpPPn9576m+FngIt+fx4OWP0dHpL889+ONwIRccJuapIoXRpkxw==` |
 | `@joe-broadhead__opencode-tavily.tgz` | `@joe-broadhead/opencode-tavily@0.0.7` (catalog CT-22) | `sha512-+KmDCMP9j085+FRX7gYbGIRe474M2hDU9YUT/8E2roHg2yELugsMNR1Ta/1rc2eeJ9yn+vcheJnnq7sPntj8Xw==` |
 | `@jasonencode__opencode-context.tgz` | `@jasonencode/opencode-context@1.0.0` (catalog CT-24) | `sha512-NJ4x4ca7HxncU3OmagqVm0O9okkC2eykd/6IkYHnBEdx7hgZIcFThWg1z1S3OEWBgVtba//IRqoaum9QAFkwHw==` |
+| `opencode-skills-tui.tgz` | `opencode-skills-tui@1.2.3` (F16 data collections) | `sha512-RQ2Zt0fc8Ipsi0pQ643TJLxQpiakZ+PP1tMIZyGvakfPBxuTFz9StLn+C1eqjjgGfRfeQWKwJ+UpbGJLDncIeQ==` |
 | `opencode-navigator.tgz` | `opencode-navigator@0.27.7` (catalog CT-21) | `sha512-Rt5p1v24ssRdG4u2JBseomSmxcQ2c4YBfRwwebsWLNThCQNZogojd3oo8W7ZvTT/es9DeT9JLD0sLX23IVtREA==` |
 | `@joe-broadhead__opencode-linear.tgz` | `@joe-broadhead/opencode-linear@0.0.9` (catalog CT-8) | `sha512-JKi7qnHOXusxcPFb8jcrsKj/6zVMsWSLv0P3PWVTFOb+aGf3yaHUwR+8RL7wny8Unfbo6HzdqojEbT2L44K10g==` |
 
