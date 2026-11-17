@@ -1014,6 +1014,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} कॉन्टेक्स्ट",
   "model.details.left": "शेष",
   "model.details.resets": "रीसेट",
+  "model.details.usage": "{{label}} · {{time}} पर रीसेट",
   "common.ok": "ठीक है",
   "common.retry": "पुनः प्रयास करें",
   "session.child.status.running": "चल रहा है",

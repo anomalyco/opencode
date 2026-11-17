@@ -1014,6 +1014,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} প্রসঙ্গ",
   "model.details.left": "বাকি",
   "model.details.resets": "রিসেট হয়",
+  "model.details.usage": "{{label}} · {{time}}-এ রিসেট হবে",
   "common.ok": "ঠিক আছে",
   "common.retry": "আবার চেষ্টা করুন",
   "session.child.status.running": "চলছে",

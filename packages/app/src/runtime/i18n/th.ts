@@ -1050,6 +1050,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · บริบท {{context}}",
   "model.details.left": "คงเหลือ",
   "model.details.resets": "รีเซ็ต",
+  "model.details.usage": "{{label}} · รีเซ็ต {{time}}",
   "common.ok": "ตกลง",
   "common.retry": "ลองอีกครั้ง",
   "session.child.status.running": "กำลังทำงาน",

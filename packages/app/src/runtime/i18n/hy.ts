@@ -1009,6 +1009,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} համատեքստ",
   "model.details.left": "Մնացել է",
   "model.details.resets": "Վերակայվում է",
+  "model.details.usage": "{{label}} · վերակայվում է {{time}}",
   "common.ok": "Լավ",
   "common.retry": "Կրկին փորձել",
   "session.child.status.running": "Աշխատում է",

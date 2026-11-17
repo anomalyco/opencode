@@ -1024,6 +1024,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · контексти {{context}}",
   "model.details.left": "Боқӣ",
   "model.details.resets": "Аз нав барқарор мешавад",
+  "model.details.usage": "{{label}} · {{time}} барқарор мешавад",
   "common.ok": "OK",
   "common.retry": "Аз нав кӯшиш кунед",
   "session.child.status.running": "Иҷро мешавад",

@@ -1105,6 +1105,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · контекст {{context}}",
   "model.details.left": "Залишилось",
   "model.details.resets": "Скидання",
+  "model.details.usage": "{{label}} · скидання {{time}}",
   "common.ok": "OK",
   "common.retry": "Спробувати ще раз",
   "session.child.status.running": "Виконується",

@@ -1056,6 +1056,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · contexte de {{context}}",
   "model.details.left": "Restant",
   "model.details.resets": "Réinitialisation",
+  "model.details.usage": "{{label}} · réinitialisation : {{time}}",
   "common.ok": "OK",
   "common.retry": "Réessayer",
   "session.child.status.running": "En cours",

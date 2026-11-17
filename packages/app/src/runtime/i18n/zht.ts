@@ -1029,6 +1029,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} 上下文",
   "model.details.left": "剩餘",
   "model.details.resets": "重設",
+  "model.details.usage": "{{label}} · {{time}} 重設",
   "common.ok": "確定",
   "common.retry": "再試一次",
   "session.child.status.running": "執行中",

@@ -1161,7 +1161,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                         {value().label}
                       </div>
                       <div class="text-[12px] leading-5 text-v2-text-text-muted">
-                        {language.t("model.details.resetsAt", { time: value().resets })}
+                        {language.t("usage.footer.resets", { time: value().resets })}
                       </div>
                     </div>
                     <div data-slot="menu-v2-separator" role="separator" />

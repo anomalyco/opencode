@@ -1013,6 +1013,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} კონტექსტი",
   "model.details.left": "დარჩა",
   "model.details.resets": "განახლდება",
+  "model.details.usage": "{{label}} · განახლდება {{time}}",
   "common.ok": "OK",
   "common.retry": "ხელახლა ცდა",
   "session.child.status.running": "მიმდინარეობს",

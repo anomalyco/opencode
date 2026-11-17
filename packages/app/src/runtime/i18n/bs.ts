@@ -1086,6 +1086,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · kontekst {{context}}",
   "model.details.left": "Preostalo",
   "model.details.resets": "Resetuje se",
+  "model.details.usage": "{{label}} · resetuje se {{time}}",
   "common.ok": "U redu",
   "common.retry": "Pokušaj ponovo",
   "session.child.status.running": "U toku",

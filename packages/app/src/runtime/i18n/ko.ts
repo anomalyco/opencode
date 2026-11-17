@@ -1011,6 +1011,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · 컨텍스트 {{context}}",
   "model.details.left": "남음",
   "model.details.resets": "초기화",
+  "model.details.usage": "{{label}} · {{time}} 초기화",
   "common.ok": "확인",
   "common.retry": "다시 시도",
   "session.child.status.running": "실행 중",

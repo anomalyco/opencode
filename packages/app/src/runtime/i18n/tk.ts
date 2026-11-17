@@ -1003,6 +1003,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontekst",
   "model.details.left": "Galan",
   "model.details.resets": "Täzelenýär",
+  "model.details.usage": "{{label}} · {{time}} täzelenýär",
   "common.ok": "Makul",
   "common.retry": "Täzeden synanyşyň",
   "session.child.status.running": "Işleýär",

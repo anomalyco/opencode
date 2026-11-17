@@ -1040,6 +1040,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontekstas",
   "model.details.left": "Liko",
   "model.details.resets": "Atsinaujina",
+  "model.details.usage": "{{label}} · atsinaujina {{time}}",
   "common.ok": "Gerai",
   "common.retry": "Bandyti dar kartą",
   "session.child.status.running": "Vykdoma",

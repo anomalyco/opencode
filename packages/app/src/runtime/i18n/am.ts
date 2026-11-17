@@ -967,6 +967,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} አውድ",
   "model.details.left": "የቀረ",
   "model.details.resets": "ዳግም ይጀምራል",
+  "model.details.usage": "{{label}} · {{time}} ዳግም ይጀምራል",
   "common.ok": "እሺ",
   "common.retry": "እንደገና ሞክር",
   "session.child.status.running": "በሂደት ላይ",

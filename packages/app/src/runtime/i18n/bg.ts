@@ -1020,6 +1020,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · контекст {{context}}",
   "model.details.left": "Остават",
   "model.details.resets": "Нулира се",
+  "model.details.usage": "{{label}} · нулира се {{time}}",
   "common.ok": "OK",
   "common.retry": "Опитайте отново",
   "session.child.status.running": "Изпълнява се",

@@ -1083,6 +1083,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} bağlam",
   "model.details.left": "Kalan",
   "model.details.resets": "Sıfırlanma",
+  "model.details.usage": "{{label}} · {{time}} sıfırlanır",
   "common.ok": "Tamam",
   "common.retry": "Tekrar dene",
   "session.child.status.running": "Çalışıyor",

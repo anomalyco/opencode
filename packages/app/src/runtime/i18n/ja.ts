@@ -1021,6 +1021,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · コンテキスト {{context}}",
   "model.details.left": "残り",
   "model.details.resets": "リセット",
+  "model.details.usage": "{{label}} · {{time}}にリセット",
   "common.ok": "OK",
   "common.retry": "再試行",
   "session.child.status.running": "実行中",

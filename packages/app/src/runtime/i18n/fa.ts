@@ -1007,6 +1007,7 @@ export const dict = {
   "model.details.summary": "⁨{{provider}}⁩ · زمینه ⁨{{context}}⁩",
   "model.details.left": "باقی‌مانده",
   "model.details.resets": "بازنشانی",
+  "model.details.usage": "⁨{{label}}⁩ · بازنشانی ⁨{{time}}⁩",
   "common.ok": "تأیید",
   "common.retry": "تلاش دوباره",
   "session.child.status.running": "در حال اجرا",

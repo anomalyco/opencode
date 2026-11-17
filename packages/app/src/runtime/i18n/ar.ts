@@ -1058,6 +1058,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · سياق {{context}}",
   "model.details.left": "المتبقي",
   "model.details.resets": "إعادة التعيين",
+  "model.details.usage": "{{label}} · إعادة التعيين {{time}}",
   "common.ok": "موافق",
   "common.retry": "حاول مرة أخرى",
   "session.child.status.running": "قيد التشغيل",

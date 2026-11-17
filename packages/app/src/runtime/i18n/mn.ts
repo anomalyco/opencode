@@ -1018,6 +1018,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} контекст",
   "model.details.left": "Үлдсэн",
   "model.details.resets": "Шинэчлэгдэнэ",
+  "model.details.usage": "{{label}} · {{time}}-д шинэчлэгдэнэ",
   "common.ok": "OK",
   "common.retry": "Дахин оролдох",
   "session.child.status.running": "Ажиллаж байна",

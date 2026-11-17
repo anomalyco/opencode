@@ -1040,6 +1040,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} Kontext",
   "model.details.left": "Verbleibend",
   "model.details.resets": "Zurücksetzung",
+  "model.details.usage": "{{label}} · Zurücksetzung am {{time}}",
   "common.ok": "OK",
   "common.retry": "Erneut versuchen",
   "session.child.status.running": "Läuft",

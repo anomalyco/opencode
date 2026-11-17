@@ -1039,6 +1039,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · kontext {{context}}",
   "model.details.left": "Zostáva",
   "model.details.resets": "Obnoví sa",
+  "model.details.usage": "{{label}} · obnoví sa {{time}}",
   "common.ok": "OK",
   "common.retry": "Skúsiť znova",
   "session.child.status.running": "Beží",

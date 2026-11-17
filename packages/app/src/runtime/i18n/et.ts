@@ -999,6 +999,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} konteksti",
   "model.details.left": "Alles",
   "model.details.resets": "Lähtestub",
+  "model.details.usage": "{{label}} · lähtestub {{time}}",
   "common.ok": "OK",
   "common.retry": "Proovi uuesti",
   "session.child.status.running": "Töötab",

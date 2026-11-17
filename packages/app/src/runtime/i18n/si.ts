@@ -1013,6 +1013,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} සන්දර්භය",
   "model.details.left": "ඉතිරි",
   "model.details.resets": "යළි පිහිටුවේ",
+  "model.details.usage": "{{label}} · {{time}} යළි පිහිටුවේ",
   "common.ok": "හරි",
   "common.retry": "නැවත උත්සාහ කරන්න",
   "session.child.status.running": "ධාවනය වෙමින්",

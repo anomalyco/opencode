@@ -1014,6 +1014,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} kontekst",
   "model.details.left": "Qalıb",
   "model.details.resets": "Sıfırlanır",
+  "model.details.usage": "{{label}} · {{time}} sıfırlanır",
   "common.ok": "OK",
   "common.retry": "Yenidən cəhd et",
   "session.child.status.running": "İşləyir",

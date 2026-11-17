@@ -1030,6 +1030,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · context {{context}}",
   "model.details.left": "Rămas",
   "model.details.resets": "Se resetează",
+  "model.details.usage": "{{label}} · se resetează {{time}}",
   "common.ok": "OK",
   "common.retry": "Încearcă din nou",
   "session.child.status.running": "Rulează",

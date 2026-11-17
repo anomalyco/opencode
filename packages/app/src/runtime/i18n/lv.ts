@@ -1031,6 +1031,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} konteksts",
   "model.details.left": "Atlicis",
   "model.details.resets": "Atiestatās",
+  "model.details.usage": "{{label}} · atiestatās {{time}}",
   "common.ok": "Labi",
   "common.retry": "Mēģināt vēlreiz",
   "session.child.status.running": "Darbojas",

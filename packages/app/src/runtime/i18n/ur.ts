@@ -1026,6 +1026,7 @@ export const dict = {
   "model.details.summary": "⁨{{provider}}⁩ · ⁨{{context}}⁩ سیاق و سباق",
   "model.details.left": "باقی",
   "model.details.resets": "ری سیٹ",
+  "model.details.usage": "⁨{{label}}⁩ · ⁨{{time}}⁩ پر ری سیٹ",
   "common.ok": "ٹھیک ہے",
   "common.retry": "دوبارہ کوشش کریں",
   "session.child.status.running": "جاری ہے",

@@ -1024,6 +1024,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} context",
   "model.details.left": "Resterend",
   "model.details.resets": "Volgende reset",
+  "model.details.usage": "{{label}} · reset op {{time}}",
   "common.ok": "OK",
   "common.retry": "Opnieuw proberen",
   "session.child.status.running": "Bezig",

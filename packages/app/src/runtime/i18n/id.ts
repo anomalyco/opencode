@@ -1075,6 +1075,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · konteks {{context}}",
   "model.details.left": "Tersisa",
   "model.details.resets": "Diatur ulang",
+  "model.details.usage": "{{label}} · diatur ulang {{time}}",
   "common.ok": "OK",
   "common.retry": "Coba lagi",
   "session.child.status.running": "Berjalan",

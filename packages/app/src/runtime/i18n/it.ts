@@ -1034,6 +1034,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · contesto {{context}}",
   "model.details.left": "Rimanente",
   "model.details.resets": "Si azzera",
+  "model.details.usage": "{{label}} · si azzera {{time}}",
   "common.ok": "OK",
   "common.retry": "Riprova",
   "session.child.status.running": "In esecuzione",

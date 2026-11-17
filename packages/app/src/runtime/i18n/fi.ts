@@ -1009,6 +1009,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} konteksti",
   "model.details.left": "Jäljellä",
   "model.details.resets": "Nollautuu",
+  "model.details.usage": "{{label}} · nollautuu {{time}}",
   "common.ok": "OK",
   "common.retry": "Yritä uudelleen",
   "session.child.status.running": "Käynnissä",

@@ -996,6 +996,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · ບໍລິບົດ {{context}}",
   "model.details.left": "ເຫຼືອ",
   "model.details.resets": "ຣີເຊັດ",
+  "model.details.usage": "{{label}} · ຣີເຊັດ {{time}}",
   "common.ok": "ຕົກລົງ",
   "common.retry": "ລອງອີກຄັ້ງ",
   "session.child.status.running": "ກຳລັງແລ່ນ",

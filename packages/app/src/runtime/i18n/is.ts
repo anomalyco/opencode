@@ -1004,6 +1004,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · {{context}} samhengi",
   "model.details.left": "Eftir",
   "model.details.resets": "Endurstillist",
+  "model.details.usage": "{{label}} · endurstillist {{time}}",
   "common.ok": "Í lagi",
   "common.retry": "Reyna aftur",
   "session.child.status.running": "Í gangi",

@@ -1010,6 +1010,7 @@ export const dict = {
   "model.details.summary": "{{provider}} · ngữ cảnh {{context}}",
   "model.details.left": "Còn lại",
   "model.details.resets": "Đặt lại",
+  "model.details.usage": "{{label}} · đặt lại {{time}}",
   "common.ok": "OK",
   "common.retry": "Thử lại",
   "session.child.status.running": "Đang chạy",
