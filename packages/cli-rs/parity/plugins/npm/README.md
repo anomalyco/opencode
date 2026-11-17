@@ -29,6 +29,8 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `@cleocode__goal.tgz` | `@cleocode/goal@0.13.0` (catalog CT-14) | `sha512-6IojHCDI9N+iWncfvFXT8BXUL+M6zWIzgh55Kkxgu2v1N0GSMtiadUS3leF4pBC43gFecdcPoNL8ZmVIqjeGQQ==` |
 | `opencode-navigator.tgz` | `opencode-navigator@0.27.7` (catalog CT-21) | `sha512-Rt5p1v24ssRdG4u2JBseomSmxcQ2c4YBfRwwebsWLNThCQNZogojd3oo8W7ZvTT/es9DeT9JLD0sLX23IVtREA==` |
 | `@joe-broadhead__opencode-linear.tgz` | `@joe-broadhead/opencode-linear@0.0.9` (catalog CT-8) | `sha512-JKi7qnHOXusxcPFb8jcrsKj/6zVMsWSLv0P3PWVTFOb+aGf3yaHUwR+8RL7wny8Unfbo6HzdqojEbT2L44K10g==` |
+| `opencode-command-hotkeys.tgz` | `opencode-command-hotkeys@0.1.1` (ports-trio) | `sha512-n5BMlNWD3/8bNtP2HeQjq8uyQX6ypROO+Vh3xUqbSl5wkVobHWQIriAp9WQkL3JMxwMHWvOJi6dMfCGNq/YXUA==` |
+| `@khaosoigai__oc-context-grid.tgz` | `@khaosoigai/oc-context-grid@0.3.2` (ports-trio) | `sha512-gKUXa1JTMIYjiY/1tHLv+HIEMa2jqOLcn5zS45CXgK6PooDjjvDRxx2IkSMbY8da8spj4NYRAFYOwFmw7nrutw==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
 (`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
