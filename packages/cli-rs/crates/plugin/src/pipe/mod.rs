@@ -443,6 +443,9 @@ struct Load {
     registered: bool,
 }
 
+/// The messages of a plugin's activation the host keeps before it registers it ([`Scripts::keep`]).
+const EARLY: usize = 256;
+
 /// The reloads of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails. Each reload sets up its surfaces
 /// again, which mounts its components again: one whose mount changes the registrations reloads without end (CT-1:
 /// tokscope's page, about 1,000 reloads a second, until the user left it).
@@ -630,6 +633,9 @@ pub struct Scripts {
     guests: RefCell<HashMap<String, Weak<Guest>>>,
     /// What a plugin sent after its setup was answered and before the loader registered it: its watches, its effects.
     early: RefCell<HashMap<String, Vec<Up>>>,
+    /// The plugins whose activation sent more than [`EARLY`] messages before it was registered, by that activation:
+    /// it fails once it is ([`Scripts::keep`]).
+    spilled: RefCell<HashMap<String, u64>>,
     waiting: RefCell<HashMap<u64, Waiting>>,
     /// The sequences the running JS host said it started.
     started: RefCell<std::collections::HashSet<u64>>,
@@ -695,6 +701,7 @@ impl Scripts {
             loads: RefCell::default(),
             guests: RefCell::default(),
             early: RefCell::default(),
+            spilled: RefCell::default(),
             waiting: RefCell::default(),
             started: RefCell::default(),
             overflow: RefCell::default(),
@@ -1589,21 +1596,40 @@ impl Scripts {
     }
 
     /// Keeps `up` of a plugin the loader has not registered yet, for its activation.
+    /// Past [`EARLY`] messages, one is not kept, and nothing of it is dropped silently (big-boi's catalog review,
+    /// final): a batch of effects is answered at once, a failure for each, so what waits for it settles; and the
+    /// activation is failed once it is registered, as what it registered or watched in a message not kept is lost.
     fn keep(&self, up: Up) {
-        const EARLY: usize = 256;
-        let Some((id, _)) = sender(&up) else { return };
+        let Some((id, activation)) = sender(&up) else { return };
         let mut early = self.early.borrow_mut();
         let kept = early.entry(id.clone()).or_default();
-        match kept.len() < EARLY {
-            true => kept.push(up),
-            false => log::warn!("plugin {id}: over {EARLY} messages before it was registered; dropped"),
+        if kept.len() < EARLY {
+            return kept.push(up);
+        }
+        drop(early);
+        log::warn!("plugin {id}: over {EARLY} messages before it was registered; it fails once it is");
+        self.spilled.borrow_mut().insert(id.clone(), activation);
+        if let Up::Effects { seq, effects, .. } = up {
+            let results = vec![serde_json::Value::Null; effects.len()];
+            self.settle(&Down::Answered { id, activation, key: format!("b{seq}"), results }, 0);
         }
     }
 
-    /// What plugin `id` sent before its activation `guest` was registered.
+    /// What plugin `id` sent before its activation `guest` was registered; and, when some of it was not kept, its
+    /// failure.
     fn registered(self: &Rc<Self>, id: &str) {
         let early = self.early.borrow_mut().remove(id).unwrap_or_default();
         early.into_iter().for_each(|up| self.up(up));
+        let spilled = self.spilled.borrow_mut().remove(id);
+        if let (Some(activation), Some(guest)) = (spilled, self.guest(id)) {
+            if activation == 0 || guest.activation() == activation {
+                // After the turn: the setup that registers it is still at work.
+                let why = format!("it sent more than {EARLY} messages before the host registered it, and lost some");
+                crate::defer(&self.host, move |_| guest.fail(why));
+                return;
+            }
+            self.spilled.borrow_mut().insert(id.to_owned(), activation);
+        }
     }
 
     /// What `seq` waited for, now answered.
