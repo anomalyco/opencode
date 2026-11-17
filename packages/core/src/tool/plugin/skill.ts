@@ -30,6 +30,14 @@ export const toModelOutput = Skill.toModelOutput
 const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
 
+// A skill also answers to the name it advertises, so a display name
+// (`acme:my-skill`) loads wherever the skill is nested. A name is not a key:
+// ambiguity resolves to nothing rather than to a guess.
+const byName = (skills: ReadonlyArray<Skill.Info>, id: string) => {
+  const matches = skills.filter((skill) => String(skill.name) === String(id))
+  return matches.length === 1 ? matches[0] : undefined
+}
+
 export const Plugin = {
   id: "opencode.tool.skill",
   effect: Effect.fn("SkillTool.Plugin")(function* (ctx: Context) {
@@ -46,7 +54,7 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
+              const skill = (yield* skills.get(input.id)) ?? byName(yield* skills.list(), input.id)
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
