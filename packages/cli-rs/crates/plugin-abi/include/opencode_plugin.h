@@ -208,10 +208,14 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - "search" (2.0) answers the values of the options to list, in order.
  *
  * Tree nodes (`Node`, by "type"): "box", "text", "slot", "markdown", "spinner", "scroll", "diff", "input", "list",
- * "code", "image", "keep" and "canvas". A source (`Source`) is {"text": text}, {"content": handle} or
+ * "code", "image", "keep", "canvas" and "fence". A source (`Source`) is {"text": text}, {"content": handle} or
  * {"part-output": {"session", "part"}}. A dialog's and a 1.x render's body is a node of ABI 1.x (`V1Node`). A tree the
  * host cannot decode, such as one with a kind it does not know, fails the plugin and leaves no effect: a library
- * lowers a kind of a later minor for an older host before it answers (the Rust SDK's `View::or`).
+ * lowers a kind of a later minor, or of a feature the host does not list, for that host before it answers (the Rust
+ * SDK's `View::or`). A "fence" is the host's own code view of the fence a claim draws, current with each revision of
+ * it with no call: a host with the feature "fence-node" takes it in a fence claim's tree only, at most once, refuses
+ * any other tree that holds it (a surface's view fails the plugin, a claim's tree shows the host's own row), and
+ * charges it one node and one row, whatever its code.
  *
  * What the requests to the host do (`HostRequest`):
  * - Effects wait until the plugin's call returns. A call that panics, or whose answer the host refuses (it cannot
@@ -223,7 +227,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   happens when the host draws its answer.
  * - A "scroll" of the transcript is taken only from a call that answers the user's input (a key, a click, an edit,
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
- *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet.
+ *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet. A "focus" names a box that is
+ *   focusable, or, on a host with the feature "focus-input", an "input" with an id, which then takes what the user
+ *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken.
  * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"), never 0, which names no
  *   request: an SDK refuses an answer of 0 as malformed. One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust

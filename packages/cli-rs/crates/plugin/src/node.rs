@@ -226,6 +226,7 @@ impl Mount {
                     draw: None,
                     plugin: Some(&self.charge.0),
                     item: false,
+                    fence: None,
                 };
                 // A tree of ABI 1.x has no ids and no keeps, so nothing in it can be refused.
                 let mut applied = Ok(());

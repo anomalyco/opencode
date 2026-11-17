@@ -203,8 +203,8 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
             let shown = picker.shown.borrow();
             keys(&shown.actions) == keys(&select.actions)
                 && shown.binds == select.binds
-                && (&shown.title, &shown.placeholder, shown.size, &shown.search)
-                    == (&select.title, &select.placeholder, select.size, &select.search)
+                && (&shown.title, &shown.placeholder, shown.size, &shown.search, shown.centered)
+                    == (&select.title, &select.placeholder, select.size, &select.search, select.centered)
                 && (&shown.query, shown.query_delay, shown.filterless, &shown.focus, &shown.note)
                     == (&select.query, select.query_delay, select.filterless, &select.focus, &select.note)
                 && shown.empty.is_some() == select.empty.is_some()
@@ -245,7 +245,10 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
         handle: RefCell::default(),
     });
     *tui.reads.select.borrow_mut() = keyed.is_some().then(|| picker.clone());
-    let size = picker.shown.borrow().size.map(dialog_size).unwrap_or_default();
+    let (size, centered) = {
+        let shown = picker.shown.borrow();
+        (shown.size.map(dialog_size).unwrap_or_default(), shown.centered)
+    };
     let dialog = keyed.as_ref().map_or(DialogOptions::new(size), |key| DialogOptions::new(size).key(key.clone()));
     let kept = RefCell::new(kept);
     own(tui, owner, |on_close| {
@@ -337,6 +340,7 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
             dialog,
         )
     });
+    tui.dialogs.set_centered(centered);
 }
 
 /// A text of `span` in `theme`, its color `text.base` unless it names one.
@@ -765,6 +769,7 @@ fn plugin_error(tui: &Tui, key: &str) -> Option<String> {
 /// TS `dialog.confirm`: `Confirm` runs the action with `true`, `Cancel` and escape with `false`; a dialog that replaces
 /// it runs nothing.
 fn ask_yes(tui: &Tui, owner: Owner, confirm: abi::Confirm) {
+    let (size, centered) = (confirm.size.map(dialog_size).unwrap_or_default(), confirm.centered);
     let (weak, answered) = (tui.weak(), owner.clone());
     own(tui, owner, |on_close| {
         tui.dialogs.replace(
@@ -787,13 +792,15 @@ fn ask_yes(tui: &Tui, owner: Owner, confirm: abi::Confirm) {
                 )
             },
             Some(on_close),
-            DialogOptions::default(),
+            DialogOptions::new(size),
         )
     });
+    tui.dialogs.set_centered(centered);
 }
 
 /// TS `dialog.alert`: however the alert closes, its action runs once after.
 fn tell(tui: &Tui, owner: Owner, alert: abi::Alert) {
+    let (size, centered) = (alert.size.map(dialog_size).unwrap_or_default(), alert.centered);
     let props = AlertProps { title: alert.title, message: alert.message, on_confirm: None };
     let (weak, closed) = (tui.weak(), owner.clone());
     own(tui, owner, |on_close| {
@@ -806,9 +813,10 @@ fn tell(tui: &Tui, owner: Owner, alert: abi::Alert) {
         tui.dialogs.replace(
             move |cx| opencode_ui::alert::alert(cx, props.clone()),
             Some(on_close),
-            DialogOptions::default(),
+            DialogOptions::new(size),
         )
     });
+    tui.dialogs.set_centered(centered);
 }
 
 fn dialog_size(size: abi::PanelSize) -> DialogSize {

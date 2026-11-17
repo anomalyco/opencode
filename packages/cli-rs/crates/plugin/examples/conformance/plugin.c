@@ -30,6 +30,10 @@ typedef struct instance {
     unsigned views;
     unsigned messages;
     int dup;
+    /* The next view of `conf` holds a fence node. */
+    int fenced;
+    /* The host draws a fence node (`fence-node`); without it the fence claim lowers it. */
+    int fence_node;
     /* The generation of the mount whose `fixed` subtree the host holds; 0 for none. */
     unsigned long long fixed;
     unsigned long long pads;
@@ -137,7 +141,7 @@ static void send(const opencode_host_api *host, const char *key, const char *mes
 static const char *const COMMANDS[] = {
     "conf.toast", "conf.store", "conf.send", "conf.wake",  "conf.panic", "conf.dup",  "conf.read",
     "conf.pad",   "conf.down",  "conf.step", "conf.where", "conf.ui",    "conf.bump", "conf.message",
-    "conf.plugins",
+    "conf.field", "conf.fence", "conf.dialogs", "conf.plugins",
 };
 
 /* The scroll `items` of the surface `rows`, as a verb or a read names it. */
@@ -163,6 +167,8 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     }
     self->host = host;
     self->search_toast = find(options, "search-toast") != NULL;
+    /* A 1.x table has no features: its size ends before them. */
+    self->fence_node = OFFERS(host, features.ptr) && find(host->features, "\"fence-node\"") != NULL;
     /* As the Rust SDK's `storage_key` does: the host serves the key from here on, also during setup. */
     ask(host, "{\"type\":\"storage-key\",\"key\":\"count\"}", NULL, 0);
     *out_instance = self;
@@ -183,6 +189,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
             "{\"name\":\"kept\",\"place\":{\"type\":\"route\",\"name\":\"kept\"},\"handler\":true,\"mounts\":true}],"
             "\"messages\":true,\"plugins\":true,"
             "\"claims\":[{\"target\":{\"type\":\"fence\",\"name\":\"conf-fence\"}},"
+            "{\"target\":{\"type\":\"fence\",\"name\":\"conf-fences\"}},"
             "{\"target\":{\"type\":\"tool\",\"name\":\"conf-tool\"}}],\"searches\":[\"conf.find\"],"
             "\"layers\":[{\"scope\":\"global\",\"keys\":[{\"key\":\"ctrl+g\",\"name\":\"conf\"},"
             "{\"key\":\"ctrl+o\",\"name\":\"pass\"}],\"paste\":true}]}",
@@ -190,6 +197,8 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     *out = owned(manifest);
     return OPENCODE_OK;
 }
+
+static int string_after(opencode_bytes request, const char *needle, char *out, size_t room);
 
 /* `conf.ui`: each verb and read of P2 once, then what the reads answered. */
 static void ui(const opencode_host_api *host) {
@@ -208,18 +217,39 @@ static void ui(const opencode_host_api *host) {
         snprintf(mode, sizeof mode, "%.63s", answer + 1);
     }
     ask(host, "{\"type\":\"release-keys\"}", NULL, 0);
+    ask(host, "{\"type\":\"focus\",\"node\":\"field\"}", NULL, 0);
+    char field[64] = "none";
+    if (ask(host, "{\"type\":\"focused\"}", answer, sizeof answer) == OPENCODE_OK) {
+        string_after(bytes(answer), "\"node\":\"", field, sizeof field);
+    }
     ask(host, "{\"type\":\"blur\"}", NULL, 0);
     ask(host, "{\"type\":\"open-panel\",\"surface\":\"rows\"}", NULL, 0);
     ask(host, "{\"type\":\"close-panel\",\"surface\":\"rows\"}", NULL, 0);
     ask(host, "{\"type\":\"overlay\",\"surface\":\"rows\",\"anchor\":{\"edge\":\"top\"},\"width\":10,\"height\":3}", NULL,
         0);
     ask(host, "{\"type\":\"close-overlay\",\"surface\":\"rows\"}", NULL, 0);
-    char message[96];
-    snprintf(message, sizeof message, "ui %s %s %s", focused ? "true" : "false", rect ? "true" : "false", mode);
+    char message[192];
+    snprintf(message, sizeof message, "ui %s %s %s %s", focused ? "true" : "false", rect ? "true" : "false", mode,
+             field);
     toast(host, "info", message);
 }
 
-static int string_after(opencode_bytes request, const char *needle, char *out, size_t room);
+/* `conf.dialogs`: a select, an alert and a confirm, each centered; the select and the alert extra large. */
+static void dialogs(const opencode_host_api *host) {
+    ask(host,
+        "{\"type\":\"dialog\",\"dialog\":{\"type\":\"select\",\"title\":\"pick\",\"options\":[{\"title\":\"one\","
+        "\"value\":\"1\"}],\"action\":{\"type\":\"command\",\"name\":\"conf.toast\"},\"size\":\"xlarge\","
+        "\"centered\":true}}",
+        NULL, 0);
+    ask(host,
+        "{\"type\":\"dialog\",\"dialog\":{\"type\":\"alert\",\"title\":\"told\",\"message\":\"said\","
+        "\"size\":\"xlarge\",\"centered\":true}}",
+        NULL, 0);
+    ask(host,
+        "{\"type\":\"dialog\",\"dialog\":{\"type\":\"confirm\",\"title\":\"asked\",\"message\":\"sure?\","
+        "\"action\":{\"type\":\"command\",\"name\":\"conf.toast\"},\"centered\":true}}",
+        NULL, 0);
+}
 
 /* `conf.plugins` and a change of the plugin list (P6b): the entries the host lists and the first one's key, said as
  * `said N KEY`. */
@@ -277,6 +307,12 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
         return OPENCODE_PANIC;
     } else if (names(request, "conf.dup")) {
         self->dup = 1;
+    } else if (names(request, "conf.field")) {
+        ask(host, "{\"type\":\"focus\",\"node\":\"field\"}", NULL, 0);
+    } else if (names(request, "conf.fence")) {
+        self->fenced = 1;
+    } else if (names(request, "conf.dialogs")) {
+        dialogs(host);
     } else if (names(request, "conf.pad")) {
         self->pads += 1;
     } else if (names(request, "conf.down")) {
@@ -327,7 +363,11 @@ static int32_t view(instance *self, opencode_bytes request, opencode_owned *out)
     snprintf(count, sizeof count, "{\"type\":\"text\",\"id\":\"count\",\"spans\":[{\"text\":\"views %u, messages %u\"}]}",
              self->views, self->messages);
     char reply[1024];
-    if (self->dup) {
+    if (self->fenced) {
+        self->fixed = 0;
+        snprintf(reply, sizeof reply, "{\"node\":{\"type\":\"box\",\"id\":\"root\",\"children\":[%s,{\"type\":\"fence\"}]}}",
+                 count);
+    } else if (self->dup) {
         self->fixed = 0;
         snprintf(reply, sizeof reply, "{\"node\":{\"type\":\"box\",\"id\":\"root\",\"children\":[%s,%s]}}", count,
                  count);
@@ -372,7 +412,7 @@ static int32_t rows(opencode_owned *out) {
                  index == 0 ? "" : ",", index, index);
         strncat(reply, item, sizeof reply - strlen(reply) - 1);
     }
-    strncat(reply, "]}]}}", sizeof reply - strlen(reply) - 1);
+    strncat(reply, "]},{\"type\":\"input\",\"id\":\"field\"}]}}", sizeof reply - strlen(reply) - 1);
     *out = owned(reply);
     return OPENCODE_OK;
 }
@@ -524,10 +564,21 @@ static int32_t call(void *raw, opencode_bytes request, opencode_owned *out) {
         return command(self, request, out);
     }
     if (is(request, "claim") && find(request, "\"part\":{\"type\":\"fence\"") != NULL) {
-        /* The claim of `conf-fence`'s fences. */
-        char code[64] = "", reply[160];
+        /* The claims of fences: claim 1 is `conf-fences`, whose tree holds two fence nodes. */
+        if (number(request, "claim") == 1) {
+            *out = owned("{\"node\":{\"type\":\"box\",\"id\":\"fences\",\"children\":[{\"type\":\"text\",\"spans\":"
+                         "[{\"text\":\"fences\"}]},{\"type\":\"fence\"},{\"type\":\"fence\"}]}}");
+            return OPENCODE_OK;
+        }
+        /* `conf-fence`: a label over the host's code view of the fence, or the code as text for an older host. */
+        char code[64] = "", language[64] = "", lowered[128], reply[384];
         string_after(request, "\"code\":\"", code, sizeof code);
-        snprintf(reply, sizeof reply, "{\"node\":{\"type\":\"text\",\"id\":\"fence\",\"spans\":[{\"text\":\"fenced %s\"}]}}", code);
+        string_after(request, "\"language\":\"", language, sizeof language);
+        snprintf(lowered, sizeof lowered, "{\"type\":\"text\",\"spans\":[{\"text\":\"fenced %s\"}]}", code);
+        snprintf(reply, sizeof reply,
+                 "{\"node\":{\"type\":\"box\",\"id\":\"fence\",\"children\":[{\"type\":\"text\",\"spans\":"
+                 "[{\"text\":\"fence %s\"}]},%s]}}",
+                 language, self->fence_node ? "{\"type\":\"fence\"}" : lowered);
         *out = owned(reply);
         return OPENCODE_OK;
     }

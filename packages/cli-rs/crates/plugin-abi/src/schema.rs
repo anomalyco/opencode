@@ -121,6 +121,7 @@ pub fn schema() -> Value {
             layout: reference("Layout") },
         Keep { key: string() } { },
         Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(), animate: boolean() },
+        Fence { } { id: nullable(string()), bg: nullable(reference("Color")), layout: reference("Layout") },
         #[cfg(any(test, feature = "next"))]
         Later { text: string() } { id: nullable(string()) },
     });

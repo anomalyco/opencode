@@ -28,6 +28,11 @@ ports.
 through the C ABI's byte shims. Every built-in is a plugin: the plugin manager (`opencode.plugins`) since P6b and the
 diff viewer (`opencode.diffs`) since P6c (`docs/P.4.md`, "The plugin list" and "The diff viewer").
 
+The linked host serves every optional feature of the contract (`abi::FEATURES`, `Read::abi`): `image-bounds`,
+`focus-input` (`Host::focus` of a field) and `fence-node` (`Node::Fence` in a fence claim's tree), so a built-in uses
+them with no check; the C ABI states the same list in `HostApi::features`. The dialogs' `centered`, and `size` on an
+alert and a confirm, need no feature (`docs/P.4.md`, "The ABI" and "Contract 2.0 surfaces").
+
 A mounted slot (`SlotMount`) or plugin route (`RouteMount`) syncs with `abi::Changed`, which the TUI builds
 from each store change batch (`host::changed`), or with `None` for a batch that changed nothing.
 

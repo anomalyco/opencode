@@ -9,10 +9,13 @@
 //!   makes the next view hold the id `count` twice; `conf.read` toasts "read", the theme mode and whether the host is
 //!   interactive; `conf.pad` moves the canvas `pad` to its next version; `conf.down` scrolls `items` by 2 rows,
 //!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3); `conf.ui` makes
-//!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a blur,
-//!   a panel and an overlay opened and closed) and toasts what the reads answered; `conf.bump` changes what `kept`
-//!   shows; `conf.message` reads message `msg_1` of session `ses_a` and toasts "message ID", or "message none" (P6a);
-//!   `conf.plugins` reads the plugin list and toasts "plugins N KEY", its length and its first entry's key (P6b).
+//!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a focus
+//!   of the field `field` and the focus read, a blur, a panel and an overlay opened and closed) and toasts what the
+//!   reads answered; `conf.bump` changes what `kept` shows; `conf.message` reads message `msg_1` of session `ses_a`
+//!   and toasts "message ID", or "message none" (P6a); `conf.plugins` reads the plugin list and toasts "plugins N
+//!   KEY", its length and its first entry's key (P6b); `conf.fence` makes the next view of `conf` hold a fence node,
+//!   which only a fence claim's tree may; `conf.field` gives the field `field` of `rows` the focus; `conf.dialogs` shows a select, an alert and a confirm, each centered, the
+//!   select and the alert extra large (contract 2.x additions).
 //! - It hears that the plugin list changed (P6b), and toasts "plugins changed N KEY" from the list read then.
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
@@ -23,7 +26,7 @@
 //! - A route surface `rows` (P3): a column `rows-root` of a text `where` and a scroll `items`, 3 rows high, of six boxes
 //!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
 //!   `where` on `#203040` while `items` is scrolled down. Between `where` and `items`, a box `button` that takes the
-//!   pointer (P2) holds "press".
+//!   pointer (P2) holds "press". Under `items`, an empty field `field`.
 //! - A route surface `kept` (P6a) that hears its mounts begin and end: a column `kept-root` of a text `kept`, "kept N"
 //!   (the bumps), and a hidden box `hidden`. A view told nothing changed (not `all`) while N is what it last showed
 //!   keeps its root.
@@ -32,7 +35,10 @@
 //!   "landed ID" (where a step landed) and "mount begins" or "mount ends", and consumes the first three; everything
 //!   else passes on.
 //! - A renderer claim (Pr) of the calls of tool `conf-tool`: Markdown of the content "claimed N", given anew in each
-//!   view, N the views it ran; and one of the fences of language `conf-fence`: "fenced CODE".
+//!   view, N the views it ran; one of the fences of language `conf-fence`: a column `fence` of a text "fence LANGUAGE"
+//!   over the host's code view of the fence (a fence node), which it lowers to a text "fenced CODE" for a host without
+//!   `fence-node`; and one of the fences of language `conf-fences`, whose tree holds a text "fences" and two fence
+//!   nodes, which the host refuses.
 //! - A search `conf.find` (P2): the values of the options whose title holds the query, in their order.
 //! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
 
@@ -43,13 +49,18 @@ use opencode_plugin_abi::canvas::{List, Style};
 use opencode_plugin_abi::interact::{
     self, Anchor, Bind, Edge, Handled, Interact, LayerScope, OpenPanel, Overlay, PointerKind,
 };
-use opencode_plugin_abi::{Command, Host, Layout, Setup, Span, ThemeMode, Toast, Variant, Width, claim, v2};
+use opencode_plugin_abi::{
+    Action, Alert, Command, Confirm, Dialog, Host, Layout, PanelSize, Select, SelectOption, Setup, Span, ThemeMode,
+    Toast, Variant, Width, claim, v2,
+};
 
 #[derive(Default)]
 struct State {
     views: Cell<u32>,
     messages: Cell<u32>,
     dup: Cell<bool>,
+    /// The next view of `conf` holds a fence node.
+    fenced: Cell<bool>,
     pads: Cell<u64>,
     draws: Cell<u32>,
     claimed: Cell<u32>,
@@ -117,6 +128,8 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.set_mode(Some("nav"));
         let mode = host.mode();
         host.release_keys();
+        host.focus("field");
+        let field = host.focused().node.unwrap_or_else(|| "none".to_owned());
         host.blur();
         host.open_panel(OpenPanel::new("rows"));
         host.close_panel("rows");
@@ -124,7 +137,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.overlay(Overlay::new("rows", anchor, 10, 3));
         host.close_overlay("rows");
         let mode = mode.unwrap_or_else(|| "none".to_owned());
-        host.toast(Toast::new(Variant::Info, format!("ui {} {} {mode}", focused.surface, rect.is_some())));
+        host.toast(Toast::new(Variant::Info, format!("ui {} {} {mode} {field}", focused.surface, rect.is_some())));
     });
     let bumped = state.clone();
     setup.command(command("conf.bump"), move |_, _| bumped.bumps.set(bumped.bumps.get() + 1));
@@ -145,12 +158,31 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.search("conf.find", |_, query, options| {
         options.iter().filter(|option| option.title.contains(query)).map(|option| option.value.clone()).collect()
     });
-    setup.claim(claim::Claim::fence("conf-fence", |_, part| match part {
+    setup.claim(claim::Claim::fence("conf-fence", |view, part| match part {
         claim::Part::Fence(fence) => {
-            Some(v2::Node::text(vec![Span::new(format!("fenced {}", fence.code))]).with_id("fence"))
+            let label = v2::Node::text(vec![Span::new(format!("fence {}", fence.language))]);
+            let code =
+                view.or(v2::Node::fence(), |_| v2::Node::text(vec![Span::new(format!("fenced {}", fence.code))]));
+            Some(v2::Node::column(vec![label, code]).with_id("fence"))
         }
         _ => None,
     }));
+    setup.claim(claim::Claim::fence("conf-fences", |_, _| {
+        let label = v2::Node::text(vec![Span::new("fences")]);
+        Some(v2::Node::column(vec![label, v2::Node::fence(), v2::Node::fence()]).with_id("fences"))
+    }));
+    setup.command(command("conf.field"), |host, _| host.focus("field"));
+    let fencing = state.clone();
+    setup.command(command("conf.fence"), move |_, _| fencing.fenced.set(true));
+    setup.command(command("conf.dialogs"), |host, _| {
+        let action = Action::Command { name: "conf.toast".to_owned(), input: None };
+        let option = SelectOption::new("one", "1");
+        let select = Select::new("pick", vec![option], action.clone()).with_size(Some(PanelSize::XLarge));
+        host.dialog(Dialog::Select(select.with_centered(true)));
+        let alert = Alert::new("told", "said").with_size(Some(PanelSize::XLarge)).with_centered(true);
+        host.dialog(Dialog::Alert(alert));
+        host.dialog(Dialog::Confirm(Confirm::new("asked", "sure?", action).with_centered(true)));
+    });
     let claims = state.clone();
     setup.claim(claim::Claim::tool("conf-tool", move |view, _| {
         claims.claimed.set(claims.claimed.get() + 1);
@@ -165,9 +197,10 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         state.views.set(state.views.get() + 1);
         let line = format!("views {}, messages {}", state.views.get(), state.messages.get());
         let count = || v2::Node::text(vec![Span::new(line.clone())]).with_id("count");
-        let second = match state.dup.get() {
-            true => count(),
-            false => view.memo("fixed", (), |view| {
+        let second = match (state.dup.get(), state.fenced.get()) {
+            (true, _) => count(),
+            (_, true) => v2::Node::fence(),
+            _ => view.memo("fixed", (), |view| {
                 let handle = view.content("# fixed");
                 v2::Node::markdown(v2::Source::Content(handle))
             }),
@@ -224,7 +257,8 @@ fn rows() -> v2::Surface {
             .with_id("button")
             .interact(Interact::default().with_pointer(true));
         let where_ = v2::Node::text(vec![Span::new("where")]).with_id("where");
-        v2::Node::column(vec![where_, button, items]).with_id("rows-root")
+        let field = v2::Node::input("").with_id("field");
+        v2::Node::column(vec![where_, button, items, field]).with_id("rows-root")
     });
     let notify = vec![v2::Notify::Scroll { id: "items".to_owned() }];
     surface

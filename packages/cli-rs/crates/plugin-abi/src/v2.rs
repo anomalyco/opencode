@@ -176,7 +176,8 @@ pub enum Node {
     },
     /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
     /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
-    /// enter (one line) or the submit key. A changed `value` replaces the text.
+    /// enter (one line) or the submit key, and, on a host with [`crate::FOCUS_INPUT`], [`crate::Host::focus`] gives it
+    /// the focus, as a click does. A changed `value` replaces the text.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -257,6 +258,21 @@ pub enum Node {
         version: u64,
         #[serde(default, skip_serializing_if = "is_false")]
         animate: bool,
+    },
+    /// 2.0, of a host with [`crate::FENCE_NODE`]: the claimed fence as the host's own code view draws it, its newest
+    /// code in the transcript's theme, concealment and streaming state, which the host keeps current with no view.
+    /// Valid only in the tree of a fence claim ([`crate::claim::Claim::fence`]), at most once: the host refuses a tree
+    /// that holds it anywhere else, or twice. `bg` is the view's background, the page's when unset. Its code costs the
+    /// plugin nothing against its limits: it is one node and one row. Build it with [`Node::fence`]; lower it for an
+    /// older host with [`View::or`].
+    #[cfg_attr(not(feature = "host"), non_exhaustive)]
+    Fence {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bg: Option<Color>,
+        #[serde(default, skip_serializing_if = "is_default_layout")]
+        layout: Layout,
     },
     /// A kind a later 2.x minor adds, which only the SDK's own tests and its `next` feature have: what an author's
     /// fallback for an older host is checked against (big-boi 13). No host knows it.
@@ -555,11 +571,13 @@ impl<'a> View<'a> {
     }
 
     /// `node`, when the host serving the plugin has its kind, else what `fallback` builds (synthesis 4.6, big-boi 13):
-    /// a kind a later 2.x minor adds is lowered here, by the author, so the tree the SDK encodes for an older host
-    /// holds no kind that host does not know. A tree that still holds one is refused by the SDK before it crosses
-    /// ([`unknown_to`]).
+    /// a kind a later 2.x minor or an optional feature adds ([`Node::since`], [`Node::feature`]) is lowered here, by
+    /// the author, so the tree the SDK encodes for an older host holds no kind that host does not know. A tree that
+    /// still holds one is refused by the SDK before it crosses ([`unknown_to`], [`unknown_feature`]).
     pub fn or(&mut self, node: Node, fallback: impl FnOnce(&mut Self) -> Node) -> Node {
-        match self.read.abi().has_minor(node.since()) {
+        let abi = self.read.abi();
+        let known = abi.has_minor(node.since()) && node.feature().is_none_or(|feature| abi.has_feature(feature));
+        match known {
             true => node,
             false => fallback(self),
         }
@@ -575,6 +593,33 @@ impl Node {
             _ => 0,
         }
     }
+
+    /// The optional host feature the node's kind needs: [`crate::FENCE_NODE`] for [`Node::Fence`], none for the rest.
+    pub fn feature(&self) -> Option<&'static str> {
+        match self {
+            Node::Fence { .. } => Some(crate::FENCE_NODE),
+            _ => None,
+        }
+    }
+}
+
+/// The feature of the first node of `node` whose kind a host of `abi` lacks ([`Node::feature`]); `None` when the host
+/// has every feature the tree's kinds need. The walk runs only when the host lacks one of them.
+pub fn unknown_feature(node: &Node, abi: &crate::Abi) -> Option<&'static str> {
+    if abi.has_feature(crate::FENCE_NODE) {
+        return None;
+    }
+    fn walk(node: &Node, abi: &crate::Abi) -> Option<&'static str> {
+        if let Some(feature) = node.feature().filter(|feature| !abi.has_feature(feature)) {
+            return Some(feature);
+        }
+        let items = match node {
+            Node::List { items, .. } => items.iter().find_map(|item| walk(&item.node, abi)),
+            _ => None,
+        };
+        items.or_else(|| node.children().iter().find_map(|child| walk(child, abi)))
+    }
+    walk(node, abi)
 }
 
 /// The first node of `node` whose kind a host of `abi` lacks, with the minor that added it; `None` when the host has
@@ -929,6 +974,11 @@ impl Node {
         self
     }
 
+    /// The host's own code view of the claimed fence ([`Node::Fence`]), on the page's background.
+    pub fn fence() -> Self {
+        Node::Fence { id: None, bg: None, layout: Layout::default() }
+    }
+
     /// A canvas with id `id`, still and at version 0.
     pub fn canvas(id: impl Into<String>) -> Self {
         Node::Canvas { id: Some(id.into()), layout: Layout::default(), version: 0, animate: false }
@@ -971,7 +1021,8 @@ impl Node {
             | Node::Input { id, .. }
             | Node::List { id, .. }
             | Node::Code { id, .. }
-            | Node::Image { id, .. } => id.as_deref(),
+            | Node::Image { id, .. }
+            | Node::Fence { id, .. } => id.as_deref(),
             #[cfg(any(test, feature = "next"))]
             Node::Later { id, .. } => id.as_deref(),
             Node::Keep { key } => Some(key),
@@ -991,7 +1042,8 @@ impl Node {
             | Node::Input { id, .. }
             | Node::List { id, .. }
             | Node::Code { id, .. }
-            | Node::Image { id, .. } => Some(id),
+            | Node::Image { id, .. }
+            | Node::Fence { id, .. } => Some(id),
             #[cfg(any(test, feature = "next"))]
             Node::Later { id, .. } => Some(id),
             Node::Keep { .. } | Node::Slot { .. } => None,
@@ -1008,7 +1060,8 @@ impl Node {
             | Node::List { layout, .. }
             | Node::Code { layout, .. }
             | Node::Image { layout, .. }
-            | Node::Canvas { layout, .. } => Some(layout),
+            | Node::Canvas { layout, .. }
+            | Node::Fence { layout, .. } => Some(layout),
             _ => None,
         }
     }
@@ -1023,7 +1076,8 @@ impl Node {
             | Node::List { layout, .. }
             | Node::Code { layout, .. }
             | Node::Image { layout, .. }
-            | Node::Canvas { layout, .. } => Some(layout),
+            | Node::Canvas { layout, .. }
+            | Node::Fence { layout, .. } => Some(layout),
             _ => None,
         }
     }
@@ -1044,9 +1098,9 @@ impl Node {
         self
     }
 
-    /// A box on `color`; anything else is unchanged.
+    /// A box or a fence on `color`; anything else is unchanged.
     pub fn bg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Box { bg, .. } = &mut self {
+        if let Node::Box { bg, .. } | Node::Fence { bg, .. } = &mut self {
             *bg = Some(color.into());
         }
         self

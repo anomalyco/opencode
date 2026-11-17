@@ -305,6 +305,8 @@ impl Backend for Shadow {
             setup.command(Command::default().with_name("plugins.list".to_owned()), |host, _| {
                 let message = "the replacement serves /plugins".to_owned();
                 host.dialog(abi::Dialog::Alert(abi::Alert {
+                    size: None,
+                    centered: false,
                     title: "Shadow plugins".to_owned(),
                     message,
                     action: None,

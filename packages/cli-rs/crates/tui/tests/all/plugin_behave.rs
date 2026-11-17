@@ -1411,6 +1411,7 @@ fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result
         owner: None,
         plugin: None,
         item: false,
+        fence: None,
     };
     tree.apply(&env, &host.app.root(), nodes)
 }

@@ -69,6 +69,8 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     let answer = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
     setup.command(command("life.confirm", "Life confirm"), move |host, _| {
         host.dialog(abi::Dialog::Confirm(abi::Confirm {
+            size: None,
+            centered: false,
             title: "Life asks".to_owned(),
             message: "Flip the line?".to_owned(),
             label: abi::ConfirmLabel::default(),
@@ -77,6 +79,8 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("life.alert", "Life alert"), move |host, _| {
         host.dialog(abi::Dialog::Alert(abi::Alert {
+            size: None,
+            centered: false,
             title: "Life says".to_owned(),
             message: "The line flips as this closes.".to_owned(),
             action: Some(answer("life.closed")),

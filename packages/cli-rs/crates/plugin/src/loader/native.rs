@@ -525,6 +525,22 @@ unsafe fn on_ui_thread(ctx: *mut c_void) -> bool {
 static FEATURES_JSON: std::sync::LazyLock<Vec<u8>> =
     std::sync::LazyLock::new(|| serde_json::to_vec(abi::FEATURES).unwrap_or_else(|_| b"[]".to_vec()));
 
+#[cfg(test)]
+thread_local! {
+    /// The features a test's host tables state instead, as an older host's would: a library then lowers what that host
+    /// lacks. The host itself behaves as it does.
+    pub(crate) static STATED: Cell<Option<&'static [u8]>> = const { Cell::new(None) };
+}
+
+/// What a host table states as its features ([`HostApi::features`]).
+fn features_json() -> &'static [u8] {
+    #[cfg(test)]
+    if let Some(stated) = STATED.get() {
+        return stated;
+    }
+    &FEATURES_JSON
+}
+
 pub(crate) enum Effect {
     Toast(abi::Toast),
     Route(String),
@@ -586,7 +602,7 @@ fn host_table(major: u32, minor: u32, ctx: *mut c_void) -> HostApi {
         send: v2.then_some(host_send as unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32),
         report: v2.then_some(host_report as unsafe extern "C" fn(*mut c_void, Bytes)),
         stopped: v2.then_some(host_stopped as unsafe extern "C" fn(*mut c_void) -> u32),
-        features: if v2 { Bytes::new(&FEATURES_JSON) } else { Bytes::new(&[]) },
+        features: if v2 { Bytes::new(features_json()) } else { Bytes::new(&[]) },
     }
 }
 

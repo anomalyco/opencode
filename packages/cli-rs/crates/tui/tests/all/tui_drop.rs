@@ -54,6 +54,8 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         (
             "drop.confirm",
             abi::Dialog::Confirm(abi::Confirm {
+                size: None,
+                centered: false,
                 title: "Drop confirm".to_owned(),
                 message: String::new(),
                 label: abi::ConfirmLabel::default(),
@@ -63,6 +65,8 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         (
             "drop.alert",
             abi::Dialog::Alert(abi::Alert {
+                size: None,
+                centered: false,
                 title: "Drop alert".to_owned(),
                 message: String::new(),
                 action: Some(action()),

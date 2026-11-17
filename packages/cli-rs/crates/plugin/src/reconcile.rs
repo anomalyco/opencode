@@ -112,6 +112,8 @@ fn weight(node: &Node) -> u16 {
         Node::Input { .. } | Node::Code { .. } => 2,
         Node::Scroll { .. } | Node::Diff { .. } | Node::Markdown { .. } => 4,
         Node::List { .. } => 5,
+        // A box, and the holder of the host's code view of the fence, which is Markdown's levels.
+        Node::Fence { .. } => 6,
         Node::Keep { .. } => 0,
     }
 }
@@ -174,6 +176,9 @@ pub enum Refused {
     Output,
     /// A list whose estimates add up to more than [`MAX_ROWS`].
     Rows,
+    /// A fence node ([`Node::Fence`]) outside a fence claim's tree, or a second one in a tree: the host's code view of
+    /// a fence is one widget, and a second would double the host's work for it.
+    Fence,
 }
 impl std::fmt::Display for Refused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -188,6 +193,7 @@ impl std::fmt::Display for Refused {
             Refused::Split => write!(f, "a split is not a row"),
             Refused::Output => write!(f, "an image shows a tool call's output"),
             Refused::Rows => write!(f, "a list's estimates add up to more than {MAX_ROWS} rows"),
+            Refused::Fence => write!(f, "a fence node is outside a fence claim's tree, or in it twice"),
         }
     }
 }
@@ -222,6 +228,9 @@ pub struct Env<'a> {
     pub plugin: Option<&'a str>,
     /// The tree is a list item's: the list's tree counted its nodes, so it counts only the rows it builds.
     pub item: bool,
+    /// The host's own code view of the claimed fence, for a [`Node::Fence`] of a fence claim's tree, which the host
+    /// keeps current with no view; `None` elsewhere, where the host refuses a fence node.
+    pub fence: Option<&'a dyn Fn() -> Option<AnyWidget>>,
 }
 
 /// A mounted tree: the widgets of the last accepted tree, in a parent the owner gives each call.
@@ -318,6 +327,8 @@ pub(crate) enum Extra {
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
+    /// The box that holds the host's code view of the claimed fence, which is the mounted node's widget.
+    Fence,
     /// The image.
     Image(opentui::widget::ImageView),
     /// In the tree before, a subtree that the tree being adopted holds again; its widget moved to wherever the tree
@@ -649,16 +660,19 @@ impl Tree {
         best.map(|(_, id)| id)
     }
 
-    /// The ids of the boxes that can take the focus, in the mounted items of lists too: none in a hidden box, which
+    /// The ids of the boxes and the fields that can take the focus, in the mounted items of lists too: none in a hidden box, which
     /// OpenTUI focuses not (review carbon-5).
     pub fn focusable(&self) -> Vec<String> {
         fn walk(nodes: &[Mounted], out: &mut Vec<String>) {
             for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
-                if let Node::Box { id: Some(id), interact, .. } = &node.node
-                    && interact.focusable
-                {
-                    out.push(id.clone());
-                }
+                // A box that asks for it, and a field with an id, which takes the focus as a click gives it
+                // (`abi::FOCUS_INPUT`).
+                let focusable = match &node.node {
+                    Node::Box { id: Some(id), interact, .. } if interact.focusable => Some(id),
+                    Node::Input { id: Some(id), .. } => Some(id),
+                    _ => None,
+                };
+                out.extend(focusable.cloned());
                 if let Extra::List(list) = &node.extra {
                     list.items.iter().filter_map(|item| item.mounted.as_ref()).for_each(|mounted| {
                         walk(&mounted.tree.nodes, out);
@@ -675,6 +689,13 @@ impl Tree {
     /// The ids the tree holds, when `key` is its only root: what a keep of the whole tree holds again, with no count.
     pub fn held_whole(&self, key: &str) -> Option<usize> {
         matches!(&self.nodes[..], [root] if root.node.id() == Some(key)).then_some(self.ids.len())
+    }
+
+    /// Whether a widget of the tree shows the host's code view of a claimed fence ([`Node::Fence`]).
+    pub fn holds_fence(&self) -> bool {
+        let mut found = false;
+        each(&self.nodes, &mut |node| found |= matches!(node.extra, Extra::Fence));
+        found
     }
 
     /// For each id, the ids the tree holds at it and under it: what a node that keeps it holds again. One walk up
@@ -723,6 +744,8 @@ impl Tree {
             moves: HashSet<&'a str>,
             costs: Vec<Cost>,
             at: usize,
+            /// The fence nodes seen: one at most, in a fence claim's tree only.
+            fences: u32,
             limits: limits::Limits,
             /// The nodes and rows the tree may take, and has taken so far.
             room: (u64, u64),
@@ -849,6 +872,12 @@ impl Tree {
                     }
                     if let Node::Image { content: Source::PartOutput(_), .. } = node {
                         return Err(Refused::Output);
+                    }
+                    if let Node::Fence { .. } = node {
+                        self.fences += 1;
+                        if self.env.fence.is_none() || self.fences > 1 {
+                            return Err(Refused::Fence);
+                        }
                     }
                     if let Node::List { items, .. } = node
                         && items.iter().map(|item| u64::from(item.estimate.max(1))).sum::<u64>() > MAX_ROWS
@@ -1011,6 +1040,7 @@ impl Tree {
             moves: HashSet::new(),
             costs,
             at: 0,
+            fences: 0,
             limits,
             room: (nodes_room, limits.rows),
             used: (0, 0),
@@ -1769,6 +1799,15 @@ impl Pass<'_, '_> {
                 }
                 Ok(old)
             }
+            (Node::Fence { .. }, Node::Fence { .. }) => {
+                // Its code is the host's, current with no view: only its box changes, built again with the code view
+                // moved into it.
+                if old.node != *new || self.restyle {
+                    let built = self.build(new);
+                    return Err(Box::new((old, built)));
+                }
+                Ok(old)
+            }
             (Node::Slot { path: was }, Node::Slot { path }) => {
                 // A slot's claims restyle as they render; a slot of another path is built where it is.
                 debug_assert_eq!(was, path, "a parent with a slot changes only in place");
@@ -2204,6 +2243,18 @@ impl Pass<'_, '_> {
                 let canvas = Canvas::new(app, id.as_deref().unwrap_or_default(), env.draw.cloned(), *version, *animate);
                 lay_out(&canvas.widget(), layout);
                 (canvas.widget(), Extra::Canvas(canvas))
+            }
+            Node::Fence { bg, layout, .. } => {
+                let view = View::new(app).column().shrink(0.0);
+                if let Some(bg) = color(theme, bg.as_ref()) {
+                    view.bg(bg);
+                }
+                lay_out(&view, layout);
+                // Validation admitted the node only where the host has the fence's code view.
+                if let Some(code) = env.fence.and_then(|fence| fence()) {
+                    view.add(&code);
+                }
+                (view.as_any(), Extra::Fence)
             }
             Node::Slot { .. } | Node::Keep { .. } => unreachable!("a slot is placed, and a keep is held"),
         };

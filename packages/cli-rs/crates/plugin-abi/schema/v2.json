@@ -5,7 +5,7 @@
   "x-abi": {
     "major": 2,
     "minor": 0,
-    "features": ["image-bounds"]
+    "features": ["image-bounds", "focus-input", "fence-node"]
   },
   "x-messages": {
     "describe": {
@@ -1033,6 +1033,38 @@
             },
             "type": {
               "const": "canvas"
+            }
+          },
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Color"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/Layout"
+            },
+            "type": {
+              "const": "fence"
             }
           },
           "required": ["type"]
@@ -5333,6 +5365,9 @@
               "type": "null"
             }
           ]
+        },
+        "centered": {
+          "type": "boolean"
         }
       },
       "required": ["title", "options", "action"],
@@ -5541,6 +5576,19 @@
         },
         "label": {
           "$ref": "#/$defs/ConfirmLabel"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
         }
       },
       "required": ["title", "message", "action"],
@@ -5591,6 +5639,19 @@
               "type": "null"
             }
           ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
         }
       },
       "required": ["title", "message"],
