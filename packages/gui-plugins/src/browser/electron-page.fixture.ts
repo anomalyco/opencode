@@ -1,4 +1,3 @@
-import { appendFileSync } from "node:fs"
 import { createServer } from "node:http"
 import electron from "electron"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
@@ -10,21 +9,6 @@ import type { Profile } from "./profile"
 // as the pane does, loads a page that navigates by itself while it boots, right-clicks it as the agent and as the
 // person, then registers a pane binding for one window and calls it as another. It prints what happened as one JSON
 // line.
-
-// A failure ends the process with its reason in the log; it never opens Electron's error box on the desktop. These
-// are installed before the page's modules load, which is why the test builds them as separate chunks.
-const fail = (error: Error) => {
-  const log = process.env.ELECTRON_PAGE_FIXTURE_LOG
-
-  if (log) appendFileSync(log, `${error.stack ?? error.message}\n`)
-  electron.app.exit(1)
-}
-
-electron.dialog.showErrorBox = () => undefined
-
-process.on("uncaughtException", fail)
-
-process.on("unhandledRejection", (reason) => fail(reason instanceof Error ? reason : new Error(String(reason))))
 
 const frame = `<!doctype html><title>frame</title><p>frame</p>`
 
