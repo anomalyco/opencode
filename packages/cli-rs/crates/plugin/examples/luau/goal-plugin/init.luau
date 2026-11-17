@@ -317,12 +317,7 @@ return plugin.define(function(setup)
         if not prompt then
             return
         end
-        local id = host:fetch({ method = "POST", path = `/api/session/{asked}/prompt`, body = { text = prompt } })
-        if not id then
-            toast(host, "the host did not take the fetch", "error")
-        end
-    end)
-    setup:onReply(function(host, _, _, failure)
+        local _, failure = host:fetch({ method = "POST", path = `/api/session/{asked}/prompt`, body = { text = prompt } })
         if failure then
             toast(host, failure, "error")
         end

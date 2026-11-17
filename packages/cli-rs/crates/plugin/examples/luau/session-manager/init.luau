@@ -34,17 +34,6 @@ local SEARCH_KEYS = {
 }
 local HINT_KEYS = { "↑↓", "Enter", "Tab", "c", "r", "d", "D", "/", "F5", "l", "Esc" }
 
--- What a confirmed delete still has to do: the sessions left, those done, and how many failed.
-type Removal = {
-    left: { string },
-    done: { string },
-    failed: number,
-    total: number,
-    group: string?,
-    current: string?,
-}
--- What a request in flight is for.
-type Want = { kind: string, removal: Removal?, id: string?, title: string? }
 type Row = grouping.Row
 
 -- TS `SessionManagerPage`'s signals.
@@ -66,11 +55,10 @@ local state = {
     mode = "directory",
     children = false,
     locale = "en",
-    -- Requests in flight, by ID: what each is for.
-    waiting = {} :: { [number]: Want },
-    renaming = nil :: string?,
-    removing = nil :: Removal?,
 }
+-- How many times the page mounted, and the refresh whose reads count: a flow that waited goes on only while its page
+-- and its refresh are the current ones.
+local mounts, reads = 0, 0
 
 local function t(): i18n.Messages
     return i18n.messages[state.locale]
@@ -133,14 +121,6 @@ local function select(host: plugin.Host, rows: { Row }, target: number)
     )
 end
 
-local function ask(host: plugin.Host, fetch: plugin.Fetch, want: Want): boolean
-    local id = host:fetch(fetch)
-    if id then
-        state.waiting[id] = want
-    end
-    return id ~= nil
-end
-
 local function page(cursor: string?): plugin.Fetch
     local query: { { string } } = { { "limit", tostring(PAGE_SIZE) }, { "order", "desc" } }
     if cursor then
@@ -149,32 +129,8 @@ local function page(cursor: string?): plugin.Fetch
     return { method = "GET", path = "/api/session", query = query }
 end
 
--- TS `refresh`: every page of the session list, and the projects.
-local function refresh(host: plugin.Host)
-    for id, want in state.waiting do
-        if want.kind == "page" or want.kind == "projects" then
-            state.waiting[id] = nil
-        end
-    end
-    state.pages = {}
-    ask(host, page(nil), { kind = "page" })
-    ask(host, { method = "GET", path = "/api/project" }, { kind = "projects" })
-end
-
-local function reading(): boolean
-    for _, want in state.waiting do
-        if want.kind == "page" or want.kind == "projects" then
-            return true
-        end
-    end
-    return false
-end
-
 -- The list is read: TS's `setSessions` with the selection on the session it came from.
 local function finished()
-    if reading() then
-        return
-    end
     state.sessions = state.pages
     state.pages = {}
     if not state.selected and state.from then
@@ -183,6 +139,58 @@ local function finished()
     state.now = os.time() * 1000
     state.error = nil
     state.loading = false
+end
+
+-- TS `refresh`: every page of the session list, and the projects, side by side. A later refresh drops what this one
+-- still reads, and a failed read drops the other.
+local function refresh(host: plugin.Host)
+    reads += 1
+    local this, left = reads, 2
+    state.pages = {}
+    local function done(failure: string?)
+        if failure then
+            reads += 1
+            state.error, state.loading = failure, false
+            return
+        end
+        left -= 1
+        if left == 0 then
+            finished()
+        end
+    end
+    plugin.spawn(function()
+        local cursor: string? = nil
+        repeat
+            local body, failure = host:fetch(page(cursor))
+            if reads ~= this then
+                return
+            elseif failure then
+                return done(failure)
+            end
+            local data = body and body.data or {}
+            for _, session in data do
+                table.insert(state.pages, session)
+            end
+            local next = body and body.cursor and body.cursor.next
+            cursor = if type(next) == "string" and next ~= "" and #data > 0 then next else nil
+        until not cursor
+        done(nil)
+    end)
+    plugin.spawn(function()
+        local body, failure = host:fetch({ method = "GET", path = "/api/project" })
+        if reads ~= this then
+            return
+        elseif failure then
+            return done(failure)
+        end
+        local list = if body and body.data then body.data else (body or {})
+        state.projects = {}
+        for _, project in list do
+            local name = type(project.name) == "string" and project.name:match("^%s*(.-)%s*$")
+            state.projects[project.id] = if name and name ~= "" then name else (project.canonical or "")
+        end
+        done(nil)
+    end)
 end
 
 -- TS's mount: a new page, with the stored settings, which reads the sessions.
@@ -197,8 +205,9 @@ local function mount(host: plugin.Host)
     end
     state.origin, state.from, state.sessions, state.pages, state.projects = origin, origin, {}, {}, {}
     state.loading, state.busy, state.collapsed, state.last, state.now = true, false, {}, 1, os.time() * 1000
-    state.query, state.searching, state.mode, state.children, state.locale, state.waiting =
-        "", false, mode, stored.showChildren == true, locale, {}
+    state.query, state.searching, state.mode, state.children, state.locale =
+        "", false, mode, stored.showChildren == true, locale
+    mounts += 1
     refresh(host)
 end
 
@@ -282,36 +291,44 @@ local function clearSearch(host: plugin.Host)
     finishSearch(host)
 end
 
--- A confirm with its own labels, whose answer runs command `answer`.
-local function confirm(title: string, lines: { string }, yes: string, no: string, answer: string): plugin.Dialog
-    return {
-        type = "confirm",
-        title = title,
-        message = table.concat(lines, "\n"),
-        label = { confirm = yes, cancel = no },
-        action = plugin.command(answer),
-    }
+-- A confirm with its own labels: whether it was confirmed.
+local function confirm(host: plugin.Host, title: string, lines: { string }, yes: string, no: string): boolean
+    local message = table.concat(lines, "\n")
+    return host:confirm({ title = title, message = message, label = { confirm = yes, cancel = no } }) == true
 end
 
--- TS `rename`: a prompt for the selected session's new title.
+-- TS `rename`: a prompt for the selected session's new title, then the rename. The page takes no keys meanwhile.
 local function rename(host: plugin.Host, rows: { Row })
     local index = indexOf(rows)
     local row = index and rows[index]
     if not row or row.type ~= "session" then
         return
     end
+    local id, opened = row.session.id, mounts
     state.busy = true
-    state.renaming = row.session.id
-    host:dialog({
-        type = "dismissable",
-        dialog = {
-            type = "prompt",
-            title = t().renameTitle,
-            placeholder = row.session.title or "",
-            action = plugin.command("session-manager.renamed"),
-        },
-        dismissed = plugin.command("session-manager.rename-closed"),
-    })
+    local text = host:prompt({ title = t().renameTitle, placeholder = row.session.title or "" })
+    local title = (text or ""):match("^%s*(.-)%s*$") :: string
+    local current
+    for _, session in state.sessions do
+        if session.id == id then
+            current = session.title
+        end
+    end
+    if mounts ~= opened or title == "" or title == current then
+        state.busy = false
+        return
+    end
+    local _, failure = host:fetch({ method = "PATCH", path = `/api/session/{id}`, body = { title = title } })
+    state.busy = false
+    if failure then
+        return host:toast({ variant = "error", message = failure })
+    end
+    for _, session in state.sessions do
+        if session.id == id then
+            session.title = title
+        end
+    end
+    host:toast({ variant = "success", message = t().renamed(title) })
 end
 
 -- TS `containsSession`: whether `target` is one of `roots` or under one.
@@ -330,55 +347,10 @@ local function contains(roots: { string }, target: string): boolean
     return false
 end
 
--- TS `removeOne`: asks, then deletes the selected session.
-local function removeOne(host: plugin.Host, rows: { Row })
-    local index = indexOf(rows)
-    local row = index and rows[index]
-    if not row or row.type ~= "session" then
-        return
-    end
-    local session = row.session
-    local total = grouping.withDescendants({ session.id }, state.sessions)
-    local lines = { t().removeMessage(grouping.title(session)) }
-    if total > 1 then
-        table.insert(lines, t().removeChildren(total - 1))
-    end
-    if session.id == state.from then
-        table.insert(lines, t().removeCurrent)
-    end
-    table.insert(lines, t().irreversible)
-    state.busy = true
-    state.removing = { left = { session.id }, done = {}, failed = 0, total = total }
-    host:dialog(confirm(t().removeTitle, lines, t().confirm, t().cancel, "session-manager.removed"))
-end
-
--- TS `removeGroup`: asks, then deletes the selected group's top-level sessions, one after another.
-local function removeGroup(host: plugin.Host, rows: { Row })
-    local index = indexOf(rows)
-    local row = index and rows[index]
-    if not row then
-        return
-    end
-    local group = row.group
-    local ids: { string } = {}
-    for _, root in group.roots do
-        table.insert(ids, root.session.id)
-    end
-    if #ids == 0 then
-        return
-    end
-    local total = grouping.withDescendants(ids, state.sessions)
-    local lines = { t().groupMessage(t().modes[modeIndex(state.mode)], group.label, total) }
-    if state.from and contains(ids, state.from) then
-        table.insert(lines, t().groupCurrent)
-    end
-    if state.query:match("%S") then
-        table.insert(lines, t().groupFiltered)
-    end
-    table.insert(lines, t().irreversible)
-    state.busy = true
-    state.removing = { left = ids, done = {}, failed = 0, total = total, group = group.label }
-    host:dialog(confirm(t().groupTitle(group.label), lines, t().groupConfirm(total), t().cancel, "session-manager.removed"))
+-- TS `isNotFound`.
+local function notFound(error: string): boolean
+    local lower = error:lower()
+    return lower:find("notfound", 1, true) ~= nil or lower:find("not found", 1, true) ~= nil or lower:find("404", 1, true) ~= nil
 end
 
 -- TS `forgetDeleted`: the deleted sessions and their descendants go, and their tabs close.
@@ -413,35 +385,86 @@ local function forget(host: plugin.Host, ids: { string })
     state.sessions = kept
 end
 
--- Deletes the next session of `removal`, or ends it: the deleted ones go, and a toast says so.
-local function nextRemoval(host: plugin.Host, removal: Removal)
-    local next = table.remove(removal.left, 1)
-    if next then
-        removal.current = next
-        if not ask(host, { method = "DELETE", path = `/api/session/{next}` }, { kind = "remove", removal = removal }) then
-            removal.failed += 1
-            return nextRemoval(host, removal)
-        end
+-- Asks with `title`, `lines` and `yes`, then deletes `ids` one after another, `total` sessions with their
+-- descendants: the deleted ones go, and a toast says so. A session that fails ends a single delete; a group's goes on
+-- and is counted. The page takes no keys meanwhile.
+local function remove(host: plugin.Host, title: string, lines: { string }, yes: string, ids: { string }, total: number, group: string?)
+    state.busy = true
+    if not confirm(host, title, lines, yes, t().cancel) then
+        state.busy = false
         return
     end
-    forget(host, removal.done)
-    state.busy = false
-    if not removal.group then
-        host:toast({ variant = "success", message = t().removed(removal.total) })
-    elseif removal.failed > 0 then
-        host:toast({ variant = "error", message = t().groupFailed(removal.failed) })
-    else
-        host:toast({ variant = "success", message = t().groupRemoved(removal.group, removal.total) })
+    local done, failed = {}, 0
+    for _, id in ids do
+        local _, failure = host:fetch({ method = "DELETE", path = `/api/session/{id}` })
+        if not failure or notFound(failure) then
+            table.insert(done, id)
+        elseif not group then
+            state.busy = false
+            return host:toast({ variant = "error", message = failure })
+        else
+            failed += 1
+        end
     end
-    if removal.group then
+    forget(host, done)
+    state.busy = false
+    if not group then
+        host:toast({ variant = "success", message = t().removed(total) })
+    elseif failed > 0 then
+        host:toast({ variant = "error", message = t().groupFailed(failed) })
+    else
+        host:toast({ variant = "success", message = t().groupRemoved(group, total) })
+    end
+    if group then
         refresh(host)
     end
 end
 
--- TS `isNotFound`.
-local function notFound(error: string): boolean
-    local lower = error:lower()
-    return lower:find("notfound", 1, true) ~= nil or lower:find("not found", 1, true) ~= nil or lower:find("404", 1, true) ~= nil
+-- TS `removeOne`: asks, then deletes the selected session.
+local function removeOne(host: plugin.Host, rows: { Row })
+    local index = indexOf(rows)
+    local row = index and rows[index]
+    if not row or row.type ~= "session" then
+        return
+    end
+    local session = row.session
+    local total = grouping.withDescendants({ session.id }, state.sessions)
+    local lines = { t().removeMessage(grouping.title(session)) }
+    if total > 1 then
+        table.insert(lines, t().removeChildren(total - 1))
+    end
+    if session.id == state.from then
+        table.insert(lines, t().removeCurrent)
+    end
+    table.insert(lines, t().irreversible)
+    remove(host, t().removeTitle, lines, t().confirm, { session.id }, total)
+end
+
+-- TS `removeGroup`: asks, then deletes the selected group's top-level sessions, one after another.
+local function removeGroup(host: plugin.Host, rows: { Row })
+    local index = indexOf(rows)
+    local row = index and rows[index]
+    if not row then
+        return
+    end
+    local group = row.group
+    local ids: { string } = {}
+    for _, root in group.roots do
+        table.insert(ids, root.session.id)
+    end
+    if #ids == 0 then
+        return
+    end
+    local total = grouping.withDescendants(ids, state.sessions)
+    local lines = { t().groupMessage(t().modes[modeIndex(state.mode)], group.label, total) }
+    if state.from and contains(ids, state.from) then
+        table.insert(lines, t().groupCurrent)
+    end
+    if state.query:match("%S") then
+        table.insert(lines, t().groupFiltered)
+    end
+    table.insert(lines, t().irreversible)
+    remove(host, t().groupTitle(group.label), lines, t().groupConfirm(total), ids, total, group.label)
 end
 
 local function listKey(host: plugin.Host, name: string): plugin.Handled
@@ -724,41 +747,6 @@ return plugin.define(function(setup)
         end
     end)
     setup:command({ name = "session-manager.children" }, toggleChildren)
-    setup:command({ name = "session-manager.renamed" }, function(host, text)
-        local id = state.renaming
-        state.renaming = nil
-        local title = (text or ""):match("^%s*(.-)%s*$") :: string
-        local current
-        for _, session in state.sessions do
-            if session.id == id then
-                current = session.title
-            end
-        end
-        if not id or title == "" or title == current then
-            state.busy = false
-            return
-        end
-        local fetch: plugin.Fetch = { method = "PATCH", path = `/api/session/{id}`, body = { title = title } }
-        if not ask(host, fetch, { kind = "rename", id = id, title = title }) then
-            state.busy = false
-        end
-    end)
-    -- The prompt closed: without an answer (escape), the page takes keys again.
-    setup:command({ name = "session-manager.rename-closed" }, function()
-        if state.renaming then
-            state.renaming = nil
-            state.busy = false
-        end
-    end)
-    setup:command({ name = "session-manager.removed" }, function(host, answer)
-        local removal = state.removing
-        state.removing = nil
-        if not removal or answer ~= "true" then
-            state.busy = false
-            return
-        end
-        nextRemoval(host, removal)
-    end)
     setup:surface({
         name = ROUTE,
         place = { type = "route", name = ROUTE },
@@ -767,64 +755,5 @@ return plugin.define(function(setup)
     }, view, event)
     setup:onEvent({ "session.created", "session.deleted", "session.renamed", "session.archived" }, function(host)
         refresh(host)
-    end)
-    setup:onReply(function(host, id, body, failure)
-        local want = state.waiting[id]
-        if not want then
-            return
-        end
-        state.waiting[id] = nil
-        if want.kind == "page" or want.kind == "projects" then
-            if failure then
-                for other, known in state.waiting do
-                    if known.kind == "page" or known.kind == "projects" then
-                        state.waiting[other] = nil
-                    end
-                end
-                state.error, state.loading = failure, false
-                return
-            end
-            if want.kind == "page" then
-                local data = body and body.data or {}
-                for _, session in data do
-                    table.insert(state.pages, session)
-                end
-                local next = body and body.cursor and body.cursor.next
-                if type(next) == "string" and next ~= "" and #data > 0 then
-                    ask(host, page(next), { kind = "page" })
-                    return
-                end
-            else
-                local list = if body and body.data then body.data else (body or {})
-                state.projects = {}
-                for _, project in list do
-                    local name = type(project.name) == "string" and project.name:match("^%s*(.-)%s*$")
-                    state.projects[project.id] = if name and name ~= "" then name else (project.canonical or "")
-                end
-            end
-            return finished()
-        elseif want.kind == "rename" then
-            state.busy = false
-            if failure then
-                return host:toast({ variant = "error", message = failure })
-            end
-            for _, session in state.sessions do
-                if session.id == want.id then
-                    session.title = want.title
-                end
-            end
-            host:toast({ variant = "success", message = t().renamed(want.title :: string) })
-        elseif want.kind == "remove" then
-            local removal = want.removal :: Removal
-            if not failure or notFound(failure) then
-                table.insert(removal.done, removal.current :: string)
-            elseif not removal.group then
-                state.busy = false
-                return host:toast({ variant = "error", message = failure })
-            else
-                removal.failed += 1
-            end
-            nextRemoval(host, removal)
-        end
     end)
 end)
