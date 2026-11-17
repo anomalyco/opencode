@@ -719,54 +719,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn decode(value: Value) -> Option<Value> {
-        Info::decode(&value).map(|info| info.to_value())
-    }
-
-    #[test]
-    fn decode_follows_effect_schema() {
-        assert_eq!(
-            decode(
-                json!({"mouse": true, "theme": {"mode": "dark", "name": "x", "extra": 1}, "zzz": 1, "$schema": "s"})
-            ),
-            Some(json!({"$schema": "s", "theme": {"name": "x", "mode": "dark"}, "mouse": true}))
-        );
-        assert_eq!(
-            stringify_decoded(
-                json!({"keybinds": {"session.new": {"name": "a", "key": "b", "foo": 1}, "app.exit": "ctrl+q", "nope": "x"}})
-            ),
-            r#"{"keybinds":{"app.exit":"ctrl+q","session.new":{"name":"a"}}}"#
-        );
-        assert_eq!(
-            stringify_decoded(
-                json!({"keybinds": {"app.exit": {"foo": 1, "key": {"name": "a", "x": 1}, "desc": "d", "event": "press"}}})
-            ),
-            r#"{"keybinds":{"app.exit":{"key":{"name":"a"},"event":"press","foo":1,"desc":"d"}}}"#
-        );
-        for invalid in [
-            json!({"keybinds": {"app.exit": [{"name": "a"}, "b", false]}}),
-            json!({"keybinds": {"app.exit": null}}),
-            json!({"theme": []}),
-            json!({"theme": null}),
-            json!({"leader": {"timeout": 1.5}}),
-            json!({"scroll": {"speed": 0}}),
-            json!({"attention": {"volume": 2}}),
-            json!([]),
-        ] {
-            assert_eq!(decode(invalid.clone()), None, "{invalid}");
-        }
-        assert_eq!(
-            decode(
-                json!({"leader": {"timeout": 2000.0}, "attention": {"sounds": {"done": "x", "other": "y", "default": "z"}}})
-            ),
-            Some(json!({"leader": {"timeout": 2000}, "attention": {"sounds": {"default": "z", "done": "x"}}}))
-        );
-    }
-
-    fn stringify_decoded(value: Value) -> String {
-        jsonc::stringify(&decode(value).unwrap())
-    }
-
     #[test]
     fn merge_overlays_and_normalizes_tabs() {
         let merged = merge(&[

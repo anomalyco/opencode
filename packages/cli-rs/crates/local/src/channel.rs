@@ -119,22 +119,6 @@ mod tests {
         assert_eq!(channels(&[("OPENCODE_CHANNEL", "")]).channel, "latest");
     }
 
-    // The P-ORACLE fixture in tests/interop.rs compares these with the TypeScript functions; these
-    // cases pin the obvious ones.
-    #[test]
-    fn names_and_ports() {
-        assert_eq!(filename("latest"), "service.json");
-        assert_eq!(filename("next"), "service.json");
-        assert_eq!(filename("local"), "service-local.json");
-        assert_eq!(filename("feat/a b"), "service-feat-a-b.json");
-        assert_eq!(legacy_filename("latest"), None);
-        assert_eq!(legacy_filename("local"), None);
-        assert_eq!(default_port("latest", false), 0xc0de);
-        assert_eq!(default_port("latest", true), 0x70de);
-        assert_eq!(default_port("local", false), 0xc0df);
-        assert!((10_000..60_000).contains(&default_port("oc-x", false)));
-    }
-
     #[test]
     fn versions() {
         assert!(version_belongs_to_channel(Some("1.2.3"), "latest", "1.2.3"));
