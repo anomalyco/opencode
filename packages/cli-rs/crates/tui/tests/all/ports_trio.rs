@@ -74,13 +74,17 @@ fn cells(h: &Port, from: u16, rows: std::ops::Range<u16>) -> Vec<String> {
 }
 
 /// The requests the server saw to paths starting with one of `paths`, as `METHOD path?query`: the writes in the order
-/// they came, then each read once, sorted. How often the host reads a session again is its timing, not the plugin's:
-/// a package's `data.session.sync` reads the route's session once more.
+/// they came, with their bodies, then each read once, sorted. How often the host reads a session again is its timing,
+/// not the plugin's: a package's `data.session.sync` reads the route's session once more.
 fn requests(h: &Port, paths: &[&str]) -> Vec<String> {
     let log = h.log.lock().unwrap();
     let seen = log.iter().filter(|seen| paths.iter().any(|path| seen.path.starts_with(path)));
-    let (reads, mut writes): (Vec<_>, Vec<_>) =
-        seen.map(|seen| (seen.method == "GET", format!("{} {}", seen.method, seen.url()))).partition(|(read, _)| *read);
+    let (reads, mut writes): (Vec<_>, Vec<_>) = seen
+        .map(|seen| match seen.method.as_str() {
+            "GET" => (true, format!("GET {}", seen.url())),
+            method => (false, format!("{method} {} {}", seen.url(), seen.body)),
+        })
+        .partition(|(read, _)| *read);
     let mut reads: Vec<(bool, String)> = reads;
     reads.sort();
     reads.dedup();
@@ -210,4 +214,164 @@ fn sidebar_prompt_draws_and_opens_alike_in_ts_rust_and_luau() {
             Some(Observed { steps, requests: requests(&h, &["/api/session/ses_"]) })
         });
     }
+}
+
+// --- opencode-command-hotkeys: configured keys, palette entries, server writes, a toast
+
+/// `ses_p`, whose commands answer with `status` and whose goal is active.
+fn hotkeys_server(status: u16) -> impl Fn(&Seen) -> Option<Reply> + Send + Sync {
+    move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": session("ses_p", "Hotkeys", None, 1) }))),
+        ("POST", "/api/session/ses_p/command") => Some((status, json!({}))),
+        ("POST", "/api/rpc/opencode.goal/get") => {
+            Some((200, json!({ "output": { "id": "goal_1", "status": "active" } })))
+        }
+        ("GET", "/api/session/ses_p/message") => Some((200, json!({ "data": [], "cursor": {} }))),
+        ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": [] }))),
+        _ => None,
+    }
+}
+
+/// Two bindings: `/review --all` on alt+r, and the goal's pause and resume on alt+o.
+fn hotkeys() -> serde_json::Value {
+    json!({ "bindings": [
+        { "id": "review", "key": "alt+r", "title": "Run the review", "command": "review", "text": "--all" },
+        { "id": "goal", "key": "alt+o", "title": "Toggle the goal", "action": "goal-toggle" },
+    ] })
+}
+
+/// The commands the server was asked to run. The host reads goals itself, at the same path the plugin reads one.
+fn writes(h: &Port) -> usize {
+    h.log.lock().unwrap().iter().filter(|seen| seen.method == "POST" && seen.path.ends_with("/command")).count()
+}
+
+// Expected: on each column, alt+r runs `/review --all` in the session in view, the palette's "Run the review" runs it
+// again, and alt+o reads the session's goal at the session's location and pauses it; on the home screen the keys run
+// nothing. A command the server refuses toasts the plugin's failure.
+#[test]
+fn command_hotkeys_send_alike_in_ts_rust_and_luau() {
+    use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;
+
+    for status in [204, 500] {
+        trio("opencode-command-hotkeys", "command-hotkeys", |carrier| {
+            let h = open_with(&[carrier], 170, hotkeys_server(status), false, None, Some(&hotkeys()))?;
+            h.wait_for("Hotkeys");
+            h.settle();
+            h.app.press("alt+r");
+            h.wait(&format!("{carrier:?}: the review runs"), || writes(&h) == 1);
+            h.settle();
+            let mut steps = Vec::new();
+            if status == 500 {
+                h.wait_for("Не удалось");
+                steps.push(("failed".to_owned(), screen(&h)));
+                return Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p"]) });
+            }
+            h.tui.keymap.dispatch(COMMAND_PALETTE_COMMAND, None);
+            h.wait_for("Search commands");
+            h.app.type_text("Run the review");
+            h.wait("the entry", || h.app.text().lines().filter(|line| line.contains("Run the review")).count() >= 1);
+            h.app.press("return");
+            h.wait("the palette runs it", || writes(&h) == 2);
+            h.settle();
+            h.app.press("alt+o");
+            h.wait("the goal pauses", || writes(&h) == 3);
+            h.settle();
+            steps.push(("ran".to_owned(), screen(&h)));
+            h.tui.navigate(opencode_tui::Route::Home);
+            h.settle();
+            h.app.press("alt+r");
+            h.settle();
+            assert_eq!(writes(&h), 3, "{carrier:?}: a key off a session runs nothing");
+            Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p"]) })
+        });
+    }
+}
+
+// Expected: on each column, options with a fault (here a repeated key, spelled two ways) register nothing and toast
+// the plugin's check, without echoing a value.
+#[test]
+fn command_hotkeys_refuse_bad_options_alike_in_ts_rust_and_luau() {
+    let options = json!({ "bindings": [
+        { "id": "one", "key": "ctrl+shift+x", "title": "One", "command": "one" },
+        { "id": "two", "key": "Shift+Control+X", "title": "Two", "command": "two" },
+    ] });
+    trio("opencode-command-hotkeys", "command-hotkeys", |carrier| {
+        let h = open_with(&[carrier], 170, hotkeys_server(204), false, None, Some(&options))?;
+        h.wait_for("Проверьте");
+        h.settle();
+        Some(Observed {
+            steps: vec![("refused".to_owned(), screen(&h))],
+            requests: requests(&h, &["/api/session/ses_p"]),
+        })
+    });
+}
+
+// --- @khaosoigai/oc-context-grid: a slot, a page of its own, a keyboard mode, and the catalog
+
+/// `ses_p`, $0.08 spent: a user prompt, then a step that read a file and answered, its usage 35,500 tokens of the
+/// 200k window of model `p/m`.
+fn grid_server(seen: &Seen) -> Option<Reply> {
+    let model = crate::support::merge(
+        crate::support::model("p", "m", "Model M"),
+        json!({ "limit": { "context": 200_000, "output": 8_000 } }),
+    );
+    let ses_p = crate::support::merge(session("ses_p", "Grid", None, 1), json!({ "cost": 0.08 }));
+    match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": ses_p }))),
+        ("GET", "/api/session") => Some((200, json!({ "data": [ses_p], "cursor": {} }))),
+        ("GET", "/api/model") => Some((200, crate::support::list(DIRECTORY, json!([model])))),
+        ("GET", "/api/session/ses_p/message") => Some((
+            200,
+            json!({ "data": [
+                {
+                    "id": "msg_2", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+                    "time": { "created": 2000, "completed": 2600 }, "cost": 0.08,
+                    "tokens": { "input": 30_000, "output": 500, "reasoning": 0, "cache": { "read": 5_000, "write": 0 } },
+                    "content": [
+                        { "type": "text", "text": "The file says what the release holds; the notes follow it." },
+                        { "type": "tool", "id": "call_1", "name": "read", "time": { "created": 2100, "ran": 2200, "completed": 2300 },
+                          "state": { "status": "completed", "input": { "path": "CHANGELOG.md" }, "content": [{ "type": "text", "text": "x".repeat(40_000) }] } },
+                    ],
+                },
+                { "id": "msg_1", "type": "user", "text": "Read the changelog and draft the notes for 2.3, then list the open questions.", "time": { "created": 1000 } },
+            ], "cursor": {} }),
+        )),
+        ("GET", "/api/session/ses_p/inbox") => Some((200, json!({ "data": [] }))),
+        _ => None,
+    }
+}
+
+// Expected: on each column, the sidebar shows "Context grid", the usage against the window and its 30 squares in their
+// categories' colors; `/contextgrid` opens the page with the model, the usage and the cost, the 100 squares and the
+// estimate by category with the free space, and escape goes back to the session; opened from home, the page says no
+// session is selected, and escape goes home.
+#[test]
+fn context_grid_draws_and_pages_alike_in_ts_rust_and_luau() {
+    trio("@khaosoigai/oc-context-grid", "context-grid", |carrier| {
+        let h = open_with(&[carrier], 170, grid_server, false, None, None)?;
+        h.wait_for("tokens (18%)");
+        h.settle();
+        let mut steps = vec![("sidebar".to_owned(), cells(&h, SIDEBAR, block(&h, "Context grid", 6)))];
+        h.app.type_text("/contextgrid");
+        h.wait_for("Show context usage as a grid");
+        h.app.press("return");
+        h.wait_for("Estimated usage by category");
+        h.settle();
+        steps.push(("page".to_owned(), screen(&h)));
+        h.app.press("escape");
+        h.wait(&format!("{carrier:?}: escape goes back"), || h.tui.route() == crate::support::session_route("ses_p"));
+        h.settle();
+        steps.push(("back".to_owned(), screen(&h)));
+        h.tui.navigate(opencode_tui::Route::Home);
+        h.settle();
+        h.app.type_text("/contextgrid");
+        h.wait_for("Show context usage as a grid");
+        h.app.press("return");
+        h.wait_for("No session selected.");
+        h.settle();
+        steps.push(("no session".to_owned(), screen(&h)));
+        h.app.press("escape");
+        h.wait(&format!("{carrier:?}: escape goes home"), || h.tui.route() == opencode_tui::Route::Home);
+        Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p", "/api/model"]) })
+    });
 }
