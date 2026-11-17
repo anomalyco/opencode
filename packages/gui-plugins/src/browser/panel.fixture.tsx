@@ -98,6 +98,8 @@ type PaneFixtureState = {
   dialog: boolean
   captures: number
   holdCapture: boolean
+  /** Main returns no still, as when the view cannot be captured. */
+  failCapture: boolean
   picker: Record<string, boolean | undefined>
   /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
   dropInspect: boolean
@@ -203,6 +205,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       dialog: false,
       captures: 0,
       holdCapture: false,
+      failCapture: false,
       picker: {},
       dropInspect: false,
       highlights: [],
@@ -256,6 +259,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
+
+        if (store.failCapture) return undefined
         // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
         const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
@@ -750,6 +755,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
           {/* Below the pane, so the pane keeps the place the geometry specs measure. */}
           <nav>
+            <button onClick={() => setStore("failCapture", true)}>Fail capture</button>
             <button
               onClick={() =>
                 emit(store.session, {

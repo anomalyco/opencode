@@ -408,6 +408,57 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story("covers the page with its warm still only once the capture is back, and through the thaw", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const still = root.locator("#browser-panel img")
+  const native = root.getByTestId("native-Alpha")
+  const popover = root.getByRole("button", { name: "Toggle popover", exact: true })
+  // Without reduced motion the pane keeps a still of the page for flights, which can cover the page at once.
+  await expect(root.getByText(/^Captures: [1-9]/)).toBeVisible()
+  const captures = Number((await root.getByText(/^Captures: \d+$/).textContent())?.split(": ")[1])
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  await popover.click()
+  await expect(root.getByText(`Captures: ${captures + 1}`, { exact: true })).toBeVisible()
+  // Main captures only a visible view: hiding it while the capture is out returns no fresh still.
+  await expect(still).toHaveCount(1)
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await root.getByRole("button", { name: "Release capture", exact: true }).click()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await popover.click()
+  await expect(native).toHaveAttribute("data-visible", "true")
+
+  // A capture that returns nothing still leaves the warm still over the hidden page, and over the page while it
+  // paints again after the cover ends.
+  // The fixture's controls below the pane sit outside the viewport.
+  await root.getByRole("button", { name: "Fail capture", exact: true }).evaluate((element: HTMLElement) => element.click())
+  await popover.click()
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(still).toHaveCount(1)
+  const frames = await popover.evaluate(async (button) => {
+    const samples: [string | null, number][] = []
+    const read = () => [
+      document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible") ?? null,
+      document.querySelectorAll("#browser-panel img").length,
+    ] as [string | null, number]
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    await new Promise<void>((resolve) => {
+      const step = () => {
+        samples.push(read())
+
+        if (samples.length < 60 && (samples.at(-1)?.[1] ?? 0) > 0) return requestAnimationFrame(step)
+        resolve()
+      }
+      requestAnimationFrame(step)
+    })
+
+    return samples
+  })
+
+  expect(frames.filter(([visible, stills]) => visible === "false" && stills === 0)).toEqual([])
+  expect(frames.some(([visible, stills]) => visible === "true" && stills > 0)).toBe(true)
+  await expect(still).toHaveCount(0)
+})
+
 story(
   "freezes on the latest capture when floating content closes and reopens before a capture lands",
   async ({ page }) => {

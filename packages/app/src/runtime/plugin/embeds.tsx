@@ -26,6 +26,7 @@ import {
   selectSnapshotHidesNative,
   selectSnapshotNeedsSync,
   selectSnapshotUrl,
+  selectSnapshotWantsStill,
   transitionEmbedSnapshot,
   type EmbedSnapshotEffect,
   type EmbedSnapshotEvent,
@@ -326,9 +327,21 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     syncSnapshot(id, shown, cover)
     const still = current().still
     const kept = still.status !== "disposed" && still.kept
-    const warm = shown && cover && kept && kept.id === id && kept.page === props.page && kept.width === bounds.width / zoom && kept.height === bounds.height / zoom ? kept : undefined
+    const snapshot = current().snapshot
+
+    const warm =
+      shown &&
+      selectSnapshotWantsStill(snapshot, id, cover) &&
+      kept &&
+      kept.id === id &&
+      kept.page === props.page &&
+      kept.width === bounds.width / zoom &&
+      kept.height === bounds.height / zoom
+        ? kept
+        : undefined
+
     setCoverStill(warm)
-    const visible = shown && !warm && !selectSnapshotHidesNative(current().snapshot, id, cover)
+    const visible = shown && !selectSnapshotHidesNative(snapshot, id, cover, !!warm)
 
     const next = `${id}:${visible}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
@@ -613,7 +626,12 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
   const snapshotUrl = createMemo(() => selectSnapshotUrl(embedState().snapshot, props.id, props.visible))
 
-  const flightStill = createMemo(() => selectFlightStill(embedState().flight, embedState().still, props.id, props.page) ?? (snapshotUrl() ? undefined : coverStill()))
+  // A warm still stays under a fresh capture until a frame has presented it.
+  const flightStill = createMemo(
+    () =>
+      selectFlightStill(embedState().flight, embedState().still, props.id, props.page) ??
+      (selectPaintingUrl(embedState().snapshot) || !snapshotUrl() ? coverStill() : undefined),
+  )
 
   return (
     <div ref={element} class={props.class}>
