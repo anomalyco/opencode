@@ -82,6 +82,33 @@ export const modules: Record<string, Record<string, unknown>> = {
   "@opencode/plugin/tui": plugin,
   // The definition of a plugin's own server RPC, which its TUI part calls through `client.rpc` (CT-4).
   "@opencode/plugin/rpc": { Rpc },
+  // The Effect entry, whose `Rpc` is the same definition (CT-23: opencode-superagent's TUI defines its RPC by it). Its
+  // other names, the server's Effect schemas, link but are undefined: a TUI part has no use for them.
+  "@opencode/plugin/effect": {
+    Rpc,
+    ...Object.fromEntries(
+      [
+        "Plugin",
+        "Agent",
+        "Artifact",
+        "Command",
+        "Connection",
+        "Credential",
+        "Integration",
+        "Location",
+        "Mcp",
+        "Model",
+        "PersistentPty",
+        "Provider",
+        "Reference",
+        "Skill",
+        "Tool",
+        "Vcs",
+        "WebSearch",
+        "Worktree",
+      ].map((name) => [name, undefined]),
+    ),
+  },
 }
 
 export { context, reported }

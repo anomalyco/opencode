@@ -272,6 +272,14 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
   expect(() => echo.events.on("unknown", () => {})).toThrow("Unknown RPC event: echo.unknown")
 })
 
+// CT-23: `@opencode/plugin/effect` is served, its `Rpc` the same as `@opencode/plugin/rpc`'s (opencode-superagent's TUI
+// defines its RPC by it and failed to load); its server schemas link, undefined.
+test("@opencode/plugin/effect serves Rpc", () => {
+  const effect = modules["@opencode/plugin/effect"] as Json
+  expect(effect.Rpc).toBe((modules["@opencode/plugin/rpc"] as Json).Rpc)
+  expect("Agent" in effect && effect.Agent === undefined).toBe(true)
+})
+
 // CT-2: an element is an event emitter, as an OpenTUI renderable is, so file-browser's `element.on("focus", …)` does
 // not crash its route; `focus()` of a field asks the host to focus it by its id and emits `focused`, another node's
 // focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone.
