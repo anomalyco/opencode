@@ -128,7 +128,6 @@ const discovery = Layer.mock(InstructionDiscovery.Service, {
   project: true,
   global: true,
   claude: true,
-  claudeGlobal: true,
   load: () => Effect.succeed(Instructions.empty),
 })
 const skills = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })

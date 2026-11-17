@@ -42,7 +42,7 @@ export const Plugin = define({
       // ~/.claude/CLAUDE.md stands in for the global AGENTS.md when it is missing.
       const claudeGlobalFile = yield* fs.resolve(join(home, ".claude", "CLAUDE.md"))
       const names = InstructionDiscovery.filenames(discovery)
-      const globalFiles = discovery.claudeGlobal ? [globalFile, claudeGlobalFile] : [globalFile]
+      const globalFiles = discovery.claude ? [globalFile, claudeGlobalFile] : [globalFile]
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
       const configured: { sources: string[]; remote: Map<string, InstructionDiscovery.File> } = {
         sources: [],
