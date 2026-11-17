@@ -42,6 +42,7 @@ export const DEFAULT_MAX_TOKENS = 32_000
 const MIN_THINKING_BUDGET = 1_024
 const DEFAULT_EFFORT = "high"
 
+// `ping` is left out: it carries no model output and must not reset the chunk timeout.
 const SSE_EVENTS = new Set([
   "message",
   "message_start",
@@ -50,7 +51,6 @@ const SSE_EVENTS = new Set([
   "content_block_start",
   "content_block_delta",
   "content_block_stop",
-  "ping",
   "error",
 ])
 export const framing = Framing.sseEvents(SSE_EVENTS)
