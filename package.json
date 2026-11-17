@@ -110,7 +110,7 @@
     "@ast-grep/cli": "0.44.0",
     "@hona/strobe": "catalog:",
     "@opencode/client": "workspace:*",
-    "@oxlint/plugins": "1.60.0",
+    "@oxlint/plugins": "1.93.0",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/mime-types": "3.0.1",
@@ -118,7 +118,7 @@
     "@typescript/native": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",
-    "oxlint": "1.60.0",
+    "oxlint": "1.93.0",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "turbo": "2.10.2"
