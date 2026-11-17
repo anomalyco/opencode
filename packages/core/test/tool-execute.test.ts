@@ -152,6 +152,29 @@ test("execute rejects filesystem fetches", async () => {
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
 })
 
+describe("execute output", () => {
+  const run = async (code: string) =>
+    (await Effect.runPromise(createCodeMode(new Map()).execute({ code }, context))).output.output
+
+  test("a program that only logs shows just its logs", async () => {
+    expect(await run('console.log("found", 12, "files")')).toBe("Logs:\nfound 12 files")
+  })
+
+  test("a program that only warns shows just its warnings", async () => {
+    expect(await run('const rejected = Promise.reject(new Error("boom"))')).toBe(
+      "Warnings:\n- [ExecutionFailure] Unhandled rejection from an un-awaited promise: Error: boom",
+    )
+  })
+
+  test("a null result with nothing else still shows null", async () => {
+    expect(await run("return null")).toBe("null")
+  })
+
+  test("a returned value keeps its line before the logs", async () => {
+    expect(await run('console.log("hi"); return { n: 1 }')).toBe('{"n":1}\n\nLogs:\nhi')
+  })
+})
+
 describe("streaming fetch", () => {
   const run = (url: URL, code: string, permission = allowAll) =>
     createCodeMode(new Map(), permission).execute(

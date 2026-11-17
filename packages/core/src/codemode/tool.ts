@@ -434,7 +434,9 @@ function formatResult(result: CodeMode.Result) {
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
+  const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
+  return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
 // Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
