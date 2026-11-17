@@ -18,42 +18,17 @@ built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-12.js  # uncaught RangeError: 
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-16.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-9.js  # uncaught RangeError: Invalid array length
 built-ins/Array/prototype/reverse/array-has-one-entry.js  # uncaught TypeError: Cannot modify a frozen or non-extensible array
-built-ins/Function/prototype/bind/instance-length-remaining-args.js  # wrong result
 built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
 built-ins/Object/isFrozen/15.2.3.12-2-a-11.js  # wrong result
-built-ins/Object/prototype/toLocaleString/S15.2.4.3_A9.js  # wrong result
-built-ins/Object/prototype/valueOf/S15.2.4.4_A9.js  # wrong result
 built-ins/RegExp/escape/escaped-surrogates.js  # wrong result
-built-ins/RegExp/prototype/exec/S15.10.6.2_A9.js  # wrong result
-built-ins/RegExp/prototype/test/S15.10.6.3_A9.js  # wrong result
-built-ins/RegExp/prototype/toString/S15.10.6.4_A9.js  # wrong result
-built-ins/String/prototype/charAt/S15.5.4.4_A9.js  # wrong result
-built-ins/String/prototype/charCodeAt/S15.5.4.5_A9.js  # wrong result
 built-ins/String/prototype/codePointAt/return-first-code-unit.js  # wrong result
 built-ins/String/prototype/codePointAt/return-single-code-unit.js  # wrong result
-built-ins/String/prototype/concat/S15.5.4.6_A9.js  # wrong result
-built-ins/String/prototype/indexOf/S15.5.4.7_A9.js  # wrong result
 built-ins/String/prototype/isWellFormed/returns-boolean.js  # wrong result
-built-ins/String/prototype/lastIndexOf/S15.5.4.8_A9.js  # wrong result
 built-ins/String/prototype/localeCompare/15.5.4.9_CE.js  # wrong result
-built-ins/String/prototype/localeCompare/S15.5.4.9_A9.js  # wrong result
-built-ins/String/prototype/match/S15.5.4.10_A9.js  # wrong result
-built-ins/String/prototype/search/S15.5.4.12_A9.js  # wrong result
-built-ins/String/prototype/slice/S15.5.4.13_A9.js  # wrong result
-built-ins/String/prototype/split/checking-if-deleting-the-string-prototype-split-length-property-fails.js  # wrong result
-built-ins/String/prototype/substring/S15.5.4.15_A9.js  # wrong result
-built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A9.js  # wrong result
-built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A9.js  # wrong result
-built-ins/String/prototype/toLowerCase/S15.5.4.16_A9.js  # wrong result
-built-ins/String/prototype/toUpperCase/S15.5.4.18_A9.js  # wrong result
 built-ins/StringIteratorPrototype/next/next-iteration-surrogate-pairs.js  # wrong result
-built-ins/decodeURI/S15.1.3.1_A5.2.js  # wrong result
-built-ins/decodeURIComponent/S15.1.3.2_A5.2.js  # wrong result
-built-ins/encodeURI/S15.1.3.3_A5.2.js  # wrong result
-built-ins/encodeURIComponent/S15.1.3.4_A5.2.js  # wrong result
 built-ins/global/10.2.1.1.3-4-18-s.js  # missing global: undefined
 language/arguments-object/10.5-7-b-4-s.js  # wrong result
 language/arguments-object/S10.6_A5_T4.js  # wrong result

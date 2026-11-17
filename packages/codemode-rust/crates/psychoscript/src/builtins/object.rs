@@ -506,12 +506,27 @@ fn function_bind(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if !vm.is_callable(&this) {
         return Err(vm.type_error("Bind must be called on a function"));
     }
-    let rest = args.iter().skip(1).cloned().collect();
+    let rest: Vec<Value> = args.iter().skip(1).cloned().collect();
+    // Like the reference: `bound <name>`, and the target's length less the bound arguments, at least 0.
+    let (lk, nk) = (vm.names.length, vm.names.name);
+    let length = match vm.get(&this, lk)? {
+        Value::Num(n) if n == f64::INFINITY => n,
+        Value::Num(n) if n.is_finite() => (n.trunc() - rest.len() as f64).max(0.0),
+        _ => 0.0,
+    };
+    let name = match vm.get(&this, nk)? {
+        Value::Str(s) => format!("bound {}", vm.text(s)),
+        _ => "bound ".to_owned(),
+    };
     let fp = vm.realm.function_proto;
-    Ok(Value::Obj(vm.alloc(Obj::new(
+    let id = vm.alloc(Obj::new(
         Some(fp),
         Kind::Bound(Box::new((this, arg(args, 0), rest))),
-    ))))
+    ));
+    let name = vm.string_val(name);
+    vm.heap[id as usize].props.insert(lk, Value::Num(length), 0);
+    vm.heap[id as usize].props.insert(nk, name, 0);
+    Ok(Value::Obj(id))
 }
 
 // ---------- Error ----------

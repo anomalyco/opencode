@@ -335,6 +335,10 @@ pub enum CombKind {
 pub const NON_EXTENSIBLE: u8 = 1;
 pub const FROZEN: u8 = 2;
 pub const SEALED: u8 = 4;
+/// A function whose own `name` was deleted; it reads the inherited one.
+pub const NAME_DELETED: u8 = 8;
+/// A function whose own `length` was deleted; it reads the inherited one.
+pub const LENGTH_DELETED: u8 = 16;
 
 pub struct Obj {
     pub proto: Option<Id>,

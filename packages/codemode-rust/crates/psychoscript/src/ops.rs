@@ -108,18 +108,18 @@ impl<'rt> Vm<'rt> {
                     }
                 }
                 Kind::Closure(c) if o.props.find(key).is_none() => {
-                    if key == self.names.name {
+                    if key == self.names.name && o.flags & NAME_DELETED == 0 {
                         return Value::Str(self.atoms.atom_str(c.proto.name));
                     }
-                    if key == self.names.length {
+                    if key == self.names.length && o.flags & LENGTH_DELETED == 0 {
                         return Value::Num(c.proto.length as f64);
                     }
                 }
                 Kind::Native { name, length, .. } if o.props.find(key).is_none() => {
-                    if key == self.names.name {
+                    if key == self.names.name && o.flags & NAME_DELETED == 0 {
                         return Value::Str(self.atoms.atom_str(*name));
                     }
-                    if key == self.names.length {
+                    if key == self.names.length && o.flags & LENGTH_DELETED == 0 {
                         return Value::Num(*length as f64);
                     }
                 }
@@ -515,14 +515,29 @@ impl<'rt> Vm<'rt> {
         }
         let flags = self.heap[id as usize].flags;
         let index = self.atoms.index(key);
+        if let Kind::Closure(_) | Kind::Native { .. } = self.heap[id as usize].kind
+            && self.own_name_or_length(flags, key)
+        {
+            if flags & (FROZEN | SEALED) != 0 {
+                let k = self.key_text(key);
+                return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
+            }
+            let deleted = if key == self.names.name {
+                NAME_DELETED
+            } else {
+                LENGTH_DELETED
+            };
+            self.heap[id as usize].flags |= deleted;
+            return Ok(true);
+        }
         if let Kind::Array(items) = &mut self.heap[id as usize].kind {
             if key == self.names.length {
-                return Err(self.type_error("Cannot delete property 'length' of [object Array]"));
+                return Err(self.type_error("Cannot delete property 'length'."));
             }
             if let Some(i) = index {
                 if flags & (FROZEN | SEALED) != 0 {
                     let k = self.key_text(key);
-                    return Err(self.type_error(&format!("Cannot delete property '{k}'")));
+                    return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
                 }
                 if let Some(slot) = items.get_mut(i as usize) {
                     *slot = Value::Uninit;
@@ -532,7 +547,7 @@ impl<'rt> Vm<'rt> {
         }
         if self.heap[id as usize].props.find(key).is_some() && flags & (FROZEN | SEALED) != 0 {
             let k = self.key_text(key);
-            return Err(self.type_error(&format!("Cannot delete property '{k}'")));
+            return Err(self.type_error(&format!("Cannot delete property '{k}'.")));
         }
         self.heap[id as usize].props.remove(key);
         Ok(true)
@@ -569,9 +584,7 @@ impl<'rt> Vm<'rt> {
                         return true;
                     }
                 }
-                Kind::Closure(_) | Kind::Native { .. }
-                    if key == self.names.name || key == self.names.length =>
-                {
+                Kind::Closure(_) | Kind::Native { .. } if self.own_name_or_length(o.flags, key) => {
                     return true;
                 }
                 k if exotic::is_exotic(k) && exotic::has_own(self, cur, key) => return true,
@@ -587,6 +600,12 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// Whether a function still has its own `name` or `length` slot for `key`.
+    fn own_name_or_length(&self, flags: u8, key: Atom) -> bool {
+        (key == self.names.name && flags & NAME_DELETED == 0)
+            || (key == self.names.length && flags & LENGTH_DELETED == 0)
+    }
+
     pub fn has_own(&self, id: Id, key: Atom) -> bool {
         let o = &self.heap[id as usize];
         match &o.kind {
@@ -600,9 +619,7 @@ impl<'rt> Vm<'rt> {
                     return true;
                 }
             }
-            Kind::Closure(_) | Kind::Native { .. }
-                if key == self.names.name || key == self.names.length =>
-            {
+            Kind::Closure(_) | Kind::Native { .. } if self.own_name_or_length(o.flags, key) => {
                 return true;
             }
             k if exotic::is_exotic(k) && exotic::has_own(self, id, key) => return true,

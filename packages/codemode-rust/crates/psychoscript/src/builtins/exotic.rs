@@ -69,9 +69,7 @@ pub fn delete(vm: &mut Vm, id: Id, key: Atom) -> Option<Result<bool, Value>> {
     match &vm.heap[id as usize].kind {
         Kind::Bytes(_) if bytes::has_own(vm, id, key) => {
             let k = vm.atoms.text(key).to_owned();
-            Some(Err(vm.type_error(&format!(
-                "Cannot delete property '{k}' of [object Uint8Array]"
-            ))))
+            Some(Err(vm.type_error(&format!("Cannot delete property '{k}'."))))
         }
         _ => None,
     }
