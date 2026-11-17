@@ -646,6 +646,9 @@ export function createBrowserPage(
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
   contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
   contents.on("did-start-navigation", (event) => {
+    // A load no frame started (the address bar, a link from the conversation, history) may redirect before it commits.
+    // Input in the page it leaves is not input in the page that redirects.
+    if (event.isMainFrame && !event.isSameDocument && !event.initiator) documentInput = false
     navigation.nativeStart(event)
     dispatch({
       type: "navigation.started",

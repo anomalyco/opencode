@@ -90,6 +90,7 @@ test("only a short, wholly visible ASCII target can launch an app", () => {
 test("editor redirects without a person's input in the current page stay copy-only", () => {
   for (const scheme of ["vscode", "vscode-insiders", "cursor", "zed", "jetbrains"]) {
     const url = `${scheme}:fixture`
+    // A conversation link to a web page that redirects here: the person's click was in the chat, not in this page.
     expect(navigationNotice(url, {}, "user")).toMatchObject({ source: "page", action: "copy" })
     expect(navigationNotice(url, {}, "user", true)).toMatchObject({ action: "open" })
     expect(navigationNotice(url, {}, "agent", true)).toMatchObject({ action: "copy" })
