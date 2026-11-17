@@ -1,11 +1,11 @@
 //! A port of `@mynameistito/opencode-force-input` 1.1.20 (`dist/index.mjs`): `ctrl+enter` (and `ctrl+return`)
 //! interrupts the running session and sends the prompt: it runs `session.interrupt` three times, OpenCode's guarded
-//! interrupt, then `prompt.submit`. A hint in the prompt footer says what enter does: `⏎ send` while the session is
-//! idle, `⏎ steer · ctrl+⏎ interrupt & send` while it runs; none in shell mode, on the home screen, or with the
-//! option `"hint": false`.
+//! interrupt, then `prompt.submit`. A hint says what enter does: `⏎ send` while the session is idle, `⏎ steer · ctrl+⏎
+//! interrupt & send` while it runs; none in shell mode, on the home screen, or with the option `"hint": false`. As TS's,
+//! it is claimed in the prompt footer and lifted two rows, into the right of the composer's own info row.
 
 use opencode_plugin_abi::{
-    Command, Host, Layout, Node, Placement, Render, SessionStatus, Setup, Span, Wrap, export_plugin,
+    Absolute, Command, Host, Layout, Node, Placement, Render, SessionStatus, Setup, Span, Wrap, export_plugin,
 };
 
 const INTERRUPT: &str = "session.interrupt";
@@ -51,9 +51,28 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             // Idle, and a status a later host adds.
             _ => vec![Span::new("⏎ "), Span::new("send").fg(LABEL)],
         };
-        Render::Show(Node::text(spans).fg(KEY).wrap(Wrap::None).layout(Layout::default().shrink(false)))
+        // TS's box at `right: 2, top: -2` of the footer row: one row up is the composer's border, two rows up its info
+        // row. TS's slot is a fragment, so the box sits in the footer row; the claim's own box fills that row for it.
+        let hint = Node::column(vec![Node::text(spans).fg(KEY).wrap(Wrap::None)]).layout(absolute(-2, 2, 1, false));
+        Render::Show(Node::column(vec![hint]).layout(absolute(0, 0, 0, true)))
     });
     Ok(())
+}
+
+/// A layout out of the flow, `top` and `right` cells from its parent's edges and painted at `z`; filling the parent when
+/// `fill`. The SDK has no setter of it, so it is set field by field.
+fn absolute(top: i16, right: i16, z: i32, fill: bool) -> Layout {
+    let mut at = Absolute::default();
+    (at.top, at.right, at.z) = (Some(top), Some(right), z);
+    if fill {
+        (at.bottom, at.left) = (Some(0), Some(0));
+    }
+    let mut layout = Layout::default();
+    if !fill {
+        layout = layout.shrink(false);
+    }
+    layout.absolute = Some(at);
+    layout
 }
 
 /// Interrupts the running session and submits the prompt, in this order.
