@@ -92,7 +92,10 @@ function SessionTabSlot(
     shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
-    combineTarget?: boolean
+    customDrag?: boolean
+    dragSource?: boolean
+    combineColor?: string
+    combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
@@ -113,17 +116,24 @@ function SessionTabSlot(
     get accept() {
       return props.group
     },
+    get disabled() {
+      return !!props.customDrag
+    },
   })
 
   let ref!: HTMLDivElement
 
   return (
     <div
-      ref={sortable.ref}
+      ref={(el) => {
+        if (!props.customDrag) sortable.ref(el)
+      }}
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
-      data-combine-target={props.combineTarget ? "true" : undefined}
+      data-drag-source={props.dragSource ? "true" : undefined}
+      data-combine-target={props.combineColor ? "true" : undefined}
+      data-group-color={props.combineColor}
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
@@ -154,10 +164,15 @@ function SessionTabSlot(
         onCloseOthers={props.onCloseOthers}
         onCloseAfter={props.onCloseAfter}
         active={props.active}
-        dragging={sortable.isDragSource()}
+        dragging={props.customDrag ? !!props.dragSource : sortable.isDragSource()}
         orientation={props.orientation}
         contextMenuExtra={props.contextMenuExtra}
       />
+      <Show when={props.combineColor && props.combineBadgeLabel}>
+        <span data-slot="tab-combine-badge" aria-hidden="true">
+          {props.combineBadgeLabel}
+        </span>
+      </Show>
       {props.footer}
     </div>
   )
@@ -179,7 +194,10 @@ function SessionTabEntry(
     serverCtx: ServerCtx | undefined
     view: SessionTabView
     shortcut?: number
-    combineTarget?: boolean
+    customDrag?: boolean
+    dragSource?: boolean
+    combineColor?: string
+    combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
@@ -325,7 +343,10 @@ function SessionTabEntry(
           }[props.view.fallbackTitle]
         }
         fallbackDirectory={props.view.fallbackDirectory}
-        combineTarget={props.combineTarget}
+        customDrag={props.customDrag}
+        dragSource={props.dragSource}
+        combineColor={props.combineColor}
+        combineBadgeLabel={props.combineBadgeLabel}
         contextMenuExtra={props.contextMenuExtra}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
@@ -504,7 +525,10 @@ function DraftTabSlot(
     orientation: "horizontal" | "vertical"
     title: string
     shortcut?: number
-    combineTarget?: boolean
+    customDrag?: boolean
+    dragSource?: boolean
+    combineColor?: string
+    combineBadgeLabel?: string
     contextMenuExtra?: () => JSX.Element
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -524,17 +548,24 @@ function DraftTabSlot(
     get accept() {
       return props.group
     },
+    get disabled() {
+      return !!props.customDrag
+    },
   })
 
   let ref!: HTMLDivElement
 
   return (
     <div
-      ref={sortable.ref}
+      ref={(el) => {
+        if (!props.customDrag) sortable.ref(el)
+      }}
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
-      data-combine-target={props.combineTarget ? "true" : undefined}
+      data-drag-source={props.dragSource ? "true" : undefined}
+      data-combine-target={props.combineColor ? "true" : undefined}
+      data-group-color={props.combineColor}
       data-orientation={props.orientation}
       class="relative flex"
       classList={{
@@ -556,10 +587,15 @@ function DraftTabSlot(
         onCloseOthers={props.onCloseOthers}
         onCloseAfter={props.onCloseAfter}
         active={props.active}
-        dragging={sortable.isDragSource()}
+        dragging={props.customDrag ? !!props.dragSource : sortable.isDragSource()}
         orientation={props.orientation}
         contextMenuExtra={props.contextMenuExtra}
       />
+      <Show when={props.combineColor && props.combineBadgeLabel}>
+        <span data-slot="tab-combine-badge" aria-hidden="true">
+          {props.combineBadgeLabel}
+        </span>
+      </Show>
       {props.footer}
     </div>
   )
@@ -581,65 +617,16 @@ export type TabStripSection = {
   }
 }
 
-function SortableTabGroupContainer(props: {
-  sectionKey: string
-  index: number
-  vertical: boolean
-  color: string
-  collapsed: boolean
-  ungrouped?: boolean
-  enabled: boolean
-  header?: JSX.Element
-  children: JSX.Element
-}) {
-  const sortable = useSortable({
-    get id() {
-      return `tab-section:${props.sectionKey}`
-    },
-    get index() {
-      return props.index
-    },
-    group: "tab-sections",
-    type: "tab-section",
-    accept: "tab-section",
-    get disabled() {
-      return !props.enabled
-    },
-  })
-
-  if (props.ungrouped) {
-    return (
-      <div
-        ref={sortable.ref}
-        class="flex min-w-0"
-        classList={{
-          "flex-row items-center gap-1.5 shrink": !props.vertical,
-          "flex-col items-stretch gap-0.5 shrink-0": props.vertical,
-        }}
-      >
-        <span ref={sortable.handleRef} hidden aria-hidden="true" />
-        {props.header}
-        {props.children}
-      </div>
-    )
-  }
-
-  return (
-    <div
-      ref={sortable.ref}
-      data-tab-group
-      data-group-key={props.sectionKey}
-      data-group-color={props.color}
-      data-collapsed={props.collapsed ? "" : undefined}
-      data-dragging={sortable.isDragSource() ? "true" : undefined}
-      data-orientation={props.vertical ? "vertical" : "horizontal"}
-    >
-      <div ref={sortable.handleRef} class="shrink-0">
-        {props.header}
-      </div>
-      {props.children}
-    </div>
-  )
+export type CustomVerticalDragBinding = {
+  isDraggingStrip: () => boolean
+  isDraggingTab: (key: string) => boolean
+  isDraggingGroup: (groupKey: string) => boolean
+  isDropInsideGroup: (groupKey: string) => boolean
+  combineColorOfTab: (key: string) => string | undefined
+  combineBadgeLabel: string
+  onPointerDown: (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => void
+  onScroll: (listEl: HTMLDivElement) => void
+  overlay: () => JSX.Element
 }
 
 export function TitlebarTabStrip(props: {
@@ -648,14 +635,7 @@ export function TitlebarTabStrip(props: {
   tabs: Tab[]
   /** Groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
   sections?: TabStripSection[]
-  /** Allows dragging tabs across section boundaries (e.g. manual browser tab groups). */
-  allowCrossSectionDrag?: boolean
-  /** Allows holding Shift or dwelling on another tab to combine them into a group. */
-  allowCombineToGroup?: boolean
-  onMoveTabToGroup?: (tabKey: string, targetGroupKey: string | undefined) => void
-  onCombineTabs?: (sourceTabKey: string, targetTabKey: string) => void
-  onDropTargetChange?: (groupKey: string | undefined) => void
-  onReorderSections?: (fromIndex: number, toIndex: number) => void
+  customVerticalDrag?: CustomVerticalDragBinding
   tabContextMenu?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: extra content rendered right after a tab row (e.g. its subagent sessions). */
   tabFooter?: (tab: Tab) => JSX.Element | undefined
@@ -672,6 +652,7 @@ export function TitlebarTabStrip(props: {
   const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
   const sections = () => (vertical() ? props.sections : undefined)
+  const customDrag = () => (vertical() ? props.customVerticalDrag : undefined)
 
   const displayTabs = createMemo(() => sections()?.flatMap((section) => section.tabs) ?? props.tabs)
 
@@ -697,33 +678,6 @@ export function TitlebarTabStrip(props: {
     if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
   })
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-
-  const [combine, setCombine] = createStore<{ key: string | undefined; candidate: string | undefined }>({
-    key: undefined,
-    candidate: undefined,
-  })
-
-  let combineTimer: ReturnType<typeof setTimeout> | undefined
-  let shiftHeld = false
-  const initialSlotRects = new Map<string, DOMRect>()
-
-  createEventListener(
-    window,
-    ["keydown", "keyup", "pointerdown", "pointermove"],
-    (event) => {
-      shiftHeld = event.shiftKey
-    },
-    { capture: true, passive: true },
-  )
-
-  const clearCombine = () => {
-    clearTimeout(combineTimer)
-    combineTimer = undefined
-    initialSlotRects.clear()
-    setCombine({ key: undefined, candidate: undefined })
-  }
-
-  onCleanup(clearCombine)
   const [tabLoads, setTabLoads] = createSignal(INITIAL_SESSION_TAB_LOADS_STATE)
   const loadTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
@@ -863,7 +817,7 @@ export function TitlebarTabStrip(props: {
   function renderTab(tab: Tab, section?: TabStripSection) {
     const id = tabKey(tab)
 
-    const group = props.allowCrossSectionDrag ? "manual-tab" : section ? `tab:${section.key}` : undefined
+    const group = section ? `tab:${section.key}` : undefined
     const menuExtra = props.tabContextMenu ? () => props.tabContextMenu!(tab) : undefined
     let ref!: HTMLDivElement
     const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
@@ -909,7 +863,10 @@ export function TitlebarTabStrip(props: {
           serverCtx={serverCtx()}
           view={views().get(id) ?? hiddenTabView}
           shortcut={shortcut(visibleIndex())}
-          combineTarget={combine.key === id}
+          customDrag={!!customDrag()}
+          dragSource={customDrag()?.isDraggingTab(id)}
+          combineColor={customDrag()?.combineColorOfTab(id)}
+          combineBadgeLabel={customDrag()?.combineBadgeLabel}
           contextMenuExtra={menuExtra}
           onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
@@ -935,7 +892,10 @@ export function TitlebarTabStrip(props: {
         orientation={vertical() ? "vertical" : "horizontal"}
         title={language.t("session.tab.session")}
         shortcut={shortcut(visibleIndex())}
-        combineTarget={combine.key === id}
+        customDrag={!!customDrag()}
+        dragSource={customDrag()?.isDraggingTab(id)}
+        combineColor={customDrag()?.combineColorOfTab(id)}
+        combineBadgeLabel={customDrag()?.combineBadgeLabel}
         contextMenuExtra={menuExtra}
         onNavigate={(element) => {
           ref = element
@@ -947,6 +907,60 @@ export function TitlebarTabStrip(props: {
       />
     )
   }
+
+  const renderList = () => (
+    <div
+      data-titlebar-tab-list
+      data-orientation={vertical() ? "vertical" : "horizontal"}
+      data-dragging={customDrag()?.isDraggingStrip() ? "true" : undefined}
+      class="relative flex w-full min-w-0"
+      classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
+      ref={listRef}
+      onPointerDown={(event) => {
+        customDrag()?.onPointerDown(event, listRef, scrollRef)
+      }}
+    >
+      <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
+        {(list) => (
+          <Key each={list()} by={(section) => section.key}>
+            {(section) => (
+              <Show
+                when={section().groupMeta && !section().groupMeta?.ungrouped ? section().groupMeta : undefined}
+                fallback={
+                  <>
+                    {section().header}
+                    <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                    {section().footer}
+                  </>
+                }
+              >
+                {(meta) => (
+                  <div
+                    data-tab-group
+                    data-group-key={section().key}
+                    data-group-color={meta().color}
+                    data-collapsed={meta().collapsed ? "" : undefined}
+                    data-dragging={customDrag()?.isDraggingGroup(section().key) ? "true" : undefined}
+                    data-drop-inside={customDrag()?.isDropInsideGroup(section().key) ? "true" : undefined}
+                    data-orientation={vertical() ? "vertical" : "horizontal"}
+                  >
+                    {section().header}
+                    <Show when={section().tabs.length > 0}>
+                      <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
+                        <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                      </div>
+                    </Show>
+                    {section().footer}
+                  </div>
+                )}
+              </Show>
+            )}
+          </Key>
+        )}
+      </Show>
+      {customDrag()?.overlay()}
+    </div>
+  )
 
   return (
     <div
@@ -970,227 +984,70 @@ export function TitlebarTabStrip(props: {
             : undefined
         }
         onScroll={() => {
-          if (vertical()) measureFade()
+          if (vertical()) {
+            measureFade()
+            customDrag()?.onScroll(listRef)
+          }
         }}
       >
-        <DragDropProvider
-          sensors={[
-            PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
-              preventActivation: (event) =>
-                event.target instanceof Element &&
-                !!event.target.closest(
-                  '[data-slot="tab-close"], [data-group-menu-trigger], [contenteditable="true"], [contenteditable="plaintext-only"]',
-                ),
-            }),
-          ]}
-          modifiers={[
-            vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
-            RestrictToElement.configure({ element: () => listRef }),
-          ]}
-          plugins={(defaults) => [
-            ...defaults.filter((plugin) => plugin !== Accessibility),
-            AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
-            Feedback.configure({ dropAnimation: null }),
-          ]}
-          onDragStart={(event) => {
-            const source = event.operation.source
-
-            if (!source) return
-            const sourceId = source.id.toString()
-
-            if (props.allowCombineToGroup && !sourceId.startsWith("tab-section:")) {
-              initialSlotRects.clear()
-              listRef.querySelectorAll<HTMLElement>("[data-titlebar-tab-slot][data-tab-key]").forEach((el) => {
-                const key = el.dataset.tabKey
-
-                if (key && key !== sourceId) initialSlotRects.set(key, el.getBoundingClientRect())
-              })
-            }
-
-            const tab = props.tabs.find((item) => tabKey(item) === sourceId)
-
-            if (!tab) return
-
-            if (vertical()) return
-            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
-            props.onNavigate(tab, tabEl ?? undefined)
-          }}
-          onDragMove={(event) => {
-            const sourceId = event.operation.source?.id.toString() ?? ""
-
-            if (sourceId.startsWith("tab-section:")) return
-            const point = event.operation.position.current
-
-            if (props.allowCrossSectionDrag) {
-              const hit =
-                typeof document !== "undefined"
-                  ? document
-                      .elementFromPoint(point.x, point.y)
-                      ?.closest<HTMLElement>("[data-tab-group-header][data-group-key]")
-                  : undefined
-
-              props.onDropTargetChange?.(hit?.dataset.groupKey)
-
-              if (hit?.dataset.groupKey) {
-                clearTimeout(combineTimer)
-                combineTimer = undefined
-                setCombine({ key: undefined, candidate: undefined })
-
-                return
-              }
-            }
-
-            if (!props.allowCombineToGroup) return
-
-            const targetKey = [...initialSlotRects.entries()].find(([, rect]) => {
-              const insetX = rect.width * 0.15
-              const insetY = rect.height * 0.2
-
-              return (
-                point.x >= rect.left + insetX &&
-                point.x <= rect.right - insetX &&
-                point.y >= rect.top + insetY &&
-                point.y <= rect.bottom - insetY
-              )
-            })?.[0]
-
-            if (shiftHeld && targetKey) {
-              clearTimeout(combineTimer)
-              combineTimer = undefined
-              setCombine({ key: targetKey, candidate: targetKey })
-
-              return
-            }
-
-            if (targetKey === combine.candidate) return
-            clearTimeout(combineTimer)
-            combineTimer = undefined
-            setCombine({ key: undefined, candidate: targetKey })
-
-            if (!targetKey) return
-            combineTimer = setTimeout(() => setCombine("key", targetKey), 380)
-          }}
-          onDragEnd={(event) => {
-            const armedCombine = combine.key
-            clearCombine()
-            props.onDropTargetChange?.(undefined)
-            const source = event.operation.source
-
-            if (event.canceled || !isSortable(source)) return
-            const movedKey = source.id.toString()
-
-            if (movedKey.startsWith("tab-section:")) {
-              if (source.initialIndex !== source.index) {
-                props.onReorderSections?.(source.initialIndex, source.index)
-              }
-
-              return
-            }
-
-            if (props.allowCombineToGroup && armedCombine && armedCombine !== movedKey) {
-              props.onCombineTabs?.(movedKey, armedCombine)
-
-              return
-            }
-
-            const current = visibleTabIds()
-
-            if (props.allowCrossSectionDrag) {
-              const point = event.operation.position.current
-
-              const hit =
-                typeof document !== "undefined"
-                  ? document
-                      .elementFromPoint(point.x, point.y)
-                      ?.closest<HTMLElement>("[data-tab-group-header][data-group-key]")
-                  : undefined
-
-              if (hit?.dataset.groupKey) {
-                props.onMoveTabToGroup?.(movedKey, hit.dataset.groupKey)
-
-                return
-              }
-            }
-
-            const { initialIndex, index } = source
-
-            if (initialIndex === index) return
-            const next = arrayMove(current, initialIndex, index)
-
-            if (props.allowCrossSectionDrag) {
-              const targetNeighborKey = current[index]
-              const targetSection = targetNeighborKey ? sectionOf().get(targetNeighborKey) : undefined
-
-              if (targetSection && targetSection !== sectionOf().get(movedKey)) {
-                props.onMoveTabToGroup?.(movedKey, targetSection)
-              }
-
-              props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
-
-              return
-            }
-
-            // Sections are contiguous, so a move within one keeps every position's section.
-            if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
-            props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
-          }}
+        <Show
+          when={!customDrag()}
+          fallback={renderList()}
         >
-          <div
-            data-titlebar-tab-list
-            data-orientation={vertical() ? "vertical" : "horizontal"}
-            class="flex w-full min-w-0"
-            classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
-            ref={listRef}
+          <DragDropProvider
+            sensors={[
+              PointerSensor.configure({
+                activationConstraints: (event) =>
+                  event.pointerType === "touch"
+                    ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                    : [new PointerActivationConstraints.Distance({ value: 4 })],
+                preventActivation: (event) =>
+                  event.target instanceof Element &&
+                  !!event.target.closest(
+                    '[data-slot="tab-close"], [data-group-menu-trigger], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                  ),
+              }),
+            ]}
+            modifiers={[
+              vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
+              RestrictToElement.configure({ element: () => listRef }),
+            ]}
+            plugins={(defaults) => [
+              ...defaults.filter((plugin) => plugin !== Accessibility),
+              AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
+              Feedback.configure({ dropAnimation: null }),
+            ]}
+            onDragStart={(event) => {
+              const source = event.operation.source
+
+              if (!source) return
+              const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+
+              if (!tab) return
+
+              if (vertical()) return
+              const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+              props.onNavigate(tab, tabEl ?? undefined)
+            }}
+            onDragEnd={(event) => {
+              const current = visibleTabIds()
+              const source = event.operation.source
+
+              if (event.canceled || !isSortable(source)) return
+
+              const { initialIndex, index } = source
+
+              if (initialIndex === index) return
+              const next = arrayMove(current, initialIndex, index)
+
+              // Sections are contiguous, so a move within one keeps every position's section.
+              if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
+              props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
+            }}
           >
-            <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
-              {(list) => (
-                <Key each={list()} by={(section) => section.key}>
-                  {(section, sectionIndex) => (
-                    <Show
-                      when={section().groupMeta}
-                      fallback={
-                        <>
-                          {section().header}
-                          <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                          {section().footer}
-                        </>
-                      }
-                    >
-                      {(meta) => (
-                        <SortableTabGroupContainer
-                          sectionKey={section().key}
-                          index={sectionIndex()}
-                          vertical={vertical()}
-                          color={meta().color}
-                          collapsed={meta().collapsed}
-                          ungrouped={meta().ungrouped}
-                          enabled={!!props.onReorderSections}
-                          header={section().header}
-                        >
-                          <Show
-                            when={!meta().ungrouped}
-                            fallback={<For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>}
-                          >
-                            <Show when={section().tabs.length > 0}>
-                              <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
-                                <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                              </div>
-                            </Show>
-                          </Show>
-                          {section().footer}
-                        </SortableTabGroupContainer>
-                      )}
-                    </Show>
-                  )}
-                </Key>
-              )}
-            </Show>
-          </div>
-        </DragDropProvider>
+            {renderList()}
+          </DragDropProvider>
+        </Show>
       </div>
       <Show when={!vertical()}>
         <div

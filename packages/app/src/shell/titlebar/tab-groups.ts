@@ -1,11 +1,9 @@
 import { Effect, Option, Schema } from "effect"
-import { arrayMove } from "@/runtime/array-move"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { tabKey, type Tab } from "@/shell/tabs/tabs"
-import type { SidebarStatus } from "./sidebar-view"
 
-export const TAB_GROUP_MODES = ["none", "server", "project", "status"] as const
+export const TAB_GROUP_MODES = ["none", "server", "project"] as const
 
 export type TabGroupMode = (typeof TAB_GROUP_MODES)[number]
 
@@ -61,13 +59,12 @@ export type ResolvedTabMeta = {
   projectID: string | undefined
   projectName: string | undefined
   directory: string | undefined
-  status: SidebarStatus
   active: boolean
 }
 
 export type ComputedTabGroup = {
   key: string
-  kind: "ungrouped" | "manual" | "server" | "project" | "status"
+  kind: "ungrouped" | "manual" | "server" | "project"
   manualId?: string
   server?: ServerConnection.Key
   directory?: string
@@ -80,16 +77,6 @@ export type ComputedTabGroup = {
   visibleTabs: Tab[]
   containsActive: boolean
 }
-
-const STATUS_COLOR: Record<SidebarStatus, TabGroupColor> = {
-  input: "orange",
-  running: "blue",
-  unread: "purple",
-  failed: "pink",
-  idle: "gray",
-}
-
-const STATUS_ORDER: readonly SidebarStatus[] = ["input", "running", "unread", "failed", "idle"]
 
 export function hashGroupColor(seed: string, usedColors: Set<TabGroupColor>): TabGroupColor {
   let hash = 0
@@ -108,6 +95,58 @@ export function nextManualGroupColor(existing: readonly ManualTabGroup[]): TabGr
   const used = new Set(existing.map((group) => group.color))
 
   return AUTO_TAB_GROUP_COLORS.find((color) => !used.has(color)) ?? AUTO_TAB_GROUP_COLORS[existing.length % 6] ?? "blue"
+}
+
+export function nextManualGroupNumber(
+  existing: readonly ManualTabGroup[],
+  formatName: (number: number) => string,
+): number {
+  const taken = new Set(existing.map((group) => group.name.trim().toLocaleLowerCase()))
+
+  for (let n = 1; n <= existing.length + 1; n++) {
+    if (!taken.has(formatName(n).trim().toLocaleLowerCase())) return n
+  }
+
+  return existing.length + 1
+}
+
+/**
+ * Assigns colors in lexicographically sorted seed order rather than tab-list order, so reordering tabs,
+ * dragging groups above/below each other, or filtering never changes any group's color.
+ */
+export function assignStableGroupColors(
+  seeds: readonly string[],
+  prefix: "server:" | "project:",
+  overrides: Readonly<Record<string, TabGroupOverride>>,
+): Map<string, TabGroupColor> {
+  const unique = [...new Set(seeds)].toSorted()
+  const used = new Set<TabGroupColor>()
+  const out = new Map<string, TabGroupColor>()
+
+  unique.forEach((seed) => {
+    const explicit = overrides[`${prefix}${seed}`]?.color
+
+    if (explicit) {
+      out.set(seed, explicit)
+      used.add(explicit)
+    }
+  })
+
+  unique.forEach((seed) => {
+    if (out.has(seed)) return
+
+    if (prefix === "project:" && seed === "other") {
+      out.set(seed, "gray")
+
+      return
+    }
+
+    const picked = hashGroupColor(seed, used)
+    used.add(picked)
+    out.set(seed, picked)
+  })
+
+  return out
 }
 
 export function matchesTabFilter(meta: ResolvedTabMeta, rawQuery: string) {
@@ -141,26 +180,64 @@ function applySavedGroupOrder(groups: ComputedTabGroup[], savedOrder: readonly s
     .map((entry) => entry.group)
 }
 
-export function reorderTabKeysByGroups(
-  allTabs: readonly Tab[],
-  groups: readonly ComputedTabGroup[],
-  fromIndex: number,
-  toIndex: number,
-) {
-  const movedGroups = arrayMove([...groups], fromIndex, toIndex)
-  const orderedGroupTabKeys = movedGroups.flatMap((group) => group.allTabs.map(tabKey))
-  const inMoved = new Set(orderedGroupTabKeys)
+export function pruneEmptyManualGroups(
+  manualGroups: readonly ManualTabGroup[],
+  assignments: Readonly<Record<string, string>>,
+): ManualTabGroup[] {
+  const populated = new Set(Object.values(assignments))
 
-  const untouched = allTabs.flatMap((tab) => {
-    const key = tabKey(tab)
+  return manualGroups.filter((group) => populated.has(group.id))
+}
 
-    return inMoved.has(key) ? [] : [key]
+/**
+ * Ensures tabs sharing a manual group stay contiguous in `tabs.store` order so visual section order and backing store
+ * order never diverge when tabs are inserted, promoted, or switched back from automatic grouping.
+ */
+export function canonicalizeManualTabOrder(
+  keys: readonly string[],
+  assignments: Readonly<Record<string, string>>,
+  movedKey?: string,
+): string[] {
+  const byGroup = new Map<string, string[]>()
+
+  keys.forEach((key) => {
+    const gid = assignments[key]
+
+    if (!gid) return
+    const list = byGroup.get(gid)
+
+    if (list) list.push(key)
+
+    if (!list) byGroup.set(gid, [key])
   })
 
-  return {
-    groupKeys: movedGroups.flatMap((group) => (group.kind !== "ungrouped" ? [group.key] : [])),
-    tabKeys: [...orderedGroupTabKeys, ...untouched],
-  }
+  const emitted = new Set<string>()
+  const out: string[] = []
+  const movedGroup = movedKey ? assignments[movedKey] : undefined
+
+  keys.forEach((key) => {
+    const gid = assignments[key]
+
+    if (!gid) {
+      out.push(key)
+
+      return
+    }
+
+    if (emitted.has(gid)) return
+
+    if (gid === movedGroup && key === movedKey) {
+      emitted.add(gid)
+      out.push(...(byGroup.get(gid) ?? []))
+
+      return
+    }
+
+    emitted.add(gid)
+    out.push(...(byGroup.get(gid) ?? []))
+  })
+
+  return out
 }
 
 export function reconcileManualAssignments(
@@ -177,7 +254,6 @@ export function reconcileManualAssignments(
   const updated = { ...assignments }
   let changed = false
 
-  // Migrate manual group membership when a draft tab promotes in-place to a session tab.
   if (previousKeys.length === nextKeys.length) {
     previousKeys.forEach((prevKey, index) => {
       const nextKey = nextKeys[index]
@@ -192,7 +268,6 @@ export function reconcileManualAssignments(
     })
   }
 
-  // Prune assignments for tabs that are no longer open.
   Object.keys(updated).forEach((key) => {
     if (nextSet.has(key)) return
     delete updated[key]
@@ -210,14 +285,12 @@ export function buildComputedTabGroups(input: {
   query: string
   labels: {
     other: string
-    status: (status: SidebarStatus) => string
   }
 }): ComputedTabGroup[] | undefined {
   const searching = input.query.trim().length > 0
   const filtered = searching ? input.items.filter((item) => matchesTabFilter(item, input.query)) : input.items
   const effectiveMode = input.mode === "server" && input.serverCount <= 1 ? "none" : input.mode
 
-  // Automatic grouping is Off ("none"): flat tabs unless the user has manual groups or an active filter query.
   if (effectiveMode === "none") {
     if (input.state.manualGroups.length > 0) {
       return buildManualGroups(filtered, input.state, searching)
@@ -241,17 +314,20 @@ export function buildComputedTabGroups(input: {
     ]
   }
 
-  const usedColors = new Set<TabGroupColor>()
-
   if (effectiveMode === "server") {
+    const colorMap = assignStableGroupColors(
+      input.items.map((item) => item.server),
+      "server:",
+      input.state.overrides,
+    )
+
     const buckets = [...Map.groupBy(filtered, (item) => item.server)]
 
     const groups = buckets.map(([server, rows]): ComputedTabGroup => {
       const key = `server:${server}`
       const defaultName = rows[0]?.serverLabel ?? server
       const override = input.state.overrides[key]
-      const color = override?.color ?? hashGroupColor(server, usedColors)
-      usedColors.add(color)
+      const color = colorMap.get(server) ?? "blue"
       const collapsed = searching ? false : !!input.state.collapsed[key]
       const allTabs = rows.map((row) => row.tab)
 
@@ -274,66 +350,34 @@ export function buildComputedTabGroups(input: {
     return applySavedGroupOrder(groups, input.state.groupOrder)
   }
 
-  if (effectiveMode === "project") {
-    const buckets = [...Map.groupBy(filtered, (item) => item.projectID ?? item.directory ?? "other")]
+  const projectSeedOf = (item: ResolvedTabMeta) => item.projectID ?? item.directory ?? "other"
 
-    const groups = buckets.map(([projectKey, rows]): ComputedTabGroup => {
-      const key = `project:${projectKey}`
-      const defaultName = rows[0]?.projectName ?? input.labels.other
-      const override = input.state.overrides[key]
-      const color = override?.color ?? (projectKey === "other" ? "gray" : hashGroupColor(projectKey, usedColors))
-      usedColors.add(color)
-      const collapsed = searching ? false : !!input.state.collapsed[key]
-      const allTabs = rows.map((row) => row.tab)
+  const colorMap = assignStableGroupColors(input.items.map(projectSeedOf), "project:", input.state.overrides)
 
-      return {
-        key,
-        kind: "project",
-        server: rows[0]?.server,
-        directory: rows[0]?.directory,
-        defaultName,
-        name: override?.name?.trim() || defaultName,
-        hasCustomOverride: !!(override?.name?.trim() || override?.color),
-        color,
-        collapsed,
-        allTabs,
-        visibleTabs: collapsed ? [] : allTabs,
-        containsActive: rows.some((row) => row.active),
-      }
-    })
+  const buckets = [...Map.groupBy(filtered, projectSeedOf)]
 
-    return applySavedGroupOrder(groups, input.state.groupOrder)
-  }
-
-  const byStatus = Map.groupBy(filtered, (item) => item.status)
-
-  const groups = STATUS_ORDER.flatMap((status): ComputedTabGroup[] => {
-    const rows = byStatus.get(status)
-
-    if (!rows?.length) return []
-    const key = `status:${status}`
-    const defaultName = input.labels.status(status)
+  const groups = buckets.map(([projectKey, rows]): ComputedTabGroup => {
+    const key = `project:${projectKey}`
+    const defaultName = rows[0]?.projectName ?? input.labels.other
     const override = input.state.overrides[key]
-    const color = override?.color ?? STATUS_COLOR[status]
+    const color = colorMap.get(projectKey) ?? "gray"
     const collapsed = searching ? false : !!input.state.collapsed[key]
     const allTabs = rows.map((row) => row.tab)
 
-    return [
-      {
-        key,
-        kind: "status",
-        server: rows[0]?.server,
-        directory: rows[0]?.directory,
-        defaultName,
-        name: override?.name?.trim() || defaultName,
-        hasCustomOverride: !!(override?.name?.trim() || override?.color),
-        color,
-        collapsed,
-        allTabs,
-        visibleTabs: collapsed ? [] : allTabs,
-        containsActive: rows.some((row) => row.active),
-      },
-    ]
+    return {
+      key,
+      kind: "project",
+      server: rows[0]?.server,
+      directory: rows[0]?.directory,
+      defaultName,
+      name: override?.name?.trim() || defaultName,
+      hasCustomOverride: !!(override?.name?.trim() || override?.color),
+      color,
+      collapsed,
+      allTabs,
+      visibleTabs: collapsed ? [] : allTabs,
+      containsActive: rows.some((row) => row.active),
+    }
   })
 
   return applySavedGroupOrder(groups, input.state.groupOrder)
@@ -365,7 +409,6 @@ function buildManualGroups(
   const emittedGroups = new Set<string>()
   const out: ComputedTabGroup[] = []
   let ungroupedRun: ResolvedTabMeta[] = []
-  let ungroupedIndex = 0
 
   const flushUngrouped = () => {
     if (!ungroupedRun.length) return
@@ -373,7 +416,7 @@ function buildManualGroups(
     ungroupedRun = []
     const allTabs = batch.map((row) => row.tab)
     out.push({
-      key: `ungrouped:${ungroupedIndex++}`,
+      key: `ungrouped:${batch[0]!.key}`,
       kind: "ungrouped",
       defaultName: "",
       name: "",
@@ -421,26 +464,6 @@ function buildManualGroups(
   })
 
   flushUngrouped()
-
-  if (!searching) {
-    state.manualGroups.forEach((manual) => {
-      if (emittedGroups.has(manual.id)) return
-      const key = `manual:${manual.id}`
-      out.push({
-        key,
-        kind: "manual",
-        manualId: manual.id,
-        defaultName: manual.name,
-        name: manual.name,
-        hasCustomOverride: false,
-        color: manual.color,
-        collapsed: !!state.collapsed[key],
-        allTabs: [],
-        visibleTabs: [],
-        containsActive: false,
-      })
-    })
-  }
 
   return out
 }

@@ -1,4 +1,5 @@
-import { createEffect, createMemo, For, on, Show, untrack, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack, type JSX } from "solid-js"
+import { Portal } from "solid-js/web"
 import { createStore, produce } from "solid-js/store"
 import { useQueries } from "@tanstack/solid-query"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -11,26 +12,45 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { uuid } from "@opencode/util/uuid"
 import { mergeHomeSessionIndex } from "@/home/sessions/index"
 import { homeSessionsQuery } from "@/home/sessions/queries"
-import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { projectSettingsKey, useSettings } from "@/settings/model"
+import { useSettings } from "@/settings/model"
 import { useCommand } from "@/shell/commands/command"
 import { compareSessionTime } from "@/shell/layout/helpers"
-import { sessionStatus } from "@/shell/layout/project-avatar-state"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { listClosedTabs } from "@/shell/tabs/closed"
 import { sessionIDHasOpenTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
-import type { SidebarStatus } from "./sidebar-view"
+import {
+  applyVerticalDragCommit,
+  INITIAL_VERTICAL_DRAG_STATE,
+  selectCombineColorOfTab,
+  selectDragGhost,
+  selectDraggingGroupKey,
+  selectDraggingTabKey,
+  selectDropInsideGroupKey,
+  selectDropLine,
+  selectGhostTargetColor,
+  selectIsDraggingStrip,
+  selectJoinGroupKey,
+  transitionVerticalDrag,
+  type MeasuredStripRow,
+  type MeasuredTopBlock,
+  type VerticalDragEvent,
+  type VerticalDragGeometry,
+  type VerticalDragIntent,
+  type VerticalDragSource,
+} from "./tab-group-drag-machine"
 import {
   AUTO_TAB_GROUP_COLORS,
   buildComputedTabGroups,
+  canonicalizeManualTabOrder,
   DEFAULT_TAB_GROUPS_STATE,
   nextManualGroupColor,
+  nextManualGroupNumber,
+  pruneEmptyManualGroups,
   reconcileManualAssignments,
-  reorderTabKeysByGroups,
   TAB_GROUP_MODES,
   TabGroupsStateSchema,
   type ComputedTabGroup,
@@ -38,7 +58,7 @@ import {
   type TabGroupColor,
   type TabGroupMode,
 } from "./tab-groups"
-import type { TabStripSection } from "./tab-strip"
+import type { CustomVerticalDragBinding, TabStripSection } from "./tab-strip"
 import { sessionTabTitle } from "./tab-title"
 import "./tab-groups.css"
 
@@ -83,14 +103,8 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     const tabs = useTabs()
 
     const [state, setState] = persisted(Persist.global("tabs.groups"), TabGroupsStateSchema, DEFAULT_TAB_GROUPS_STATE)
-
-    const [local, setLocal] = createStore<{
-      query: string
-      dropTargetKey: string | undefined
-    }>({
-      query: "",
-      dropTargetKey: undefined,
-    })
+    const [local, setLocal] = createStore({ query: "" })
+    const [drag, setDrag] = createSignal(INITIAL_VERTICAL_DRAG_STATE)
 
     const mode = () => state.mode
     const serverCount = () => global.servers.list().length
@@ -98,37 +112,40 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
 
     const connOf = (server: string) => global.servers.list().find((conn) => ServerConnection.key(conn) === server)
 
-    // Migrate manual group membership when a draft promotes to a session, and prune closed keys.
+    // Migrate manual group membership when a draft promotes to a session, prune closed keys, and keep manual groups contiguous.
     let previousTabKeys: string[] = []
     createEffect(() => {
       if (!tabs.ready()) return
       const nextKeys = tabs.store.map(tabKey)
+      const isFreeform = effectiveMode() === "none"
 
       untrack(() => {
         const reconciled = reconcileManualAssignments(previousTabKeys, nextKeys, state.manualAssignments)
+        const assignments = reconciled ?? state.manualAssignments
 
         if (reconciled) {
           setState(
-            "manualAssignments",
-            produce((record) => {
-              Object.keys(record).forEach((key) => {
-                delete record[key]
-              })
-              Object.entries(reconciled).forEach(([key, groupId]) => {
-                record[key] = groupId
-              })
+            produce((draft) => {
+              draft.manualAssignments = reconciled
+              draft.manualGroups = pruneEmptyManualGroups(draft.manualGroups, reconciled)
             }),
           )
+        }
+
+        if (isFreeform && state.manualGroups.length > 0) {
+          const canonical = canonicalizeManualTabOrder(nextKeys, assignments)
+
+          if (!sameList(nextKeys, canonical)) {
+            tabs.reorder(canonical)
+          }
         }
       })
 
       previousTabKeys = nextKeys
     })
 
-    const resolvedTabs = createMemo<ResolvedTabMeta[]>(() => {
-      const needStatus = effectiveMode() === "status"
-
-      return tabs.store.map((tab): ResolvedTabMeta => {
+    const resolvedTabs = createMemo<ResolvedTabMeta[]>(() =>
+      tabs.store.map((tab): ResolvedTabMeta => {
         const key = tabKey(tab)
         const conn = connOf(tab.server)
         const ctx = global.serverCtx(tab.server)
@@ -146,7 +163,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             projectID: project?.id,
             projectName: project ? displayName(project) : displayName({ worktree: tab.directory }),
             directory: tab.directory,
-            status: "idle",
             active: false,
           }
         }
@@ -161,15 +177,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             ? ctx?.projects.forDirectory(directory)
             : undefined
 
-        const status: SidebarStatus =
-          needStatus && ctx && session
-            ? sessionStatus(ctx, session.id, {
-                root: !session.parentID,
-                autoApprove: settings.permissions.autoApproves(projectSettingsKey(ctx.sdk.scope, session.projectID)),
-                snapshot: session,
-              })
-            : "idle"
-
         return {
           tab,
           key,
@@ -183,11 +190,12 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
               ? displayName({ worktree: directory })
               : undefined,
           directory,
-          status,
           active: false,
         }
-      })
-    })
+      }),
+    )
+
+    const resolvedByKey = createMemo(() => new Map(resolvedTabs().map((meta) => [meta.key, meta])))
 
     const groups = createMemo(() =>
       buildComputedTabGroups({
@@ -198,7 +206,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         query: local.query,
         labels: {
           other: language.t("sidebar.view.other"),
-          status: (value) => language.t(`sidebar.view.status.${value}`),
         },
       }),
     )
@@ -254,11 +261,14 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       })
     }
 
+    const formatUnnamedGroup = (number: number) => language.t("tabs.groups.unnamed", { number })
+
     const createManualGroup = (seedTabs?: Tab[], customName?: string) => {
       const id = uuid()
       const color = nextManualGroupColor(state.manualGroups)
-      const name = customName?.trim() || language.t("tabs.groups.unnamed", { number: state.manualGroups.length + 1 })
-      const targets = seedTabs ?? (props.currentTab() ? [props.currentTab()!] : [])
+      const number = nextManualGroupNumber(state.manualGroups, formatUnnamedGroup)
+      const name = customName?.trim() || formatUnnamedGroup(number)
+      const targets = seedTabs ?? (props.currentTab() ? [props.currentTab()!] : tabs.store.slice(0, 1))
 
       setState(
         produce((draft) => {
@@ -281,94 +291,55 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
 
           if (!manualId) {
             delete draft.manualAssignments[key]
+            draft.manualGroups = pruneEmptyManualGroups(draft.manualGroups, draft.manualAssignments)
 
             return
           }
 
           draft.manualAssignments[key] = manualId
+          draft.manualGroups = pruneEmptyManualGroups(draft.manualGroups, draft.manualAssignments)
         }),
       )
     }
 
-    const combineTabs = (sourceKey: string, targetKey: string) => {
-      if (sourceKey === targetKey) return
-      const existingGroupId = state.manualAssignments[targetKey]
+    const commitDrag = (blocks: readonly MeasuredTopBlock[], intent: VerticalDragIntent) => {
+      const allTabKeys = tabs.store.map(tabKey)
 
-      if (existingGroupId && state.manualGroups.some((item) => item.id === existingGroupId)) {
-        setState(
-          produce((draft) => {
-            draft.mode = "none"
-            draft.manualAssignments[sourceKey] = existingGroupId
-          }),
-        )
-      }
-
-      if (!existingGroupId || !state.manualGroups.some((item) => item.id === existingGroupId)) {
-        const id = uuid()
-        const color = nextManualGroupColor(state.manualGroups)
-        const name = language.t("tabs.groups.unnamed", { number: state.manualGroups.length + 1 })
-        setState(
-          produce((draft) => {
-            draft.mode = "none"
-            draft.manualGroups.push({ id, name, color })
-            draft.manualAssignments[targetKey] = id
-            draft.manualAssignments[sourceKey] = id
-          }),
-        )
-      }
-
-      const allKeys = tabs.store.map(tabKey)
-      const fromIdx = allKeys.indexOf(sourceKey)
-      const targetIdx = allKeys.indexOf(targetKey)
-
-      if (fromIdx !== -1 && targetIdx !== -1 && Math.abs(fromIdx - targetIdx) > 1) {
-        const destIdx = fromIdx < targetIdx ? targetIdx : targetIdx + 1
-        tabs.reorder(arrayMove(allKeys, fromIdx, Math.min(destIdx, allKeys.length - 1)))
-      }
-    }
-
-    const moveTabKeyToSection = (movedTabKey: string, targetSectionKey: string | undefined) => {
-      if (effectiveMode() !== "none" || !targetSectionKey) return
-
-      if (targetSectionKey.startsWith("manual:")) {
-        const manualId = targetSectionKey.slice("manual:".length)
-        setState("manualAssignments", movedTabKey, manualId)
-
-        return
-      }
-
-      if (targetSectionKey.startsWith("ungrouped:")) {
-        setState(
-          "manualAssignments",
-          produce((record) => {
-            delete record[movedTabKey]
-          }),
-        )
-      }
-    }
-
-    const reorderSections = (fromIndex: number, toIndex: number) => {
-      const current = groups()
-
-      if (!current || fromIndex === toIndex) return
-      const next = reorderTabKeysByGroups(tabs.store, current, fromIndex, toIndex)
+      const result = applyVerticalDragCommit({
+        allTabKeys,
+        groups: groups(),
+        blocks,
+        state: {
+          mode: effectiveMode(),
+          groupOrder: state.groupOrder,
+          collapsed: state.collapsed,
+          overrides: state.overrides,
+          manualGroups: state.manualGroups,
+          manualAssignments: state.manualAssignments,
+        },
+        intent,
+        createGroupId: uuid,
+        createGroupName: formatUnnamedGroup,
+      })
 
       setState(
         produce((draft) => {
-          draft.groupOrder = next.groupKeys
+          if (intent.type !== "move-group" || effectiveMode() === "none") {
+            if (effectiveMode() === "none" && draft.mode !== "none") draft.mode = "none"
 
-          if (effectiveMode() === "none" && draft.manualGroups.length > 1) {
-            const manualIds = next.groupKeys.flatMap((key) =>
-              key.startsWith("manual:") ? [key.slice("manual:".length)] : [],
-            )
-
-            const rank = new Map(manualIds.map((id, index) => [id, index]))
-
-            draft.manualGroups.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+            if (intent.type === "combine-tabs" || intent.type === "join-group") draft.mode = "none"
           }
+
+          draft.groupOrder = result.groupOrder
+          draft.collapsed = result.collapsed
+          draft.manualGroups = result.manualGroups
+          draft.manualAssignments = result.manualAssignments
         }),
       )
-      tabs.reorder(next.tabKeys)
+
+      if (!sameList(allTabKeys, result.tabKeys)) {
+        tabs.reorder(result.tabKeys)
+      }
     }
 
     const ungroupManual = (manualId: string) => {
@@ -381,7 +352,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             if (draft.manualAssignments[key] === manualId) delete draft.manualAssignments[key]
           })
           delete draft.collapsed[`manual:${manualId}`]
-        }),
+        })
       )
     }
 
@@ -409,6 +380,17 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
 
     const groupByKey = createMemo(() => new Map((groups() ?? []).map((group) => [group.key, group])))
 
+    const groupByTabKey = createMemo(() => {
+      const out = new Map<string, ComputedTabGroup>()
+
+      ;(groups() ?? []).forEach((group) => {
+        if (group.kind === "ungrouped") return
+        group.allTabs.forEach((tab) => out.set(tabKey(tab), group))
+      })
+
+      return out
+    })
+
     const plans = createMemo<SectionPlan[] | undefined>(
       () =>
         groups()?.map((group) => ({
@@ -422,17 +404,463 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       { equals: samePlans },
     )
 
+    // Thin pointer & scroll driver for `transitionVerticalDrag`.
+    let activeListEl: HTMLDivElement | undefined
+    let activeScrollEl: HTMLDivElement | undefined
+    let autoScrollFrame: number | undefined
+    let autoScrollVelocity = 0
+    let cleanupListeners: (() => void) | undefined
+
+    const stopAutoScroll = () => {
+      if (autoScrollFrame !== undefined) cancelAnimationFrame(autoScrollFrame)
+      autoScrollFrame = undefined
+      autoScrollVelocity = 0
+    }
+
+    const detachWindowListeners = () => {
+      cleanupListeners?.()
+      cleanupListeners = undefined
+      stopAutoScroll()
+    }
+
+    const swallowTrailingClick = () => {
+      if (typeof window === "undefined") return
+
+      const eat = (clickEvent: MouseEvent) => {
+        clickEvent.preventDefault()
+        clickEvent.stopPropagation()
+      }
+
+      window.addEventListener("click", eat, { capture: true, once: true })
+      requestAnimationFrame(() => window.removeEventListener("click", eat, true))
+    }
+
+    const dispatchDrag = (event: VerticalDragEvent, pointerButtons = 0) => {
+      const previous = untrack(drag)
+      const next = transitionVerticalDrag(previous, event)
+
+      if (next.state !== previous) setDrag(next.state)
+      next.effects.forEach((effect) => {
+        if (effect.type === "capture-pointer") {
+          if (activeListEl && pointerButtons !== 0 && !activeListEl.hasPointerCapture(effect.pointerId)) {
+            activeListEl.setPointerCapture(effect.pointerId)
+          }
+
+          return
+        }
+
+        if (effect.type === "suppress-click") {
+          swallowTrailingClick()
+
+          return
+        }
+
+        commitDrag(effect.blocks, effect.intent)
+      })
+
+      return next.state
+    }
+
+    onCleanup(() => {
+      detachWindowListeners()
+      dispatchDrag({ type: "disposed" })
+    })
+
+    const measureGeometry = (listEl: HTMLDivElement): VerticalDragGeometry => {
+      const listRect = listEl.getBoundingClientRect()
+
+      const slotRects = new Map<
+        string,
+        { top: number; bottom: number; tabTop: number; tabBottom: number }
+      >()
+
+      listEl.querySelectorAll<HTMLElement>("[data-titlebar-tab-slot][data-tab-key]").forEach((el) => {
+        const key = el.dataset.tabKey
+
+        if (!key) return
+        const rect = el.getBoundingClientRect()
+        const innerTab = el.querySelector<HTMLElement>("[data-titlebar-tab]")
+        const tabRect = innerTab ? innerTab.getBoundingClientRect() : rect
+        slotRects.set(key, {
+          top: rect.top - listRect.top,
+          bottom: rect.bottom - listRect.top,
+          tabTop: tabRect.top - listRect.top,
+          tabBottom: tabRect.bottom - listRect.top,
+        })
+      })
+
+      const groupBoxRects = new Map<string, { top: number; bottom: number }>()
+      listEl.querySelectorAll<HTMLElement>("[data-tab-group][data-group-key]").forEach((el) => {
+        const key = el.dataset.groupKey
+
+        if (!key) return
+        const rect = el.getBoundingClientRect()
+        groupBoxRects.set(key, { top: rect.top - listRect.top, bottom: rect.bottom - listRect.top })
+      })
+
+      const headerRects = new Map<string, { top: number; bottom: number }>()
+      listEl.querySelectorAll<HTMLElement>("[data-tab-group-header][data-group-key]").forEach((el) => {
+        const key = el.dataset.groupKey
+
+        if (!key) return
+        const rect = el.getBoundingClientRect()
+        headerRects.set(key, { top: rect.top - listRect.top, bottom: rect.bottom - listRect.top })
+      })
+
+      const blocks: MeasuredTopBlock[] = []
+      const rows: MeasuredStripRow[] = []
+      const currentGroups = groups()
+
+      if (!currentGroups) {
+        tabs.store.forEach((tab) => {
+          const key = tabKey(tab)
+          const bounds = slotRects.get(key)
+
+          if (!bounds) return
+          blocks.push({ kind: "tab", tabKey: key, top: bounds.top, bottom: bounds.bottom })
+          rows.push({
+            kind: "tab",
+            tabKey: key,
+            groupKey: undefined,
+            manualId: undefined,
+            color: undefined,
+            isFirstInGroup: false,
+            isLastInGroup: false,
+            top: bounds.top,
+            bottom: bounds.bottom,
+            tabTop: bounds.tabTop,
+            tabBottom: bounds.tabBottom,
+          })
+        })
+
+        return {
+          listLeft: listRect.left,
+          freeform: effectiveMode() === "none",
+          nextGroupColor: nextManualGroupColor(state.manualGroups),
+          blocks,
+          rows,
+        }
+      }
+
+      currentGroups.forEach((group) => {
+        if (group.kind === "ungrouped") {
+          group.visibleTabs.forEach((tab) => {
+            const key = tabKey(tab)
+            const bounds = slotRects.get(key)
+
+            if (!bounds) return
+            blocks.push({ kind: "tab", tabKey: key, top: bounds.top, bottom: bounds.bottom })
+            rows.push({
+              kind: "tab",
+              tabKey: key,
+              groupKey: undefined,
+              manualId: undefined,
+              color: undefined,
+              isFirstInGroup: false,
+              isLastInGroup: false,
+              top: bounds.top,
+              bottom: bounds.bottom,
+              tabTop: bounds.tabTop,
+              tabBottom: bounds.tabBottom,
+            })
+          })
+
+          return
+        }
+
+        const groupBounds = groupBoxRects.get(group.key) ?? headerRects.get(group.key)
+        const headerBounds = headerRects.get(group.key) ?? groupBounds
+        const allKeys = group.allTabs.map(tabKey)
+
+        if (groupBounds) {
+          blocks.push({
+            kind: "group",
+            groupKey: group.key,
+            manualId: group.manualId,
+            tabKeys: allKeys,
+            top: groupBounds.top,
+            bottom: groupBounds.bottom,
+          })
+        }
+
+        if (headerBounds) {
+          rows.push({
+            kind: "header",
+            groupKey: group.key,
+            manualId: group.manualId,
+            color: group.color,
+            collapsed: group.collapsed,
+            firstTabKey: allKeys[0],
+            lastTabKey: allKeys[allKeys.length - 1],
+            top: headerBounds.top,
+            bottom: headerBounds.bottom,
+          })
+        }
+
+        group.visibleTabs.forEach((tab, idx) => {
+          const key = tabKey(tab)
+          const bounds = slotRects.get(key)
+
+          if (!bounds) return
+          rows.push({
+            kind: "tab",
+            tabKey: key,
+            groupKey: group.key,
+            manualId: group.manualId,
+            color: group.color,
+            isFirstInGroup: idx === 0,
+            isLastInGroup: idx === group.visibleTabs.length - 1,
+            top: bounds.top,
+            bottom: bounds.bottom,
+            tabTop: bounds.tabTop,
+            tabBottom: bounds.tabBottom,
+          })
+        })
+      })
+
+      return {
+        listLeft: listRect.left,
+        freeform: effectiveMode() === "none",
+        nextGroupColor: nextManualGroupColor(state.manualGroups),
+        blocks,
+        rows,
+      }
+    }
+
+    const stepAutoScroll = () => {
+      if (!activeScrollEl || !activeListEl || autoScrollVelocity === 0) {
+        autoScrollFrame = undefined
+
+        return
+      }
+
+      const before = activeScrollEl.scrollTop
+      activeScrollEl.scrollTop += autoScrollVelocity
+
+      if (activeScrollEl.scrollTop !== before) {
+        const current = untrack(drag)
+
+        if (current.status === "dragging") {
+          const contentY = current.currentY - activeListEl.getBoundingClientRect().top
+          dispatchDrag({ type: "scroll.changed", contentY })
+        }
+      }
+
+      autoScrollFrame = requestAnimationFrame(stepAutoScroll)
+    }
+
+    const updateAutoScroll = (clientY: number) => {
+      if (!activeScrollEl) return
+      const rect = activeScrollEl.getBoundingClientRect()
+      const edge = 28
+
+      if (clientY < rect.top + edge && activeScrollEl.scrollTop > 0) {
+        autoScrollVelocity = -Math.ceil(((rect.top + edge - clientY) / edge) * 7)
+
+        if (autoScrollFrame === undefined) autoScrollFrame = requestAnimationFrame(stepAutoScroll)
+
+        return
+      }
+
+      if (
+        clientY > rect.bottom - edge &&
+        activeScrollEl.scrollTop < activeScrollEl.scrollHeight - activeScrollEl.clientHeight
+      ) {
+        autoScrollVelocity = Math.ceil(((clientY - (rect.bottom - edge)) / edge) * 7)
+
+        if (autoScrollFrame === undefined) autoScrollFrame = requestAnimationFrame(stepAutoScroll)
+
+        return
+      }
+
+      stopAutoScroll()
+    }
+
+    const cancelDrag = () => {
+      detachWindowListeners()
+      dispatchDrag({ type: "cancel" })
+    }
+
+    const onPointerDown = (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => {
+      if (event.pointerType !== "touch" && event.button !== 0) return
+
+      if (!(event.target instanceof Element)) return
+
+      if (
+        event.target.closest(
+          '[data-slot="tab-close"], [data-group-menu-trigger], [contenteditable="true"], [contenteditable="plaintext-only"]',
+        )
+      )
+        return
+
+      let source: VerticalDragSource | undefined
+
+      const headerEl = event.target.closest<HTMLElement>("[data-tab-group-header][data-group-key]")
+
+      if (headerEl?.dataset.groupKey) {
+        const group = groupByKey().get(headerEl.dataset.groupKey)
+
+        if (group && group.kind !== "ungrouped") {
+          source = {
+            kind: "group",
+            groupKey: group.key,
+            label: group.name,
+            color: group.color,
+            count: group.allTabs.length,
+          }
+        }
+      }
+
+      if (!source) {
+        const slotEl = event.target.closest<HTMLElement>("[data-titlebar-tab-slot][data-tab-key]")
+        const key = slotEl?.dataset.tabKey
+
+        if (key) {
+          const group = groupByTabKey().get(key)
+          const meta = resolvedByKey().get(key)
+          source = {
+            kind: "tab",
+            tabKey: key,
+            label: meta?.title ?? language.t("session.tab.session"),
+            groupKey: group?.key,
+            manualId: group?.manualId,
+          }
+        }
+      }
+
+      if (!source) return
+      detachWindowListeners()
+      activeListEl = listEl
+      activeScrollEl = scrollEl
+
+      dispatchDrag({
+        type: "pointer.down",
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        x: event.clientX,
+        y: event.clientY,
+        source,
+      })
+
+      const onMove = (moveEvent: PointerEvent) => {
+        if (!activeListEl) return
+        const contentY = moveEvent.clientY - activeListEl.getBoundingClientRect().top
+
+        const nextState = dispatchDrag(
+          {
+            type: "pointer.move",
+            pointerId: moveEvent.pointerId,
+            x: moveEvent.clientX,
+            y: moveEvent.clientY,
+            contentY,
+            measure: () => measureGeometry(activeListEl!),
+          },
+          moveEvent.buttons,
+        )
+
+        if (nextState.status === "dragging") {
+          if (moveEvent.cancelable) moveEvent.preventDefault()
+          updateAutoScroll(moveEvent.clientY)
+        }
+      }
+
+      const onUp = (upEvent: PointerEvent) => {
+        detachWindowListeners()
+        dispatchDrag({ type: "pointer.up", pointerId: upEvent.pointerId })
+      }
+
+      const onKeyDown = (keyEvent: KeyboardEvent) => {
+        if (keyEvent.key === "Escape") {
+          keyEvent.preventDefault()
+          cancelDrag()
+        }
+      }
+
+      window.addEventListener("pointermove", onMove, { passive: false })
+      window.addEventListener("pointerup", onUp)
+      window.addEventListener("pointercancel", cancelDrag)
+      window.addEventListener("blur", cancelDrag)
+      window.addEventListener("keydown", onKeyDown, true)
+
+      cleanupListeners = () => {
+        window.removeEventListener("pointermove", onMove)
+        window.removeEventListener("pointerup", onUp)
+        window.removeEventListener("pointercancel", cancelDrag)
+        window.removeEventListener("blur", cancelDrag)
+        window.removeEventListener("keydown", onKeyDown, true)
+      }
+    }
+
+    const onScroll = (listEl: HTMLDivElement) => {
+      const current = untrack(drag)
+
+      if (current.status !== "dragging") return
+      const contentY = current.currentY - listEl.getBoundingClientRect().top
+      dispatchDrag({ type: "scroll.changed", contentY })
+    }
+
+    const dragBinding: CustomVerticalDragBinding = {
+      isDraggingStrip: () => selectIsDraggingStrip(drag()),
+      isDraggingTab: (key: string) => selectDraggingTabKey(drag()) === key,
+      isDraggingGroup: (groupKey: string) => selectDraggingGroupKey(drag()) === groupKey,
+      isDropInsideGroup: (groupKey: string) => selectDropInsideGroupKey(drag()) === groupKey,
+      combineColorOfTab: (key: string) => selectCombineColorOfTab(drag(), key),
+      get combineBadgeLabel() {
+        return language.t("tabs.groups.combineBadge")
+      },
+      onPointerDown,
+      onScroll,
+      overlay: () => (
+        <>
+          <Show when={selectDropLine(drag())}>
+            {(line) => (
+              <div
+                data-slot="tab-group-drop-line"
+                data-indented={line().indented ? "true" : undefined}
+                data-group-color={line().color}
+                style={{ top: `${line().y}px` }}
+                aria-hidden="true"
+              />
+            )}
+          </Show>
+          <Show when={selectDragGhost(drag())}>
+            {(active) => (
+              <Portal>
+                <div
+                  data-slot="tab-group-drag-ghost"
+                  data-kind={active().source.kind}
+                  data-group-color={selectGhostTargetColor(drag())}
+                  style={{
+                    transform: `translate3d(${Math.round(active().currentX + 14)}px, ${Math.round(active().currentY + 12)}px, 0)`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <Show when={active().source.kind === "tab" && selectGhostTargetColor(drag())}>
+                    <span data-group-swatch class="size-2 shrink-0 rounded-full" />
+                  </Show>
+                  <span class="min-w-0 truncate" dir="auto">
+                    {active().source.label}
+                  </span>
+                  <Show when={active().source.kind === "group" ? active().source : undefined}>
+                    {(groupSource) => <span class="shrink-0 text-[11px] opacity-75">{groupSource().count}</span>}
+                  </Show>
+                </div>
+              </Portal>
+            )}
+          </Show>
+        </>
+      ),
+    }
+
     return {
       state,
       mode,
       effectiveMode,
       plans,
-      manualDragEnabled: () => effectiveMode() === "none" && state.manualGroups.length > 0,
-      combineDragEnabled: () => effectiveMode() === "none",
+      dragBinding,
+      isJoinTarget: (groupKey: string) => selectJoinGroupKey(drag()) === groupKey,
       query: () => local.query,
       setQuery: (value: string) => setLocal("query", value),
-      dropTargetKey: () => local.dropTargetKey,
-      setDropTargetKey: (key: string | undefined) => setLocal("dropTargetKey", key),
       setMode: (next: TabGroupMode) => setState("mode", next),
       groups,
       groupOfKey: (key: string) => groupByKey().get(key),
@@ -443,9 +871,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       recolorGroup,
       createManualGroup,
       assignTabToManualGroup,
-      combineTabs,
-      moveTabKeyToSection,
-      reorderSections,
       ungroupManual,
       closeGroup,
     }
@@ -556,7 +981,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
       data-orientation="vertical"
       data-group-key={props.group.key}
       data-group-color={props.group.color}
-      data-drop-over={tabGroups.dropTargetKey() === props.group.key ? "true" : undefined}
+      data-drop-over={tabGroups.isJoinTarget(props.group.key) ? "true" : undefined}
       class="group/group-row relative flex w-full min-w-0 shrink-0 select-none items-center gap-1.5 rounded-[6px]"
       onContextMenu={(event) => {
         event.preventDefault()

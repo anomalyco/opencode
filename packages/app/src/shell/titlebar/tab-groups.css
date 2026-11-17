@@ -109,7 +109,11 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin-block-end: 6px;
+  margin-block: 2px;
+}
+
+[data-tab-group][data-orientation="vertical"]:first-child {
+  margin-block-start: 0;
 }
 
 [data-tab-group][data-orientation="vertical"]:last-child {
@@ -164,15 +168,125 @@
   }
 }
 
-[data-tab-group][data-dragging="true"] {
-  opacity: 0.75;
+/* ==========================================================================
+   Drag & Drop Affordances: Above/Below Line, iOS Folder Combine, Ghost Pill
+   ========================================================================== */
+
+/* Freeze bystander hover states while dragging so only the active drop target responds */
+[data-titlebar-tab-list][data-dragging="true"] > * {
+  pointer-events: none;
 }
 
-[data-tab-group-header][data-drop-over="true"],
-[data-titlebar-tab-slot][data-combine-target="true"] [data-titlebar-tab] {
-  outline: 1.5px solid var(--tab-group-swatch);
-  outline-offset: 1px;
+[data-tab-group][data-dragging="true"],
+[data-titlebar-tab-slot][data-drag-source="true"] {
+  opacity: 0.36;
+}
+
+/* Illuminate a group's left rail while an insertion line sits inside that group */
+[data-tab-group][data-drop-inside="true"] > [data-tab-group-items]::before {
+  width: 2px;
+  background: var(--tab-group-swatch);
+}
+
+/* Crisp 2px insertion bar with a 6px leading dot cap:
+   - Full-width (x = 2px, accent hue) = drops ungrouped / reorders whole group
+   - Indented (x = 18px, group swatch hue) = drops inside group */
+[data-slot="tab-group-drop-line"] {
+  position: absolute;
+  inset-inline: 3px 2px;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--drop-line-color, var(--v2-icon-icon-accent));
+  pointer-events: none;
+  z-index: 30;
+  transform: translateY(-1px);
+}
+
+[data-slot="tab-group-drop-line"][data-indented="true"] {
+  inset-inline-start: 18px;
+}
+
+[data-slot="tab-group-drop-line"][data-group-color] {
+  --drop-line-color: var(--tab-group-swatch);
+}
+
+[data-slot="tab-group-drop-line"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -1px;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--drop-line-color, var(--v2-icon-icon-accent));
+}
+
+/* Join existing group header highlight */
+[data-tab-group-header][data-drop-over="true"] {
+  background: var(--tab-group-pill-bg);
+  box-shadow: inset 0 0 0 1.5px var(--tab-group-swatch);
   border-radius: 6px;
+}
+
+/* iOS Home-Screen Folder combine preview when hovering over the center of another tab */
+[data-titlebar-tab-slot][data-combine-target="true"] [data-titlebar-tab] {
+  --tab-base: var(--tab-group-pill-bg);
+  --tab-overlay: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--tab-group-swatch);
+}
+
+[data-slot="tab-combine-badge"] {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 14px;
+  transform: translateY(-50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding-inline: 6px;
+  border-radius: 4px;
+  background: var(--tab-group-pill-bg);
+  color: var(--tab-group-pill-fg);
+  box-shadow: inset 0 0 0 1px var(--tab-group-swatch);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: var(--line-height-compact);
+  pointer-events: none;
+}
+
+/* Floating drag ghost following pointer */
+[data-slot="tab-group-drag-ghost"] {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  pointer-events: none;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  max-width: 210px;
+  padding-inline: 9px;
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+  color: var(--v2-text-text-base);
+  box-shadow:
+    inset 0 0 0 0.5px var(--v2-border-border-strong),
+    var(--v2-elevation-floating);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: var(--line-height-compact);
+  opacity: 0.96;
+}
+
+[data-slot="tab-group-drag-ghost"][data-kind="group"] {
+  background: var(--tab-group-pill-bg);
+  color: var(--tab-group-pill-fg);
+  box-shadow:
+    inset 0 0 0 1px var(--tab-group-pill-border),
+    var(--v2-elevation-floating);
 }
 
 @keyframes tab-group-expand-v {

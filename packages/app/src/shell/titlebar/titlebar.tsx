@@ -651,12 +651,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       <TitlebarTabStrip
                         orientation="vertical"
                         sections={verticalSections()}
-                        allowCrossSectionDrag={tabGroups.manualDragEnabled()}
-                        allowCombineToGroup={tabGroups.combineDragEnabled()}
-                        onMoveTabToGroup={tabGroups.moveTabKeyToSection}
-                        onCombineTabs={tabGroups.combineTabs}
-                        onDropTargetChange={tabGroups.setDropTargetKey}
-                        onReorderSections={tabGroups.reorderSections}
+                        customVerticalDrag={tabGroups.dragBinding}
                         tabContextMenu={
                           tabGroups.effectiveMode() === "none"
                             ? (tab) => <TabAddToGroupMenuItems tab={tab} />
