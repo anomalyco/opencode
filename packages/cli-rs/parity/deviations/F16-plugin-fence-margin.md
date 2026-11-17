@@ -12,6 +12,13 @@ still gets its row. The built-in LaTeX and Mermaid renderers set `marginTop: 1` 
 before the first. A fence a plugin draws (`Setup::code_block`, a fence claim) has no margin of its own. So it has the
 row TS gives its built-ins and what Core's code intends, wherever it is.
 
+**A renderer that wraps the default view** (contract 2.x, step D: `opencode-good-fences@0.1.0`, which boxes
+`defaultRender()` under a label). In TS the default view carries the block's own top margin, so its blank row is inside
+the plugin's box, between the label and the code. In Rust the fence node (`Node::Fence`) is the host's code view of
+the fence alone, which has no row of its own, and the block's row is above the box, as for any plugin fence. Each box
+is the same height and otherwise equal: about 116 cells differ a box, the label's row and the blank one swapped
+(`P.8/good-fences`).
+
 **Reason.** Decision O-89: a defect the TS client shares is fixed in Rust. Text drawn against a block is a
 visible defect, and TS's own renderers work around it. `parity/scenarios/P.2/plugin-fence-margin.app.ts` drives it:
 four fences with no margin, after a paragraph, after another fence, and after a list, are four rows lower in Rust and

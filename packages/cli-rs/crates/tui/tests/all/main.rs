@@ -38,7 +38,10 @@ mod plugin_claim;
 // The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod plugin_compat;
+// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 mod plugin_contain;
+#[cfg(feature = "ts")]
+mod plugin_fences;
 mod plugin_fetch;
 mod plugin_flood;
 mod plugin_gate;

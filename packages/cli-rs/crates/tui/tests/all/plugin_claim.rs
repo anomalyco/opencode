@@ -2686,6 +2686,29 @@ fn a_fence_node_follows_the_stream() {
     }
 }
 
+// Expected (contract 2.x, step D, as TS's `defaultRender().bg`): a fence node's background is its code's too, so a card
+// that sets it reads as one block (good-fences); the host's own row of a declined fence keeps the transcript's.
+#[test]
+fn a_fence_nodes_code_is_on_its_background() {
+    let text = "```probe\nlet a = 1;\n```\n\nAfter.\n";
+    for carrier in CARRIERS {
+        let bg_of = |frame: &Capture| {
+            let screen = frame.text();
+            let (y, line) =
+                screen.lines().enumerate().find(|(_, line)| line.contains("let a")).expect("the code shows");
+            let x = line[..line.find("let a").unwrap()].chars().count();
+            frame.cell(x as u32, y as u32).unwrap().bg
+        };
+        let (world, card) = fenced(carrier, Fenced::Card, text);
+        let raised = opencode_plugin::node::theme_color(&world.harness.tui.page(), "background.raised.base").unwrap();
+        let bg = bg_of(&card);
+        assert_eq!((bg.r, bg.g, bg.b), (raised.r, raised.g, raised.b), "{carrier:?}: the code is not on the card's");
+        let (world, declined) = fenced(carrier, Fenced::Declined, text);
+        let page = world.harness.tui.page().background.base;
+        assert_eq!(bg_of(&declined), page, "{carrier:?}: the host's row is not on the transcript's background");
+    }
+}
+
 // Expected (contract 2.x additions, `fence-node`): a fence node costs one node and one row, whatever its code: a fence of
 // 2,000 lines in a card draws whole, where P3's `Code` of the same lines is past the tree's rows and a placeholder.
 #[test]
