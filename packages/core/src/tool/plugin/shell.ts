@@ -40,7 +40,7 @@ const OS =
       : process.platform === "linux"
         ? "Linux"
         : process.platform
-const description = (shell?: string) =>
+const description = (shell?: string, codeMode = false) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
@@ -49,7 +49,8 @@ const description = (shell?: string) =>
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands still running after their timeout move to the background.",
-    "Background commands return immediately, and you will be notified when they complete.",
+    // Code Mode has no background parameter.
+    ...(codeMode ? [] : ["Background commands return immediately, and you will be notified when they complete."]),
     "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
   ].join(" ")
 
@@ -71,12 +72,15 @@ export const Input = Schema.Struct({
   }),
 })
 
-const CodeModeInput = Schema.Struct({ ...Input.fields, timeout: timeoutInput(CODE_MODE_TIMEOUT_MS) })
+const CodeModeInput = Schema.Struct({
+  ...Struct.omit(Input.fields, ["background"]),
+  timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
+})
 
 const StructuredOutput = Schema.Struct({
   shellID: Schema.optionalKey(Schema.String).annotate({
     description:
-      "Present only while the command is still running in the background, because it outlived timeout or used background: true. You will be notified when it exits. A result without shellID is final.",
+      "Present only while the command is still running in the background. You will be notified when it exits. A result without shellID is final.",
   }),
   exitCode: Schema.NullOr(Schema.Number).annotate({
     description:
@@ -376,13 +380,15 @@ export const Plugin = {
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
           // pinned so the Code Mode catalog always lists it, however many other tools there are.
           options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: description(),
+          description: description(undefined, codeMode),
           input: codeMode ? CodeModeInput : Input,
           output: StructuredOutput,
           execute: (input, context) => {
+            // Code Mode input has no background parameter.
+            const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
             const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
-            const timeout = input.background === true ? (input.timeout ?? 0) : foreground
+            const timeout = background ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
@@ -405,7 +411,7 @@ export const Plugin = {
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
-                      waited: input.background !== true,
+                      waited: !background,
                       toolCall: {
                         sessionID: context.sessionID,
                         assistantMessageID: context.messageID,
@@ -432,7 +438,7 @@ export const Plugin = {
                           ),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
-                        if (input.background !== true) invocation.timeout = 0
+                        if (!background) invocation.timeout = 0
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
@@ -445,7 +451,7 @@ export const Plugin = {
                   // Stopped while the command was starting: stop it now.
                   if (yield* Deferred.isDone(stopped)) return yield* cancelled(info, job.id)
 
-                  if (input.background === true) {
+                  if (background) {
                     yield* jobs.background(job.id)
                     yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                     return backgroundResult(info, yield* Clock.currentTimeMillis)
@@ -502,7 +508,7 @@ export const Plugin = {
               // Shell spans, including the job that waits for a backgrounded command, name the call that started them.
               Effect.annotateSpans({
                 "gen_ai.tool.call.id": context.id,
-                ...(input.background === true ? { "opencode.shell.background": true } : {}),
+                ...(background ? { "opencode.shell.background": true } : {}),
               }),
               Effect.map((output) => toolResult(output, finalTimeout)),
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),

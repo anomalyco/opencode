@@ -905,6 +905,9 @@ describe("ShellTool", () => {
           expect(pinned.map((entry) => entry.path)).toEqual(["shell"])
           expect(pinned[0]!.line).toContain("600000")
           expect(pinned[0]!.line).toContain("Execute a shell command and return its output.")
+          // No background parameter in Code Mode.
+          expect(pinned[0]!.line).not.toContain("background?: boolean")
+          expect(pinned[0]!.line).not.toContain("Background commands return immediately")
           expect(pinned[0]!.line).toContain("A result without shellID is final")
           expect(pinned[0]!.line).toContain("there are no separate stdout or stderr fields")
           const timeouts: number[] = []
