@@ -4,8 +4,8 @@
  * how many messages arrived, the message handler, and a renderer claim of the `c` tool's calls. It matches requests
  * by their "type" with a byte search, which is enough for a test and no way to read JSON.
  *
- * The tests build variants of it. `-DOPENCODE_AS_V1` exports it as a 1.4 plugin, through `opencode_plugin_v1`, still
- * declaring its surface, messages and claim; `-DOPENCODE_BAD_DESCRIBE` answers metadata the host cannot read. Its
+ * The tests build variants of it. `-DOPENCODE_AS_V1` exports it as a library of ABI 1.4, through `opencode_plugin_v1`
+ * alone, which the host refuses; `-DOPENCODE_BAD_DESCRIBE` answers metadata the host cannot read. Its
  * options (the JSON text of its `plugins` entry) switch faults on: "view-toast" asks for a toast in a view, and
  * "claim-toast" in a claim's view; "claim-memo" declines a call and says its memo table holds 7 values; "claim-handle"
  * gives content numbered 0, which the host never numbers so; "command-true" answers `true` to a command,
@@ -108,7 +108,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
     snprintf(manifest, sizeof manifest,
              "{\"id\":\"example.c\",\"commands\":[{\"name\":\"c.hello\",\"title\":\"Hello from C\",\"group\":null,"
              "\"slash\":null,\"keybind\":null,\"palette\":false}],\"fences\":[],\"slots\":[],\"routes\":[],"
-             "\"storage\":[],\"render\":2,\"surfaces\":[{\"name\":\"c\",\"place\":{\"type\":\"route\",\"name\":\"c\"},"
+             "\"storage\":[],\"surfaces\":[{\"name\":\"c\",\"place\":{\"type\":\"route\",\"name\":\"c\"},"
              "\"draw\":%s}],\"claims\":[{\"target\":{\"type\":\"tool\",\"name\":\"c\"}}],\"messages\":%s}",
              option(self, "canvas") ? "true" : "false", option(self, "no-messages") ? "false" : "true");
     *out = owned(manifest);

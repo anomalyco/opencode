@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use opencode_plugin_abi::{
     Action, Click, Command, Dialog, Layout, Node, Placement, Read, Render, Route, Select, SelectOption, SessionStatus,
-    Setup, Span, Wrap, export_plugin,
+    Setup, Span, Wrap, plugin,
 };
 use serde_json::json;
 
@@ -156,4 +156,4 @@ fn row(child: &Child) -> Node {
     .on_click(Click::command(OPEN, Some(child.id.clone())).on_down())
 }
 
-export_plugin!("subagents-sidebar", setup);
+plugin!(id = "subagents-sidebar", setup);

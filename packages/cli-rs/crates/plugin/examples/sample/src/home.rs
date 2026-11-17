@@ -1,4 +1,4 @@
-//! The sample's home claims and event handler, on the one API (ABI 1.4). When a session's run succeeds, it shows a
+//! The sample's home claims and event handler, on the one API. When a session's run succeeds, it shows a
 //! toast about that session, which the host offers to open, and counts it. Its `home.footer` claim draws once and
 //! nests the `home.footer.status` slot, where its other claim shows the count; the host keeps rendering that nested
 //! claim while the outer one keeps what it shows. The loader's tests also compile this file into the host and run it

@@ -15,7 +15,8 @@ use crate::{
     SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
-/// The node of ABI 1.x, which renders and dialogs of 2.0 still draw.
+/// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, older than a surface's
+/// keyed tree; its schema name is the one it has had since ABI 1.x.
 type V1Node = crate::Node;
 type ClaimTarget = claim::Target;
 type ClaimEntry = claim::Entry;
@@ -40,23 +41,16 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 &[("id", json!({ "type": "string", "minLength": 1 }))],
                 &[("version", nullable(string())), ("requires", array(string()))],
                 None,
-                "What a 2.x library's `describe` answers: its nonempty ID, which the host reads before any `create`.",
+                "What a library's `describe` answers: its nonempty ID, which the host reads before any `create`.",
             )
         }),
-        (
-            "MetadataV1",
-            object!(Metadata, "What a 1.x library's `describe` answers; the ID may be left out.", { } {
-                version: nullable(string()), id: nullable(string()), requires: array(string()),
-            }),
-        ),
         (
             "Manifest",
             object!(Manifest, "What `create` answers: everything the plugin registered in its setup.", {
                 id: string(), commands: array(reference("Command")), fences: array(string()),
                 slots: array(reference("SlotClaim")), routes: array(string()), storage: array(string()),
             } {
-                render: uint32(), events: array(array(string())), render_routes: array(string()), wake: boolean(),
-                route_mounts: array(string()), fence_gone: boolean(), deltas: boolean(), plugins: boolean(),
+                events: array(array(string())), wake: boolean(), route_mounts: array(string()), fence_gone: boolean(), deltas: boolean(), plugins: boolean(),
                 surfaces: array(reference("SurfaceClaim")), claims: array(reference("ClaimEntry")), messages: boolean(),
                 layers: array(reference("Layer")), searches: array(string()),
             }),
@@ -81,8 +75,8 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         }),
         (
             "SlotClaim",
-            object!(SlotClaim, "A 1.x slot claim.", { kind: reference("SlotKind"), path: string() } {
-                render: boolean(), mount: boolean(), size: boolean(),
+            object!(SlotClaim, "A slot claim, which a `render` draws.", { kind: reference("SlotKind"), path: string() } {
+                mount: boolean(), size: boolean(),
             }),
         ),
         ("SlotKind", unit!(SlotKind { Prepend, Append, Before, After, Replace })),
@@ -145,9 +139,6 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         (
             "Request",
             tagged!(Request, "A request the host sends a plugin's `call`.", {
-                Fence { language: string(), info: string(), code: string(), streaming: boolean() } { },
-                Slot { claim: uint64() } { session_id: nullable(string()) },
-                Route { name: string() } { },
                 Command { name: string() } { input: nullable(string()) },
                 Render { claim: uint64(), input: reference("SlotInput"), changed: reference("Changed") } { },
                 Event { handler: uint64(), event: api("V2Event") } { },
@@ -421,7 +412,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         ),
         (
             "Panel",
-            object!(Panel, "A panel dialog of a 1.x node body.", {
+            object!(Panel, "A panel dialog, whose body is a `V1Node`.", {
                 key: string(), title: array(reference("Span")), body: reference("V1Node"),
             } {
                 size: reference("PanelSize"), subtitle: nullable(string()), actions: array(reference("PanelAction")),
@@ -554,7 +545,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             let _ = |value: &RequestId| {
                 let RequestId(_) = value;
             };
-            // 0 names no request: it is what the 1.x SDK answers for a refused one (bigboi's last pass).
+            // 0 names no request (bigboi's last pass).
             described(
                 json!({ "type": "integer", "minimum": 1, "maximum": u64::MAX }),
                 "What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which \
@@ -587,7 +578,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         }),
         (
             "V1Node",
-            tagged!(V1Node, "A node of ABI 1.x, which a render and a dialog body draw.", {
+            tagged!(V1Node, "The node tree a render and a dialog body draw.", {
                 Box { } {
                     row: boolean(), gap: uint16(), padding: pair(uint16(), uint16()), justify: reference("Justify"),
                     align: reference("Align"), bg: nullable(reference("Color")), layout: reference("Layout"),
@@ -703,12 +694,9 @@ pub(super) fn messages() -> Value {
     let maybe = |name: &str| nullable(reference(name));
     let list = |name: &str| array(reference(name));
     let call = [
-        ("fence", nullable(array(reference("Line")))),
         ("render-fence", reference("Fenced")),
         ("render", reference("Render")),
         ("render-route", reference("Render")),
-        ("slot", array(reference("Line"))),
-        ("route", array(reference("Line"))),
         ("view", reference("ViewReply")),
         ("claim", reference("ClaimReply")),
         ("draw", reference("DrawList")),
@@ -773,7 +761,6 @@ pub(super) fn messages() -> Value {
     };
     json!({
         "describe": reference("Metadata"),
-        "describe-v1": reference("MetadataV1"),
         "create": reference("Manifest"),
         "call": map(&call),
         "host": map(&host),

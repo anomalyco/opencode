@@ -21,19 +21,20 @@
 //! - The major version is for a deliberate breaking change. A major the host does not serve is the only thing that
 //!   refuses a plugin outright. The entry symbol carries the major version ([`ENTRY`], `opencode_plugin_v2`).
 //! - Nothing is removed inside a major: an entry, a request or a field that a later 2.x replaces stays as an alias
-//!   until 3.0, because a compiled library cannot follow a rename (decision O-125 (6)).
+//!   until 3.0, because a compiled library cannot follow a rename.
 //! - A plugin that needs an optional feature of the host lists it in [`Metadata::requires`]; a host without it
 //!   refuses the plugin at load and names the feature. The host lists its own in [`HostApi::features`].
 //!
 //! # 2.0
 //!
-//! ABI 2.0 is ABI 1.6 with the contract 2.0 of the rich-plugin design on the C ABI: keyed surfaces ([`v2`],
-//! [`Request::View`]), renderer claims of tool calls and fences ([`claim`], [`Request::Claim`]), and threads that send messages to the UI thread through a bounded mailbox ([`mail`],
-//! [`HostApi::send`]). Every 1.6 request and entry is still there. The host loads 1.x libraries as before, through
-//! [`ENTRY_V1`], and serves them ABI 1.6; they get no surfaces and no mailbox. Every message's schema is
-//! `schema/v2.json`, generated from these types ([`v2::schema`]).
+//! ABI 2.0 is the first version this host loads (decision O-169: the 1.x versions of the branch's development are
+//! gone, and a 1.x library is refused as any other major). It carries the contract 2.0 of the rich-plugin design:
+//! keyed surfaces ([`v2`], [`Request::View`]), renderer claims of tool calls and fences ([`claim`],
+//! [`Request::Claim`]), threads that send messages to the UI thread through a bounded mailbox ([`mail`],
+//! [`HostApi::send`]), and the slot claims, routes, fences, dialogs, reads and verbs of [`Setup`] and [`Host`]. Every
+//! message's schema is `schema/v2.json`, generated from these types ([`v2::schema`]).
 //!
-//! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`export_plugin!`] with a setup
+//! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`plugin!`] with a setup
 //! function. The setup registers the P.1 surface through [`Setup`]: commands, code-fence renderers, slot claims,
 //! routes, storage keys, and handlers of events, replies, mounts, wakes and disposal. Renderers return data
 //! ([`Fenced`], [`Render`] with [`Node`]s); the host turns it into widgets. `crates/plugin-abi/README.md` has a quick
@@ -50,11 +51,8 @@
 //! or an event handler receives a [`Host`], which also has effects; they wait until then as well, so a plugin never reenters itself
 //! through the host.
 //!
-//! Renders in this form (ABI 1.4) are opt-in on the wire: [`Setup`] sets [`Manifest::render`], and the host sends
-//! [`Request::RenderFence`] and [`Request::Render`] only to a plugin that sets it. A 1.3 plugin gets the old requests
-//! and answers in the old format. A 1.x plugin built with this crate (`export_plugin!(id, setup, requires_minor =
-//! N)`, deprecated) sets [`PluginApi::requires_minor`] to at least 4, so a 1.3 host refuses it; a 2.x plugin sets the
-//! minimum of ABI 2 it asks for with `requires_minor` on [`plugin!`], 0 by default.
+//! A plugin sets the minimum of ABI 2 it asks for with `requires_minor` on [`plugin!`], 0 by default
+//! ([`PluginApi::requires_minor`]).
 //!
 //! Session and catalog values are the HTTP API's generated types, re-exported as [`types`].
 
@@ -86,35 +84,11 @@ use types::{
 /// The major version: changes only with a deliberate breaking change, and a major the host does not serve refuses the
 /// plugin.
 pub const ABI_MAJOR: u32 = 2;
-/// The minor version of [`ABI_MAJOR`]. 2.0 adds [`HostApi::send`], [`HostApi::report`], [`HostApi::stopped`] and
-/// [`HostApi::features`], [`Metadata::requires`], [`Manifest::surfaces`], [`Manifest::claims`],
-/// [`Manifest::messages`], [`Manifest::layers`], [`Manifest::searches`] and [`Manifest::plugins`], and the requests
-/// [`Request::View`], [`Request::Draw`], [`Request::Claim`], [`Request::Unmount`], [`Request::Message`],
-/// [`Request::Layout`], [`Request::Input`], [`Request::Search`] and [`Request::Plugins`], with the host requests
-/// of their surfaces (from [`HostRequest::Scroll`] on).
+/// The minor version of [`ABI_MAJOR`]. 2.0 is everything this crate has; a later minor only appends.
 pub const ABI_MINOR: u32 = 0;
 
 /// The symbol every 2.x plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v2";
-
-/// The last minor of ABI 1, which the host serves a 1.x library. 1.0 is the core; 1.1 adds [`PluginApi::describe`]; 1.2 adds
-/// [`HostApi::theme_mode`]; 1.3 adds [`HostApi::wake`]; 1.4 adds [`Manifest::render`], [`Request::RenderFence`],
-/// [`Request::Render`], [`Request::Event`], [`HostRequest::Color`], the session and catalog reads,
-/// [`HostRequest::Info`], [`HostRequest::Route`], [`HostRequest::Dispatch`], [`HostRequest::Attention`], and the
-/// requests of routes, replies, dialogs, navigation and the clipboard ([`Request::RenderRoute`], [`Request::Reply`],
-/// [`HostRequest::Fetch`], [`HostRequest::Navigate`], [`HostRequest::Dialog`], [`HostRequest::Copy`]), and of mounts and
-/// the prompt ([`Request::Mount`], [`HostRequest::Interactive`], [`HostRequest::Shortcut`],
-/// [`HostRequest::DialogOpen`]), [`Dialog::Select`], [`Request::Wake`], [`Request::RouteMount`],
-/// [`HostRequest::StorageMerge`] and [`Request::FenceGone`]. 1.5 adds [`Dialog::Confirm`] and [`Dialog::Alert`], the
-/// box styling of [`Node::Box`] ([`Border`], [`Edges`], [`Overflow`]) and [`Layout`]'s heights and margins, and the
-/// composer: [`HostRequest::Composer`] and [`HostRequest::ComposerEdit`]. 1.6 adds the small reads and verbs: a claim's
-/// size in [`SlotInput`], the streaming deltas ([`Setup::on_deltas`]), the model's variants, the session tabs, the
-/// keymap's state, the mouse selection, a program in the foreground, a link on a [`Span`], the terminal title, the
-/// theme, and [`PanelSize::XLarge`] (see [`HostRequest`] from [`HostRequest::Variants`] on). 2.0 has all of 1.6.
-pub const V1_MINOR: u32 = 6;
-
-/// The symbol every 1.x plugin exports.
-pub const ENTRY_V1: &str = "opencode_plugin_v1";
 
 /// The optional features this crate's host side knows ([`HostApi::features`]).
 pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
@@ -325,11 +299,9 @@ pub struct HostApi {
     pub call: Option<unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
     /// Frees a buffer `call` wrote.
     pub free: Option<unsafe extern "C" fn(owned: Owned)>,
-    // 1.2
     /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
     /// `api.themeMode`. Only on the UI thread, as `call`: another thread gets [`THEME_DARK`].
     pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
-    // 1.3
     /// Asks the host to request the rows of the plugin's mounted slot claims and routes again, on its UI thread.
     /// It is a redraw hint: it carries no data and drains nothing for the plugin, which keeps its own results and
     /// reads all of them when the host asks for rows. Wakes that arrive before the host handles one count once, and
@@ -337,7 +309,6 @@ pub struct HostApi {
     /// so a plugin makes sure no thread calls it after that. A Rust plugin reads it as [`Setup::waker`], whose
     /// [`Waker`] the SDK revokes in `destroy`.
     pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
-    // 2.0
     /// Puts `message`, JSON text, in the plugin's mailbox: at the end with an empty `key`, else in the place of the
     /// entry that waits under `key`. Returns [`OK`], [`FULL`] or [`CLOSED`] at once and never blocks; [`ERROR`] for a
     /// message that is not JSON. The host then runs [`Request::Message`] on its UI thread. Callable from any thread
@@ -357,33 +328,6 @@ pub struct HostApi {
 pub const THEME_DARK: u32 = 0;
 pub const THEME_LIGHT: u32 = 1;
 
-/// The 1.1 layout of [`HostApi`], a prefix of it. Hosts built against 1.1 pass this; kept to test that plugins
-/// read only what such a host offers.
-#[doc(hidden)]
-#[repr(C)]
-pub struct HostApiV1_1 {
-    pub size: usize,
-    pub major: u32,
-    pub minor: u32,
-    pub ctx: *mut c_void,
-    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
-    pub free: Option<unsafe extern "C" fn(Owned)>,
-}
-
-/// The 1.2 layout of [`HostApi`], a prefix of it, without `wake`; kept to test that plugins read only what such a
-/// host offers.
-#[doc(hidden)]
-#[repr(C)]
-pub struct HostApiV1_2 {
-    pub size: usize,
-    pub major: u32,
-    pub minor: u32,
-    pub ctx: *mut c_void,
-    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
-    pub free: Option<unsafe extern "C" fn(Owned)>,
-    pub theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
-}
-
 /// Dark or light, from [`Read::theme_mode`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
@@ -391,12 +335,11 @@ pub enum ThemeMode {
     Light,
 }
 
-/// What a plugin exports. The host reads an entry only when `size` covers it; entries added by later minor versions
-/// go at the end and are optional.
+/// What a plugin exports. Every entry here is in a 2.0 table, which the host refuses when shorter; entries added by
+/// later minor versions go at the end, are optional, and are read only when `size` covers them.
 #[repr(C)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PluginApi {
-    // 1.0: the core, which every plugin of major version 1 has.
     /// `size_of` the struct as the plugin built it.
     pub size: usize,
     pub major: u32,
@@ -414,38 +357,23 @@ pub struct PluginApi {
     pub destroy: Option<unsafe extern "C" fn(instance: *mut c_void)>,
     /// Frees a buffer `create`, `call`, or `describe` wrote. Required.
     pub free: Option<unsafe extern "C" fn(owned: Owned)>,
-    // 1.1
-    /// Writes the plugin's [`Metadata`] JSON into `out`.
+    /// Writes the plugin's [`Metadata`] JSON into `out`. Required: the host learns the plugin's ID here, before any
+    /// `create`.
     pub describe: Option<unsafe extern "C" fn(out: *mut Owned) -> i32>,
 }
 
-/// The 1.0 layout of [`PluginApi`], a prefix of it. Plugins built against 1.0 export this; kept to test that they
-/// still load.
-#[doc(hidden)]
-#[repr(C)]
-pub struct PluginApiV1_0 {
-    pub size: usize,
-    pub major: u32,
-    pub minor: u32,
-    pub requires_minor: u32,
-    pub create: Option<unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32>,
-    pub call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
-    pub destroy: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub free: Option<unsafe extern "C" fn(Owned)>,
-}
-
-/// What [`PluginApi::describe`] returns (1.1).
+/// What [`PluginApi::describe`] returns.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Metadata {
     /// The plugin's own version, such as its crate version.
     #[serde(default)]
     pub version: Option<String>,
-    /// The plugin's ID, the one its [`Manifest`] will have. A host that knows it before setup serves storage
-    /// requests during setup; older hosts ignore it.
+    /// The plugin's ID, the one its [`Manifest`] will have; required and nonempty. The host reads it before any
+    /// setup, so setup runs once, at activation, and may use storage.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// 2.0: the optional host features the plugin cannot work without. A host that lacks one refuses the plugin at
+    /// The optional host features the plugin cannot work without. A host that lacks one refuses the plugin at
     /// load and names it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
@@ -459,21 +387,15 @@ pub struct Manifest {
     pub commands: Vec<Command>,
     /// The languages of the code fences it renders.
     pub fences: Vec<String>,
-    /// Slot claims, in order; [`Request::Slot`] names one by index.
+    /// Slot claims of [`Setup::slot`], in order; [`Request::Render`] and [`Request::Mount`] name one by index.
     pub slots: Vec<SlotClaim>,
+    /// The routes of [`Setup::route`], which answer [`Request::RenderRoute`].
     pub routes: Vec<String>,
     /// Storage keys, stored by the host as `plugin.<id>.<key>`.
     pub storage: Vec<String>,
-    /// 2 when the plugin answers the render requests of ABI 1.4 ([`Request::RenderFence`]) instead of the old ones
-    /// ([`Request::Fence`]). [`Setup`] sets it; absent (0) in a 1.3 plugin.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub render: u32,
     /// The event types of each [`Setup::on_event`] handler, in order; [`Request::Event`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<Vec<String>>,
-    /// The routes of [`Setup::route`], which answer [`Request::RenderRoute`]; [`Manifest::routes`] lists them too.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub render_routes: Vec<String>,
     /// The plugin has [`Setup::on_wake`] handlers, which [`Request::Wake`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wake: bool,
@@ -483,7 +405,7 @@ pub struct Manifest {
     /// The plugin has [`Setup::on_fence_gone`] handlers, which [`Request::FenceGone`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fence_gone: bool,
-    /// 1.6: the plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
+    /// The plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deltas: bool,
     /// 2.0 (P6b): the plugin has [`Setup::on_plugins`] handlers, which [`Request::Plugins`] runs.
@@ -578,13 +500,6 @@ impl From<&SurfacePlace> for v2::Place {
     }
 }
 
-/// What [`Manifest::render`] is for the render requests of ABI 1.4.
-pub const RENDER: u32 = 2;
-
-fn is_zero(value: &u32) -> bool {
-    *value == 0
-}
-
 /// A command: in the palette when `palette` is set, as `/slash`, and on `keybind` (such as `ctrl+shift+h`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -595,13 +510,13 @@ pub struct Command {
     pub slash: Option<String>,
     pub keybind: Option<String>,
     pub palette: bool,
-    /// 1.4: a line under the title in the palette.
+    /// A line under the title in the palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// 1.4: `/slash` keeps its text after the name and passes it as the input.
+    /// `/slash` keeps its text after the name and passes it as the input.
     #[serde(default, skip_serializing_if = "is_false")]
     pub arguments: bool,
-    /// 1.4: where the command runs.
+    /// Where the command runs.
     #[serde(default, skip_serializing_if = "Scope::is_global")]
     pub scope: Scope,
 }
@@ -700,13 +615,10 @@ pub struct SlotClaim {
     pub kind: SlotKind,
     /// A host slot path, such as `home.footer` or `sidebar.content`.
     pub path: String,
-    /// The claim answers [`Request::Render`] (ABI 1.4), not [`Request::Slot`]. Absent in a 1.3 plugin.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub render: bool,
-    /// 1.4: the claim has a [`Setup::on_mount`] handler, which [`Request::Mount`] runs.
+    /// The claim has a [`Setup::on_mount`] handler, which [`Request::Mount`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub mount: bool,
-    /// 1.6: the claim reads its size ([`Setup::sized`]).
+    /// The claim reads its size ([`Setup::sized`]).
     #[serde(default, skip_serializing_if = "is_false")]
     pub size: bool,
 }
@@ -796,7 +708,7 @@ impl Serialize for Rgba {
 impl<'de> Deserialize<'de> for Rgba {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = Cow::<str>::deserialize(deserializer)?;
-        // Only the 8-digit form: `#rrggbb` stays a token, so 1.3 rows read back as they were written.
+        // Only the 8-digit form: `#rrggbb` stays a token.
         Self::parse(&text).filter(|_| text.len() == 9).ok_or_else(|| serde::de::Error::custom("not #rrggbbaa"))
     }
 }
@@ -820,8 +732,8 @@ pub struct Span {
     pub dim: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub strikethrough: bool,
-    /// 1.6: an OSC 8 hyperlink to this URL (TS `<a href>`); a terminal without OSC 8 shows the text alone. An older
-    /// host draws the text without it, and so does any host for a URL with a C0 or C1 control character or DEL
+    /// An OSC 8 hyperlink to this URL (TS `<a href>`); a terminal without OSC 8 shows the text alone. The host
+    /// draws the text without it for a URL with a C0 or C1 control character or DEL
     /// (OpenTUI writes no such link).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
@@ -842,7 +754,7 @@ impl Span {
         self
     }
 
-    /// The span as a hyperlink to `url` (1.6).
+    /// The span as a hyperlink to `url`.
     pub fn link(mut self, url: impl Into<String>) -> Self {
         self.link = Some(url.into());
         self
@@ -940,16 +852,16 @@ pub enum Node {
         on_click: Option<Click>,
         #[serde(default)]
         children: Vec<Node>,
-        /// 1.5: a border on the box's edge, inside its size and outside its padding.
+        /// A border on the box's edge, inside its size and outside its padding.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         border: Option<std::boxed::Box<Border>>,
-        /// 1.5: cells inside each edge, instead of `padding`. A negative side counts as 0.
+        /// Cells inside each edge, instead of `padding`. A negative side counts as 0.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         padding_sides: Option<Edges>,
-        /// 1.5: children that do not fit go on to another row or column (TS `flexWrap="wrap"`).
+        /// Children that do not fit go on to another row or column (TS `flexWrap="wrap"`).
         #[serde(default, skip_serializing_if = "is_false")]
         wrap: bool,
-        /// 1.5: whether what does not fit in the box draws outside it.
+        /// Whether what does not fit in the box draws outside it.
         #[serde(default, skip_serializing_if = "Overflow::is_visible")]
         overflow: Overflow,
     },
@@ -1162,7 +1074,7 @@ impl Node {
     }
 }
 
-/// 1.5: a border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title` and `titleAlignment`).
+/// A border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title` and `titleAlignment`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Border {
@@ -1411,16 +1323,16 @@ pub struct Layout {
     /// May shrink below its content's width.
     #[serde(default, skip_serializing_if = "is_false")]
     pub min_width_zero: bool,
-    /// 1.5: its height, in rows or percent of its parent's; its content's by default.
+    /// Its height, in rows or percent of its parent's; its content's by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<Width>,
-    /// 1.5: the least height it takes.
+    /// The least height it takes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_height: Option<Width>,
-    /// 1.5: the most height it takes.
+    /// The most height it takes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_height: Option<Width>,
-    /// 1.5: cells outside each edge; a negative margin moves the node over its neighbors.
+    /// Cells outside each edge; a negative margin moves the node over its neighbors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub margin: Option<Edges>,
     /// 2.0 (P8): out of its parent's flow, placed against its edges (TS `position: "absolute"`). An older host lays it
@@ -1547,7 +1459,7 @@ pub struct SlotInput {
     /// `prompt.footer*`: the prompt's mode and whether its details show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<PromptInput>,
-    /// 1.6: the width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed (TS
+    /// The width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed (TS
     /// `onSizeChange`); 0 before its first layout, so also as it mounts, and for any other claim. When it changes,
     /// the claim renders again with [`Changed::size`] in the same frame, so that frame shows what it renders for the
     /// size; it does not mount again. A claim whose node changes its size with each render renders at most twice a
@@ -1557,7 +1469,7 @@ pub struct SlotInput {
     /// terminal's size in [`Info::size`].
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub width: u16,
-    /// 1.6: the claim's height in rows, as `width`.
+    /// The claim's height in rows, as `width`.
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub height: u16,
 }
@@ -1593,10 +1505,10 @@ pub struct Changed {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locations: Vec<LocationRef>,
     /// The host's own state changed: the selected model, the usage limits, the settings, the plugins' storage, and
-    /// (1.6) the session tabs, the pending keys and the themes.
+    /// the session tabs, the pending keys and the themes.
     #[serde(default, skip_serializing_if = "is_false")]
     pub local: bool,
-    /// The terminal changed size, or (1.6) the claim did: [`SlotInput::width`] and [`SlotInput::height`].
+    /// The terminal changed size, or the claim did: [`SlotInput::width`] and [`SlotInput::height`].
     #[serde(default, skip_serializing_if = "is_false")]
     pub size: bool,
     /// The plugin woke the host.
@@ -1749,76 +1661,62 @@ pub struct Member {
     pub updated: f64,
 }
 
-/// From the host to the plugin. Results: `Fence` → `Option<Vec<Line>>`, `RenderFence` → [`Fenced`], `Render` and
-/// `RenderRoute` → [`Render`], `Slot` and `Route` → `Vec<Line>`, everything else `null`.
+/// From the host to the plugin. Results: `RenderFence` → [`Fenced`], `Render` and `RenderRoute` → [`Render`], `View`
+/// → [`ViewReply`], `Claim` → [`claim::Reply`], `Draw` → the list's bytes, `Layout` → [`v2::LayoutReply`], `Input` →
+/// [`interact::Handled`], `Search` → the values of the options, everything else `null`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Request {
-    /// The fence request of ABI 1.3, sent to a plugin whose manifest has no [`Manifest::render`]. `streaming` is set
-    /// while the message streams and the fence is open.
-    Fence {
-        language: String,
-        info: String,
-        code: String,
-        streaming: bool,
-    },
-    Slot {
-        claim: usize,
-        session_id: Option<String>,
-    },
-    Route {
-        name: String,
-    },
     Command {
         name: String,
         input: Option<String>,
     },
-    /// 1.4: renders a fence through [`Setup::code_block`].
+    /// Renders a fence through [`Setup::code_block`].
     RenderFence(RenderFence),
-    /// 1.4: renders a slot claim of [`Setup::slot`], which [`Manifest::slots`] names by index.
+    /// Renders a slot claim of [`Setup::slot`], which [`Manifest::slots`] names by index.
     Render {
         claim: usize,
         input: SlotInput,
         changed: Changed,
     },
-    /// 1.4: runs a handler of [`Setup::on_event`], which [`Manifest::events`] names by index, with one of its
+    /// Runs a handler of [`Setup::on_event`], which [`Manifest::events`] names by index, with one of its
     /// events.
     Event {
         handler: usize,
         event: Box<V2Event>,
     },
-    /// 1.4: renders a route of [`Setup::route`].
+    /// Renders a route of [`Setup::route`].
     RenderRoute {
         name: String,
         changed: Changed,
     },
-    /// 1.4: the reply to a [`Host::fetch`], for the [`Setup::on_reply`] handlers: the JSON body, or the error.
+    /// The reply to a [`Host::try_fetch`] or a [`Host::try_foreground`], for the [`Setup::on_reply`] handlers: the JSON body, or the error.
     Reply {
         id: RequestId,
         result: Result<serde_json::Value, String>,
     },
-    /// 1.4: runs the [`Setup::on_mount`] handlers of the slot claim [`Manifest::slots`] names by index: `mounted` as the
+    /// Runs the [`Setup::on_mount`] handlers of the slot claim [`Manifest::slots`] names by index: `mounted` as the
     /// host mounts the claim with `input`, before it first renders, and not as it unmounts it.
     Mount {
         claim: usize,
         input: SlotInput,
         mounted: bool,
     },
-    /// 1.4: runs the [`Setup::on_wake`] handlers after the plugin woke the host, before its claims render again.
+    /// Runs the [`Setup::on_wake`] handlers after the plugin woke the host, before its claims render again.
     Wake,
-    /// 1.4: runs the [`Setup::on_route_mount`] handlers of route `name`, which [`Manifest::route_mounts`] lists:
+    /// Runs the [`Setup::on_route_mount`] handlers of route `name`, which [`Manifest::route_mounts`] lists:
     /// `mounted` as the host mounts the route, before it first renders, and not as it unmounts it.
     RouteMount {
         name: String,
         mounted: bool,
     },
-    /// 1.4: runs the [`Setup::on_fence_gone`] handlers with a [`Fence::key`] the host no longer shows. The host sends
+    /// Runs the [`Setup::on_fence_gone`] handlers with a [`Fence::key`] the host no longer shows. The host sends
     /// it only when [`Manifest::fence_gone`] is set.
     FenceGone {
         key: u64,
     },
-    /// 1.6: runs the [`Setup::on_deltas`] handlers with the streaming deltas that arrived since the last time, oldest
+    /// Runs the [`Setup::on_deltas`] handlers with the streaming deltas that arrived since the last time, oldest
     /// first. The host sends it only when [`Manifest::deltas`] is set.
     Deltas {
         events: Vec<V2Event>,
@@ -2121,7 +2019,7 @@ pub enum HostRequest {
         level: Level,
         message: String,
     },
-    /// A toast; `title` and `session` are 1.4 ([`Host::toast`]).
+    /// A toast ([`Host::toast`]).
     Toast {
         variant: Variant,
         message: String,
@@ -2146,19 +2044,19 @@ pub enum HostRequest {
     StorageKey {
         key: String,
     },
-    /// 1.4: [`Read::color`].
+    /// [`Read::color`].
     Color {
         token: String,
     },
-    /// 1.4: [`Read::session`].
+    /// [`Read::session`].
     Session {
         id: String,
     },
-    /// 1.4: [`Read::family`].
+    /// [`Read::family`].
     Family {
         id: String,
     },
-    /// 1.4: [`Read::messages`], as a list.
+    /// [`Read::messages`], as a list.
     Messages {
         id: String,
     },
@@ -2167,132 +2065,130 @@ pub enum HostRequest {
         session: String,
         message: String,
     },
-    /// 1.4: [`Read::models`].
+    /// [`Read::models`].
     Models {
         location: Option<LocationRef>,
     },
-    /// 1.4: [`Read::model`].
+    /// [`Read::model`].
     Model,
-    /// 1.4: [`Read::limits`].
+    /// [`Read::limits`].
     Limits,
-    /// 1.4: [`Read::providers`].
+    /// [`Read::providers`].
     Providers,
-    /// 1.4: [`Read::info`].
+    /// [`Read::info`].
     Info,
-    /// 1.4: [`Read::mcp_servers`].
+    /// [`Read::mcp_servers`].
     McpServers {
         location: Option<LocationRef>,
     },
-    /// 1.4: [`Read::integrations`].
+    /// [`Read::integrations`].
     Integrations {
         location: Option<LocationRef>,
     },
-    /// 1.4: [`Read::vcs`].
+    /// [`Read::vcs`].
     Vcs {
         location: Option<LocationRef>,
     },
-    /// 1.4: [`Read::route`].
+    /// [`Read::route`].
     Route,
-    /// 1.4: [`Host::dispatch`], once the current call returns.
+    /// [`Host::dispatch`], once the current call returns.
     Dispatch {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<String>,
     },
-    /// 1.4: [`Host::attention`], once the current call returns.
+    /// [`Host::attention`], once the current call returns.
     Attention(Attention),
-    /// 1.4: [`Host::navigate`], once the current call returns.
+    /// [`Host::navigate`], once the current call returns.
     Navigate {
         route: Route,
     },
-    /// 1.4: [`Host::fetch`], sent once the current call returns; answers the [`RequestId`].
+    /// [`Host::try_fetch`], sent once the current call returns; answers the [`RequestId`].
     Fetch(Fetch),
-    /// 1.4: [`Host::dialog`], once the current call returns.
+    /// [`Host::dialog`], once the current call returns.
     Dialog {
         /// Boxed: a select is the largest request.
         dialog: Box<Dialog>,
     },
-    /// 1.4: [`Host::copy`], once the current call returns.
+    /// [`Host::copy`], once the current call returns.
     Copy {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         then: Option<Action>,
     },
-    /// 1.4: [`Read::interactive`].
+    /// [`Read::interactive`].
     Interactive,
-    /// 1.4: [`Read::shortcut`].
+    /// [`Read::shortcut`].
     Shortcut {
         name: String,
     },
-    /// 1.4: [`Read::dialog_open`].
+    /// [`Read::dialog_open`].
     DialogOpen {
         key: String,
     },
-    /// 1.4: [`Host::storage_merge`], which the host sets in the latest stored object under the storage lock. A plugin
+    /// [`Host::storage_merge`], which the host sets in the latest stored object under the storage lock. A plugin
     /// whose host does not know it sends [`HostRequest::StorageSet`] instead.
     StorageMerge {
         key: String,
         fields: serde_json::Map<String, serde_json::Value>,
     },
-    /// 1.5: [`Read::composer`].
+    /// [`Read::composer`].
     Composer,
-    /// 1.5: [`Host::edit_composer`], once the current call returns.
+    /// [`Host::edit_composer`], once the current call returns.
     ComposerEdit {
         edit: ComposerEdit,
     },
-    /// 1.5: marks what the current call asked for so far; answers the mark, a number. The SDK sends it before each
+    /// Marks what the current call asked for so far; answers the mark, a number. The SDK sends it before each
     /// dispose callback.
     Checkpoint,
-    /// 1.5: drops what the current call asked for after `mark`, and puts back the storage it wrote since: the SDK sends
+    /// Drops what the current call asked for after `mark`, and puts back the storage it wrote since: the SDK sends
     /// it when a dispose callback panicked.
     Rollback {
         mark: u64,
     },
-    // 1.6: the small reads and verbs. A host older than 1.6 answers each with an error, so a read returns its
-    // default and a verb does nothing and returns `false`.
-    /// 1.6: [`Read::variants`].
+    /// [`Read::variants`].
     Variants,
-    /// 1.6: [`Host::set_variant`]; answers whether it will.
+    /// [`Host::set_variant`]; answers whether it will.
     SetVariant {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         variant: Option<String>,
     },
-    /// 1.6: [`Host::set_model`], once the current call returns.
+    /// [`Host::set_model`], once the current call returns.
     SetModel {
         provider: String,
         model: String,
     },
-    /// 1.6: [`Read::tabs_enabled`].
+    /// [`Read::tabs_enabled`].
     TabsEnabled,
-    /// 1.6: [`Read::tabs`].
+    /// [`Read::tabs`].
     Tabs,
-    /// 1.6: [`Host::edit_tab`]; answers whether it will.
+    /// [`Host::edit_tab`]; answers whether it will.
     Tab {
         edit: TabEdit,
     },
-    /// 1.6: [`Read::keymap_pending`].
+    /// [`Read::keymap_pending`].
     KeymapPending,
-    /// 1.6: [`Read::keymap_active`].
+    /// [`Read::keymap_active`].
     KeymapActive,
-    /// 1.6: [`Read::keymap_commands`].
+    /// [`Read::keymap_commands`].
     KeymapCommands,
-    /// 1.6: [`Read::shortcuts`].
+    /// [`Read::shortcuts`].
     Shortcuts {
         name: String,
     },
-    /// 1.6: [`Read::selection`].
+    /// [`Read::selection`].
     Selection,
-    /// 1.6: [`Host::clear_selection`], once the current call returns.
+    /// [`Host::clear_selection`], once the current call returns.
     ClearSelection,
-    /// 1.6: [`Host::foreground`], once the current call returns; answers the [`RequestId`].
+    /// [`Host::try_foreground`], once the current call returns; answers the [`RequestId`].
     Foreground(Foreground),
-    /// 1.6: [`Host::set_title`], once the current call returns.
+    /// [`Host::set_title`], once the current call returns.
     Title {
         title: String,
     },
-    /// 1.6: [`Read::theme`].
+    /// [`Read::theme`].
     Theme,
-    /// 1.6: [`Read::themes`].
+    /// [`Read::themes`].
     Themes,
     /// 2.0 (P6b): [`Read::plugins`].
     Plugins,
@@ -2311,11 +2207,11 @@ pub enum HostRequest {
         name: String,
         value: serde_json::Value,
     },
-    /// 1.6: [`Host::set_theme`]; answers whether it will.
+    /// [`Host::set_theme`]; answers whether it will.
     SetTheme {
         name: String,
     },
-    /// 1.6: [`Host::install_theme`], once the current call returns.
+    /// [`Host::install_theme`], once the current call returns.
     InstallTheme {
         name: String,
         theme: serde_json::Value,
@@ -2384,7 +2280,7 @@ pub enum HostRequest {
     },
 }
 
-/// 1.5: the composer on screen, from [`Read::composer`].
+/// The composer on screen, from [`Read::composer`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Composer {
@@ -2396,7 +2292,7 @@ pub struct Composer {
     pub focused: bool,
 }
 
-/// 1.5: an edit of the composer, for [`Host::edit_composer`]. It goes through the composer's own edit path, as typed
+/// An edit of the composer, for [`Host::edit_composer`]. It goes through the composer's own edit path, as typed
 /// input and the TS composer's `ref` do.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -2411,7 +2307,7 @@ pub enum ComposerEdit {
     Submit,
 }
 
-/// 1.6: a session tab, from [`Read::tabs`] (TS `ui.tabs.list()`).
+/// A session tab, from [`Read::tabs`] (TS `ui.tabs.list()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Tab {
@@ -2432,7 +2328,7 @@ pub struct Tab {
     pub unread: Option<Unread>,
 }
 
-/// 1.6: what a [`Tab`] has that the user has not seen.
+/// What a [`Tab`] has that the user has not seen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -2441,7 +2337,7 @@ pub enum Unread {
     Error,
 }
 
-/// 1.6: a change of the session tabs, for [`Host::edit_tab`] (TS `ui.tabs.open`, `focus`, `move` and `close`). A
+/// A change of the session tabs, for [`Host::edit_tab`] (TS `ui.tabs.open`, `focus`, `move` and `close`). A
 /// session is named by any session of its family, a tab being its root's, except in `Close`, which takes the tab's
 /// own ID as TS does. Each answer counts the edits the same call made before it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2462,7 +2358,7 @@ pub enum TabEdit {
     },
 }
 
-/// 1.6: one stroke of the pending key sequence, from [`Read::keymap_pending`] (TS `keymap.pending()`).
+/// One stroke of the pending key sequence, from [`Read::keymap_pending`] (TS `keymap.pending()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapPending {
@@ -2473,7 +2369,7 @@ pub struct KeymapPending {
     pub token: Option<String>,
 }
 
-/// 1.6: a key that does something now, from [`Read::keymap_active`] (TS `keymap.active()`): at the root, or one that
+/// A key that does something now, from [`Read::keymap_active`] (TS `keymap.active()`): at the root, or one that
 /// continues the pending sequence.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -2491,7 +2387,7 @@ pub struct KeymapActive {
     pub continues: bool,
 }
 
-/// 1.6: a command that can be reached now, from [`Read::keymap_commands`] (TS `keymap.commands()`).
+/// A command that can be reached now, from [`Read::keymap_commands`] (TS `keymap.commands()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapCommand {
@@ -2513,7 +2409,7 @@ pub struct KeymapCommand {
     pub suggested: bool,
 }
 
-/// 1.6: the slash command of a [`KeymapCommand`].
+/// The slash command of a [`KeymapCommand`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct KeymapSlash {
@@ -2525,7 +2421,7 @@ pub struct KeymapSlash {
     pub arguments: bool,
 }
 
-/// 1.6: a program to run in the foreground, for [`Host::foreground`] (TS `renderer.suspend()`, then the program, then
+/// A program to run in the foreground, for [`Host::try_foreground`] (TS `renderer.suspend()`, then the program, then
 /// `renderer.resume()`): the host gives it the terminal and waits, as it does for `$EDITOR`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -2652,7 +2548,7 @@ pub enum Route {
     },
 }
 
-/// A request to the server, for [`Host::fetch`]: it goes through the host's own client, to the server the host talks
+/// A request to the server, for [`Host::try_fetch`]: it goes through the host's own client, to the server the host talks
 /// to now, with the host's credentials. A path that would leave that server's origin, such as
 /// `/https://elsewhere/`, is refused before the credentials go on.
 ///
@@ -2725,7 +2621,7 @@ impl Fetch {
     }
 }
 
-/// What [`Host::fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
+/// What [`Host::try_fetch`] returns, and [`Setup::on_reply`] gets back with the reply.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RequestId(pub u64);
@@ -2751,9 +2647,9 @@ pub enum Dialog {
     /// A list to pick from, with a filter. Enter or a click closes it and runs its `action` with the option's value as
     /// the input; escape closes it.
     Select(Select),
-    /// 1.5: a question with `Cancel` and `Confirm` buttons (TS `dialog.confirm`). A 1.4 host shows nothing.
+    /// A question with `Cancel` and `Confirm` buttons (TS `dialog.confirm`).
     Confirm(Confirm),
-    /// 1.5: a message with `ok` (TS `dialog.alert`). A 1.4 host shows nothing.
+    /// A message with `ok` (TS `dialog.alert`).
     Alert(Alert),
     /// 2.0: an error's details, drawn by the host's own error view (TS `DialogErrorDetails`); `back` runs from its
     /// Back button and from escape.
@@ -3394,7 +3290,7 @@ pub enum PanelSize {
     #[default]
     Medium,
     Large,
-    /// 1.6: the widest (TS `xlarge`). An older host shows it [`PanelSize::Large`].
+    /// The widest (TS `xlarge`).
     #[serde(rename = "xlarge")]
     XLarge,
 }
@@ -3531,66 +3427,60 @@ pub trait Read {
     fn dialog_open(&self, _key: &str) -> bool {
         false
     }
-    /// 1.5: the composer on screen, on home or in a session; `None` without one, while the host hides it (for a
-    /// permission or a form, as TS unmounts it), and from a 1.4 host.
+    /// The composer on screen, on home or in a session; `None` without one, and while the host hides it (for a
+    /// permission or a form, as TS unmounts it).
     fn composer(&self) -> Option<Composer> {
         None
     }
-    /// 1.5: the host's minor of ABI 1, so a plugin can fall back where an older host lacks a request, such as a
-    /// [`Dialog::Select`] for a [`Dialog::Confirm`] below 5. A host of ABI 2 has all of 1.x and answers [`V1_MINOR`], as
-    /// does a host in process.
-    fn abi_minor(&self) -> u32 {
-        V1_MINOR
-    }
-    /// 2.0: what the host serves the plugin, as it stated at load: its major, its minor of that major, and its
+    /// What the host serves the plugin, as it stated at load: its major, its minor of that major, and its
     /// optional features (big-boi 13). A plugin of this SDK that uses what a later 2.x minor adds checks it here, or
     /// lowers it with [`v2::View::or`]; one that cannot work without it sets `requires_minor` on [`plugin!`] instead,
     /// and an older host refuses it. In process the host is this crate's own.
     fn abi(&self) -> Abi {
         Abi::current()
     }
-    /// 1.6: the variant IDs of the model the next prompt uses (TS `ui.model.variant.list()`); its variant is
+    /// The variant IDs of the model the next prompt uses (TS `ui.model.variant.list()`); its variant is
     /// [`Read::model`]'s.
     fn variants(&self) -> Vec<String> {
         Vec::new()
     }
-    /// 1.6: whether session tabs are on (TS `ui.tabs.enabled()`).
+    /// Whether session tabs are on (TS `ui.tabs.enabled()`).
     fn tabs_enabled(&self) -> bool {
         false
     }
-    /// 1.6: the open session tabs, in order (TS `ui.tabs.list()`). Claims render again with [`Changed::local`] when
+    /// The open session tabs, in order (TS `ui.tabs.list()`). Claims render again with [`Changed::local`] when
     /// tabs open, close or move, and with the change batch when a tab's session changes.
     fn tabs(&self) -> Vec<Tab> {
         Vec::new()
     }
-    /// 1.6: the pending key sequence, one entry a stroke (TS `keymap.pending()`). Claims render again with
+    /// The pending key sequence, one entry a stroke (TS `keymap.pending()`). Claims render again with
     /// [`Changed::local`] when it changes, so they can show [`Read::keymap_active`] too.
     fn keymap_pending(&self) -> Vec<KeymapPending> {
         Vec::new()
     }
-    /// 1.6: the keys that do something now (TS `keymap.active()`).
+    /// The keys that do something now (TS `keymap.active()`).
     fn keymap_active(&self) -> Vec<KeymapActive> {
         Vec::new()
     }
-    /// 1.6: the commands that can be reached now, the plugins' and the host's (TS `keymap.commands()`).
+    /// The commands that can be reached now, the plugins' and the host's (TS `keymap.commands()`).
     fn keymap_commands(&self) -> Vec<KeymapCommand> {
         Vec::new()
     }
-    /// 1.6: every key of command `name`, as the host shows keys (TS `keymap.shortcuts(id)`); [`Read::shortcut`] is the
+    /// Every key of command `name`, as the host shows keys (TS `keymap.shortcuts(id)`); [`Read::shortcut`] is the
     /// first.
     fn shortcuts(&self, _name: &str) -> Vec<String> {
         Vec::new()
     }
-    /// 1.6: the text the mouse selected, if any (TS `renderer.getSelection()?.getSelectedText()`). A plugin can clear
+    /// The text the mouse selected, if any (TS `renderer.getSelection()?.getSelectedText()`). A plugin can clear
     /// the selection ([`Host::clear_selection`]) but not set it.
     fn selection(&self) -> Option<String> {
         None
     }
-    /// 1.6: the name of the selected theme (TS 1.x `api.theme.selected`).
+    /// The name of the selected theme (TS 1.x `api.theme.selected`).
     fn theme(&self) -> Option<String> {
         None
     }
-    /// 1.6: the names of the themes the host has, built in and installed (TS 1.x `api.theme.has(name)`).
+    /// The names of the themes the host has, built in and installed (TS 1.x `api.theme.has(name)`).
     fn themes(&self) -> Vec<String> {
         Vec::new()
     }
@@ -3674,7 +3564,7 @@ pub const SETTINGS: [&str; 5] = ["diffs.source", "diffs.view", "diffs.fullscreen
 /// # use opencode_plugin_abi::*;
 /// fn command(host: &dyn Host) {
 ///     std::thread::scope(|threads| {
-///         threads.spawn(|| host.foreground(Foreground { command: "true".into(), ..Foreground::default() }));
+///         threads.spawn(|| host.try_foreground(Foreground { command: "true".into(), ..Foreground::default() }));
 ///     });
 /// }
 /// ```
@@ -3699,15 +3589,7 @@ pub trait Host: Read {
     fn open_route(&self, name: &str);
     /// Shows `route`: home, a session, or a plugin's route.
     fn navigate(&self, route: Route);
-    /// 1.x: [`Host::try_fetch`], but a fetch the host did not take returns `RequestId(0)`, which no reply carries, as
-    /// it does on a host without fetch. It keeps that meaning until 3.0, so a 1.x plugin's source builds unchanged
-    /// (O-125, O-154).
-    #[deprecated(
-        note = "a fetch the host does not take returns RequestId(0) and never gets a reply; `try_fetch` returns it as \
-                an `Err`"
-    )]
-    fn fetch(&self, fetch: Fetch) -> RequestId;
-    /// 2.0: sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, while what
+    /// Sends `fetch` to the server. [`Setup::on_reply`] gets the reply, with the ID this returns, while what
     /// owns the fetch lives, on every carrier:
     ///
     /// - A fetch a mount's call asks for (a command of the route it shows, or a handler of the mount's input) is that
@@ -3718,43 +3600,30 @@ pub trait Host: Read {
     ///   unless the plugin is disposed first.
     ///
     /// An error is a fetch the host did not take, and no reply comes for it: its queue of effects is full, as when a
-    /// plugin fans out without end, or it has no server. By default, [`Host::fetch`]'s `RequestId(0)` is that error.
+    /// plugin fans out without end, or it has no server.
     #[must_use = "a fetch the host did not take gets no reply"]
-    fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
-        #[allow(deprecated)]
-        let id = self.fetch(fetch);
-        (id != RequestId(0)).then_some(id).ok_or_else(|| "the host did not take the fetch".to_owned())
-    }
+    fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String>;
     /// Shows `dialog`.
     fn dialog(&self, dialog: Dialog);
     /// Copies `text` to the clipboard, then runs `then` once it is copied; a toast says so when it fails.
     fn copy(&self, text: &str, then: Option<Action>);
-    /// 1.5: edits the composer on screen ([`Read::composer`]); without one, and on a 1.4 host, it does nothing.
+    /// Edits the composer on screen ([`Read::composer`]); without one, it does nothing.
     fn edit_composer(&self, _edit: ComposerEdit) {}
-    /// 1.6: selects `variant` of the model the next prompt uses, or its default for `None` (TS
+    /// Selects `variant` of the model the next prompt uses, or its default for `None` (TS
     /// `ui.model.variant.set`). `false`, and nothing happens, when no model is selected or it has no such variant.
     fn set_variant(&self, _variant: Option<&str>) -> bool {
         false
     }
-    /// 1.6: selects model `model` of provider `provider` for the next prompt and adds it to the recent models, as the
+    /// Selects model `model` of provider `provider` for the next prompt and adds it to the recent models, as the
     /// model dialog does. A model the host does not list is ignored.
     fn set_model(&self, _provider: &str, _model: &str) {}
-    /// 1.6: opens, shows, moves or closes a session tab (TS `ui.tabs.*`); whether it will.
+    /// Opens, shows, moves or closes a session tab (TS `ui.tabs.*`); whether it will.
     fn edit_tab(&self, _edit: TabEdit) -> bool {
         false
     }
-    /// 1.6: clears the mouse selection (TS `renderer.clearSelection()`).
+    /// Clears the mouse selection (TS `renderer.clearSelection()`).
     fn clear_selection(&self) {}
-    /// 1.6: [`Host::try_foreground`], but a program the host did not take returns `RequestId(0)`, which no reply
-    /// carries, as on an older host. It keeps that meaning until 3.0, as [`Host::fetch`] does.
-    #[deprecated(
-        note = "a program the host does not take returns RequestId(0) and never gets a reply; `try_foreground` \
-                returns it as an `Err`"
-    )]
-    fn foreground(&self, _program: Foreground) -> RequestId {
-        RequestId(0)
-    }
-    /// 2.0: gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
+    /// Gives the terminal to `program` until it exits, then takes it back, as the host does for `$EDITOR`.
     /// [`Setup::on_reply`] gets `{ "code": <exit code or null> }` with the ID this returns, plus `"signal"` on Unix when
     /// a signal ended it, or the error when it did not start. It starts once the current call is done, and not when
     /// the plugin was disposed or failed by then, another program has the terminal, or the host has none (headless).
@@ -3763,22 +3632,20 @@ pub trait Host: Read {
     /// as the host has no shell to hand it to; on Windows the host ignores Ctrl+C and Ctrl+Break while it runs. Input
     /// it leaves unread is dropped. It is owned as a fetch is ([`Host::try_fetch`]): a mount's request does not start
     /// once its mount closed, and its reply reaches no other mount. An error is a program the host did not take, as
-    /// for [`Host::try_fetch`], or an older host's: no reply comes for it. By default, [`Host::foreground`]'s `RequestId(0)` is that error.
+    /// for [`Host::try_fetch`]: no reply comes for it. A host that runs no program, by default, takes none.
     #[must_use = "a program the host did not take gets no reply"]
-    fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
-        #[allow(deprecated)]
-        let id = self.foreground(program);
-        (id != RequestId(0)).then_some(id).ok_or_else(|| "the host did not take the program".to_owned())
+    fn try_foreground(&self, _program: Foreground) -> Result<RequestId, String> {
+        Err("the host did not take the program".to_owned())
     }
-    /// 1.6: sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
+    /// Sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
     /// change, such as a route change.
     fn set_title(&self, _title: &str) {}
-    /// 1.6: selects theme `name` and saves it as the user's choice, as the theme dialog does (TS 1.x
+    /// Selects theme `name` and saves it as the user's choice, as the theme dialog does (TS 1.x
     /// `api.theme.set`). `false`, and nothing happens, for a theme the host does not have.
     fn set_theme(&self, _name: &str) -> bool {
         false
     }
-    /// 1.6: writes `theme`, a theme's JSON, as `<config>/themes/<name>.json`, and lists it among the themes (TS 1.x
+    /// Writes `theme`, a theme's JSON, as `<config>/themes/<name>.json`, and lists it among the themes (TS 1.x
     /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
     /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
@@ -3819,12 +3686,12 @@ pub trait Host: Read {
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
     fn declare_storage_key(&self, _key: &str) {}
-    /// 1.5: marks what the current call asked for so far, for [`Host::rollback`]; `None` from a host without marks.
+    /// Marks what the current call asked for so far, for [`Host::rollback`]; `None` from a host without marks.
     #[doc(hidden)]
     fn checkpoint(&self) -> Option<u64> {
         None
     }
-    /// 1.5: drops what the current call asked for after `mark`, and puts back the storage it wrote since.
+    /// Drops what the current call asked for after `mark`, and puts back the storage it wrote since.
     #[doc(hidden)]
     fn rollback(&self, _mark: u64) {}
 }
@@ -3840,7 +3707,7 @@ fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json
 }
 
 /// The host table, as the plugin calls it. It is valid until the host destroys the instance, so it is the plugin's
-/// own: a 1.4 plugin gets it only as the [`Read`] or [`Host`] of one callback.
+/// own: a plugin gets it only as the [`Read`] or [`Host`] of one callback.
 #[derive(Clone, Default)]
 struct HostHandle {
     api: *const HostApi,
@@ -3874,23 +3741,19 @@ impl HostHandle {
         }
     }
 
-    /// The core every host table has, the 1.1 layout; `None` for a null, misaligned or shorter table. Nothing is read
-    /// through the table's own type, which may be longer than the host's.
-    fn core(&self) -> Option<&HostApiV1_1> {
+    /// The host's table, of ABI 2 and with every entry of 2.0; `None` for a null, misaligned or shorter table, or one of
+    /// another major, which is no host this SDK can talk to. An entry a later 2.x appends is read only when `size`
+    /// covers it.
+    fn core(&self) -> Option<&HostApi> {
         if self.api.is_null() || !self.api.is_aligned() {
             return None;
         }
-        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
-        let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
-        // SAFETY: `size` covers the core, a prefix of the table.
-        let core = (size >= size_of::<HostApiV1_1>()).then(|| unsafe { &*self.api.cast::<HostApiV1_1>() })?;
-        // A host of a major version this SDK does not speak (1 or the current) is no host it can talk to.
-        matches!(core.major, 1 | ABI_MAJOR).then_some(core)
-    }
-
-    /// Whether the table's `size` covers the entry that ends at `end`.
-    fn covers(&self, end: usize) -> Option<&HostApiV1_1> {
-        self.core().filter(|core| core.size >= end)
+        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`
+        // and its version.
+        let (size, major) =
+            unsafe { (std::ptr::addr_of!((*self.api).size).read(), std::ptr::addr_of!((*self.api).major).read()) };
+        // SAFETY: `size` covers the 2.0 table, which is all of `HostApi`.
+        (size >= size_of::<HostApi>() && major == ABI_MAJOR).then(|| unsafe { &*self.api })
     }
 
     /// The JSON text stored under one of the plugin's storage keys.
@@ -3903,58 +3766,36 @@ impl HostHandle {
         let _ = self.request(&HostRequest::Log { level, message: message.to_owned() });
     }
 
-    /// Whether the page theme is dark or light; `None` from a host older than 1.2.
+    /// Whether the page theme is dark or light; `None` without a host or its entry.
     fn mode(&self) -> Option<ThemeMode> {
-        type Entry = Option<unsafe extern "C" fn(*mut c_void) -> u32>;
-        let core = self.covers(std::mem::offset_of!(HostApi, theme_mode) + size_of::<Entry>())?;
-        // SAFETY: `size` covers the entry; the host keeps it valid while the instance lives.
-        let mode = unsafe { (std::ptr::addr_of!((*self.api).theme_mode).read()?)(core.ctx) };
-        match mode {
+        let core = self.core()?;
+        // SAFETY: the host keeps the entry valid while the instance lives.
+        match unsafe { (core.theme_mode?)(core.ctx) } {
             THEME_DARK => Some(ThemeMode::Dark),
             THEME_LIGHT => Some(ThemeMode::Light),
             _ => None,
         }
     }
 
-    /// A handle that wakes the host from any thread; `None` from a host older than 1.3.
+    /// A handle that wakes the host from any thread; `None` without a host or its entry.
     fn waker(&self) -> Option<Waker> {
-        type Entry = Option<unsafe extern "C" fn(*mut c_void)>;
-        let core = self.covers(std::mem::offset_of!(HostApi, wake) + size_of::<Entry>())?;
-        // SAFETY: `size` covers the entry.
-        let wake = unsafe { std::ptr::addr_of!((*self.api).wake).read()? };
-        let ctx = Ctx(core.ctx);
+        let core = self.core()?;
+        let (wake, ctx) = (core.wake?, Ctx(core.ctx));
         // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes the waker first.
         Some(Waker::new(move || unsafe { wake(ctx.get()) }))
     }
 
-    /// What the plugin's threads reach the host through; `None` from a host older than 2.0.
+    /// What the plugin's threads reach the host through; `None` without a host or its entries.
     fn link(&self) -> Option<Arc<dyn mail::Link>> {
-        let core = self.v2()?;
-        // SAFETY: `size` covers the entries.
-        let (send, report, stopped) = unsafe {
-            let api = self.api;
-            (
-                std::ptr::addr_of!((*api).send).read()?,
-                std::ptr::addr_of!((*api).report).read()?,
-                std::ptr::addr_of!((*api).stopped).read()?,
-            )
-        };
+        let core = self.core()?;
+        let (send, report, stopped) = (core.send?, core.report?, core.stopped?);
         Some(Arc::new(AbiLink { ctx: Ctx(core.ctx), send, report, stopped }))
     }
 
-    /// The core of a host of ABI 2 or newer whose table has every entry of 2.0: by its major, not only its size, so a
-    /// 1.x host's longer table is never read as 2.0's.
-    fn v2(&self) -> Option<&HostApiV1_1> {
-        self.covers(std::mem::offset_of!(HostApi, features) + size_of::<Bytes>()).filter(|core| core.major >= 2)
-    }
-
-    /// The host's optional features; none from a host older than 2.0.
+    /// The host's optional features; none without a host.
     fn features(&self) -> Vec<String> {
-        if self.v2().is_none() {
-            return Vec::new();
-        }
-        // SAFETY: `size` covers the entry, and the host keeps its bytes while the instance lives.
-        let bytes = unsafe { std::ptr::addr_of!((*self.api).features).read().as_slice() };
+        // SAFETY: the host keeps the bytes while the instance lives.
+        let bytes = self.core().map(|core| unsafe { core.features.as_slice() }).unwrap_or_default();
         serde_json::from_slice(bytes).unwrap_or_default()
     }
 }
@@ -4106,10 +3947,6 @@ impl Read for HostHandle {
         self.read(&HostRequest::Composer)
     }
 
-    fn abi_minor(&self) -> u32 {
-        self.core().map_or(0, |core| if core.major >= 2 { V1_MINOR } else { core.minor })
-    }
-
     fn abi(&self) -> Abi {
         self.core().map_or(Abi::new(0, 0, Vec::new()), |core| Abi::new(core.major, core.minor, self.features()))
     }
@@ -4218,10 +4055,8 @@ impl Host for HostHandle {
     }
 
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
-        let request = HostRequest::StorageMerge { key: key.to_owned(), fields: fields.clone() };
-        if self.request(&request).is_err() {
-            // A host older than the request sets the whole object, as plugins built before it do.
-            storage_merge_whole(self, key, fields);
+        if let Err(error) = self.request(&HostRequest::StorageMerge { key: key.to_owned(), fields }) {
+            self.log(Level::Warn, &format!("storage {key}: {error}"));
         }
     }
 
@@ -4246,24 +4081,11 @@ impl Host for HostHandle {
         let _ = self.request(&HostRequest::Navigate { route });
     }
 
-    fn fetch(&self, fetch: Fetch) -> RequestId {
-        // As the 1.x SDK: a host that refuses it, or has no fetch, never replies.
-        self.try_fetch(fetch).unwrap_or(RequestId(0))
-    }
-
     fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
         self.requested(&HostRequest::Fetch(fetch))
     }
 
     fn dialog(&self, dialog: Dialog) {
-        // A host older than 1.6 does not know `xlarge` and would refuse the whole dialog: it gets the largest it knows.
-        let dialog = match dialog {
-            Dialog::Panel(mut panel) if panel.size == PanelSize::XLarge && self.abi_minor() < 6 => {
-                panel.size = PanelSize::Large;
-                Dialog::Panel(panel)
-            }
-            dialog => dialog,
-        };
         let _ = self.request(&HostRequest::Dialog { dialog: Box::new(dialog) });
     }
 
@@ -4331,10 +4153,6 @@ impl Host for HostHandle {
         let _ = self.request(&HostRequest::ClearSelection);
     }
 
-    fn foreground(&self, program: Foreground) -> RequestId {
-        self.try_foreground(program).unwrap_or(RequestId(0))
-    }
-
     fn try_foreground(&self, program: Foreground) -> Result<RequestId, String> {
         self.requested(&HostRequest::Foreground(program))
     }
@@ -4373,7 +4191,7 @@ impl HostHandle {
     }
 }
 
-/// Wakes the host from any thread, from [`Setup::waker`] (over the C ABI, a 1.3 host's [`HostApi::wake`]): the host
+/// Wakes the host from any thread, from [`Setup::waker`] (over the C ABI, [`HostApi::wake`]): the host
 /// then runs the plugin's [`Setup::on_wake`] handlers and renders its mounted slot claims and routes again, with
 /// [`Changed::woken`], so a plugin that works on its own thread can show the result.
 ///
@@ -4428,13 +4246,6 @@ impl Ctx {
 pub type FenceFn = Rc<dyn Fn(&dyn Read, &Fence) -> Fenced>;
 /// A registered slot render.
 pub type RenderFn = Rc<dyn Fn(&dyn Read, &SlotInput, &Changed) -> Render>;
-type LinesFn = Box<dyn Fn(Option<&str>) -> Vec<Line>>;
-/// A slot claim's render: the 1.3 rows, or a [`Render`].
-enum SlotFn {
-    Lines(LinesFn),
-    Render(RenderFn),
-}
-type LinesRouteFn = Box<dyn Fn() -> Vec<Line>>;
 /// A registered route render of [`Setup::route`].
 pub type RouteFn = Rc<dyn Fn(&dyn Read, &Changed) -> Render>;
 /// A registered reply handler.
@@ -4520,7 +4331,7 @@ impl Setup<'_> {
         self.host.unwrap_or(&self.registered.host)
     }
 
-    /// What wakes the host from the plugin's own threads; `None` from a host older than 1.3.
+    /// What wakes the host from the plugin's own threads; `None` without a host.
     pub fn waker(&self) -> Option<Waker> {
         self.registered.waker.clone()
     }
@@ -4566,18 +4377,17 @@ impl Setup<'_> {
     /// state, each wake, and after each of the plugin's commands and event, reply, mount and wake handlers (with
     /// [`Changed::woken`]).
     pub fn slot(&mut self, at: Placement, render: impl Fn(&dyn Read, &SlotInput, &Changed) -> Render + 'static) {
-        let claim = SlotClaim { kind: at.kind, path: at.path, render: true, mount: false, size: false };
+        let claim = SlotClaim { kind: at.kind, path: at.path, mount: false, size: false };
         self.registered.manifest.slots.push(claim);
-        self.registered.slots.push(SlotFn::Render(Rc::new(render)));
+        self.registered.slots.push(Rc::new(render));
     }
 
-    /// 1.6: gives the claim registered last at `at` (by [`Setup::slot`]) its laid-out size in [`SlotInput::width`] and
+    /// Gives the claim registered last at `at` (by [`Setup::slot`]) its laid-out size in [`SlotInput::width`] and
     /// [`SlotInput::height`], and renders it again with [`Changed::size`] when that changes (TS `onSizeChange`). Other
-    /// claims get 0, so a size they do not read costs them no render. Without a claim at `at`, it does nothing. An
-    /// older host gives 0.
+    /// claims get 0, so a size they do not read costs them no render. Without a claim at `at`, it does nothing.
     pub fn sized(&mut self, at: Placement) {
         let claims = self.registered.manifest.slots.iter_mut();
-        if let Some(claim) = claims.rev().find(|claim| claim.render && claim.kind == at.kind && claim.path == at.path) {
+        if let Some(claim) = claims.rev().find(|claim| claim.kind == at.kind && claim.path == at.path) {
             claim.size = true;
         }
     }
@@ -4587,12 +4397,8 @@ impl Setup<'_> {
     /// per mount here, such as a request a mount starts. A slot mounts its claims again when its input changes, and
     /// the next mount may come before the last one goes. Without a claim at `at`, it registers one that draws nothing.
     pub fn on_mount(&mut self, at: Placement, run: impl Fn(&dyn Host, &SlotInput, bool) + 'static) {
-        let found = self
-            .registered
-            .manifest
-            .slots
-            .iter()
-            .rposition(|claim| claim.render && claim.kind == at.kind && claim.path == at.path);
+        let found =
+            self.registered.manifest.slots.iter().rposition(|claim| claim.kind == at.kind && claim.path == at.path);
         let claim = match found {
             Some(claim) => claim,
             None => {
@@ -4604,20 +4410,11 @@ impl Setup<'_> {
         self.registered.mounts.push((claim, Rc::new(run)));
     }
 
-    /// Claims a place in the slot tree with rows, as ABI 1.3 did; `render` receives the slot's session ID, if it
-    /// has one.
-    pub fn slot_lines(&mut self, kind: SlotKind, path: &str, render: impl Fn(Option<&str>) -> Vec<Line> + 'static) {
-        let claim = SlotClaim { kind, path: path.to_owned(), render: false, mount: false, size: false };
-        self.registered.manifest.slots.push(claim);
-        self.registered.slots.push(SlotFn::Lines(Box::new(render)));
-    }
-
     /// Registers route `name`, which [`Host::navigate`] opens as [`Route::Plugin`]. The host draws what `render`
     /// returns centered in a scroll box on the page background; `render` runs again with each change, as a slot
     /// claim's does. Commands of [`Scope::Route`] run while it shows.
     pub fn route(&mut self, name: &str, render: impl Fn(&dyn Read, &Changed) -> Render + 'static) {
         self.registered.manifest.routes.push(name.to_owned());
-        self.registered.manifest.render_routes.push(name.to_owned());
         self.registered.views.push((name.to_owned(), Rc::new(render)));
     }
 
@@ -4631,15 +4428,9 @@ impl Setup<'_> {
         self.registered.route_mounts.push((name.to_owned(), Rc::new(run)));
     }
 
-    /// Registers a route of rows, as ABI 1.3 did.
-    pub fn route_lines(&mut self, name: &str, render: impl Fn() -> Vec<Line> + 'static) {
-        self.registered.manifest.routes.push(name.to_owned());
-        self.registered.routes.push((name.to_owned(), Box::new(render)));
-    }
-
     /// Calls `run` on the UI thread after the plugin's [`Waker`] woke the host, before its claims and routes render
     /// again with [`Changed::woken`]: a plugin whose thread keeps time asks the host for what a render cannot, such as
-    /// a [`Host::fetch`]. Wakes that arrive together run it once.
+    /// a [`Host::try_fetch`]. Wakes that arrive together run it once.
     pub fn on_wake(&mut self, run: impl Fn(&dyn Host) + 'static) {
         self.registered.manifest.wake = true;
         self.registered.wakes.push(Rc::new(run));
@@ -4660,17 +4451,17 @@ impl Setup<'_> {
         self.registered.fence_gone.push(Rc::new(run));
     }
 
-    /// Calls `run` with each reply to the plugin's [`Host::fetch`]es, on the UI thread, with the request's ID. A reply
+    /// Calls `run` with each reply to the plugin's [`Host::try_fetch`]es, on the UI thread, with the request's ID. A reply
     /// that arrives after the plugin was disposed is dropped.
     pub fn on_reply(&mut self, run: impl Fn(&dyn Host, RequestId, Result<serde_json::Value, String>) + 'static) {
         self.registered.replies.push(Rc::new(run));
     }
 
-    /// 1.6: calls `run` with the streaming deltas (`session.text.delta`, `session.reasoning.delta`,
+    /// Calls `run` with the streaming deltas (`session.text.delta`, `session.reasoning.delta`,
     /// `session.tool.input.delta`, `session.compaction.delta`), which [`Setup::on_event`] never gets: the deltas the
     /// host applied since the last call, or since setup, oldest first, at most once a frame and before it, never
     /// empty, with a store batch's deltas in one call (TS `data.on(type)` once an event). The host keeps at most 4096
-    /// between calls and drops the oldest past that. An older host never calls it.
+    /// between calls and drops the oldest past that.
     pub fn on_deltas(&mut self, run: impl Fn(&dyn Host, &[V2Event]) + 'static) {
         self.registered.manifest.deltas = true;
         self.registered.deltas.push(Rc::new(run));
@@ -4697,7 +4488,7 @@ impl Setup<'_> {
     /// Registers what the plugin's threads send: `run` gets each message on the UI thread, in the order the mailbox
     /// holds them, as the plugin's `update`, with the host of a command; the plugin's claims and surfaces render again
     /// after it. The [`Sender`] it returns sends from any thread (see [`mail`]). A plugin has one message type: a
-    /// second call is an error. A sender of a host older than 2.0 is closed.
+    /// second call is an error. A sender without a host is closed.
     pub fn messages<M>(&mut self, run: impl Fn(&dyn Host, M) + 'static) -> Result<Sender<M>, String>
     where
         M: Serialize + serde::de::DeserializeOwned + Send + 'static,
@@ -4770,8 +4561,7 @@ pub struct Registered {
     host: HostHandle,
     waker: Option<Waker>,
     fences: Vec<(String, FenceFn)>,
-    slots: Vec<SlotFn>,
-    routes: Vec<(String, LinesRouteFn)>,
+    slots: Vec<RenderFn>,
     views: Vec<(String, RouteFn)>,
     commands: Vec<CommandFn>,
     events: Vec<EventFn>,
@@ -4881,10 +4671,7 @@ impl Registered {
 
     /// The slot claims of [`Setup::slot`], with their index in [`Manifest::slots`] and their renders.
     pub fn renders(&self) -> impl Iterator<Item = (usize, &SlotClaim, &RenderFn)> {
-        self.manifest.slots.iter().zip(&self.slots).enumerate().filter_map(|(index, (claim, render))| match render {
-            SlotFn::Render(render) => Some((index, claim, render)),
-            SlotFn::Lines(_) => None,
-        })
+        self.manifest.slots.iter().zip(&self.slots).enumerate().map(|(index, (claim, render))| (index, claim, render))
     }
 
     /// The mount handlers, with the index of their claim in [`Manifest::slots`].
@@ -4960,7 +4747,7 @@ impl Registered {
     fn with_host(id: &str, options: Option<String>, host: *const HostApi) -> Self {
         let host = HostHandle::new(host);
         Self {
-            manifest: Manifest { id: id.to_owned(), render: RENDER, ..Manifest::default() },
+            manifest: Manifest { id: id.to_owned(), ..Manifest::default() },
             options,
             waker: host.waker(),
             link: host.link().map(mail::Revocable::new).unwrap_or_default(),
@@ -4998,7 +4785,6 @@ impl Registered {
     fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
         let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
         match request {
-            Request::Fence { .. } => Err("this plugin renders fences through render-fence".to_owned()),
             Request::RenderFence(RenderFence { fence, index }) => {
                 let render = match index {
                     Some(index) => self.fences.get(index),
@@ -5007,17 +4793,9 @@ impl Registered {
                 let fenced = render.map_or(Fenced::Code, |(_, render)| render(&self.host, &fence));
                 json(serde_json::to_value(fenced))
             }
-            Request::Slot { claim, session_id } => match self.slots.get(claim).ok_or("no such slot claim")? {
-                SlotFn::Lines(render) => json(serde_json::to_value(render(session_id.as_deref()))),
-                SlotFn::Render(_) => Err("this slot claim renders through render".to_owned()),
-            },
-            Request::Render { claim, input, changed } => match self.slots.get(claim).ok_or("no such slot claim")? {
-                SlotFn::Render(render) => json(serde_json::to_value(render(&self.host, &input, &changed))),
-                SlotFn::Lines(_) => Err("this slot claim renders through slot".to_owned()),
-            },
-            Request::Route { name } => {
-                let (_, render) = self.routes.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
-                json(serde_json::to_value(render()))
+            Request::Render { claim, input, changed } => {
+                let render = self.slots.get(claim).ok_or("no such slot claim")?;
+                json(serde_json::to_value(render(&self.host, &input, &changed)))
             }
             Request::Command { name, input } => {
                 let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
@@ -5146,7 +4924,7 @@ impl Registered {
     }
 }
 
-/// A plugin the host runs in process: its ID and setup, as [`export_plugin!`] takes them.
+/// A plugin the host runs in process: its ID and setup, as [`plugin!`] takes them.
 #[derive(Clone, Copy)]
 pub struct Plugin {
     pub id: &'static str,
@@ -5174,57 +4952,42 @@ macro_rules! plugin {
     };
     // A plugin that cannot work without what host minor `requires_minor` of ABI 2 added (big-boi 13, carbon-4).
     (id = $id:expr, requires_minor = $requires:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
-        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, [$($feature),*]);
+        $crate::export_plugin!(@entry $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, [$($feature),*]);
     };
     (id = $id:expr, requires_minor = $requires:expr, $setup:path) => {
         $crate::plugin!(id = $id, requires_minor = $requires, requires = [], $setup);
     };
     (id = $id:expr, $setup:path) => {
-        $crate::export_plugin!($id, $setup);
+        $crate::plugin!(id = $id, requires_minor = 0, requires = [], $setup);
     };
     ($setup:path) => {
-        $crate::export_plugin!(env!("CARGO_PKG_NAME"), $setup);
+        $crate::plugin!(id = env!("CARGO_PKG_NAME"), $setup);
     };
 }
 
-/// Exports a plugin: `export_plugin!("my.plugin", setup)`, which [`plugin!`] calls. It exports the current
-/// [`PluginApi`] as [`ENTRY`], with the crate's version as its [`Metadata`].
-///
-/// A plugin of ABI 1.x that cannot work without what a newer 1.x minor adds, such as the composer of 1.5, asks for that
-/// host, and an older host refuses it with a message naming both versions rather than run it with its requests refused:
-///
-/// ```ignore
-/// export_plugin!("my.plugin", setup, requires_minor = 5);
-/// ```
-///
-/// That form exports [`ENTRY_V1`] at [`V1_MINOR`]; below 4 it requires 4. It keeps that meaning until 3.0 (O-125), and
-/// warns as deprecated: a 2.x minimum is `plugin!(id = "my.plugin", requires_minor = 1, setup)`. A plugin that can do
-/// without reads [`Read::abi_minor`] and falls back instead.
+/// What [`plugin!`] expands to, and the entries the loader's tests wire a setup through: not for plugins, which call
+/// [`plugin!`].
+#[doc(hidden)]
 #[macro_export]
 macro_rules! export_plugin {
-    ($id:expr, $setup:path) => {
-        $crate::export_plugin!(@entry opencode_plugin_v2, $crate::ABI_MAJOR, $crate::ABI_MINOR, 0, $id, $setup, []);
-    };
-    // ABI 1.x, which needs host 1.`requires_minor`. The deprecated function is named by the caller's own
-    // `requires_minor` token, so the warning shows in the caller's crate.
-    ($id:expr, $setup:path, $requires_minor:ident = $requires:expr) => {
-        $crate::export_plugin!(@version 1, $crate::V1_MINOR, $crate::runtime::legacy::$requires_minor($requires), $id, $setup);
-    };
-    // A plugin built against ABI 1.x, or that pretends to be built against another version, for the loader's tests.
+    // A plugin that pretends to be built against another version, for the loader's tests.
     (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
-        $crate::export_plugin!(@entry opencode_plugin_v1, $major, $minor, $requires, $id, $setup, []);
+        $crate::export_plugin!(@entry $major, $minor, $requires, $id, $setup, []);
     };
-    // The same through the entry of ABI 2.
-    (@version2 $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
-        $crate::export_plugin!(@entry opencode_plugin_v2, $major, $minor, $requires, $id, $setup, []);
-    };
-    (@entry $symbol:ident, $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path, [$($feature:expr),*]) => {
+    (@entry $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path, [$($feature:expr),*]) => {
         // A panic is caught at the edge only when it unwinds; with `abort` it would end the client.
         #[cfg(panic = "abort")]
         compile_error!("an opencode plugin must be built with panic = \"unwind\"");
         #[unsafe(no_mangle)]
-        pub extern "C" fn $symbol() -> *const $crate::PluginApi {
-            $crate::export_plugin!(@create $id, $setup);
+        pub extern "C" fn opencode_plugin_v2() -> *const $crate::PluginApi {
+            unsafe extern "C" fn create(
+                host: *const $crate::HostApi,
+                options: $crate::Bytes,
+                instance: *mut *mut ::std::ffi::c_void,
+                out: *mut $crate::Owned,
+            ) -> i32 {
+                unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
+            }
             unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
                 unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[$($feature),*], out) }
             }
@@ -5232,36 +4995,8 @@ macro_rules! export_plugin {
             &API
         }
     };
-    // A plugin built against 1.0: the shorter table, without `describe`.
-    (@v1_0 $id:expr, $setup:path) => {
-        #[unsafe(no_mangle)]
-        pub extern "C" fn opencode_plugin_v1() -> *const $crate::PluginApi {
-            $crate::export_plugin!(@create $id, $setup);
-            static API: $crate::PluginApiV1_0 = $crate::PluginApiV1_0 {
-                size: ::std::mem::size_of::<$crate::PluginApiV1_0>(),
-                major: 1,
-                minor: 0,
-                requires_minor: 0,
-                create: Some(create),
-                call: Some($crate::runtime::call),
-                destroy: Some($crate::runtime::destroy),
-                free: Some($crate::runtime::free),
-            };
-            (&API as *const $crate::PluginApiV1_0).cast()
-        }
-    };
-    (@create $id:expr, $setup:path) => {
-        unsafe extern "C" fn create(
-            host: *const $crate::HostApi,
-            options: $crate::Bytes,
-            instance: *mut *mut ::std::ffi::c_void,
-            out: *mut $crate::Owned,
-        ) -> i32 {
-            unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
-        }
-    };
     // The `create` and `describe` of `$setup`, for tests that wire a plugin through the byte shims
-    // (`loader::native::loopback`); a 2.x library describes itself with its ID before any `create`.
+    // (`loader::native::loopback`); a library describes itself with its ID before any `create`.
     (@loopback $id:expr, $setup:expr) => {{
         let (create, describe) = $crate::export_plugin!(@loopback_described $id, $setup);
         $crate::runtime::Loopback { create, describe }
@@ -5291,7 +5026,7 @@ macro_rules! export_plugin {
     }};
 }
 
-/// The shims [`export_plugin!`] wires into [`PluginApi`]. Each catches panics, so none unwinds into the host.
+/// The shims [`plugin!`] wires into [`PluginApi`]. Each catches panics, so none unwinds into the host.
 #[doc(hidden)]
 pub mod runtime {
     use super::*;
@@ -5306,14 +5041,8 @@ pub mod runtime {
         QUIET.call_once(|| {});
     }
 
-    /// The host minor a plugin of this SDK requires when it asks for `minor`: at least 4, whose render requests the
-    /// SDK answers.
-    pub const fn requires(minor: u32) -> u32 {
-        if minor < 4 { 4 } else { minor }
-    }
-
-    /// The table [`export_plugin!`] exports, built here rather than in the plugin's crate, so an entry a later 2.x
-    /// appends to [`PluginApi`] is no break of the plugin's source (carbon-4).
+    /// The table [`plugin!`] exports, built here rather than in the plugin's crate, so an entry a later 2.x appends to
+    /// [`PluginApi`] is no break of the plugin's source (carbon-4).
     pub const fn table(
         major: u32,
         minor: u32,
@@ -5331,18 +5060,6 @@ pub mod runtime {
             destroy: Some(destroy),
             free: Some(free),
             describe: Some(describe),
-        }
-    }
-
-    /// What the 1.x form `export_plugin!(id, setup, requires_minor = N)` calls.
-    pub mod legacy {
-        /// The host minor of ABI 1 a plugin of `export_plugin!(id, setup, requires_minor = N)` requires.
-        #[deprecated(
-            note = "`export_plugin!(id, setup, requires_minor = N)` exports ABI 1.x; for a 2.x minimum write \
-                    `plugin!(id = id, requires_minor = N, setup)`"
-        )]
-        pub const fn requires_minor(minor: u32) -> u32 {
-            super::requires(minor)
         }
     }
 
@@ -5519,16 +5236,16 @@ mod tests {
         THEME_LIGHT
     }
 
-    // Expected: a plugin reads the theme mode from a 1.2 host, and gets `None`, without reading past the table, from
-    // a 1.1 host or a 1.2 host that leaves the entry null.
+    // Expected: a plugin reads the theme mode from the host, and gets `None` from a host that leaves the entry null or
+    // whose table is shorter than 2.0's, without reading past it.
     #[test]
     fn the_theme_mode_is_read_only_when_the_host_offers_it() {
         let ctx = std::ptr::null_mut();
         let (call, free) = (Some(call as _), Some(free as _));
         let current = HostApi {
             size: size_of::<HostApi>(),
-            major: 1,
-            minor: 3,
+            major: ABI_MAJOR,
+            minor: 0,
             ctx,
             call,
             free,
@@ -5542,8 +5259,8 @@ mod tests {
         assert_eq!(HostHandle::new(&current).mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
         assert_eq!(HostHandle::new(&null).mode(), None);
-        let old = HostApiV1_1 { size: size_of::<HostApiV1_1>(), major: 1, minor: 1, ctx, call, free };
-        assert_eq!(HostHandle::new(std::ptr::from_ref(&old).cast()).mode(), None);
+        let short = HostApi { size: std::mem::offset_of!(HostApi, features), ..current };
+        assert_eq!(HostHandle::new(&short).mode(), None);
     }
 
     unsafe extern "C" fn answer(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
@@ -5553,8 +5270,8 @@ mod tests {
         OK
     }
 
-    // Expected (carbon-p0a-9): a table of another major version is no host: nothing is called and its minor reads 0.
-    // The minor a plugin reads is of ABI 1: a 1.x host's own, and all of 1.x from a host of ABI 2 and in process.
+    // Expected (carbon-p0a-9): a table of another major version, 1 as a later one, is no host: nothing is called, and
+    // its version reads 0.0.
     #[test]
     fn a_host_of_another_major_is_no_host() {
         let calls = std::sync::atomic::AtomicUsize::new(0);
@@ -5573,36 +5290,25 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle::new(&api);
-        assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
-        assert_eq!((host.abi_minor(), host.mode(), host.waker().is_none()), (0, None, true));
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
-        let older = HostHandle::new(&HostApi { major: 1, minor: 5, ..api });
-        assert_eq!(older.abi_minor(), 5);
-        let current = HostHandle::new(&HostApi { major: ABI_MAJOR, minor: 0, ..api });
-        assert_eq!(current.abi_minor(), V1_MINOR);
-        struct InProcess;
-        impl Read for InProcess {
-            fn theme_mode(&self) -> ThemeMode {
-                ThemeMode::Dark
-            }
-            fn color(&self, _: &str) -> Option<Rgba> {
-                None
-            }
+        for major in [1, ABI_MAJOR + 1] {
+            let host = HostHandle::new(&HostApi { major, minor: 6, ..api });
+            assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
+            assert_eq!((host.abi(), host.mode(), host.waker().is_none()), (Abi::new(0, 0, Vec::new()), None, true));
         }
-        assert_eq!(InProcess.abi_minor(), V1_MINOR);
-        assert_eq!((runtime::requires(0), runtime::requires(4), runtime::requires(5)), (4, 4, 5));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let current = HostHandle::new(&HostApi { major: ABI_MAJOR, minor: 0, ..api });
+        assert_eq!((current.abi().major, current.abi().minor), (ABI_MAJOR, 0));
     }
 
-    // Expected: a table whose `size` does not cover the 1.1 core, or a misaligned table, is no host: its `call` is
-    // not read past `size`, let alone called.
+    // Expected: a table whose `size` does not cover every entry of 2.0, or a misaligned table, is no host: its `call`
+    // is not read past `size`, let alone called.
     #[test]
     fn a_table_shorter_than_its_core_is_not_read() {
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
         let api = HostApi {
             size: std::mem::offset_of!(HostApi, ctx),
-            major: 1,
+            major: ABI_MAJOR,
             minor: 0,
             ctx,
             call: Some(answer),
@@ -5614,9 +5320,11 @@ mod tests {
             stopped: None,
             features: Bytes::new(&[]),
         };
-        let host = HostHandle::new(&api);
-        assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
-        assert_eq!((host.mode(), host.waker().is_none()), (None, true));
+        for size in [std::mem::offset_of!(HostApi, ctx), std::mem::offset_of!(HostApi, features)] {
+            let host = HostHandle::new(&HostApi { size, ..api });
+            assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
+            assert_eq!((host.mode(), host.waker().is_none()), (None, true));
+        }
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
         let bytes = [0u64; 16];
         let misaligned = HostHandle::new(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast());
@@ -5766,10 +5474,8 @@ mod tests {
     }
 
     // Expected (bigboi's last pass): a host that answers a fetch or a program OK with the ID 0, which names no
-    // request, gave a malformed answer: the 2.x calls are an error, and the 1.x calls answer `RequestId(0)`, which no
-    // reply carries.
+    // request, gave a malformed answer: the calls are an error.
     #[test]
-    #[allow(deprecated)]
     fn a_request_id_of_zero_is_a_malformed_answer() {
         let api = HostApi {
             size: size_of::<HostApi>(),
@@ -5790,7 +5496,6 @@ mod tests {
         let program = || Foreground::new("true");
         assert!(host.try_fetch(fetch()).is_err_and(|error| error.contains("request ID 0")));
         assert!(host.try_foreground(program()).is_err_and(|error| error.contains("request ID 0")));
-        assert_eq!((host.fetch(fetch()), host.foreground(program())), (RequestId(0), RequestId(0)));
     }
 
     /// A host that states image bounds of 100 bytes and 10 pixels a side, and answers an image's size as [4, 3].
@@ -5904,8 +5609,8 @@ mod tests {
         unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
-    // Expected: a plugin wakes a 1.3 host from another thread, and gets no waker, without reading past the table, from
-    // a 1.2 host or a 1.3 host that leaves the entry null.
+    // Expected: a plugin wakes the host from another thread, and gets no waker from a host that leaves the entry null,
+    // or whose table is shorter than 2.0's, without reading past it.
     #[test]
     fn a_waker_wakes_the_host_from_another_thread_when_the_host_offers_it() {
         let wakes = std::sync::atomic::AtomicUsize::new(0);
@@ -5913,8 +5618,8 @@ mod tests {
         let (call, free) = (Some(call as _), Some(free as _));
         let api = HostApi {
             size: size_of::<HostApi>(),
-            major: 1,
-            minor: 3,
+            major: ABI_MAJOR,
+            minor: 0,
             ctx,
             call,
             free,
@@ -5929,8 +5634,8 @@ mod tests {
         std::thread::spawn(move || waker.wake()).join().unwrap();
         assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert!(HostHandle::new(&HostApi { wake: None, ..api }).waker().is_none());
-        let old = HostApiV1_2 { size: size_of::<HostApiV1_2>(), major: 1, minor: 2, ctx, call, free, theme_mode: None };
-        assert!(HostHandle::new(std::ptr::from_ref(&old).cast()).waker().is_none());
+        let short = HostApi { size: std::mem::offset_of!(HostApi, send), ..api };
+        assert!(HostHandle::new(&short).waker().is_none());
     }
 
     // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
@@ -5945,8 +5650,8 @@ mod tests {
         let ctx = std::ptr::null_mut();
         let api = HostApi {
             size: size_of::<HostApi>(),
-            major: 1,
-            minor: 3,
+            major: ABI_MAJOR,
+            minor: 0,
             ctx,
             call: None,
             free: None,
@@ -5962,24 +5667,16 @@ mod tests {
         assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
     }
 
-    // Expected: the 1.3 requests, rows and manifest keep their JSON byte for byte; only a plugin of this crate sets
-    // the render marker, and its fence answers in the 1.4 form.
+    // Expected: rows keep their JSON byte for byte, a manifest leaves out what is unset, and a fence renders through the
+    // registration of its language, or the one the host names by index.
     #[test]
-    fn the_1_3_wire_format_is_unchanged() {
-        let fence = Request::Fence { language: "x".into(), info: "x y".into(), code: "a".into(), streaming: true };
-        assert_eq!(
-            serde_json::to_string(&fence).unwrap(),
-            r#"{"type":"fence","language":"x","info":"x y","code":"a","streaming":true}"#
-        );
+    fn rows_and_fence_renders_round_trip() {
         let line = vec![Span::new("a").fg("text.muted").bold(), Span { bg: Some("#102030".into()), ..Span::new("b") }];
         let json = r##"[{"text":"a","fg":"text.muted","bold":true},{"text":"b","bg":"#102030"}]"##;
         assert_eq!(serde_json::to_string(&line).unwrap(), json);
         assert_eq!(serde_json::from_str::<Line>(json).unwrap(), line);
-        let old: Manifest =
-            serde_json::from_str(r#"{"id":"old","commands":[],"fences":["x"],"slots":[],"routes":[],"storage":[]}"#)
-                .unwrap();
-        assert_eq!(old.render, 0);
-        assert!(!serde_json::to_string(&old).unwrap().contains("render"));
+        let json = r#"{"id":"old","commands":[],"fences":["x"],"slots":[],"routes":[],"storage":[]}"#;
+        assert_eq!(serde_json::to_string(&serde_json::from_str::<Manifest>(json).unwrap()).unwrap(), json);
 
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
@@ -5987,7 +5684,6 @@ mod tests {
             0 => Fenced::Code,
             _ => Fenced::Lines { lines: vec![vec![Span::new(fence.code.clone())]], fg: None, drag: false },
         });
-        assert_eq!(setup.manifest().render, RENDER);
         let fence = Fence {
             language: "x".into(),
             info: "x".into(),
@@ -6011,10 +5707,10 @@ mod tests {
         assert_eq!(setup.handle(request(&fence, Some(1))).unwrap(), serde_json::json!({ "type": "code" }));
     }
 
-    // Expected: what 1.4 adds for Mermaid is optional on the wire: an `Rgba` is `#rrggbbaa` and reads back as one,
+    // Expected: what Mermaid's fences use is optional on the wire: an `Rgba` is `#rrggbbaa` and reads back as one,
     // `#rrggbb` stays a token, `fg` and `drag` are left out when unset, and a fence without `width` reads as 0.
     #[test]
-    fn the_1_4_colors_and_rows_round_trip() {
+    fn colors_and_rows_round_trip() {
         let line = vec![Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new("a").fg("#102030") }];
         let fenced = Fenced::Lines { lines: vec![line], fg: Some(Rgba::new(1, 2, 3, 255).into()), drag: true };
         let json = r##"{"type":"lines","lines":[[{"text":"a","fg":"#102030","bg":"#ffffff14"}]],"fg":"#010203ff","drag":true}"##;
@@ -6032,10 +5728,10 @@ mod tests {
         assert_eq!(Rgba::parse("#0a0b0"), None);
     }
 
-    // Expected: a slot render's request and answer leave out what is unset, read back as written, and a 1.3 claim
-    // keeps its JSON; each kind of slot claim refuses the other kind's request.
+    // Expected: a slot render's request and answer leave out what is unset and read back as written, and a claim the
+    // plugin did not register is refused.
     #[test]
-    fn the_1_4_slot_render_round_trips() {
+    fn slot_renders_round_trip() {
         let changed = Changed { lists: vec!["ses_1".into()], local: true, ..Changed::default() };
         let request = Request::Render {
             claim: 1,
@@ -6052,23 +5748,20 @@ mod tests {
         assert_eq!(serde_json::to_string(&render).unwrap(), json);
         assert_eq!(serde_json::from_str::<Render>(json).unwrap(), render);
         assert_eq!(serde_json::to_string(&Render::Keep).unwrap(), r#"{"type":"keep"}"#);
-        let old =
-            SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), render: false, mount: false, size: false };
-        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
+        let claim = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), mount: false, size: false };
+        assert_eq!(serde_json::to_string(&claim).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
         assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
 
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
-        setup.slot_lines(SlotKind::Append, "home.footer", |_| Vec::new());
         setup.slot(Placement::append("sidebar.content"), |_, input, _| match &input.session_id {
             Some(_) => Render::Hide,
             None => Render::Keep,
         });
         assert_eq!(setup.renders().count(), 1);
         let render = |claim| Request::Render { claim, input: SlotInput::default(), changed: Changed::everything() };
-        assert_eq!(setup.handle(render(1)).unwrap(), serde_json::json!({ "type": "keep" }));
-        assert!(setup.handle(render(0)).is_err());
-        assert!(setup.handle(Request::Slot { claim: 1, session_id: None }).is_err());
+        assert_eq!(setup.handle(render(0)).unwrap(), serde_json::json!({ "type": "keep" }));
+        assert!(setup.handle(render(1)).is_err());
     }
 
     // Expected: a click, a hover color and a struck-through span cross the wire and read back as written, a
@@ -6240,10 +5933,7 @@ mod tests {
             let into = seen.clone();
             setup.on_reply(move |_, id, result| into.borrow_mut().push((id, result)));
         }
-        assert_eq!(
-            (setup.manifest().routes.clone(), setup.manifest().render_routes.clone()),
-            (vec!["page".to_owned()], vec!["page".to_owned()])
-        );
+        assert_eq!(setup.manifest().routes, ["page"]);
         let render =
             Request::RenderRoute { name: "page".into(), changed: Changed { woken: true, ..Changed::default() } };
         assert_eq!(setup.handle(render).unwrap(), serde_json::json!({ "type": "hide" }));
@@ -6261,7 +5951,7 @@ mod tests {
     // dereference either.
     #[test]
     fn the_shims_check_null_pointers() {
-        let request = serde_json::to_vec(&Request::Route { name: "x".to_owned() }).unwrap();
+        let request = serde_json::to_vec(&Request::Wake).unwrap();
         let mut out = Owned::EMPTY;
         // SAFETY: null pointers are what is under test; `out` is freed by the same library.
         unsafe {
@@ -6369,17 +6059,13 @@ mod tests {
         static REQUESTS: std::cell::RefCell<Vec<HostRequest>> = const { std::cell::RefCell::new(Vec::new()) };
     }
 
-    /// A host that records each request and refuses `storage-merge` when `ctx` is non-null, as a host older than it.
+    /// A host that records each request and refuses `storage-merge` when `ctx` is non-null.
     unsafe extern "C" fn record(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: the plugin passes the request for the length of the call.
         let request: HostRequest = serde_json::from_slice(unsafe { request.as_slice() }).unwrap();
         let refused = !ctx.is_null() && matches!(request, HostRequest::StorageMerge { .. });
-        let answer = match &request {
-            HostRequest::StorageGet { .. } => serde_json::json!("{\"sibling\":1}"),
-            _ => serde_json::Value::Null,
-        };
         REQUESTS.with(|requests| requests.borrow_mut().push(request));
-        let bytes = if refused { b"unknown variant".to_vec() } else { serde_json::to_vec(&answer).unwrap() };
+        let bytes = if refused { b"unknown variant".to_vec() } else { b"null".to_vec() };
         // SAFETY: `out` is valid for writes during the call.
         unsafe { *out = Owned::from_vec(bytes) };
         if refused { ERROR } else { OK }
@@ -6391,15 +6077,15 @@ mod tests {
     }
 
     // Expected: `storage_merge` over the C ABI sends only the fields, for the host to set under its storage lock; a
-    // host that does not know the request gets the whole object through `storage-set`, as before.
+    // refusal is logged, and nothing is set in its place.
     #[test]
-    fn storage_merge_sends_the_fields_and_falls_back_on_an_older_host() {
+    fn storage_merge_sends_the_fields() {
         let fields = serde_json::json!({ "open": false }).as_object().cloned().unwrap();
         for ctx in [std::ptr::null_mut(), std::ptr::dangling_mut::<u8>().cast()] {
             let api = HostApi {
                 size: size_of::<HostApi>(),
-                major: 1,
-                minor: 4,
+                major: ABI_MAJOR,
+                minor: 0,
                 ctx,
                 call: Some(record),
                 free: Some(release),
@@ -6418,8 +6104,7 @@ mod tests {
             [
                 merge.clone(),
                 merge,
-                HostRequest::StorageGet { key: "view".into() },
-                HostRequest::StorageSet { key: "view".into(), value: "{\"sibling\":1,\"open\":false}".into() },
+                HostRequest::Log { level: Level::Warn, message: "storage view: unknown variant".into() },
             ]
         );
     }
@@ -6542,10 +6227,10 @@ mod tests {
         assert_eq!(runs.get(), 12);
     }
 
-    // Expected: what 1.5 adds reads back as written and leaves out what is unset, so a 1.4 box, layout and dialog keep
-    // their JSON byte for byte, and 1.4 JSON reads as the 1.5 defaults.
+    // Expected: a box's styling, a layout's heights and margins, and the dialogs read back as written and leave out
+    // what is unset, so a plain box, layout and dialog keep their short JSON, and it reads as the defaults.
     #[test]
-    fn the_1_5_additions_round_trip_and_keep_the_1_4_wire() {
+    fn box_styling_and_dialogs_round_trip() {
         let rows: [(&str, serde_json::Value); 9] = [
             (r#"{"type":"box","children":[]}"#, serde_json::to_value(Node::column(Vec::new())).unwrap()),
             (
@@ -6644,60 +6329,6 @@ mod tests {
         );
     }
 
-    /// A 1.4 host's `call`: it knows no request of 1.5, which it answers with an error, as `serde` refuses an unknown
-    /// tag; it counts the requests it knows.
-    unsafe extern "C" fn host_1_4(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the test passes a live counter and the request's bytes.
-        let (known, request) = unsafe { (&*ctx.cast::<std::sync::atomic::AtomicUsize>(), request.as_slice()) };
-        let text = String::from_utf8_lossy(request);
-        let newer = ["\"composer\"", "\"composer-edit\"", "\"confirm\"", "\"alert\""];
-        let (status, reply) = match newer.iter().any(|tag| text.contains(&format!("\"type\":{tag}"))) {
-            true => (ERROR, b"unsupported host request (host ABI 1.4)".to_vec()),
-            false => {
-                known.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                (OK, b"null".to_vec())
-            }
-        };
-        unsafe { *out = Owned::from_vec(reply) };
-        status
-    }
-
-    unsafe extern "C" fn free_vec(owned: Owned) {
-        drop(unsafe { owned.into_vec() });
-    }
-
-    // Expected: a 1.5 plugin on a 1.4 host gets what that host offers: no composer, and an edit, a confirm and an alert
-    // that do nothing and fail nothing, while the 1.4 requests still go through.
-    #[test]
-    fn a_1_5_plugin_on_a_1_4_host_gets_what_the_host_offers() {
-        let known = std::sync::atomic::AtomicUsize::new(0);
-        let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: 1,
-            minor: 4,
-            ctx: std::ptr::from_ref(&known).cast_mut().cast(),
-            call: Some(host_1_4),
-            free: Some(free_vec),
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(&[]),
-        };
-        let host = HostHandle::new(&api);
-        assert_eq!(host.abi_minor(), 4);
-        assert_eq!(host.composer(), None);
-        host.edit_composer(ComposerEdit::Submit);
-        let action = Action::Command { name: "x.a".into(), input: None };
-        host.dialog(Dialog::Confirm(Confirm::new("T", "M", action.clone())));
-        host.dialog(Dialog::Alert(Alert::new("T", "M")));
-        assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 0);
-        host.dialog(Dialog::Prompt { title: "T".into(), placeholder: None, action });
-        host.toast(Toast::new(Variant::Info, "a"));
-        assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 2);
-    }
-
     /// A text delta of message `msg_1` in `ses_1`.
     fn text_delta(delta: &str) -> V2Event {
         serde_json::from_value(serde_json::json!({
@@ -6709,10 +6340,10 @@ mod tests {
         .unwrap()
     }
 
-    // Expected: what 1.6 adds reads back as written and leaves out what is unset, so a 1.4 span, slot input, panel and
-    // manifest keep their JSON byte for byte.
+    // Expected: the small reads and verbs read back as written and leave out what is unset, so a plain span, slot
+    // input, panel and manifest keep their short JSON.
     #[test]
-    fn the_1_6_additions_round_trip_and_keep_the_older_wire() {
+    fn the_small_reads_and_verbs_round_trip() {
         let rows: [(&str, serde_json::Value); 12] = [
             (r#"{"text":"a"}"#, serde_json::to_value(Span::new("a")).unwrap()),
             (
@@ -6797,21 +6428,16 @@ mod tests {
         assert_eq!(*seen.borrow(), [2]);
     }
 
-    /// A 1.4 host: it decodes a toast and a dialog of a size it knows and answers `null`, logs every request in the
-    /// `Vec` at `ctx`, and answers every other request, and a panel of a size it does not know, with an error.
-    unsafe extern "C" fn host_before_1_6(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
+    /// A host that takes only toasts and dialogs: it answers them `null`, logs every request in the `Vec` at `ctx`, and
+    /// answers every other request with an error.
+    unsafe extern "C" fn toasts_only(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
         // SAFETY: the test passes a live log and the request's bytes.
         let (log, request) = unsafe { (&*ctx.cast::<std::sync::Mutex<Vec<String>>>(), request.as_slice()) };
         let text = String::from_utf8_lossy(request).into_owned();
         let json: serde_json::Value = serde_json::from_slice(request).unwrap();
-        let known = match json["type"].as_str() {
-            Some("toast") => true,
-            Some("dialog") => ["medium", "large"].contains(&json["dialog"]["size"].as_str().unwrap_or("medium")),
-            _ => false,
-        };
-        let (status, reply) = match known {
+        let (status, reply) = match matches!(json["type"].as_str(), Some("toast" | "dialog")) {
             true => (OK, b"null".to_vec()),
-            false => (ERROR, b"unsupported host request (host ABI 1.4)".to_vec()),
+            false => (ERROR, b"unsupported host request".to_vec()),
         };
         log.lock().unwrap().push(text);
         unsafe { *out = Owned::from_vec(reply) };
@@ -6822,17 +6448,17 @@ mod tests {
         drop(unsafe { owned.into_vec() });
     }
 
-    // Expected: a 1.6 plugin on an older host gets what that host offers: every read its default, every verb `false`
-    // or nothing, and an xlarge panel shown large, while the older requests still go through.
+    // Expected: a host that refuses a read or a verb, as a host refuses a request of a later minor, gives the read its
+    // default and the verb `false` or nothing, each asked once, while the requests it takes still go through.
     #[test]
-    fn a_1_6_plugin_on_an_older_host_gets_what_the_host_offers() {
+    fn refused_reads_and_verbs_answer_their_defaults() {
         let log = std::sync::Mutex::new(Vec::<String>::new());
         let api = HostApi {
             size: size_of::<HostApi>(),
-            major: 1,
-            minor: 4,
+            major: ABI_MAJOR,
+            minor: 0,
             ctx: std::ptr::from_ref(&log).cast_mut().cast(),
-            call: Some(host_before_1_6),
+            call: Some(toasts_only),
             free: Some(free_buffer),
             theme_mode: None,
             wake: None,
@@ -6855,46 +6481,15 @@ mod tests {
         host.set_title("t");
         host.install_theme("t", serde_json::json!({}));
         host.toast(Toast::new(Variant::Info, "a"));
-        let panel = |size| Panel {
-            key: "k".into(),
-            size,
-            title: Vec::new(),
-            subtitle: None,
-            body: Node::column(Vec::new()),
-            actions: Vec::new(),
-            binds: Vec::new(),
-            bleed: false,
-            centered: false,
-            bare: false,
-            close: None,
-            height: None,
-        };
-        host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
-        // A panel whose text says `xlarge` is not one (review bigboi-12).
-        host.dialog(Dialog::Panel(Panel { title: vec![Span::new("xlarge")], ..panel(PanelSize::Large) }));
+        let panel = Panel::new("k", Vec::new(), Node::column(Vec::new())).with_size(PanelSize::XLarge);
+        host.dialog(Dialog::Panel(panel));
         let log = std::mem::take(&mut *log.lock().unwrap());
         let shown: Vec<&String> = log.iter().filter(|request| request.contains("\"type\":\"dialog\"")).collect();
-        // Each sent once, the xlarge one as large.
-        assert_eq!(shown.len(), 2, "{log:?}");
-        assert!(shown.iter().all(|shown| shown.contains("\"size\":\"large\"")), "{log:?}");
+        assert_eq!(shown.len(), 1, "{log:?}");
+        assert!(shown[0].contains("\"size\":\"xlarge\""), "{log:?}");
         assert_eq!(log.iter().filter(|request| request.contains("\"type\":\"toast\"")).count(), 1);
         // Every read and verb above asked once, and nothing more.
-        assert_eq!(log.len(), 21, "{log:?}");
-
-        // A 1.6 host gets xlarge, once, also when it refuses the dialog for another reason.
-        let current = HostApi { minor: 6, ..api };
-        let host = HostHandle::new(&current);
-        host.dialog(Dialog::Panel(panel(PanelSize::XLarge)));
-        let log = log_of(&current);
-        assert_eq!(log.len(), 1, "{log:?}");
-        assert!(log[0].contains("\"size\":\"xlarge\""), "{log:?}");
-    }
-
-    /// What `api`'s host logged.
-    fn log_of(api: &HostApi) -> Vec<String> {
-        // SAFETY: the test's `ctx` is a live log.
-        let log = unsafe { &*api.ctx.cast::<std::sync::Mutex<Vec<String>>>() };
-        std::mem::take(&mut *log.lock().unwrap())
+        assert_eq!(log.len(), 20, "{log:?}");
     }
 
     unsafe extern "C" fn sent(_: *mut c_void, _: Bytes, _: Bytes) -> i32 {
@@ -6907,8 +6502,8 @@ mod tests {
         0
     }
 
-    // Expected (reviews carbon-2, carbon-7): a plugin reads the 2.0 entries and the features from a host of major 2 only;
-    // a table of major 1, though as long, offers no link and no features.
+    // Expected (reviews carbon-2, carbon-7): a plugin reads the threads' entries and the features from a host of major 2
+    // only; a table of major 1, though as long, offers no link and no features.
     #[test]
     fn only_a_2_0_host_offers_threads_and_features() {
         let features = br#"["terminal"]"#;

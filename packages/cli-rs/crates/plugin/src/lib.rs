@@ -193,7 +193,7 @@ pub trait Host: 'static {
     fn clear_selection(&self) {
         self.app().clear_selection();
     }
-    /// Runs `program` in the foreground ([`abi::Host::foreground`]) while `alive` holds for the plugin that asked, which
+    /// Runs `program` in the foreground ([`abi::Host::try_foreground`]) while `alive` holds for the plugin that asked, which
     /// the host checks as the program starts, and calls `reply` on the UI thread once with its exit code or the error.
     /// Called outside every plugin callback.
     fn foreground(&self, _program: abi::Foreground, _alive: Box<dyn Fn() -> bool>, reply: Reply) {
@@ -459,10 +459,6 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         if let Err(error) = set_up {
             scope.dispose(&mut api);
             return Err(error);
-        }
-        let manifest = api.manifest();
-        if manifest.routes.len() != manifest.render_routes.len() || !manifest.slots.iter().all(|claim| claim.render) {
-            log::error!("plugin {}: 1.3 routes and slot claims do not run in process", setup.id());
         }
         *scope.replies.borrow_mut() = api.replies().to_vec();
         if !api.wakes().is_empty() {
@@ -1359,10 +1355,6 @@ impl abi::Host for Scoped<'_> {
         self.defer(move |host| host.navigate(&id, &route));
     }
 
-    fn fetch(&self, fetch: abi::Fetch) -> abi::RequestId {
-        self.try_fetch(fetch).unwrap_or(abi::RequestId(0))
-    }
-
     fn try_fetch(&self, fetch: abi::Fetch) -> Result<abi::RequestId, String> {
         self.request(move |host, reply| host.fetch(fetch, reply))
     }
@@ -1452,10 +1444,6 @@ impl abi::Host for Scoped<'_> {
 
     fn clear_selection(&self) {
         self.defer(|host| host.clear_selection());
-    }
-
-    fn foreground(&self, program: abi::Foreground) -> abi::RequestId {
-        self.try_foreground(program).unwrap_or(abi::RequestId(0))
     }
 
     fn try_foreground(&self, program: abi::Foreground) -> Result<abi::RequestId, String> {
@@ -2057,13 +2045,7 @@ impl Setup<'_> {
             abi::v2::Place::Slot(at) => {
                 let path = at.path.clone();
                 self.slot(
-                    slot::placement(&abi::SlotClaim {
-                        kind: at.kind,
-                        path: at.path,
-                        render: true,
-                        mount: false,
-                        size: false,
-                    }),
+                    slot::placement(&abi::SlotClaim { kind: at.kind, path: at.path, mount: false, size: false }),
                     move |host, slot_input| {
                         let mounted = surface::Surface::new(
                             host,

@@ -1,4 +1,4 @@
-//! The sample's prompt footer claim, on the one API (ABI 1.4). Each mount of it fetches `/api/sample/<session>` from
+//! The sample's prompt footer claim, on the one API. Each mount of it fetches `/api/sample/<session>` from
 //! its `on_mount`, and the claim shows the mounts alive, the reply, whether the session pane owns the input (on or off),
 //! and the key of `command.palette.show`. The loader's tests also compile this file into the host and run it in process, so both
 //! paths are proven the same.
@@ -31,7 +31,9 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         mounts.set(mounts.get() + 1);
         let session = input.session_id.clone().unwrap_or_default();
         let fetch = Fetch::default().with_method("GET".to_owned()).with_path(format!("/api/sample/{session}"));
-        fetched.borrow_mut().insert(host.fetch(fetch), session);
+        if let Ok(id) = host.try_fetch(fetch) {
+            fetched.borrow_mut().insert(id, session);
+        }
     });
     setup.on_reply(move |_, id, result| {
         let Some(session) = asked.borrow_mut().remove(&id) else { return };

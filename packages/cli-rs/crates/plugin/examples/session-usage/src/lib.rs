@@ -28,7 +28,7 @@ use config::{Config, Position};
 use opencode_plugin_abi::types::{ModelInfo, SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event};
 use opencode_plugin_abi::{
     Changed, Fetch, Host, LocationRef, Node, Placement, Read, Render, RequestId, SendError, Sender, Setup, Span, Stop,
-    Waker, Wrap, base64, export_plugin,
+    Waker, Wrap, base64, plugin,
 };
 use serde_json::{Value, json};
 use usage::js_round;
@@ -795,7 +795,7 @@ impl Drop for Clock {
     }
 }
 
-export_plugin!("opencode.sidebar.limit", setup);
+plugin!(id = "opencode.sidebar.limit", setup);
 
 #[cfg(test)]
 mod tests {
@@ -828,10 +828,10 @@ mod tests {
         fn attention(&self, _attention: Attention) {}
         fn open_route(&self, _name: &str) {}
         fn navigate(&self, _route: opencode_plugin_abi::Route) {}
-        fn fetch(&self, fetch: Fetch) -> RequestId {
+        fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
             let mut fetches = self.fetches.borrow_mut();
             fetches.push(fetch);
-            RequestId(fetches.len() as u64)
+            Ok(RequestId(fetches.len() as u64))
         }
         fn dialog(&self, _dialog: Dialog) {}
         fn copy(&self, _text: &str, _then: Option<Action>) {}

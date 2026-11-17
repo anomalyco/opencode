@@ -14,15 +14,15 @@
 //! An instance lives while its plugin is active: deactivation, unload and reload destroy it at once, whatever still
 //! holds a claim, route or fence of it, which then draw nothing.
 //!
-//! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake` (ABI 1.3),
-//! which posts through the app's proxy; the host then asks that plugin's mounted claims for their rows again. A wake
-//! that finds the proxy's queue full is delivered once it has room, so the last one is never lost. From ABI 2.0 its
-//! threads `send` messages to its mailbox ([`crate::mailbox`]), which the UI thread hands to the plugin one call each.
+//! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake`, which posts
+//! through the app's proxy; the host then asks that plugin's mounted claims to render again. A wake that finds the
+//! proxy's queue full is delivered once it has room, so the last one is never lost. Its threads `send` messages to its
+//! mailbox ([`crate::mailbox`]), which the UI thread hands to the plugin one call each.
 //!
-//! Versions follow the ABI's rules. The host serves ABI 2.0 to a library that exports [`abi::ENTRY`], and ABI 1.6 to
-//! one that exports only [`abi::ENTRY_V1`], as before. Only a major the host does not serve, a too-short table, a
-//! plugin that requires a newer host minor version, or one that requires a feature the host lacks is refused. Entries
-//! past the plugin's table size are absent.
+//! Versions follow the ABI's rules. The host serves ABI 2.0 to a library that exports [`abi::ENTRY`]. A major the host
+//! does not serve (also ABI 1.x, whose libraries export `opencode_plugin_v1`, decision O-169), a table shorter than
+//! 2.0's, a plugin that requires a newer host minor version, or one that requires a feature the host lacks is refused.
+//! Entries a later minor appends past the plugin's table size are absent.
 //!
 //! What the host takes from a plugin is decoded before anything of the call is applied: a buffer it cannot decode,
 //! or one that breaks the contract, fails the plugin and leaves no effect, as a panic does (4.14, `no-effects`).
@@ -48,8 +48,8 @@ use std::time::Duration;
 
 use opencode_plugin_abi::mail::Message;
 use opencode_plugin_abi::{
-    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Line, Manifest, Owned, PluginApi,
-    PluginApiV1_0, Request, V1_MINOR, received, v2,
+    self as abi, ABI_MAJOR, ABI_MINOR, Bytes, Fenced, HostApi, HostRequest, Manifest, Owned, PluginApi, Request,
+    received, v2,
 };
 use opencode_ui::keymap::TuiCommand;
 use opencode_util::dl;
@@ -58,27 +58,21 @@ use opentui::prelude::*;
 use serde::de::DeserializeOwned;
 
 use super::Backend;
-use crate::activation::{Activation, Drawn, Wake};
+use crate::activation::{Activation, Wake};
 use crate::behave;
 use crate::conformance::{self, Event};
 use crate::mailbox::Mailbox;
-use crate::node::{Fences, MountFn, Scroll, SlotRender, lines_widget, theme_color};
+use crate::node::{Fences, MountFn, SlotRender, theme_color};
 use crate::slot::placement;
 use crate::surface::{self, Viewed, Viewer, Viewing};
-use crate::{Claimed, Definition, ErrorFn, Host, Setup, Undo, defer, fail, next_request, route, tui_command};
+use crate::{Definition, ErrorFn, Host, Setup, Undo, defer, fail, next_request, route, tui_command};
 
 /// The host's minor version of the current major: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
 
-/// The minor a host that serves ABI 1 up to `v1` serves a library of `major`; `None` for a major it does not serve.
-/// The host serves [`V1_MINOR`]; a test stands in for an older host with another.
-fn served(major: u32, v1: u32) -> Option<u32> {
-    match major {
-        ABI_MAJOR => Some(HOST_MINOR),
-        1 => Some(v1),
-        _ => None,
-    }
-}
+/// The entry of ABI 1.x, which no host serves any more (O-169): a library that exports it alone is refused by its
+/// major, with a reason, not as no plugin.
+const ENTRY_V1: &str = "opencode_plugin_v1";
 
 /// What crossed the C ABI on this thread, counted outside any plugin and any mount (4.14, `work`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -127,14 +121,14 @@ pub struct Native;
 pub struct Inspected {
     pub major: u32,
     pub minor: u32,
-    /// The plugin's version from `describe` (ABI 1.1), when its table has it.
+    /// The plugin's version from `describe`, when it names one.
     pub version: Option<String>,
 }
 
 impl Native {
     /// Opens `library` and checks its version without setting it up.
     pub fn inspect(&self, library: &[u8]) -> Result<Inspected, String> {
-        let library = Library::open(library, None, V1_MINOR)?;
+        let library = Library::open(library, None)?;
         let metadata = library.compatible()?;
         Ok(Inspected { major: library.major, minor: library.minor, version: metadata.version })
     }
@@ -154,18 +148,18 @@ impl Backend for Native {
 
     fn load_read(
         &self,
-        host: &Rc<dyn Host>,
+        _host: &Rc<dyn Host>,
         library: &[u8],
         quarantine: Option<&[u8]>,
         source: &Path,
         options: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String> {
-        define(host, Library::open(library, Some((source, quarantine)), V1_MINOR)?, options)
+        define(Library::open(library, Some((source, quarantine)))?, options)
     }
 }
 
 /// The definition of the plugin `library` holds; setup runs on each activation.
-fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
+fn define(library: Library, options: Option<&str>) -> Result<(Definition, ErrorFn), String> {
     let library = Rc::new(library);
     let metadata = library.compatible()?;
     if let Some(version) = &metadata.version {
@@ -173,24 +167,13 @@ fn define(host: &Rc<dyn Host>, library: Library, options: Option<&str>) -> Resul
     }
     let options = options.map(str::to_owned);
     // Setup runs on each activation only, so a disabled plugin starts nothing: loading a library runs its native
-    // initializers, never its setup. A 2.x library names its ID in `describe`, before any `create` (big-boi 6). A 1.x
-    // library without one (ABI 1.0) tells its ID only from setup, so for it alone setup runs once now, and that
-    // instance is destroyed.
-    let id = match metadata.id.filter(|id| !id.is_empty()) {
-        Some(id) => id,
-        None if library.major >= 2 => {
-            let missing = match library.describe {
-                None => "has no `describe`",
-                Some(_) => "names no ID in `describe`",
-            };
-            return Err(format!(
-                "plugin of ABI {}.{} {missing}: a 2.x plugin describes itself with a nonempty \"id\" before it is \
-                 set up; rebuild it with `opencode_plugin_abi::plugin!`, or return the ID from `describe`",
-                library.major, library.minor
-            ));
-        }
-        // That instance only tells the ID: nothing it asks for happens.
-        None => Instance::create(&library, Rc::downgrade(host), "", options.as_deref(), true, None)?.1.id,
+    // initializers, never its setup. A library names its ID in `describe`, before any `create` (big-boi 6).
+    let Some(id) = metadata.id.filter(|id| !id.is_empty()) else {
+        return Err(format!(
+            "plugin of ABI {}.{} names no ID in `describe`: a plugin describes itself with a nonempty \"id\" before it \
+             is set up; rebuild it with `opencode_plugin_abi::plugin!`, or return the ID from `describe`",
+            library.major, library.minor
+        ));
     };
     // The failure of the running instance, a panic, in a cell of each activation's own: a new activation leaves an old
     // one's failure as it was.
@@ -258,30 +241,21 @@ type CreateFn = Rc<dyn Fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -
 struct Library {
     major: u32,
     minor: u32,
-    /// The minor the host serves it, of its major.
-    served: u32,
     create: CreateFn,
     call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
     destroy: Option<unsafe extern "C" fn(*mut c_void)>,
     free: unsafe extern "C" fn(Owned),
-    describe: Option<Rc<dyn Fn(*mut Owned) -> i32>>,
+    describe: Rc<dyn Fn(*mut Owned) -> i32>,
 }
 
 impl Library {
     /// `plugin` through the SDK's own shims, as a library of the current ABI exports them.
     fn carried(plugin: abi::Plugin) -> Self {
         let id = plugin.id;
-        conformance::tap(Event::Open {
-            entry: ABI_MAJOR,
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            requires_minor: 0,
-            served: HOST_MINOR,
-        });
+        conformance::tap(Event::Open { major: ABI_MAJOR, minor: ABI_MINOR, requires_minor: 0, served: HOST_MINOR });
         Self {
             major: ABI_MAJOR,
             minor: ABI_MINOR,
-            served: HOST_MINOR,
             // SAFETY: the host calls it as `PluginApi::create` documents.
             create: Rc::new(move |host, options, instance, out| unsafe {
                 abi::runtime::create(plugin.id, plugin.setup, host, options, instance, out)
@@ -290,15 +264,15 @@ impl Library {
             destroy: Some(abi::runtime::destroy),
             free: abi::runtime::free,
             // SAFETY: the host passes an `out` valid for writes.
-            describe: Some(Rc::new(move |out| unsafe { abi::runtime::describe(id, "", &[], out) })),
+            describe: Rc::new(move |out| unsafe { abi::runtime::describe(id, "", &[], out) }),
         }
     }
 
     /// Opens a library, `bytes` read from the file `source` with its raw quarantine, through a copy, so a new build
-    /// can replace the file: through [`abi::ENTRY`] as ABI 2, else through [`abi::ENTRY_V1`] as ABI 1, for a host that
-    /// serves ABI 1 up to `v1`. On macOS the copy carries the quarantine the bytes were read with, so the system checks
-    /// it as it would the file (review carbon-6, final review big-boi 3); a copy that cannot carry it is not opened.
-    fn open(bytes: &[u8], source: Option<(&Path, Option<&[u8]>)>, v1: u32) -> Result<Self, String> {
+    /// can replace the file, through [`abi::ENTRY`]. On macOS the copy carries the quarantine the bytes were read with,
+    /// so the system checks it as it would the file (review carbon-6, final review big-boi 3); a copy that cannot carry
+    /// it is not opened.
+    fn open(bytes: &[u8], source: Option<(&Path, Option<&[u8]>)>) -> Result<Self, String> {
         let dir = staging()?;
         let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
         let error = |error: std::io::Error| format!("{}: {error}", file.display());
@@ -321,50 +295,48 @@ impl Library {
                 .map_or(error.clone(), |source| error.replace(&*file.to_string_lossy(), &source.to_string_lossy()));
             explain_refusal(&error, cfg!(target_os = "macos"), quarantined, source)
         })?;
-        // SAFETY: both entries have type `EntryFn`, in every plugin of their major version.
-        let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
-            .map(|entry| (entry, ABI_MAJOR))
-            .or_else(|_| unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY_V1) }.map(|entry| (entry, 1)))
-            .map_err(|_| format!("not an opencode-native plugin: no `{}` symbol", abi::ENTRY))?;
+        // SAFETY: the entry has type `EntryFn` in every plugin of ABI 2. The entry of ABI 1 is only looked up, never
+        // called.
+        let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }.map_err(|_| {
+            match unsafe { library.symbol::<abi::EntryFn>(ENTRY_V1) } {
+                Ok(_) => unsupported("1.x"),
+                Err(_) => format!("not an opencode-native plugin: no `{}` symbol", abi::ENTRY),
+            }
+        })?;
         // SAFETY: as above; the table it returns lives as long as the library.
-        let opened = Self::from_table(unsafe { (entry.0)() }, entry.1, v1)?;
+        let opened = Self::from_table(unsafe { entry() })?;
         library.leak();
         Ok(opened)
     }
 
-    /// Checks the table `api` points to, found through the entry of major `entry`, for a host that serves ABI 1 up to
-    /// `v1`, and takes its entries. Nothing past the `size` it declares is read.
-    fn from_table(api: *const PluginApi, entry: u32, v1: u32) -> Result<Self, String> {
-        let symbol = if entry == 1 { abi::ENTRY_V1 } else { abi::ENTRY };
+    /// Checks the table `api` points to, found through [`abi::ENTRY`], and takes its entries. Nothing past the `size`
+    /// it declares is read.
+    fn from_table(api: *const PluginApi) -> Result<Self, String> {
         if api.is_null() {
-            return Err(format!("`{symbol}` returned no table"));
+            return Err(format!("`{}` returned no table", abi::ENTRY));
         }
         if !api.is_aligned() {
             return Err("plugin table is not aligned".to_owned());
         }
         // SAFETY: every table of any version starts with `size`, and `api` is aligned and non-null.
         let size = unsafe { std::ptr::addr_of!((*api).size).read() };
-        if size < offset_of!(PluginApiV1_0, requires_minor) {
+        if size < offset_of!(PluginApi, requires_minor) {
             return Err(format!("plugin table is {size} bytes, shorter than its version header"));
         }
         // SAFETY: `size` covers `major` and `minor`.
         let (major, minor) =
             unsafe { (std::ptr::addr_of!((*api).major).read(), std::ptr::addr_of!((*api).minor).read()) };
-        let Some(host_minor) = served(major, v1).filter(|_| major == entry) else {
-            return Err(format!(
-                "plugin ABI {major}.{minor} is not supported: this opencode-native loads ABI {ABI_MAJOR}.x plugins \
-                 (up to {ABI_MAJOR}.{HOST_MINOR}) and ABI 1.x plugins (up to 1.{v1}); rebuild the plugin \
-                 against opencode-plugin-abi {ABI_MAJOR}"
-            ));
-        };
-        if size < size_of::<PluginApiV1_0>() {
-            return Err(format!("plugin table is {size} bytes, shorter than the ABI {major}.0 core"));
+        if major != ABI_MAJOR {
+            return Err(unsupported(&format!("{major}.{minor}")));
         }
-        // SAFETY: the 1.0 core is within `size`; its callbacks are nullable.
-        let core = unsafe { &*api.cast::<PluginApiV1_0>() };
-        if core.requires_minor > host_minor {
+        if size < size_of::<PluginApi>() {
+            return Err(format!("plugin table is {size} bytes, shorter than the ABI {major}.0 table"));
+        }
+        // SAFETY: the 2.0 table is within `size`; its callbacks are nullable.
+        let core = unsafe { &*api };
+        if core.requires_minor > HOST_MINOR {
             return Err(format!(
-                "plugin needs host ABI {major}.{} or newer, this opencode-native has {major}.{host_minor}; \
+                "plugin needs host ABI {major}.{} or newer, this opencode-native has {major}.{HOST_MINOR}; \
                  update opencode-native",
                 core.requires_minor
             ));
@@ -373,39 +345,31 @@ impl Library {
         let create = core.create.ok_or_else(|| required("create"))?;
         let call = core.call.ok_or_else(|| required("call"))?;
         let free = core.free.ok_or_else(|| required("free"))?;
-        let describe = has::<Option<unsafe extern "C" fn(*mut Owned) -> i32>>(size, offset_of!(PluginApi, describe))
-            // SAFETY: `size` covers the entry.
-            .then(|| unsafe { std::ptr::addr_of!((*api).describe).read() })
-            .flatten();
+        let describe = core.describe.ok_or_else(|| required("describe"))?;
         // SAFETY: the host calls them as `PluginApi::create` and `PluginApi::describe` document.
         let create: CreateFn =
             Rc::new(move |host, options, instance, out| unsafe { create(host, options, instance, out) });
-        let describe =
-            describe.map(|describe| Rc::new(move |out| unsafe { describe(out) }) as Rc<dyn Fn(*mut Owned) -> i32>);
+        let describe: Rc<dyn Fn(*mut Owned) -> i32> = Rc::new(move |out| unsafe { describe(out) });
         let requires_minor = core.requires_minor;
-        conformance::tap(Event::Open { entry, major, minor, requires_minor, served: host_minor });
-        Ok(Self { major, minor, served: host_minor, create, call, destroy: core.destroy, free, describe })
+        conformance::tap(Event::Open { major, minor, requires_minor, served: HOST_MINOR });
+        Ok(Self { major, minor, create, call, destroy: core.destroy, free, describe })
     }
 
-    /// What the plugin says about itself, when it has `describe` (1.1), checked against what this host offers: a 2.x
-    /// library whose `describe` fails or answers what the host cannot read, or that requires a feature the host lacks,
-    /// is refused before any setup. A 1.x library's metadata is a hint, as it always was.
+    /// What the plugin says about itself, checked against what this host offers: a library whose `describe` fails or
+    /// answers what the host cannot read, or that requires a feature the host lacks, is refused before any setup.
     fn compatible(&self) -> Result<abi::Metadata, String> {
-        let Some(describe) = &self.describe else { return Ok(abi::Metadata::default()) };
         let mut out = Owned::EMPTY;
         conformance::tap(Event::Describe);
-        let status = describe(&mut out);
+        let status = (self.describe)(&mut out);
         // SAFETY: `describe` wrote `out`, which goes back to `free`.
         let received = unsafe { received(out, self.free) };
         conformance::tap(Event::Return { status, reply: received.as_deref().map_err(String::as_str) });
-        let metadata = received.and_then(|bytes| match status {
-            abi::OK => serde_json::from_slice::<abi::Metadata>(&bytes).map_err(|error| error.to_string()),
-            _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
-        });
-        if self.major < 2 {
-            return Ok(abi::Metadata { requires: Vec::new(), ..metadata.unwrap_or_default() });
-        }
-        let metadata = metadata.map_err(|error| format!("plugin describe failed: {error}"))?;
+        let metadata = received
+            .and_then(|bytes| match status {
+                abi::OK => serde_json::from_slice::<abi::Metadata>(&bytes).map_err(|error| error.to_string()),
+                _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
+            })
+            .map_err(|error| format!("plugin describe failed: {error}"))?;
         if let Some(feature) = metadata.requires.iter().find(|feature| !abi::FEATURES.contains(&feature.as_str())) {
             return Err(format!(
                 "plugin requires the feature {feature}, which this opencode-native (ABI {ABI_MAJOR}.{HOST_MINOR}) \
@@ -478,9 +442,12 @@ pub fn explain_refusal(error: &str, macos: bool, quarantined: bool, source: Opti
     )
 }
 
-/// Whether a table of `size` bytes holds an entry of type `T` at `offset`.
-fn has<T>(size: usize, offset: usize) -> bool {
-    size >= offset + size_of::<T>()
+/// Why a library of ABI `version` is refused.
+fn unsupported(version: &str) -> String {
+    format!(
+        "plugin ABI {version} is not supported: this opencode-native loads ABI {ABI_MAJOR}.x plugins (up to \
+         {ABI_MAJOR}.{HOST_MINOR}); rebuild the plugin against opencode-plugin-abi {ABI_MAJOR}"
+    )
 }
 
 /// What the host's callbacks see: the plugin's identity, its storage keys, and what the running call asked for:
@@ -495,7 +462,7 @@ pub(crate) struct Ctx {
     staged: crate::Staged,
     /// What it asks for is dropped.
     quiet: bool,
-    /// A render of 1.4 on or a view runs: it may read, and ask for nothing.
+    /// A render or a view runs: it may read, and ask for nothing.
     pub(crate) read_only: bool,
     /// What the calls hold of the input (P2), from the end of setup: setup itself has no mount and no owner.
     pub(crate) owners: Option<Rc<crate::Owners>>,
@@ -597,23 +564,21 @@ struct Instance {
     shared: NonNull<Shared>,
 }
 
-/// The table a library of `major` gets, of `minor`: ABI 1.x's for a 1.x library, which ends before the entries of 2.0,
-/// and the whole 2.0 table for a 2.x one.
-fn host_table(major: u32, minor: u32, ctx: *mut c_void) -> HostApi {
-    let v2 = major >= 2;
+/// The table a library gets: the host's whole table, of [`ABI_MAJOR`].[`HOST_MINOR`].
+fn host_table(ctx: *mut c_void) -> HostApi {
     HostApi {
-        size: if v2 { size_of::<HostApi>() } else { offset_of!(HostApi, send) },
-        major,
-        minor,
+        size: size_of::<HostApi>(),
+        major: ABI_MAJOR,
+        minor: HOST_MINOR,
         ctx,
         call: Some(host_call),
         free: Some(host_free),
         theme_mode: Some(host_theme_mode),
         wake: Some(host_wake),
-        send: v2.then_some(host_send as unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32),
-        report: v2.then_some(host_report as unsafe extern "C" fn(*mut c_void, Bytes)),
-        stopped: v2.then_some(host_stopped as unsafe extern "C" fn(*mut c_void) -> u32),
-        features: if v2 { Bytes::new(features_json()) } else { Bytes::new(&[]) },
+        send: Some(host_send),
+        report: Some(host_report),
+        stopped: Some(host_stopped),
+        features: Bytes::new(features_json()),
     }
 }
 
@@ -682,7 +647,7 @@ impl Instance {
         });
         let ui = std::thread::current().id();
         let shared = NonNull::from(Box::leak(Box::new(Shared { ctx, mail: Mailbox::new(id, wake), ui })));
-        let table = host_table(library.major, library.served, shared.as_ptr().cast());
+        let table = host_table(shared.as_ptr().cast());
         let api = NonNull::from(Box::leak(Box::new(table)));
         // SAFETY: allocated above, and never written.
         let table = unsafe { api.as_ref() };
@@ -730,7 +695,7 @@ impl Instance {
             return Err(text(bytes));
         }
         let instance = Self { library: library.clone(), tap, handle, api, shared };
-        match bytes.and_then(|bytes| manifest(&bytes, library.major, expect)) {
+        match bytes.and_then(|bytes| manifest(&bytes, expect)) {
             Ok(manifest) => {
                 let mut ctx = context.ctx.borrow_mut();
                 ctx.id = manifest.id.clone();
@@ -791,26 +756,15 @@ impl Instance {
     }
 }
 
-/// The manifest `create` answered, checked: its ID, and, for a 1.x library, nothing of 2.0.
-fn manifest(bytes: &[u8], major: u32, expect: Option<&str>) -> Result<Manifest, String> {
-    let mut manifest: Manifest =
+/// The manifest `create` answered, checked: its ID.
+fn manifest(bytes: &[u8], expect: Option<&str>) -> Result<Manifest, String> {
+    let manifest: Manifest =
         serde_json::from_slice(bytes).map_err(|error| format!("setup returned a bad manifest: {error}"))?;
     if manifest.id.is_empty() {
         return Err("setup returned an empty plugin ID".to_owned());
     }
     if let Some(expect) = expect.filter(|expect| *expect != manifest.id) {
         return Err(format!("setup returned plugin ID {}, not {expect}", manifest.id));
-    }
-    let two = !manifest.surfaces.is_empty()
-        || !manifest.claims.is_empty()
-        || manifest.messages
-        || !manifest.layers.is_empty()
-        || !manifest.searches.is_empty()
-        || manifest.plugins;
-    if major < 2 && two {
-        log::warn!("plugin {}: a plugin of ABI {major}.x has none of 2.0's registrations; ignored", manifest.id);
-        (manifest.surfaces, manifest.claims, manifest.messages) = (Vec::new(), Vec::new(), false);
-        (manifest.layers, manifest.searches, manifest.plugins) = (Vec::new(), Vec::new(), false);
     }
     Ok(manifest)
 }
@@ -1249,9 +1203,8 @@ fn owners(ctx: &Ctx) -> Result<Rc<crate::Owners>, String> {
     ctx.owners.clone().ok_or_else(|| "setup has no input: it may open, focus and read nothing of it".to_owned())
 }
 
-/// Whether `request` is a render of 1.4 on, a view, a claim's view, a draw, a layout or a search, which read only, as in
-/// process, where they get the host's reads alone. A 1.3 render is left as it was: its SDK let it
-/// ask for effects, which apply when the host draws its answer.
+/// Whether `request` is a render, a view, a claim's view, a draw, a layout or a search, which read only, as in
+/// process, where they get the host's reads alone.
 fn renders(request: &Request) -> bool {
     matches!(
         request,
@@ -1417,10 +1370,10 @@ impl Guest {
 
     /// [`Guest::request`] whose result `check` must accept. A result the host cannot decode, or that `check` refuses,
     /// fails the plugin as a panic does: what the call asked for is dropped, and the storage it wrote put back. An
-    /// error the plugin returns is an answer: what the call asked for happens, and a 2.x plugin then fails (4.14), where
-    /// a 1.x plugin's error is logged, as it always was. A render or a view may ask for nothing ([`asks`]). A call that
-    /// returned late (an overrun, synthesis 4.4) did return: what it asked for happens, then it fails, which revokes it;
-    /// a cause of the call's own (a refusal, or a 2.x error) names the failure before the overrun.
+    /// error the plugin returns is an answer: what the call asked for happens, and the plugin then fails (4.14). A
+    /// render or a view may ask for nothing ([`renders`]). A call that returned late (an overrun, synthesis 4.4) did
+    /// return: what it asked for happens, then it fails, which revokes it; a cause of the call's own (a refusal, or an
+    /// error) names the failure before the overrun.
     fn checked<T: DeserializeOwned>(
         self: &Rc<Self>,
         export: &'static str,
@@ -1446,7 +1399,7 @@ impl Guest {
         if self.failure.borrow().is_some() {
             return None;
         }
-        let ((result, timed), major) = {
+        let (result, timed) = {
             let instance = self.instance.borrow();
             let instance = instance.as_ref()?;
             if self.busy.replace(true) {
@@ -1467,7 +1420,7 @@ impl Guest {
             });
             instance.shared().ctx.borrow_mut().read_only = false;
             self.busy.set(false);
-            (timed, instance.library.major)
+            timed
         };
         let (effects, undo) = self.taken();
         let bad = |error: String| Failed::Refused(format!("returned a bad result: {error}"));
@@ -1486,13 +1439,7 @@ impl Guest {
             }
             Err(Failed::Returned(error)) => {
                 self.apply(effects);
-                match major {
-                    1 => {
-                        log::warn!("plugin {}: {export}: {error}", self.id);
-                        overrun
-                    }
-                    _ => Some(format!("{export} returned an error: {error}")),
-                }
+                Some(format!("{export} returned an error: {error}"))
             }
             // A result the host refuses, or a panic: nothing of it happens, and its storage writes go back.
             Err(Failed::Refused(error)) => {
@@ -1815,49 +1762,29 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         }) as crate::node::Gone
     });
     for (index, language) in manifest.fences.iter().enumerate() {
-        let (guest, language) = (guest.clone(), language.clone());
-        // A 1.4 plugin renders through `RenderFence`, which names the registration, as the host may have normalized
-        // the language the block has; a 1.3 plugin gets the 1.3 request, with the language it registered.
-        let fences = (manifest.render >= abi::RENDER).then(|| Fences::new(gone.clone()));
+        // A fence renders through `RenderFence`, which names the registration, as the host may have normalized the
+        // language the block has.
+        let (guest, fences) = (guest.clone(), Fences::new(gone.clone()));
         setup.code_block(language.clone(), move |block, theme| {
-            if let Some(fences) = &fences {
-                return fences.render(block, theme, |fence| {
-                    let request = Request::RenderFence(abi::RenderFence { fence, index: Some(index) });
-                    guest.request("render-fence", &request).unwrap_or(Fenced::Code)
-                });
-            }
-            let request = Request::Fence {
-                language: language.clone(),
-                info: block.info.to_owned(),
-                code: block.code.to_owned(),
-                streaming: block.streaming && !block.closed,
-            };
-            let lines = guest.request::<Option<Vec<Line>>>("render-fence", &request).flatten()?;
-            Some(lines_widget(block.app, theme, &lines, None, Scroll::Wheel))
+            fences.render(block, theme, |fence| {
+                let request = Request::RenderFence(abi::RenderFence { fence, index: Some(index) });
+                guest.request("render-fence", &request).unwrap_or(Fenced::Code)
+            })
         });
     }
     for (claim, slot) in manifest.slots.iter().enumerate() {
-        let guest = guest.clone();
-        // A 1.4 claim renders through `Render`; a 1.3 claim gets the 1.3 request.
-        if manifest.render >= abi::RENDER && slot.render {
-            let activation = guest.activation.clone();
-            let mount = slot.mount.then(|| {
-                let guest = guest.clone();
-                Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
-                    guest.handle("on-mount", &Request::Mount { claim, input: input.clone(), mounted });
-                }) as MountFn
-            });
-            let render: SlotRender = Rc::new(move |_, input, changed| {
-                let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
-                guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
-            });
-            setup.claim(placement(slot), render, mount, slot.size, &activation);
-            continue;
-        }
-        setup.slot(placement(slot), move |host, input| {
-            let request = Request::Slot { claim, session_id: input.session_id.clone() };
-            Box::new(Claim::mount(host, &guest, "render-slot", request))
+        let (guest, activation) = (guest.clone(), guest.activation.clone());
+        let mount = slot.mount.then(|| {
+            let guest = guest.clone();
+            Rc::new(move |_: &dyn Host, input: &abi::SlotInput, mounted: bool| {
+                guest.handle("on-mount", &Request::Mount { claim, input: input.clone(), mounted });
+            }) as MountFn
         });
+        let render: SlotRender = Rc::new(move |_, input, changed| {
+            let request = Request::Render { claim, input: input.clone(), changed: changed.clone() };
+            guest.request("render-slot", &request).unwrap_or(abi::Render::Hide)
+        });
+        setup.claim(placement(slot), render, mount, slot.size, &activation);
     }
     for (handler, types) in manifest.events.iter().enumerate() {
         let (called, kinds) = (guest.clone(), types.clone());
@@ -1882,24 +1809,18 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         guest.revoked.borrow_mut().extend(subscription);
     }
     for name in &manifest.routes {
-        let guest = guest.clone();
-        if manifest.render >= abi::RENDER && manifest.render_routes.contains(name) {
-            let (request, activation) = (name.clone(), guest.activation.clone());
-            let mount = manifest.route_mounts.contains(name).then(|| {
-                let (guest, name) = (guest.clone(), name.clone());
-                Rc::new(move |_: &dyn Host, _: &abi::SlotInput, mounted: bool| {
-                    guest.handle("on-route-mount", &Request::RouteMount { name: name.clone(), mounted });
-                }) as MountFn
-            });
-            let render: SlotRender = Rc::new(move |_, _, changed| {
-                let request = Request::RenderRoute { name: request.clone(), changed: changed.clone() };
-                guest.request("render-route", &request).unwrap_or(abi::Render::Hide)
-            });
-            setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
-            continue;
-        }
-        let request = Request::Route { name: name.clone() };
-        setup.route(name.clone(), move |host| Box::new(Claim::mount(host, &guest, "render-route", request.clone())));
+        let (guest, request, activation) = (guest.clone(), name.clone(), guest.activation.clone());
+        let mount = manifest.route_mounts.contains(name).then(|| {
+            let (guest, name) = (guest.clone(), name.clone());
+            Rc::new(move |_: &dyn Host, _: &abi::SlotInput, mounted: bool| {
+                guest.handle("on-route-mount", &Request::RouteMount { name: name.clone(), mounted });
+            }) as MountFn
+        });
+        let render: SlotRender = Rc::new(move |_, _, changed| {
+            let request = Request::RenderRoute { name: request.clone(), changed: changed.clone() };
+            guest.request("render-route", &request).unwrap_or(abi::Render::Hide)
+        });
+        setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
     }
     // P2: the searches, and the layers of setup, each with its own handler, the activation's.
     for name in &manifest.searches {
@@ -2131,64 +2052,15 @@ impl crate::claim::Viewer for RemoteClaim {
     }
 }
 
-/// A mounted slot claim or route: the plugin's rows in a view, empty when it drew nothing or failed. It asks for
-/// them again with each change batch and each wake, and rebuilds the view only when they differ.
-struct Claim {
-    guest: Rc<Guest>,
-    export: &'static str,
-    request: Request,
-    view: View,
-    lines: RefCell<Vec<Line>>,
-}
-
-impl Claim {
-    fn mount(host: &dyn Host, guest: &Rc<Guest>, export: &'static str, request: Request) -> Rc<Self> {
-        let view = View::new(host.app()).shrink(0.0);
-        let claim = Rc::new(Self { guest: guest.clone(), export, request, view, lines: RefCell::default() });
-        guest.activation.track(Rc::downgrade(&claim) as Weak<dyn Drawn>);
-        claim.draw(host);
-        claim
-    }
-
-    fn draw(&self, host: &dyn Host) {
-        let lines = self.guest.request::<Vec<Line>>(self.export, &self.request).unwrap_or_default();
-        if *self.lines.borrow() == lines {
-            return;
-        }
-        self.view.clear();
-        if !lines.is_empty() {
-            self.view.add(&lines_widget(host.app(), &host.theme(), &lines, None, Scroll::None));
-        }
-        self.lines.replace(lines);
-        host.app().request_redraw();
-    }
-}
-
-impl Claimed for Rc<Claim> {
-    fn root(&self) -> View {
-        self.view.clone()
-    }
-
-    fn sync(&self, host: &dyn Host, _: &abi::Changed) {
-        self.draw(host);
-    }
-}
-
-impl Drawn for Claim {
-    fn woken(&self, host: &dyn Host) {
-        self.draw(host);
-    }
-}
-
 /// The definition of a built-in whose `create` is `create`, wired through the byte shims of the C ABI as a loaded
 /// library is, for the tests that prove a built-in on that path (`Loopback`).
 #[doc(hidden)]
 pub fn loopback(host: &Rc<dyn Host>, entries: abi::runtime::Loopback) -> Result<(Definition, ErrorFn), String> {
-    loopback_with(host, entries.create, Some(entries.describe))
+    loopback_with(host, entries.create, entries.describe)
 }
 
-/// [`loopback`] for a plugin that describes itself (`export_plugin!(@loopback_described ..)`), as every library
-/// built against ABI 1.1 or newer does: the host learns its ID without a `setup`.
+/// [`loopback`] for a plugin that describes itself (`export_plugin!(@loopback_described ..)`), as every library does:
+/// the host learns its ID without a `setup`.
 #[doc(hidden)]
 pub fn loopback_described(
     host: &Rc<dyn Host>,
@@ -2197,13 +2069,13 @@ pub fn loopback_described(
         unsafe extern "C" fn(*mut Owned) -> i32,
     ),
 ) -> Result<(Definition, ErrorFn), String> {
-    loopback_with(host, create, Some(describe))
+    loopback_with(host, create, describe)
 }
 
 fn loopback_with(
-    host: &Rc<dyn Host>,
+    _host: &Rc<dyn Host>,
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-    describe: Option<unsafe extern "C" fn(*mut Owned) -> i32>,
+    describe: unsafe extern "C" fn(*mut Owned) -> i32,
 ) -> Result<(Definition, ErrorFn), String> {
     let api = PluginApi {
         size: size_of::<PluginApi>(),
@@ -2214,35 +2086,32 @@ fn loopback_with(
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
-        describe,
+        describe: Some(describe),
     };
     // The shims would silence the process's panic hook on their first `create`, as a plugin's own std does; the process
     // here keeps its own. Taking and setting the hook around each load would race other threads' loads.
     abi::runtime::keep_panic_hook();
-    Library::from_table(&api, ABI_MAJOR, V1_MINOR).and_then(|library| define(host, library, None))
+    Library::from_table(&api).and_then(|library| define(library, None))
 }
 
-/// The definition of the plugin whose table `api` is, found through the entry of major `entry`, as a library's: the
-/// conformance tests' reference and the plugin that answers from a transcript.
+/// The definition of the plugin whose table `api` is, as a library's: the conformance tests' reference and the plugin
+/// that answers from a transcript.
 #[cfg(test)]
 pub(crate) fn from_api(
-    host: &Rc<dyn Host>,
+    _host: &Rc<dyn Host>,
     api: *const PluginApi,
-    entry: u32,
     options: Option<&str>,
 ) -> Result<(Definition, ErrorFn), String> {
     // As in `loopback`: the process keeps its panic hook.
     abi::runtime::keep_panic_hook();
-    Library::from_table(api, entry, V1_MINOR).and_then(|library| define(host, library, options))
+    Library::from_table(api).and_then(|library| define(library, options))
 }
 
-/// What the host makes of the table `api` found through the entry of major `entry`: the minor it serves it and what
-/// it says about itself, or why it refuses it (the version gate).
+/// What the host makes of the table `api`: what the plugin says about itself, or why the host refuses it (the version
+/// gate).
 #[cfg(test)]
-pub(crate) fn gate(api: *const PluginApi, entry: u32) -> Result<(u32, abi::Metadata), String> {
-    let library = Library::from_table(api, entry, V1_MINOR)?;
-    let metadata = library.compatible()?;
-    Ok((library.served, metadata))
+pub(crate) fn gate(api: *const PluginApi) -> Result<abi::Metadata, String> {
+    Library::from_table(api)?.compatible()
 }
 
 /// Plugin `plugin` through the byte shims of the C ABI, as a loaded library runs it: the SDK's own `create`, `call`,
@@ -2261,7 +2130,7 @@ pub fn carried(plugin: abi::Plugin) -> Definition {
             None => {
                 // As in `loopback`: the process keeps its panic hook.
                 abi::runtime::keep_panic_hook();
-                let made = define(setup.host(), Library::carried(plugin), None)?;
+                let made = define(Library::carried(plugin), None)?;
                 defined.borrow_mut().insert(made).0.clone()
             }
         };

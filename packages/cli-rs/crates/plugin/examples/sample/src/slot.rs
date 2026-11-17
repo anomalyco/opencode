@@ -1,4 +1,4 @@
-//! The sample's sidebar claim, on the one API (ABI 1.4). It reads its session, the session's messages and the
+//! The sample's sidebar claim, on the one API. It reads its session, the session's messages and the
 //! selected model, and draws boxes and text. A line counts its clicks: it brightens under the pointer, and a click
 //! dispatches a hidden command with the session ID as its input, which stores the count; the claim reads it back
 //! when the host tells it the storage changed. The loader's tests also compile this file into the host and run it in

@@ -11,26 +11,10 @@
     "describe": {
       "$ref": "#/$defs/Metadata"
     },
-    "describe-v1": {
-      "$ref": "#/$defs/MetadataV1"
-    },
     "create": {
       "$ref": "#/$defs/Manifest"
     },
     "call": {
-      "fence": {
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/Line"
-            }
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
       "render-fence": {
         "$ref": "#/$defs/Fenced"
       },
@@ -39,18 +23,6 @@
       },
       "render-route": {
         "$ref": "#/$defs/Render"
-      },
-      "slot": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Line"
-        }
-      },
-      "route": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Line"
-        }
       },
       "view": {
         "$ref": "#/$defs/ViewReply"
@@ -1330,7 +1302,7 @@
         }
       },
       "required": [],
-      "description": "What changed since a surface's last view, as a 1.x render hears it."
+      "description": "What changed since a render's or a surface's last view."
     },
     "LocationRef": {
       "type": "object",
@@ -2424,40 +2396,7 @@
         }
       },
       "required": ["id"],
-      "description": "What a 2.x library's `describe` answers: its nonempty ID, which the host reads before any `create`."
-    },
-    "MetadataV1": {
-      "type": "object",
-      "properties": {
-        "version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [],
-      "description": "What a 1.x library's `describe` answers; the ID may be left out."
+      "description": "What a library's `describe` answers: its nonempty ID, which the host reads before any `create`."
     },
     "Manifest": {
       "type": "object",
@@ -2495,11 +2434,6 @@
             "type": "string"
           }
         },
-        "render": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 4294967295
-        },
         "events": {
           "type": "array",
           "items": {
@@ -2507,12 +2441,6 @@
             "items": {
               "type": "string"
             }
-          }
-        },
-        "render_routes": {
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         },
         "wake": {
@@ -2654,9 +2582,6 @@
         "path": {
           "type": "string"
         },
-        "render": {
-          "type": "boolean"
-        },
         "mount": {
           "type": "boolean"
         },
@@ -2665,7 +2590,7 @@
         }
       },
       "required": ["kind", "path"],
-      "description": "A 1.x slot claim."
+      "description": "A slot claim, which a `render` draws."
     },
     "SlotKind": {
       "type": "string",
@@ -2903,63 +2828,6 @@
     },
     "Request": {
       "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "language": {
-              "type": "string"
-            },
-            "info": {
-              "type": "string"
-            },
-            "code": {
-              "type": "string"
-            },
-            "streaming": {
-              "type": "boolean"
-            },
-            "type": {
-              "const": "fence"
-            }
-          },
-          "required": ["type", "language", "info", "code", "streaming"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "claim": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 18446744073709551615
-            },
-            "session_id": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "type": {
-              "const": "slot"
-            }
-          },
-          "required": ["type", "claim"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "type": {
-              "const": "route"
-            }
-          },
-          "required": ["type", "name"]
-        },
         {
           "type": "object",
           "properties": {
@@ -5504,7 +5372,7 @@
         }
       },
       "required": ["key", "title", "body"],
-      "description": "A panel dialog of a 1.x node body."
+      "description": "A panel dialog, whose body is a `V1Node`."
     },
     "PanelSize": {
       "type": "string",
@@ -6413,7 +6281,7 @@
           "required": ["type", "label"]
         }
       ],
-      "description": "A node of ABI 1.x, which a render and a dialog body draw."
+      "description": "The node tree a render and a dialog body draw."
     },
     "NodeRect": {
       "type": "object",

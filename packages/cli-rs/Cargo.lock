@@ -891,7 +891,6 @@ dependencies = [
  "opencode-latex",
  "opencode-mermaid",
  "opencode-plugin-abi",
- "opencode-plugin-abi-1-4",
  "opencode-ui",
  "opencode-util",
  "opentui",
@@ -904,15 +903,6 @@ dependencies = [
 
 [[package]]
 name = "opencode-plugin-abi"
-version = "0.1.0"
-dependencies = [
- "opencode-api-types",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "opencode-plugin-abi-1-4"
 version = "0.1.0"
 dependencies = [
  "opencode-api-types",

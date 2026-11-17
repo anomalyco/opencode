@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use opencode_plugin_abi::{ABI_MAJOR, ABI_MINOR, Bytes, HostApi, Owned, PluginApi, V1_MINOR};
+use opencode_plugin_abi::{ABI_MAJOR, ABI_MINOR, Bytes, HostApi, Owned, PluginApi};
 use opencode_ui::theme::ThemeMode;
 use opentui::prelude::Container;
 use serde_json::{Value, json};
@@ -47,14 +47,13 @@ unsafe extern "C" fn reference_describe(out: *mut Owned) -> i32 {
     unsafe { abi::runtime::describe(ID, "1.0.0", &[], out) }
 }
 
-/// The reference's table through the SDK's byte shims, as a library of `major` exports it: 2.0, or 1.x as
-/// `export_plugin!(.., requires_minor = 4)` does.
-fn reference(major: u32) -> PluginApi {
+/// The reference's table through the SDK's byte shims, as a library exports it.
+fn reference() -> PluginApi {
     PluginApi {
         size: size_of::<PluginApi>(),
-        major,
-        minor: if major >= 2 { ABI_MINOR } else { V1_MINOR },
-        requires_minor: if major >= 2 { 0 } else { 4 },
+        major: ABI_MAJOR,
+        minor: ABI_MINOR,
+        requires_minor: 0,
         create: Some(abi::export_plugin!(@loopback_create "conformance", reference::setup)),
         call: Some(abi::runtime::call),
         destroy: Some(abi::runtime::destroy),
@@ -65,34 +64,33 @@ fn reference(major: u32) -> PluginApi {
 
 // The libraries.
 
-/// The reference built as a `cdylib`, as ABI 2.0 or with `v1`; built once per test run.
-fn rust_library(major: u32) -> Vec<u8> {
-    static BUILT: Mutex<Vec<(u32, Vec<u8>)>> = Mutex::new(Vec::new());
+/// The reference built as a `cdylib`; built once per test run.
+fn rust_library() -> Vec<u8> {
+    static BUILT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
     let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((_, library)) = built.iter().find(|(known, _)| *known == major) {
+    if let Some(library) = &*built {
         return library.clone();
     }
-    let target = root().join(format!("../../target/conformance-plugin-v{major}"));
+    let target = root().join("../../target/conformance-plugin-v2");
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
         .args(["build", "--quiet", "--manifest-path"])
         .arg(root().join("examples/conformance/Cargo.toml"))
         .arg("--target-dir")
         .arg(&target)
-        .args(if major >= 2 { &[][..] } else { &["--features", "v1"][..] })
         .status()
         .unwrap();
     assert!(status.success(), "the conformance plugin did not build");
     let name = format!("{}opencode_conformance{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
     let library = std::fs::read(target.join("debug").join(name)).unwrap();
-    built.push((major, library.clone()));
+    *built = Some(library.clone());
     library
 }
 
-/// `examples/conformance/plugin.c` built as ABI 2.0 or 1.x, with symbols hidden, optimized as a binding's author
-/// builds it (which runs the warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an
-/// error; `None` without a C compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
+/// `examples/conformance/plugin.c` built with symbols hidden, optimized as a binding's author builds it (which runs
+/// the warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an error; `None` without a
+/// C compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
 #[cfg(unix)]
-fn c_library(major: u32) -> Option<Vec<u8>> {
+fn c_library() -> Option<Vec<u8>> {
     let dir = opencode_util::temp::tempdir().unwrap();
     let library = dir.path().join("plugin.so");
     let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
@@ -107,7 +105,6 @@ fn c_library(major: u32) -> Option<Vec<u8>> {
             "-Werror",
             "-pedantic",
         ])
-        .args((major < 2).then_some("-DCONFORMANCE_V1"))
         .arg("-I")
         .arg(root().join("../plugin-abi/include"))
         .arg("-o")
@@ -119,26 +116,23 @@ fn c_library(major: u32) -> Option<Vec<u8>> {
         eprintln!("skipped: no C compiler");
         return None;
     };
-    assert!(status.success(), "the C conformance plugin did not build as {major}.x");
+    assert!(status.success(), "the C conformance plugin did not build");
     Some(std::fs::read(library).unwrap())
 }
 
 /// The table a library's bytes export, from a copy of its own that stays loaded.
-fn table(library: &[u8]) -> (*const PluginApi, u32) {
+fn table(library: &[u8]) -> *const PluginApi {
     let dir = opencode_util::temp::tempdir().unwrap();
     let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
     std::fs::write(&file, library).unwrap();
     // SAFETY: a test plugin of this repository.
     let opened = unsafe { opencode_util::dl::Library::open(&file) }.unwrap();
-    // SAFETY: both entries have type `EntryFn`.
-    let (entry, major) = unsafe { opened.symbol::<abi::EntryFn>(abi::ENTRY) }
-        .map(|entry| (entry, 2))
-        .or_else(|_| unsafe { opened.symbol::<abi::EntryFn>(abi::ENTRY_V1) }.map(|entry| (entry, 1)))
-        .unwrap();
+    // SAFETY: the entry has type `EntryFn`.
+    let entry = unsafe { opened.symbol::<abi::EntryFn>(abi::ENTRY) }.unwrap();
     opened.leak();
     std::mem::forget(dir);
     // SAFETY: the table lives as long as the library.
-    (unsafe { entry() }, major)
+    unsafe { entry() }
 }
 
 // The script, run by the host.
@@ -190,7 +184,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                             &*Vec::leak(serde_json::to_vec(features).unwrap_or_else(|_| b"[]".to_vec()))
                         });
                         native::STATED.set(stated);
-                        let loaded = load_plugin(&host, header.library, load, options);
+                        let loaded = load_plugin(&host, load, options);
                         match loaded {
                             Ok((definition, error)) => {
                                 registry.load(&dynamic(&host), definition.external(TARGET, error));
@@ -287,16 +281,14 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
 
 fn load_plugin(
     host: &Rc<TestHost>,
-    major: u32,
     load: &Load<'_>,
     options: Option<&str>,
 ) -> Result<(crate::Definition, crate::ErrorFn), String> {
     match load {
-        Load::Reference => native::from_api(&dynamic(host), &reference(major), major, options),
+        Load::Reference => native::from_api(&dynamic(host), &reference(), options),
         Load::Library(bytes) => Native.load(&dynamic(host), bytes, Path::new("plugin.so"), options),
         Load::Player(transcript, future) => {
-            let (api, entry) = player::start(transcript, *future);
-            native::from_api(&dynamic(host), api, entry, options)
+            native::from_api(&dynamic(host), player::start(transcript, *future), options)
         }
     }
 }
@@ -420,13 +412,9 @@ fn as_future(transcript: &Transcript) -> Vec<Entry> {
         .entries
         .iter()
         .map(|entry| match entry {
-            Entry::Open { entry, major, minor, requires_minor, served } => Entry::Open {
-                entry: *entry,
-                major: *major,
-                minor: minor + 1,
-                requires_minor: *requires_minor,
-                served: *served,
-            },
+            Entry::Open { major, minor, requires_minor, served } => {
+                Entry::Open { major: *major, minor: minor + 1, requires_minor: *requires_minor, served: *served }
+            }
             other => other.clone(),
         })
         .collect()
@@ -463,7 +451,7 @@ fn host_side(transcript: &Transcript, future: bool) -> Result<(), String> {
 #[test]
 fn the_host_replays_every_transcript() {
     for transcript in golden().unwrap() {
-        for future in [false, true].into_iter().filter(|future| !future || transcript.header.library >= 2) {
+        for future in [false, true] {
             if let Err(error) = host_side(&transcript, future) {
                 panic!("{} (a later library: {future}): {error}", transcript.header.transcript);
             }
@@ -471,13 +459,12 @@ fn the_host_replays_every_transcript() {
     }
 }
 
-/// The library side and the host side with a real library: the library replays each transcript of its major, also
-/// against a host of a later minor, and the host with it records each.
-fn both_sides(name: &str, library: &[u8], major: u32) {
-    let (api, entry) = table(library);
-    assert_eq!(entry, major, "{name}");
-    for transcript in golden().unwrap().iter().filter(|transcript| transcript.header.library == major) {
-        for future in [false, true].into_iter().filter(|future| !future || major >= 2) {
+/// The library side and the host side with a real library: the library replays each transcript, also against a host
+/// of a later minor, and the host with it records each.
+fn both_sides(name: &str, library: &[u8]) {
+    let api = table(library);
+    for transcript in golden().unwrap().iter() {
+        for future in [false, true] {
             // SAFETY: the library stays loaded.
             if let Err(error) = unsafe { replay(api, transcript, future) } {
                 panic!("{name}, {} (a later host: {future}): {error}", transcript.header.transcript);
@@ -491,12 +478,10 @@ fn both_sides(name: &str, library: &[u8], major: u32) {
 }
 
 // Expected: the reference built as a `cdylib`, with its own std and allocator, answers and asks what every transcript
-// of its major has, as ABI 2.0 and as 1.x, also against a host of a later minor; and the host loading it records each.
+// has, also against a host of a later minor; and the host loading it records each.
 #[test]
 fn the_reference_library_conforms() {
-    for major in [2, 1] {
-        both_sides(&format!("the Rust library {major}.x"), &rust_library(major), major);
-    }
+    both_sides("the Rust library", &rust_library());
 }
 
 // Expected: the same plugin written in C against `opencode_plugin.h` alone, built with symbols hidden and every
@@ -504,10 +489,8 @@ fn the_reference_library_conforms() {
 #[cfg(unix)]
 #[test]
 fn the_c_library_conforms() {
-    for major in [2, 1] {
-        let Some(library) = c_library(major) else { return };
-        both_sides(&format!("the C library {major}.x"), &library, major);
-    }
+    let Some(library) = c_library() else { return };
+    both_sides("the C library", &library);
 }
 
 // Expected: the linked reference replays on the library side too, so the side a mutant of a transcript's library half
@@ -515,7 +498,7 @@ fn the_c_library_conforms() {
 #[test]
 fn the_linked_reference_replays_every_transcript() {
     for transcript in golden().unwrap() {
-        let api = reference(transcript.header.library);
+        let api = reference();
         for future in [false, true] {
             // SAFETY: the shims are this process's.
             if let Err(error) = unsafe { replay(&api, &transcript, future) } {
@@ -589,7 +572,7 @@ fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
     let host = host();
     let registry = Registry::define(Vec::new(), []);
     native::STATED.set(Some(features));
-    let (definition, error) = load_plugin(&host, 2, load, None).unwrap();
+    let (definition, error) = load_plugin(&host, load, None).unwrap();
     registry.load(&dynamic(&host), definition.external(TARGET, error));
     let theme = host.theme();
     let renderers = registry.code_blocks({
@@ -635,7 +618,7 @@ fn a_library_reads_the_features_it_is_offered_as_json() {
     let escape = [92, b'u', b'0', b'0', b'6', b'6'];
     assert!(cases[1].0.windows(6).any(|window| window == escape), "the test data lost its escape");
     #[cfg(unix)]
-    let c = c_library(2);
+    let c = c_library();
     #[cfg(not(unix))]
     let c: Option<Vec<u8>> = None;
     for (features, drawn) in cases {
@@ -680,7 +663,7 @@ fn a_search_asks_for_nothing() {
     assert_eq!(seen.last().unwrap(), &&json!({ "toasts": [], "status": "Some(Active)" }));
 
     #[cfg(unix)]
-    if let Some(library) = c_library(2) {
+    if let Some(library) = c_library() {
         let host = host();
         let registry = Registry::define(Vec::new(), []);
         let (definition, error) =
@@ -706,9 +689,9 @@ unsafe extern "C" fn answers_ok(_: *mut c_void, _: Bytes, out: *mut Owned) -> i3
 // anything but ERROR; the reference answers ERROR.
 #[test]
 fn a_library_that_takes_an_unknown_request_fails_the_later_host() {
-    let api = PluginApi { call: Some(answers_ok), ..reference(2) };
+    let api = PluginApi { call: Some(answers_ok), ..reference() };
     // SAFETY: the shims are this process's.
-    let (library, accepted) = unsafe { (Opened::new(&api).unwrap(), Opened::new(&reference(2)).unwrap()) };
+    let (library, accepted) = unsafe { (Opened::new(&api).unwrap(), Opened::new(&reference()).unwrap()) };
     let instance = std::ptr::dangling_mut::<c_void>();
     let error = future_request(&library, instance).unwrap_err();
     assert!(error.contains("was answered 0, not ERROR"), "{error}");
@@ -737,7 +720,7 @@ unsafe extern "C" fn minor_only(
     // SAFETY: the host passes a table valid for the call.
     match unsafe { (*host).minor } {
         // SAFETY: as the host calls it.
-        0 => unsafe { (reference(2).create.unwrap())(host, options, instance, out) },
+        0 => unsafe { (reference().create.unwrap())(host, options, instance, out) },
         _ => abi::ERROR,
     }
 }
@@ -751,7 +734,7 @@ unsafe extern "C" fn size_only(
     // SAFETY: the host passes a table valid for the call.
     match unsafe { (*host).size } == size_of::<HostApi>() {
         // SAFETY: as the host calls it.
-        true => unsafe { (reference(2).create.unwrap())(host, options, instance, out) },
+        true => unsafe { (reference().create.unwrap())(host, options, instance, out) },
         false => abi::ERROR,
     }
 }
@@ -764,9 +747,9 @@ fn a_library_that_takes_only_its_own_minor_fails_the_later_host() {
     let transcript =
         golden().unwrap().into_iter().find(|transcript| transcript.header.transcript == "actions").unwrap();
     let strict = [
-        PluginApi { call: Some(strict_call), ..reference(2) },
-        PluginApi { create: Some(minor_only), ..reference(2) },
-        PluginApi { create: Some(size_only), ..reference(2) },
+        PluginApi { call: Some(strict_call), ..reference() },
+        PluginApi { create: Some(minor_only), ..reference() },
+        PluginApi { create: Some(size_only), ..reference() },
     ];
     for (index, api) in strict.iter().enumerate() {
         // SAFETY: the shims are this process's.
@@ -807,9 +790,9 @@ fn changed(value: &Value) -> Value {
 fn mutants(entry: &Entry) -> Vec<(Side, Option<Entry>)> {
     let entry = entry.clone();
     match entry {
-        Entry::Open { entry, major, minor, requires_minor, served } => vec![
-            (Side::Host, Some(Entry::Open { entry, major, minor, requires_minor, served: served + 1 })),
-            (Side::Library, Some(Entry::Open { entry, major, minor: minor + 1, requires_minor, served })),
+        Entry::Open { major, minor, requires_minor, served } => vec![
+            (Side::Host, Some(Entry::Open { major, minor, requires_minor, served: served + 1 })),
+            (Side::Library, Some(Entry::Open { major, minor: minor + 1, requires_minor, served })),
         ],
         Entry::Describe | Entry::Destroy | Entry::Destroyed => vec![(Side::Host, None)],
         Entry::Create { major, minor, features, options } => vec![
@@ -853,7 +836,7 @@ fn mutants(entry: &Entry) -> Vec<(Side, Option<Entry>)> {
 fn a_transcript_changed_without_the_host_fails() {
     let mut lived = Vec::new();
     for transcript in golden().unwrap() {
-        let api = reference(transcript.header.library);
+        let api = reference();
         for (at, entry) in transcript.entries.iter().enumerate() {
             for (side, mutant) in mutants(entry) {
                 let mut changed = transcript.clone();
@@ -916,19 +899,17 @@ mod player {
         later: Option<unsafe extern "C" fn()>,
     }
 
-    /// Starts answering from `transcript`: the table the host takes, as its `Open` entry has it, and the entry it is
-    /// found through. With `future` it is of a later minor.
-    pub fn start(transcript: &Transcript, future: bool) -> (*const PluginApi, u32) {
+    /// Starts answering from `transcript`: the table the host takes, as its `Open` entry has it. With `future` it is of
+    /// a later minor.
+    pub fn start(transcript: &Transcript, future: bool) -> *const PluginApi {
         let entries = transcript.entries.clone();
-        let (entry, major, minor, requires_minor) = entries
+        let (major, minor, requires_minor) = entries
             .iter()
             .find_map(|entry| match entry {
-                Entry::Open { entry, major, minor, requires_minor, .. } => {
-                    Some((*entry, *major, *minor, *requires_minor))
-                }
+                Entry::Open { major, minor, requires_minor, .. } => Some((*major, *minor, *requires_minor)),
                 _ => None,
             })
-            .unwrap_or((ABI_MAJOR, ABI_MAJOR, ABI_MINOR, 0));
+            .unwrap_or((ABI_MAJOR, ABI_MINOR, 0));
         let later = Box::new(Later {
             api: PluginApi {
                 size: if future { size_of::<Later>() } else { size_of::<PluginApi>() },
@@ -948,7 +929,7 @@ mod player {
         let player =
             Player { entries, at: 0, future, host: std::ptr::null(), normal: Normal::default(), failure: None };
         PLAYER.set(Some(player));
-        (api, entry)
+        api
     }
 
     /// Ends the player; what went wrong on its side, such as a request no host knows that was not refused.
@@ -1140,19 +1121,17 @@ mod player {
 
 // The version gate.
 
-/// A table of the version grid: the entry it is found through and its header, its size, and what its `describe`
-/// answers.
+/// A table of the version grid: its header, its size, and what its `describe` answers.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 struct Row {
-    entry: u32,
     major: u32,
     minor: u32,
     requires_minor: u32,
-    /// `full`, `1.0` (the core alone, without `describe`), or `short` (shorter than the header).
+    /// `full`, `cut` (shorter than the 2.0 table, without `describe`), or `short` (shorter than the header).
     size: String,
     /// What `describe` answers: `null` for none, else the metadata's JSON or `"ERROR"`.
     describe: Value,
-    /// What the host makes of it: `{"served": minor, "metadata": ..}` or `{"refused": why}`.
+    /// What the host makes of it: `{"metadata": ..}` or `{"refused": why}`.
     verdict: Value,
 }
 
@@ -1177,13 +1156,13 @@ unsafe extern "C" fn grid_free(owned: Owned) {
     drop(unsafe { owned.into_vec() });
 }
 
-/// The grid: each major the host serves, one below and one above, through either entry; minors at, below and above
-/// the host's; a `requires_minor` the host has and one it lacks; a table cut short; and `describe` answers that are
-/// fine, that fail, that the host cannot read, that require a feature it lacks, and that carry a field it does not know.
+/// The grid: the major the host serves, one below, which is ABI 1.x, two below and one above; minors at, below and
+/// above the host's; a `requires_minor` the host has and one it lacks; a table cut short of 2.0's and one shorter than
+/// its header; and `describe` answers that are fine, missing, that fail, that the host cannot read, that require a
+/// feature it lacks, and that carry a field it does not know.
 fn grid() -> Vec<Row> {
     let mut rows = Vec::new();
-    let row = |entry, major, minor, requires_minor, size: &str, describe: Value| Row {
-        entry,
+    let row = |major, minor, requires_minor, size: &str, describe: Value| Row {
         major,
         minor,
         requires_minor,
@@ -1192,30 +1171,25 @@ fn grid() -> Vec<Row> {
         verdict: Value::Null,
     };
     let fine = json!({ "version": "1.0.0", "id": "grid" });
-    for entry in [1, 2] {
-        for major in [0, 1, 2, 3] {
-            let minors = match major {
-                1 => vec![0, V1_MINOR, V1_MINOR + 1],
-                2 => vec![0, ABI_MINOR + 1],
-                _ => vec![0],
-            };
-            for minor in minors {
-                let served = if major == 2 { ABI_MINOR } else { V1_MINOR };
-                for requires in [0, served, served + 1] {
-                    rows.push(row(entry, major, minor, requires, "full", fine.clone()));
-                }
+    for major in [0, 1, 2, 3] {
+        let minors = match major {
+            1 => vec![0, 6],
+            2 => vec![0, ABI_MINOR + 1],
+            _ => vec![0],
+        };
+        for minor in minors {
+            for requires in [0, ABI_MINOR, ABI_MINOR + 1] {
+                rows.push(row(major, minor, requires, "full", fine.clone()));
             }
         }
     }
-    for (entry, major) in [(1, 1), (2, 2)] {
-        rows.push(row(entry, major, 0, 0, "1.0", Value::Null));
-        rows.push(row(entry, major, 0, 0, "short", Value::Null));
-        rows.push(row(entry, major, 0, 0, "full", Value::Null));
-        rows.push(row(entry, major, 0, 0, "full", json!("ERROR")));
-        rows.push(row(entry, major, 0, 0, "full", json!("{\"version\":2}")));
-        rows.push(row(entry, major, 0, 0, "full", json!({ "id": "grid", "requires": ["terminal"] })));
-        rows.push(row(entry, major, 0, 0, "full", json!({ "id": "grid", "x-future": [1, 2] })));
-    }
+    rows.push(row(ABI_MAJOR, 0, 0, "cut", fine.clone()));
+    rows.push(row(ABI_MAJOR, 0, 0, "short", Value::Null));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", Value::Null));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!("ERROR")));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!("{\"version\":2}")));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "id": "grid", "requires": ["terminal"] })));
+    rows.push(row(ABI_MAJOR, 0, 0, "full", json!({ "id": "grid", "x-future": [1, 2] })));
     rows
 }
 
@@ -1228,8 +1202,8 @@ fn verdict(row: &Row) -> Value {
         abi::ERROR
     }
     let size = match row.size.as_str() {
-        "1.0" => size_of::<abi::PluginApiV1_0>(),
-        "short" => std::mem::offset_of!(abi::PluginApiV1_0, requires_minor),
+        "cut" => std::mem::offset_of!(PluginApi, describe),
+        "short" => std::mem::offset_of!(PluginApi, requires_minor),
         _ => size_of::<PluginApi>(),
     };
     let api = PluginApi {
@@ -1244,42 +1218,33 @@ fn verdict(row: &Row) -> Value {
         describe: (!row.describe.is_null()).then_some(grid_describe as unsafe extern "C" fn(*mut Owned) -> i32),
     };
     DESCRIBED.set(row.describe.clone());
-    match native::gate(&api, row.entry) {
-        Ok((served, metadata)) => json!({ "served": served, "metadata": metadata }),
+    match native::gate(&api) {
+        Ok(metadata) => json!({ "metadata": metadata }),
         Err(error) => json!({ "refused": error }),
     }
 }
 
-/// The rule, written from the header and not from the loader: whether the host takes `row`, and the minor it serves.
-fn rule(row: &Row) -> Option<u32> {
-    let served = match row.major {
-        1 => V1_MINOR,
-        2 => ABI_MINOR,
-        _ => return None,
-    };
-    let header = row.size != "short";
-    let described = match (row.major, &row.describe) {
-        (_, Value::Null) | (1, _) => true,
-        (_, Value::String(text)) => serde_json::from_str::<abi::Metadata>(text).is_ok(),
-        (_, value) => serde_json::from_value::<abi::Metadata>(value.clone())
+/// The rule, written from the header and not from the loader: whether the host takes `row`.
+fn rule(row: &Row) -> bool {
+    let described = match &row.describe {
+        Value::Null => false,
+        Value::String(text) => serde_json::from_str::<abi::Metadata>(text).is_ok(),
+        value => serde_json::from_value::<abi::Metadata>(value.clone())
             .is_ok_and(|metadata| metadata.requires.iter().all(|feature| abi::FEATURES.contains(&feature.as_str()))),
     };
-    // A table cut to the 1.0 core has no `describe`, which the host then does not call.
-    let described = described || row.size == "1.0";
-    (row.entry == row.major && header && row.requires_minor <= served && described).then_some(served)
+    row.major == ABI_MAJOR && row.size == "full" && row.requires_minor < ABI_MINOR + 1 && described
 }
 
-// Expected: the version gate is exact. Each table of the grid is taken, with the minor of its major the host serves, or
-// refused, with the words of the golden rows, and the verdict follows the rule of the header: the entry names the
-// major, the major is one the host serves, the table covers its header, `requires_minor` is at most the minor served,
-// and a 2.x `describe` answers metadata the host reads and requires no feature it lacks. A minor above the host's is
-// taken; a field the host does not know is ignored. `CONFORMANCE_WRITE=1` writes the rows again.
+// Expected: the version gate is exact. Each table of the grid is taken or refused, with the words of the golden rows,
+// and the verdict follows the rule of the header: the major is the one the host serves (1.x is refused as any other,
+// O-169), the table covers 2.0's, `requires_minor` is at most the host's minor, and `describe` answers metadata the
+// host reads and requires no feature it lacks. A minor above the host's is taken; a field the host does not know is
+// ignored. `CONFORMANCE_WRITE=1` writes the rows again.
 #[test]
 fn the_version_gate_is_exact() {
     let rows: Vec<Row> = grid().into_iter().map(|row| Row { verdict: verdict(&row), ..row }).collect();
     for row in &rows {
-        let served = row.verdict.get("served").and_then(Value::as_u64).map(|served| served as u32);
-        assert_eq!(served, rule(row), "{row:?}");
+        assert_eq!(row.verdict.get("metadata").is_some(), rule(row), "{row:?}");
     }
     let text: String = rows.iter().map(|row| serde_json::to_string(row).unwrap() + "\n").collect();
     let file = root().join("conformance/versions.jsonl");
@@ -1311,10 +1276,10 @@ fn breaks(events: &[Event<'_>]) -> bool {
 }
 
 // Expected: the protocol machine takes a run that keeps the header's rules, and refuses each kind of break: a call
-// inside a call, a host request outside one, a request of 2.0 to a 1.x library, a message to a plugin without a
-// handler, a view of a surface it does not have or of a mount that ended, a call after a panic or a 2.x error or a
-// handler reply that is not `null`, a destroy of a failed instance or twice, a render granted an effect, the host
-// panicking, and a request no contract names.
+// inside a call, a host request outside one, a message to a plugin without a handler, a view of a surface it does not
+// have or of a mount that ended, a call after a panic or an error or a handler reply that is not `null`, a destroy of
+// a failed instance or twice, a render granted an effect, the host panicking, and a request no contract names, also
+// one of ABI 1.3 (O-169).
 #[test]
 fn the_protocol_machine_refuses_what_the_header_forbids() {
     let call = |request: &'static str| Event::Call { instance: 1, request: request.as_bytes() };
@@ -1377,7 +1342,7 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
             vec![call(command), Event::Return { status: abi::PANIC, reply: Ok(b"boom") }, call(command)],
         ),
         (
-            "a call after a 2.x error",
+            "a call after an error",
             vec![call(command), Event::Return { status: abi::ERROR, reply: Ok(b"no") }, call(command)],
         ),
         ("a call after a handler's reply that is not null", vec![call(command), ok("true"), call(command)]),
@@ -1400,6 +1365,7 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
             vec![call(command), Event::Host { request: br#"{"type":"route"}"#, status: abi::PANIC, reply: b"boom" }],
         ),
         ("a request no contract names", vec![call(r#"{"type":"teleport"}"#)]),
+        ("a request of ABI 1.3, which 2.0 does not name", vec![call(r#"{"type":"slot","claim":0}"#)]),
         (
             "a host request no contract names, answered",
             vec![call(command), Event::Host { request: br#"{"type":"teleport"}"#, status: abi::OK, reply: b"null" }],
@@ -1410,17 +1376,6 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
         assert!(breaks(&events), "not refused: {name}");
     }
 
-    // A 1.x instance gets nothing of 2.0, and a plugin without a message handler no message.
-    let mut protocol = Protocol::default();
-    protocol.event(&Event::Create { instance: 2, major: 1, minor: 6, features: b"", options: b"" });
-    protocol.event(&Event::Return { status: abi::OK, reply: Ok(MANIFEST.as_bytes()) });
-    protocol.event(&Event::Call { instance: 2, request: view.as_bytes() });
-    assert!(protocol.broken().is_some(), "a 1.x library got a view");
-    let mut protocol = Protocol::default();
-    protocol.event(&Event::Create { instance: 2, major: 1, minor: 6, features: b"", options: b"" });
-    protocol.event(&Event::Return { status: abi::OK, reply: Ok(MANIFEST.as_bytes()) });
-    protocol.event(&Event::Call { instance: 2, request: unmount.as_bytes() });
-    assert!(protocol.broken().is_some(), "a 1.x library got an unmount");
     // `describe` runs before any instance, and asks the host nothing.
     let mut protocol = Protocol::default();
     protocol.event(&Event::Describe);

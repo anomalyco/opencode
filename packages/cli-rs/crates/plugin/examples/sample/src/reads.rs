@@ -1,4 +1,4 @@
-//! The small reads and verbs of ABI 1.6 (P0b): a `home.footer` claim that shows its own size and what it reads, a
+//! The small reads and verbs (P0b): a `home.footer` claim that shows its own size and what it reads, a
 //! command that asks for every verb and toasts what each answered, a handler of the streaming deltas, and the reply
 //! of a program in the foreground. The loader's tests run it in process and from the library and compare the two.
 
@@ -41,7 +41,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             host.clear_selection();
             host.set_title("sample title");
             host.install_theme("sample", json!({ "theme": {} }));
-            program.set(Some(host.foreground(Foreground::new("true").with_args(vec!["a".to_owned()]))));
+            program.set(host.try_foreground(Foreground::new("true").with_args(vec!["a".to_owned()])).ok());
             let answers: Vec<String> = answers.iter().map(bool::to_string).collect();
             host.toast(Toast::new(Variant::Info, format!("sample verbs: {}", answers.join(" "))));
             host.dialog(Dialog::Panel(

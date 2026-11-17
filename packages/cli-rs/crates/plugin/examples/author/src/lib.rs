@@ -3,8 +3,7 @@
 //! `cargo tree` has no OpenTUI and no crate of the TUI (`crates/plugin-abi/tests/sdk.rs`).
 
 use opencode_plugin_abi::{
-    Changed, Click, Command, Fence, Fenced, Host, Node, Placement, Read, Render, Setup, Span, Toast, Variant,
-    export_plugin,
+    Changed, Click, Command, Fence, Fenced, Host, Node, Placement, Read, Render, Setup, Span, Toast, Variant, plugin,
 };
 
 const COUNT: &str = "count";
@@ -49,4 +48,4 @@ fn shout(fence: &Fence) -> Fenced {
     Fenced::Lines { lines, fg: None, drag: false }
 }
 
-export_plugin!("example.author", setup);
+plugin!(id = "example.author", setup);

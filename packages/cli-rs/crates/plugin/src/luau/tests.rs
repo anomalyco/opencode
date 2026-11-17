@@ -790,9 +790,8 @@ impl abi::Host for Nop {
     fn attention(&self, _: abi::Attention) {}
     fn open_route(&self, _: &str) {}
     fn navigate(&self, _: abi::Route) {}
-    #[allow(deprecated)]
-    fn fetch(&self, _: abi::Fetch) -> abi::RequestId {
-        abi::RequestId(0)
+    fn try_fetch(&self, _: abi::Fetch) -> Result<abi::RequestId, String> {
+        Err("no server".to_owned())
     }
     fn dialog(&self, _: abi::Dialog) {}
     fn copy(&self, _: &str, _: Option<abi::Action>) {}

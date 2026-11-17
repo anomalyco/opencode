@@ -50,8 +50,8 @@ pub const SCRIPTS: &str = include_str!("../conformance/scripts.json");
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Entry {
-    /// The host took the library's table: the entry it found (1 or 2), the table's version, and the minor it serves.
-    Open { entry: u32, major: u32, minor: u32, requires_minor: u32, served: u32 },
+    /// The host took the library's table: the table's version, and the minor the host serves.
+    Open { major: u32, minor: u32, requires_minor: u32, served: u32 },
     /// The host calls `describe`.
     Describe,
     /// The host calls `create` with a host table of `major.minor` and `features`, and `options`.
@@ -100,8 +100,6 @@ impl Entry {
 pub struct Header {
     pub transcript: String,
     pub about: String,
-    /// The major of the library: 2, or 1 for a library through `opencode_plugin_v1`.
-    pub library: u32,
     pub script: Vec<Step>,
 }
 
@@ -233,7 +231,6 @@ pub fn golden() -> Result<Vec<Transcript>, String> {
 #[derive(Clone, Copy, Debug)]
 pub enum Event<'a> {
     Open {
-        entry: u32,
         major: u32,
         minor: u32,
         requires_minor: u32,
@@ -453,7 +450,7 @@ pub enum Kind {
     Layout,
     /// What a renderer claim's view returns (Pr): a tree as a view's, or none.
     Claim,
-    /// Anything else: a handler's `null`, or a 1.x render's rows, as JSON.
+    /// Anything else, such as a handler's `null`, as JSON.
     Raw,
 }
 
@@ -532,13 +529,9 @@ pub struct Recorder {
 impl Recorder {
     pub fn event(&mut self, event: &Event<'_>) {
         let entry = match event {
-            Event::Open { entry, major, minor, requires_minor, served } => Entry::Open {
-                entry: *entry,
-                major: *major,
-                minor: *minor,
-                requires_minor: *requires_minor,
-                served: *served,
-            },
+            Event::Open { major, minor, requires_minor, served } => {
+                Entry::Open { major: *major, minor: *minor, requires_minor: *requires_minor, served: *served }
+            }
             Event::Describe => {
                 self.open.push(Kind::Describe);
                 Entry::Describe
@@ -632,14 +625,14 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 ///   with `PANIC`, and `describe` asks for nothing.
 /// - An instance is called only between a `create` that returned `OK` and its `destroy`, which comes once; an instance
 ///   whose `create` failed is never destroyed.
-/// - After a call that panicked, a 2.x error, a reply the host cannot read (a handler's that is not `null`, a view's
-///   that is no tree, a buffer refused unread), the instance is called no more, not even destroyed.
-/// - A 1.x instance gets no request of 2.0; a message only an instance whose manifest takes messages; a view only of a
+/// - After a call that panicked, an error, a reply the host cannot read (a handler's that is not `null`, a view's that
+///   is no tree, a buffer refused unread), the instance is called no more, not even destroyed.
+/// - A message goes only to an instance whose manifest takes messages; a view only of a
 ///   surface the manifest lists, and of no mount that ended; a draw or a layout only of a surface that declares one;
 ///   input only to a surface with a handler or a layer of the manifest; a claim's view and a search only of what the
 ///   manifest declares; a change of the plugin list (P6b) only to an instance whose manifest hears it.
-/// - A render of 1.4 on, a view, a claim's view, a draw, a layout or a search reads only: every request of it that asks for something is answered
-///   `ERROR`. A 1.3 render may ask.
+/// - A render, a view, a claim's view, a draw, a layout or a search reads only: every request of it that asks for
+///   something is answered `ERROR`.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).
 #[derive(Default)]
 pub struct Protocol {
@@ -649,9 +642,8 @@ pub struct Protocol {
 }
 
 struct Instance {
-    major: u32,
     state: State,
-    /// What the manifest declares of 2.0: none of it for a 1.x instance, whose 2.0 the host ignores.
+    /// What the manifest declares.
     manifest: abi::Manifest,
     ended: Vec<u64>,
 }
@@ -757,11 +749,8 @@ pub const READS: &[&str] = &[
     "plugins",
 ];
 
-/// The requests of the host, by their `type`: those of 1.x, and those 2.0 adds.
-const REQUESTS_V1: &[&str] = &[
-    "fence",
-    "slot",
-    "route",
+/// The requests of the host, by their `type`.
+const REQUESTS: &[&str] = &[
     "command",
     "render-fence",
     "render",
@@ -773,8 +762,16 @@ const REQUESTS_V1: &[&str] = &[
     "route-mount",
     "fence-gone",
     "deltas",
+    "view",
+    "draw",
+    "unmount",
+    "message",
+    "layout",
+    "claim",
+    "input",
+    "search",
+    "plugins",
 ];
-const REQUESTS_V2: &[&str] = &["view", "draw", "unmount", "message", "layout", "claim", "input", "search", "plugins"];
 
 /// The requests that run handlers, whose reply is `null`.
 const HANDLERS: &[&str] = &[
@@ -829,26 +826,18 @@ impl Protocol {
         match event {
             Event::Open { .. } => {}
             Event::Describe => self.start(None, Call::Describe)?,
-            Event::Create { instance, major, .. } => {
+            Event::Create { instance, .. } => {
                 self.start(Some(*instance), Call::Create)?;
-                let created = Instance {
-                    major: *major,
-                    state: State::Creating,
-                    manifest: abi::Manifest::default(),
-                    ended: Vec::new(),
-                };
+                let created =
+                    Instance { state: State::Creating, manifest: abi::Manifest::default(), ended: Vec::new() };
                 self.instances.insert(*instance, created);
             }
             Event::Call { instance, request } => {
                 let request: Value = serde_json::from_slice(request).map_err(|_| "a request that is not JSON")?;
                 let kind = request.get("type").and_then(Value::as_str).unwrap_or_default().to_owned();
                 let known = self.live(*instance)?;
-                let v2 = REQUESTS_V2.contains(&kind.as_str());
-                if !REQUESTS_V1.contains(&kind.as_str()) && !v2 {
+                if !REQUESTS.contains(&kind.as_str()) {
                     return Err(format!("a request the contract does not name: {kind}"));
-                }
-                if v2 && known.major < 2 {
-                    return Err(format!("a request of 2.0 to a library of {}.x: {kind}", known.major));
                 }
                 let manifest = &known.manifest;
                 if kind == "message" && !manifest.messages {
@@ -919,9 +908,7 @@ impl Protocol {
                         match (*status, manifest) {
                             (abi::OK, Some(manifest)) => {
                                 instance.state = State::Live;
-                                if instance.major >= 2 {
-                                    instance.manifest = manifest;
-                                }
+                                instance.manifest = manifest;
                             }
                             (abi::OK, None) => instance.state = State::Refused,
                             _ => instance.state = State::Dead,
@@ -943,7 +930,7 @@ impl Protocol {
                             Ok(_) => true,
                             Err(_) => false,
                         };
-                        let failed = *status == abi::PANIC || *status == abi::ERROR && instance.major >= 2;
+                        let failed = *status == abi::PANIC || *status == abi::ERROR;
                         if failed || !readable {
                             instance.state = State::Dead;
                         }
@@ -1168,7 +1155,7 @@ struct Opened {
     call: unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32,
     destroy: Option<unsafe extern "C" fn(*mut c_void)>,
     free: unsafe extern "C" fn(Owned),
-    describe: Option<unsafe extern "C" fn(*mut Owned) -> i32>,
+    describe: unsafe extern "C" fn(*mut Owned) -> i32,
 }
 
 impl Opened {
@@ -1182,15 +1169,11 @@ impl Opened {
         }
         // SAFETY: as documented; nothing past `size` is read.
         let size = unsafe { std::ptr::addr_of!((*api).size).read() };
-        if size < size_of::<abi::PluginApiV1_0>() {
-            return Err(format!("the table is {size} bytes, shorter than the 1.0 core"));
+        if size < size_of::<PluginApi>() {
+            return Err(format!("the table is {size} bytes, shorter than the 2.0 table"));
         }
-        // SAFETY: `size` covers the core.
-        let core = unsafe { &*api.cast::<abi::PluginApiV1_0>() };
-        let describe = (size >= std::mem::offset_of!(PluginApi, describe) + size_of::<usize>())
-            // SAFETY: `size` covers the entry.
-            .then(|| unsafe { std::ptr::addr_of!((*api).describe).read() })
-            .flatten();
+        // SAFETY: `size` covers the 2.0 table.
+        let core = unsafe { &*api };
         let missing = |name: &str| format!("the table has a null `{name}`");
         Ok(Self {
             major: core.major,
@@ -1200,7 +1183,7 @@ impl Opened {
             call: core.call.ok_or_else(|| missing("call"))?,
             destroy: core.destroy,
             free: core.free.ok_or_else(|| missing("free"))?,
-            describe,
+            describe: core.describe.ok_or_else(|| missing("describe"))?,
         })
     }
 
@@ -1273,11 +1256,8 @@ pub unsafe fn replay(api: *const PluginApi, transcript: &Transcript, future: boo
                     )),
                 }
             }
-            Entry::Describe => match library.describe {
-                // SAFETY: `out` is valid for writes.
-                Some(describe) => call("describe", &mut |out| unsafe { describe(out) }, Kind::Describe),
-                None => Err(format!("entry {at}: the library has no describe")),
-            },
+            // SAFETY: `out` is valid for writes.
+            Entry::Describe => call("describe", &mut |out| unsafe { (library.describe)(out) }, Kind::Describe),
             Entry::Create { major, minor, features: listed, options } => {
                 // A later host has every feature the transcript's host stated, and one no library knows.
                 let listed = match (future, listed) {
@@ -1292,7 +1272,7 @@ pub unsafe fn replay(api: *const PluginApi, transcript: &Transcript, future: boo
                     Value::Null => Vec::new(),
                     listed => serde_json::to_vec(&listed).unwrap_or_default(),
                 });
-                let mut later = Box::new(Later {
+                let later = Box::new(Later {
                     api: HostApi {
                         size: if future { size_of::<Later>() } else { size_of::<HostApi>() },
                         major,
@@ -1302,17 +1282,13 @@ pub unsafe fn replay(api: *const PluginApi, transcript: &Transcript, future: boo
                         free: Some(fake_free),
                         theme_mode: Some(fake_theme_mode),
                         wake: Some(fake_wake),
-                        send: (major >= 2)
-                            .then_some(fake_send as unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32),
-                        report: (major >= 2).then_some(fake_report as unsafe extern "C" fn(*mut c_void, Bytes)),
-                        stopped: (major >= 2).then_some(fake_stopped as unsafe extern "C" fn(*mut c_void) -> u32),
+                        send: Some(fake_send),
+                        report: Some(fake_report),
+                        stopped: Some(fake_stopped),
                         features: Bytes::new(features.last().map_or(&[][..], Vec::as_slice)),
                     },
                     later: None,
                 });
-                if major < 2 {
-                    later.api.size = std::mem::offset_of!(HostApi, send);
-                }
                 let host: *const HostApi = &later.api;
                 tables.push(later);
                 let mut created = std::ptr::null_mut();
@@ -1400,23 +1376,20 @@ pub struct Outcome {
     pub result: Result<(), String>,
 }
 
-/// Replays every golden transcript of the library's major against the library at `path`, also as a host of a later
-/// minor for a 2.x library: `plugin test --conformance`. A library passes when it is the conformance plugin, in any
-/// language (`examples/conformance`).
+/// Replays every golden transcript against the library at `path`, also as a host of a later minor: `plugin test
+/// --conformance`. A library passes when it is the conformance plugin, in any language (`examples/conformance`).
 pub fn check_library(path: &Path) -> Result<Vec<Outcome>, String> {
     // SAFETY: loading runs the library's initializers; a plugin is code the user chose to run.
     let library = unsafe { opencode_util::dl::Library::open(path) }.map_err(|error| error.to_string())?;
-    // SAFETY: both entries have type `EntryFn`.
-    let (entry, major) = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
-        .map(|entry| (entry, 2))
-        .or_else(|_| unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY_V1) }.map(|entry| (entry, 1)))
+    // SAFETY: the entry has type `EntryFn`.
+    let entry = unsafe { library.symbol::<abi::EntryFn>(abi::ENTRY) }
         .map_err(|_| format!("not an opencode-native plugin: no `{}` symbol", abi::ENTRY))?;
     // SAFETY: as above; the table lives as long as the library, which stays loaded.
     let api = unsafe { entry() };
     library.leak();
     let mut outcomes = Vec::new();
-    for transcript in golden()?.iter().filter(|transcript| transcript.header.library == major) {
-        for future in [false, true].into_iter().filter(|future| !future || major >= 2) {
+    for transcript in golden()?.iter() {
+        for future in [false, true] {
             // SAFETY: the library stays loaded.
             let result = unsafe { replay(api, transcript, future) };
             outcomes.push(Outcome { transcript: transcript.header.transcript.clone(), future, result });

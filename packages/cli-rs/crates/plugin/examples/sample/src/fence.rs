@@ -1,4 +1,4 @@
-//! The sample's code fences, on the one API (ABI 1.4). The loader's tests also compile this file into the host and
+//! The sample's code fences, on the one API. The loader's tests also compile this file into the host and
 //! run it in process, so the same fence is proven on both paths. `super::VERSION` is the build's version text.
 
 use std::cell::Cell;
