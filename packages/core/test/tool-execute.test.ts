@@ -612,7 +612,8 @@ describe("fs", () => {
         try { fs.cpSync("src", "nope") } catch (e) { needsRecursive = e.code }
         return [fs.globSync("copy/**/*.ts").sort(), fs.readFileSync("one.ts", "utf8"), needsRecursive,
           fs.globSync("src/*.ts"), fs.globSync("src/**/*", { exclude: ["**/*.md"] }).sort(),
-          fs.globSync("src/a.ts", { withFileTypes: true }).map((d) => [d.name, d.isFile()])]`,
+          fs.globSync("src/a.ts", { withFileTypes: true }).map((d) => [d.name, d.isFile()]),
+          fs.globSync("src/*/b.ts"), fs.globSync(path.join(${JSON.stringify(tmp.path)}, "src", "*/*.md"))]`,
       ),
     ).toEqual([
       ["copy/a.ts", "copy/nested/b.ts"],
@@ -621,6 +622,8 @@ describe("fs", () => {
       ["src/a.ts"],
       ["src/a.ts", "src/nested", "src/nested/b.ts"],
       [["a.ts", true]],
+      ["src/nested/b.ts"],
+      [path.join(tmp.path, "src", "nested", "c.md")],
     ])
   })
 

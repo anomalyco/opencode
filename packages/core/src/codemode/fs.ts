@@ -46,7 +46,7 @@ const ops = {
   }),
   appendFile: op("open", (host, file, data: Data, options?: Encoding) => append(host, file, toBytes(data, options))),
   readdir: op("scandir", function* (host, file, options?: { withFileTypes?: boolean; recursive?: boolean }) {
-    const entries = yield* walk(host.files, yield* read(host, file), options?.recursive === true)
+    const entries = yield* walk(host.files, yield* read(host, file), options?.recursive === true ? Infinity : 1)
     if (options?.withFileTypes !== true) return entries.map((entry) => entry.path)
     return entries.map((entry) =>
       dirent(path.basename(entry.path), path.join(file, path.dirname(entry.path)), entry.type),
@@ -141,7 +141,7 @@ const ops = {
       }
       if (type !== "directory") return yield* copyOne(file, destination)
       if (options?.recursive !== true) return yield* Effect.fail("EISDIR" as const)
-      const entries = yield* walk(host.files, source!, true)
+      const entries = yield* walk(host.files, source!, Infinity)
       for (const entry of entries.filter((item) => item.type === "directory"))
         yield* mkdirp(host, path.join(destination, entry.path))
       yield* mkdirp(host, destination)
@@ -155,10 +155,14 @@ const ops = {
       const cwd = options?.cwd ?? "."
       const segments = pattern.split("/")
       const literal = segments.findIndex((segment) => /[*?[\]{}()!+@]/.test(segment))
-      // The fixed part of the pattern is where listing starts, and what read permission is asked for.
-      const base = path.join(cwd, (literal < 0 ? segments : segments.slice(0, literal)).join("/") || ".")
+      // The fixed part of the pattern is where listing starts, and what read permission is asked for. An absolute
+      // pattern keeps its root and gives absolute paths, as in Node.
+      const fixed =
+        (literal < 0 ? segments : segments.slice(0, literal)).join("/") || (path.isAbsolute(pattern) ? "/" : ".")
+      const base = path.isAbsolute(pattern) ? fixed : path.join(cwd, fixed)
       const root = yield* read(host, base)
-      const shown = (relative: string) => path.join(path.relative(cwd, base), relative)
+      const shown = (relative: string) =>
+        path.isAbsolute(pattern) ? path.join(base, relative) : path.join(path.relative(cwd, base), relative)
       const matches = (relative: string) =>
         Glob.match(pattern, shown(relative), { dot: false }) &&
         !(options?.exclude ?? []).some((item) => Glob.match(item, shown(relative), { dot: false }))
@@ -167,7 +171,9 @@ const ops = {
         if (type === undefined) return []
         return [options?.withFileTypes === true ? dirent(path.basename(base), path.dirname(base), type) : pattern]
       }
-      const entries = (yield* walk(host.files, root, pattern.includes("**"))).filter((entry) => matches(entry.path))
+      // Deep enough for every segment after the fixed part; `**` can match any depth.
+      const depth = pattern.includes("**") ? Infinity : segments.length - literal
+      const entries = (yield* walk(host.files, root, depth)).filter((entry) => matches(entry.path))
       if (options?.withFileTypes === true)
         return entries.map((entry) =>
           dirent(path.basename(entry.path), path.join(base, path.dirname(entry.path)), entry.type),
@@ -332,25 +338,26 @@ const typeOf = (host: Host, absolute: string) =>
 
 // The paths inside a directory, relative to it; nothing for a file.
 const tree = (host: Host, absolute: string) =>
-  walk(host.files, absolute, true).pipe(
+  walk(host.files, absolute, Infinity).pipe(
     Effect.map((entries) => entries.map((entry) => entry.path)),
     Effect.orElseSucceed(() => []),
   )
 
 type Entry = { readonly path: string; readonly type: Environment.FileType }
 
+// Lists `depth` levels below `directory`: 1 is its own entries, Infinity everything.
 const walk = (
   files: Environment.Files,
   directory: string,
-  recursive: boolean,
+  depth: number,
   prefix = "",
 ): Effect.Effect<Array<Entry>, Environment.NotFound | Environment.WrongKind | Environment.Failed> =>
   files.list(path.join(directory, prefix)).pipe(
     Effect.flatMap((entries) =>
       Effect.forEach(entries, (entry) => {
         const item = { path: path.join(prefix, entry.name), type: entry.type }
-        if (!recursive || entry.type !== "directory") return Effect.succeed([item])
-        return walk(files, directory, true, item.path).pipe(Effect.map((inside) => [item, ...inside]))
+        if (depth <= 1 || entry.type !== "directory") return Effect.succeed([item])
+        return walk(files, directory, depth - 1, item.path).pipe(Effect.map((inside) => [item, ...inside]))
       }),
     ),
     Effect.map((items) => items.flat()),
