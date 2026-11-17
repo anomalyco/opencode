@@ -231,10 +231,10 @@ pub fn str_to_num(s: &str) -> f64 {
         return sign * f64::INFINITY;
     }
     if t.len() > 2 && body.len() == t.len() {
-        let radix = match &t[..2] {
-            "0x" | "0X" => 16,
-            "0o" | "0O" => 8,
-            "0b" | "0B" => 2,
+        let radix = match t.get(..2) {
+            Some("0x" | "0X") => 16,
+            Some("0o" | "0O") => 8,
+            Some("0b" | "0B") => 2,
             _ => 0,
         };
         if radix != 0 {
@@ -400,6 +400,8 @@ mod tests {
         assert_eq!(str_to_num(""), 0.0);
         assert_eq!(str_to_num("0x1f"), 31.0);
         assert_eq!(parse_float_prefix("2.5e1x"), 25.0);
+        assert!(str_to_num("\u{180e}").is_nan());
+        assert!(str_to_num("1\u{180e}").is_nan());
     }
 }
 

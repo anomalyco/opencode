@@ -101,9 +101,6 @@ built-ins/AsyncGeneratorPrototype/throw/throw-suspendedYield.js  # unsupported s
 built-ins/Function/prototype/bind/instance-length-remaining-args.js  # wrong result
 built-ins/JSON/parse/reviver-array-get-prop-from-prototype.js  # wrong result
 built-ins/JSON/stringify/value-string-escape-unicode.js  # wrong result
-built-ins/Number/S9.3.1_A2_U180E.js  # interpreter panic
-built-ins/Number/S9.3.1_A3_T1_U180E.js  # interpreter panic
-built-ins/Number/S9.3.1_A3_T2_U180E.js  # interpreter panic
 built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
