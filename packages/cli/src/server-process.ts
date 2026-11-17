@@ -113,6 +113,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
             path: databasePath(global.data),
+            wal: process.env.OPENCODE_DB_WAL === undefined ? undefined : truthy(process.env.OPENCODE_DB_WAL),
           },
           models: {
             url: process.env.OPENCODE_MODELS_URL,

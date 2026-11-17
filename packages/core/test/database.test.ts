@@ -10,7 +10,7 @@ import { tmpdir } from "./fixture/tmpdir"
 const openModes = (filename: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Layer.build(Database.layer({ path: filename }))
+      yield* Layer.build(Database.layer({ path: filename, wal: true }))
       return yield* Effect.promise(() =>
         Promise.all(["", "-wal", "-shm"].map(async (suffix) => (await stat(filename + suffix)).mode & 0o777)),
       )
