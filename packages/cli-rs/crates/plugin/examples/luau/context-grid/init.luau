@@ -19,7 +19,7 @@ end
 
 -- TS `Grid`: rows of ten squares, each its glyph and a space in its category's color.
 local function squares(found: context.Context, total: number)
-    local rows = {}
+    local rows: { { plugin.Span } } = {}
     local grid = if found.limit > 0 then context.grid(found.segments, found.limit, total) else {}
     for index, square in grid do
         local row = (index - 1) // 10 + 1

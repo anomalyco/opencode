@@ -17,7 +17,7 @@ local FORCE = "text.action.primary.base"
 local KEY = "text.base"
 local LABEL = "text.muted"
 
-local function forceSubmit(host)
+local function forceSubmit(host: plugin.Host)
     host:dispatch(INTERRUPT)
     host:dispatch(INTERRUPT)
     host:dispatch(INTERRUPT)
