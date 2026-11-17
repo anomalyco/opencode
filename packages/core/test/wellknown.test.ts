@@ -57,7 +57,7 @@ it.live("loads embedded and remote configuration", () =>
   ),
 )
 
-serviceIt.live("persists sources in one KV value", () =>
+serviceIt.live("persists sources in one KV value and skips unreachable ones", () =>
   Effect.acquireUseRelease(
     Effect.sync(() =>
       Bun.serve({
@@ -83,6 +83,9 @@ serviceIt.live("persists sources in one KV value", () =>
         yield* wellknown.remove(server.url.origin)
         expect(yield* kv.get("wellknown:sources")).toEqual([])
         expect(yield* wellknown.entries()).toEqual([])
+
+        yield* kv.set("wellknown:sources", ["http://127.0.0.1:1", server.url.origin])
+        expect((yield* wellknown.entries()).map((entry) => entry.origin)).toEqual([server.url.origin])
       }),
     (server) => Effect.promise(() => server.stop(true)),
   ),
@@ -125,25 +128,5 @@ serviceIt.live("refreshes changed manifests", () =>
         expect(wellknown.snapshot()[0]?.manifest.auth?.command).toEqual(["second"])
       }),
     ({ server }) => Effect.promise(() => server.stop(true)),
-  ),
-)
-
-serviceIt.live("skips an unreachable source without a cached manifest", () =>
-  Effect.acquireUseRelease(
-    Effect.sync(() =>
-      Bun.serve({
-        port: 0,
-        fetch: () => Response.json({ auth: { command: ["login"], env: "TOKEN" } }),
-      }),
-    ),
-    (server) =>
-      Effect.gen(function* () {
-        const wellknown = yield* WellKnown.Service
-        const kv = yield* KV.Service
-        yield* kv.set("wellknown:sources", ["http://127.0.0.1:1", server.url.origin])
-
-        expect((yield* wellknown.entries()).map((entry) => entry.origin)).toEqual([server.url.origin])
-      }),
-    (server) => Effect.promise(() => server.stop(true)),
   ),
 )
