@@ -21,9 +21,16 @@ export type ShippedModel = {
 }
 
 export const shippedModels: readonly ShippedModel[] = [
+  { id: "gemini-4-carbon-high", name: "Gemini 4 Carbon (High)", modelEnum: "MODEL_PLACEHOLDER_M427" },
+  { id: "gemini-4-carbon-medium", name: "Gemini 4 Carbon (Medium)", modelEnum: "MODEL_PLACEHOLDER_M437" },
+  { id: "gemini-4-carbon-low", name: "Gemini 4 Carbon (Low)", modelEnum: "MODEL_PLACEHOLDER_M438" },
   { id: "gemini-4-argon-high", name: "Gemini 4 Argon (High)", modelEnum: "MODEL_PLACEHOLDER_M417" },
   { id: "gemini-4-argon-medium", name: "Gemini 4 Argon (Medium)", modelEnum: "MODEL_PLACEHOLDER_M418" },
   { id: "gemini-4-argon-low", name: "Gemini 4 Argon (Low)", modelEnum: "MODEL_PLACEHOLDER_M419" },
+  { id: "gemini-4-hydrogen-xhigh", name: "Gemini 4 Hydrogen (XHigh)", modelEnum: "MODEL_PLACEHOLDER_M528" },
+  { id: "gemini-4-hydrogen-high", name: "Gemini 4 Hydrogen (High)", modelEnum: "MODEL_PLACEHOLDER_M525" },
+  { id: "gemini-4-hydrogen-medium", name: "Gemini 4 Hydrogen (Medium)", modelEnum: "MODEL_PLACEHOLDER_M526" },
+  { id: "gemini-4-hydrogen-low", name: "Gemini 4 Hydrogen (Low)", modelEnum: "MODEL_PLACEHOLDER_M527" },
   { id: "gemini-3.8-flash-high", name: "Gemini 3.8 Flash (High)", modelEnum: "MODEL_PLACEHOLDER_M318" },
   { id: "gemini-3.8-flash-medium", name: "Gemini 3.8 Flash (Medium)", modelEnum: "MODEL_PLACEHOLDER_M319" },
   { id: "gemini-3.8-flash-low", name: "Gemini 3.8 Flash (Low)", modelEnum: "MODEL_PLACEHOLDER_M320" },

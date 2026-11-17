@@ -14,12 +14,13 @@ uses a stub for its Node-only callback surface. Explicit
 browser authorization uses a Node HTTP callback listener on localhost port 36742.
 There are no Core imports, SDK transport wrappers, or proxy servers.
 
-- Provider/model transforms expose the shipped Gemini 4 Argon, Gemini 3.8 Flash,
-  and older subscription variants without overriding the user's default model.
+- Provider/model transforms expose the shipped Gemini 4 Carbon, Argon and
+  Hydrogen (including Hydrogen XHigh), Gemini 3.8 Flash, and older subscription
+  variants without overriding the user's default model.
   Fallback requests without a model ID resolve to `gemini-3.8-flash-high`.
 - Access-only imports activate using shipped models without discovery requests.
   Normal OAuth connections may discover model enums and suppress shipped variants
-  explicitly denied by catalog entries (such as `gemini-4-argon-disabled` or a
+  explicitly denied by catalog entries (such as `gemini-4-hydrogen-disabled` or a
   disabled shipped model ID), with shipped defaults if discovery is unavailable.
 - Native Gemini requests resolve the active credential afresh, then use the
   Cloud Code envelope and `metadata.projectId`. Only responses belonging to
