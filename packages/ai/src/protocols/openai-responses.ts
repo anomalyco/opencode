@@ -316,8 +316,13 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     lowerToolChanges: toolChangeLowering(layout.head.length > 0, custom),
   })
   return {
-    ...conversation,
-    input: [...layout.head, ...conversation.input],
+    model: conversation.model,
+    // GPT-6.2 never caches top-level `instructions`, so the system prompt leads `input` as a developer message.
+    input: [
+      ...layout.head,
+      ...(conversation.instructions === undefined ? [] : [developer(conversation.instructions)]),
+      ...conversation.input,
+    ],
     ...generation,
     ...Cache.openAIRequestTTL(requestTTL(request)),
     ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
