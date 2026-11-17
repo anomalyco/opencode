@@ -499,6 +499,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
         renderGutterUtility={commentsUi.renderGutterUtility}
+        onCommentSelection={commentsUi.commentSelection()}
         onLineSelected={(range: LineRange | null) => {
           commentsUi.onLineSelected(range)
         }}

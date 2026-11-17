@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Komentování ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Přidat komentář",
+  "ui.lineComment.add": "Přidat komentář",
+  "ui.lineComment.actions": "Akce výběru",
   "ui.lineComment.contextPlaceholder": "Přidejte kontext pro tuto změnu",
   "ui.lineComment.submit": "Komentář",
   "ui.lineComment.cancel": "Zrušit",

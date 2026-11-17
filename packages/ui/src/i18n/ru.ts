@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Добавить комментарий",
+  "ui.lineComment.add": "Добавить комментарий",
+  "ui.lineComment.actions": "Действия с выделенным",
   "ui.lineComment.contextPlaceholder": "Добавить контекст для этого изменения",
   "ui.lineComment.submit": "Добавить комментарий",
   "ui.lineComment.cancel": "Отмена",

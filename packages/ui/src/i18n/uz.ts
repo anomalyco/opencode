@@ -50,6 +50,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Fikr bildirish ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Fikr qo'shing",
+  "ui.lineComment.add": "Fikr qo'shing",
+  "ui.lineComment.actions": "Tanlov amallari",
   "ui.lineComment.contextPlaceholder": "Ushbu o'zgarish uchun kontekst qo'shing",
   "ui.lineComment.submit": "Izoh",
   "ui.lineComment.cancel": "Bekor qilish",
