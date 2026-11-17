@@ -136,17 +136,7 @@ built-ins/Object/fromEntries/iterator-closed-for-null-entry.js  # wrong error ty
 built-ins/Object/fromEntries/iterator-closed-for-string-entry.js  # wrong error type: Test262Error instead of TypeError
 built-ins/Object/fromEntries/string-entry-primitive-throws.js  # error not thrown: TypeError
 built-ins/Object/isFrozen/15.2.3.12-2-a-11.js  # wrong result
-built-ins/Object/prototype/hasOwnProperty/S15.2.4.5_A12.js  # error not thrown: TypeError
-built-ins/Object/prototype/hasOwnProperty/S15.2.4.5_A13.js  # error not thrown: TypeError
-built-ins/Object/prototype/isPrototypeOf/null-this-and-object-arg-throws.js  # error not thrown: TypeError
-built-ins/Object/prototype/isPrototypeOf/undefined-this-and-object-arg-throws.js  # error not thrown: TypeError
-built-ins/Object/prototype/propertyIsEnumerable/S15.2.4.7_A12.js  # error not thrown: TypeError
-built-ins/Object/prototype/propertyIsEnumerable/S15.2.4.7_A13.js  # error not thrown: TypeError
 built-ins/Object/prototype/toLocaleString/S15.2.4.3_A9.js  # wrong result
-built-ins/Object/prototype/valueOf/S15.2.4.4_A12.js  # error not thrown: TypeError
-built-ins/Object/prototype/valueOf/S15.2.4.4_A13.js  # error not thrown: TypeError
-built-ins/Object/prototype/valueOf/S15.2.4.4_A14.js  # error not thrown: TypeError
-built-ins/Object/prototype/valueOf/S15.2.4.4_A15.js  # error not thrown: TypeError
 built-ins/Object/prototype/valueOf/S15.2.4.4_A9.js  # wrong result
 built-ins/Promise/all/S25.4.4.1_A3.1_T1.js  # uncaught TypeError: N is not iterable
 built-ins/Promise/all/S25.4.4.1_A3.1_T2.js  # uncaught TypeError: object is not iterable

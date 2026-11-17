@@ -329,18 +329,29 @@ fn object_is(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     }))
 }
 
+/// The receiver of the `Object.prototype` methods that need an object: like the reference, primitives (which JS
+/// would box) and tool references are rejected.
+fn object_receiver(vm: &mut Vm, this: &Value, method: &str) -> Result<Id, Value> {
+    if let Value::Obj(id) = this
+        && !matches!(vm.heap[*id as usize].kind, Kind::ToolRef(_))
+    {
+        return Ok(*id);
+    }
+    Err(super::incompatible(
+        vm,
+        &format!("Object.prototype.{method}"),
+        this,
+    ))
+}
+
+fn is_tool_ref(vm: &Vm, v: &Value) -> bool {
+    matches!(v, Value::Obj(id) if matches!(vm.heap[*id as usize].kind, Kind::ToolRef(_)))
+}
+
 fn proto_has_own_property(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = object_receiver(vm, &this, "hasOwnProperty")?;
     let k = vm.key_of(&arg(args, 0))?;
-    Ok(Value::Bool(match this {
-        Value::Obj(id) => vm.has_own(id, k),
-        Value::Str(s) => {
-            vm.atoms
-                .index(k)
-                .is_some_and(|i| (i as usize) < vm.atoms.sref(s).len16())
-                || k == vm.names.length
-        }
-        _ => false,
-    }))
+    Ok(Value::Bool(vm.has_own(id, k)))
 }
 
 pub fn tag_of(vm: &Vm, v: &Value) -> &'static str {
@@ -354,9 +365,7 @@ pub fn tag_of(vm: &Vm, v: &Value) -> &'static str {
         Value::Obj(id) => match &vm.heap[*id as usize].kind {
             Kind::Array(_) => "Array",
             Kind::Arguments(_) => "Arguments",
-            Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) | Kind::ToolRef(_) => {
-                "Function"
-            }
+            Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "Function",
             Kind::Error(_) => "Error",
             Kind::Promise(_) => "Promise",
             Kind::Map(_) => "Map",
@@ -393,7 +402,7 @@ fn proto_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    if this.is_nullish() {
+    if this.is_nullish() || is_tool_ref(vm, &this) {
         return Err(vm.type_error("Object.prototype.toLocaleString called on null or undefined."));
     }
     let k = vm.names.to_string;
@@ -401,12 +410,16 @@ fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> R
     vm.call(&f, this, &[])
 }
 
-fn proto_value_of(_vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+fn proto_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    if this.is_nullish() {
+        return Err(vm.type_error("Object.prototype.valueOf called on null or undefined."));
+    }
     Ok(this)
 }
 
 fn proto_is_prototype_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let (Value::Obj(p), Value::Obj(mut cur)) = (this, arg(args, 0)) else {
+    let p = object_receiver(vm, &this, "isPrototypeOf")?;
+    let Value::Obj(mut cur) = arg(args, 0) else {
         return Ok(Value::Bool(false));
     };
     while let Some(next) = vm.heap[cur as usize].proto {
@@ -419,10 +432,8 @@ fn proto_is_prototype_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res
 }
 
 fn proto_property_is_enumerable(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    let id = object_receiver(vm, &this, "propertyIsEnumerable")?;
     let k = vm.key_of(&arg(args, 0))?;
-    let Value::Obj(id) = this else {
-        return Ok(Value::Bool(false));
-    };
     let o = &vm.heap[id as usize];
     if let Kind::Array(items) = &o.kind
         && let Some(i) = vm.atoms.index(k)

@@ -5,8 +5,4 @@
 built-ins/Array/prototype/indexOf/15.4.4.14-9-7.js  # accident: circular values are allowed; the reference rejects them on purpose when created
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # accident: circular values are allowed; the reference rejects them on purpose when created
 built-ins/JSON/stringify/value-array-circular.js  # accident: circular values are allowed; the reference rejects them on purpose when created
-built-ins/Promise/all/resolve-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
-built-ins/Promise/allSettled/reject-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
-built-ins/Promise/allSettled/resolve-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
-built-ins/Promise/any/reject-element-function-nonconstructor.js  # accident: hasOwnProperty accepts an undefined receiver; the reference throws, as JS does
 built-ins/Promise/race/S25.4.4.3_A5.1_T1.js  # accident: Promise.race([]) never settles; the reference rejects it on purpose with a hint
