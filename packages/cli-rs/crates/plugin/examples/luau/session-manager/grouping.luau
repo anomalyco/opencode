@@ -14,9 +14,18 @@ export type Session = {
     location: { directory: string },
 }
 
+-- A session and its subsessions, as a tree.
+export type Node = { session: Session, children: { Node } }
+-- A group of trees, by its key: a directory, a project, or a bucket of time.
+export type Group = { key: string, roots: { Node }, index: number, label: string, count: number }
+-- A row of the page: a group's, or a session's in its tree.
+export type GroupRow = { type: "group", group: Group, collapsed: boolean }
+export type SessionRow = { type: "session", group: Group, session: Session, depth: number, prefix: string }
+export type Row = GroupRow | SessionRow
+
 -- TS `titleOf`.
 function grouping.title(session: Session): string
-    local title = session.title and session.title:match("^%s*(.-)%s*$")
+    local title = if session.title then session.title:match("^%s*(.-)%s*$") else nil
     return if title and title ~= "" then title else session.id
 end
 
@@ -46,7 +55,7 @@ function grouping.bucket(time: number, now: number): number
 end
 
 -- TS `formatAge`: `just now`, `5m ago`, `3h ago`, `2d ago`, else the local date.
-function grouping.age(time: number, now: number, t): string
+function grouping.age(time: number, now: number, t: any): string
     local minutes = math.max(0, now - time) // 60_000
     local hours, days = minutes // 60, minutes // 60 // 24
     if minutes < 1 then
@@ -61,7 +70,7 @@ function grouping.age(time: number, now: number, t): string
     return os.date("%Y-%m-%d", time // 1000) :: string
 end
 
-local function countNodes(nodes): number
+local function countNodes(nodes: { Node }): number
     local total = 0
     for _, node in nodes do
         total += 1 + countNodes(node.children)
@@ -70,8 +79,14 @@ local function countNodes(nodes): number
 end
 
 -- TS `buildGroups`: groups of trees, each sorted newest first, the groups by their newest session or by bucket.
-function grouping.groups(sessions: { Session }, mode: string, children: boolean, now: number, label: (string) -> string)
-    local ids = {}
+function grouping.groups(
+    sessions: { Session },
+    mode: string,
+    children: boolean,
+    now: number,
+    label: (string) -> string
+): { Group }
+    local ids: { [string]: boolean } = {}
     for _, session in sessions do
         ids[session.id] = true
     end
@@ -79,12 +94,12 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
         return not session.parentID or not ids[session.parentID]
     end
     -- Stable, as JavaScript's sort: equal times keep their order.
-    local function sorted(list)
-        local order = {}
+    local function sorted(list: { Node })
+        local order: { [Node]: number } = {}
         for index, node in list do
             order[node] = index
         end
-        table.sort(list, function(a, b)
+        table.sort(list, function(a: Node, b: Node): boolean
             local ta, tb = grouping.time(a.session, mode), grouping.time(b.session, mode)
             if ta ~= tb then
                 return ta > tb
@@ -92,7 +107,7 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
             return order[a] < order[b]
         end)
     end
-    local nodes = {}
+    local nodes: { [string]: Node } = {}
     for _, session in sessions do
         nodes[session.id] = { session = session, children = {} }
     end
@@ -106,7 +121,7 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
             sorted(node.children)
         end
     end
-    local groups, byKey = {}, {}
+    local groups: { Group }, byKey: { [string]: Group } = {}, {}
     for _, session in sessions do
         if isRoot(session) then
             local key = if mode == "directory"
@@ -115,7 +130,7 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
                 else tostring(grouping.bucket(grouping.time(session, mode), now))
             local group = byKey[key]
             if not group then
-                group = { key = key, roots = {}, index = #groups + 1 }
+                group = { key = key, roots = {}, index = #groups + 1, label = "", count = 0 }
                 byKey[key] = group
                 table.insert(groups, group)
             end
@@ -127,15 +142,15 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
         group.label = label(group.key)
         group.count = countNodes(group.roots)
     end
-    local function latest(group): number
+    local function latest(group: Group): number
         local most = -math.huge
         for _, node in group.roots do
             most = math.max(most, node.session.time.updated)
         end
         return most
     end
-    table.sort(groups, function(a, b)
-        local ka, kb
+    table.sort(groups, function(a: Group, b: Group): boolean
+        local ka: number, kb: number
         if mode == "directory" or mode == "project" then
             ka, kb = -latest(a), -latest(b)
         else
@@ -150,11 +165,12 @@ function grouping.groups(sessions: { Session }, mode: string, children: boolean,
 end
 
 -- TS `flattenRows`: each group's row, then, unless it is folded, its sessions as a tree.
-function grouping.rows(groups, collapsed: { [string]: boolean })
-    local rows = {}
-    local function walk(group, node, depth: number, indent: string, last: boolean)
+function grouping.rows(groups: { Group }, collapsed: { [string]: boolean }): { Row }
+    local rows: { Row } = {}
+    local function walk(group: Group, node: Node, depth: number, indent: string, last: boolean)
         local prefix = if depth == 0 then "" else indent .. (if last then "└─ " else "├─ ")
-        table.insert(rows, { type = "session", session = node.session, group = group, depth = depth, prefix = prefix })
+        local row: SessionRow = { type = "session", session = node.session, group = group, depth = depth, prefix = prefix }
+        table.insert(rows, row)
         local inner = if depth == 0 then "" else indent .. (if last then "   " else "│  ")
         for index, child in node.children do
             walk(group, child, depth + 1, inner, index == #node.children)
@@ -162,7 +178,8 @@ function grouping.rows(groups, collapsed: { [string]: boolean })
     end
     for _, group in groups do
         local folded = collapsed[group.key] == true
-        table.insert(rows, { type = "group", group = group, collapsed = folded })
+        local row: GroupRow = { type = "group", group = group, collapsed = folded }
+        table.insert(rows, row)
         if not folded then
             for _, root in group.roots do
                 walk(group, root, 0, "", true)
@@ -175,18 +192,18 @@ end
 -- TS `filterSessions`: the sessions matching every word of `query`, with the ancestors of a matching subsession when
 -- `children`; else only top-level sessions are searched.
 function grouping.filter(sessions: { Session }, query: string, text: (Session) -> string, children: boolean): { Session }
-    local terms = {}
+    local terms: { string } = {}
     for term in query:lower():gmatch("%S+") do
         table.insert(terms, term)
     end
     if #terms == 0 then
         return sessions
     end
-    local byID = {}
+    local byID: { [string]: Session } = {}
     for _, session in sessions do
         byID[session.id] = session
     end
-    local keep = {}
+    local keep: { [string]: boolean } = {}
     for _, session in sessions do
         local root = not session.parentID or not byID[session.parentID]
         if children or root then
@@ -201,11 +218,11 @@ function grouping.filter(sessions: { Session }, query: string, text: (Session) -
             local cursor: Session? = if matches then session else nil
             while cursor and not keep[cursor.id] do
                 keep[cursor.id] = true
-                cursor = cursor.parentID and byID[cursor.parentID]
+                cursor = if cursor.parentID then byID[cursor.parentID] else nil
             end
         end
     end
-    local kept = {}
+    local kept: { Session } = {}
     for _, session in sessions do
         if keep[session.id] then
             table.insert(kept, session)
@@ -216,7 +233,7 @@ end
 
 -- TS `countWithDescendants`.
 function grouping.withDescendants(ids: { string }, sessions: { Session }): number
-    local children = {}
+    local children: { [string]: { string } } = {}
     for _, session in sessions do
         if session.parentID then
             children[session.parentID] = children[session.parentID] or {}

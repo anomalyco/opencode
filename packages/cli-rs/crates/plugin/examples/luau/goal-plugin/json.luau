@@ -5,7 +5,7 @@ local json = {}
 
 json.null = table.freeze({})
 
-local ESCAPES = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
+local ESCAPES: { [string]: string } = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
 
 function json.decode(text: string): any
     local at = 1
@@ -25,7 +25,7 @@ function json.decode(text: string): any
     end
     local function str(): string
         at += 1
-        local out = {}
+        local out: { string } = {}
         while true do
             local char = text:sub(at, at)
             if char == "" then
@@ -116,10 +116,11 @@ function json.decode(text: string): any
         elseif char == "n" then
             return word("null", json.null)
         end
-        local number = text:match("^-?%d+%.?%d*[eE]?[-+]?%d*", at)
-        if not number or number == "" or number == "-" then
+        local matched = text:match("^-?%d+%.?%d*[eE]?[-+]?%d*", at)
+        if not matched or matched == "" or matched == "-" then
             fail()
         end
+        local number = matched :: string
         at += #number
         return tonumber(number) or fail()
     end

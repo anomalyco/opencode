@@ -9,8 +9,8 @@
 -- and the system's locale are not a Luau plugin's to read; and its select opens medium, as TS's does after a
 -- `dialog.set` that comes before it.
 local plugin = require("@opencode/plugin")
-local i18n = require("./i18n")
-local json = require("./json")
+local i18n = require("@self/i18n")
+local json = require("@self/json")
 
 local GOAL_TOOLS = {
     "get_goal",
@@ -102,7 +102,7 @@ end
 
 -- TS `goalFromV2Messages`: the newest completed goal tool result in session `id`'s messages: the goal, `null` after a
 -- clear, nil when there is none.
-local function goalFromMessages(read, id: string): any
+local function goalFromMessages(read: plugin.Read, id: string): any
     local messages = read:messages(id)
     for index = #messages, 1, -1 do
         local message = messages[index]
@@ -207,13 +207,13 @@ end
 return plugin.define(function(setup)
     local options = setup.options
     local locale = i18n.resolve(type(options) == "table" and type(options.locale) == "string" and options.locale or nil)
-    local t = i18n[locale]
+    local t = i18n.messages(locale)
     -- TS `storage.memory("goal-mode.v2.<session>")`: the goal a session's sidebar showed last.
     local cache: { [string]: any } = {}
     -- The session the summary was shown for.
     local asked = ""
 
-    local function toast(host, message: string, variant: string)
+    local function toast(host: plugin.Host, message: string, variant: plugin.Variant)
         host:toast({ variant = variant, title = t.title, message = message })
     end
 
@@ -278,7 +278,8 @@ return plugin.define(function(setup)
         end
         local goal = goalFromMessages(host, route.id)
         goal = if goal == null then nil else goal
-        local options = { { title = t.refresh, value = "refresh", description = t.refreshDescription } }
+        local options: { plugin.SelectOption } =
+            { { title = t.refresh, value = "refresh", description = t.refreshDescription } }
         if goal then
             table.insert(options, { title = t.history, value = "history", description = t.historyDescription })
             if goal.status == "active" then

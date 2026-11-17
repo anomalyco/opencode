@@ -17,7 +17,7 @@ type Prompt = { text: string, created: number, pending: boolean }
 
 -- TS `lastPrompt`: the newest of the session's user messages and of its inbox's user prompts not delivered yet; on a
 -- tie, the later one listed.
-local function lastPrompt(read, session: string): Prompt?
+local function lastPrompt(read: plugin.Read, session: string): Prompt?
     local latest: Prompt? = nil
     local delivered = {}
     local function consider(prompt: Prompt)
@@ -59,7 +59,7 @@ local function preview(text: string, limit: number): string
 end
 
 -- TS `openPrompt`: the whole prompt in a large centered dialog, as the plugin draws it (`FullPromptDialog`).
-local function show(host, prompt: Prompt)
+local function show(host: plugin.Host, prompt: Prompt)
     local text = displayText(prompt.text)
     if text == "" then
         text = "[No prompt text: attachments only]"

@@ -82,9 +82,11 @@ local zh = {
     groupRemoved = function(label: string, count: number) return `已删除分类「{label}」下的 {count} 个 session` end,
 }
 
+export type Messages = typeof(en)
+
 -- TS `LOCALES`, in the order the switch shows them.
 return table.freeze({
-    codes = { "en", "zh-CN" },
-    labels = { en = "EN", ["zh-CN"] = "中文" },
-    messages = { en = en, ["zh-CN"] = zh },
+    codes = { "en", "zh-CN" } :: { string },
+    labels = { en = "EN", ["zh-CN"] = "中文" } :: { [string]: string },
+    messages = { en = en, ["zh-CN"] = zh } :: { [string]: Messages },
 })

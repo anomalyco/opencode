@@ -10,8 +10,8 @@
 -- Where the native port differs: Luau has no thread, so the pages are read and priced on the UI thread, and no clock,
 -- so the countdowns and the throttled read move only when the panel draws again; and it reads no config file.
 local plugin = require("@opencode/plugin")
-local usage = require("./usage")
-local configure = require("./config")
+local usage = require("@self/usage")
+local configure = require("@self/config")
 
 local MAX_SESSIONS = 500
 local PAGE_SIZE = 100
@@ -25,14 +25,14 @@ local function now(): number
 end
 
 -- The cursor of the page after `body`, if any.
-local function cursorOf(body): string?
+local function cursorOf(body: any): string?
     local cursor = body and body.cursor and body.cursor.next
     return if type(cursor) == "string" and cursor ~= "" then cursor else nil
 end
 
 -- A page of `parent`'s children (TS `client.session.list`).
-local function children(parent: string, cursor: string?)
-    local query = { { "limit", tostring(PAGE_SIZE) }, { "parentID", parent } }
+local function children(parent: string, cursor: string?): plugin.Fetch
+    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) }, { "parentID", parent } }
     if cursor then
         table.insert(query, { "cursor", cursor })
     end
@@ -40,8 +40,8 @@ local function children(parent: string, cursor: string?)
 end
 
 -- A page of `session`'s messages (TS `client.message.list`).
-local function messages(session: string, cursor: string?)
-    local query = { { "limit", tostring(PAGE_SIZE) } }
+local function messages(session: string, cursor: string?): plugin.Fetch
+    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) } }
     if cursor then
         table.insert(query, { "cursor", cursor })
     end
@@ -49,7 +49,7 @@ local function messages(session: string, cursor: string?)
 end
 
 -- TS `familyIDs`: every session the host knows in the tree of `session`, the root first.
-local function family(read, session: string): { string }
+local function family(read: plugin.Read, session: string): { string }
     local roots, rest = {}, {}
     for _, member in read:family(session).members do
         table.insert(if member.parent then rest else roots, member.id)
@@ -66,23 +66,23 @@ return plugin.define(function(setup)
     local mounts: { string } = {}
     local session: string? = nil
     local tree: { string } = {}
-    local go = nil
+    local go: any = nil
     local limits: number? = nil
     local lastLoaded, lastForced = 0, 0
-    local run = nil
+    local run: any = nil
     local queued: boolean? = nil
-    local priced = nil
+    local priced: any = nil
     local total: number? = nil
     local runs = 0
 
     -- TS `location()`: the session's location, else where the TUI works.
-    local function location(read)
+    local function location(read: plugin.Read)
         local info = session and read:session(session)
         return if info then { directory = info.info.location.directory } else read:info().location
     end
 
     -- TS `load`: the usage limits, at most once per `refreshMs`, and a forced read at most once a second.
-    local function load(host, force: boolean)
+    local function load(host: plugin.Host, force: boolean)
         local time = now()
         if limits or (not force and (config.refreshMs == 0 or time - lastLoaded < config.refreshMs)) then
             return
@@ -107,7 +107,7 @@ return plugin.define(function(setup)
 
     -- The run ended: when it read every page of the session still in view, its messages wait for the location's
     -- models to price them. Then a queued run starts.
-    local function finish(host, done: boolean)
+    local function finish(host: plugin.Host, done: boolean)
         local ended = run
         run = nil
         if ended and done and session == ended.session then
@@ -121,7 +121,7 @@ return plugin.define(function(setup)
     end
 
     -- Fetches `fetch` for the run, waiting for `want`; false when the host did not take it.
-    local function ask(host, fetch, want): boolean
+    local function ask(host: plugin.Host, fetch: plugin.Fetch, want: any): boolean
         local id = host:fetch(fetch)
         if id then
             run.waiting[id] = want
@@ -130,7 +130,7 @@ return plugin.define(function(setup)
     end
 
     -- Sends what the run needs next, or finishes it.
-    local function step(host)
+    local function step(host: plugin.Host)
         while run do
             if run.stage == "discover" then
                 if next(run.waiting) ~= nil then

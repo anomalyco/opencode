@@ -10,22 +10,22 @@ context.GLYPH_FREE = "⛶"
 -- The categories in their order on the grid: TS `categoryColor` (a categorical hue's step 400 by place) and
 -- `CATEGORY_LABEL`.
 context.KEYS = { "system", "user", "assistant", "tool", "other" }
-context.COLOR = {
+context.COLOR = ({
     system = "categorical.0.400",
     user = "categorical.1.400",
     assistant = "categorical.2.400",
     tool = "categorical.3.400",
     other = "categorical.4.400",
     free = "text.muted",
-}
-context.LABEL = {
+} :: { [string]: string })
+context.LABEL = ({
     system = "System",
     user = "User",
     assistant = "Assistant",
     tool = "Tools",
     other = "Other",
     free = "Free space",
-}
+} :: { [string]: string })
 
 export type Segment = { key: string, tokens: number }
 export type Context = {
@@ -105,7 +105,7 @@ local function estimate(chars: number): number
 end
 
 -- TS `charsFromAssistantPart`: the characters of a step's part, as assistant and tool.
-local function partChars(part): (number, number)
+local function partChars(part: any): (number, number)
     if part.type == "text" or part.type == "reasoning" then
         return length(part.text), 0
     elseif part.type ~= "tool" then
@@ -128,7 +128,7 @@ local function partChars(part): (number, number)
 end
 
 -- TS `estimateSystemResidual`: the first step's input, less the users' text before it.
-local function residual(messages): number?
+local function residual(messages: { any }): number?
     local leading = 0
     for _, message in messages do
         if message.type == "user" then
@@ -146,7 +146,7 @@ local function residual(messages): number?
 end
 
 -- TS `estimateBreakdown`: the estimate by category, scaled down to `input` when it is over, the rest `other`.
-local function breakdown(messages, input: number, system: number?): { Segment }
+local function breakdown(messages: { any }, input: number, system: number?): { Segment }
     if input == 0 then
         return {}
     end
@@ -185,7 +185,7 @@ local function breakdown(messages, input: number, system: number?): { Segment }
 end
 
 -- TS `lastAssistantWithUsage`.
-local function lastWithUsage(messages, boundary: string?)
+local function lastWithUsage(messages: { any }, boundary: string?): any
     local finish = #messages + 1
     if boundary then
         finish = 0
@@ -218,7 +218,7 @@ end
 
 -- TS `getContextData`: the last assistant step with usage, after the last finished compaction and before the
 -- session's revert point; `nil` without one, or with no tokens.
-function context.data(messages, session, models): Context?
+function context.data(messages: { any }, session: any, models: { any }): Context?
     local revert = session and session.revert
     local last = lastWithUsage(messages, revert and revert.messageID)
     if not last then
@@ -229,7 +229,7 @@ function context.data(messages, session, models): Context?
     if total == 0 then
         return nil
     end
-    local model
+    local model: any
     for _, known in models do
         if known.providerID == last.model.providerID and (known.id == last.model.id or known.modelID == last.model.id) then
             model = known

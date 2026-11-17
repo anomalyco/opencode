@@ -10,8 +10,8 @@
 -- it; a refresh after a session event runs at once, as Luau has no timer for TS's 300 ms; paths keep the home
 -- directory, which a Luau plugin cannot read; and `/sm` is not there.
 local plugin = require("@opencode/plugin")
-local grouping = require("./grouping")
-local i18n = require("./i18n")
+local grouping = require("@self/grouping")
+local i18n = require("@self/i18n")
 
 local ROUTE = "manager"
 local SETTINGS = "settings"
@@ -34,6 +34,19 @@ local SEARCH_KEYS = {
 }
 local HINT_KEYS = { "↑↓", "Enter", "Tab", "c", "r", "d", "D", "/", "F5", "l", "Esc" }
 
+-- What a confirmed delete still has to do: the sessions left, those done, and how many failed.
+type Removal = {
+    left: { string },
+    done: { string },
+    failed: number,
+    total: number,
+    group: string?,
+    current: string?,
+}
+-- What a request in flight is for.
+type Want = { kind: string, removal: Removal?, id: string?, title: string? }
+type Row = grouping.Row
+
 -- TS `SessionManagerPage`'s signals.
 local state = {
     origin = nil :: string?,
@@ -54,12 +67,12 @@ local state = {
     children = false,
     locale = "en",
     -- Requests in flight, by ID: what each is for.
-    waiting = {} :: { [number]: any },
+    waiting = {} :: { [number]: Want },
     renaming = nil :: string?,
-    removing = nil :: any,
+    removing = nil :: Removal?,
 }
 
-local function t()
+local function t(): i18n.Messages
     return i18n.messages[state.locale]
 end
 
@@ -69,7 +82,7 @@ end
 
 -- What the page lists now: its groups and their rows.
 local function listed()
-    local function text(session)
+    local function text(session: grouping.Session): string
         return `{session.title or ""} {session.location.directory} {session.location.directory}`
     end
     local shown = grouping.filter(state.sessions, state.query, text, state.children)
@@ -85,12 +98,12 @@ local function listed()
     return groups, grouping.rows(groups, state.collapsed)
 end
 
-local function keyOf(row): string
+local function keyOf(row: Row): string
     return if row.type == "group" then `g:{row.group.key}` else `s:{row.session.id}`
 end
 
 -- TS `index`: the selected row, else the one at the last index.
-local function indexOf(rows): number?
+local function indexOf(rows: { Row }): number?
     if #rows == 0 then
         return nil
     end
@@ -107,7 +120,7 @@ local function rowId(index: number): string
 end
 
 -- TS `select`, and the scroll that keeps it in view (`scrollChildIntoView`).
-local function select(host, rows, target: number)
+local function select(host: plugin.Host, rows: { Row }, target: number)
     if #rows == 0 then
         return
     end
@@ -120,7 +133,7 @@ local function select(host, rows, target: number)
     )
 end
 
-local function ask(host, fetch, want)
+local function ask(host: plugin.Host, fetch: plugin.Fetch, want: Want): boolean
     local id = host:fetch(fetch)
     if id then
         state.waiting[id] = want
@@ -128,8 +141,8 @@ local function ask(host, fetch, want)
     return id ~= nil
 end
 
-local function page(cursor: string?)
-    local query = { { "limit", tostring(PAGE_SIZE) }, { "order", "desc" } }
+local function page(cursor: string?): plugin.Fetch
+    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) }, { "order", "desc" } }
     if cursor then
         table.insert(query, { "cursor", cursor })
     end
@@ -137,7 +150,7 @@ local function page(cursor: string?)
 end
 
 -- TS `refresh`: every page of the session list, and the projects.
-local function refresh(host)
+local function refresh(host: plugin.Host)
     for id, want in state.waiting do
         if want.kind == "page" or want.kind == "projects" then
             state.waiting[id] = nil
@@ -173,7 +186,7 @@ local function finished()
 end
 
 -- TS's mount: a new page, with the stored settings, which reads the sessions.
-local function mount(host)
+local function mount(host: plugin.Host)
     local stored = host:storageGet(SETTINGS)
     stored = if type(stored) == "table" then stored else {}
     local mode = if table.find(grouping.MODES, stored.mode) then stored.mode else "directory"
@@ -190,10 +203,10 @@ local function mount(host)
 end
 
 -- TS `persist`, as its store writes it: the fields that differ from what is stored, or from the defaults.
-local function persist(host)
+local function persist(host: plugin.Host)
     local stored = host:storageGet(SETTINGS)
     local base = if type(stored) == "table" then stored else { mode = "directory", showChildren = false, locale = "en" }
-    local draft = { mode = state.mode, showChildren = state.children, locale = state.locale }
+    local draft: { [string]: any } = { mode = state.mode, showChildren = state.children, locale = state.locale }
     local fields, any = {}, false
     for key, value in draft do
         if base[key] ~= value then
@@ -210,7 +223,7 @@ local function fold(key: string)
 end
 
 -- TS `activate`: a group folds, a session opens.
-local function activate(host, rows)
+local function activate(host: plugin.Host, rows: { Row })
     local index = indexOf(rows)
     local row = index and rows[index]
     if not row then
@@ -224,53 +237,53 @@ local function activate(host, rows)
 end
 
 -- TS `back`: the session it was opened from, while it exists, else home.
-local function back(host)
+local function back(host: plugin.Host)
     for _, session in state.sessions do
         if session.id == state.from then
-            return host:navigate({ type = "session", id = state.from })
+            return host:navigate({ type = "session", id = session.id })
         end
     end
     host:navigate({ type = "home" })
 end
 
-local function setMode(host, mode: string)
+local function setMode(host: plugin.Host, mode: string)
     state.collapsed = {}
     state.mode = mode
     persist(host)
 end
 
-local function stepMode(host, delta: number)
+local function stepMode(host: plugin.Host, delta: number)
     setMode(host, grouping.MODES[(modeIndex(state.mode) - 1 + delta) % #grouping.MODES + 1])
 end
 
-local function toggleChildren(host)
+local function toggleChildren(host: plugin.Host)
     state.children = not state.children
     persist(host)
 end
 
-local function setLocale(host, locale: string)
+local function setLocale(host: plugin.Host, locale: string)
     state.locale = locale
     persist(host)
 end
 
 -- TS `startSearch`. The field shows with this call's view, after the focus is refused: see the header.
-local function startSearch(host)
+local function startSearch(host: plugin.Host)
     state.searching = true
     host:focus(SEARCH)
 end
 
-local function finishSearch(host)
+local function finishSearch(host: plugin.Host)
     state.searching = false
     host:blur()
 end
 
-local function clearSearch(host)
+local function clearSearch(host: plugin.Host)
     state.query = ""
     finishSearch(host)
 end
 
 -- A confirm with its own labels, whose answer runs command `answer`.
-local function confirm(title: string, lines: { string }, yes: string, no: string, answer: string)
+local function confirm(title: string, lines: { string }, yes: string, no: string, answer: string): plugin.Dialog
     return {
         type = "confirm",
         title = title,
@@ -281,7 +294,7 @@ local function confirm(title: string, lines: { string }, yes: string, no: string
 end
 
 -- TS `rename`: a prompt for the selected session's new title.
-local function rename(host, rows)
+local function rename(host: plugin.Host, rows: { Row })
     local index = indexOf(rows)
     local row = index and rows[index]
     if not row or row.type ~= "session" then
@@ -303,7 +316,7 @@ end
 
 -- TS `containsSession`: whether `target` is one of `roots` or under one.
 local function contains(roots: { string }, target: string): boolean
-    local byID = {}
+    local byID: { [string]: grouping.Session } = {}
     for _, session in state.sessions do
         byID[session.id] = session
     end
@@ -318,7 +331,7 @@ local function contains(roots: { string }, target: string): boolean
 end
 
 -- TS `removeOne`: asks, then deletes the selected session.
-local function removeOne(host, rows)
+local function removeOne(host: plugin.Host, rows: { Row })
     local index = indexOf(rows)
     local row = index and rows[index]
     if not row or row.type ~= "session" then
@@ -340,14 +353,14 @@ local function removeOne(host, rows)
 end
 
 -- TS `removeGroup`: asks, then deletes the selected group's top-level sessions, one after another.
-local function removeGroup(host, rows)
+local function removeGroup(host: plugin.Host, rows: { Row })
     local index = indexOf(rows)
     local row = index and rows[index]
     if not row then
         return
     end
     local group = row.group
-    local ids = {}
+    local ids: { string } = {}
     for _, root in group.roots do
         table.insert(ids, root.session.id)
     end
@@ -369,8 +382,8 @@ local function removeGroup(host, rows)
 end
 
 -- TS `forgetDeleted`: the deleted sessions and their descendants go, and their tabs close.
-local function forget(host, ids: { string })
-    local removed = {}
+local function forget(host: plugin.Host, ids: { string })
+    local removed: { [string]: boolean } = {}
     local todo = table.clone(ids)
     while #todo > 0 do
         local id = table.remove(todo) :: string
@@ -391,7 +404,7 @@ local function forget(host, ids: { string })
             host:editTab({ type = "close", session = id })
         end
     end
-    local kept = {}
+    local kept: { grouping.Session } = {}
     for _, session in state.sessions do
         if not removed[session.id] then
             table.insert(kept, session)
@@ -401,7 +414,7 @@ local function forget(host, ids: { string })
 end
 
 -- Deletes the next session of `removal`, or ends it: the deleted ones go, and a toast says so.
-local function nextRemoval(host, removal)
+local function nextRemoval(host: plugin.Host, removal: Removal)
     local next = table.remove(removal.left, 1)
     if next then
         removal.current = next
@@ -431,7 +444,7 @@ local function notFound(error: string): boolean
     return lower:find("notfound", 1, true) ~= nil or lower:find("not found", 1, true) ~= nil or lower:find("404", 1, true) ~= nil
 end
 
-local function listKey(host, name: string): string
+local function listKey(host: plugin.Host, name: string): plugin.Handled
     local groups, rows = listed()
     local index = indexOf(rows) or 0
     local pageSize = math.max(1, host:info().size[2] - 8)
@@ -484,7 +497,7 @@ local function listKey(host, name: string): string
     return "consume"
 end
 
-local function searchKey(host, name: string): string
+local function searchKey(host: plugin.Host, name: string): plugin.Handled
     local _, rows = listed()
     local index = indexOf(rows) or 0
     local pageSize = math.max(1, host:info().size[2] - 8)
@@ -506,7 +519,7 @@ local function searchKey(host, name: string): string
     return "consume"
 end
 
-local function event(host, event)
+local function event(host: plugin.Host, event: any): plugin.Handled
     if event.type == "mount" then
         if event.mounted then
             mount(host)
@@ -526,7 +539,7 @@ local function event(host, event)
     return "pass"
 end
 
-local function nowrap(content, props)
+local function nowrap(content: string | { plugin.Span }, props: { [string]: any }?)
     props = props or {}
     props.wrap = "none"
     props.layout = props.layout or { shrink = false }
@@ -578,7 +591,7 @@ local function searchRow(count: number, filtered: boolean)
     return plugin.row(row, { gap = 1, layout = { shrink = false } })
 end
 
-local function row(index: number, row, selected: boolean)
+local function row(index: number, row: Row, selected: boolean)
     local click = plugin.click("session-manager.row", tostring(index))
     local bg = if selected then "background.raised.high" else nil
     if row.type == "group" then
@@ -622,7 +635,7 @@ local function row(index: number, row, selected: boolean)
     return plugin.row(line, { id = rowId(index), gap = 1, padding_sides = { left = 2 }, bg = bg, on_click = click })
 end
 
-local function body(groups, rows, filtered: boolean)
+local function body(groups: { grouping.Group }, rows: { Row }, filtered: boolean)
     if state.loading then
         return plugin.text(t().loading, { fg = "text.muted" })
     elseif state.error then
@@ -666,8 +679,8 @@ local function view()
     })
 end
 
-local function binds(keys, prefix: string)
-    local list = {}
+local function binds(keys: { { string } }, prefix: string): plugin.Layer
+    local list: { plugin.Bind } = {}
     for _, key in keys do
         table.insert(list, { key = key[1], name = prefix .. key[2] })
     end
@@ -701,8 +714,8 @@ return plugin.define(function(setup)
         end
     end)
     setup:command({ name = "session-manager.mode" }, function(host, mode)
-        if table.find(grouping.MODES, mode) then
-            setMode(host, mode :: string)
+        if mode and table.find(grouping.MODES, mode) then
+            setMode(host, mode)
         end
     end)
     setup:command({ name = "session-manager.locale" }, function(host, code)
@@ -725,7 +738,7 @@ return plugin.define(function(setup)
             state.busy = false
             return
         end
-        local fetch = { method = "PATCH", path = `/api/session/{id}`, body = { title = title } }
+        local fetch: plugin.Fetch = { method = "PATCH", path = `/api/session/{id}`, body = { title = title } }
         if not ask(host, fetch, { kind = "rename", id = id, title = title }) then
             state.busy = false
         end
@@ -800,11 +813,11 @@ return plugin.define(function(setup)
                     session.title = want.title
                 end
             end
-            host:toast({ variant = "success", message = t().renamed(want.title) })
+            host:toast({ variant = "success", message = t().renamed(want.title :: string) })
         elseif want.kind == "remove" then
-            local removal = want.removal
+            local removal = want.removal :: Removal
             if not failure or notFound(failure) then
-                table.insert(removal.done, removal.current)
+                table.insert(removal.done, removal.current :: string)
             elseif not removal.group then
                 state.busy = false
                 return host:toast({ variant = "error", message = failure })

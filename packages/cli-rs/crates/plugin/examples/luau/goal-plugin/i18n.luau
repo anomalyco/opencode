@@ -86,11 +86,11 @@ i18n["zh-CN"] = table.freeze({
 -- TS `resolveLocale`, for a locale the options name. `auto` would read `LC_ALL`, `LANG` and the system's locale, which a
 -- Luau plugin has no reader of: it is English.
 function i18n.resolve(explicit: string?): string
-    local configured = if explicit then (explicit:match("^%s*(.-)%s*$") :: string) else ""
+    local configured: string = if explicit then (explicit:match("^%s*(.-)%s*$") :: string) else ""
     if configured == "" or configured:lower() == "auto" then
         return "en"
     end
-    local normalized = (configured:gsub("_", "-"):match("^[^.@]*") :: string):lower()
+    local normalized = ((configured:gsub("_", "-")):match("^[^.@]*") :: string):lower()
     if normalized == "zh" or normalized:sub(1, 3) == "zh-" then
         return "zh-CN"
     end
@@ -189,8 +189,9 @@ function i18n.lastStatus(status: string, locale: string): string
         return `自动继续已在 {paused} 个低进展轮次后暂停。请继续目标后重试。`
     end
     local turns, limit = status:match("^Low%-progress continuation turn detected %((%d+)/(%w+)%)%.$")
-    if turns and (limit == "unbounded" or limit:match("^%d+$")) then
-        return `检测到低进展的继续轮次（{turns}/{if limit == "unbounded" then "不限" else limit}）。`
+    if turns and limit and (limit == "unbounded" or limit:match("^%d+$")) then
+        local shown: string = if limit == "unbounded" then "不限" else limit
+        return `检测到低进展的继续轮次（{turns}/{shown}）。`
     end
     local reserved = status:match("^Auto%-continue (%d+) reserved%.$")
     if reserved then
@@ -209,6 +210,11 @@ function i18n.lastStatus(status: string, locale: string): string
         return `{i18n.stopReason(wrap, locale)}；需要收尾。`
     end
     return status
+end
+
+-- The texts of `locale`, English unless it is Chinese.
+function i18n.messages(locale: string): typeof(i18n.en)
+    return if locale == "zh-CN" then i18n["zh-CN"] else i18n.en
 end
 
 return table.freeze(i18n)

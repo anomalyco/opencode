@@ -9,7 +9,11 @@
 -- `.txt` file says so in TS's error alert; sorting compares by byte after lowercasing, where TS collates in Turkish;
 -- and the host's list of the session's pending items follows its own reads and events (no `pending.sync`).
 local plugin = require("@opencode/plugin")
-local core = require("./core")
+local core = require("@self/core")
+
+-- What an open dialog asks and what a request waits for: a `kind` and the fields that kind carries.
+type Asked = { [string]: any }
+type Want = { [string]: any }
 
 local DRAFTS = "queue-manager.drafts.v1"
 local ANSWER = "queue.manager.answer"
@@ -20,12 +24,12 @@ local state = {
     session = "",
     -- The open dialog's generation and what it asks.
     generation = 0,
-    asking = nil :: { generation: number, ask: any }?,
+    asking = nil :: { generation: number, ask: Asked }?,
     -- Requests in flight, by ID: what each is for.
-    waiting = {} :: { [number]: any },
+    waiting = {} :: { [number]: Want },
 }
 
-local function entries(host): { string }
+local function entries(host: plugin.Host): { string }
     local stored = host:storageGet(DRAFTS)
     local sessions = type(stored) == "table" and stored.sessions
     local list = type(sessions) == "table" and sessions[state.session]
@@ -41,7 +45,7 @@ local function entries(host): { string }
 end
 
 -- TS `storeEntries`: the session's list in the stored drafts.
-local function store(host, list: { string })
+local function store(host: plugin.Host, list: { string })
     local stored = host:storageGet(DRAFTS)
     stored = if type(stored) == "table" then stored else {}
     if type(stored.sessions) ~= "table" then
@@ -57,7 +61,7 @@ local function concat(a: { string }, b: { string }): { string }
     return out
 end
 
-local function toast(host, title: string, message: string)
+local function toast(host: plugin.Host, title: string, message: string)
     host:toast({ variant = "info", title = title, message = message })
 end
 
@@ -68,7 +72,7 @@ local function text(value: string): string?
 end
 
 -- Opens `dialog` for `ask`, with a close that names its generation.
-local function show(host, dialog, ask)
+local function show(host: plugin.Host, dialog: plugin.Dialog, ask: Asked)
     state.generation += 1
     state.asking = { generation = state.generation, ask = ask }
     host:dialog({
@@ -78,20 +82,20 @@ local function show(host, dialog, ask)
     })
 end
 
-local function option(title: string, value: string, description: string?)
+local function option(title: string, value: string, description: string?): plugin.SelectOption
     return { title = title, value = value, description = description }
 end
 
-local function choose(host, title: string, options, ask)
+local function choose(host: plugin.Host, title: string, options: { plugin.SelectOption }, ask: Asked)
     show(host, { type = "select", title = title, options = options, action = plugin.command(ANSWER) }, ask)
 end
 
-local function prompt(host, title: string, placeholder: string, ask)
+local function prompt(host: plugin.Host, title: string, placeholder: string, ask: Asked)
     show(host, { type = "prompt", title = title, placeholder = placeholder, action = plugin.command(ANSWER) }, ask)
 end
 
 -- A confirm with its own labels; its answer is `true` or `false`.
-local function confirm(host, title: string, message: string, yes: string, no: string, ask)
+local function confirm(host: plugin.Host, title: string, message: string, yes: string, no: string, ask: Asked)
     show(host, {
         type = "confirm",
         title = title,
@@ -101,17 +105,17 @@ local function confirm(host, title: string, message: string, yes: string, no: st
     }, ask)
 end
 
-local function alert(host, title: string, message: string, after: string)
+local function alert(host: plugin.Host, title: string, message: string, after: string)
     show(host, { type = "alert", title = title, message = message }, { kind = "alert", after = after })
 end
 
 -- TS `reportError`.
-local function report(host, message: string, after: string)
+local function report(host: plugin.Host, message: string, after: string)
     alert(host, "Queue Manager - Error", message, after)
 end
 
 -- Sends `fetch` for `want`; one the host refuses fails as TS's request would, and goes on to `after`.
-local function ask(host, fetch, want, after: string)
+local function ask(host: plugin.Host, fetch: plugin.Fetch, want: Want, after: string)
     local id = host:fetch(fetch)
     if id then
         state.waiting[id] = want
@@ -120,22 +124,22 @@ local function ask(host, fetch, want, after: string)
     end
 end
 
-local function inboxList(host, kind: string)
+local function inboxList(host: plugin.Host, kind: string)
     -- A list that fails ends the manager, as TS's outer `try` does.
     ask(host, { method = "GET", path = `/api/session/{state.session}/inbox` }, { kind = kind }, "close")
 end
 
 -- One round of TS's menu loop: the pending count, then the menu.
-local function menu(host)
+local function menu(host: plugin.Host)
     inboxList(host, "menu")
 end
 
 -- One round of TS `nativeInbox`'s loop.
-local function inbox(host)
+local function inbox(host: plugin.Host)
     inboxList(host, "inbox")
 end
 
-local function after(host, where: string)
+local function after(host: plugin.Host, where: string)
     if where == "menu" then
         menu(host)
     elseif where == "inbox" then
@@ -143,7 +147,7 @@ local function after(host, where: string)
     end
 end
 
-local function showMenu(host, pending: number)
+local function showMenu(host: plugin.Host, pending: number)
     local drafts = #entries(host)
     choose(host, `Queue Manager | {drafts} drafts | {pending} native pending`, {
         option("Repeat 10 / 25 / 50 / 100 / 200 / custom", "repeat"),
@@ -160,12 +164,12 @@ local function showMenu(host, pending: number)
 end
 
 -- TS `manageDrafts`' list.
-local function drafts(host)
+local function drafts(host: plugin.Host)
     local list = entries(host)
     if #list == 0 then
         return alert(host, "Drafts", "Draft list is empty.", "menu")
     end
-    local options = {}
+    local options: { plugin.SelectOption } = {}
     for index, entry in list do
         table.insert(options, option(`{string.format("%03d", index)}. {core.summarize(entry)}`, tostring(index - 1)))
     end
@@ -173,7 +177,7 @@ local function drafts(host)
     choose(host, `Drafts ({#list}) - choose one`, options, { kind = "drafts" })
 end
 
-local function presets(host, count: number)
+local function presets(host: plugin.Host, count: number)
     choose(host, "Choose message", {
         option("devam et", "devam et"),
         option("continue", "continue"),
@@ -183,7 +187,7 @@ local function presets(host, count: number)
 end
 
 -- TS `flushDrafts`: the first draft goes to the queue, and leaves the drafts once it is admitted.
-local function publish(host, sent: number, count: number)
+local function publish(host: plugin.Host, sent: number, count: number)
     local first = entries(host)[1]
     if not first then
         toast(host, "Published", `{sent} messages admitted to the native queue.`)
@@ -196,18 +200,18 @@ local function publish(host, sent: number, count: number)
     }, { kind = "publish", text = first, sent = sent, count = count }, "menu")
 end
 
-local function cancelEach(host, left: { string }, done: number)
+local function cancelEach(host: plugin.Host, left: { string }, done: number)
     local id = table.remove(left, 1)
     if not id then
         toast(host, "Cleared", `{done} pending prompts cancellation requested.`)
         return menu(host)
     end
-    local fetch = { method = "DELETE", path = `/api/session/{state.session}/inbox/{id}` }
+    local fetch: plugin.Fetch = { method = "DELETE", path = `/api/session/{state.session}/inbox/{id}` }
     ask(host, fetch, { kind = "cancel-each", left = left, done = done }, "menu")
 end
 
 -- An action on draft `index` (from 0); the list comes back after it.
-local function act(host, index: number, action: string)
+local function act(host: plugin.Host, index: number, action: string)
     local list = entries(host)
     local at, last = index + 1, math.max(#list, 1)
     local next, bad
@@ -238,9 +242,9 @@ local function act(host, index: number, action: string)
 end
 
 -- An item of the menu.
-local function chosen(host, value: string, count: number)
+local function chosen(host: plugin.Host, value: string, count: number)
     if value == "repeat" then
-        local options = {}
+        local options: { plugin.SelectOption } = {}
         for _, n in { 10, 25, 50, 100, 200 } do
             table.insert(options, option(tostring(n), tostring(n)))
         end
@@ -274,7 +278,7 @@ local function chosen(host, value: string, count: number)
 end
 
 -- What a close without an answer goes on to, as TS's `undefined` does where it awaited.
-local function escaped(host, asked)
+local function escaped(host: plugin.Host, asked: Asked)
     local kind = asked.kind
     if kind == "menu" then
         return
@@ -290,7 +294,7 @@ local function escaped(host, asked)
 end
 
 -- The answer to `asked`: what it chose or typed.
-local function answer(host, asked, value: string)
+local function answer(host: plugin.Host, asked: Asked, value: string)
     local kind = asked.kind
     if kind == "menu" then
         chosen(host, value, asked.drafts)
@@ -378,7 +382,7 @@ local function answer(host, asked, value: string)
             end
             list = reversed
         else
-            table.sort(list, function(a, b)
+            table.sort(list, function(a: string, b: string): boolean
                 return a:lower() < b:lower()
             end)
             if value == "desc" then
@@ -429,7 +433,7 @@ local function answer(host, asked, value: string)
         end
     elseif kind == "cancel" then
         if value == "true" then
-            local fetch = { method = "DELETE", path = `/api/session/{state.session}/inbox/{asked.id}` }
+            local fetch: plugin.Fetch = { method = "DELETE", path = `/api/session/{state.session}/inbox/{asked.id}` }
             ask(host, fetch, { kind = "cancel" }, "inbox")
         else
             inbox(host)
@@ -446,7 +450,7 @@ local function answer(host, asked, value: string)
 end
 
 -- A request of `want` that failed: what TS's `catch` there does.
-local function failed(host, want, message: string)
+local function failed(host: plugin.Host, want: Want, message: string)
     if want.kind == "publish" then
         local left = #entries(host)
         toast(host, "Partial publish", `{want.count - math.min(left, want.count)} admitted, {left} still in drafts.`)
@@ -461,15 +465,15 @@ local function failed(host, want, message: string)
     end
 end
 
-local function replied(host, want, body)
-    local items = if type(body) == "table" then (body.data or body) else {}
+local function replied(host: plugin.Host, want: Want, body: any)
+    local items: { any } = if type(body) == "table" then (body.data or body) else {}
     if want.kind == "menu" then
         showMenu(host, #items)
     elseif want.kind == "inbox" then
         if #items == 0 then
             return alert(host, "Native inbox", "No pending items.", "menu")
         end
-        local options = {}
+        local options: { plugin.SelectOption } = {}
         for index, item in items do
             local label = if item.type == "user" or item.type == "synthetic"
                 then core.summarize(item.payload and item.payload.text or "")
@@ -479,7 +483,7 @@ local function replied(host, want, body)
         table.insert(options, option("Back", "back"))
         choose(host, `OpenCode native inbox ({#items})`, options, { kind = "inbox", items = items })
     elseif want.kind == "clear-native" then
-        local ids = {}
+        local ids: { string } = {}
         for _, item in items do
             if item.type == "user" and item.delivery == "queue" then
                 table.insert(ids, item.id)
