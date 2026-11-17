@@ -68,6 +68,7 @@ mod plugins;
 // The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod ports;
+#[cfg(feature = "ts")]
 mod ports_trio;
 mod prompt;
 mod prompt_footer;
