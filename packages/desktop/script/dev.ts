@@ -1,5 +1,8 @@
 import { $ } from "bun"
-import { constants, setPriority } from "node:os"
+import { Database } from "bun:sqlite"
+import { createHash } from "node:crypto"
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, rmSync } from "node:fs"
+import { constants, homedir, setPriority, tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareDevElectron } from "./dev-electron"
@@ -17,6 +20,7 @@ async function main() {
 
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
+  cloneLockedDevProfile()
   await prepareDesktop()
   await prepareServer(options.server)
   await startDesktop(options.electron)
@@ -81,6 +85,72 @@ function buildWebUi() {
         : `Pairing web UI build failed with code ${code}; run 'bun run --cwd packages/app build' to see why`,
     ),
   )
+}
+
+function defaultDevUserData() {
+  if (process.platform === "win32") {
+    return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "ai.opencode.desktop.dev")
+  }
+
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "ai.opencode.desktop.dev")
+  }
+
+  return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "ai.opencode.desktop.dev")
+}
+
+function isProfileLocked(userData: string) {
+  const lockfile = join(userData, process.platform === "win32" ? "lockfile" : "SingletonLock")
+
+  if (!existsSync(lockfile)) return false
+
+  if (process.platform !== "win32") return true
+
+  try {
+    const fd = openSync(lockfile, "r+")
+    closeSync(fd)
+
+    return false
+  } catch {
+    return true
+  }
+}
+
+// When OpenCode Dev is already running, snapshot only its small desktop profile (`drafts.sqlite` + window state)
+// into a per-worktree temp userData dir while sharing the main OpenCode database (`~/.local/share/opencode`) in place.
+function cloneLockedDevProfile() {
+  if (process.env.OPENCODE_DESKTOP_USER_DATA || process.env.OPENCODE_DESKTOP_TEST_ROOT) return
+  const sourceDir = defaultDevUserData()
+
+  if (!isProfileLocked(sourceDir)) return
+  const slug = createHash("sha1").update(import.meta.dirname).digest("hex").slice(0, 8)
+  const cloneDir = join(tmpdir(), `opencode-desktop-dev-${slug}`)
+  mkdirSync(cloneDir, { recursive: true })
+
+  const sourceDb = join(sourceDir, "drafts.sqlite")
+  const cloneDb = join(cloneDir, "drafts.sqlite")
+
+  if (existsSync(sourceDb)) {
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(`${cloneDb}${suffix}`, { force: true })
+    const db = new Database(sourceDb, { readonly: true })
+    db.exec(`VACUUM INTO ${JSON.stringify(cloneDb.replaceAll("\\", "/"))}`)
+    db.close()
+  }
+
+  for (const entry of readdirSync(sourceDir)) {
+    if (
+      entry === "opencode.settings" ||
+      entry === "Local State" ||
+      entry === "Preferences" ||
+      entry.startsWith("window-state-")
+    ) {
+      copyFileSync(join(sourceDir, entry), join(cloneDir, entry))
+    }
+  }
+
+  process.env.OPENCODE_DESKTOP_USER_DATA = cloneDir
+  process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ??= "0"
+  console.log(`OpenCode Dev is already running; cloned desktop state into ${cloneDir} (sharing main OpenCode DB)`)
 }
 
 async function startDesktop(args: string[]) {
