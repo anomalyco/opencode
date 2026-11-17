@@ -43,16 +43,15 @@ local function round(value: number): number
 end
 context.round = round
 
--- A string's length as JavaScript counts it, in UTF-16 units.
+-- A string's length as JavaScript counts it, in UTF-16 units: its characters, and one more for each of four bytes in
+-- UTF-8 (a lead byte from `\240`), which UTF-16 writes as two. Both counts run in the VM's C, not character by
+-- character.
 local function length(text: string?): number
     if not text then
         return 0
     end
-    local units = 0
-    for _, code in utf8.codes(text) do
-        units += if code >= 0x10000 then 2 else 1
-    end
-    return units
+    local _, wide = text:gsub("[\240-\247]", "")
+    return (utf8.len(text) or #text) + wide
 end
 
 -- The length of `JSON.stringify(value)`, for a tool's structured error.
