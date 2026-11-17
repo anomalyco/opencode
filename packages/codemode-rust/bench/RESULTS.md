@@ -55,7 +55,7 @@ mins and means are shown for spread, never compared.
 
 | Artifact                                 |     Bytes |    MiB |
 | ---------------------------------------- | --------: | -----: |
-| Rust embed example, release, stripped    |   2139576 |   2.04 |
+| Rust embed example, release, stripped    |   6033016 |   5.75 |
 | bun executable (what you ship otherwise) | 107308936 | 102.34 |
 
 ## (e) Perturbed variants, 11 iterations after one warm-up

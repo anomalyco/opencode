@@ -694,17 +694,19 @@ fn s_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    use icu_collator::{Collator, CollatorBorrowed, options::CollatorOptions};
+    // The root collation the reference's host uses for its default locale (en-US), built once per process.
+    static COLLATOR: std::sync::LazyLock<Option<CollatorBorrowed<'static>>> =
+        std::sync::LazyLock::new(|| {
+            Collator::try_new(Default::default(), CollatorOptions::default()).ok()
+        });
     let s = this_str(vm, &this)?;
     let o = arg_str(vm, args, 0)?;
     let (a, b) = (vm.text(s), vm.text(o));
-    // Case-insensitive first, then lowercase before uppercase, like the default collation for plain text.
-    let order = a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| {
-        a.chars()
-            .zip(b.chars())
-            .find(|(x, y)| x != y)
-            .map(|(x, y)| y.is_lowercase().cmp(&x.is_lowercase()))
-            .unwrap_or(a.len().cmp(&b.len()))
-    });
+    let order = match COLLATOR.as_ref() {
+        Some(c) => c.compare(a, b),
+        None => a.cmp(b),
+    };
     Ok(Value::Num(match order {
         std::cmp::Ordering::Less => -1.0,
         std::cmp::Ordering::Equal => 0.0,

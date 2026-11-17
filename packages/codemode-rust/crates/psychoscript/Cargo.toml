@@ -10,6 +10,7 @@ description = "Embeddable Rust port of OpenCode's Code Mode language"
 test262 = []
 
 [dependencies]
+icu_collator = { version = "2.4", default-features = false, features = ["compiled_data"] }
 idna_adapter = "~1.1"
 oxc_allocator = "0.159"
 oxc_ast = "0.159"
