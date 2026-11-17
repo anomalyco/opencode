@@ -67,6 +67,10 @@ describe("Mime.detect", () => {
       expect(Mime.detectMedia(Buffer.from(text, "latin1"))).toBeUndefined()
   })
 
+  test("detects WebM from its EBML header", () => {
+    expect(Mime.detect(Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3))).toBe("video/webm")
+  })
+
   test("tells ISO-BMFF brands apart", () => {
     expect(Mime.detect(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe("image/avif")
     expect(Mime.detect(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")

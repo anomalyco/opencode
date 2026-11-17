@@ -471,14 +471,14 @@ Earlier work
     ])
   })
 
-  test("uses materialized image and PDF data as provider media", () => {
+  test("uses materialized image, PDF, audio, and video data as provider media", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
-          id: id("user-local-image"),
+          id: id("user-local-media"),
           type: "user",
-          text: "Inspect this image",
+          text: "Inspect these attachments",
           files: [
             FileAttachment.make({ data, mime: "image/png", source: { type: "inline" }, name: "image.png" }),
             FileAttachment.make({
@@ -487,6 +487,10 @@ Earlier work
               source: { type: "inline" },
               name: "document.pdf",
             }),
+            FileAttachment.make({ data, mime: "video/mp4", source: { type: "inline" }, name: "clip.mp4" }),
+            FileAttachment.make({ data, mime: "video/webm", source: { type: "inline" }, name: "clip.webm" }),
+            FileAttachment.make({ data, mime: "video/quicktime", source: { type: "inline" }, name: "clip.mov" }),
+            FileAttachment.make({ data, mime: "audio/mpeg", source: { type: "inline" }, name: "voice.mp3" }),
           ],
           time: { created },
         }),
@@ -495,9 +499,13 @@ Earlier work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "text", text: "Inspect this image" },
+      { type: "text", text: "Inspect these attachments" },
       { type: "media", media: Media.base64(data, "image/png"), filename: "image.png" },
       { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
+      { type: "media", media: Media.base64(data, "video/mp4"), filename: "clip.mp4" },
+      { type: "media", media: Media.base64(data, "video/webm"), filename: "clip.webm" },
+      { type: "media", media: Media.base64(data, "video/quicktime"), filename: "clip.mov" },
+      { type: "media", media: Media.base64(data, "audio/mpeg"), filename: "voice.mp3" },
     ])
   })
 
