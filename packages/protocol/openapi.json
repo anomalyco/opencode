@@ -16317,47 +16317,6 @@
         "required": ["_tag", "artifactID", "message"],
         "additionalProperties": false
       },
-      "Blob.ID": {
-        "type": "string",
-        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}_(0|[1-9][0-9]{0,2})$"
-      },
-      "Blob.Info": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Blob.ID"
-          },
-          "mime": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "number"
-          },
-          "expiresAt": {
-            "type": "number",
-            "description": "Epoch milliseconds after which the blob may be deleted. Read it with GET /api/experimental/blob/:id"
-          }
-        },
-        "required": ["id", "mime", "bytes", "expiresAt"],
-        "additionalProperties": false
-      },
-      "BlobNotFoundErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["BlobNotFoundError"]
-          },
-          "blobID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "blobID", "message"],
-        "additionalProperties": false
-      },
       "Automation.Action": {
         "anyOf": [
           {
@@ -16711,6 +16670,47 @@
           }
         },
         "required": ["_tag", "automationID", "message"],
+        "additionalProperties": false
+      },
+      "Blob.ID": {
+        "type": "string",
+        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}_(0|[1-9][0-9]{0,2})$"
+      },
+      "Blob.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Blob.ID"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Epoch milliseconds after which the blob may be deleted. Read it with GET /api/experimental/blob/:id"
+          }
+        },
+        "required": ["id", "mime", "bytes", "expiresAt"],
+        "additionalProperties": false
+      },
+      "BlobNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["BlobNotFoundError"]
+          },
+          "blobID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "blobID", "message"],
         "additionalProperties": false
       },
       "Command.Info": {
