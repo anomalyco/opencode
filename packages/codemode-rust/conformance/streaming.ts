@@ -255,9 +255,23 @@ const programs: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)}); const it = r.body[Symbol.asyncIterator](); const a = await it.next(); const b = await it.return(); return [[...a.value], a.done, b, r.body.locked]`,
 ]
 
+// `t.echo` answers its input and logs that it started, so the log shows when each call's arguments had crossed.
+const echo = (log: Array<unknown>) =>
+  Tool.make({
+    description: "Echoes its input",
+    input: Schema.Unknown,
+    output: Schema.Unknown,
+    execute: (input: unknown) =>
+      Effect.sync(() => {
+        log.push(["echo", input])
+        return input
+      }),
+  })
+
 const record = async (code: string) => {
   const log: Array<unknown> = []
-  const result = await Effect.runPromise(CodeMode.make({ extensions: [web(log)] }).execute(code))
+  const runtime = CodeMode.make({ tools: { t: { echo: echo(log) } }, extensions: [web(log)] })
+  const result = await Effect.runPromise(runtime.execute(code))
   return {
     code,
     outcome: result.ok
@@ -474,6 +488,61 @@ programs.push(
   during("const err = new TypeError('boom'); err.extra = [1, 2]", "for (let j = 0; j < 3000; j++) { JSON.stringify({ err, n: [new Date(5)] }, (k, v) => v); see(j) }"),
 )
 
+// Crossing to the host: a tool's or search's arguments, and the result, cross as JSON; a promise inside is awaited by
+// the reference's internal walk, a toJSON of the program's is called there, and the call starts once they crossed.
+const later = (v: string) => `new Promise((done) => setTimeout(() => done(${v}), 0))`
+programs.push(
+  `return await tools.t.echo({ a: Promise.resolve(5), b: { toJSON: () => 7 }, c: [Promise.resolve(1), { d: Promise.resolve('x') }] })`,
+  `return [await tools.t.echo(Promise.resolve({ x: 1 })), await tools.t.echo(), await tools.t.echo(undefined), await tools.t.echo(null)]`,
+  `return await tools.t.echo({ s: new Set([Promise.resolve(2), 3]), q: new URLSearchParams('a=1'), h: new Headers({ k: 'v' }), d: new Date(0), m: new Map([[1, 2]]), e: new TypeError('x'), p: Promise.resolve(0), f: () => 1, u: undefined, n: NaN })`,
+  `const o = { p: Promise.resolve(1) }; const shared = { v: 1 }; return await tools.t.echo({ o, x: [shared, shared, o] })`,
+  `const big = Array(3000).fill({ k: 1 }); return (await tools.t.echo({ big })).big.length`,
+  `const e = new Error('m'); e.extra = Promise.resolve(2); e.name = 'Custom'; return await tools.t.echo({ e })`,
+  `return await tools.t.echo({ ['__proto__']: Promise.resolve(1), a: Promise.resolve(3) })`,
+  `const p = tools.t.echo({ a: Promise.reject(new Error('no')) }); return await p.catch((e) => [e.name, e.message])`,
+  `return await tools.t.echo({ p: Promise.resolve(1), t: { toJSON() { throw new TypeError('tj') } } }).catch((e) => [e.name, e.message])`,
+  `return await tools.t.echo({ p: Promise.resolve(1), b: new Uint8Array(1) }).catch((e) => [e.name, e.message])`,
+  `const a = { p: Promise.resolve(1) }; const b = { a }; return await tools.t.echo({ x: [b, b] })`,
+  `let o = 1; for (let i = 0; i < 40; i++) o = { o }; return await tools.t.echo({ p: Promise.resolve(1), o }).then((r) => { let n = 0; while (r.o) { r = r.o; n++ } return n }, (e) => [e.name, e.message])`,
+  `let o = 1; for (let i = 0; i < 120; i++) o = { o }; return await tools.t.echo({ p: Promise.resolve(1), o }).catch((e) => [e.name, e.message])`,
+  `let o = Promise.resolve(1); for (let i = 0; i < 40; i++) o = { o }; return await tools.t.echo(o).catch((e) => [e.name, e.message])`,
+  `return await tools.t.echo(1, Promise.resolve(2)).catch((e) => [e.name, e.message])`,
+  `const log = []; const p = tools.t.echo({ a: { toJSON(k) { log.push('toJSON ' + k); return 1 } }, p: Promise.resolve(2) }); log.push('after'); return [log, await p]`,
+  `const log = []; const p = tools.t.echo({ p: Promise.resolve(1), t: { toJSON() { log.push('late'); return 2 } } }); log.push('after'); await p; return log`,
+  `const log = []; const a = tools.t.echo({ n: 'walked', p: Promise.resolve(1) }); const b = tools.t.echo({ n: 'plain' }); Promise.resolve().then(() => tools.t.echo({ n: 'job' })); log.push(typeof a.then)
+   await Promise.all([a, b]); return log`,
+  `const a = tools.t.echo({ n: 'later', p: ${later("1")} }); const b = tools.t.echo({ n: 'then' }); return [await a, await b]`,
+  `const p = Promise.resolve(1); const calls = [1, 2, 3].map((n) => tools.t.echo({ n, p })); return await Promise.all(calls)`,
+  `return await tools.search({ query: Promise.resolve('echo') }).then((r) => r.items.length)`,
+  `return { a: Promise.resolve(5), b: [Promise.resolve(2), { c: Promise.resolve(3) }], d: { toJSON: () => 'D' } }`,
+  `return Promise.resolve({ x: Promise.resolve(1) })`,
+  `return { then(done) { done({ y: Promise.resolve(2) }) } }`,
+  `return { a: Promise.reject(new TypeError('rejected')) }`,
+  `return { a: Promise.resolve(1), t: { toJSON() { throw new RangeError('tj') } } }`,
+  `let o = Promise.resolve(1); for (let i = 0; i < 40; i++) o = { o }; return o`,
+  `let o = 1; for (let i = 0; i < 120; i++) o = { o }; return { p: Promise.resolve(1), o }`,
+  `const log = []; Promise.resolve().then(() => log.push('job')); return { log, p: Promise.resolve(1).then(() => log.push('then')) }`,
+  `return search({ query: Promise.resolve('echo') }).items.length`,
+  `function f() { return search({ query: Promise.resolve('echo') }).items.length } return f()`,
+  `const log = []; Promise.resolve().then(() => log.push('job')); const r = search({ query: Promise.resolve('echo') }); log.push('after'); return [log, r.items.length]`,
+  `try { search({ query: Promise.reject(new Error('no')) }) } catch (e) { return [e.name, e.message] }`,
+  `try { search({ query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] }`,
+  `async function f() { return search({ query: Promise.resolve('echo') }).remaining } const p = f(); const t = typeof p.then; return [t, await p]`,
+  `const g = (q) => search(q).items.length; return [g({ query: { toJSON: () => 'echo' } }), g({ query: Promise.resolve('echo') })]`,
+)
+
+// Busy loops through the walk: its fuel decides when the reference starts the queued read.
+programs.push(
+  after("", "for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' })"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.echo([Promise.resolve(1), [Promise.resolve(2), [Promise.resolve(3)]]])"),
+  after("const t = { toJSON: () => [1, 2] }", "for (let j = 0; j < 37; j++) await tools.t.echo({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.echo(Promise.resolve(j)).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) search({ query: Promise.resolve('echo'), limit: 1 })"),
+  during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { tools.t.echo({ t, a: [1, 2, { c: 3 }] }); see(j) }"),
+  during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { search({ query: t }); see(j) }"),
+  during("const x = { v: 1 }; const many = Array(2049).fill(x)", "for (let j = 0; j < 30; j++) { tools.t.echo({ many }); see(j) }"),
+)
+
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.
 const suspensions: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)}); await tools.wait({}); return [r.status, r.bodyUsed]`,
@@ -490,6 +559,11 @@ const suspensions: Array<string> = [
    const text = await get(); await tools.wait({}); return await text()`,
   // Suspended while a response has arrived but the run has not taken it yet: a busy loop holds the run.
   `const p = fetch(${JSON.stringify(text)}); for (let i = 0; i < 200000000; i++) {} const r = await p; return r.status`,
+  // Suspended while a crossing awaits: a tool call's arguments, the result, and a search that parked its frames.
+  `const r = tools.t.echo({ a: 1, w: tools.wait({}) }); return await r`,
+  `return { a: 1, w: tools.wait({}), b: [Promise.resolve(2)] }`,
+  `function f() { return search({ query: tools.wait({}).then(() => 'echo') }).items.length } return [f(), 1]`,
+  `const t = { toJSON: () => 9 }; const r = tools.t.echo({ t, n: [1, { w: tools.wait({}) }], z: t }); return await r`,
 ]
 
 const suspend = async (code: string) => {
@@ -510,7 +584,10 @@ const suspend = async (code: string) => {
     ),
   })
   // Without `tools.wait`, the suspend comes once the response has arrived.
-  const runtime = CodeMode.make({ tools: { wait }, extensions: [web(log, code.includes("tools.wait") ? undefined : started)] })
+  const runtime = CodeMode.make({
+    tools: { wait, t: { echo: echo(log) } },
+    extensions: [web(log, code.includes("tools.wait") ? undefined : started)],
+  })
   const program = runtime.program(code)
   const fiber = Effect.runFork(program.run())
   await waiting

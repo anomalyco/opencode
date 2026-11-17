@@ -1241,6 +1241,7 @@ impl<'rt> Vm<'rt> {
         })
     }
 
+    #[cfg(feature = "test262")]
     pub fn error_text(&mut self, e: &Value) -> String {
         if let Value::Obj(id) = e
             && let Kind::Error(_) = self.heap[*id as usize].kind

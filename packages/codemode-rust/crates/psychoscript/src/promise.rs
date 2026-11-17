@@ -276,6 +276,7 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(())
             }
+            Reaction::Cross(id) => crate::cross::advance(self, id, Some(outcome)),
             Reaction::Program => {
                 if self.outcome.is_none() {
                     self.outcome = Some(outcome);

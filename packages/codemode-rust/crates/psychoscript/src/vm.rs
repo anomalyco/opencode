@@ -85,6 +85,11 @@ pub struct SavedFrame {
     pub stack: Vec<Slot>,
     pub handlers: Vec<Handler>,
     pub started: bool,
+    /// The frames above `frame` that wait with it, a `search(...)` parked them (see `Vm::park_search`): their `base`
+    /// and `hbase` are relative to `frame`'s.
+    // Boxed as the job stack holds them, so parking and restoring move the boxes instead of copying frames.
+    #[allow(clippy::vec_box)]
+    pub above: Vec<Box<Frame>>,
 }
 
 /// How `run` left its base frame. The value is packed: returning a two-word `Value` through memory stalls the
@@ -124,6 +129,8 @@ pub enum Reaction {
         outcome: Result<Value, Value>,
     },
     Program,
+    /// Resume the crossing to the host (`cross`) that awaited.
+    Cross(Id),
     /// Resume the async generator suspended at an `await`.
     AwaitGen(Id),
     /// Answer an async generator's `return` request with how its value settled.
@@ -236,6 +243,12 @@ pub struct Vm<'rt> {
     budget: i32,
     pub fatal: Option<(DiagnosticKind, String)>,
     pub outcome: Option<Result<Value, Value>>,
+    /// The program's result once it has crossed to the host.
+    pub result_json: Option<crate::Json>,
+    /// The `search` global, which a call from bytecode runs itself (see `call_op`), or 0.
+    pub(crate) search_fn: Id,
+    /// A `search(...)` whose arguments' walk awaits: the call parks its frames (see `park_search`).
+    pub(crate) park: bool,
     native_depth: usize,
     /// Address near the bottom of the native stack this run started on, and how much of it calls may use.
     pub stack_base: usize,
@@ -322,6 +335,9 @@ impl<'rt> Vm<'rt> {
             budget: HANDOVER_FUEL,
             fatal: None,
             outcome: None,
+            result_json: None,
+            search_fn: 0,
+            park: false,
             native_depth: 0,
             json_walk: 0,
             json_walks: 0,
@@ -1045,6 +1061,9 @@ impl<'rt> Vm<'rt> {
                     }
                     return Ok(true);
                 }
+                if id == self.search_fn {
+                    return self.search_op(fpos);
+                }
                 let mut args = self.arg_pool.pop().unwrap_or_default();
                 args.extend(self.stack.drain(fpos + 2..).map(Slot::get));
                 let this = self.pop();
@@ -1243,6 +1262,7 @@ impl<'rt> Vm<'rt> {
                 stack: Vec::new(),
                 handlers: Vec::new(),
                 started,
+                above: Vec::new(),
             })
         });
         saved.stack.clear();
@@ -1261,13 +1281,154 @@ impl<'rt> Vm<'rt> {
         let Some(mut frame) = saved.frame.take() else {
             return false;
         };
-        frame.base = self.stack.len() + 2;
+        let (base, hbase) = (self.stack.len() + 2, self.handlers.len() as u32);
+        frame.base = base;
         frame.is_base = true;
-        frame.hbase = self.handlers.len() as u32;
+        frame.hbase = hbase;
         self.stack.append(&mut saved.stack);
         self.handlers.append(&mut saved.handlers);
         self.frames.push(frame);
+        if !saved.above.is_empty() {
+            self.restore_above(saved, base, hbase);
+        }
         true
+    }
+
+    /// The frames a `search(...)` parked above a restored frame, at its `base` and `hbase`.
+    #[cold]
+    #[inline(never)]
+    fn restore_above(&mut self, saved: &mut SavedFrame, base: usize, hbase: u32) {
+        for mut f in saved.above.drain(..) {
+            f.base += base;
+            f.hbase += hbase;
+            self.frames.push(f);
+        }
+    }
+
+    /// The async function a `search(...)` called now from bytecode would park, frames and all, while its arguments'
+    /// walk awaits, as the reference parks every frame above its nearest async one: `None` when a native call or a
+    /// generator stands in between, which cannot wait.
+    pub(crate) fn search_parkable(&self) -> Option<u32> {
+        for f in self.frames.iter().rev() {
+            match f.kind {
+                FrameKind::Async(c) => return Some(c),
+                FrameKind::Generator(..) => return None,
+                FrameKind::Normal if f.is_base => return None,
+                FrameKind::Normal => {}
+            }
+        }
+        None
+    }
+
+    /// Parks the frames from the nearest async function up to the `search(...)` call with that function's coroutine,
+    /// as an `await` there would; returns that function's promise and whether its frame was this run's base.
+    fn park_search(&mut self) -> (Value, bool) {
+        let k = self
+            .frames
+            .iter()
+            .rposition(|f| matches!(f.kind, FrameKind::Async(_)))
+            .unwrap_or(0);
+        let FrameKind::Async(c) = self.frames[k].kind else {
+            return (Value::Undef, false);
+        };
+        let mut parked: Vec<Box<Frame>> = self.frames.drain(k..).collect();
+        let first = parked.remove(0);
+        let (base, hbase) = (first.base, first.hbase);
+        let mut saved = self.coroutines[c as usize].saved.take().unwrap_or_else(|| {
+            Box::new(SavedFrame {
+                frame: None,
+                stack: Vec::new(),
+                handlers: Vec::new(),
+                started: true,
+                above: Vec::new(),
+            })
+        });
+        saved.stack.clear();
+        saved.stack.extend(self.stack.drain(base - 2..));
+        saved.handlers.clear();
+        saved.handlers.extend(self.handlers.drain(hbase as usize..));
+        saved.started = true;
+        saved.above = parked
+            .into_iter()
+            .map(|mut f| {
+                f.base -= base;
+                f.hbase -= hbase;
+                f
+            })
+            .collect();
+        let is_base = first.is_base;
+        saved.frame = Some(first);
+        self.coroutines[c as usize].saved = Some(saved);
+        let result = match self.coroutines[c as usize].promise {
+            Some(p) => Value::Obj(p),
+            None => Value::Undef,
+        };
+        (result, is_base)
+    }
+
+    /// The `Call` of `search`: the reference's `search` returns to the VM, which crosses its arguments after the call's
+    /// fifty. Returns whether the call parked its frames.
+    #[cold]
+    #[inline(never)]
+    fn search_op(&mut self, fpos: usize) -> Result<bool, Value> {
+        let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
+        self.stack.truncate(fpos);
+        self.spend(NATIVE_FUEL);
+        let r = crate::cross::search_call(self, &args, true)?;
+        if self.park {
+            return Ok(true);
+        }
+        self.push(r);
+        Ok(false)
+    }
+
+    /// After a call that parked its frames (`search_op`): the promise the call answers, pushed for the frame below, or
+    /// returned when the parked function was this run's base.
+    #[cold]
+    #[inline(never)]
+    fn parked(&mut self) -> Option<Value> {
+        self.park = false;
+        let (result, is_base) = self.park_search();
+        if is_base {
+            return Some(result);
+        }
+        self.push(result);
+        None
+    }
+
+    /// A parked `search(...)`'s arguments crossed or failed: its answer, then the parked frames run on.
+    pub(crate) fn answer_search(
+        &mut self,
+        c: u32,
+        outcome: Result<Vec<Option<crate::Json>>, Value>,
+    ) -> Result<(), Value> {
+        let answer = match outcome {
+            Ok(json) => crate::host::search_value(self, &json),
+            Err(e) => Err(e),
+        };
+        if self.fatal.is_some() {
+            return answer.map(|_| ());
+        }
+        let Some(mut saved) = self.coroutines[c as usize].saved.take() else {
+            return Ok(());
+        };
+        let restored = self.restore_frame(&mut saved);
+        self.coroutines[c as usize].saved = Some(saved);
+        if !restored {
+            return Ok(());
+        }
+        match answer {
+            Ok(v) => self.push(v),
+            Err(e) => {
+                if let Err(r) = self.handle_throw(e) {
+                    return r.map(|_| ());
+                }
+            }
+        }
+        self.resumable_run = true;
+        let r = self.run();
+        self.resumable_run = false;
+        r.map(|_| ())
     }
 
     /// Resumes a suspended async function with the settled value of what it awaited.
@@ -2426,6 +2587,11 @@ impl<'rt> Vm<'rt> {
                     Op::Call(argc) => {
                         self.frames[fi].pc = pc;
                         if tri!(self.call_op(argc as usize)) {
+                            if self.park
+                                && let Some(result) = self.parked()
+                            {
+                                return Ok(Exit::Return(Slot::pack(result)));
+                            }
                             continue 'outer;
                         }
                     }
@@ -2442,6 +2608,11 @@ impl<'rt> Vm<'rt> {
                         let argc = args.len();
                         self.stack.extend(args.into_iter().map(Slot::pack));
                         if tri!(self.call_op(argc)) {
+                            if self.park
+                                && let Some(result) = self.parked()
+                            {
+                                return Ok(Exit::Return(Slot::pack(result)));
+                            }
                             continue 'outer;
                         }
                     }
@@ -2476,7 +2647,7 @@ impl<'rt> Vm<'rt> {
                                     Value::Obj(p)
                                 }
                                 None => {
-                                    self.program_return(v);
+                                    crate::cross::program_result(self, v)?;
                                     Value::Undef
                                 }
                             },
@@ -2530,6 +2701,7 @@ impl<'rt> Vm<'rt> {
                             stack,
                             handlers: Vec::new(),
                             started: false,
+                            above: Vec::new(),
                         }));
                         self.heap[g as usize].kind = if is_async {
                             Kind::AsyncGenerator(Box::new(AsyncGen {
@@ -2863,26 +3035,6 @@ impl<'rt> Vm<'rt> {
     fn tdz_error(&mut self, name: Atom) -> Value {
         let n = self.atoms.text(name).to_owned();
         self.reference_error(&format!("Cannot access '{n}' before initialization"))
-    }
-
-    #[inline(never)]
-    fn program_return(&mut self, v: Value) {
-        let thenable = match &v {
-            Value::Obj(id) => {
-                matches!(self.heap[*id as usize].kind, Kind::Promise(_)) || {
-                    let then = self.names.then;
-                    let t = self.get_obj(*id, then);
-                    self.is_callable(&t)
-                }
-            }
-            _ => false,
-        };
-        if thenable {
-            let p = self.promise_resolve(v);
-            self.perform_then(p, Reaction::Program);
-        } else {
-            self.outcome = Some(Ok(v));
-        }
     }
 
     // ---------- driver ----------

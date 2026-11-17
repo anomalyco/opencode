@@ -11,6 +11,7 @@ mod builtins;
 mod bytecode;
 mod compiler;
 mod convert;
+mod cross;
 mod exec;
 mod extension;
 mod hooks;

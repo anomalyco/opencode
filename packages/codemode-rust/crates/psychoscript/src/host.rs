@@ -338,7 +338,13 @@ pub fn install(vm: &mut Vm, referenced: &[Atom]) {
 /// Defines one host global by name; false when there is none.
 fn define_host_global(vm: &mut Vm, name: &str) -> bool {
     let v = match name {
-        "search" => native(vm, "search", 0, search_native, Value::Undef),
+        "search" => {
+            let f = native(vm, "search", 0, search_native, Value::Undef);
+            if let Value::Obj(id) = f {
+                vm.search_fn = id;
+            }
+            f
+        }
         "require" => native(vm, "require", 1, require_native, Value::Undef),
         IMPORT_GLOBAL => native(vm, "import", 2, import_native, Value::Undef),
         _ => {
@@ -384,9 +390,7 @@ fn native(vm: &mut Vm, name: &str, length: u8, f: crate::vm::NativeFn, data: Val
 
 /// `tools.<path>(...args)`: returns a promise at once; the call starts now and settles it later.
 pub fn call_tool(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
-    let p = vm.new_promise();
-    start_tool(vm, p, path, args);
-    Ok(Value::Obj(p))
+    crate::cross::tool_call(vm, path, args)
 }
 
 /// Everything about a call that happens before its tool runs: the reference's `decode` and `admit`.
@@ -396,12 +400,13 @@ struct Admitted<'rt> {
     call: u64,
 }
 
-/// Starts a call whose promise is `p`. A call that ends at once queues its outcome; the rest become tasks.
-fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: &[Value]) {
+/// Starts a call whose promise is `p`, once its arguments have crossed (`args`, `None` for undefined). A call that ends
+/// at once queues its outcome; the rest become tasks.
+pub(crate) fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: Vec<Option<Json>>) {
     let setup = vm.host.setup;
     // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
     if path == "search" && !setup.registry.exists("search") {
-        let s = match run_search(vm, args) {
+        let s = match run_search(vm, &args) {
             Ok(json) => Settlement::Json(json),
             Err(f) => Settlement::Failure(f),
         };
@@ -505,7 +510,11 @@ pub fn spawn_tool<'rt>(
 }
 
 #[inline]
-fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Result<Admitted<'rt>, Box<Failed>> {
+fn admit<'rt>(
+    vm: &mut Vm<'rt>,
+    path: &str,
+    args: Vec<Option<Json>>,
+) -> Result<Admitted<'rt>, Box<Failed>> {
     let setup = vm.host.setup;
     let Some(tool) = setup.registry.get(path) else {
         return Err(unknown_tool(setup, path));
@@ -516,20 +525,19 @@ fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: &[Value]) -> Result<Admitted<'
     } else {
         None
     };
-    let input = decode(vm, path, &tool.input, entry_field.as_deref(), args, false)?;
+    let input = decode(path, &tool.input, entry_field.as_deref(), args, false)?;
     admit_call(vm, path, &input)?;
     let call = vm.host.next_call();
     Ok(Admitted { tool, input, call })
 }
 
-/// Copies the call's argument out as JSON and decodes it with the tool's input schema.
+/// Decodes the call's crossed argument with the tool's input schema.
 #[inline]
 fn decode(
-    vm: &mut Vm,
     name: &str,
     schema: &crate::Schema,
     string_field: Option<&str>,
-    args: &[Value],
+    args: Vec<Option<Json>>,
     search: bool,
 ) -> Result<Json, Box<Failed>> {
     if args.len() > 1 {
@@ -538,18 +546,9 @@ fn decode(
             format!("Tool '{name}' expects at most one input object."),
         ));
     }
-    let input = match args.first() {
+    let input = match args.into_iter().next() {
         None => Json::Object(serde_json::Map::new()),
-        Some(v) => match crate::convert::to_json(vm, v) {
-            Ok(j) => j,
-            Err(e) => {
-                let msg = vm.error_text(&e);
-                return Err(Failed::new(
-                    DiagnosticKind::InvalidDataValue,
-                    format!("Invalid input for tool '{name}': {msg}"),
-                ));
-            }
-        },
+        Some(j) => j.unwrap_or(Json::Null),
     };
     let input = match (string_field, input) {
         (Some(field), Json::String(s)) => {
@@ -865,7 +864,13 @@ fn failure_value(
 
 // ---------- search ----------
 
+/// `search(...)` called other than from bytecode, which `call_op` runs itself (`cross::search_call`).
 fn search_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res {
+    crate::cross::search_call(vm, args, false)
+}
+
+/// What `search(...)` answers for its crossed arguments.
+pub(crate) fn search_value(vm: &mut Vm, args: &[Option<Json>]) -> Res {
     match run_search(vm, args) {
         Ok(json) => {
             let v = crate::convert::from_json(vm, &json);
@@ -879,22 +884,15 @@ fn search_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res 
 }
 
 /// The built-in search, blocking: decode, admit, the hooks, then the ranking.
-fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Box<Failed>> {
+fn run_search(vm: &mut Vm, args: &[Option<Json>]) -> Result<Json, Box<Failed>> {
     let setup = vm.host.setup;
-    let args: Vec<Value> = match args.first() {
-        Some(Value::Str(s)) => {
-            let query = crate::strings::host_text(vm.text(*s)).into_owned();
-            let id = vm.new_object();
-            let q = vm.str_val(&query);
-            let key = vm.atoms.intern("query");
-            vm.define(id, key, q);
-            let mut rest = vec![Value::Obj(id)];
-            rest.extend_from_slice(&args[1..]);
-            rest
-        }
-        _ => args.to_vec(),
-    };
-    let input = decode(vm, "search", &search::input_schema(), None, &args, true)?;
+    let mut args = args.to_vec();
+    if let Some(Some(Json::String(query))) = args.first() {
+        let mut map = serde_json::Map::new();
+        map.insert("query".into(), Json::String(query.clone()));
+        args[0] = Some(Json::Object(map));
+    }
+    let input = decode("search", &search::input_schema(), None, args, true)?;
     admit_call(vm, "search", &input)?;
     let ctx = vm.host.context();
     let key = ctx.key();

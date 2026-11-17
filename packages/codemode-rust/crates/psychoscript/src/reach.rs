@@ -50,6 +50,9 @@ impl Walk<'_> {
         if let Some(f) = &s.frame {
             self.frame(f);
         }
+        for f in &s.above {
+            self.frame(f);
+        }
         self.slots(&s.stack);
     }
 
@@ -78,6 +81,7 @@ impl Walk<'_> {
                 self.id(*derived);
             }
             Reaction::Await(_) | Reaction::Program => {}
+            Reaction::Cross(id) => self.id(*id),
             Reaction::Resolve(t) => self.id(*t),
             Reaction::Comb { comb, .. } => self.id(*comb),
             Reaction::Finally { cleanup, derived } => {
@@ -147,6 +151,10 @@ impl Walk<'_> {
             | Kind::MapIter { target, .. }
             | Kind::ExoticIter { target, .. } => self.id(*target),
             Kind::Resolvers { promise, .. } => self.id(*promise),
+            Kind::Cross(c) => {
+                let values: Vec<Value> = crate::cross::values(c).collect();
+                self.vals(values.iter());
+            }
             Kind::Combinator(c) => {
                 self.id(c.promise);
                 self.vals(c.values.iter());

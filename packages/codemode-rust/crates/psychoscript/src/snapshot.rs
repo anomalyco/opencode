@@ -264,6 +264,53 @@ fn opt_id(id: Option<Id>) -> J {
     id.map_or(J::Null, J::from)
 }
 
+/// A crossing to the host in progress (`cross::Cross`).
+fn cross(c: &crate::cross::Cross) -> J {
+    use crate::cross::{Step, Target, Waiting};
+    let stack: Vec<J> = c
+        .stack
+        .iter()
+        .map(|v| {
+            let step = match &v.step {
+                Step::Start => json!(["s"]),
+                Step::Array {
+                    target,
+                    out,
+                    len,
+                    i,
+                } => json!(["a", val(target), out, len, i]),
+                Step::Object {
+                    target,
+                    out,
+                    names,
+                    i,
+                } => json!(["o", val(target), out, vals(names), i]),
+            };
+            json!([val(&v.holder), val(&v.key), v.depth, step])
+        })
+        .collect();
+    let target = match &c.target {
+        Target::Tool { path, promise } => json!(["tool", path.as_ref(), promise]),
+        Target::Search { coroutine } => json!(["search", coroutine]),
+        Target::Result => json!(["result"]),
+    };
+    let waiting = match c.waiting {
+        Waiting::No => 0,
+        Waiting::Root => 1,
+        Waiting::Value => 2,
+    };
+    json!([
+        "x",
+        vals(&c.roots),
+        vals(&c.crossed),
+        stack,
+        vals(&c.ancestors),
+        target,
+        waiting,
+        c.owed
+    ])
+}
+
 // ---------- capture ----------
 
 /// What a capture needs to know beyond the VM.
@@ -548,6 +595,7 @@ impl Enc<'_, '_> {
                 json!(["xi", target, pos, iter_kind(*kind)])
             }
             Kind::StrIter { s, pos } => json!(["si", s, pos]),
+            Kind::Cross(c) => cross(c),
             Kind::ListIter { items, pos } => json!(["li", vals(items), pos]),
             Kind::ToolRef(path) => json!(["t", path.as_ref()]),
             Kind::Resolvers { promise, done } => json!(["r", promise, done]),
@@ -649,12 +697,23 @@ impl Enc<'_, '_> {
             Some(f) => self.frame(f)?,
             None => J::Null,
         };
-        Ok(json!([
+        let mut out = json!([
             frame,
             s.stack.iter().map(slot).collect::<Vec<_>>(),
             s.handlers.iter().map(handler).collect::<Vec<_>>(),
             s.started
-        ]))
+        ]);
+        if !s.above.is_empty()
+            && let J::Array(items) = &mut out
+        {
+            items.push(J::Array(
+                s.above
+                    .iter()
+                    .map(|f| self.frame(f))
+                    .collect::<R<Vec<_>>>()?,
+            ));
+        }
+        Ok(out)
     }
 
     fn frame(&self, f: &Frame) -> R<J> {
@@ -799,6 +858,7 @@ fn reaction(r: &Reaction) -> J {
             outcome: o,
         } => json!(["restore", derived, outcome(o)]),
         Reaction::Program => json!(["program"]),
+        Reaction::Cross(id) => json!(["cross", id]),
         Reaction::AwaitGen(g) => json!(["awaitgen", g]),
         Reaction::GenReturn(g) => json!(["genreturn", g]),
         Reaction::FromSync { made, done, close } => json!(["fromsync", made, done, opt_id(*close)]),
@@ -1232,6 +1292,7 @@ impl Dec<'_> {
                 outcome: self.outcome(at(j, 2)?)?,
             },
             "program" => Reaction::Program,
+            "cross" => Reaction::Cross(self.id(at(j, 1)?)?),
             "awaitgen" => Reaction::AwaitGen(self.id(at(j, 1)?)?),
             "genreturn" => Reaction::GenReturn(self.id(at(j, 1)?)?),
             "fromsync" => Reaction::FromSync {
@@ -1309,11 +1370,19 @@ impl Dec<'_> {
             J::Null => None,
             f => Some(self.frame(vm, f)?),
         };
+        let above = match j.get(4) {
+            Some(J::Array(items)) => items
+                .iter()
+                .map(|f| self.frame(vm, f))
+                .collect::<R<Vec<_>>>()?,
+            _ => Vec::new(),
+        };
         Ok(Box::new(SavedFrame {
             frame,
             stack: self.slots(at(j, 1)?)?,
             handlers: self.handlers(at(j, 2)?)?,
             started: boolean(at(j, 3)?)?,
+            above,
         }))
     }
 
@@ -1380,6 +1449,66 @@ impl Dec<'_> {
             flags,
             visit: 0,
         })
+    }
+
+    fn cross<'j>(&self, f: impl Fn(usize) -> R<&'j J>) -> R<Kind> {
+        use crate::cross::{Cross, Step, Target, Visit, Waiting};
+        let stack = f(3)?
+            .as_array()
+            .ok_or_else(|| invalid("a crossing's visits are not a list."))?
+            .iter()
+            .map(|v| {
+                let s = at(v, 3)?;
+                let step = match at(s, 0)?.as_str() {
+                    Some("s") => Step::Start,
+                    Some("a") => Step::Array {
+                        target: self.val(at(s, 1)?)?,
+                        out: self.id(at(s, 2)?)?,
+                        len: u32_(at(s, 3)?)?,
+                        i: u32_(at(s, 4)?)?,
+                    },
+                    Some("o") => Step::Object {
+                        target: self.val(at(s, 1)?)?,
+                        out: self.id(at(s, 2)?)?,
+                        names: self.vals(at(s, 3)?)?,
+                        i: u32_(at(s, 4)?)?,
+                    },
+                    _ => return Err(invalid("a crossing's visit is unknown.")),
+                };
+                Ok(Visit {
+                    holder: self.val(at(v, 0)?)?,
+                    key: self.val(at(v, 1)?)?,
+                    depth: u32_(at(v, 2)?)?,
+                    step,
+                })
+            })
+            .collect::<R<Vec<_>>>()?;
+        let t = f(5)?;
+        let target = match at(t, 0)?.as_str() {
+            Some("tool") => Target::Tool {
+                path: string(at(t, 1)?)?.into(),
+                promise: self.id(at(t, 2)?)?,
+            },
+            Some("search") => Target::Search {
+                coroutine: u32_(at(t, 1)?)?,
+            },
+            Some("result") => Target::Result,
+            _ => return Err(invalid("a crossing's target is unknown.")),
+        };
+        let waiting = match uint(f(6)?)? {
+            0 => Waiting::No,
+            1 => Waiting::Root,
+            _ => Waiting::Value,
+        };
+        Ok(Kind::Cross(Box::new(Cross {
+            roots: self.vals(f(1)?)?,
+            crossed: self.vals(f(2)?)?,
+            stack,
+            ancestors: self.vals(f(4)?)?,
+            target,
+            waiting,
+            owed: boolean(f(7)?)?,
+        })))
     }
 
     fn kind(&self, vm: &mut Vm, j: &J) -> R<Kind> {
@@ -1488,6 +1617,7 @@ impl Dec<'_> {
                 promise: self.id(f(1)?)?,
                 done: boolean(f(2)?)?,
             },
+            "x" => self.cross(f)?,
             "cb" => Kind::Combinator(Box::new(Combinator {
                 kind: match uint(f(1)?)? {
                     0 => CombKind::All,

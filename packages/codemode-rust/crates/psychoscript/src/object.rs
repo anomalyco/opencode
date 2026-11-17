@@ -307,6 +307,8 @@ pub enum Kind {
     SearchParams(Box<crate::builtins::web::Params>),
     Headers(Box<crate::builtins::web::HeaderList>),
     /// A live iterator over a standard-library collection.
+    /// A crossing to the host in progress (see `cross`).
+    Cross(Box<crate::cross::Cross>),
     ExoticIter {
         target: Id,
         pos: u32,

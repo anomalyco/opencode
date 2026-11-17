@@ -224,9 +224,12 @@ pub fn finish(r: Running<'_>) -> Outcome {
     let vm = &mut vm;
     let result = match (vm.fatal.clone(), vm.outcome.take()) {
         (Some((kind, message)), _) => Err(diagnostic(kind, message)),
-        (None, Some(Ok(v))) => match convert::to_json(vm, &v) {
-            Ok(j) => Ok(j),
-            Err(e) => Err(diagnose(vm, &e, code)),
+        (None, Some(Ok(v))) => match vm.result_json.take() {
+            Some(j) => Ok(j),
+            None => match convert::to_json(vm, &v) {
+                Ok(j) => Ok(j),
+                Err(e) => Err(diagnose(vm, &e, code)),
+            },
         },
         (None, Some(Err(e))) => Err(diagnose(vm, &e, code)),
         (None, None) => Err(diagnostic(

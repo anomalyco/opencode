@@ -145,6 +145,16 @@ fn fixture() -> Json {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
+/// `t.echo` of `conformance/streaming.ts`: answers its input, logging that it started.
+fn echo(log: &Log) -> Tool {
+    let log = log.clone();
+    Tool::new_async("Echoes its input", move |input: Json, _| {
+        log.lock().unwrap().push(json!(["echo", input.clone()]));
+        async move { Ok(input) }
+    })
+    .output(Schema::validated(json!({})))
+}
+
 /// The host's side of the log the reference recorded: what the program cancelled with. How often the host runtime
 /// pulls ahead is its own buffering.
 fn cancels(log: &Json) -> Json {
@@ -174,7 +184,9 @@ fn streaming_responses_match_the_reference() {
     let mut failures = Vec::new();
     for program in programs {
         let log: Log = Arc::default();
-        let rt = Runtime::new().extension(web(&log, None));
+        let rt = Runtime::new()
+            .with_tool("t.echo", echo(&log))
+            .extension(web(&log, None));
         let code = program["code"].as_str().unwrap();
         let o = rt.execute(code, &serde_json::Map::new());
         let actual = json!({ "outcome": outcome(&o), "log": *log.lock().unwrap() });
@@ -261,6 +273,7 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
         let busy = !code.contains("tools.wait");
         let rt = Runtime::new()
             .with_tool("wait", waiting.tool())
+            .with_tool("t.echo", echo(&log))
             .extension(web(&log, busy.then(|| waiting.clone())));
         let (run, suspend) = background(rt.program(code, &Default::default(), None), |s| {
             waiting.entered();

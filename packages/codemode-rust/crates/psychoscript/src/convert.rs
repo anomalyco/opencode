@@ -11,7 +11,7 @@ use crate::{DiagnosticKind, Json};
 pub const MAX_VALUE_DEPTH: usize = 32;
 
 /// A string as the host gets it; only a carrier needs converting.
-fn host_string(vm: &Vm, s: crate::strings::StrId) -> String {
+pub(crate) fn host_string(vm: &Vm, s: crate::strings::StrId) -> String {
     if vm.atoms.is_wtf(s) {
         return host_text(vm.text(s)).into_owned();
     }
@@ -46,7 +46,7 @@ pub fn from_json(vm: &mut Vm, j: &Json) -> Value {
     }
 }
 
-fn json_number(n: f64) -> Json {
+pub(crate) fn json_number(n: f64) -> Json {
     if n.fract() == 0.0 && n.abs() < 9.2e18 {
         return Json::from(n as i64);
     }
