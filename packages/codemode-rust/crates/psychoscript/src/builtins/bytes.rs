@@ -333,6 +333,7 @@ pub fn setup(vm: &mut Vm) {
     let op = vm.realm.object_proto;
     let proto = vm.plain(op);
     vm.realm.std.uint8 = proto;
+    super::accessors(vm, proto, &["length"]);
     let ctor = vm.ctor("Uint8Array", 3, uint8_ctor, proto, Value::Undef);
     vm.methods(
         ctor,
@@ -388,6 +389,7 @@ pub fn setup(vm: &mut Vm) {
 
     let dp = vm.plain(op);
     vm.realm.std.text_decoder = dp;
+    super::accessors(vm, dp, &["encoding", "fatal", "ignoreBOM"]);
     vm.ctor("TextDecoder", 0, decoder_ctor, dp, Value::Undef);
     vm.method(dp, "decode", 0, decoder_decode);
 

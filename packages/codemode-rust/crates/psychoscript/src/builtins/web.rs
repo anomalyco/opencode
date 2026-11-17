@@ -26,6 +26,8 @@ pub fn setup(vm: &mut Vm) {
     let op = vm.realm.object_proto;
     let up = vm.plain(op);
     vm.realm.std.url = up;
+    super::accessors(vm, up, &URL_FIELDS);
+    super::accessors(vm, up, &["searchParams"]);
     let url = vm.ctor("URL", 1, url_ctor, up, Value::Undef);
     vm.methods(
         url,
@@ -38,6 +40,7 @@ pub fn setup(vm: &mut Vm) {
 
     let pp = vm.plain(op);
     vm.realm.std.params = pp;
+    super::accessors(vm, pp, &["size"]);
     vm.ctor("URLSearchParams", 0, params_ctor, pp, Value::Undef);
     vm.methods(
         pp,

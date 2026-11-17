@@ -137,26 +137,23 @@ pub fn setup(vm: &mut Vm) {
     let ctor = vm.ctor("RegExp", 2, regexp_ctor, proto, Value::Undef);
     vm.method(ctor, "escape", 1, regexp_escape);
     // The accessors live on the prototype, as in JS; instances answer them through `get_prop`.
-    for name in [
-        "source",
-        "flags",
-        "hasIndices",
-        "global",
-        "ignoreCase",
-        "multiline",
-        "dotAll",
-        "unicode",
-        "unicodeSets",
-        "sticky",
-    ] {
-        let k = vm.atoms.intern_static(name);
-        let v = match name {
-            "source" => vm.static_str("(?:)"),
-            "flags" => vm.static_str(""),
-            _ => Value::Undef,
-        };
-        vm.define_hidden(proto, k, v);
-    }
+    super::accessors(
+        vm,
+        proto,
+        &[
+            "source",
+            "flags",
+            "lastIndex",
+            "hasIndices",
+            "global",
+            "ignoreCase",
+            "multiline",
+            "dotAll",
+            "unicode",
+            "unicodeSets",
+            "sticky",
+        ],
+    );
     vm.methods(
         proto,
         &[

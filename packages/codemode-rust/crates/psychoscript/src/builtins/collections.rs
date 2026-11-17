@@ -8,6 +8,7 @@ use crate::vm::{Reaction, Res, Vm};
 pub fn setup(vm: &mut Vm) {
     let mp = vm.realm.map_proto;
     vm.ctor("Map", 0, map_ctor, mp, Value::Undef);
+    super::accessors(vm, mp, &["size"]);
     vm.methods(
         mp,
         &[
@@ -25,6 +26,7 @@ pub fn setup(vm: &mut Vm) {
     vm.define_hidden(mp, SYM_ITERATOR, entries);
 
     let sp = vm.realm.set_proto;
+    super::accessors(vm, sp, &["size"]);
     vm.ctor("Set", 0, set_ctor, sp, Value::Undef);
     vm.methods(
         sp,

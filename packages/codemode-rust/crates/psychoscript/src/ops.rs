@@ -25,6 +25,9 @@ impl<'rt> Vm<'rt> {
         match v {
             Value::Obj(id) => {
                 let v = self.get_obj(*id, key);
+                if let Value::Uninit = v {
+                    return Err(crate::builtins::accessor_error(self, *id, key));
+                }
                 if matches!(v, Value::Undef)
                     && matches!(self.heap[*id as usize].kind, Kind::Promise(_))
                     && !self.has_key(*id, key)

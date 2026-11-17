@@ -464,3 +464,34 @@ pub fn require_callback(vm: &mut Vm, f: &Value, name: &str) -> Result<Value, Val
     }
     Err(vm.type_error(&format!("{name} expects a function callback.")))
 }
+
+/// Declares getter-only accessor properties on a built-in prototype. Instances answer them through their exotic
+/// hooks; the slot on the prototype holds `Uninit`, which a property read turns into `accessor_error`, so reading
+/// one from the prototype itself (or an object that merely inherits it) throws as the reference's getters do.
+fn accessors(vm: &mut Vm, proto: Id, names: &[&'static str]) {
+    for name in names {
+        let k = vm.atoms.intern_static(name);
+        vm.heap[proto as usize].props.insert(k, Value::Uninit, 0);
+    }
+}
+
+/// The error for reading an accessor of `this`, which is not the kind the accessor belongs to.
+pub fn accessor_error(vm: &mut Vm, this: Id, key: Atom) -> Value {
+    let (pk, nk) = (vm.names.constructor, vm.names.name);
+    let mut owner = Some(this);
+    while let Some(o) = owner {
+        if matches!(vm.heap[o as usize].props.get(key), Some(Value::Uninit)) {
+            break;
+        }
+        owner = vm.heap[o as usize].proto;
+    }
+    let ctor = match owner.map(|o| vm.get_obj(o, pk)) {
+        Some(Value::Obj(c)) => match vm.get_obj(c, nk) {
+            Value::Str(s) => vm.text(s).to_owned(),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    };
+    let k = vm.atoms.text(key).to_owned();
+    incompatible(vm, &format!("{ctor}.prototype.{k}"), &Value::Obj(this))
+}
