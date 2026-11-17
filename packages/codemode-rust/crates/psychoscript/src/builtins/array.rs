@@ -31,6 +31,7 @@ pub fn setup(vm: &mut Vm) {
             ("concat", 1, a_concat),
             ("join", 1, a_join),
             ("toString", 0, a_to_string),
+            ("toLocaleString", 0, a_to_locale_string),
             ("reverse", 0, a_reverse),
             ("toReversed", 0, a_to_reversed),
             ("indexOf", 1, a_index_of),
@@ -325,6 +326,30 @@ fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(vm.string_val(s))
 }
 
+fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    let id = arr_id(vm, &this)?;
+    let key = vm.atoms.intern_static("toLocaleString");
+    let mut out = String::new();
+    let mut i = 0;
+    while i < len(vm, id) {
+        if i > 0 {
+            out.push(',');
+        }
+        let item = item(vm, id, i);
+        if !item.is_nullish() {
+            let f = vm.get(&item, key)?;
+            let r = vm.call(&f, item, &[])?;
+            let s = vm.string_of(&r)?;
+            out.push_str(vm.text(s));
+            if out.len() > crate::ops::MAX_STRING_LEN {
+                return Err(vm.range_error("Invalid string length"));
+            }
+        }
+        i += 1;
+    }
+    Ok(vm.string_val(out))
+}
+
 fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     items_mut(vm, id, false)?.reverse();
@@ -521,7 +546,7 @@ fn a_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     reduce(vm, this, args, true)
 }
 
-fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<Vec<Value>, Value> {
+pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<Vec<Value>, Value> {
     if !matches!(cmp, Value::Undef) && !vm.is_callable(cmp) {
         return Err(vm.type_error("The comparison function must be either a function or undefined"));
     }

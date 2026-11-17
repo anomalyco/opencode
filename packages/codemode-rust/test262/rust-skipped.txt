@@ -73,9 +73,6 @@ built-ins/Array/prototype/some/15.4.4.17-7-5.js  # wrong result
 built-ins/Array/prototype/some/15.4.4.17-7-b-1.js  # wrong result
 built-ins/Array/prototype/sort/bug_596_2.js  # wrong result
 built-ins/Array/prototype/splice/15.4.4.12-9-c-ii-1.js  # wrong result
-built-ins/Array/prototype/toLocaleString/S15.4.4.3_A1_T1.js  # wrong result
-built-ins/Array/prototype/toLocaleString/invoke-element-tolocalestring.js  # wrong result
-built-ins/Array/prototype/toLocaleString/primitive_this_value.js  # wrong result
 built-ins/Array/prototype/values/iteration-mutable.js  # wrong result
 built-ins/ArrayIteratorPrototype/next/iteration-mutable.js  # wrong result
 built-ins/ArrayIteratorPrototype/next/non-own-slots.js  # wrong error type: RangeError instead of TypeError
@@ -320,10 +317,7 @@ built-ins/Object/prototype/isPrototypeOf/null-this-and-object-arg-throws.js  # e
 built-ins/Object/prototype/isPrototypeOf/undefined-this-and-object-arg-throws.js  # error not thrown: TypeError
 built-ins/Object/prototype/propertyIsEnumerable/S15.2.4.7_A12.js  # error not thrown: TypeError
 built-ins/Object/prototype/propertyIsEnumerable/S15.2.4.7_A13.js  # error not thrown: TypeError
-built-ins/Object/prototype/toLocaleString/S15.2.4.3_A12.js  # error not thrown: TypeError
-built-ins/Object/prototype/toLocaleString/S15.2.4.3_A13.js  # error not thrown: TypeError
 built-ins/Object/prototype/toLocaleString/S15.2.4.3_A9.js  # wrong result
-built-ins/Object/prototype/toLocaleString/primitive_this_value.js  # wrong result
 built-ins/Object/prototype/valueOf/S15.2.4.4_A12.js  # error not thrown: TypeError
 built-ins/Object/prototype/valueOf/S15.2.4.4_A13.js  # error not thrown: TypeError
 built-ins/Object/prototype/valueOf/S15.2.4.4_A14.js  # error not thrown: TypeError

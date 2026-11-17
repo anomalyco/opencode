@@ -34,7 +34,7 @@ pub fn setup(vm: &mut Vm) {
         &[
             ("hasOwnProperty", 1, proto_has_own_property),
             ("toString", 0, proto_to_string),
-            ("toLocaleString", 0, proto_to_string),
+            ("toLocaleString", 0, proto_to_locale_string),
             ("valueOf", 0, proto_value_of),
             ("isPrototypeOf", 1, proto_is_prototype_of),
             ("propertyIsEnumerable", 1, proto_property_is_enumerable),
@@ -367,6 +367,8 @@ pub fn tag_of(vm: &Vm, v: &Value) -> &'static str {
             Kind::StrIter { .. } => "String Iterator",
             Kind::RegExp(_) => "RegExp",
             Kind::Date(_) => "Date",
+            Kind::Bytes(_) => "Uint8Array",
+            Kind::ExoticIter { .. } => "Iterator",
             _ => "Object",
         },
     }
@@ -380,6 +382,15 @@ fn proto_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     }
     let t = format!("[object {}]", tag_of(vm, &this));
     Ok(vm.static_str(&t))
+}
+
+fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+    if this.is_nullish() {
+        return Err(vm.type_error("Object.prototype.toLocaleString called on null or undefined."));
+    }
+    let k = vm.names.to_string;
+    let f = vm.get(&this, k)?;
+    vm.call(&f, this, &[])
 }
 
 fn proto_value_of(_vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {

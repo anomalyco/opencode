@@ -379,6 +379,11 @@ impl<'rt> Vm<'rt> {
             return Ok(true);
         };
         let id = *id;
+        if exotic::is_exotic(&self.heap[id as usize].kind)
+            && let Some(r) = exotic::delete(self, id, key)
+        {
+            return r;
+        }
         let flags = self.heap[id as usize].flags;
         let index = self.atoms.index(key);
         if let Kind::Array(items) = &mut self.heap[id as usize].kind {

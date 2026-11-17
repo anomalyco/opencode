@@ -1,9 +1,12 @@
 //! Native built-ins: prototypes, constructors and global functions, created fresh for every run.
 
 mod array;
+mod buffer;
+pub mod bytes;
 mod collections;
 pub mod date;
 pub mod exotic;
+pub mod iterator;
 mod object;
 pub mod regexp;
 mod string;
@@ -17,6 +20,10 @@ use crate::vm::{NativeFn, Vm};
 pub struct StdProtos {
     pub regexp: Id,
     pub date: Id,
+    pub uint8: Id,
+    pub buffer: Id,
+    pub text_encoder: Id,
+    pub text_decoder: Id,
 }
 
 /// Global names a program cannot assign to.
@@ -43,6 +50,12 @@ pub const GLOBAL_NAMES: &[&str] = &[
     "AggregateError",
     "RegExp",
     "Date",
+    "Uint8Array",
+    "Buffer",
+    "TextEncoder",
+    "TextDecoder",
+    "atob",
+    "btoa",
     "console",
     "parseInt",
     "parseFloat",
@@ -170,6 +183,9 @@ impl<'rt> Vm<'rt> {
         collections::setup(self);
         regexp::setup(self);
         date::setup(self);
+        iterator::setup(self);
+        bytes::setup(self);
+        buffer::setup(self);
 
         let tools = self.tool_ref("");
         self.realm.tools = tools.as_obj().unwrap_or(0);
@@ -226,6 +242,11 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
         }
         Kind::Date(t) => date::display(*t),
         Kind::RegExp(_) => regexp::inspect(vm, id),
+        Kind::Bytes(b) if b.buffer => String::from_utf8_lossy(&b.to_vec()).into_owned(),
+        Kind::Bytes(b) => {
+            let parts: Vec<String> = b.to_vec().iter().map(u8::to_string).collect();
+            parts.join(",")
+        }
         Kind::Error(_) => {
             let (nk, mk) = (vm.names.name, vm.names.message);
             let name = match vm.get_obj(id, nk) {
@@ -266,6 +287,11 @@ pub fn builtin_number(vm: &mut Vm, v: &Value) -> Result<f64, Value> {
     }
 }
 
+/// ToIntegerOrInfinity over `builtin_number`.
+pub fn builtin_integer(vm: &mut Vm, v: &Value) -> Result<f64, Value> {
+    Ok(crate::value::to_integer(builtin_number(vm, v)?))
+}
+
 /// How diagnostics refer to a value, as the reference's `describeValue` does: `a number`, `an array`, `a Date`.
 pub fn describe_value(vm: &Vm, v: &Value) -> String {
     let tag = match v {
@@ -300,4 +326,20 @@ pub fn describe_value(vm: &Vm, v: &Value) -> String {
 pub fn incompatible(vm: &mut Vm, method: &str, this: &Value) -> Value {
     let d = describe_value(vm, this);
     vm.type_error(&format!("{method} called on incompatible receiver {d}."))
+}
+
+/// Checks a callback argument, as the reference's `requireCallback` does.
+pub fn require_callback(vm: &mut Vm, f: &Value, name: &str) -> Result<Value, Value> {
+    if let Value::Obj(id) = f {
+        match &vm.heap[*id as usize].kind {
+            Kind::ToolRef(p) if !p.is_empty() => {
+                return Err(vm.type_error(&format!(
+                    "{name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value)."
+                )));
+            }
+            _ if vm.is_callable(f) => return Ok(*f),
+            _ => {}
+        }
+    }
+    Err(vm.type_error(&format!("{name} expects a function callback.")))
 }

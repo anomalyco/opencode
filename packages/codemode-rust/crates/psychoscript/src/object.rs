@@ -246,6 +246,14 @@ pub enum Kind {
     RegExp(Box<crate::builtins::regexp::RegExpData>),
     /// A Date's time value.
     Date(f64),
+    Bytes(Box<crate::builtins::bytes::Bytes>),
+    TextDecoder(Box<crate::builtins::bytes::Decoder>),
+    /// A live iterator over a standard-library collection.
+    ExoticIter {
+        target: Id,
+        pos: u32,
+        kind: IterKind,
+    },
 }
 
 pub struct Combinator {
