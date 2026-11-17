@@ -1,8 +1,8 @@
+import { Instance } from "@opencode/core/instance/service"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Mcp } from "@opencode/core/mcp/index"
-import { SessionStore } from "@opencode/core/session/store"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/core/session"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { ForbiddenError, McpServerNotFoundError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@opencode/protocol/groups/pty"
@@ -13,6 +13,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { locationErrors, requestRef, response } from "../location"
+import { missingSession } from "./session-error"
 import { holdLocation, type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
@@ -24,26 +25,24 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
     const cors = yield* CorsConfig
     const tickets = yield* PtyTicket.Service
 
-    const store = yield* SessionStore.Service
+    const instances = yield* Instance.Service
+    const sessions = yield* Session.Service
     const owned = (sessionID: Session.ID) =>
       Effect.fnUntraced(function* (ref: Location.Ref) {
-        const session = yield* store.get(sessionID)
-        if (
-          !session ||
-          session.location.directory !== ref.directory ||
-          session.location.workspaceID !== ref.workspaceID
-        )
+        const session = yield* sessions.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+        if (session.location.directory !== ref.directory || session.location.workspaceID !== ref.workspaceID)
           return yield* new SessionNotFoundError({
             sessionID,
             message: `Session not found at this location: ${sessionID}`,
           })
+        return session
       })
 
     const token = Effect.fnUntraced(function* <E>(
       request: HttpServerRequest.HttpServerRequest,
       name: string,
       owner: Session.ID | undefined,
-      guard: (ref: Location.Ref) => Effect.Effect<void, E>,
+      guard: (ref: Location.Ref) => Effect.Effect<Session.Info | undefined, E>,
     ) {
       // The custom header forces a CORS preflight, so cross-origin pages cannot mint tickets.
       if (
@@ -66,7 +65,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       request: HttpServerRequest.HttpServerRequest,
       { name, ticket }: { name: string; ticket?: string },
       owner: Session.ID | undefined,
-      guard: (ref: Location.Ref) => Effect.Effect<void, E>,
+      guard: (ref: Location.Ref) => Effect.Effect<Session.Info | undefined, E>,
     ) {
       if (!isAllowedRequestOrigin(request.headers.origin, request.headers.host, cors))
         return HttpServerResponse.empty({ status: 403 })
@@ -75,7 +74,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       if (
         ticket &&
         !(yield* tickets.consume({
-          ticket: ticket,
+          ticket,
           mcpClient: name,
           sessionID: owner,
           directory: ref.directory,
@@ -84,8 +83,8 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       )
         return HttpServerResponse.empty({ status: 403 })
 
-      yield* guard(ref)
-      return yield* Effect.gen(function* () {
+      const session = yield* guard(ref)
+      const upgrade = Effect.gen(function* () {
         const mcp = yield* Mcp.Service
         const { McpSocketClient } = yield* Effect.promise(() => import("@opencode/core/mcp/socket-client"))
         const socket = yield* Effect.orDie(request.upgrade)
@@ -131,7 +130,10 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
           },
         })
         return HttpServerResponse.empty()
-      }).pipe(Effect.scoped, Effect.provide(locations.get(ref)), locationErrors)
+      }).pipe(Effect.scoped)
+      return yield* (
+        session ? upgrade.pipe(instances.provide(session)) : upgrade.pipe(Effect.provide(locations.get(ref)))
+      ).pipe(locationErrors)
     })
 
     return handlers
@@ -181,11 +183,13 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
           return yield* response(service.resourceCatalog())
         }),
       )
-      .handle("mcp.clientToken", (ctx) => token(ctx.request, ctx.query.name, undefined, () => Effect.void))
+      .handle("mcp.clientToken", (ctx) =>
+        token(ctx.request, ctx.query.name, undefined, () => Effect.succeed(undefined)),
+      )
       .handle("session.clientMcp.token", (ctx) =>
         token(ctx.request, ctx.query.name, ctx.params.sessionID, owned(ctx.params.sessionID)),
       )
-      .handleRaw("mcp.client", (ctx) => socket(ctx.request, ctx.query, undefined, () => Effect.void))
+      .handleRaw("mcp.client", (ctx) => socket(ctx.request, ctx.query, undefined, () => Effect.succeed(undefined)))
       .handleRaw("session.clientMcp", (ctx) =>
         socket(ctx.request, ctx.query, ctx.params.sessionID, owned(ctx.params.sessionID)),
       )

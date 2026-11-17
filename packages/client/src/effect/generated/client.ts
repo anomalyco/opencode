@@ -170,6 +170,8 @@ import type {
   ExperimentalMcpDisconnectOutput,
   ExperimentalMcpClientTokenInput,
   ExperimentalMcpClientTokenOutput,
+  ExperimentalMcpExperimentalSessionClientMcpTokenInput,
+  ExperimentalMcpExperimentalSessionClientMcpTokenOutput,
   CredentialListOutput,
   CredentialCreateInput,
   CredentialCreateOutput,
@@ -1220,12 +1222,23 @@ const EndpointExperimentalMcpClientToken = (raw: RawClient["server.mcp"]) => (in
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalMcpExperimentalSessionClientMcpToken =
+  (raw: RawClient["server.mcp"]) => (input: ExperimentalMcpExperimentalSessionClientMcpTokenInput) =>
+    preserveEffect<ExperimentalMcpExperimentalSessionClientMcpTokenOutput>()(
+      raw["session.clientMcp.token"]({
+        params: { sessionID: input["sessionID"] },
+        query: { location: input["location"], name: input["name"] },
+        headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimentalMcp = (raw: RawClient["server.mcp"]) => ({
   add: EndpointExperimentalMcpAdd(raw),
   remove: EndpointExperimentalMcpRemove(raw),
   connect: EndpointExperimentalMcpConnect(raw),
   disconnect: EndpointExperimentalMcpDisconnect(raw),
   client: { token: EndpointExperimentalMcpClientToken(raw) },
+  experimental: { session: { clientMcp: { token: EndpointExperimentalMcpExperimentalSessionClientMcpToken(raw) } } },
 })
 
 const EndpointCredentialList = (raw: RawClient["server.credential"]) => () =>

@@ -164,6 +164,8 @@ import type {
   ExperimentalMcpDisconnectOutput,
   ExperimentalMcpClientTokenInput,
   ExperimentalMcpClientTokenOutput,
+  ExperimentalMcpExperimentalSessionClientMcpTokenInput,
+  ExperimentalMcpExperimentalSessionClientMcpTokenOutput,
   CredentialListOutput,
   CredentialCreateInput,
   CredentialCreateOutput,
@@ -1365,6 +1367,25 @@ export function make(options: ClientOptions) {
               },
               requestOptions,
             ),
+        },
+        experimental: {
+          session: {
+            clientMcp: {
+              token: (input: ExperimentalMcpExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
+                request<ExperimentalMcpExperimentalSessionClientMcpTokenOutput>(
+                  {
+                    method: "POST",
+                    path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
+                    query: { location: input["location"], name: input["name"] },
+                    headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+                    successStatus: 200,
+                    declaredStatuses: [400, 401, 403, 404],
+                    empty: false,
+                  },
+                  requestOptions,
+                ),
+            },
+          },
         },
       },
       file: {

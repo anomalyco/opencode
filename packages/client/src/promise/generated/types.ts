@@ -4289,6 +4289,18 @@ export type ExperimentalMcpClientTokenInput = {
 
 export type ExperimentalMcpClientTokenOutput = { location: LocationPublicRef; data: PtyTicketConnectToken }
 
+export type ExperimentalMcpExperimentalSessionClientMcpTokenInput = {
+  readonly sessionID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name: string
+  readonly "x-opencode-ticket"?: string | undefined
+}
+
+export type ExperimentalMcpExperimentalSessionClientMcpTokenOutput = {
+  location: LocationPublicRef
+  data: PtyTicketConnectToken
+}
+
 export type CredentialListOutput = { data: Array<CredentialEntry> }["data"]
 
 export type CredentialCreateInput = {

@@ -1858,12 +1858,31 @@ export type ExperimentalMcpClientTokenOperation<E = never> = (
   input: ExperimentalMcpClientTokenInput,
 ) => Effect.Effect<ExperimentalMcpClientTokenOutput, E>
 
+export type ExperimentalMcpExperimentalSessionClientMcpTokenInput = {
+  readonly sessionID: Session.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name: string
+  readonly "x-opencode-ticket"?: string | undefined
+}
+export type ExperimentalMcpExperimentalSessionClientMcpTokenOutput = {
+  readonly location: Location.PublicRef
+  readonly data: PtyTicket.ConnectToken
+}
+export type ExperimentalMcpExperimentalSessionClientMcpTokenOperation<E = never> = (
+  input: ExperimentalMcpExperimentalSessionClientMcpTokenInput,
+) => Effect.Effect<ExperimentalMcpExperimentalSessionClientMcpTokenOutput, E>
+
 export interface ExperimentalMcpApi<E = never> {
   readonly add: ExperimentalMcpAddOperation<E>
   readonly remove: ExperimentalMcpRemoveOperation<E>
   readonly connect: ExperimentalMcpConnectOperation<E>
   readonly disconnect: ExperimentalMcpDisconnectOperation<E>
   readonly client: { readonly token: ExperimentalMcpClientTokenOperation<E> }
+  readonly experimental: {
+    readonly session: {
+      readonly clientMcp: { readonly token: ExperimentalMcpExperimentalSessionClientMcpTokenOperation<E> }
+    }
+  }
 }
 
 export type CredentialListOutput = ReadonlyArray<Credential.Entry>
