@@ -72,6 +72,39 @@ test("budgets whole lines, not traversal: find reaches the last item of a trunca
   expect([...match.refs.values()]).toEqual([2000])
 })
 
+test("links that fill the budget leave a quarter for headings, opening text and status, which return unused", async () => {
+  const links = Array.from({ length: 1000 }, (_, i) => node(i + 10, "link", `Sidebar entry ${i}`))
+  const rows = Array.from({ length: 200 }, (_, i) => node(i + 2000, "row", `Row ${i}`))
+  const prose = Array.from({ length: 400 }, (_, i) => node(i + 3000, "StaticText", `Paragraph ${i} explains one more detail of arrays.`))
+
+  const article = [
+    node(1, "generic", "", ...links.map((_, i) => i + 10), 2, 3, 4, 5, 6, ...prose.map((_, i) => i + 3000)),
+    node(2, "heading", "Array reference"),
+    node(3, "StaticText", "The Array object stores a list of values."),
+    node(4, "table", "Methods", 7, ...rows.map((_, i) => i + 2000)),
+    node(5, "status", "", 8),
+    node(6, "StaticText", "Closing remark"),
+    node(7, "columnheader", "Method"),
+    node(8, "StaticText", "Saved"),
+    ...links,
+    ...rows,
+    ...prose,
+  ]
+
+  const page = (await accessibilitySnapshot(article, options())).content
+
+  for (const text of ['[heading] "Array reference"', "The Array object", '[columnheader] "Method"', '"Saved"', '"Paragraph 0 ']) expect(page).toContain(text)
+
+  // Cells and rows do not spend the share on a table's first rows.
+  expect(page).not.toContain('"Row 199"')
+  const linkChars = page.split("\n").filter((line) => line.includes("[link]")).join("\n").length
+  expect(linkChars).toBeGreaterThan(14_000)
+  expect(linkChars).toBeLessThan(15_500)
+  const controls = (await accessibilitySnapshot([node(1, "generic", "", ...links.map((_, i) => i + 10)), ...links], options())).content
+  expect(controls.length).toBeGreaterThan(19_500)
+  expect((await accessibilitySnapshot(article, { ...options(), interactive: true })).content).not.toContain("The Array object")
+})
+
 test("orders landmarks across empty branching wrappers, follows aria-owns cycles once, and never enters an editor", async () => {
   const tree = [
     node(1, "generic", "", 2, 3, 4),

@@ -28,6 +28,7 @@ type Branch = {
   scope: string
   item: string
   ordinal: number
+  emphasis?: boolean
   priority?: number
   area?: Area
   collection?: Area
@@ -43,6 +44,7 @@ type Line = {
   entry?: Item
   important: boolean
   deep: boolean
+  reading?: "heading" | "prose"
 }
 
 const controls =
@@ -158,6 +160,8 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
 
     const collection = area && collections.test(area.role) ? area : branch.collection
     const priority = Math.min(branch.priority ?? 5, (visible && rank(role)) || 5)
+    // A status or alert rarely has a name of its own; its text is the message.
+    const emphasis = branch.emphasis || /^(heading|columnheader|rowheader|status|alert|alertdialog)$/.test(role)
     const inherited = headings.get(branch.parent) ?? branch.scope
 
     const scope =
@@ -240,6 +244,7 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
           entry,
           important,
           deep: branch.level > (options.depth ?? Infinity),
+          reading: interactive || role === "RootWebArea" || !name.trim() ? undefined : emphasis ? "heading" : "prose",
         })
       }
     }
@@ -257,6 +262,7 @@ export async function accessibilitySnapshot(nodes: readonly Protocol.Accessibili
           parentName: visible ? name : branch.parentName,
           scope,
           item,
+          emphasis,
           priority,
           area,
           collection,
@@ -296,22 +302,43 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
     areas.set(line.area, (areas.get(line.area) ?? 0) + 1)
   }
 
-  for (const original of buckets) {
-    const order = new Map(original.map((line, i) => [line, i + visited]))
+  const ordered = buckets.flat()
+  const order = new Map(ordered.map((line, i) => [line, i]))
+
+  // Links alone can fill any budget and leave an article without its title or opening. Headings and text outside rows
+  // and list items first take up to a quarter, in reading order; controls get what they leave. A larger share measured
+  // fewer section headings on documentation pages, and cells would spend it on a table's first rows.
+  const reading = options.interactive
+    ? []
+    : ordered.filter((line) => !line.deep && (line.reading === "heading" || (line.reading === "prose" && !line.entry)))
+
+  const placed = new Set<Line>()
+
+  for (const [pass, original] of [reading, ...buckets].entries()) {
+    const chars = pass ? maxChars : maxChars / 4
+    const lines = pass ? maxLines : maxLines / 4
+    let spent = false
     // Select within each landmark's budget by usefulness, then restore tree order for reading.
     const groups = Array.from({ length: 4 }, (): Line[] => [])
 
     for (const line of original)
-      groups[
-        line.important || line.entry?.keep ? 0 : line.interactive ? 1 : line.area?.id === line.id && line.id ? 2 : 3
-      ].push(line)
-    const bucket = groups.flat()
+      if (!placed.has(line))
+        groups[
+          line.important || line.entry?.keep
+            ? 0
+            : line.interactive || line.reading === "heading"
+              ? 1
+              : line.area?.id === line.id && line.id
+                ? 2
+                : 3
+        ].push(line)
+    const bucket = pass ? groups.flat() : original
 
-    for (let i = 0; i < bucket.length; i += 32) {
+    for (let i = 0; i < bucket.length && !spent; i += 32) {
       const batch = bucket.slice(i, i + 32)
 
       const details =
-        !full && output.length < maxLines
+        !full && output.length < lines
           ? await Promise.all(
               batch.map(async (line) => {
                 if (!line.id || line.deep) return ""
@@ -325,6 +352,14 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
       for (const [j, line] of batch.entries()) {
         if (++visited % 2048 === 0) await setImmediate(undefined, { signal: options.signal })
 
+        if (spent) continue
+
+        // A reading line beyond the share keeps its place in its landmark.
+        if (!pass && output.length >= lines) {
+          spent = true
+          continue
+        }
+
         if (line.deep || full || output.length >= maxLines) {
           omit(line)
           continue
@@ -334,13 +369,19 @@ async function printSnapshot(buckets: Line[][], items: Item[], options: Options)
         const text = (key ? line.label.replace(/^\s*/, (pad) => `${pad}@${key} `) : line.label) + (details[j] ?? "")
         const length = size + Number(output.length > 0) + text.length
 
-        if (length > maxChars) {
+        if (length > chars && !pass) {
+          spent = true
+          continue
+        }
+
+        if (length > chars) {
           full = true
           omit(line)
           continue
         }
 
         size = length
+        placed.add(line)
         output.push({ line, text, order: order.get(line) ?? 0 })
       }
     }
