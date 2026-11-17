@@ -315,10 +315,20 @@ export function context(base: Base, carrier: Carrier) {
 
   // The theme, from the host's palette: each leaf a color that carries its token, so the host restyles it. A hue's step
   // carries the contract's name of it (`accent.500`, `categorical.3.300`), as the palette's `hue.accent.500` is not one.
-  const theme = (): Json => {
+  // A raised surface's view (`surface`, CT-22) takes the colors the palette lists for it (`@dialog.<token>`,
+  // `@dialog.footer.<token>`) where they differ from the page's: such a leaf carries its color, as the contract names
+  // no token of a raised surface, and the others their page token.
+  const theme = (surface?: string): Json => {
     const palette = carrier.palette()
+    const raised: Record<string, Record<string, string>> = {}
+    const page: Array<[string, string]> = []
+    for (const [token, hex] of Object.entries(palette.colors)) {
+      const on = token.startsWith("@dialog.footer.") ? "dialog.footer" : token.startsWith("@dialog.") ? "dialog" : undefined
+      if (on) (raised[on] ??= {})[token.slice(on.length + 2)] = hex
+      else page.push([token, hex])
+    }
     const tree: Json = {}
-    for (const [token, hex] of Object.entries(palette.colors).sort(([a], [b]) => a.length - b.length)) {
+    for (const [token, hex] of page.sort(([a], [b]) => a.length - b.length)) {
       const parts = token.split(".")
       let at = tree
       for (const part of parts.slice(0, -1)) {
@@ -326,8 +336,10 @@ export function context(base: Base, carrier: Carrier) {
         at = at[part]
       }
       const last = parts[parts.length - 1]!
-      const value = hexToRgb(hex)
-      const rgba = new RGBA(value.r, value.g, value.b, value.a, parts[0] === "hue" ? parts.slice(1).join(".") : token)
+      const own = surface === undefined ? undefined : raised[surface]?.[token]
+      const value = hexToRgb(own ?? hex)
+      const named = own !== undefined ? undefined : parts[0] === "hue" ? parts.slice(1).join(".") : token
+      const rgba = new RGBA(value.r, value.g, value.b, value.a, named)
       at[last] = Object.assign(rgba, typeof at[last] === "object" ? at[last] : {})
     }
     // CT-9: the raw scales and the state functions of TS's `ResolvedTheme`. The categorical scales are a list, and a
@@ -369,14 +381,18 @@ export function context(base: Base, carrier: Carrier) {
     tree.source = source
     tree.increase = (color: Json, amount = 1) => shift(color, amount)
     tree.decrease = (color: Json, amount = 1) => shift(color, -amount)
-    // A raised surface's theme (`ResolvedTheme.surface`, CT-8): the page's, as the host sends the page's colors alone.
-    // It says so once, where it was undefined and the render crashed (snippets' library).
-    tree.surface = () => {
-      unsupported("theme.surface")
+    // A raised surface's theme (`ResolvedTheme.surface`, CT-8, CT-22): `dialog` and `dialog.footer` as the host
+    // resolves them; another name is the page's, which the JS host's log says once, where a toast covered the plugin's
+    // page (the joe-broadhead status dialogs).
+    tree.surface = (name: string) => {
+      if (name === "dialog" || name === "dialog.footer") return theme(name)
+      if (!surfaces.has(name)) console.warn(`plugin ${id}: theme.surface("${name}") is the page theme`)
+      surfaces.add(name)
       return tree
     }
     return tree
   }
+  const surfaces = new Set<string>()
 
   // Internal commands: a click on a node, a dialog's answer, and its close. The host runs a dialog's action with the
   // answer as its input, and one dialog shows at a time. A click's handler is its mount's (`presses`, by the mount, then

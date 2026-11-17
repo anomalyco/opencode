@@ -2086,7 +2086,22 @@ fn palette(host: &dyn Host) -> proto::Palette {
     let hues = theme.hues().iter().flat_map(|(name, scale)| steps(format!("hue.{name}"), scale));
     let categorical = theme.categorical().iter().enumerate();
     let categorical = categorical.flat_map(|(index, scale)| steps(format!("categorical.{index}"), scale));
-    let colors = (theme.list().into_iter().chain(hues).chain(categorical))
+    // The raised surfaces' tokens that differ from the page's, as `@dialog.<token>` and `@dialog.footer.<token>`, which
+    // the context's `theme.surface(name)` answers (CT-22).
+    let page = theme.list();
+    let raised = [
+        (opencode_ui::theme::Surface::Dialog, "@dialog"),
+        (opencode_ui::theme::Surface::DialogFooter, "@dialog.footer"),
+    ]
+    .into_iter()
+    .flat_map(|(surface, prefix)| {
+        let page = page.clone();
+        let tokens = theme.surface(surface).list().into_iter().zip(page);
+        tokens
+            .filter(|((_, color), (_, base))| color != base)
+            .map(move |((token, color), _)| (format!("{prefix}.{token}"), color))
+    });
+    let colors = (page.clone().into_iter().chain(hues).chain(categorical).chain(raised))
         .map(|(token, color)| (token, format!("#{:02x}{:02x}{:02x}{:02x}", color.r, color.g, color.b, color.a)))
         .collect();
     proto::Palette { mode: theme_mode(host), colors }
