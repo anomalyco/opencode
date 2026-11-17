@@ -22,7 +22,7 @@ import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionContext } from "@opencode/core/session/context"
-import { ScheduleCheck } from "@opencode/core/schedule/check"
+import { AutomationCode } from "@opencode/core/automation/code"
 import { Tool } from "@opencode/core/tool"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -924,22 +924,19 @@ it.live("a person's own skill named browser follows their rules, not the built-i
   }),
 )
 
-it.live("a scheduled check runs the browser for an allowed agent and refuses one denied the browser", () =>
+it.live("an automation's code runs the browser for an allowed agent and refuses one denied the browser", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
     const sessions = yield* Session.Service
-    const check = {
-      mode: "if" as const,
-      condition: { type: "code" as const, code: "return (await tools.browser.tabs.list({})).tabs.length === 0" },
-    }
+    const action = { type: "code" as const, code: "return { state: (await tools.browser.tabs.list({})).tabs.length }" }
     const run = () =>
       sessions.get(browser.session.id).pipe(
         Effect.flatMap((session) =>
-          ScheduleCheck.evaluate(session, check, null, { messageID: SessionMessage.ID.create(), now: 0, checks: 0 }),
+          AutomationCode.run(session, action, { messageID: SessionMessage.ID.create(), state: null, now: 0, runs: 0 }),
         ),
         Effect.provideContext(browser.context),
       )
-    expect(yield* run()).toMatchObject({ ok: true, wake: true })
+    expect(yield* run()).toMatchObject({ ok: true, state: 0 })
     expect(browser.commands.count).toBe(1)
     yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
     expect(yield* run()).toMatchObject({ ok: false, error: "Permission denied: browser" })
