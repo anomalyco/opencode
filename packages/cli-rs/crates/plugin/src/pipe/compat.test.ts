@@ -556,15 +556,28 @@ test("a mount a reload begins again adopts the one it ended", async () => {
   expect(text(surface.view(cx(4)))).toBe("run 3")
 })
 
-// CT-8: a raised surface's theme is the page's, which says so once; it was undefined, and snippets' library crashed.
-test("theme.surface answers the page theme", () => {
+// CT-8, CT-22: a raised surface's theme is the host's: a color the dialog or its footer gives differently from the page
+// is that color, without a token, and the rest keep their page token; another name is the page's. No toast says so,
+// where one covered five plugins' pages.
+test("theme.surface answers the raised surface's colors", () => {
   const fake = host()
-  fake.palette = () => ({ mode: "dark", colors: { "text.base": "#ffffffff" } })
+  fake.palette = () => ({
+    mode: "dark",
+    colors: {
+      "text.base": "#ffffffff",
+      "background.base": "#000000ff",
+      "@dialog.background.base": "#202020ff",
+      "@dialog.footer.background.base": "#303030ff",
+    },
+  })
   const ctx = plugin("t.surface", fake)
   const dialog = ctx.theme.surface("dialog")
-  expect(dialog.text.base.toInts()).toEqual(ctx.theme.text.base.toInts())
-  expect(dialog.surface("dialog.footer").text.base.toInts()).toEqual([255, 255, 255, 255])
-  expect(fake.toasts()).toEqual(["t.surface: theme.surface is not supported by opencode-native yet"])
+  expect([dialog.background.base.toInts(), dialog.background.base.token]).toEqual([[32, 32, 32, 255], undefined])
+  expect(dialog.text.base.token).toBe("text.base")
+  expect(dialog.surface("dialog.footer").background.base.toInts()).toEqual([48, 48, 48, 255])
+  expect(ctx.theme.surface("menu").background.base.token).toBe("background.base")
+  expect(ctx.theme.background.base.token).toBe("background.base")
+  expect(fake.toasts()).toEqual([])
 })
 
 // CT-9: TS's raw hue scales, the categorical list, the stateful colors' `state` and the step functions, from the host's

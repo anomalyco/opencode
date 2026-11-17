@@ -142,8 +142,14 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `hue` scales and `categorical` list are the page theme's, each step carrying the contract's token of it
   (`accent.500`, `categorical.3.300`), and a stateful color has TS's `state` (CT-9, `P.8/context-hue`). `source`,
   `increase` and `decrease` find a color's step by its token, else by its value among the named hues, where TS matches
-  the object a token was read from; a color that two steps share is the first hue's. Its `surface(name)` answers the
-  page's theme, not the raised surface's, and says so once (CT-8); neither it nor `themeMode` is a signal.
+  the object a token was read from; a color that two steps share is the first hue's. Its `surface("dialog")` and
+  `surface("dialog.footer")` are the host's raised surfaces (CT-8, CT-22, `P.8/tavily-surface`): a color the surface
+  gives differently from the page is that color, carrying no token, as the contract names none of a raised surface,
+  so it keeps that color across a theme change; the others keep their page token. Another name is the page's theme,
+  which the JS host's log says once. Neither `theme` nor `themeMode` is a signal.
+- **The context's `location`** is the directory and workspace the host works in (`abi::Info.location`), where TS's is
+  the whole location the server answers, its project with it: an RPC call that passes it sends the directory alone in
+  its `location` query. It would need the contract to give a plugin the location's project.
 - **Numbers** a render computes are rounded and clamped to the contract's ranges.
 - **Raw writes to standard output** (`fs.writeSync(1, …)`, as oc-bg-color-sync writes `OSC 11` and `OSC 111` to set
   and reset the terminal's background) reach the terminal in TS, where the plugin runs in the TUI's process. Here they
