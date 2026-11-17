@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Seans {{filename}}ga saqlandi",
   "export.failed.title": "Seansni eksport qilib boʻlmadi",
   "export.failed.description": "Seansni eksport qilishda xatolik yuz berdi",
+  "usage.toggle": "Sessiya kontekstini almashtirish",
 }

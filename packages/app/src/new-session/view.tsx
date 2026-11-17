@@ -1,13 +1,11 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
-import { Match, Show, Switch, createComputed, createMemo, createSignal, onCleanup, untrack, type JSX } from "solid-js"
+import { Match, Show, Switch, createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { getFilename } from "@opencode/util/path"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -41,7 +39,7 @@ import {
   transitionCheckoutLabel,
   type CheckoutLabelEvent,
 } from "./workspace/checkout-machine"
-import { NewSessionBranch } from "./workspace/selector"
+import { BaseBranchPicker } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { NewSessionWordmark } from "./wordmark"
@@ -124,29 +122,16 @@ export function NewSessionView(props: {
                   <Composer model={props.composer} />
                 </div>
                 <Show when={props.project.selected()}>
-                  {(project) => {
-                    const workspace = () => (props.workspace.bar.visible() ? props.workspace.selection.value() : "main")
-
-                    const worktrees = () =>
-                      project().id && project().vcs === "git" ? () => location(project()) : undefined
-
-                    return (
-                      <NewSessionLocation
-                        project={project()}
-                        workspace={workspace()}
-                        root={props.workspace.project.root()}
-                        checkout={props.workspace.bar.checkout()}
-                        branch={
-                          workspace() === "main" && worktrees() ? undefined : (
-                            <NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />
-                          )
-                        }
-                        onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                        onClick={() => location()}
-                        onWorktree={worktrees()}
-                      />
-                    )
-                  }}
+                  {(project) => (
+                    <NewSessionLocation
+                      project={project()}
+                      workspace={props.workspace}
+                      onDone={props.composer.restoreFocus}
+                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
+                      onProjects={() => location()}
+                      onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
+                    />
+                  )}
                 </Show>
               </div>
               <Show when={props.project.empty()}>
@@ -293,18 +278,12 @@ function fitPath(value: string, width: number, font: string) {
 const TRIGGER =
   "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
 
-/** The composer tray: project and worktree pickers, Git context, and the session's directory. */
 function NewSessionLocation(props: {
   project: PromptProject
-  /** "main", "create", or a worktree directory. */
-  workspace: string
-  root: string
-  /** Missing while the main checkout's Git info loads. */
-  checkout?: { branch?: string }
-  branch?: JSX.Element
+  workspace: NewSessionWorkspaceController
+  onDone: () => void
   onboarding: boolean
-  onClick: () => void
-  /** Opens the project's worktree step; without it the project has no worktrees to choose. */
+  onProjects: () => void
   onWorktree?: () => void
 }) {
   const language = useLanguage()
@@ -348,24 +327,28 @@ function NewSessionLocation(props: {
       })
     })
 
+  const path = () => {
+    const selection = props.workspace.selection.value()
+
+    if (selection === "create") return
+
+    return selection === "main" ? props.workspace.project.root() : selection
+  }
+
   createComputed(() =>
-    dispatchCheckout({ type: "checkout.changed", directory: props.root, loaded: props.checkout !== undefined }),
+    dispatchCheckout({
+      type: "checkout.changed",
+      directory: path() ?? props.workspace.project.root(),
+      loaded: props.workspace.bar.checkout() !== undefined,
+    }),
   )
 
   onCleanup(() => dispatchCheckout({ type: "disposed" }))
 
-  const worktree = () => {
-    if (props.workspace === "main") return
+  const label = () => {
+    const checkout = props.workspace.bar.checkout()
 
-    if (props.workspace === "create") return language.t("workspace.new")
-
-    return getFilename(props.workspace)
-  }
-
-  const path = () => {
-    if (props.workspace === "create") return
-
-    return props.workspace === "main" ? props.root : props.workspace
+    return checkout && (checkout.branch || language.t("session.location.noBranch"))
   }
 
   const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
@@ -393,7 +376,7 @@ function NewSessionLocation(props: {
               aria-haspopup="dialog"
               aria-description={language.t("session.new.project.trigger.tooltip")}
               class={`${TRIGGER} min-w-0`}
-              onClick={props.onClick}
+              onClick={props.onProjects}
             >
               <ProjectAvatar
                 class="shrink-0"
@@ -403,12 +386,15 @@ function NewSessionLocation(props: {
                 generated={getProjectAvatarGenerated(props.project)}
               />
               <span class="min-w-0 truncate">{displayName(props.project)}</span>
+              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
             </button>
           </Tooltip>
           <Show when={props.onWorktree}>
             {(onWorktree) => (
-              <>
-                <Slash gap={2} />
+              <Show
+                when={props.workspace.selection.value() !== "create"}
+                fallback={<BaseBranchPicker workspace={props.workspace} onDone={props.onDone} />}
+              >
                 <Tooltip
                   appearance={props.onboarding ? "large" : undefined}
                   placement="top"
@@ -436,32 +422,29 @@ function NewSessionLocation(props: {
                     </div>
                   }
                   contentClass={props.onboarding ? "max-w-[280px]" : undefined}
-                  class="flex min-w-12 shrink-[1000]"
+                  class="flex min-w-0 max-w-[220px]"
                 >
                   <button
                     type="button"
                     data-action="prompt-worktree"
                     aria-haspopup="dialog"
-                    aria-label={worktree() ?? props.checkout?.branch ?? language.t("session.location.worktree")}
+                    aria-label={label() ?? language.t("session.location.worktree")}
                     aria-busy={selectCheckoutSkeleton(checkoutLabel())}
                     aria-description={language.t("session.location.worktree")}
                     class={`${TRIGGER} min-w-0`}
                     onClick={onWorktree()}
                   >
-                    <Icon
-                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "branch"}
-                      size={worktree() ? "small" : "normal"}
-                      class="shrink-0 text-v2-icon-icon-muted"
-                    />
+                    <Icon name="branch" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
                     <Switch>
-                      <Match when={worktree() ?? props.checkout?.branch}>
-                        {(label) => <span class="min-w-0 truncate">{label()}</span>}
+                      <Match when={label()}>
+                        {(label) => (
+                          <span dir="auto" class="min-w-0 truncate">
+                            {label()}
+                          </span>
+                        )}
                       </Match>
                       <Match when={selectCheckoutSkeleton(checkoutLabel())}>
-                        <span
-                          aria-hidden="true"
-                          class="h-2 w-12 shrink-0 rounded-full bg-v2-background-bg-layer-02"
-                        />
+                        <span aria-hidden="true" class="h-2 w-12 shrink-0 rounded-full bg-v2-background-bg-layer-02" />
                       </Match>
                     </Switch>
                     <Show when={props.onboarding}>
@@ -473,11 +456,10 @@ function NewSessionLocation(props: {
                     </Show>
                   </button>
                 </Tooltip>
-              </>
+              </Show>
             )}
           </Show>
         </div>
-        {props.branch}
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
       <Show when={path()} keyed>

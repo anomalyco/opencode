@@ -22,11 +22,6 @@ export const content = {
       body: "自分のスクリプト、CIジョブ、ツールからOpenCodeを操作できます。",
       action: "ドキュメント",
     },
-    ide: {
-      name: "IDE拡張機能",
-      body: "VS Code、Cursor、WindsurfでOpenCodeを開けます。ZedやJetBrains IDEではACP経由で使えます。",
-      action: "インストール",
-    },
     mini: {
       name: "Mini",
       body: "最小限のターミナルインターフェース。返答はスクロールバックに出力され、下にはプロンプトが1つだけ残ります。",
@@ -188,32 +183,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | VS Code、Cursor、Zed向けのエディタ連携",
-      description:
-        "エディタの中でOpenCodeを使えます。VS Code、Cursor、Windsurf、VSCodiumには拡張機能があり、Zed、JetBrains IDE、その他のACP対応エディタでは opencode acp を使います。",
-      intro:
-        "エディタの中でOpenCodeを使えます。VS Code、Cursor、Windsurf、VSCodiumでは、統合ターミナルで opencode を実行すると拡張機能が自動でインストールされます。Zed、JetBrains IDE、その他のAgent Client Protocol対応エディタでは、opencode acp でOpenCodeを実行します。",
-      features: {
-        "quick-launch": {
-          title: "すばやく起動",
-          body: "Cmd+Esc または Ctrl+Esc で、分割したターミナルにOpenCodeを開きます。",
-        },
-        "new-session": {
-          title: "新規セッション",
-          body: "Cmd+Shift+Esc または Ctrl+Shift+Esc で別のセッションを開始します。",
-        },
-        context: { title: "コンテキスト", body: "現在の選択範囲やタブをOpenCodeと共有します。" },
-        "file-references": {
-          title: "ファイル参照",
-          body: "Cmd+Option+K または Alt+Ctrl+K で @File#L37-42 を挿入します。",
-        },
-        "installs-itself": { title: "自動インストール", body: "統合ターミナルで opencode を実行すると追加されます。" },
-        "acp-editors": { title: "ACPエディタ", body: "Zed、JetBrains IDE、Avante.nvim、CodeCompanion.nvim。" },
-        "open-vsx": { title: "Open VSX", body: "Cursor、Windsurf、VSCodium向けにOpen VSXでも公開しています。" },
-        "same-agent": { title: "同じエージェント", body: "ターミナルで使うOpenCodeを、コードのすぐ横で。" },
-      },
-    },
     mini: {
       title: "OpenCode | Mini、エージェントのための最小限のターミナルUI",
       description:
@@ -252,9 +221,9 @@ export const content = {
       body: "エージェントが普段のブラウザを使えます。",
       title: "OpenCode | Browse、コーディングエージェントが使う普段のブラウザ",
       description:
-        "Browseを使うと、OpenCodeやほかのMCPクライアントが普段のブラウザを使えます。エージェントはPlaywrightでバックグラウンドのタブを操作し、ログインや2FAはあなたに任せます。",
+        "Browseを使うと、OpenCodeやほかのMCPクライアントが普段のブラウザを使えます。エージェントはページを読み、クリックし、入力し、スクリーンショットを撮り、タブを録画します。ログインや2FAはあなたに任せます。",
       intro:
-        "MCPサーバーとChromium拡張機能で、エージェントが普段のブラウザを使えるようにします。あなたのタブ、ログイン、拡張機能をそのまま使えます。エージェントはPlaywrightでタブを開いて操作し、スクリーンショットを撮り、画面を録画します。タブはバックグラウンドでグループにまとめられ、作業の邪魔になりません。ログイン、2FAの入力、支払いなどあなたの番になると、エージェントはタブをあなたに渡し、「Continue」をクリックすると作業を再開します。",
+        "MCPサーバーとChromium拡張機能で、エージェントが普段のブラウザを使えるようにします。あなたのタブ、ログイン、拡張機能をそのまま使えます。エージェントはタブをバックグラウンドで開き、グループにまとめて邪魔にならないようにし、ページを読んだり、クリックしたり、入力したり、スクリーンショットを撮ったり、タブを録画したりします。ログイン、2FAの入力、支払いなどあなたの番になると、エージェントはタブをあなたに渡し、「Continue」をクリックすると作業を再開します。",
       features: {
         "your-real-browser": {
           title: "普段のブラウザ",
@@ -271,14 +240,14 @@ export const content = {
         },
         "record-and-capture": {
           title: "録画と記録",
-          body: "スクリーンショット、画面録画、HAR形式のネットワーク通信。",
+          body: "スクリーンショット、タブの録画、ネットワーク通信。",
         },
         "any-mcp-client": { title: "全MCPクライアント", body: "OpenCode、Claude Code、Cursor、Codex、Zedなど多数。" },
         "all-your-logins": {
           title: "ログインはそのまま",
           body: "エージェントは、すでにサインインしているサイトをそのまま使います。キーも設定も不要です。",
         },
-        allowlists: { title: "許可リスト", body: "セッションのタブを、指定したサイトだけに制限できます。" },
+        "allowed-sites": { title: "許可したサイト", body: "エージェントのタブを、指定したサイトだけに保ちます。" },
       },
       install:
         "まず [Chrome 拡張機能] をインストールしてください。残りの手順は拡張機能が案内します。CLI を直接インストールする場合は(通常は不要です)、次のいずれかを使ってください。",
@@ -362,7 +331,7 @@ export const content = {
     },
     colors: {
       title: "カラー",
-      body: "ロゴとワードマークは1つのインクを3段階の不透明度で使い、暗い背景にはより明るいインクを使います。下の値は、標準ファイルと同じく、白または#0B0B0Bの上にそのインクを重ねた色です。値をクリックするとコピーできます。",
+      body: "ロゴとワードマークは1つのインクを3段階の不透明度で使い、暗い背景にはより明るいインクを使います。下の値は標準ファイルの色です。これらはロゴとワードマークだけに使用し、ほかのテキストや背景には使用しないでください。値をクリックするとコピーできます。",
       palettes: {
         light: {
           name: "ライト",
@@ -719,14 +688,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "スクリプト" } } },
     sdk: { more: { label: "SDKのドキュメントを読む" } },
-    ide: {
-      lead: "エディタの統合ターミナルで opencode を実行すると拡張機能が自動でインストールされます。手動でインストールすることもできます。",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX（Cursor、Windsurf、VSCodium）" },
-      },
-      more: { label: "Zed、JetBrains IDE、その他のACPエディタを設定" },
-    },
     mini: {
       commands: { curl: { name: "スクリプト" } },
       lead: "MiniはOpenCode CLIに含まれています。次のいずれかでインストールし、opencode mini を実行してください。",

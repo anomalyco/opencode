@@ -24,6 +24,13 @@ const absolute = (value: string) => AbsolutePath.make(value)
 describe("ReadTool text serialization", () => {
   const cases = [
     {
+      name: "reads a partial GIF signature as text",
+      content: "GIF8 is text",
+      page: {},
+      output: { type: "file", content: "GIF8 is text", encoding: "utf8" },
+      model: "Read file lines.txt, lines 1-1\n1: GIF8 is text",
+    },
+    {
       name: "preserves a selected trailing blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 1, limit: 2 },
@@ -90,8 +97,29 @@ describe("ReadTool text serialization", () => {
       name: "preserves empty-file page output",
       content: "",
       page: { limit: 2 },
-      output: { type: "text-page", content: "", offset: 1, truncated: false },
+      output: { type: "text-page", content: "", lineCount: 0, offset: 1, truncated: false },
       model: "Read file lines.txt, 0 lines",
+    },
+    {
+      name: "numbers the only blank line in a newline-only file",
+      content: "\n",
+      page: { limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 1, truncated: false },
+      model: "Read file lines.txt, lines 1-1\n1: ",
+    },
+    {
+      name: "numbers a single blank line before continuation",
+      content: "alpha\n\nomega\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: true, next: 3 },
+      model: "Read file lines.txt, lines 2-2\n2: \n[Output truncated. Continue reading with offset: 3]",
+    },
+    {
+      name: "counts the last blank line when an offset is past EOF",
+      content: "alpha\n\n",
+      page: { offset: 9, limit: 1 },
+      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: false },
+      model: "Read file lines.txt, lines 2-2 (offset 9 is past the end; the file has 2 lines)\n2: ",
     },
   ]
 
@@ -105,13 +133,81 @@ describe("ReadTool text serialization", () => {
         const result = yield* ReadToolFileSystem.read(current.environment, file, "lines.txt", input.page)
 
         expect(result).toMatchObject(input.output)
-        expect(ReadTool.toModelContent("lines.txt", undefined, result)).toBe(input.model)
+        expect(ReadTool.toModelContent("lines.txt", input.page.offset, result)).toBe(input.model)
       }),
     )
   })
 })
 
 describe("ReadToolFileSystem", () => {
+  it.live("applies the default line limit to small files at physical line boundaries", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "dense.txt"))
+      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const prefix = "x\r\n".repeat(1_999)
+      for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
+        const content = prefix + ending
+        yield* files.writeFileString(file, content)
+        expect(yield* read()).toMatchObject({ type: "file", content })
+      }
+
+      yield* files.writeFileString(file, prefix + "\r\nlast")
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ content: "x\n".repeat(1_999), offset: 1, next: 2_001, truncated: true })
+      expect(ReadTool.toModelContent("dense.txt", undefined, page)).toEndWith(
+        "2000: \n[Output truncated. Continue reading with offset: 2001]",
+      )
+      expect(yield* read({ offset: page.next })).toMatchObject({ content: "last", offset: 2_001, truncated: false })
+    }),
+  )
+
+  it.live("applies the byte limit to the returned content of small files", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "bytes.txt"))
+      const read = () => ReadToolFileSystem.read(environment, file, "bytes.txt")
+      const exact = ("é".repeat(799) + "x\n").repeat(32)
+      yield* files.writeFileString(file, exact)
+      expect(yield* read()).toMatchObject({ type: "file", content: exact })
+
+      // Each truncation marker takes more bytes than the one character it replaces.
+      yield* files.writeFileString(file, ("x".repeat(2_001) + "\n").repeat(25) + "é".repeat(500))
+      const page = yield* read()
+      expect(page.type).toBe("text-page")
+      if (page.type !== "text-page") return
+      expect(page).toMatchObject({ offset: 1, next: 26, truncated: true })
+      expect(page.content.split("\n")).toHaveLength(25)
+      expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
+    }),
+  )
+
+  it.live("reads extensionless and renamed GIFs as images", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      for (const [version, name] of [
+        ["GIF87a", "pixel"],
+        ["GIF89a", "pixel.txt"],
+      ]) {
+        // 1x1 screen, black/white palette, one pixel and trailer.
+        const bytes = Buffer.concat([
+          Buffer.from(version),
+          Buffer.from("01000100800000000000ffffff2c00000000010001000002024401003b", "hex"),
+        ])
+        const file = absolute(path.join(directory, name))
+        yield* files.writeFile(file, bytes)
+        expect(yield* ReadToolFileSystem.read(environment, file, name)).toMatchObject({
+          type: "file",
+          mime: "image/gif",
+          encoding: "base64",
+          content: bytes.toString("base64"),
+        })
+      }
+    }),
+  )
+
   it.effect("preserves the environment not-found error", () =>
     Effect.gen(function* () {
       const { environment, directory } = yield* fixture
@@ -392,6 +488,53 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads the end of a file many chunks long", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const read = (name: string, content: string | Uint8Array, page: ReadToolFileSystem.PageInput) =>
+        (typeof content === "string"
+          ? files.writeFileString(path.join(directory, name), content)
+          : files.writeFile(path.join(directory, name), content)
+        ).pipe(
+          Effect.andThen(ReadToolFileSystem.read(environment, absolute(path.join(directory, name)), name, page)),
+          Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
+        )
+      // 60,000 lines of 51 bytes span 12 chunks.
+      const lines = Array.from({ length: 60_000 }, (_, index) => `${index + 1}`.padEnd(50, "x"))
+      const content = lines.join("\n") + "\n"
+      const expected = (from: number, to: number) =>
+        lines.slice(from - 1, to).map((line, index) => `${from + index}: ${line}`)
+
+      expect(yield* read("negative.txt", content, { offset: -5 })).toEqual([
+        "Read file negative.txt, lines 59996-60000",
+        ...expected(59_996, 60_000),
+      ])
+      expect(yield* read("past.txt", content, { offset: 70_000, limit: 3 })).toEqual([
+        "Read file past.txt, lines 59998-60000 (offset 70000 is past the end; the file has 60000 lines)",
+        ...expected(59_998, 60_000),
+      ])
+      expect(yield* read("deep.txt", content, { offset: 45_000, limit: 2 })).toEqual([
+        "Read file deep.txt, lines 45000-45001",
+        ...expected(45_000, 45_001),
+        "[Output truncated. Continue reading with offset: 45002]",
+      ])
+      // Far from the end, a negative offset still reads from the line it counts back to.
+      expect(yield* read("far.txt", content, { offset: -10_000, limit: 3 })).toEqual([
+        "Read file far.txt, lines 50001-50003",
+        ...expected(50_001, 50_003),
+        "[Output truncated. Continue reading with offset: 50004]",
+      ])
+
+      // A null byte in an earlier scanned chunk still marks the file as binary.
+      const early = new TextEncoder().encode(content)
+      early[10] = 0
+      const negative = yield* read("early-nul.txt", early, { offset: -5 }).pipe(Effect.flip)
+      expect(negative).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+      const past = yield* read("early-nul-past.txt", early, { offset: 70_000 }).pipe(Effect.flip)
+      expect(past).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
   it.effect("rejects a negative offset for a directory", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
@@ -493,6 +636,33 @@ describe("ReadToolFileSystem", () => {
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "nul.txt", { limit: 1 })
 
       expect(result).toMatchObject({ type: "text-page", content: "one", truncated: true, next: 2 })
+    }),
+  )
+
+  it.live("ignores a NUL after a chunked page but rejects it for a past-end offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "nul.txt"))
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024)}\nselected\n\0\ntail`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "nul.txt", { offset, limit: 1 })
+
+      for (const offset of [2, -3]) {
+        expect(yield* read(offset)).toMatchObject({ content: "selected", offset: 2, truncated: true, next: 3 })
+      }
+      expect(yield* read(5).pipe(Effect.flip)).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
+    }),
+  )
+
+  it.live("keeps a split byte order mark in a past-end tail and strips it at a negative offset", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = absolute(path.join(directory, "marked.txt"))
+      // The first byte of the three-byte UTF-8 mark is the last byte of the first chunk.
+      yield* files.writeFileString(file, `${"x".repeat(256 * 1024 - 2)}\n\uFEFFselected`)
+      const read = (offset: number) => ReadToolFileSystem.read(environment, file, "marked.txt", { offset, limit: 1 })
+
+      expect(yield* read(3)).toMatchObject({ content: "\uFEFFselected", offset: 2, truncated: false })
+      expect(yield* read(-1)).toMatchObject({ content: "selected", offset: 2, truncated: false })
     }),
   )
 

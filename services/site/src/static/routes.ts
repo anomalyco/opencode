@@ -13,7 +13,6 @@ export const staticPaths = [
   "/terminal",
   "/mobile",
   "/sdk",
-  "/ide",
   "/mini",
   "/legal",
   "/legal/privacy-policy",

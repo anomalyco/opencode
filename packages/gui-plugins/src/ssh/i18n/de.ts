@@ -40,4 +40,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Server hinzufügen",
   "menu.delete": "Löschen",
+  "error.unavailable": "SSH ist nicht verfügbar",
 }

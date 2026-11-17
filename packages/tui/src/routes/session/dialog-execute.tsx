@@ -1,7 +1,6 @@
 import { TextAttributes, type CodeRenderable, type LineInfo, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { Option, Schema } from "effect"
 import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
@@ -20,8 +19,7 @@ import {
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
-
-const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+import { formatExecuteOutput } from "@opencode/util/execute-output"
 
 // The part is the live store object, so the dialog follows the tool while child
 // calls stream and the output arrives.
@@ -219,13 +217,11 @@ function outputText(state: SessionMessageAssistantTool["state"]) {
   return text || undefined
 }
 
-// The tool prints a JSON result, optionally followed by "\n\nWarnings:" and "\n\nLogs:".
+// A JSON result shows indented and highlighted, with any "Warnings:" and "Logs:" sections below it.
 function highlightedOutput(text: string) {
-  if (!text.startsWith("{") && !text.startsWith("[")) return
-  const end = text.search(/\n\n(Warnings|Logs):\n/)
-  const json = end === -1 ? text : text.slice(0, end)
-  if (Option.isNone(decodeJson(json))) return
-  return { json, rest: text.slice(json.length).trim() || undefined }
+  const formatted = formatExecuteOutput(text)
+  if (formatted.json === undefined) return
+  return { json: formatted.json, rest: formatted.rest }
 }
 
 function lineCount(text: string | undefined) {

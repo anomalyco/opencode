@@ -520,7 +520,7 @@ describe("Tool", () => {
         },
       })
       expect(callable.output).toMatchObject({
-        output: expect.stringContaining('"text": "sales"'),
+        output: expect.stringContaining('"text":"sales"'),
         toolCalls: [
           { tool: "registry.search", status: "completed" },
           { tool: "registry.search.sales", status: "completed" },
@@ -589,7 +589,7 @@ describe("Tool", () => {
           },
         },
       })
-      expect(result.output).toMatchObject({ output: expect.stringContaining('"text": "sales"') })
+      expect(result.output).toMatchObject({ output: expect.stringContaining('"text":"sales"') })
     }),
   )
 
@@ -961,6 +961,113 @@ describe("Tool", () => {
       }),
     )
   })
+
+  it.effect("a hook can rename a call inside a Code Mode program to another of its tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make(), constant: constant("renamed") })
+      yield* transform(service, { direct: constant("direct") }, { codemode: false })
+      const seen: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool !== "echo") return
+          event.tool = Schema.is(Schema.Struct({ text: Schema.String }))(event.input) ? event.input.text : event.tool
+        }),
+      )
+      yield* hooks.register("tool", "execute.after", (event) => Effect.sync(() => void seen.push(event.tool)))
+      const snapshot = yield* service.snapshot()
+      const program = (code: string) =>
+        snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-program", name: "execute", input: { code } },
+        })
+
+      expect((yield* program('return await tools.echo({ text: "constant" })')).output).toMatchObject({
+        output: JSON.stringify({ text: "renamed" }),
+      })
+      expect(seen).toContain("constant")
+      // A program can only reach its own tools, however the call is renamed.
+      for (const name of ["direct", "missing"])
+        expect(
+          (yield* program(`try { await tools.echo({ text: "${name}" }) } catch (e) { return e.message }`)).output,
+        ).toMatchObject({ output: `Tool is not available for this request: ${name}` })
+
+      const check = (tools: string[]) =>
+        service.check({
+          code: 'return await tools.echo({ text: "constant" })',
+          tools,
+          bindings: {},
+          permissions: [],
+          limits: {},
+          context: { sessionID, ...identity, progress: () => Effect.void },
+        })
+      expect(yield* check(["echo"])).toMatchObject({ ok: false })
+      expect(yield* check(["echo", "constant"])).toMatchObject({ ok: true, value: { text: "renamed" } })
+    }),
+  )
+
+  it.effect("a call renamed inside a Code Mode program returns the renamed tool's structured output", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      const plain: Info = {
+        name: "plain",
+        description: "Return text",
+        input: Schema.Struct({ text: Schema.String }),
+        execute: () => Effect.succeed({ content: "plain" }),
+      }
+      yield* transform(service, { plain, constant: constant("structured") })
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => {
+          if (event.tool === "plain") event.tool = "constant"
+        }),
+      )
+      const snapshot = yield* service.snapshot()
+      const result = yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'return await tools.plain({ text: "x" })' },
+        },
+      })
+      expect(result.output).toMatchObject({ output: JSON.stringify({ text: "structured" }) })
+    }),
+  )
+
+  it.effect("hooks see one ID per call inside a Code Mode program", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const hooks = yield* PluginHooks.Service
+      yield* transform(service, { echo: make() })
+      const before: string[] = []
+      const after: string[] = []
+      yield* hooks.register("tool", "execute.before", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && before.push(event.id))),
+      )
+      yield* hooks.register("tool", "execute.after", (event) =>
+        Effect.sync(() => void (event.tool === "echo" && after.push(event.id))),
+      )
+      const snapshot = yield* service.snapshot()
+      yield* snapshot.execute({
+        sessionID,
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-program",
+          name: "execute",
+          input: { code: 'await Promise.all([tools.echo({ text: "a" }), tools.echo({ text: "b" })])' },
+        },
+      })
+      expect(new Set(before).size).toBe(2)
+      expect(before).not.toContain("call-program")
+      expect(after.toSorted()).toEqual(before.toSorted())
+    }),
+  )
 
   it.effect("normalizes image tool output once and drops unresizable images", () =>
     Effect.gen(function* () {

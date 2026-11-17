@@ -115,13 +115,16 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
       if (path === "/api/v2/config") {
         config.push({ authorization: request.headers.get("authorization"), orgID: request.headers.get("x-org-id") })
         if (orgID === "org-missing") return new Response("Forbidden", { status: 403 })
-        return Response.json({ providers: {} })
+        return Response.json({ providers: {} }, withLists)
       }
       return new Response("Not found", { status: 404 })
     },
   })
   return { server, config, requests, agents }
 }
+
+// Console's config answer while the workspace has instructions and skills.
+const withLists = { headers: { "x-opencode-instructions-skills": "1" } }
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value")
@@ -1394,8 +1397,6 @@ describe("OpencodePlugin", () => {
           )
           expect(requests).toEqual([
             "https://opencode.ai/console/api/v2/config",
-            "https://opencode.ai/console/api/v2/instructions",
-            "https://opencode.ai/console/api/v2/skills",
             "https://opencode.ai/console/api/websearch",
           ])
         }),
@@ -1580,7 +1581,7 @@ describe("OpencodePlugin", () => {
               authorization: request.headers.get("authorization"),
               orgID: request.headers.get("x-org-id"),
             })
-            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} }, withLists)
             if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
             if (url.pathname === "/api/v2/skills/deploy") {
               // Skill archives come from presigned storage on its own host, where the signature covers the encoding.
@@ -1634,7 +1635,7 @@ describe("OpencodePlugin", () => {
       const server = {
         fetch: (request: Request) => {
           const path = new URL(request.url).pathname
-          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/config") return Response.json({ providers: {} }, withLists)
           if ((path === "/api/v2/instructions" || path === "/api/v2/skills") && state.lists !== 200)
             return new Response(null, { status: state.lists })
           if (path === "/api/v2/instructions")
@@ -1692,7 +1693,8 @@ describe("OpencodePlugin", () => {
       const server = {
         fetch: (request: Request) => {
           const path = new URL(request.url).pathname
-          if (path === "/api/v2/config") return Response.json({ providers: {}, policies: [sudo] })
+          if (path === "/api/v2/config")
+            return Response.json({ providers: {}, policies: [sudo] }, withLists)
           if (path !== "/api/v2/instructions" && path !== "/api/v2/skills") return new Response(null, { status: 404 })
           if (state.lists === "down") return new Response("Unavailable", { status: 503 })
           if (path === "/api/v2/skills") return Response.json({ skills: [] })
@@ -1745,7 +1747,7 @@ describe("OpencodePlugin", () => {
         fetch: async (request: Request) => {
           const path = new URL(request.url).pathname
           requests.push(path)
-          if (path === "/api/v2/config") return Response.json({ providers: {} })
+          if (path === "/api/v2/config") return Response.json({ providers: {} }, withLists)
           if (path === "/api/v2/instructions") {
             await skillsRequested.promise
             return Response.json({ instructions: [{ id: "style", content: "Use tabs." }] })
@@ -1783,7 +1785,7 @@ describe("OpencodePlugin", () => {
           fetch: (request) => {
             const url = new URL(request.url)
             downloads.push({ path: url.pathname, authorization: request.headers.get("authorization") })
-            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} })
+            if (url.pathname === "/api/v2/config") return Response.json({ providers: {} }, withLists)
             if (url.pathname === "/api/v2/skills") return Response.json({ skills: [{ slug: "deploy", version: "1" }] })
             if (url.pathname === "/api/v2/skills/deploy")
               return Response.redirect(`${url.origin}/assets/deploy.json`, 302)

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sesiunea a fost salvată în {{filename}}",
   "export.failed.title": "Nu s-a putut exporta sesiunea",
   "export.failed.description": "A apărut o eroare la exportarea sesiunii",
+  "usage.toggle": "Comută contextul sesiunii",
 }

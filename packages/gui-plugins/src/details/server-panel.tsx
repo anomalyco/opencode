@@ -6,8 +6,8 @@ import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
 import { createMcpSignIn, type McpSignInFailure } from "@opencode/ui/mcp-sign-in"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { Switch } from "@opencode/ui/switch"
-import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { TruncatedText } from "@opencode/ui/truncated-text"
@@ -19,7 +19,6 @@ import {
   For,
   Index,
   onCleanup,
-  onMount,
   Show,
   untrack,
   type Accessor,
@@ -1544,7 +1543,6 @@ function McpSignInDialog(props: {
   onClose: () => void
 }) {
   const ctx = usePlugin()
-  const errorID = createUniqueId()
 
   const attempt = () => ({
     integrationID: props.integrationID,
@@ -1568,7 +1566,6 @@ function McpSignInDialog(props: {
 
   const view = signIn.view
   const dispatch = signIn.dispatch
-  let input: HTMLInputElement | undefined
 
   const failure = (value: McpSignInFailure) => {
     if (value.type === "auth-expired") return ctx.t("mcp.signIn.failed", { error: ctx.t("mcp.signIn.expired") })
@@ -1579,16 +1576,6 @@ function McpSignInDialog(props: {
 
     return ctx.t("mcp.timedOut", { name: props.name })
   }
-
-  const entryError = () => {
-    const error = view().entryError
-
-    if (!error) return
-
-    return error.type === "rejected" ? error.message : ctx.t("mcp.signIn.paste.required")
-  }
-
-  onMount(() => input?.focus({ preventScroll: true }))
 
   return (
     <Dialog>
@@ -1628,40 +1615,15 @@ function McpSignInDialog(props: {
             </div>
           </Show>
           <Show when={view().showForm}>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                dispatch({ type: "paste.submitted" })
-              }}
-              class="flex flex-col items-start gap-5 self-stretch"
-            >
-              <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-                {ctx.t("mcp.signIn.paste.label")}
-                <TextInput
-                  ref={input}
-                  class="!w-full"
-                  name="redirect"
-                  placeholder={ctx.t("mcp.signIn.paste.placeholder")}
-                  value={view().value}
-                  readOnly={view().locked}
-                  invalid={entryError() !== undefined}
-                  aria-describedby={entryError() ? errorID : undefined}
-                  autocomplete="off"
-                  spellcheck={false}
-                  onInput={(event) => dispatch({ type: "paste.changed", value: event.currentTarget.value })}
-                />
-              </label>
-              <Show when={entryError()}>
-                {(error) => (
-                  <div id={errorID} role="alert" class="-mt-4 text-xs text-v2-state-fg-danger">
-                    {error()}
-                  </div>
-                )}
-              </Show>
-              <Button type="submit" variant="contrast" disabled={view().locked} aria-busy={view().submitting}>
-                {ctx.t("common.continue")}
-              </Button>
-            </form>
+            <RedirectPasteForm
+              value={view().value}
+              error={view().entryError}
+              locked={view().locked}
+              submitting={view().submitting}
+              autofocus
+              onInput={(value) => dispatch({ type: "paste.changed", value })}
+              onSubmit={() => dispatch({ type: "paste.submitted" })}
+            />
           </Show>
         </div>
       </DialogBody>

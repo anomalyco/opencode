@@ -353,14 +353,15 @@ function normalizeCompaction(
   unsupportedIfPresent(input.compaction, "tail_turns", ["compaction", "tail_turns"], diagnostics)
   unsupportedIfPresent(input.compaction, "prune", ["compaction", "prune"], diagnostics)
   const result: Record<string, unknown> = {}
-  if (own(input.compaction, "auto")) {
+  for (const key of ["auto", "background"] as const) {
+    if (!own(input.compaction, key)) continue
     const value = decodeEncoded(
-      ConfigCompaction.Info.fields.auto,
-      input.compaction.auto,
-      ["compaction", "auto"],
+      ConfigCompaction.Info.fields[key],
+      input.compaction[key],
+      ["compaction", key],
       diagnostics,
     )
-    if (value !== undefined) result.auto = value
+    if (value !== undefined) result[key] = value
   }
   const legacyTokens = own(input.compaction, "preserve_recent_tokens")
     ? decodeEncoded(
@@ -465,15 +466,6 @@ function normalizeExperimental(
         const value = decodeEncoded(schema, experimental[key], ["experimental", key], diagnostics)
         if (value !== undefined) result[key] = value
       })
-      if (!own(experimental, "codemode_vm") && own(experimental, "codemodeVm")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.codemode_vm,
-          experimental.codemodeVm,
-          ["experimental", "codemodeVm"],
-          diagnostics,
-        )
-        if (value !== undefined) result.codemode_vm = value
-      }
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))

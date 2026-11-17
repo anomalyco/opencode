@@ -6,14 +6,14 @@
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { resolveAndParseConfig } from "@cloudflare/config"
+import { stage } from "../stage"
 
 const root = path.resolve(import.meta.dir, "..")
 const flag = (name: string) => {
   const index = process.argv.indexOf(name)
   return index === -1 ? undefined : process.argv[index + 1]
 }
-const mode = flag("--mode")
-if (mode !== "dev" && mode !== "production") throw new Error(`Unknown --mode ${mode}; use dev or production`)
+const mode = stage(flag("--mode"))
 const secretsFile = flag("--secrets-file")
 const secrets: Record<string, string> = secretsFile ? await Bun.file(secretsFile).json() : {}
 

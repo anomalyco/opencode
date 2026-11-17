@@ -2,9 +2,11 @@ import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
+import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { ExternalLink } from "@/runtime/platform/external-link"
 import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
@@ -69,11 +71,7 @@ const WorkspaceDestinationSetting: Component = () => {
   )
 }
 
-export const ShellSetting: Component<{
-  controller: ShellSettingsController
-  /** Search reveals the row with the default action; the Servers page names the other servers' rows apart. */
-  action?: string
-}> = (props) => {
+export const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
   const language = useLanguage()
 
   const options = createMemo(() =>
@@ -89,7 +87,7 @@ export const ShellSetting: Component<{
       description={language.t("settings.general.row.shell.description")}
     >
       <Select
-        data-action={props.action ?? "settings-shell"}
+        data-action="settings-shell"
         options={options()}
         current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
         placement="bottom-end"
@@ -322,6 +320,16 @@ export const SettingsGeneral: Component = () => {
             <span class="text-11-regular text-v2-text-text-muted">
               {language.t("settings.preferences.description")}
             </span>
+          </div>
+          <div class="settings-tab-header-actions">
+            <ExternalLink
+              data-action="settings-help-feedback"
+              href="https://opencode.ai/desktop-feedback"
+              class="inline-flex items-center gap-1.5 text-13-regular text-v2-text-text-muted no-underline hover:text-v2-text-text-base hover:underline"
+            >
+              {language.t("settings.helpFeedback")}
+              <Icon name="arrow-up-right" size="small" />
+            </ExternalLink>
           </div>
         </div>
       </div>

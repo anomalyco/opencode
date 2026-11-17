@@ -100,10 +100,10 @@ describe("CodeModeCatalog.summarize", () => {
     expect(catalog.namespaces[0]?.entries[0]?.line).toEndWith("// Summary")
   })
 
-  test("limits inline descriptions to 120 characters", () => {
-    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(121))] })
+  test("limits inline descriptions to 500 characters", () => {
+    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(501))] })
     const description = catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]
-    expect(description).toHaveLength(120)
+    expect(description).toHaveLength(500)
     expect(description).toEndWith("...")
   })
 

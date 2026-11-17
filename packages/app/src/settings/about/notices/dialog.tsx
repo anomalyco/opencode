@@ -17,7 +17,7 @@ export default function DialogThirdPartyNotices() {
   const language = useLanguage()
 
   return (
-    <Dialog size="large">
+    <Dialog size="x-large">
       <DialogHeader>
         <DialogTitleGroup
           title={language.t("settings.about.notices.title")}

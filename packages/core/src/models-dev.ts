@@ -133,7 +133,7 @@ const SourceProvider = Schema.Struct({
 })
 
 // The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
-const TYPES: readonly string[] = ["chat", "decision", "image"]
+const TYPES: readonly string[] = ["chat", "decision", "image", "video"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)

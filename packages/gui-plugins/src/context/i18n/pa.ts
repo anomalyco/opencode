@@ -28,4 +28,5 @@ export default {
   "export.success.description": "سیشن نوں ⁨{{filename}}⁩ وچ محفوظ کر دتا گیا",
   "export.failed.title": "سیشن برآمد کرن چ ناکامی ہوئی",
   "export.failed.description": "سیشن برآمد کردے ویلے اک غلطی ہو گئی",
+  "usage.toggle": "سیشن تناظر ٹوگل کرو",
 }

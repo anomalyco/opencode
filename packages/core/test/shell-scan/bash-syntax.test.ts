@@ -169,6 +169,45 @@ describe("ordinary Bash and Zsh syntax", () => {
     })
   })
 
+  // Expected values are what Bash 3.2 and 5.2 and Zsh 5.9 print for these words.
+  test.each([
+    ["bash", "$'\\033\\[?1049'", "\x1b\\[?1049"],
+    ["bash", "$'\\q\\8\\-\\xg\\ug\\Ug'", "\\q\\8\\-\\xg\\ug\\Ug"],
+    ["bash", "$'a\\\nb'", "a\\\nb"],
+    ["zsh", "$'\\033\\[?1049'", "\x1b[?1049"],
+    ["zsh", "$'\\q\\8\\-\\c'", "q8-c"],
+    ["zsh", "$'a\\\nb'", "a\nb"],
+  ] as const)("decodes unknown ANSI-C escapes like %s: %s", (dialect, word, value) => {
+    expect(ShellScan.scan(`printf '%s' ${word} | od -c`, dialect)).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["printf", "%s", value] }, { words: ["od", "-c"] }],
+    })
+  })
+
+  test("decodes unknown escapes in ANSI-C heredoc delimiters like each dialect", () => {
+    const source = "cat <<$'E\\[F'\nE[F\nE\\[F\nprintf done"
+    expect(ShellScan.scan(source, "bash")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["cat"] }, { words: ["printf", "done"] }],
+    })
+    expect(ShellScan.scan(source, "zsh")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["cat"] }, { words: ["E[F"] }, { words: ["printf", "done"] }],
+    })
+  })
+
+  test.each([
+    ["posix", "$'\\['"],
+    ["bash", "$'\\cA'"],
+    ["bash", "$'a\\0b'"],
+    ["zsh", "$'\\C-a'"],
+    ["zsh", "$'\\M-a'"],
+    ["zsh", "$'\\xg'"],
+    ["zsh", "$'\\u'"],
+  ] as const)("rejects ANSI-C escapes whose value differs between shells in %s: %s", (dialect, word) => {
+    expect(ShellScan.scan(`printf '%s' ${word}`, dialect)).toEqual({ kind: "opaque", reason: "unsupported-escape" })
+  })
+
   test.each([
     ["coproc job { scan_probe; }", ["scan_probe"]],
     ["case x in @(one|$(scan_probe))) ;; esac", ["scan_probe"]],

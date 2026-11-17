@@ -79,6 +79,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/inference/anthropic/v1/messages`                      | `@ai-sdk/anthropic`         |
 | Gemini 4 Carbon                 | gemini-4-carbon                 | `https://opencode.ai/inference/google/v1beta/models/gemini-4-carbon`       | `@ai-sdk/google`            |
 | Gemini 4 Argon                  | gemini-4-argon                  | `https://opencode.ai/inference/google/v1beta/models/gemini-4-argon`        | `@ai-sdk/google`            |
+| Gemini 4 Hydrogen               | gemini-4-hydrogen               | `https://opencode.ai/inference/google/v1beta/models/gemini-4-hydrogen`     | `@ai-sdk/google`            |
 | Gemini 3.8 Flash                | gemini-3.8-flash                | `https://opencode.ai/inference/google/v1beta/models/gemini-3.8-flash`      | `@ai-sdk/google`            |
 | Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/inference/google/v1beta/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
 | Gemini 3.6 Flash                | gemini-3.6-flash                | `https://opencode.ai/inference/google/v1beta/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
@@ -113,6 +114,8 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Kimi K3                         | kimi-k3                         | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Mistral Large 4                 | mistral-large-4                 | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
+| GPT 6 Luna Decision             | gpt-6-luna-decision             | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
+| Gemini Decision 1               | gemini-decision-1               | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/inference/systemone/v1/systemone`                     | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -120,10 +123,10 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Inkling 2 Small Free            | inkling-2-small-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | GLM-5.3-Flash Free              | glm-5.3-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free        | deepseek-v4.1-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
-| MiniMax M3.1 Flash Free         | minimax-m3.1-flash-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Beam Free                       | beam-free                       | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Flint 40B Free                  | flint-40b-free                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | LongCat 2.5 Free                | longcat-2.5-free                | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
+| Hy4 flash Free                  | hy4-flash-free                  | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/inference/openai/v1/chat/completions`                 | `@ai-sdk/openai-compatible` |
@@ -201,6 +204,26 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 Use `jev-1.13-free` instead of `jev-1.13` to use the limited-time free model. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
 
+### GPT 6 Luna Decision and Gemini Decision 1
+
+`gpt-6-luna-decision` and `gemini-decision-1` take the same System One request as Jev, on the same endpoint. Pass images, audio, video, and PDFs in `state` as chat-style parts (`image_url`, `input_audio`, `video_url`, `file`). GPT 6 Luna Decision accepts text and images; Gemini Decision 1 also accepts audio, video, and PDFs.
+
+```bash
+curl https://opencode.ai/inference/systemone/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-decision-1",
+    "state": "I was charged twice for my order.",
+    "questions": {
+      "refund": {
+        "type": "noul",
+        "instructions": "Is this a refund request?"
+      }
+    }
+  }'
+```
+
 ## Pricing
 
 Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
@@ -214,16 +237,19 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Inkling 2 Small Free              | Free            | Free            | Free            | -            |
 | GLM-5.3-Flash Free                | Free            | Free            | Free            | -            |
 | DeepSeek V4.1 Flash Free          | Free            | Free            | Free            | -            |
-| MiniMax M3.1 Flash Free           | Free            | Free            | Free            | -            |
 | Beam Free                         | Free            | Free            | Free            | -            |
 | Flint 40B Free                    | Free            | Free            | Free            | -            |
 | LongCat 2.5 Free                  | Free            | Free            | Free            | -            |
+| Hy4 flash Free                    | Free            | Free            | Free            | -            |
 | MiMo-V2.6-Flash Free              | Free            | Free            | Free            | -            |
 | Nemotron 3 Ultra Free             | Free            | Free            | Free            | -            |
 | Nemotron 3.5 Lightning Free       | Free            | Free            | Free            | -            |
 | Nemotron 3.5 Super VL Free        | Free            | Free            | Free            | -            |
 | Jev 1.13 Free                     | Free            | Free            | -               | -            |
 | Jev 1.13                          | $0.042          | Free            | -               | -            |
+| Gemini Decision 1                 | $0.10           | Free            | -               | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free            | $0.01           | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | $0.20           | Free            | $0.02           | $0.25        |
 | MiniMax M3                        | $0.30           | $1.20           | $0.06           | -            |
 | MiniMax M2.7                      | $0.30           | $1.20           | $0.06           | -            |
 | MiniMax M2.5                      | $0.30           | $1.20           | $0.06           | -            |
@@ -262,6 +288,7 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Claude Haiku 4.5                  | $1.00           | $5.00           | $0.10           | $1.25        |
 | Gemini 4 Carbon (50% off)         | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10 | -          |
 | Gemini 4 Argon (50% off)          | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10 | -          |
+| Gemini 4 Hydrogen                 | $1.50           | $7.50           | $0.075          | -            |
 | Gemini 3.8 Flash (50% off)        | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75 | ~~$0.15~~ $0.075 | -           |
 | Gemini 3.7 Flash (50% off)        | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75 | ~~$0.15~~ $0.075 | -           |
 | Gemini 3.6 Flash (50% off)        | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75 | ~~$0.15~~ $0.075 | -           |
@@ -333,7 +360,6 @@ models to generate session titles.
 
 - GLM-5.3-Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - DeepSeek V4.1 Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
-- MiniMax M3.1 Flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - MiMo-V2.6-Flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3 Ultra Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
@@ -344,6 +370,7 @@ models to generate session titles.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - LongCat 2.5 Free is free on OpenCode for a limited time, with a limit of 100 requests per day. Its provider follows a zero-retention policy and does not use your data for model training. It's hosted in China.
+- Hy4 flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - Jev 1.13 Free is available on OpenCode for a limited time.
 
 To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free models](/models#free-models).
@@ -357,29 +384,30 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 ### Deprecated models
 
-| Model              | Deprecation date  |
-| ------------------ | ----------------- |
-| Crouton Alpha Free | November 9, 2026  |
-| Pulse Alpha Free   | November 6, 2026  |
-| DeepSeek V4 Flash  | October 26, 2026  |
-| GPT 5.2 Codex      | July 23, 2026     |
-| GPT 5.1 Codex      | July 23, 2026     |
-| GPT 5.1 Codex Max  | July 23, 2026     |
-| GPT 5.1 Codex Mini | July 23, 2026     |
-| GPT 5 Codex        | July 23, 2026     |
-| Claude Opus 4.1    | August 5, 2026    |
-| Claude Sonnet 4    | June 15, 2026     |
-| Claude Haiku 3.5   | February 16, 2026 |
-| Gemini 3 Pro       | March 9, 2026     |
-| MiniMax M2.5       | August 5, 2026    |
-| MiniMax M2.1       | March 15, 2026    |
-| GLM 5              | May 14, 2026      |
-| GLM 4.7            | March 15, 2026    |
-| GLM 4.6            | March 15, 2026    |
-| Kimi K2.5          | August 5, 2026    |
-| Kimi K2 Thinking   | March 6, 2026     |
-| Kimi K2            | March 6, 2026     |
-| Qwen3 Coder 480B   | February 6, 2026  |
+| Model                   | Deprecation date  |
+| ----------------------- | ----------------- |
+| MiniMax M3.1 Flash Free | November 17, 2026 |
+| Crouton Alpha Free      | November 9, 2026  |
+| Pulse Alpha Free        | November 6, 2026  |
+| DeepSeek V4 Flash       | October 26, 2026  |
+| GPT 5.2 Codex           | July 23, 2026     |
+| GPT 5.1 Codex           | July 23, 2026     |
+| GPT 5.1 Codex Max       | July 23, 2026     |
+| GPT 5.1 Codex Mini      | July 23, 2026     |
+| GPT 5 Codex             | July 23, 2026     |
+| Claude Opus 4.1         | August 5, 2026    |
+| Claude Sonnet 4         | June 15, 2026     |
+| Claude Haiku 3.5        | February 16, 2026 |
+| Gemini 3 Pro            | March 9, 2026     |
+| MiniMax M2.5            | August 5, 2026    |
+| MiniMax M2.1            | March 15, 2026    |
+| GLM 5                   | May 14, 2026      |
+| GLM 4.7                 | March 15, 2026    |
+| GLM 4.6                 | March 15, 2026    |
+| Kimi K2.5               | August 5, 2026    |
+| Kimi K2 Thinking        | March 6, 2026     |
+| Kimi K2                 | March 6, 2026     |
+| Qwen3 Coder 480B        | February 6, 2026  |
 
 ## Privacy
 

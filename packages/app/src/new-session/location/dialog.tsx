@@ -12,15 +12,15 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createTypeahead } from "@opencode/ui/typeahead"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import type { PromptProject, PromptProjectController, PromptServer } from "@/new-session/project/selector"
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useCommand } from "@/shell/commands/command"
@@ -76,11 +76,22 @@ function NewSessionLocationDialog(props: {
   const global = useGlobal()
   const servers = useServers()
   const serverSDK = useServerSDK()
-  const data = useData()
 
   const [step, setStep] = createSignal(createLocationDialogState(props.drilled))
   const view = createMemo(() => locationDialogView(step()))
   const drilled = createMemo(() => view().drilled)
+
+  const currentDestination = createMemo(() => {
+    const project = drilled()
+
+    if (project && props.project.isSelected(project)) return props.workspace.selection.value()
+  })
+
+  const current = (entry: LocationEntry) => {
+    const destination = currentDestination()
+
+    return entry.type === "workspace" && destination !== undefined && sameDirectory(entry.value, destination)
+  }
 
   const connection = (project: PromptProject) =>
     project.server ? servers.list.find((item) => ServerConnection.key(item) === project.server!.key) : serverSDK.server
@@ -122,9 +133,17 @@ function NewSessionLocationDialog(props: {
     return !query || values.some((value) => value?.toLowerCase().includes(query))
   }
 
-  // Only the current server's checkouts have a synced branch.
   const checkout = (project: PromptProject) =>
-    tagged(project.server) ? undefined : data.location.vcs.info({ directory: project.worktree })?.branch.current
+    context(project)?.data.location.vcs.info({ directory: project.worktree })?.branch.current
+
+  createEffect(() => {
+    const project = drilled()
+
+    if (project?.vcs === "git")
+      void context(project)
+        ?.data.location.vcs.sync({ directory: project.worktree })
+        .catch(() => undefined)
+  })
 
   const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
 
@@ -321,7 +340,7 @@ function NewSessionLocationDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette new-session-location" size="large">
+    <Dialog class="command-palette new-session-location" size="large" fit>
       <DialogBody class="command-palette-body">
         <div class="palette-menu-search">
           <TextInput
@@ -333,7 +352,21 @@ function NewSessionLocationDialog(props: {
             appearance="large"
             aria-label={placeholder()}
             placeholder={placeholder()}
-            leadingIcon={<Icon name="magnifying-glass" />}
+            leadingIcon={
+              <Show when={view().ownsEscape && !view().titleKey} fallback={<Icon name="magnifying-glass" />}>
+                <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
+                  <button
+                    type="button"
+                    class="new-session-location-search-back"
+                    aria-label={language.t("session.new.location.back")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={back}
+                  >
+                    <Icon name="arrow-left" />
+                  </button>
+                </Tooltip>
+              </Show>
+            }
             role="combobox"
             aria-expanded="true"
             data-owns-escape={view().ownsEscape ? "" : undefined}
@@ -402,7 +435,7 @@ function NewSessionLocationDialog(props: {
                           "new-session-location-workspace": entry.type === "workspace",
                         }}
                         role="option"
-                        aria-selected={activeEntry()?.id === entry.id}
+                        aria-selected={entry.type === "workspace" ? current(entry) : activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
                         onMouseMove={(event) => {
                           // Ignore hover from a static cursor when keyboard scrolling moves rows underneath it.
@@ -495,6 +528,9 @@ function NewSessionLocationDialog(props: {
                             )}
                           </Match>
                         </Switch>
+                        <Show when={current(entry)}>
+                          <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                        </Show>
                       </button>
                     </>
                   )}
