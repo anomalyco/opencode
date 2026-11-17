@@ -9,11 +9,16 @@ import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
 
 export const MCP_CLIENT_PATH = "/api/experimental/client-mcp"
 
+export const SESSION_MCP_CLIENT_PATH = "/api/experimental/session/:sessionID/client-mcp"
+
 export function hasMcpClientTicketURL(url: URL) {
-  return url.pathname === MCP_CLIENT_PATH && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+  return (
+    (url.pathname === MCP_CLIENT_PATH || /^\/api\/experimental\/session\/[^/]+\/client-mcp$/.test(url.pathname)) &&
+    !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+  )
 }
 
-const McpClientQuery = Schema.Struct({
+export const McpClientQuery = Schema.Struct({
   ...LocationQuery.fields,
   name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)),
 })

@@ -4,7 +4,7 @@ import { Authorization } from "@opencode/protocol/middleware/authorization"
 export { Authorization } from "@opencode/protocol/middleware/authorization"
 import { PTY_CONNECT_PATH, PTY_CONNECT_TICKET_QUERY } from "@opencode/protocol/groups/pty"
 import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persistent-pty"
-import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
+import { MCP_CLIENT_PATH, SESSION_MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
 import { Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
@@ -87,7 +87,8 @@ export const authorizationLayer = Layer.effect(
         if (
           ((route.route.path === PTY_CONNECT_PATH ||
             route.route.path === PERSISTENT_PTY_CONNECT_PATH ||
-            route.route.path === MCP_CLIENT_PATH) &&
+            route.route.path === MCP_CLIENT_PATH ||
+            route.route.path === SESSION_MCP_CLIENT_PATH) &&
             !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)) ||
           route.route.path === PAIRING_CONNECT_PATH
         )

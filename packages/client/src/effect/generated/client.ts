@@ -109,6 +109,8 @@ import type {
   ExperimentalSessionInstructionsEntryRemoveOutput,
   ExperimentalSessionLogInput,
   ExperimentalSessionLogOutput,
+  ExperimentalSessionClientMcpTokenInput,
+  ExperimentalSessionClientMcpTokenOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -884,6 +886,16 @@ const EndpointExperimentalSessionLog = (raw: RawClient["server.session"]) => (in
     ),
   )
 
+const EndpointExperimentalSessionClientMcpToken =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionClientMcpTokenInput) =>
+    preserveEffect<ExperimentalSessionClientMcpTokenOutput>()(
+      raw["session.clientMcp.token"]({
+        params: { sessionID: input["sessionID"] },
+        query: { location: input["location"], name: input["name"] },
+        headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   stats: EndpointExperimentalSessionStats(raw),
   import: EndpointExperimentalSessionImport(raw),
@@ -898,6 +910,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
     },
   },
   log: EndpointExperimentalSessionLog(raw),
+  clientMcp: { token: EndpointExperimentalSessionClientMcpToken(raw) },
 })
 
 const EndpointMessageList = (raw: RawClient["server.message"]) => (input: MessageListInput) =>

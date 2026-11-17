@@ -103,6 +103,8 @@ import type {
   ExperimentalSessionInstructionsEntryRemoveOutput,
   ExperimentalSessionLogInput,
   ExperimentalSessionLogOutput,
+  ExperimentalSessionClientMcpTokenInput,
+  ExperimentalSessionClientMcpTokenOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -1178,6 +1180,21 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        clientMcp: {
+          token: (input: ExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalSessionClientMcpTokenOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
+                query: { location: input["location"], name: input["name"] },
+                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
       },
       generate: {
         text: (input: ExperimentalGenerateTextInput, requestOptions?: RequestOptions) =>

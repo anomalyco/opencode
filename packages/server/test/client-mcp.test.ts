@@ -1,5 +1,11 @@
 import { expect } from "bun:test"
 import { NodeHttpServer } from "@effect/platform-node"
+import { llmClient } from "@opencode/core/effect/app-node-platform"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { LanguageModel, LLMClient } from "../../ai/src/effect"
+import { OpenAIChat } from "../../ai/src/protocols/openai-chat"
+import { TestLLM } from "../../ai/src/testing"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
@@ -25,17 +31,21 @@ declare const WebSocket: {
 
 const authorization = `Basic ${btoa("opencode:secret")}`
 
-const serve = Effect.fnUntraced(function* () {
+const serve = Effect.fnUntraced(function* (overrides: LayerNode.Replacements = []) {
   const directory = (yield* tmpdirScoped("opencode-client-mcp-")).path
   const context = yield* Layer.build(
-    createRoutes({
-      password: "secret",
-      app: { version: "test-version" },
-      database: { path: ":memory:" },
-      models: { fetch: false },
-      config: { directory, project: false, content: "{}" },
-      fs: { filewatcher: false },
-    }).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
+    createRoutes(
+      {
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: ":memory:" },
+        models: { fetch: false },
+        config: { directory, project: false, content: "{}" },
+        fs: { filewatcher: false },
+      },
+      undefined,
+      overrides,
+    ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
   )
   const server = createServer()
   const http = yield* NodeHttpServer.make(() => server, { port: 0, host: "127.0.0.1" })
@@ -64,7 +74,7 @@ const serve = Effect.fnUntraced(function* () {
 })
 
 /** Hosts an MCP server over a WebSocket opened to the endpoint, recording each call's session. */
-const connectClient = (url: URL, headers?: Record<string, string>) =>
+const connectClient = (url: URL, headers?: Record<string, string>, name = "open_terminal") =>
   Effect.acquireRelease(
     Effect.promise(async () => {
       const socket = new WebSocket(url, { headers })
@@ -88,7 +98,7 @@ const connectClient = (url: URL, headers?: Record<string, string>) =>
         }
         if (message.method === "tools/list")
           return reply(message.id, {
-            tools: [{ name: "open_terminal", description: "Open a terminal", inputSchema: { type: "object" } }],
+            tools: [{ name, description: "Fixture tool", inputSchema: { type: "object" } }],
           })
         if (message.method === "tools/call") {
           sessions.push(message.params._meta?.["ai.opencode/sessionID"])
@@ -168,6 +178,106 @@ it.live(
       yield* until(() =>
         Effect.runPromise(server.inLocation(registryIDs)).then((ids) => !ids.includes("tui_open_terminal")),
       )
+    }),
+  20_000,
+)
+
+it.live(
+  "only the owning session sees and uses a client across detach and reattach",
+  () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test.pipe(Effect.provide(TestLLM.testLayer()))
+      const model = SessionRunnerModel.resolved(
+        LanguageModel.make({ id: "fixture", provider: "test", route: OpenAIChat.route }),
+        {
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          cost: [],
+          limit: { context: 200_000, output: 8192 },
+        },
+      )
+      const server = yield* serve([
+        llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
+        SessionRunnerModel.node.replace(
+          Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+        ),
+      ])
+      const sessions = Context.get(server.context, Session.Service)
+      const create = () =>
+        sessions.create({
+          title: "fixture",
+          location: Location.Ref.make({ directory: AbsolutePath.make(server.directory) }),
+          model: model.ref,
+          permissions: [{ action: "*", resource: "*", effect: "allow" }],
+        })
+      const a = yield* create()
+      const b = yield* create()
+      const step = Effect.fnUntraced(function* (sessionID: Session.ID, call = false) {
+        if (call)
+          yield* llm.push(TestLLM.toolCall("call_sample", "execute", { code: "return tools.sample.read_label({})" }))
+        yield* llm.push(TestLLM.text("done", "text"))
+        yield* sessions.prompt({ sessionID, text: "continue", resume: false })
+        yield* sessions.resume(sessionID)
+        const request = (yield* llm.requests()).at(-1)!
+        const text = [
+          ...request.system.map((part) => part.text),
+          ...request.messages.flatMap((message) =>
+            message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+          ),
+        ]
+        return {
+          tools: request.tools,
+          system: request.system,
+          catalog: text.filter((part) => /Code Mode|tool catalog/.test(part)),
+        }
+      })
+      const url = server.url({ name: "sample" })
+      url.pathname = `/api/experimental/session/${a.id}/client-mcp`
+      const count = (n: number, owner = a.id) =>
+        until(() =>
+          Effect.runPromise(server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(owner)))).then(
+            (tools) => tools.length === n,
+          ),
+        )
+      const baseline = yield* step(b.id)
+      expect(baseline.catalog.length).toBeGreaterThan(0)
+      const before = yield* step(a.id)
+      const client = yield* connectClient(url, { authorization }, "read_label")
+      yield* count(1)
+      const after = yield* step(a.id)
+      expect(after.tools).toEqual(before.tools)
+      expect(after.system).toEqual(before.system)
+      expect(after.catalog.join("\n")).toContain("sample.read_label")
+      yield* step(a.id, true)
+      expect(client.sessions).toEqual([a.id])
+      expect(yield* step(b.id)).toEqual(baseline)
+      client.socket.close()
+      yield* count(0)
+      const offline = yield* step(a.id)
+      expect(offline.tools).toEqual(before.tools)
+      expect(offline.system).toEqual(before.system)
+      expect(yield* step(b.id)).toEqual(baseline)
+      const second = yield* connectClient(url, { authorization }, "read_label")
+      yield* count(1)
+      expect(yield* step(b.id)).toEqual(baseline)
+      expect(JSON.stringify(yield* sessions.messages({ sessionID: b.id }))).not.toContain("read_label")
+      const otherURL = new URL(url)
+      otherURL.pathname = `/api/experimental/session/${b.id}/client-mcp`
+      const other = yield* connectClient(otherURL, { authorization }, "read_label")
+      yield* count(1, b.id)
+      yield* step(a.id, true)
+      yield* step(b.id, true)
+      expect(second.sessions).toEqual([a.id])
+      expect(other.sessions).toEqual([b.id])
+      yield* sessions.setPermissions({
+        sessionID: a.id,
+        permissions: [{ action: "sample_read_label", resource: "*", effect: "deny" }],
+      })
+      yield* step(a.id, true)
+      expect(second.sessions).toEqual([a.id])
+      other.socket.close()
+      yield* count(0, b.id)
+      second.socket.close()
+      yield* count(0)
     }),
   20_000,
 )
@@ -283,6 +393,94 @@ it.live(
       // The server's end of an accepted socket lives in the serving scope until the client disconnects.
       client.socket.close()
       yield* until(() => client.state.closed)
+    }),
+  20_000,
+)
+
+it.live(
+  "binds browser tickets to the session and location",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const sessions = Context.get(server.context, Session.Service)
+      const location = Location.Ref.make({ directory: AbsolutePath.make(server.directory) })
+      const a = yield* sessions.create({ location })
+      const b = yield* sessions.create({ location })
+      const url = (sessionID?: Session.ID) => {
+        const url = server.url({ name: "sample" })
+        if (sessionID) {
+          url.pathname = `/api/experimental/session/${sessionID}/client-mcp`
+          url.searchParams.delete("location[directory]")
+        }
+        return url
+      }
+      const request = (url: URL, method = "GET") => {
+        const http = new URL(url)
+        http.protocol = "http:"
+        if (method === "POST") http.pathname += "/token"
+        return Effect.promise(() => fetch(http, { method, headers: { authorization, "x-opencode-ticket": "1" } }))
+      }
+      const missing = url(Session.ID.make("ses_missing"))
+      expect((yield* request(missing)).status).toBe(404)
+      const otherLocation = url(a.id)
+      otherLocation.searchParams.set("location[directory]", (yield* tmpdirScoped()).path)
+      expect((yield* request(otherLocation)).status).toBe(404)
+      expect((yield* request(otherLocation, "POST")).status).toBe(404)
+      const response = yield* request(url(a.id), "POST")
+      expect(response.status).toBe(200)
+      const { data } = yield* Effect.promise<{ data: { ticket: string } }>(() => response.json())
+      for (const target of [url(), url(b.id)]) {
+        target.searchParams.set("ticket", data.ticket)
+        expect((yield* request(target)).status).toBe(403)
+      }
+      const scoped = url(a.id)
+      scoped.searchParams.set("ticket", data.ticket)
+      const client = yield* connectClient(scoped)
+      yield* until(() => client.state.initialized)
+      client.socket.close()
+      yield* until(() => client.state.closed)
+      expect((yield* request(scoped)).status).toBe(403)
+    }),
+  20_000,
+)
+
+it.live(
+  "releases only the moved or deleted owner's socket",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const sessions = Context.get(server.context, Session.Service)
+      const location = Location.Ref.make({ directory: AbsolutePath.make(server.directory) })
+      const a = yield* sessions.create({ location })
+      const b = yield* sessions.create({ location })
+      const attach = Effect.fnUntraced(function* (owner: Session.ID) {
+        const url = server.url({ name: "sample" })
+        url.pathname = `/api/experimental/session/${owner}/client-mcp`
+        const client = yield* connectClient(url, { authorization }, "read_label")
+        yield* until(() =>
+          Effect.runPromise(server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(owner)))).then(
+            (tools) => tools.length === 1,
+          ),
+        )
+        return client
+      })
+      const first = yield* attach(a.id)
+      const sibling = yield* attach(b.id)
+      yield* sessions.move({ sessionID: a.id, directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
+      yield* until(() => first.state.closed)
+      yield* sessions.move({ sessionID: a.id, directory: location.directory })
+      // A move is queued. Reattach only after the runner has applied the new location.
+      yield* until(() =>
+        Effect.runPromise(sessions.get(a.id)).then((session) => session.location.directory === location.directory),
+      )
+      expect(yield* server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(a.id)))).toEqual([])
+      const second = yield* attach(a.id)
+      yield* sessions.remove(a.id)
+      yield* until(() => second.state.closed)
+      expect(sibling.state.closed).toBeFalse()
+      expect(yield* server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(b.id)))).toHaveLength(1)
+      sibling.socket.close()
+      yield* until(() => sibling.state.closed)
     }),
   20_000,
 )

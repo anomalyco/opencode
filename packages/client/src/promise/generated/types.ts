@@ -178,6 +178,8 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
+export type PtyTicketConnectToken = { ticket: string; expires_in: number }
+
 export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
@@ -281,8 +283,6 @@ export type McpResourceTemplate = {
   description?: string
   mimeType?: string
 }
-
-export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
 export type CredentialKey = { type: "key"; key: string; metadata?: { [x: string]: JsonValue } }
 
@@ -3170,6 +3170,10 @@ export const isInstructionEntryValueTooLargeError = (value: unknown): value is I
   "_tag" in value &&
   value["_tag"] === "InstructionEntryValueTooLargeError"
 
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
+
 export type ProviderNotFoundError = {
   readonly _tag: "ProviderNotFoundError"
   readonly providerID: string
@@ -3207,10 +3211,6 @@ export type ProviderRequestError = {
 }
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
-
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type VideoNotFoundError = {
   readonly _tag: "VideoNotFoundError"
@@ -3989,6 +3989,15 @@ export type ExperimentalSessionLogInput = {
 }
 
 export type ExperimentalSessionLogOutput = SessionLogItem
+
+export type ExperimentalSessionClientMcpTokenInput = {
+  readonly sessionID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name: string
+  readonly "x-opencode-ticket"?: string | undefined
+}
+
+export type ExperimentalSessionClientMcpTokenOutput = { location: LocationPublicRef; data: PtyTicketConnectToken }
 
 export type MessageListInput = {
   readonly sessionID: string

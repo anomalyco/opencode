@@ -2,6 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
+import type { Info } from "@opencode/schema/tool"
 import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { extension } from "mime-types"
@@ -9,6 +10,7 @@ import { Bus } from "../bus.js"
 
 import { Mcp } from "../mcp/index.js"
 import { Mime } from "../mime.js"
+import type { Session } from "@opencode/schema/session"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -25,6 +27,8 @@ export const name = (server: string, tool: string) =>
   effectiveName({ name: tool, options: { namespace: namespace(server) } })
 
 export interface Interface {
+  /** Stable owner-bound definitions for this session's current MCP list. */
+  readonly sessionTools: (owner: Session.ID) => Effect.Effect<ReadonlyArray<Info>>
   /**
    * Wait for the initial MCP tool registration, give servers still connecting a bounded chance to
    * finish, then bring the registry up to date without waiting for the debounced reload.
@@ -44,6 +48,69 @@ export const layer = Layer.effect(
     const toolOutput = yield* ToolOutput.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
+    const overlays = new WeakMap<ReadonlyArray<Mcp.Tool>, ReadonlyArray<Info>>()
+
+    const definition = (tool: Mcp.Tool, owner?: Session.ID): Info => ({
+      name: tool.name,
+      options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
+      description: tool.description ?? "",
+      input: tool.inputSchema as JsonSchema.JsonSchema,
+      output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
+      execute: (input, context) =>
+        Effect.gen(function* () {
+          yield* permission.assert({
+            action: name(tool.server, tool.name),
+            resources: ["*"],
+            save: ["*"],
+            metadata: { input: input ?? {} },
+            ...Permission.invocation(context),
+          })
+          const result = yield* mcp
+            .callTool({
+              server: tool.server,
+              name: tool.name,
+              args: (input ?? {}) as Record<string, unknown>,
+              sessionID: context.sessionID,
+              owner,
+            })
+            .pipe(
+              Effect.catchTags({
+                "MCP.NotFoundError": (error) =>
+                  new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
+                "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
+              }),
+            )
+          if (result.isError)
+            return yield* new ToolFailure({
+              message:
+                result.content
+                  .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                  .join("\n")
+                  .trim() || "MCP tool returned an error",
+            })
+          const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
+          const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+          const output = () => {
+            if (result.structured !== undefined) return result.structured
+            if (text === "") return null
+            // Agents assume JSON returned as text is already an object, so parse it when the server declares no schema.
+            if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("[")))
+              return Option.getOrElse(decodeJson(text), () => text)
+            return text
+          }
+          return {
+            output: output(),
+            ...(content.length === 0 ? {} : { content }),
+          }
+        }).pipe(
+          Effect.mapError((error) => {
+            if (error instanceof ToolFailure) return error
+            if (error instanceof Permission.BlockedError) return new ToolFailure({ message: error.message, error })
+            if (error instanceof Permission.CorrectedError) return new ToolFailure({ message: error.feedback, error })
+            return new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}`, error })
+          }),
+        ),
+    })
 
     // Register once after initial discovery; only subsequent updates need a debounced reload.
     const initial = yield* lock
@@ -52,68 +119,7 @@ export const layer = Layer.effect(
           discovered = yield* mcp.tools()
           yield* tools.transform((editor) => {
             for (const tool of discovered) {
-              editor.add({
-                name: tool.name,
-                options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
-                description: tool.description ?? "",
-                input: tool.inputSchema as JsonSchema.JsonSchema,
-                output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
-                execute: (input, context) =>
-                  Effect.gen(function* () {
-                    yield* permission.assert({
-                      action: name(tool.server, tool.name),
-                      resources: ["*"],
-                      save: ["*"],
-                      metadata: { input: input ?? {} },
-                      ...Permission.invocation(context),
-                    })
-                    const result = yield* mcp
-                      .callTool({
-                        server: tool.server,
-                        name: tool.name,
-                        args: (input ?? {}) as Record<string, unknown>,
-                        sessionID: context.sessionID,
-                      })
-                      .pipe(
-                        Effect.catchTags({
-                          "MCP.NotFoundError": (error) =>
-                            new ToolFailure({ message: `MCP server "${error.server}" is not available` }),
-                          "MCP.ToolCallError": (error) => new ToolFailure({ message: error.message }),
-                        }),
-                      )
-                    if (result.isError)
-                      return yield* new ToolFailure({
-                        message:
-                          result.content
-                            .flatMap((part) => (part.type === "text" ? [part.text] : []))
-                            .join("\n")
-                            .trim() || "MCP tool returned an error",
-                      })
-                    const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
-                    const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-                    const output = () => {
-                      if (result.structured !== undefined) return result.structured
-                      if (text === "") return null
-                      // Agents assume JSON returned as text is already an object, so parse it when the server declares no schema.
-                      if (tool.outputSchema === undefined && (text.startsWith("{") || text.startsWith("[")))
-                        return Option.getOrElse(decodeJson(text), () => text)
-                      return text
-                    }
-                    return {
-                      output: output(),
-                      ...(content.length === 0 ? {} : { content }),
-                    }
-                  }).pipe(
-                    Effect.mapError((error) => {
-                      if (error instanceof ToolFailure) return error
-                      if (error instanceof Permission.BlockedError)
-                        return new ToolFailure({ message: error.message, error })
-                      if (error instanceof Permission.CorrectedError)
-                        return new ToolFailure({ message: error.feedback, error })
-                      return new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}`, error })
-                    }),
-                  ),
-              })
+              editor.add(definition(tool))
             }
           })
         }),
@@ -140,6 +146,15 @@ export const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({
+      sessionTools: Effect.fnUntraced(function* (owner) {
+        const source = yield* mcp.sessionTools(owner)
+        if (!source.length) return []
+        const cached = overlays.get(source)
+        if (cached) return cached
+        const tools = source.map((tool) => definition(tool, owner))
+        overlays.set(source, tools)
+        return tools
+      }),
       flush: Effect.gen(function* () {
         yield* Fiber.await(initial)
         yield* mcp.awaitStartup()

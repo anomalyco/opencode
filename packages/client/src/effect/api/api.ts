@@ -26,11 +26,11 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
+import type { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
-import type { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
@@ -1440,6 +1440,20 @@ export type ExperimentalSessionLogOperation<E = never> = (
   input: ExperimentalSessionLogInput,
 ) => Stream.Stream<ExperimentalSessionLogOutput, E>
 
+export type ExperimentalSessionClientMcpTokenInput = {
+  readonly sessionID: Session.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name: string
+  readonly "x-opencode-ticket"?: string | undefined
+}
+export type ExperimentalSessionClientMcpTokenOutput = {
+  readonly location: Location.PublicRef
+  readonly data: PtyTicket.ConnectToken
+}
+export type ExperimentalSessionClientMcpTokenOperation<E = never> = (
+  input: ExperimentalSessionClientMcpTokenInput,
+) => Effect.Effect<ExperimentalSessionClientMcpTokenOutput, E>
+
 export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
@@ -1454,6 +1468,7 @@ export interface ExperimentalSessionApi<E = never> {
     }
   }
   readonly log: ExperimentalSessionLogOperation<E>
+  readonly clientMcp: { readonly token: ExperimentalSessionClientMcpTokenOperation<E> }
 }
 
 export type MessageListInput = {
