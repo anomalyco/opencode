@@ -34,10 +34,10 @@ export type PluginUpdateEvent =
   | { readonly type: "update.succeeded"; readonly id: number }
   | { readonly type: "update.failed"; readonly id: number; readonly message: string }
   /**
-   * The plugin list loaded again. `ready` is false while the server is still reloading its plugins, when the list's
-   * flags may predate the latest check or update; `outdated` maps each listed package to its flag.
+   * The plugin list loaded again; `outdated` maps each listed package to its flag. A list read while the server still
+   * reloads its plugins can predate the latest check or update, so a finding is only dropped once a list agrees with it.
    */
-  | { readonly type: "list.loaded"; readonly ready: boolean; readonly outdated: Readonly<Record<string, boolean>> }
+  | { readonly type: "list.loaded"; readonly outdated: Readonly<Record<string, boolean>> }
   /** Another server: forget what this one's checks and updates learned. */
   | { readonly type: "server.changed" }
   | { readonly type: "disposed" }
@@ -69,8 +69,6 @@ export function transitionPluginUpdate(state: PluginUpdateState, event: PluginUp
   if (event.type === "server.changed") return step({ status: "idle", nextId: state.nextId, findings: {}, updating: [] })
 
   if (event.type === "list.loaded") {
-    if (!event.ready) return step(state)
-
     const settled = Object.keys(state.findings).filter(
       (target) => !(target in event.outdated) || event.outdated[target] === state.findings[target]?.outdated,
     )
