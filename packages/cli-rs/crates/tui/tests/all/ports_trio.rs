@@ -312,23 +312,40 @@ fn command_hotkeys_send_alike_in_ts_rust_and_luau() {
     }
 }
 
-// Expected: on each column, options with a fault (here a repeated key, spelled two ways) register nothing and toast
-// the plugin's check, without echoing a value.
+// Expected: on each column, options with a fault register nothing and toast the plugin's check, without echoing a
+// value: a key repeated in two spellings, and a key with an empty or blank alternative (`ctrl+a,`, which the Luau
+// audit found could reach the layer as a key without a name). `+`, the plus key, is no fault: it is taken, as TS
+// takes it.
 #[test]
 fn command_hotkeys_refuse_bad_options_alike_in_ts_rust_and_luau() {
-    let options = json!({ "bindings": [
-        { "id": "one", "key": "ctrl+shift+x", "title": "One", "command": "one" },
-        { "id": "two", "key": "Shift+Control+X", "title": "Two", "command": "two" },
-    ] });
-    trio("opencode-command-hotkeys", "command-hotkeys", |carrier| {
-        let h = open_with(&[carrier], 170, hotkeys_server(204), false, None, Some(&options))?;
-        h.wait_for("Проверьте");
-        h.settle();
-        Some(Observed {
-            steps: vec![("refused".to_owned(), screen(&h))],
-            requests: requests(&h, &["/api/session/ses_p"]),
-        })
-    });
+    let one = |key: &str| json!({ "id": "one", "key": key, "title": "One", "command": "one" });
+    let faults = [
+        (
+            "repeated",
+            vec![
+                one("ctrl+shift+x"),
+                json!({ "id": "two", "key": "Shift+Control+X", "title": "Two", "command": "two" }),
+            ],
+        ),
+        ("empty alternative", vec![one("ctrl+a,")]),
+        ("blank alternative", vec![one("ctrl+a, ,ctrl+b")]),
+        ("plus key", vec![one("+")]),
+    ];
+    for (fault, bindings) in faults {
+        let options = json!({ "bindings": bindings });
+        trio("opencode-command-hotkeys", "command-hotkeys", |carrier| {
+            let h = open_with(&[carrier], 170, hotkeys_server(204), false, None, Some(&options))?;
+            match fault {
+                "plus key" => drop(h.wait_for("Hotkeys")),
+                _ => h.wait(&format!("{carrier:?} refuses the {fault}"), || h.app.text().contains("Проверьте")),
+            }
+            h.settle();
+            Some(Observed {
+                steps: vec![(fault.to_owned(), screen(&h))],
+                requests: requests(&h, &["/api/session/ses_p"]),
+            })
+        });
+    }
 }
 
 // --- @khaosoigai/oc-context-grid: a slot, a page of its own, a keyboard mode, and the catalog
