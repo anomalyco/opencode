@@ -408,6 +408,7 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "dialogOpen" => |r, _lua, key: String| r.dialog_open(&key);
         "composer" => |r, _lua| r.composer();
         "tabs" => |r, _lua| r.tabs();
+        "tabsEnabled" => |r, _lua| r.tabs_enabled();
         "theme" => |r, _lua| r.theme();
         "themes" => |r, _lua| r.themes();
         "selection" => |r, _lua| r.selection();
