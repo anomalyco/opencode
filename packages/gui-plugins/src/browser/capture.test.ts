@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { captureCoordinator, captureScale, cropPixels, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
+import { CAPTURE_DEADLINE_MS, captureCoordinator, captureScale, cropPixels, FULL_PAGE_DEADLINE_MS, jpegFits, pngFits, undrawable, undrawableMessage } from "./capture"
 
 const shown = { minimized: false, visible: true, appHidden: false }
 
@@ -45,11 +45,14 @@ function coordinator() {
 
 test("a full-page redraw keeps its subscription beyond the viewport deadline", async () => {
   const c = coordinator()
-  const shot = c.capture(false, new AbortController().signal, () => new Promise<void>(() => {}), 6000)
-  c.advance(2500)
+  const shot = c.capture(false, new AbortController().signal, () => new Promise<void>(() => {}), FULL_PAGE_DEADLINE_MS)
+  c.advance(CAPTURE_DEADLINE_MS)
   expect(c.events).toEqual(["begin"])
-  c.advance(3500)
-  await expect(shot).rejects.toThrow("6 seconds")
+  // A never-shown tab on macOS took 5.6 s for about 15.6 MP: the deadline leaves it room, inside the tool's 60 s.
+  c.advance(6_000 - CAPTURE_DEADLINE_MS)
+  expect(c.events).toEqual(["begin"])
+  c.advance(FULL_PAGE_DEADLINE_MS - 6_000)
+  await expect(shot).rejects.toThrow("15 seconds")
   expect(c.events).toEqual(["begin", "end"])
 })
 
