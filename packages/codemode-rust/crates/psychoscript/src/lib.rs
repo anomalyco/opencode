@@ -13,6 +13,9 @@ mod ops;
 mod promise;
 mod run;
 mod strings;
+#[cfg(feature = "test262")]
+#[doc(hidden)]
+pub mod test262;
 mod value;
 mod vm;
 
