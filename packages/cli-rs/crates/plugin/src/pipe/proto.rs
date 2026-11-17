@@ -119,6 +119,10 @@ pub enum Down {
     /// A read over the host's bound is not pushed: `value` is null, and `error` says why.
     Snapshot {
         id: String,
+        /// The JS host's activation that watches it: a candidate the JS host knows by the plugin's ID before the host
+        /// does never takes the running one's, and one that ended takes none (big-boi's catalog review, final).
+        #[serde(default)]
+        activation: u64,
         key: String,
         value: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]

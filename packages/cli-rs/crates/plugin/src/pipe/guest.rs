@@ -522,7 +522,8 @@ impl Guest {
             drop(watches);
             // Answered as a failed read, so what waits for it ends (bigboi P8-2).
             let error = Some(format!("the plugin watches {WATCHES} reads already"));
-            self.send(Down::Snapshot { id: self.id().to_owned(), key, value: serde_json::Value::Null, error }, None);
+            let (id, activation) = (self.id().to_owned(), self.js.get());
+            self.send(Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error }, None);
             return;
         }
         let (value, hash) = self.evaluate(&request);
@@ -538,7 +539,8 @@ impl Guest {
     fn push(&self, key: String, value: serde_json::Value) {
         let bytes = Measure::of(&value).bytes;
         let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
-        let snapshot = Down::Snapshot { id: self.id().to_owned(), key: key.clone(), value, error: None };
+        let activation = self.js.get();
+        let snapshot = Down::Snapshot { id: self.id().to_owned(), activation, key: key.clone(), value, error: None };
         let error = if bytes > READ {
             Some(format!("the read is {bytes} bytes, over {READ}"))
         } else if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
@@ -555,7 +557,8 @@ impl Guest {
         let snapshot = match error {
             Some(error) => {
                 log::warn!("plugin {}: the read it watches as {key}: {error}", self.id());
-                Down::Snapshot { id: self.id().to_owned(), key, value: serde_json::Value::Null, error: Some(error) }
+                let id = self.id().to_owned();
+                Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error: Some(error) }
             }
             None => snapshot,
         };

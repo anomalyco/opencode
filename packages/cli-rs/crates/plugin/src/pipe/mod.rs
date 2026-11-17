@@ -1083,14 +1083,15 @@ impl Scripts {
         }
         // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
         // (P.4.md, reads; bigboi's pipe sign-off).
-        if let Down::Snapshot { id, key, .. } = message {
+        if let Down::Snapshot { id, activation, key, .. } = message {
             // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back (bigboi's
             // pipe sign-off, recheck).
             if let Some(guest) = self.guest(id) {
                 guest.unpushed(key);
             }
             let error = Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
-            let failed = Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error };
+            let (id, key, activation) = (id.clone(), key.clone(), *activation);
+            let failed = Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error };
             return self.settle(&failed, 0);
         }
         let seq = message.seq();
@@ -2435,7 +2436,8 @@ mod tests {
                 });
             }
             for (key, bytes) in [("k1", 16), ("k2", 262_131 - 2)] {
-                let snapshot = Down::Snapshot { id: "p".into(), key: key.into(), value: read(bytes), error: None };
+                let snapshot =
+                    Down::Snapshot { id: "p".into(), activation: 1, key: key.into(), value: read(bytes), error: None };
                 scripts.send(snapshot.clone(), None);
                 sent.push(snapshot);
             }
@@ -2456,11 +2458,12 @@ mod tests {
                     }],
                     // A reply within the overflow's room goes in parts (CT-5), which join to its result below.
                     Down::Call { call: Request::Reply { .. }, .. } => scripts.split(message).unwrap(),
-                    Down::Snapshot { id, key, .. } => {
+                    Down::Snapshot { id, activation, key, .. } => {
                         let size = serde_json::to_vec(message).unwrap().len();
                         let error =
                             Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
-                        vec![Down::Snapshot { id: id.clone(), key: key.clone(), value: serde_json::Value::Null, error }]
+                        let (id, key, activation) = (id.clone(), key.clone(), *activation);
+                        vec![Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error }]
                     }
                     other => vec![Down::Skipped { seq: other.seq().unwrap() }],
                 })
