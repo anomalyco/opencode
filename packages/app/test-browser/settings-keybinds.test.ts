@@ -16,6 +16,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
           catalog: [
             { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
             { id: "session.beta", title: "Beta", keybind: "mod+b" },
+            { id: "session.chord", title: "Chord", keybind: "mod+k mod+c" },
             { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
           ],
           options: [],
@@ -27,8 +28,8 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
         },
         plugins: plugins && (() => plugins),
         settings: {
-          current: { keybinds: overrides },
           keybinds: {
+            all: () => overrides,
             get: (id) => overrides[id],
             set: (id, value) => {
               overrides[id] = value
@@ -73,6 +74,10 @@ function modKey(key: string) {
   return new KeyboardEvent("keydown", { key, ctrlKey: !mac, metaKey: mac, bubbles: true, cancelable: true })
 }
 
+function key(key: string, init?: KeyboardEventInit) {
+  return new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+}
+
 describe("keybind settings controller", () => {
   test("derives the catalog, effective bindings, and filtered groups", () => {
     const state = setup({ "session.beta": "alt+k" })
@@ -115,6 +120,29 @@ describe("keybind settings controller", () => {
     expect(state.suppression).toEqual([false, true, false, true])
     document.dispatchEvent(modKey("z"))
     expect(state.changes).toEqual([["session.beta", "mod+x"]])
+  })
+
+  test("+ adds a key to the saved shortcut, and a chord may not start or be started by another", () => {
+    const state = setup()
+
+    state.controller.capture.toggle("session.beta")
+    document.dispatchEvent(modKey("k"))
+    expect(state.notifications.map((toast) => toast.description)).toEqual([expect.stringContaining("Chord")])
+
+    document.dispatchEvent(modKey("j"))
+    expect(state.changes).toEqual([["session.beta", "mod+j"]])
+    expect(state.controller.capture.extendable("session.beta")).toBe(true)
+    expect(state.controller.capture.extendable("session.alpha")).toBe(false)
+
+    state.controller.capture.extend("session.beta")
+    expect(state.controller.capture.prefix()).not.toBe("")
+    document.dispatchEvent(modKey("c"))
+    expect(state.changes).toEqual([
+      ["session.beta", "mod+j"],
+      ["session.beta", "mod+j mod+c"],
+    ])
+
+    state.dispose()
   })
 
   test("moving the recording between rows keeps shortcuts suspended, and hiding the page resumes them", () => {

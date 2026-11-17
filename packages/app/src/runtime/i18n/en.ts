@@ -1234,6 +1234,7 @@ export const dict = {
   "settings.shortcuts.unassigned": "Unassigned",
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.unbind": "Unbind",
+  "settings.shortcuts.addKey": "Add a key",
   "settings.shortcuts.search.placeholder": "Search shortcuts",
 
   "settings.shortcuts.group.general": "General",
