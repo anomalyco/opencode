@@ -39,6 +39,9 @@ export default defineApp({
   steps: [
     { checkpoint: "session", until: "Plan the release" },
     { type: "/session-manager" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    { checkpoint: "slash", until: "Browse, rename and delete" },
     { keys: ["enter"] },
     { checkpoint: "page", until: "Draft the notes" },
     { keys: ["k"] },

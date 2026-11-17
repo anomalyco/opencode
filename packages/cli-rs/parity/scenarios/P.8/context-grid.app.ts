@@ -59,6 +59,14 @@ export default defineApp({
   steps: [
     { checkpoint: "sidebar", until: "tokens (18%)" },
     { type: "/contextgrid" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    {
+      checkpoint: "slash",
+      until: "Show context usage as a grid",
+      // TS's list also shows the plugin's slash alias `/ctx`; the contract's command, in each carrier, has one slash name.
+      deviation: [{ file: "F16-v2-compat-layer", cells: 187 }],
+    },
     { keys: ["enter"] },
     { checkpoint: "page", until: "Estimated usage by category" },
     { keys: ["escape"] },

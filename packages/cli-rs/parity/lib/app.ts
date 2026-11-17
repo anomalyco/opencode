@@ -82,6 +82,15 @@ export type AppScenario = {
 }
 
 export function defineApp(scenario: AppScenario) {
+  // A plugin's commands register after the screen settles, and an Enter on a completion that has not listed the typed
+  // command yet does nothing, in TS as in Rust (file-browser-flake). With a plugin loaded, a typed `/command` waits
+  // for its row in the completion (a checkpoint) before Enter.
+  if (scenario.env?.OPENCODE_PARITY_PLUGIN)
+    scenario.steps.forEach((step, index) => {
+      const next = scenario.steps[index + 1]
+      if ("type" in step && step.type.startsWith("/") && next && "keys" in next && next.keys[0] === "enter")
+        throw new Error(`step ${index}: wait for the completion to list ${step.type} before Enter (a checkpoint)`)
+    })
   return scenario
 }
 

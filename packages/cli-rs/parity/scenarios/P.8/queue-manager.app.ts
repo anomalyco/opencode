@@ -46,6 +46,9 @@ export default defineApp({
   steps: [
     { checkpoint: "session", until: "Ready." },
     { type: "/qm" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    { checkpoint: "slash", until: "Queue Manager" },
     { keys: ["enter"] },
     { checkpoint: "menu", until: "native pending" },
     { keys: ["down", "enter"] },

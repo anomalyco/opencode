@@ -29,6 +29,9 @@ export default defineApp({
     { checkpoint: "session", until: "Highlighted." },
     // `/plugins` lists it as active, where it failed.
     { type: "/plugins" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    { checkpoint: "slash", until: "Plugins" },
     { keys: ["enter"] },
     { checkpoint: "plugins", until: "shell-highlighting" },
   ],
