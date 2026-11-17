@@ -665,9 +665,11 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
         let h = open_with(&[carrier], 120, queue_server, true, None, None)?;
         h.settle();
         let mut steps = Vec::new();
-        let mut step = |name: &str, keys: &[&str], text: Option<&str>, until: &str| {
+        // Presses `keys`; with `text`, waits for the prompt they open (its placeholder) and answers it with the text.
+        let mut step = |name: &str, keys: &[&str], text: Option<(&str, &str)>, until: &str| {
             keys.iter().for_each(|key| h.app.press(key));
-            if let Some(text) = text {
+            if let Some((prompt, text)) = text {
+                h.wait_for(prompt);
                 h.app.type_text(text);
                 h.app.press("return");
             }
@@ -680,10 +682,10 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
         step("menu", &["return"], None, "native pending");
         step("count", &["return"], None, "Custom (1-500)");
         step("how many", &["down", "down", "down", "down", "down", "return"], None, "e.g. 150");
-        step("refused", &[], Some("0"), "between 1 and 500");
+        step("refused", &[], Some(("e.g. 150", "0")), "between 1 and 500");
         step("back", &["return"], None, "0 drafts");
-        step("first", &["down", "return"], Some("zeta task"), "1 drafts");
-        step("second", &["down", "return"], Some("Alpha task"), "2 drafts");
+        step("first", &["down", "return"], Some(("Your prompt", "zeta task")), "1 drafts");
+        step("second", &["down", "return"], Some(("Your prompt", "Alpha task")), "2 drafts");
         step("sort", &["down", "down", "down", "down", "return"], None, "Sort A-Z");
         step("sorted", &["down", "return"], None, "2 drafts");
         step("drafts", &["down", "down", "down", "return"], None, "001. Alpha task");
@@ -708,7 +710,7 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
         #[cfg(not(feature = "luau"))]
         let reads_files = true;
         if reads_files {
-            step("import", &["down", "down", "return"], Some(&path), "Stage 2 messages");
+            step("import", &["down", "down", "return"], Some(("messages.txt", &path)), "Stage 2 messages");
             step("imported", &["return"], None, "2 messages staged");
         }
         drop(step);
