@@ -497,3 +497,30 @@ fn reruns_start_from_a_clean_slate() {
         assert_eq!(outcome.tool_calls.len(), 1);
     }
 }
+
+#[test]
+fn warnings_have_their_own_output_budget() {
+    let rt = Runtime::new().limits(Limits {
+        max_output_bytes: Some(120),
+        ..Limits::default()
+    });
+    let outcome = run(
+        &rt,
+        r#"for (const m of ["a", "b", "c"]) Promise.reject(new Error(m)); return "ok""#,
+    );
+    assert_eq!(outcome.result.unwrap(), json!("ok"));
+    let messages: Vec<&str> = outcome
+        .warnings
+        .iter()
+        .map(|w| w.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        [
+            "Unhandled rejection from an un-awaited promise: Error: a",
+            "2 additional warnings omitted by the output limit."
+        ]
+    );
+    assert_eq!(outcome.warnings[1].kind, DiagnosticKind::Truncated);
+    assert!(outcome.truncated);
+}
