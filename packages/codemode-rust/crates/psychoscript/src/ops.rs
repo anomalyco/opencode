@@ -1065,10 +1065,13 @@ impl<'rt> Vm<'rt> {
         self.atoms.atom_str(a)
     }
 
+    /// ToPrimitive. The reference runs it in its internal bytecode (`$vmToPrimitive`), entered for one unit, and
+    /// calls `toString` and `valueOf` as bytecode calls them (see `builtins/fuel.rs`).
     pub fn primitive_of(&mut self, v: &Value, hint: Hint) -> Res {
         let Value::Obj(id) = v else {
             return Ok(*v);
         };
+        self.fuel(1);
         let hint = if hint == Hint::Default && exotic::prefers_string(self, *id) {
             Hint::String
         } else {
@@ -1082,13 +1085,30 @@ impl<'rt> Vm<'rt> {
         for name in order {
             let f = self.get_obj(*id, name);
             if self.is_callable(&f) {
-                let r = self.call(&f, *v, &[])?;
+                let r = self.call_counted(&f, *v, &[])?;
                 if !matches!(r, Value::Obj(_)) {
                     return Ok(r);
                 }
             }
         }
         Err(self.type_error("Cannot convert object to primitive value"))
+    }
+
+    /// An operand of a binary operator that converts its operands: once either is an object, the reference's
+    /// `$vmBinary` runs ToPrimitive on both, so a primitive costs its call too.
+    #[inline]
+    pub fn op_primitive(&mut self, v: &Value, other: &Value, hint: Hint) -> Res {
+        if !matches!(v, Value::Obj(_)) && matches!(other, Value::Obj(_)) {
+            self.fuel(1);
+        }
+        self.primitive_of(v, hint)
+    }
+
+    /// `op_primitive` as a number.
+    #[inline(never)]
+    pub fn op_number(&mut self, v: &Value, other: &Value) -> Result<f64, Value> {
+        let p = self.op_primitive(v, other, Hint::Number)?;
+        self.number_of(&p)
     }
 
     fn concat(&mut self, x: &str, y: &str) -> Res {
@@ -1125,8 +1145,8 @@ impl<'rt> Vm<'rt> {
             _ => {}
         }
         self.data_operands(&a, &b)?;
-        let pa = self.primitive_of(&a, Hint::Default)?;
-        let pb = self.primitive_of(&b, Hint::Default)?;
+        let pa = self.op_primitive(&a, &b, Hint::Default)?;
+        let pb = self.op_primitive(&b, &a, Hint::Default)?;
         if matches!(pa, Value::Str(_)) || matches!(pb, Value::Str(_)) {
             let x = self.string_of(&pa)?;
             let y = self.string_of(&pb)?;
@@ -1145,7 +1165,8 @@ impl<'rt> Vm<'rt> {
         Ok(match op {
             A::Add => return self.add(a, b),
             A::Sub | A::Mul | A::Div | A::Mod => {
-                let (x, y) = (self.number_of(&a)?, self.number_of(&b)?);
+                let x = self.op_number(&a, &b)?;
+                let y = self.op_number(&b, &a)?;
                 Value::Num(match op {
                     A::Sub => x - y,
                     A::Mul => x * y,
@@ -1171,11 +1192,11 @@ impl<'rt> Vm<'rt> {
         left_first: bool,
     ) -> Result<Option<bool>, Value> {
         let (pa, pb) = if left_first {
-            let pa = self.primitive_of(a, Hint::Number)?;
-            (pa, self.primitive_of(b, Hint::Number)?)
+            let pa = self.op_primitive(a, b, Hint::Number)?;
+            (pa, self.op_primitive(b, a, Hint::Number)?)
         } else {
-            let pb = self.primitive_of(b, Hint::Number)?;
-            (self.primitive_of(a, Hint::Number)?, pb)
+            let pb = self.op_primitive(b, a, Hint::Number)?;
+            (self.op_primitive(a, b, Hint::Number)?, pb)
         };
         if let (Value::Str(x), Value::Str(y)) = (&pa, &pb) {
             return Ok(Some(self.atoms.sref(*x).cmp16(self.atoms.sref(*y)).is_lt()));
@@ -1207,9 +1228,11 @@ impl<'rt> Vm<'rt> {
             }
             (Value::Obj(_), Value::Num(_) | Value::Str(_) | Value::Sym(_)) => {
                 let p = self.primitive_of(a, Hint::Default)?;
+                self.fuel(1);
                 return self.loose_eq(&p, b);
             }
             (Value::Num(_) | Value::Str(_) | Value::Sym(_), Value::Obj(_)) => {
+                self.fuel(1);
                 let p = self.primitive_of(b, Hint::Default)?;
                 return self.loose_eq(a, &p);
             }

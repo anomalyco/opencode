@@ -1573,8 +1573,8 @@ impl<'rt> Vm<'rt> {
                         let b = self.pop();
                         let a = self.pop();
                         tri!(self.data_operands(&a, &b));
-                        let x = tri!(self.number_of(&a));
-                        let y = tri!(self.number_of(&b));
+                        let x = tri!(self.op_number(&a, &b));
+                        let y = tri!(self.op_number(&b, &a));
                         self.push(Value::Num(f(x, y)));
                     }
                 }};
@@ -1584,8 +1584,8 @@ impl<'rt> Vm<'rt> {
                     let b = self.pop();
                     let a = self.pop();
                     tri!(self.data_operands(&a, &b));
-                    let x = tri!(self.number_of(&a));
-                    let y = tri!(self.number_of(&b));
+                    let x = tri!(self.op_number(&a, &b));
+                    let y = tri!(self.op_number(&b, &a));
                     let f: fn(f64, f64) -> f64 = $f;
                     self.push(Value::Num(f(x, y)));
                 }};

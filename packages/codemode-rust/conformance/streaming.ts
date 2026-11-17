@@ -414,6 +414,9 @@ programs.push(
   after(doc, "JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); JSON.stringify(doc, (k, v) => v)"),
   after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
   after("const err = new TypeError('boom'); err.extra = [1, 2]", "JSON.stringify({ err, n: [new Date(5)], h: new Headers({ a: 'b' }) }, (k, v) => v)"),
+  during("const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }",
+    "for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }"),
+  during("const t = new Date(0); const e = {}; const arr = [1]", "for (let i = 0; i < 3000; i++) { t - 0; t + 1; t < 5; 'a' + e; arr == 1; see(i) }"),
   `const ks = []; const s = JSON.stringify({ h: new Headers({ a: 'b' }), e: new TypeError('x'), u: new Uint8Array([1]) }, (k, v) => { ks.push(k); return v }, 1)
    return [s, ks, JSON.stringify({ h: new Headers({ a: 'b' }) }, ['h', 'z'])]`,
   during(doc + "; const t = { x: [1, 2, { toJSON: () => see(7) }], y: doc }", "for (let j = 0; j < 300; j++) { JSON.stringify(t); JSON.stringify([doc, { toJSON() { return see(1) } }]); see(j) }"),
