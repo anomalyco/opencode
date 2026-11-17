@@ -1,0 +1,371 @@
+//! Contract 2.x, step D: code-block renderers of TypeScript plugins on the pipe. A V2 plugin's
+//! `markdown.registerCodeBlockRenderer` is a fence claim of the host's, whose view runs on the JS host and answers after
+//! the frame: a fence shows the host's own code view at once, and the plugin's tree once it comes. The plugin is
+//! `crates/plugin/examples/pipe/fences/tui.ts`. Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+
+use std::cell::Cell;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use opencode_api::generated::V2Event;
+use opencode_plugin::claim::mounted;
+use opencode_plugin::pipe::{Config, Tamper};
+use opencode_tui::plugins::host::{External, external_with};
+use opencode_tui::{Deps, Route};
+use serde_json::{Value, json};
+
+use crate::plugin_pipe::{EXAMPLES, Pipe, config, copy};
+use crate::support;
+
+const SESSION: &str = "ses_f";
+const ID: &str = "example.fences";
+
+/// The TUI on a session, with `example.fences` (its `options`) on the JS host `config`.
+struct Fences {
+    pipe: Pipe,
+    seq: Cell<u64>,
+}
+
+impl Fences {
+    fn open(config: Config, options: Option<Value>) -> Self {
+        Self::open_with(config, options, false)
+    }
+
+    /// [`Fences::open`], with a second copy of the plugin when `other`: `example.other`, which draws `other` fences as
+    /// `example.fences` draws `probe` ones.
+    fn open_with(config: Config, options: Option<Value>, other: bool) -> Self {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let config_dir = root.path().join("config");
+        let dir = config_dir.join("plugins").join("fences");
+        copy(&Path::new(EXAMPLES).join("fences"), &dir);
+        if other {
+            let second = config_dir.join("plugins").join("other");
+            copy(&Path::new(EXAMPLES).join("fences"), &second);
+            let source = std::fs::read_to_string(second.join("tui.ts")).unwrap();
+            let source = source
+                .replace("id: \"example.fences\"", "id: \"example.other\"")
+                .replace("registerCodeBlockRenderer(\"probe\"", "registerCodeBlockRenderer(\"other\"");
+            std::fs::write(second.join("tui.ts"), source).unwrap();
+        }
+        let session = support::merge(support::session(SESSION, "Fences"), json!({ "agent": "build" }));
+        let messages = json!([
+            {
+                "id": "msg_2", "type": "assistant", "agent": "build",
+                "model": { "providerID": "provider", "id": "model" }, "time": { "created": 1500 }, "content": [],
+            },
+            { "id": "msg_1", "type": "user", "text": "Show fences", "time": { "created": 1000 } },
+        ]);
+        let fake = support::Fake::new(move |seen| match seen.path.as_str() {
+            "/api/session" => (200, json!({ "data": [], "cursor": {} })),
+            "/api/session/ses_f" => (200, json!({ "data": session })),
+            "/api/session/ses_f/message" => (200, json!({ "data": messages, "cursor": {} })),
+            "/api/session/ses_f/permission" | "/api/session/ses_f/inbox" => (200, json!({ "data": [] })),
+            _ => support::not_found(),
+        });
+        let mut info = json!({ "animations": false });
+        if let Some(options) = options {
+            info["plugins"] = json!([{ "package": dir.to_string_lossy(), "options": options }]);
+        }
+        let info = support::decode(&info.to_string());
+        let deps = Deps {
+            config: support::config(info),
+            route: support::session_route(SESSION),
+            ..support::deps(Arc::new(fake))
+        };
+        let harness = support::mount(100, 60, deps);
+        let external = External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() };
+        external_with(&harness.tui, external, Some(config));
+        let pipe = Pipe { harness, root };
+        pipe.active(ID);
+        if other {
+            pipe.active("example.other");
+        }
+        pipe.harness.wait_for("Show fences");
+        pipe.settle();
+        Self { pipe, seq: Cell::new(0) }
+    }
+
+    fn emit(&self, kind: &str, data: Value) {
+        let seq = self.seq.get() + 1;
+        self.seq.set(seq);
+        let ids = json!({ "sessionID": SESSION, "assistantMessageID": "msg_2" });
+        let event: V2Event = serde_json::from_value(json!({
+            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
+            "durable": { "aggregateID": SESSION, "seq": seq, "version": 1 },
+            "data": support::merge(ids, data),
+        }))
+        .unwrap();
+        let tui = &self.pipe.harness.tui;
+        tui.data.apply(&[event]);
+        assert!(self.pipe.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
+    }
+
+    /// The answer begins with `text`.
+    fn answer(&self, text: &str) {
+        self.emit("session.text.started", json!({ "ordinal": 0 }));
+        self.more(text);
+    }
+
+    /// The answer goes on with `text`.
+    fn more(&self, text: &str) {
+        self.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+    }
+
+    /// The screen as it is drawn now, the JS host left as it is.
+    fn now(&self) -> String {
+        let app = &self.pipe.harness.app;
+        app.advance(Duration::from_millis(1));
+        app.render();
+        app.text()
+    }
+
+    /// The screen once the JS host settled.
+    fn settled(&self) -> String {
+        self.pipe.settle();
+        self.now()
+    }
+
+    fn toasts(&self) -> Vec<String> {
+        let tui = &self.pipe.harness.tui;
+        let mut toasts = Vec::new();
+        while let Some(toast) = tui.toasts.current() {
+            toasts.push(toast.message.clone());
+            tui.toasts.dismiss();
+        }
+        toasts
+    }
+
+    fn status(&self) -> Option<opencode_plugin::Status> {
+        self.pipe.status(ID)
+    }
+}
+
+/// The claimed parts that show the plugin's tree.
+fn drawn() -> usize {
+    mounted().iter().filter(|shown| shown.shows).count()
+}
+
+// Expected: a fence a JS renderer claims shows the host's own code view in the frame it first shows, and the plugin's
+// box (a label and that code view) once the JS host answered; as it streams, the code follows in the frame and the box
+// stays; the host's row never comes back.
+#[test]
+fn a_js_fence_claim_draws_its_box_after_the_frame() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    // The JS host's tree waits, however fast it answers: the frames before it comes.
+    fences.pipe.scripts().tamper(Tamper::Hold);
+    fences.answer("```probe\nlet a = 1;\n");
+    let app = &fences.pipe.harness.app;
+    app.wait_until(Duration::from_millis(300), || {
+        fences.now();
+        false
+    });
+    let first = fences.now();
+    assert!(first.contains("let a = 1;") && !first.contains("| probe"), "the first frame waited:\n{first}");
+    assert_eq!(drawn(), 0, "{:?}", mounted());
+    fences.pipe.scripts().replay();
+    let screen = fences.settled();
+    assert!(screen.contains("| probe") && screen.contains("let a = 1;"), "no box:\n{screen}");
+    for delta in ["let b = 2;\n", "```\n\nAfter.\n"] {
+        fences.more(delta);
+        let screen = fences.now();
+        assert!(screen.contains("| probe"), "the box went as the fence streamed:\n{screen}");
+    }
+    let screen = fences.settled();
+    assert!(screen.contains("let b = 2;") && screen.contains("After.") && !screen.contains("```"), "{screen}");
+    assert_eq!(drawn(), 1, "{:?}", mounted());
+    assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+}
+
+// Expected (Simon's call 6): a renderer that throws falls back its part alone, for the part's mount, with one toast;
+// the plugin stays active, and its other fences draw. A declined fence shows the host's code view.
+#[test]
+fn a_renderer_that_throws_falls_back_its_part_alone() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    fences.answer("```nope\ndeclined here\n```\n\n```asks\nasked here\n```\n\n```probe\nboxed here\n```\n\n");
+    fences.more("```boom\nthrown here\n");
+    let screen = fences.settled();
+    for code in ["thrown here", "declined here", "asked here", "boxed here", "| probe"] {
+        assert!(screen.contains(code), "{code:?} does not show:\n{screen}");
+    }
+    assert_eq!(fences.toasts(), ["example.fences crashed in code block boom: boom"]);
+    // The part that threw is not viewed again as it streams: no second toast.
+    fences.more("more thrown\n```\n\nAfter.\n");
+    let screen = fences.settled();
+    assert!(screen.contains("more thrown") && screen.contains("After."), "{screen}");
+    assert_eq!(fences.toasts(), Vec::<String>::new());
+    assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+    // `probe`'s box and `asks`' code view are the plugin's; the thrown and the declined fences show the host's row.
+    assert_eq!(drawn(), 2, "{:?}", mounted());
+}
+
+// Expected: a claim's view reads only, on every carrier: the toast a renderer asks for as it draws is dropped (the
+// log says so once), and its fence draws.
+#[test]
+fn what_a_renderer_asks_for_as_it_draws_is_dropped() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    fences.answer("```asks\nasked here\n```\n\nAfter.\n");
+    let screen = fences.settled();
+    assert!(screen.contains("asked here"), "{screen}");
+    assert_eq!(fences.toasts(), Vec::<String>::new());
+    assert_eq!(drawn(), 1, "{:?}", mounted());
+}
+
+// Expected (the pipe's bounds): a part waits while the JS host's queue is backed up, and is offered as it drains, so 300
+// fences that mount at once all draw the plugin's box, oldest first, none is lost, and nothing is refused.
+#[test]
+fn three_hundred_fences_mounted_at_once_all_fill_in() {
+    let Some(mut config) = config() else { return };
+    // A queue to the JS host that takes a few parts at a time: the answer's 300 parts back it up.
+    config.limits.queued = 4 << 10;
+    let fences = Fences::open(config, None);
+    let before = opencode_plugin::pipe::crossed();
+    let text: String = (0..300).map(|index| format!("```probe\nfence {index}\n```\n\n")).collect();
+    fences.answer(&text);
+    fences.settled();
+    let shown = mounted();
+    assert_eq!((shown.len(), drawn()), (300, 300), "{shown:?}");
+    let after = opencode_plugin::pipe::crossed();
+    assert!(after.deferred_parts > before.deferred_parts, "no part waited for the queue");
+    assert_eq!(after.refused_sends, before.refused_sends, "the queue refused a part");
+}
+
+// Expected (the pipe's bounds): a part that waited while another plugin's parts backed the queue up is offered once it
+// drained, though nothing of its own plugin wakes it.
+#[test]
+fn a_part_another_plugin_held_back_is_offered_once_the_queue_drained() {
+    let Some(mut config) = config() else { return };
+    config.limits.queued = 4 << 10;
+    let fences = Fences::open_with(config, None, true);
+    let before = opencode_plugin::pipe::crossed();
+    let text: String = (0..300).map(|index| format!("```probe\nfence {index}\n```\n\n")).collect();
+    fences.answer(&format!("{text}```other\nlast\n```\n\nAfter.\n"));
+    fences.settled();
+    let other: Vec<_> = mounted().into_iter().filter(|shown| shown.id.surface == "other").collect();
+    assert!(other.len() == 1 && other[0].shows, "the other plugin's part never drew: {other:?}");
+    assert!(opencode_plugin::pipe::crossed().deferred_parts > before.deferred_parts, "no part waited");
+}
+
+// Expected (the pipe's bounds): a fence over 256 KiB keeps the host's code view, and the plugin stays active.
+#[test]
+fn a_fence_past_the_frame_cap_keeps_the_host_view() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    let code: String = (0..30_000).map(|line| format!("line {line:05}\n")).collect();
+    assert!(code.len() > 256 << 10);
+    let refused = opencode_plugin::pipe::crossed().refused_sends;
+    fences.answer(&format!("```probe\n{code}```\n\nAfter.\n"));
+    let screen = fences.settled();
+    assert_eq!(opencode_plugin::pipe::crossed().refused_sends, refused, "the part went to the queue");
+    assert!(screen.contains("line 29999") && !screen.contains("| probe"), "{screen}");
+    assert_eq!(drawn(), 0, "{:?}", mounted());
+    assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+}
+
+// Expected (the pipe's bounds): a plugin holds 256 claims: a fence of a language past them is not claimed.
+#[test]
+fn a_plugin_holds_256_claims() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, Some(json!({ "many": 300 })));
+    fences.answer("```x200\ntaken\n```\n\n```x290\nleft\n```\n\nAfter.\n");
+    fences.settled();
+    let claimed: Vec<String> = mounted().into_iter().map(|shown| shown.id.surface).collect();
+    assert_eq!(claimed, ["x200"]);
+}
+
+// Expected: a tree the JS host sends for a part whose mount ended is dropped: the session left before the answer came,
+// and nothing of the part stays; the plugin stays active.
+#[test]
+fn a_tree_for_a_gone_part_is_dropped() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    fences.pipe.scripts().tamper(Tamper::Hold);
+    fences.answer("```probe\nlet a = 1;\n```\n\nAfter.\n");
+    let app = &fences.pipe.harness.app;
+    app.wait_until(Duration::from_millis(300), || {
+        fences.now();
+        false
+    });
+    assert_eq!((mounted().len(), drawn()), (1, 0));
+    fences.pipe.harness.tui.navigate(Route::Home);
+    for _ in 0..5 {
+        fences.now();
+    }
+    let dropped = opencode_plugin::pipe::crossed().dropped;
+    fences.pipe.scripts().replay();
+    fences.settled();
+    assert_eq!(opencode_plugin::pipe::crossed().dropped, dropped + 1, "the tree was not dropped");
+    assert_eq!(mounted(), Vec::new());
+    assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+}
+
+// Expected (the existing rule, P.4): a renderer that never returns leaves its fence as the host's code view; the JS host,
+// which then answers nothing, is ended, and the plugin whose view ran fails, so all its fences show the host's row.
+#[test]
+fn a_js_host_that_never_answers_leaves_every_fence_as_code() {
+    let Some(mut config) = config() else { return };
+    config.limits.ack = Duration::from_millis(500);
+    let fences = Fences::open(config, None);
+    fences.answer("```probe\nfirst\n```\n\n");
+    let screen = fences.settled();
+    assert!(screen.contains("| probe"), "{screen}");
+    fences.more("```hang\nstuck\n```\n\nAfter.\n");
+    let app = &fences.pipe.harness.app;
+    let failed = app.wait_until(Duration::from_secs(20), || {
+        app.advance(Duration::from_millis(5));
+        app.render();
+        matches!(fences.status(), Some(opencode_plugin::Status::Failed(_)))
+    });
+    let screen = fences.now();
+    assert!(failed, "the plugin never failed: {:?}\n{screen}", fences.status());
+    assert!(screen.contains("first") && screen.contains("stuck") && !screen.contains("| probe"), "{screen}");
+    assert_eq!(drawn(), 0, "{:?}", mounted());
+}
+
+// Expected (ownership, 2.8): a claimed part is a mount with a generation. A tree that comes after Markdown built the
+// same fence again in a new theme, a new mount, is dropped; the new mount draws its own. One that comes after the
+// plugin was disabled is dropped too, and the fence shows the host's code view.
+#[test]
+fn a_tree_of_an_ended_mount_is_dropped_after_a_rebuild_or_a_disable() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    let tui = &fences.pipe.harness.tui;
+    let held = || {
+        let app = &fences.pipe.harness.app;
+        app.wait_until(Duration::from_millis(300), || {
+            fences.now();
+            false
+        });
+    };
+    fences.pipe.scripts().tamper(Tamper::Hold);
+    fences.answer("```probe\nlet a = 1;\n```\n\nAfter.\n");
+    held();
+    let first: Vec<_> = mounted().into_iter().map(|shown| shown.id).collect();
+    tui.theme.borrow_mut().set("tokyonight");
+    tui.theme_changed();
+    held();
+    let dropped = opencode_plugin::pipe::crossed().dropped;
+    fences.pipe.scripts().replay();
+    let screen = fences.settled();
+    let now: Vec<_> = mounted().into_iter().map(|shown| shown.id).collect();
+    assert!(now.len() == 1 && first.len() == 1 && now != first, "{first:?} {now:?}");
+    assert_eq!(opencode_plugin::pipe::crossed().dropped, dropped + 1, "the old mount's tree was not dropped");
+    // Each render numbers its label: the first, the old mount's, never shows.
+    assert!(screen.contains("| probe") && !screen.contains("(1)") && drawn() == 1, "{screen}");
+    // The plugin is disabled while its next tree is in flight.
+    fences.pipe.scripts().tamper(Tamper::Hold);
+    fences.answer("```probe\nlet b = 2;\n```\n\nAfter.\n");
+    held();
+    let host = opencode_tui::plugins::host::host(tui);
+    assert_eq!(tui.plugins.toggle(&host, ID, false), Some(Ok(())));
+    // As the manager does: the route mounts again without the plugin's renderers.
+    tui.navigate(tui.route());
+    held();
+    fences.pipe.scripts().replay();
+    let screen = fences.settled();
+    assert!(screen.contains("let b = 2;") && !screen.contains("| probe"), "{screen}");
+    assert_eq!(drawn(), 0, "{:?}", mounted());
+}
