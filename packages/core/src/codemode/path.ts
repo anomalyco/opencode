@@ -1,7 +1,7 @@
 export * as CodeModePath from "./path.js"
 
 import { Extension } from "@opencode/codemode"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import path from "path"
 import { Location } from "../location.js"
 
@@ -11,19 +11,19 @@ import { Location } from "../location.js"
 // resolves from its own root instead of falling back to the server's working directory.
 const flavor = (module: path.PlatformPath) => {
   const { posix: _posix, win32: _win32, ...functions } = module
-  const base = (directory: string) => (module === path ? directory : module.sep)
+  const base: Effect.Effect<string> = module === path ? directory : Effect.succeed(module.sep)
   return {
     ...functions,
-    resolve: (...parts: Array<string>) =>
-      Location.Service.use((location) => Effect.succeed(module.resolve(base(location.directory), ...parts))),
+    resolve: (...parts: Array<string>) => Effect.map(base, (from) => module.resolve(from, ...parts)),
     relative: (from: string, to: string) =>
-      Location.Service.use((location) =>
-        Effect.succeed(
-          module.relative(module.resolve(base(location.directory), from), module.resolve(base(location.directory), to)),
-        ),
-      ),
+      Effect.map(base, (start) => module.relative(module.resolve(start, from), module.resolve(start, to))),
   }
 }
+
+// A run gets `path` only with the session's Location (see `CodeModeTool.create`).
+const directory = Effect.flatMap(Effect.serviceOption(Location.Service), (location) =>
+  Option.isSome(location) ? Effect.succeed(location.value.directory) : Effect.die("Code Mode path needs a Location."),
+)
 
 /** The host's own path module, as Node gives it, with `path.posix` and `path.win32`. */
 export const extension = Extension.make({

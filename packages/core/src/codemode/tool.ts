@@ -126,43 +126,47 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const program = location
-          ? pathRuntime(inventory).execute(code).pipe(Effect.provideService(Location.Service, location))
-          : runtime(inventory).execute(code)
-        const result = yield* program.pipe(
-          Effect.provideService(Run, {
-            executeTool: (name, tool, input) =>
-              Effect.gen(function* () {
-                const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
-                // until the program ends its permission requests show on this call's.
-                const id = CallID.make(`call_${Identifier.ascending()}`)
-                yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
-                // The program sees the same failure text the model gets for a direct call.
-                const executed = yield* executeTool(name, tool, input, {
-                  ...context,
-                  id,
-                  // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
-                  progress: () => Effect.void,
-                  // A stop is the execute call's to handle: a nested call never fails it with its own error.
-                  cancel: undefined,
-                }).pipe(Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })))
-                const content = resultContent(executed)
-                const outputFileParts = outputFiles(content)
-                if (outputFileParts.length > 0)
-                  yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                return resultValue(executed)
-              }),
-            hooks: progressHooks(record),
-          }),
-          // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
-          Effect.onError(() =>
-            lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
-          ),
-          // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-          Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
-          Effect.provideService(Permission.Service, permission),
-        )
+        const result = yield* runtime(inventory)
+          .execute(code, undefined, {
+            extensions: location ? [CodeModeFetch.extension, CodeModePath.extension] : [CodeModeFetch.extension],
+          })
+          .pipe(
+            Effect.provideService(Run, {
+              executeTool: (name, tool, input) =>
+                Effect.gen(function* () {
+                  const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
+                  // until the program ends its permission requests show on this call's.
+                  const id = CallID.make(`call_${Identifier.ascending()}`)
+                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
+                  // The program sees the same failure text the model gets for a direct call.
+                  const executed = yield* executeTool(name, tool, input, {
+                    ...context,
+                    id,
+                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                    progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
+                  }).pipe(
+                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
+                  )
+                  const content = resultContent(executed)
+                  const outputFileParts = outputFiles(content)
+                  if (outputFileParts.length > 0)
+                    yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+                  return resultValue(executed)
+                }),
+              hooks: progressHooks(record),
+            }),
+            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+            Effect.onError(() =>
+              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+            ),
+            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
+            Effect.provideService(Permission.Service, permission),
+            (program) => (location ? Effect.provideService(program, Location.Service, location) : program),
+          )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
@@ -281,35 +285,18 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
 const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
-const pathRuntimes = new WeakMap<
-  Inventory,
-  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | Location.Service>
->()
 
-const runtime = (inventory: Inventory) =>
-  cached(runtimes, inventory, (tools) =>
-    CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
-      tools,
-      extensions: [CodeModeFetch.extension],
-      hooks: runHooks,
-    }),
-  )
-
-// The runtime with the experimental `path` global.
-const pathRuntime = (inventory: Inventory) =>
-  cached(pathRuntimes, inventory, (tools) =>
-    CodeMode.make<typeof tools, [typeof CodeModeFetch.extension, typeof CodeModePath.extension]>({
-      tools,
-      extensions: [CodeModeFetch.extension, CodeModePath.extension],
-      hooks: runHooks,
-    }),
-  )
-
-function cached<T>(cache: WeakMap<Inventory, T>, inventory: Inventory, make: (tools: Tools) => T) {
-  const found = cache.get(inventory)
-  if (found) return found
-  const created = make(inventoryTools(inventory))
-  cache.set(inventory, created)
+function runtime(inventory: Inventory) {
+  const cached = runtimes.get(inventory)
+  if (cached) return cached
+  const tools = inventoryTools(inventory)
+  // Every extension a run may get; `create` picks each run's.
+  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension, typeof CodeModePath.extension]>({
+    tools,
+    extensions: [CodeModeFetch.extension, CodeModePath.extension],
+    hooks: runHooks,
+  })
+  runtimes.set(inventory, created)
   return created
 }
 
