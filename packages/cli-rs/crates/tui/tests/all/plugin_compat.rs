@@ -143,7 +143,7 @@ fn a_v2_render_that_throws_is_reported_as_ts_reports_it() {
     assert!(toasts(&pipe).is_empty(), "the crash was reported again");
 }
 
-// Expected: an intrinsic the contract has no node for (`<select>`) throws as it is created, which the boundary reports
+// Expected: an intrinsic the contract has no node for (`<tab_select>`) throws as it is created, which the boundary reports
 // as any crash in a render: the plugin learns it as an exception, the user as TS's crash toast.
 #[test]
 fn an_intrinsic_without_a_node_is_reported_as_a_crash() {
@@ -154,7 +154,9 @@ fn an_intrinsic_without_a_node_is_reported_as_a_crash() {
     pipe.settle();
     assert_eq!(
         toasts(&pipe),
-        ["Plugin: example.v2probe crashed in slot home.footer: <select> is not supported by opencode-native's JS host"]
+        [
+            "Plugin: example.v2probe crashed in slot home.footer: <tab_select> is not supported by opencode-native's JS host"
+        ]
     );
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
