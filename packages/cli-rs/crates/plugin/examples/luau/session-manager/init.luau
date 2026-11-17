@@ -5,8 +5,10 @@
 -- delete one or a whole group, each after asking. The grouping, the subsessions and the language are kept.
 --
 -- Where it differs from TS: the rename prompt cannot be filled with the session's title or show its directory (a
--- prompt has a title and a placeholder only); a refresh after a session event runs at once, as Luau has no timer for
--- TS's 300 ms; paths keep the home directory, which a Luau plugin cannot read; and `/sm` is not there.
+-- prompt has a title and a placeholder only); the search field never takes the focus from `/` (the host refuses a
+-- field its tree does not hold yet, and a Luau plugin has no wake to ask again once it does), so only a click focuses
+-- it; a refresh after a session event runs at once, as Luau has no timer for TS's 300 ms; paths keep the home
+-- directory, which a Luau plugin cannot read; and `/sm` is not there.
 local plugin = require("@opencode/plugin")
 local grouping = require("./grouping")
 local i18n = require("./i18n")
@@ -251,6 +253,7 @@ local function setLocale(host, locale: string)
     persist(host)
 end
 
+-- TS `startSearch`. The field shows with this call's view, after the focus is refused: see the header.
 local function startSearch(host)
     state.searching = true
     host:focus(SEARCH)
