@@ -111,9 +111,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   as TS's `<Slot>` is a fragment; OpenTUI's Rust layout has no way back, so the box stays absolute if a later render
   of the claim is in the flow.
 - **Not mapped**, each reported once a plugin with a warning toast (`<id>: <feature> is not supported by
-  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`, `data.project`,
-  `data.shell`, `data.session.permission`, `data.session.form`, the
-  location's `agent`, `command`, `mcp.resource`, `reference` and `skill` lists, `renderer` members other than
+  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`,
+  `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
   returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside),
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
@@ -123,6 +122,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   claim whose rows it answers after the frame, the host's code view showing until they come (a claim answers within
   the frame today, which the JS host cannot), and a node that stands for the host's own code view, which the
   renderer's `defaultRender()` returns; its renderables built with `new` would also need to draw (below).
+  `data.project.permission` has no client call to load it through and would need a contract read; the location's
+  `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   The intrinsics without a contract node (`select`, `tab_select`, `ascii_font`, `diff`, `line_number`, `image`, `video`)
   and `<Portal>` throw as they are created, which the plugin's boundary reports as TS reports a crash in a render
   (`<id> crashed in slot <path>: …`). The TS TUI's own `<spinner>` is the contract's spinner, in the host's frames,
@@ -131,6 +132,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   each reported as it is read, so a plugin that checks they exist starts (CT-17: opencode-dollar-skills). What such a
   plugin then does with the composer's editor (opencode-vim-navigation's modal editing, dollar-skills' completion)
   would need the composer as a renderable a plugin edits, where the contract has only `ComposerEdit`.
+- **The `data` collections the contract has no read of** (`data.project`, `data.shell`, `data.session.permission`,
+  `data.session.form`, the location's `agent`, `command`, `reference` and `skill` lists) load through the plugin's
+  `client` over the host's fetch: as the plugin first lists or syncs one, on `invalidate`, and on each event that
+  changes it (`agent.updated`, `permission.asked`, `form.replied`, …); `form.reply` and `cancel` go through
+  `client.session.form` and load the list again. A list answers `undefined` until its load came, where TS's store
+  answers what it holds, and nothing keeps it live between events (`P.8/skills-data`: opencode-skills-tui's skills).
+  A live store would need the contract to give a plugin these collections as reads.
 - **OpenTUI's exports**: the layer exports every name the installed `@opentui/core` and `@opentui/solid` export, so a
   plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets) and Solid's renderer
   the layer gives, each is inert: a class constructs, extends and answers its methods with nothing, a function does

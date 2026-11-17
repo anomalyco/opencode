@@ -232,6 +232,59 @@ export function context(base: Base, carrier: Carrier) {
   }
   const routeData = new Map<string, Json>()
 
+  // A collection the contract has no read of, loaded through the plugin's `client` over the host's fetch: as the plugin
+  // first lists or syncs it, again on `invalidate`, and again on each event `events` names, which it subscribes to with
+  // its first load. A list answers `undefined` until its load came, and its reader follows it.
+  const fetched = (events: string[], load: (...args: Json[]) => Promise<Json>, key = (...args: Json[]) => JSON.stringify(args)) => {
+    const entries = new Map<string, { args: Json[]; value?: Json; version: ReturnType<typeof createSignal<number>>; loading?: Promise<void> }>()
+    let heard = false
+    const entry = (args: Json[]) => {
+      const at = key(...args)
+      const known = entries.get(at)
+      if (known) return known
+      const made = { args, version: createRoot(() => createSignal(0)) }
+      entries.set(at, made)
+      return made
+    }
+    const reload = (at: ReturnType<typeof entry>): Promise<void> => {
+      if (!heard) {
+        heard = true
+        for (const type of events) base.data.on(type, () => entries.forEach((known) => void reload(known)))
+      }
+      at.loading = load(...at.args).then(
+        (value) => {
+          at.value = value
+          at.version[1]((count) => count + 1)
+          invalidate()
+        },
+        (error) => console.warn(`plugin ${id}: a load of data failed: ${error instanceof Error ? error.message : error}`),
+      )
+      return at.loading
+    }
+    return {
+      list(...args: Json[]) {
+        const at = entry(args)
+        at.version[0]()
+        if (at.value === undefined && !at.loading) void reload(at)
+        return at.value
+      },
+      sync: (...args: Json[]) => reload(entry(args)),
+      invalidate: (...args: Json[]) => void reload(entry(args)),
+    }
+  }
+  const directoryOf = (location?: Json) => (location?.directory ? { directory: location.directory } : undefined)
+  const listed = (name: string, events: string[]) =>
+    fetched(events, (location?: Json) => (raw as Json)[name].list({ location: directoryOf(location) }).then((out: Json) => out.data), (location?: Json) =>
+      locationKey(location),
+    )
+  const forms = fetched(
+    ["form.created", "form.replied", "form.cancelled"],
+    (sessionID: string, location?: Json) =>
+      raw.form.list({ location: directoryOf(location) }).then((out: Json) => out.data.filter((form: Json) => form.sessionID === sessionID)),
+  )
+  const shells = listed("shell", ["shell.created", "shell.exited", "shell.deleted"])
+  const projects = fetched(["project.updated"], () => raw.project.list())
+
   // `data.listen`: every event, as `{ details }`, through one subscription of the plugin to every type the client names,
   // made with its first listener.
   const everything = new Set<(event: Json) => unknown>()
@@ -282,11 +335,30 @@ export function context(base: Base, carrier: Carrier) {
         sync: (sessionID: string) => synced(`messages:${sessionID}`, { type: "messages", id: sessionID }),
         invalidate() {},
       },
-      permission: none("session.permission"),
-      form: { ...none("session.form"), reply: async () => unsupported("data.session.form"), cancel: async () => {} },
+      permission: fetched(["permission.asked", "permission.replied"], (sessionID: string) => raw.permission.list({ sessionID })),
+      form: {
+        ...forms,
+        reply: async (input: Json, location?: Json) => {
+          await raw.session.form.reply(input)
+          forms.invalidate(input.sessionID, location)
+        },
+        cancel: async (input: Json, location?: Json) => {
+          await raw.session.form.cancel(input)
+          forms.invalidate(input.sessionID, location)
+        },
+      },
     },
-    project: { ...none("project"), get: () => undefined, permission: none("project.permission") },
-    shell: { ...none("shell"), get: () => undefined },
+    project: {
+      ...projects,
+      list: () => projects.list() ?? [],
+      get: (projectID: string) => (projects.list() ?? []).find((project: Json) => project.id === projectID),
+      permission: none("project.permission"),
+    },
+    shell: {
+      ...shells,
+      list: (location?: Json) => shells.list(location) ?? [],
+      get: (shellID: string) => (shells.list() ?? []).find((shell: Json) => shell.id === shellID),
+    },
     location: {
       // The directory the client works in, which the JS host does not start in (carbon-1).
       default: () => toRef(info()?.location) ?? { directory: process.env.OPENCODE_DIRECTORY ?? process.cwd() },
@@ -298,8 +370,8 @@ export function context(base: Base, carrier: Carrier) {
         sync: (location?: Json) => synced(`vcs:${locationKey(location)}`, { type: "vcs", location: locationOf(location) }),
         invalidate() {},
       },
-      agent: none("location.agent"),
-      command: none("location.command"),
+      agent: listed("agent", ["agent.updated"]),
+      command: listed("command", ["command.updated"]),
       integration: collection("integrations"),
       mcp: { server: collection("mcp-servers"), resource: none("location.mcp.resource") },
       model: collection("models"),
@@ -308,8 +380,8 @@ export function context(base: Base, carrier: Carrier) {
         sync: () => synced("providers", { type: "providers" }),
         invalidate() {},
       },
-      reference: none("location.reference"),
-      skill: none("location.skill"),
+      reference: listed("reference", ["reference.updated"]),
+      skill: listed("skill", ["skill.updated"]),
     },
   }
 

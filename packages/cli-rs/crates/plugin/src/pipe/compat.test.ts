@@ -586,6 +586,42 @@ test("a built renderable returned draws nothing, and a node's layout is the host
   expect(refs.box.height).toBe(4)
 })
 
+// The F16 data collections: the location's agents and a session's permissions, which the contract has no read of, load
+// through `client` as the plugin first lists them, answer `undefined` until then, and load again on an event that
+// changes them; they answered an empty list and a toast.
+test("data collections load through the client", async () => {
+  const fake = host()
+  const fetched: string[] = []
+  let agents = [{ name: "build" }]
+  fake.fetch = async (request: Json) => {
+    fetched.push(`${request.method} ${request.path}`)
+    if (request.path === "/api/agent") return { Ok: { location: { directory: "/w" }, data: agents } }
+    if (request.path === "/api/session/s1/permission") return { Ok: { data: [{ id: "per_1" }] } }
+    return { Ok: null }
+  }
+  const handlers = new Map<string, (event: Json) => unknown>()
+  const base = {
+    id: "t.data",
+    options: {},
+    app: { version: "", channel: "" },
+    themeMode: "dark",
+    data: { on: (type: string, handler: (event: Json) => unknown) => (handlers.set(type, handler), () => {}) },
+  }
+  const ctx = context(base, fake) as Json
+  expect(ctx.data.location.agent.list({ directory: "/w" })).toBeUndefined()
+  await ctx.data.location.agent.sync({ directory: "/w" })
+  expect(ctx.data.location.agent.list({ directory: "/w" })).toEqual([{ name: "build" }])
+  await ctx.data.session.permission.sync("s1")
+  expect(ctx.data.session.permission.list("s1")).toEqual([{ id: "per_1" }])
+  agents = [{ name: "build" }, { name: "plan" }]
+  handlers.get("agent.updated")!({ type: "agent.updated" })
+  await turn()
+  await turn()
+  expect(ctx.data.location.agent.list({ directory: "/w" })).toEqual([{ name: "build" }, { name: "plan" }])
+  expect(fetched.filter((line) => line === "GET /api/agent").length).toBe(3)
+  expect(fake.toasts()).toEqual([])
+})
+
 // CT-8, CT-22: a raised surface's theme is the host's: a color the dialog or its footer gives differently from the page
 // is that color, without a token, and the rest keep their page token; another name is the page's. No toast says so,
 // where one covered five plugins' pages.
