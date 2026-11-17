@@ -59,8 +59,28 @@ const plugins = Array.from(new Bun.Glob("**/plugin.toml").scanSync({ cwd: root }
 const results = await Promise.all(plugins.map(check))
 const errors = results.reduce((sum, count) => sum + count, 0)
 const checked = results.filter((count) => count >= 0).length
-console.log(`check-luau-types: ${checked} plugin(s), luau-analyze ${release}, ${errors} error(s)`)
-if (errors > 0) process.exit(1)
+const expected = Array.from(new Bun.Glob("script/luau-expect/*.luau").scanSync({ cwd: root }))
+  .sort()
+  .map((file) => path.join(root, file))
+const unmet = (await Promise.all(expected.map(refused))).filter((met) => !met).length
+console.log(
+  `check-luau-types: ${checked} plugin(s), luau-analyze ${release}, ${errors} error(s); ${expected.length - unmet} of ${expected.length} expected refusal(s)`,
+)
+if (errors > 0 || unmet > 0) process.exit(1)
+
+/** Whether the analyzer refuses `file` with the error its first line names (`-- expect: <text>`): proof that the
+ * check catches what it should, such as a misspelled field of a server type. */
+async function refused(file: string) {
+  const want = (await Bun.file(file).text()).match(/^-- expect: (.+)$/m)?.[1]
+  if (!want) fail(`${path.relative(root, file)} names no error on a first line "-- expect: <text>"`)
+  const config = await luaurc(path.dirname(file))
+  if (config.problem) fail(`${path.relative(root, file)}: ${config.problem}`)
+  const proc = Bun.spawnSync([analyzer, "--formatter=gnu", "--solver=new", file], { stdout: "pipe", stderr: "pipe" })
+  const output = proc.stdout.toString() + proc.stderr.toString()
+  const met = proc.exitCode !== 0 && output.includes(want)
+  if (!met) console.error(`${path.relative(root, file)}: expected an error with "${want}", got:\n${output.trimEnd()}`)
+  return met
+}
 
 /** Analyzes one plugin directory and returns its error count; -1 when it has no .luau files. */
 async function check(dir: string) {

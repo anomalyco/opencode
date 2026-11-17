@@ -71,7 +71,7 @@ return plugin.define(function(setup)
     local lastLoaded, lastForced = 0, 0
     local run: any = nil
     local queued: boolean? = nil
-    local priced: any = nil
+    local priced: { location: plugin.LocationRef?, sessions: { { plugin.SessionMessageInfo } } }? = nil
     local total: number? = nil
     local runs = 0
 
@@ -103,7 +103,7 @@ return plugin.define(function(setup)
         end
     end
 
-    local refreshCost: (host: any, reload: boolean) -> ()
+    local refreshCost: (host: plugin.Host, reload: boolean) -> ()
 
     -- The run ended: when it read every page of the session still in view, its messages wait for the location's
     -- models to price them. Then a queued run starts.
@@ -288,24 +288,23 @@ return plugin.define(function(setup)
         if #mounts == 0 then
             return
         end
-        local data = event.data or {}
         if event.type == "session.execution.succeeded" or event.type == "session.usage.updated" then
-            if touches(data.sessionID) then
+            if touches(event.data.sessionID) then
                 refreshCost(host, false)
                 load(host, true)
             end
         elseif event.type == "session.created" then
-            local parent = data.parentID
+            local parent = event.data.parentID
             if not parent or not touches(parent) then
                 return
             end
-            if not table.find(tree, data.sessionID) then
-                table.insert(tree, data.sessionID)
+            if not table.find(tree, event.data.sessionID) then
+                table.insert(tree, event.data.sessionID)
             end
             refreshCost(host, false)
             load(host, true)
         elseif event.type == "session.deleted" then
-            local index = table.find(tree, data.sessionID)
+            local index = table.find(tree, event.data.sessionID)
             if index then
                 table.remove(tree, index)
                 refreshCost(host, false)

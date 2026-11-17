@@ -6,7 +6,7 @@
 type Schema = {
   $ref?: string
   type?: string | string[]
-  enum?: (string | number)[]
+  enum?: (string | number | boolean | null)[]
   const?: string | number | boolean
   description?: string
   properties?: Record<string, Schema>
@@ -16,6 +16,7 @@ type Schema = {
   prefixItems?: Schema[]
   oneOf?: Schema[]
   anyOf?: Schema[]
+  not?: Schema
   allOf?: Schema[]
 }
 
@@ -23,6 +24,46 @@ const root = new URL("../..", import.meta.url).pathname
 const schema = (await Bun.file(`${root}crates/plugin-abi/schema/v2.json`).json()) as {
   $defs: Record<string, Schema>
   "x-abi": { major: number; minor: number }
+}
+// The HTTP API's document, which the schema's references into `openapi.json` name (messages, sessions, models, events).
+const openapi = (await Bun.file(`${root}../protocol/openapi.json`).json()) as {
+  components: { schemas: Record<string, Schema> }
+}
+const components = openapi.components.schemas
+
+// The HTTP API's schemas the stub writes, by the Luau name of each: what the contract's schema and the reads reach.
+const reached = new Map<string, string>()
+
+// The Luau name of the API's schema `name` (`Session.Message.Info` is `SessionMessageInfo`), which the stub then
+// writes, with everything it reaches.
+function server(name: string) {
+  if (!components[name]) throw new Error(`plugin-types-luau: openapi.json has no schema ${name}`)
+  const joined = name
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join("")
+  // The contract's own type keeps the plain name (`LocationRef`); the API's of that name is `ApiLocationRef`.
+  const luauName = schema.$defs[joined] ? `Api${joined}` : joined
+  const known = reached.get(luauName)
+  if (known !== undefined && known !== name)
+    throw new Error(`plugin-types-luau: ${known} and ${name} are both ${luauName}`)
+  reached.set(luauName, name)
+  return luauName
+}
+
+// A reference into the API's document: a schema by name, or a part of one (`Tool/properties/id`), written in place.
+function reference(fragment: string, indent: string): string {
+  const [name, ...rest] = fragment.replace(/^\/components\/schemas\//, "").split("/")
+  if (rest.length === 0) return server(name)
+  const part = rest.reduce<any>((at, step) => at?.[step.replace(/~1/g, "/").replace(/~0/g, "~")], components[name])
+  if (!part) throw new Error(`plugin-types-luau: openapi.json has no ${fragment}`)
+  return luau(part, indent)
+}
+
+// `{ not: {} }` holds no value: an alternative that never matches.
+function never(schema: Schema) {
+  return schema.not !== undefined && Object.keys(schema.not).length === 0
 }
 
 // Luau's reserved words, which a table type names in brackets.
@@ -36,7 +77,8 @@ function key(name: string) {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !reserved.has(name) ? name : `[${JSON.stringify(name)}]`
 }
 
-function literal(value: string | number | boolean) {
+function literal(value: string | number | boolean | null) {
+  if (value === null) return "nil"
   return typeof value === "string" ? JSON.stringify(value) : typeof value === "boolean" ? String(value) : "number"
 }
 
@@ -52,14 +94,17 @@ function union(types: string[]) {
 // The Luau type of `schema`, indented by `indent` for its nested table types.
 function luau(schema: Schema, indent: string): string {
   if (schema.$ref) {
-    // The HTTP API's types are the OpenAPI document's, which this file does not carry.
-    return schema.$ref.startsWith("#/$defs/") ? schema.$ref.slice("#/$defs/".length) : "any"
+    if (schema.$ref.startsWith("#/$defs/")) return schema.$ref.slice("#/$defs/".length)
+    // `#/components/...` inside the API's document, `…/openapi.json#/components/...` from the contract's schema.
+    const fragment = schema.$ref.split("#")[1]
+    if (fragment?.startsWith("/components/schemas/")) return reference(fragment, indent)
+    throw new Error(`plugin-types-luau: a reference this writer does not follow: ${schema.$ref}`)
   }
   if (schema.const !== undefined) return literal(schema.const)
   if (schema.enum) return union(schema.enum.map(literal))
   const alternatives = schema.oneOf ?? schema.anyOf
   if (alternatives) {
-    const present = alternatives.filter((alternative) => !nullable(alternative))
+    const present = alternatives.filter((alternative) => !nullable(alternative) && !never(alternative))
     const type = union(present.map((alternative) => luau(alternative, indent)))
     // `any` holds `nil` already, and `any?` as a read-write field is invariant: a table built in a local fails it.
     return present.length < alternatives.length && type !== "any" ? `${type}?` : type
@@ -141,16 +186,16 @@ const reads = `    themeMode: (self: Read) -> "dark" | "light",
     session: (self: Read, id: string) -> Session?,
     sessions: (self: Read) -> { Session },
     family: (self: Read, id: string) -> Family,
-    messages: (self: Read, id: string) -> { any },
+    messages: (self: Read, id: string) -> { ${server("Session.Message.Info")} },
     --- The inbox items of session \`id\` the server has not delivered yet, oldest first; empty while its inbox is not loaded.
-    pending: (self: Read, id: string) -> { any },
+    pending: (self: Read, id: string) -> { ${server("Session.Inbox.Info")} },
     --- The models of \`location\`, or where the TUI works; \`nil\` while they are not loaded.
-    models: (self: Read, location: LocationRef?) -> { any }?,
+    models: (self: Read, location: LocationRef?) -> { ${server("Model.Info")} }?,
     --- The providers where the TUI works; \`nil\` while they are not loaded.
-    providers: (self: Read) -> { any }?,
+    providers: (self: Read) -> { ${server("Provider.Info")} }?,
     --- The OpenCode Console workspace's usage limits; \`nil\` while they are not loaded.
-    limits: (self: Read) -> any,
-    model: (self: Read) -> any,
+    limits: (self: Read) -> ${server("UsageLimits.Info")}?,
+    model: (self: Read) -> ${server("Model.Ref")}?,
     info: (self: Read) -> Info,
     route: (self: Read) -> Route,
     interactive: (self: Read) -> boolean,
@@ -250,7 +295,8 @@ export type Setup = {
     route: (self: Setup, name: string, render: (read: Read, changed: Changed) -> Render?) -> (),
     onRouteMount: (self: Setup, name: string, run: (host: Host, mounted: boolean) -> ()) -> (),
     codeBlock: (self: Setup, language: string, render: (read: Read, fence: Fence) -> Fenced?) -> (),
-    onEvent: (self: Setup, types: { string }, run: (host: Host, event: any) -> ()) -> (),
+    --- \`event\` is one of the API's events, a union tagged by \`type\`: \`if event.type == "…" then\` narrows it.
+    onEvent: (self: Setup, types: { string }, run: (host: Host, event: ${server("V2Event")}) -> ()) -> (),
     onReply: (self: Setup, run: (host: Host, id: number, value: any, error: string?) -> ()) -> (),
     onDispose: (self: Setup, run: (host: Host) -> ()) -> (),
     layer: (self: Setup, layer: Layer, handler: (host: Host, event: InputEvent) -> Handled?) -> (),
@@ -306,6 +352,27 @@ local plugin: Plugin = nil :: any
 return plugin
 `
 
+// The API's schemas the contract and the reads reached, and what those reach in turn, by Luau name.
+const written = new Map<string, string>()
+for (
+  let pending = [...reached.keys()];
+  pending.length > 0;
+  pending = [...reached.keys()].filter((name) => !written.has(name))
+)
+  for (const name of pending) {
+    const source = reached.get(name)!
+    written.set(
+      name,
+      [...comment(components[source].description), `export type ${name} = ${luau(components[source], "")}`, ""].join(
+        "\n",
+      ),
+    )
+  }
+const served = [...written.keys()].toSorted().map((name) => written.get(name)!)
+
 const file = `${root}crates/plugin/src/luau/opencode/plugin.luau`
-await Bun.write(file, `${header}\n${generated.join("\n")}\n${api}${footer}`)
-console.log(`plugin-types-luau: ${Object.keys(schema.$defs).length} definitions`)
+await Bun.write(
+  file,
+  `${header}\n${generated.join("\n")}\n-- The HTTP API's types (packages/protocol/openapi.json) ${"-".repeat(57)}\n\n${served.join("\n")}\n${api}${footer}`,
+)
+console.log(`plugin-types-luau: ${Object.keys(schema.$defs).length} definitions, ${written.size} of the API's schemas`)
