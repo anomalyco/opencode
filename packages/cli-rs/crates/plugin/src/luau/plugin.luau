@@ -39,8 +39,13 @@ plugin.HIDE = table.freeze({ type = "hide" })
 -- a fetch whose mount closes is not told yet: the host cancels the request and the task stays parked for the rest of
 -- the activation. Start a flow that waits from a command or an event, not from `onMount`, until then.
 
--- What a task's coroutine yields once its handler returned; a waiting call yields nothing.
+-- What a task's coroutine yields once its function returned, ready for the next; a waiting call yields nothing.
 local ENDED = table.freeze({})
+
+-- This chunk runs before the VM is sandboxed, so a global it names is looked up in full at each use: the hot ones are
+-- upvalues.
+local create, resume, yield, running = coroutine.create, coroutine.resume, coroutine.yield, coroutine.running
+local clone, pack, unpack, select = table.clone, table.pack, table.unpack, select
 
 -- The most tasks a plugin may have parked at once; a waiting call past it fails.
 local PARKED = 256
@@ -48,14 +53,14 @@ local PARKED = 256
 -- The coroutines that are tasks: only they may wait.
 local tasks: { [thread]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local parked = 0
--- A handler's coroutine whose last handler returned without waiting, kept for the next one.
+-- A task's coroutine whose last function returned without waiting, kept for the next task.
 local idle: thread? = nil
 
--- A handler's coroutine: runs `f(a, b, c)`, yields `ENDED` and its first result, and runs the next handler it is
--- resumed with. Handlers take at most three arguments.
+-- A task's coroutine: runs `f(a, b, c)`, yields `ENDED` and its first result, and runs the next function it is resumed
+-- with. A task takes at most three arguments; `plugin.spawn` packs more into a closure.
 local function worker(f, a, b, c)
     while true do
-        f, a, b, c = coroutine.yield(ENDED, (f(a, b, c)))
+        f, a, b, c = yield(ENDED, (f(a, b, c)))
     end
 end
 
@@ -96,35 +101,42 @@ local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean
         end
         error(text, 0)
     end
-    if mark ~= ENDED then
-        return false, nil
+    if mark == ENDED then
+        if idle == nil then
+            idle = co
+        end
+        return true, result
     end
-    if idle == nil and coroutine.status(co) == "suspended" then
-        idle = co
-    end
-    return true, result
+    return false, nil
 end
 
--- Runs handler `f` as a task: whether it ended without waiting, and its first result.
+-- Runs `f(a, b, c)` as a task, on the idle coroutine or a new one: whether it ended without waiting, and its first
+-- result.
 local function run(f, a, b, c): (boolean, any)
     local co = idle
     idle = nil
     if co == nil then
-        co = coroutine.create(worker)
+        co = create(worker)
         tasks[co] = true
     end
-    return settle(co, coroutine.resume(co, f, a, b, c))
+    local ok, mark, result = resume(co, f, a, b, c)
+    -- Most handlers return without waiting: their worker goes back at once.
+    if ok and mark == ENDED and idle == nil then
+        idle = co
+        return true, result
+    end
+    return settle(co, ok, mark, result)
 end
 
 -- Goes on with parked task `co`, its waiting call returning `...`.
 local function wake(co: thread, ...)
     parked -= 1
-    settle(co, coroutine.resume(co, ...))
+    settle(co, resume(co, ...))
 end
 
 -- The running task, or an error naming waiting call `name` at the plugin's line `level` frames up.
 local function task(name: string, level: number): thread
-    local co = coroutine.running()
+    local co = running()
     if not tasks[co] then
         error(
             `{name} waits, and only a task can: a command's, an event's, a mount's, a layer's or a surface's handler, or plugin.spawn`,
@@ -140,17 +152,20 @@ end
 -- Parks the running task until `wake` goes on with it, and returns what `wake` was given.
 local function park(): ...any
     parked += 1
-    return coroutine.yield()
+    return yield()
 end
 
 -- Starts `f(...)` as a task of its own, from a handler, from another task or from setup. It runs until it ends or
 -- waits, then the caller goes on.
 function plugin.spawn(f: (...any) -> ...any, ...)
-    local co = coroutine.create(function(...)
-        return ENDED, (f(...))
+    if select("#", ...) <= 3 then
+        run(f, ...)
+        return
+    end
+    local args = pack(...)
+    run(function()
+        return f(unpack(args, 1, args.n))
     end)
-    tasks[co] = true
-    settle(co, coroutine.resume(co, ...))
 end
 
 -- Runs each function of `fns` as a task and waits until all ended. Each returns `value` or `nil, err`: the result is
@@ -222,7 +237,7 @@ local function tasked(raw)
     -- Shows `spec` as a dialog of `kind` and parks until it is answered (the answer) or closes without one (`nil`).
     local function ask(name: string, self, kind: string, spec): any
         local co = task(name, 4)
-        local shape: { [string]: any } = table.clone(spec)
+        local shape: { [string]: any } = clone(spec)
         shape.type = kind
         if kind ~= "alert" then
             shape.action = { type = "command", name = answer }
@@ -309,9 +324,9 @@ local function tasked(raw)
         -- The slot's input is a table the host fills again for its next call: a task that waits keeps a copy.
         onMount = acting("onMount", function(handler)
             return function(h, input, mounted)
-                local copy = table.clone(input)
+                local copy = clone(input)
                 if copy.prompt then
-                    copy.prompt = table.clone(copy.prompt)
+                    copy.prompt = clone(copy.prompt)
                 end
                 run(handler, h, copy, mounted)
             end
