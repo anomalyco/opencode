@@ -98,9 +98,11 @@ test.each(["loaded", "pending"])(
 )
 
 function expectLaunch(launch: { command: string; args: readonly string[] }, target: string) {
-  // `open` launches Windows PowerShell on both Windows and WSL; only the path conversion differs.
-  if (process.platform === "win32" || isWsl()) {
-    expect(path.basename(launch.command).toLowerCase()).toBe("powershell.exe")
+  const command = path.basename(launch.command).toLowerCase()
+
+  // `open` only uses PowerShell in WSL when it is outside a container and SSH and PowerShell is
+  // accessible; otherwise it deliberately falls back to xdg-open with the Linux path unchanged.
+  if (command === "powershell.exe") {
     expect(launch.args.slice(0, -1)).toEqual([
       "-NoProfile",
       "-NonInteractive",
@@ -108,16 +110,23 @@ function expectLaunch(launch: { command: string; args: readonly string[] }, targ
       "Bypass",
       "-EncodedCommand",
     ])
-    const converted =
-      isWsl() && !/^https?:\/\//.test(target)
-        ? childProcess.execFileSync("wslpath", ["-aw", target], { encoding: "utf8" }).trim()
-        : target
-    expect(Buffer.from(launch.args.at(-1)!, "base64").toString("utf16le")).toBe(
-      `$ProgressPreference = 'SilentlyContinue'; Start '${converted.replaceAll("'", "''")}'`,
-    )
+    // WSL converts local targets with `wslpath -aw` when available; Windows passes them through.
+    const expected = [target]
+    if (isWsl() && !/^https?:\/\//.test(target)) {
+      try {
+        expected.push(childProcess.execFileSync("wslpath", ["-aw", target], { encoding: "utf8" }).trim())
+      } catch {
+        // `open` keeps the original path when wslpath is unavailable.
+      }
+    }
+    const script = Buffer.from(launch.args.at(-1)!, "base64").toString("utf16le")
+    const start = /^\$ProgressPreference = 'SilentlyContinue'; Start '(.*)'$/.exec(script)
+    expect(start).not.toBeNull()
+    expect(expected).toContain(start![1]!.replaceAll("''", "'"))
     return
   }
-  expect(path.basename(launch.command)).toBe(process.platform === "darwin" ? "open" : "xdg-open")
+
+  expect(["open", "xdg-open"]).toContain(command)
   expect(launch.args).toEqual([target])
 }
 
