@@ -28,13 +28,18 @@ describe("buildHomeSessionRecords", () => {
   })
 
   test("filters sessions when a project is selected", () => {
+    const below = session("sub", "/repo/a/packages/cli", "project-a")
+    const sibling = session("near", "/repo/ab", "project-b")
+
     const records = buildHomeSessionRecords({
-      sessions: () => sessions,
+      sessions: () => [...sessions, below, sibling],
       projectDirectories: () => ["/repo/a"],
       projects: () => [opened],
     })
 
-    expect(records.map((record) => record.session.id)).toEqual(["a"])
+    // A session created below the worktree (opencode run in a subdirectory) belongs to the selected project; a
+    // directory that only shares its prefix does not.
+    expect(records.map((record) => record.session.id)).toEqual(["a", "sub"])
   })
 
   test("labels a worktree session with its project before that project's inventory has loaded", () => {

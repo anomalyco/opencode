@@ -3,7 +3,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
-import { getFilename } from "@opencode/util/path"
+import { containsDirectory, getFilename } from "@opencode/util/path"
 
 export type HomeSessionRecord = {
   session: SessionInfo
@@ -21,11 +21,12 @@ export function buildHomeSessionRecords(input: {
   projects: () => LocalProject[]
   resolveProject?: (session: SessionInfo) => LocalProject | undefined
 }) {
-  const selected = input.projectDirectories()
-  const directories = selected ? new Set(selected.map(pathKey)) : undefined
+  const roots = input.projectDirectories()
 
-  const sessions = directories
-    ? input.sessions().filter((session) => directories.has(pathKey(session.location.directory)))
+  // The server files a session created below a worktree root (opencode run inside packages/cli) under that root's
+  // project, so the selection keeps them instead of matching the session's directory exactly.
+  const sessions = roots
+    ? input.sessions().filter((session) => roots.some((root) => containsDirectory(root, session.location.directory)))
     : input.sessions()
 
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
