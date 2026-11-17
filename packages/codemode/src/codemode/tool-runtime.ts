@@ -810,7 +810,10 @@ export const globals = <R>(
           return searchAlias as Host.Fn<R>
         }
         const found = resolve(root, path, prepared.searchIndex)
-        return found instanceof HostFailure ? found : toolFunction(segments.join("."), found)
+        // Tools are async, so a call to a missing one rejects its promise rather than throwing at the call.
+        return found instanceof HostFailure
+          ? Host.fn(() => Effect.fail(found), { type: "async" })
+          : toolFunction(segments.join("."), found)
       },
     }),
     search: search as Host.Fn<R>,
