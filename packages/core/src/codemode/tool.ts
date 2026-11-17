@@ -16,10 +16,12 @@ import { CallID } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -74,24 +76,29 @@ export type Inventory = {
 }
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
-const description = [
-  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-  'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-  "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-  "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-].join("\n")
+const description = (path: boolean) =>
+  [
+    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+    path
+      ? "`fetch` is available for HTTP requests, and Node's `path` (also importable as `node:path`), whose `resolve` starts from the session directory. Other imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
+      : "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+    "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+    'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
+    "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
+    "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  ].join("\n")
 
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
+  /** The session's Location, which turns on the experimental `path` global. */
+  location?: Location.Interface,
 ) => {
   return {
     name: "execute",
-    description,
+    description: description(location !== undefined),
     input: CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
@@ -122,9 +129,10 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory)
-          .execute(code)
-          .pipe(
+        const program = location
+          ? pathRuntime(inventory).execute(code).pipe(Effect.provideService(Location.Service, location))
+          : runtime(inventory).execute(code)
+        const result = yield* program.pipe(
             Effect.provideService(Run, {
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
@@ -278,17 +286,35 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
 const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+const pathRuntimes = new WeakMap<
+  Inventory,
+  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | Location.Service>
+>()
 
-function runtime(inventory: Inventory) {
-  const cached = runtimes.get(inventory)
-  if (cached) return cached
-  const tools = inventoryTools(inventory)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
-    tools,
-    extensions: [CodeModeFetch.extension],
-    hooks: runHooks,
-  })
-  runtimes.set(inventory, created)
+const runtime = (inventory: Inventory) =>
+  cached(runtimes, inventory, (tools) =>
+    CodeMode.make<typeof tools, [typeof CodeModeFetch.extension]>({
+      tools,
+      extensions: [CodeModeFetch.extension],
+      hooks: runHooks,
+    }),
+  )
+
+// The runtime with the experimental `path` global.
+const pathRuntime = (inventory: Inventory) =>
+  cached(pathRuntimes, inventory, (tools) =>
+    CodeMode.make<typeof tools, [typeof CodeModeFetch.extension, typeof CodeModePath.extension]>({
+      tools,
+      extensions: [CodeModeFetch.extension, CodeModePath.extension],
+      hooks: runHooks,
+    }),
+  )
+
+function cached<T>(cache: WeakMap<Inventory, T>, inventory: Inventory, make: (tools: Tools) => T) {
+  const found = cache.get(inventory)
+  if (found) return found
+  const created = make(inventoryTools(inventory))
+  cache.set(inventory, created)
   return created
 }
 
