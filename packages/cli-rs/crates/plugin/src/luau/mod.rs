@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hasher};
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use vm::MEMORY;
 
@@ -59,9 +60,18 @@ pub fn approves(artifact: &Artifact) -> bool {
     artifact.sha256.starts_with(TAG)
 }
 
-/// Whether `OPENCODE_PLUGIN_LUAU=1` turns Luau plugins on.
+/// Turned on by [`enable`].
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Turns Luau plugins on for the rest of the process, as `OPENCODE_PLUGIN_LUAU=1` does: for a test, which cannot set
+/// the environment while other threads read it. A loader made before it keeps what it found.
+pub fn enable() {
+    ENABLED.store(true, Ordering::Relaxed);
+}
+
+/// Whether `OPENCODE_PLUGIN_LUAU=1`, or [`enable`], turns Luau plugins on.
 pub fn enabled() -> bool {
-    std::env::var(FLAG).as_deref() == Ok("1")
+    ENABLED.load(Ordering::Relaxed) || std::env::var(FLAG).as_deref() == Ok("1")
 }
 
 /// Whether `dir` is a Luau plugin: it holds a `plugin.toml`.
