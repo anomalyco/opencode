@@ -541,7 +541,16 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const content: OpenAIChatTextContent[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
+  let droppedProviderExecuted = false
   for (const part of message.content) {
+    // A provider-executed tool call keeps its result inside the assistant message, and the Chat
+    // wire format has no way to replay that pair: emitting the call without a matching tool
+    // message is invalid too. Dropping both keeps a session usable after switching a provider
+    // that executed tools server-side to this route.
+    if ((part.type === "tool-call" || part.type === "tool-result") && part.providerExecuted === true) {
+      droppedProviderExecuted = true
+      continue
+    }
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
@@ -557,6 +566,10 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
       continue
     }
   }
+  // A turn that only held hosted tool parts has nothing left to replay; an empty assistant
+  // message with neither content nor tool calls is not worth sending.
+  if (droppedProviderExecuted && content.length === 0 && reasoning.length === 0 && toolCalls.length === 0)
+    return undefined
   const text = reasoning.map((part) => part.text).join("")
   const details = reasoningDetails(reasoning, options.providerMetadataKey)
   const observedField = reasoning
@@ -636,6 +649,7 @@ const lowerMessage = Effect.fnUntraced(function* (
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
   const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)
+  if (lowered === undefined) return []
   return [options.assistant?.(message, lowered) ?? lowered]
 })
 

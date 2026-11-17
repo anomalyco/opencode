@@ -10,6 +10,7 @@ import {
   Media,
   Message,
   ToolCallPart,
+  ToolResultPart,
   ToolDefinition,
   Usage,
 } from "../../src/effect.js"
@@ -587,6 +588,66 @@ describe("OpenAI Chat route", () => {
         stream_options: { include_usage: true },
         store: false,
       })
+    }),
+  )
+
+  it.effect("drops provider-executed tool calls and results from assistant history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          id: "req_provider_executed",
+          model,
+          messages: [
+            Message.user("Search for the release notes."),
+            Message.assistant([
+              { type: "text", text: "Found them." },
+              ToolCallPart.make({
+                id: "srv_1",
+                name: "web_search",
+                input: { query: "release" },
+                providerExecuted: true,
+              }),
+              ToolResultPart.make({ id: "srv_1", name: "web_search", result: "notes", providerExecuted: true }),
+            ]),
+            Message.user("Summarize."),
+          ],
+        }),
+      )
+
+      const messages = (prepared.body as { messages: ReadonlyArray<Record<string, unknown>> }).messages
+      expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+      expect(messages[1]).toEqual({ role: "assistant", content: "Found them." })
+      expect(JSON.stringify(messages)).not.toContain("web_search")
+    }),
+  )
+
+  it.effect("omits an assistant turn that only held provider-executed tool parts", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          id: "req_provider_executed_only",
+          model,
+          messages: [
+            Message.user("Search for the release notes."),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "srv_1",
+                name: "web_search",
+                input: { query: "release" },
+                providerExecuted: true,
+              }),
+              ToolResultPart.make({ id: "srv_1", name: "web_search", result: "notes", providerExecuted: true }),
+            ]),
+            Message.user("Summarize."),
+          ],
+        }),
+      )
+
+      const messages = (prepared.body as { messages: ReadonlyArray<Record<string, unknown>> }).messages
+      expect(messages).toEqual([
+        { role: "user", content: "Search for the release notes." },
+        { role: "user", content: "Summarize." },
+      ])
     }),
   )
 
