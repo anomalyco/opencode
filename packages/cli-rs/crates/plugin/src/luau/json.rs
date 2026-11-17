@@ -78,7 +78,12 @@ impl Walk {
     }
 
     fn count(&mut self) -> Result<(), Refused> {
-        self.values += 1;
+        self.charge(1)
+    }
+
+    /// Counts `parts` more parts.
+    fn charge(&mut self, parts: u64) -> Result<(), Refused> {
+        self.values += parts;
         if self.values > self.most_values {
             return Err(Refused::Bound(format!("it holds more than {} parts", self.most_values)));
         }
@@ -153,7 +158,10 @@ impl Walk {
                 return Err(Refused::Bound("its tables nest too deep for the VM's stack".to_owned()));
             }
             let length = usize::try_from(ffi::lua_objlen_(state, index)).unwrap_or(0);
-            let mut items: Vec<serde_json::Value> = Vec::with_capacity(length);
+            // The length is the table's border, which a table of one item can put anywhere: no more room than the parts
+            // the value may still hold.
+            let left = usize::try_from(self.most_values.saturating_sub(self.values)).unwrap_or(usize::MAX);
+            let mut items: Vec<serde_json::Value> = Vec::with_capacity(length.min(left));
             let mut fields = Map::new();
             let mut array = true;
             let mut iter = 0;
@@ -199,7 +207,11 @@ impl Walk {
                 index.filter(|index| *array && index.fract() == 0.0 && *index >= 1.0 && *index <= length as f64)
             {
                 let slot = slot as usize - 1;
-                if items.len() <= slot {
+                // The `null`s an item past the end leaves before it are parts, counted before they are made. Luau walks
+                // a sequence's keys in order, so no later item takes the place of one; one that did would be counted
+                // twice, refused early rather than late.
+                if let Some(gap) = slot.checked_sub(items.len()) {
+                    self.charge(gap as u64)?;
                     items.resize(slot + 1, serde_json::Value::Null);
                 }
                 items[slot] = value;
