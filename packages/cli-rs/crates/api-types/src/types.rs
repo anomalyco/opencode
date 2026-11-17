@@ -13027,6 +13027,7 @@ pub enum JobKind {
     Shell,
     Subagent,
     Image,
+    Codemode,
     Unknown(String),
 }
 
@@ -13036,6 +13037,7 @@ impl JobKind {
             Self::Shell => "shell",
             Self::Subagent => "subagent",
             Self::Image => "image",
+            Self::Codemode => "codemode",
             Self::Unknown(value) => value,
         }
     }
@@ -13047,6 +13049,7 @@ impl From<&str> for JobKind {
             "shell" => Self::Shell,
             "subagent" => Self::Subagent,
             "image" => Self::Image,
+            "codemode" => Self::Codemode,
             _ => Self::Unknown(value.to_owned()),
         }
     }
@@ -13174,6 +13177,18 @@ pub struct JobImage {
     pub model: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobCodeMode {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+}
+
 /// `Job.Info`, tagged by `kind`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -13181,6 +13196,7 @@ pub enum JobInfo {
     Shell(JobShell),
     Subagent(JobSubagent),
     Image(JobImage),
+    Codemode(JobCodeMode),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
@@ -13197,6 +13213,7 @@ impl JobInfo {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("subagent") => raw.variant().map(Self::Subagent),
             Some("image") => raw.variant().map(Self::Image),
+            Some("codemode") => raw.variant().map(Self::Codemode),
             _ => raw.unknown().map(Self::Unknown),
         }
     }
@@ -13209,6 +13226,7 @@ impl JobInfo {
             Self::Shell(value) => value.kind.as_str(),
             Self::Subagent(value) => value.kind.as_str(),
             Self::Image(value) => value.kind.as_str(),
+            Self::Codemode(value) => value.kind.as_str(),
             Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
@@ -13219,6 +13237,7 @@ impl JobInfo {
             Self::Shell(value) => value.id.as_str(),
             Self::Subagent(value) => value.id.as_str(),
             Self::Image(value) => value.id.as_str(),
+            Self::Codemode(value) => value.id.as_str(),
             Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
@@ -13229,6 +13248,7 @@ impl JobInfo {
             Self::Shell(value) => value.session_id.as_str(),
             Self::Subagent(value) => value.session_id.as_str(),
             Self::Image(value) => value.session_id.as_str(),
+            Self::Codemode(value) => value.session_id.as_str(),
             Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
     }
@@ -13239,6 +13259,7 @@ impl JobInfo {
             Self::Shell(value) => Some(&value.status),
             Self::Subagent(value) => Some(&value.status),
             Self::Image(value) => Some(&value.status),
+            Self::Codemode(value) => Some(&value.status),
             Self::Unknown(_) => None,
         }
     }
@@ -13249,6 +13270,7 @@ impl JobInfo {
             Self::Shell(value) => value.title.as_deref(),
             Self::Subagent(value) => value.title.as_deref(),
             Self::Image(value) => value.title.as_deref(),
+            Self::Codemode(value) => value.title.as_deref(),
             Self::Unknown(_) => None,
         }
     }
@@ -13259,6 +13281,7 @@ impl JobInfo {
             Self::Shell(value) => Some(&value.time),
             Self::Subagent(value) => Some(&value.time),
             Self::Image(value) => Some(&value.time),
+            Self::Codemode(value) => Some(&value.time),
             Self::Unknown(_) => None,
         }
     }
@@ -13269,6 +13292,7 @@ impl JobInfo {
             Self::Shell(value) => value.time.started,
             Self::Subagent(value) => value.time.started,
             Self::Image(value) => value.time.started,
+            Self::Codemode(value) => value.time.started,
             Self::Unknown(value) => {
                 value.pointer("/time/started").and_then(serde_json::Value::as_f64).unwrap_or_default()
             }
@@ -13281,6 +13305,7 @@ impl JobInfo {
             Self::Shell(value) => value.time.completed,
             Self::Subagent(value) => value.time.completed,
             Self::Image(value) => value.time.completed,
+            Self::Codemode(value) => value.time.completed,
             Self::Unknown(_) => None,
         }
     }
