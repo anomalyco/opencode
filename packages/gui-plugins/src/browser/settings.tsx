@@ -1,7 +1,8 @@
-import { createMemo, createSignal, For, Show, untrack, type JSX } from "solid-js"
+import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
-import { choiceLabel, choiceValue, Glyph, profileChoices } from "./choices"
+import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
+import { SiteChooser } from "./site-chooser"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
@@ -49,6 +50,14 @@ export default function BrowserSettings() {
 
     if (file) jobs.start({ type: "import-file", path: file })
   }
+
+  // The dialog's import is one of this page's jobs, whose row says how it ended, so the dialog goes with the page.
+  const owner = getOwner()
+
+  const chooseSites = (choice: Choice) =>
+    runWithOwner(owner, () =>
+      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+    )
 
   const addExtension = () =>
     ctx.dialogs.open((dialog) => <AddExtension sources={jobs.sources()} close={() => dialog.close()} />)
@@ -125,22 +134,28 @@ export default function BrowserSettings() {
                   fallback="outline-globe"
                   name={choice.source.name}
                   detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
+                  keep
                   message={
                     jobs.importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
                 />
               }
             >
-              <ui.Button
-                size="small"
-                disabled={blocked() || unsaved()}
-                busy={jobs.importing(choice)}
-                onClick={() =>
-                  jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
-                }
-              >
-                {ctx.t("settings.import.action")}
-              </ui.Button>
+              <div class="flex items-center gap-2">
+                <ui.Button size="small" variant="ghost-muted" disabled={blocked() || unsaved()} onClick={() => chooseSites(choice)}>
+                  {ctx.t("settings.import.choose")}
+                </ui.Button>
+                <ui.Button
+                  size="small"
+                  disabled={blocked() || unsaved()}
+                  busy={jobs.importing(choice)}
+                  onClick={() =>
+                    jobs.start({ type: "import-browser", source: choice.source.id, profile: choice.profile.id })
+                  }
+                >
+                  {ctx.t("settings.import.action")}
+                </ui.Button>
+              </div>
             </ui.SettingsRow>
           )}
         </For>
@@ -658,8 +673,18 @@ function InstallReview(props: {
   )
 }
 
-/** A row's subject: its icon, its name, and under it a detail or what the last action on it did. */
-function Identity(props: { image?: string; fallback: IconName; name: string; detail?: string; message?: JobMessage }) {
+/**
+ * A row's subject: its icon, its name, and under it a detail or what the last action on it did; with `keep`, the
+ * detail stays before the message, so rows of one browser still say which profile each is.
+ */
+function Identity(props: {
+  image?: string
+  fallback: IconName
+  name: string
+  detail?: string
+  keep?: boolean
+  message?: JobMessage
+}) {
   return (
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
@@ -667,12 +692,14 @@ function Identity(props: { image?: string; fallback: IconName; name: string; det
         <span class="truncate">{props.name}</span>
         <Show when={props.message} fallback={<Show when={props.detail}>{(detail) => <Muted>{detail()}</Muted>}</Show>}>
           {(message) => (
-            <span
-              role={message().error ? "alert" : "status"}
-              class="text-[13px] font-[440] leading-[var(--line-height-base)]"
-              classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
-            >
-              {message().text}
+            <span class="text-[13px] font-[440] leading-[var(--line-height-base)]">
+              <Show when={props.keep && props.detail}>{(detail) => <span class="text-v2-text-text-muted">{detail()} · </span>}</Show>
+              <span
+                role={message().error ? "alert" : "status"}
+                classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}
+              >
+                {message().text}
+              </span>
             </span>
           )}
         </Show>

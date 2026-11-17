@@ -19,6 +19,8 @@ import { CodedError, missingArtifact } from "./errors"
 import { createBrowserFiles } from "./files"
 import { guardFileChoosers } from "./file-choosers"
 import { guardMediaRequests } from "./media-gate"
+import { afterRefusal, agentPasskeyRefusal, guardWebAuthn } from "./webauthn-gate"
+import { cookieSite } from "./profile/sites"
 import { createDiagnostics } from "./diagnostics"
 import { loadIcon } from "./icon"
 import { agentKeyRefusal, hardwareInput, pageLetter, pageReload, pageShortcut, type PageShortcut } from "./keys"
@@ -270,6 +272,13 @@ export function createBrowserPage(
     previewFailure?: (url: string) => typeof FileVerificationError.code | undefined
     artifacts?: ReturnType<typeof artifactPages>
     remote?: Extract<WorkspaceSource, { type: "remote" }>
+    /**
+     * The tab's pop-up group must refuse passkeys too: the agent drives this tab, and a page of the group can script
+     * another through `window.opener` or the window it opened. Windows only.
+     */
+    restrictPasskeys?: () => void
+    /** The tab's pop-up group refuses passkeys already, so this tab does from its first document. */
+    passkeysRestricted?: () => boolean
     /** The server runs on this machine, so its loopback addresses are this machine's and the system browser reaches them. */
     local: boolean
     signal: AbortSignal
@@ -495,7 +504,7 @@ export function createBrowserPage(
   // Set the nested auto-attach policy before the new renderer can create its own children.
   const prepareFrame = async (sessionID: string) => {
     try {
-      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID)])
+      await Promise.all([attachFrames(sessionID), choosers.attach(sessionID), media.attach(sessionID), passkeys.attach(sessionID)])
       await cdp.send("Runtime.runIfWaitingForDebugger", {}, sessionID)
     } catch {
       // A detached target needs no resumption. A live one must not run unguarded or remain invisibly paused.
@@ -651,6 +660,49 @@ export function createBrowserPage(
 
   // A page's getUserMedia waits for the pane before Blink opens a device, so macOS asks only after the user's Allow.
   const media = guardMediaRequests(cdp, (ask) => prompts.gate(ask))
+  // A site's passkey or security-key request fails where nothing here could answer it: always on macOS and Linux, and on
+  // Windows, whose own dialog would answer, in tabs the agent drives or could script. Once per page, the notice says
+  // why and a running agent command stops with the reason.
+  const native = process.platform === "win32"
+  const passkeyPage = { noticed: false, interrupted: false }
+
+  const passkeys = guardWebAuthn(cdp, {
+    native,
+    refused: (asker) => {
+      // Another site's frame does not speak for the page: its request is refused without a word.
+      if (!asker.mainFrame && (!asker.origin || asker.origin !== contents.mainFrame.origin)) return
+      const address = URL.parse(displayURL(contents.getURL()))
+
+      if (activity.agentRuns > 0 && !passkeyPage.interrupted) {
+        passkeyPage.interrupted = true
+        prompts.interruptAgent(new CodedError(Browser.FailureCode.signInRequired, agentPasskeyRefusal(address?.host)))
+      }
+
+      if (passkeyPage.noticed) return
+      passkeyPage.noticed = true
+      const site = address?.hostname ? cookieSite(address.hostname) : undefined
+      // On Windows only an enforced tab refuses, and a new tab of the person's would reach the system's dialog.
+      const reason = native ? "browser.passkey.off" : agentDriven(activity) ? "browser.passkey.agent" : "browser.passkey"
+      notices.show(site && site.length <= 255 ? { reason, site } : { reason })
+    },
+  })
+
+  // A page that can never reach the system's dialog, or one the agent drove or could script, refuses in the browser
+  // process before its first document loads. On Windows a failure to do so, whenever it happens, leaves it with the
+  // system's dialog, so the tab fails.
+  const restrictPasskeys = () => {
+    if (native) options.restrictPasskeys?.()
+
+    const enforcing = passkeys.enforce()
+
+    if (native) void enforcing.catch(() => options.fail())
+
+    return enforcing
+  }
+
+  if (!native || agentDriven(options.activity) || options.passkeysRestricted?.())
+    void restrictPasskeys().catch(() => undefined)
+
   constructing.defer(() => prompts.dispose())
   constructing.defer(() => dialogs.dispose())
 
@@ -683,6 +735,8 @@ export function createBrowserPage(
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
     notices.clear()
+    passkeyPage.noticed = false
+    passkeyPage.interrupted = false
     popupReport = undefined
 
     rendering.committed()
@@ -1126,6 +1180,7 @@ export function createBrowserPage(
     diagnostics.enable(),
     choosers.attach(),
     media.attach(),
+    passkeys.attach(),
     cdp.send("Page.enable"),
     cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: RESTORE_PROMPT, runImmediately: true }),
     cdp.send("DOM.enable"),
@@ -1145,6 +1200,8 @@ export function createBrowserPage(
     answerNotice: notices.answer,
     personCommand,
     openPage,
+    /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
+    restrictPasskeys,
     ready,
     /** The host embed the renderer lays this page out with. */
     embed: embed.id,
@@ -1265,7 +1322,9 @@ export function createBrowserPage(
         if (command.action.type === "dialog") void intercepting.catch(() => undefined)
 
         return await Promise.race([
-          (command.action.type === "dialog" ? Promise.resolve() : intercepting).then(() => {
+          // The agent drives the tab from here on: refuse passkeys in the browser process before its action runs. The
+          // refusal is the browser process's own command, which an open dialog does not block.
+          afterRefusal(origin === "agent" ? restrictPasskeys : undefined, command.action.type === "dialog" ? Promise.resolve() : intercepting, () => {
             abortError(run.controller.signal)
 
             return perform(command, run.controller.signal, origin, saved)
@@ -1295,6 +1354,7 @@ export function createBrowserPage(
       menu.dispose()
       choosers.dispose()
       media.dispose()
+      passkeys.dispose()
       options.artifacts?.dispose()
       options.workspace?.dispose()
       dispatchDialog({ type: "disposed" })

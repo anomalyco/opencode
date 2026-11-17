@@ -4,7 +4,14 @@ import type { BuiltinMainStorage, MainStoreFrom } from "@opencode/plugin/gui/bui
 import type { TabActivity } from "./policy"
 
 const Stored = Schema.Struct({
-  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url, control: Schema.optionalKey(Schema.Literals(["agent", "reclaimed"])), agent: Schema.optionalKey(Schema.String) })),
+  // Who drove the tab, which keeps every agent-driven limit when it comes back: `control` says whether the person took
+  // it over since, `agent` names the agent. `agent: true` is the earlier form of an agent-driven tab.
+  tabs: Schema.Array(Schema.Struct({
+    id: Browser.TabID,
+    url: Browser.Tab.fields.url,
+    control: Schema.optionalKey(Schema.Literals(["agent", "reclaimed"])),
+    agent: Schema.optionalKey(Schema.Union([Schema.Literal(true), Schema.String])),
+  })),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
 
@@ -14,6 +21,20 @@ type Stored = typeof Stored.Type
 type SavedTab = { -readonly [Key in keyof Stored["tabs"][number]]: Stored["tabs"][number][Key] }
 
 const empty: Stored = { tabs: [], focusedTabID: null }
+
+/**
+ * What the pane seeds its tabs' activity with from a saved state: a tab the agent drove stays agent-driven for good,
+ * and stays the agent's until the person takes it over, though no command runs in it now.
+ */
+export function restoredActivity(saved: Stored) {
+  return new Map<Browser.TabID, TabActivity>(
+    saved.tabs.flatMap((tab) =>
+      tab.control || tab.agent
+        ? [[tab.id, { agentRuns: 0, control: tab.control ?? "agent", agent: typeof tab.agent === "string" ? tab.agent : undefined }]]
+        : [],
+    ),
+  )
+}
 
 /** Tab URLs and focus per `${server}\n${session}`, imported once from the desktop's own `opencode.browser.dat` rows. */
 export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
@@ -34,16 +55,16 @@ export function createBrowserRestoreStore(storage: BuiltinMainStorage) {
 
   return {
     load: (key: string) => store(key).value,
-    save(key: string, state: Stored, activity: ReadonlyMap<Browser.TabID, TabActivity>) {
+    save(key: string, state: Stored, provenance: (tabID: Browser.TabID) => TabActivity | undefined) {
       const target = store(key)
 
       const tabs = state.tabs.map((tab) => {
-        const provenance = activity.get(tab.id)
+        const driven = provenance(tab.id)
         const saved: SavedTab = { id: tab.id, url: tab.url }
 
-        if (provenance?.control) saved.control = provenance.control
+        if (driven?.control) saved.control = driven.control
 
-        if (provenance?.agent) saved.agent = provenance.agent
+        if (driven?.agent) saved.agent = driven.agent
 
         return saved
       })

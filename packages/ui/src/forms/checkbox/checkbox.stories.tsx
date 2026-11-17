@@ -96,6 +96,9 @@ export const Compact = {
       <Checkbox appearance="compact" surface="layer-1">
         Layer 1
       </Checkbox>
+      <Checkbox appearance="compact" surface="layer-1" defaultChecked>
+        Layer 1, checked
+      </Checkbox>
     </div>
   ),
 }

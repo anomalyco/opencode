@@ -8,6 +8,11 @@ export interface CheckboxProps extends ParentProps<ComponentProps<typeof Root>> 
   appearance?: "standard" | "compact"
   /** Background of the compact control. */
   surface?: "base" | "layer-1"
+  /**
+   * The compact control only shows a state its row owns, as an option of a multi-select listbox does: it takes no
+   * focus, no pointer and no accessible role, and the row toggles it.
+   */
+  presentation?: boolean
   hideLabel?: boolean
   description?: JSX.Element
   icon?: JSX.Element
@@ -20,6 +25,7 @@ export function Checkbox(props: CheckboxProps) {
     "label",
     "appearance",
     "surface",
+    "presentation",
     "hideLabel",
     "description",
     "icon",
@@ -28,9 +34,16 @@ export function Checkbox(props: CheckboxProps) {
   return (
     <Switch>
       <Match when={local.appearance === "compact"}>
-        <Root {...others} class={local.class} data-slot="checkbox-v2" data-surface={local.surface ?? "base"}>
+        <Root
+          {...others}
+          readOnly={local.presentation || others.readOnly}
+          aria-hidden={local.presentation ? "true" : undefined}
+          class={local.class}
+          data-slot="checkbox-v2"
+          data-surface={local.surface ?? "base"}
+        >
           <div data-slot="checkbox-v2-row">
-            <Input data-slot="checkbox-v2-input" />
+            <Input data-slot="checkbox-v2-input" tabIndex={local.presentation ? -1 : undefined} />
             <div data-slot="checkbox-v2-control-stack">
               <Control data-slot="checkbox-v2-control">
                 <Indicator data-slot="checkbox-v2-indicator">

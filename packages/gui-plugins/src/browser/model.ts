@@ -693,17 +693,30 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
+      // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
+      // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
+      if (notice.reason === "browser.passkey.off")
+        return { token: notice.token, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+
+      if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
+        return {
+          token: notice.token,
+          text: ctx.t("refused.passkey"),
+          label: ctx.t("refused.passkey.import"),
+          passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
+        }
+
       return { token: notice.token, text: describe(notice.reason) }
     },
     async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
-      const token = state.chrome[session.key]?.[tabID]?.notice?.token
+      const notice = state.chrome[session.key]?.[tabID]?.notice
 
-      if (!token) return
+      if (!notice) return
       setState("chrome", session.key, tabID, "notice", undefined)
       const target = registration(session)
 
       if (!target) throw new Error("browser.pane.unavailable")
-      await target.notice(tabID, token, dismiss)
+      await target.notice(tabID, notice.token, dismiss)
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,

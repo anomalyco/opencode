@@ -19,6 +19,9 @@ import {
 
 type Client = IpcClient<(typeof BrowserProfile)["spec"]>
 
+/** One surface's jobs, as `createProfileJobs` returns them; a dialog the surface opens may run its jobs there. */
+export type ProfileJobs = ReturnType<typeof createProfileJobs>
+
 /**
  * What a surface says about a finished job, and whether it is bad news. An install that added an extension which only
  * partly works here, or added nothing because it will not work here, says what will not work.
@@ -255,6 +258,9 @@ export function createProfileJobs(
     remoteSignIns: () => client()?.state()?.remoteSignIns,
     /** The switch shows main's state, so a call that fails leaves it where it was. */
     shareSignIns: (enabled: boolean) => void client()?.shareSignIns({ enabled }, { signal: ctx.signal }).catch(() => undefined),
+    /** The sites one browser profile has cookies for, without any cookie's name or value. Rejects while main is away. */
+    sites: (source: string, profile: string, signal: AbortSignal) =>
+      client()?.sites({ source, profile }, { signal }) ?? Promise.reject(new Error("browser.profile.unavailable")),
     /** The extensions one Chromium profile has installed. */
     browserExtensions: (source: string, profile: string, signal: AbortSignal) =>
       client()?.browserExtensions({ source, profile }, { signal }) ?? Promise.resolve([]),
@@ -269,7 +275,7 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
     case "import-browser":
       return {
         type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile }, { signal }),
+        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites }, { signal }),
       }
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }

@@ -178,6 +178,23 @@ export const InstallResult = Schema.Union([
 
 export type InstallResult = typeof InstallResult.Type
 
+/** A site of another browser's profile: its registrable domain, or its IP address, and how many cookies would import. */
+export const ProfileSite = Schema.Struct({ site: text(255), cookies: Count })
+
+export type ProfileSite = typeof ProfileSite.Type
+
+/**
+ * The sites a browser profile has cookies for, read without any cookie's name or value: the ones used most recently
+ * first (`order: "recent"`), or by name where the browser records no last use (`"name"`, Safari). `failed` says why
+ * there is no list, with the reasons of `ImportResult`.
+ */
+export const SiteList = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("listed"), sites: Schema.Array(ProfileSite), order: Schema.Literals(["recent", "name"]) }),
+  Schema.Struct({ type: Schema.Literal("failed"), reason: Schema.Literals(["access", "locked", "read"]) }),
+])
+
+export type SiteList = typeof SiteList.Type
+
 const SourceProfile = { source: text(64), profile: text(4096) }
 
 /**
@@ -194,7 +211,16 @@ export const BrowserProfile = Ipc.define({
   }),
   methods: {
     sources: { output: Schema.Array(ProfileSource) },
-    importBrowser: { input: Schema.Struct(SourceProfile), output: ImportResult },
+    /** The sites a browser profile has cookies for; see `SiteList`. Only the window's import dialog asks. */
+    sites: { input: Schema.Struct(SourceProfile), output: SiteList },
+    /**
+     * Imports a browser profile's cookies: all of them, or with `sites` only those of the sites `sites` returned that
+     * the user chose. Cookies already in the profile stay, so a later import adds more sites.
+     */
+    importBrowser: {
+      input: Schema.Struct({ ...SourceProfile, sites: Schema.optional(Schema.Array(text(255)).check(Schema.isMaxLength(100_000))) }),
+      output: ImportResult,
+    },
     /** A Netscape `cookies.txt`, a JSON cookie export or a Playwright storage state. */
     importFile: { input: Schema.Struct({ path: text(4096) }), output: ImportResult },
     /**

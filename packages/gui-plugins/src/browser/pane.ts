@@ -38,7 +38,8 @@ import {
   type PaneMachineEvent,
   type PaneState,
 } from "./pane-machine"
-import { createBrowserRestoreStore } from "./restore"
+import { createBrowserRestoreStore, restoredActivity } from "./restore"
+import { createPasskeyGroups } from "./passkey-groups"
 import { guardSession } from "./session-guard"
 import { extensionResource } from "./profile/extension-api/resource"
 import type { SitePermissions } from "./site-permissions"
@@ -75,10 +76,16 @@ type Handle = {
   sendState?: (state: Browser.State) => void
   /** Pages by attempt. */
   pages: Map<number, BrowserPage>
-  /** Survives unloading the page, but not closing its tab or releasing the binding. */
+  /**
+   * Survives unloading the page, but not closing its tab or releasing the binding. A tab the agent drove is saved as
+   * such, so it comes back agent-driven after a restart or a window reload.
+   */
   activity: Map<Browser.TabID, TabActivity>
   background: Set<Browser.TabID>
   pluginTabs: ReturnType<typeof pluginTabs>
+  /** Which tabs refuse passkeys together, by pop-up group; see `createPasskeyGroups`. */
+  passkeys: ReturnType<typeof createPasskeyGroups>
+  readonly storageKey: string
   /** Agent requests in flight by request ID. */
   requests: Map<string, AbortController>
 }
@@ -151,6 +158,7 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
+      const saved = restore.load(storageKey)
       // A server on this machine reaches the same network as this desktop, so its pages browse in the profile. Another
       // server's pages need its network through a proxy, which Chromium sets per partition.
       const shared = server.sameMachine
@@ -175,8 +183,6 @@ export function createBrowserPane(input: {
       scopes.set(storageKey, rights)
       owners.set(win, scopes)
 
-      const saved = restore.load(storageKey)
-
       const handle: Handle = {
         previewFailure: previews.failure,
         window,
@@ -193,8 +199,10 @@ export function createBrowserPane(input: {
           win.webContents.off("did-start-navigation", navigate)
         },
         pages: new Map(),
-        activity: new Map(saved.tabs.map(tab => [tab.id, { agentRuns: 0, control: tab.control, agent: tab.agent }])),
+        activity: restoredActivity(saved),
         ...rights,
+        passkeys: createPasskeyGroups(),
+        storageKey,
         requests: new Map(),
       }
 
@@ -564,6 +572,7 @@ export function createBrowserPane(input: {
       handles.get(binding)?.activity.delete(event.tabID)
       handles.get(binding)?.background.delete(event.tabID)
       handles.get(binding)?.pluginTabs.forget(event.tabID)
+      handles.get(binding)?.passkeys.remove(event.tabID)
     }
 
     dispatch({ type: "binding", binding, event })
@@ -578,11 +587,11 @@ export function createBrowserPane(input: {
 
   function perform(effect: PaneEffect) {
     if (effect.type === "save-restore") {
-      const handle = handles.get(effect.binding)
+      const activities = Array.from(handles.values()).flatMap((handle) => (handle.storageKey === effect.storageKey ? [handle.activity] : []))
 
-      if (handle) restore.save(effect.storageKey, effect.snapshot, handle.activity)
-
-      return
+      return restore.save(effect.storageKey, effect.snapshot, (tabID) =>
+        activities.map((activity) => activity.get(tabID)).find((tab) => !!tab && agentDriven(tab)),
+      )
     }
 
     if (effect.type === "remove-restore") return restore.remove(effect.storageKey)
@@ -726,6 +735,8 @@ export function createBrowserPane(input: {
       readonly popupOptions?: Electron.BrowserWindowConstructorOptions
       readonly activity?: TabActivity
       readonly identity?: string
+      /** The tab whose page opened this one, which joins its pop-up group. */
+      readonly opener?: Browser.TabID
     } = {},
   ) {
     const entry = selectBinding(machine.state, binding)
@@ -738,6 +749,7 @@ export function createBrowserPane(input: {
     const inherited = options.activity && agentDriven(options.activity) ? options.activity : running ? childActivity(running) : undefined
     const activity = handle.activity.get(id) ?? inherited ?? options.activity ?? { agentRuns: 0 }
     handle.activity.set(id, activity)
+    handle.passkeys.join(id, options.opener)
     const attempt = entry.nextAttempt
     const win = handle.win
     // Every callback is fenced to this page: a later page of the same tab has another attempt.
@@ -758,6 +770,15 @@ export function createBrowserPane(input: {
       id,
       activity,
       userInput: () => { if (current()) handle.pluginTabs.forget(id) },
+      passkeysRestricted: () => handle.passkeys.restricted(id),
+      // Every page of the group refuses from now on, or fails where it cannot; one created later refuses from its first
+      // document.
+      restrictPasskeys: () =>
+        handle.passkeys.restrict(id).forEach((tabID) => {
+          const attempt = selectPageAttempt(machine.state, binding, tabID)
+
+          if (attempt !== undefined) void handle.pages.get(attempt)?.restrictPasskeys().catch(() => undefined)
+        }),
       partition: handle.partition,
       network: handle.network,
       initialize: options.initialize,
@@ -836,7 +857,7 @@ export function createBrowserPane(input: {
         if (handle.shared) input.profile.extensionTabs.hidden(page.contents.id)
       },
       popup: (popupOptions, background, activity) => {
-        const popup = create(binding, { initialize: false, popupOptions, activity })
+        const popup = create(binding, { initialize: false, popupOptions, activity, opener: id })
 
         if (activityOwner(activity) === "agent") {
           announce(binding, popup.state().id, false, !background)
@@ -980,6 +1001,10 @@ export function createBrowserPane(input: {
       handle?.activity.set(id, activity)
 
       if (changed && current?.previewUsed()) dispatchBinding(binding, {type:"tab.restricted", tabID:id, url:current.state().url})
+
+      // The agent may only focus the tab, which runs no command on its page: the refusal starts now all the same, and
+      // where it cannot, the page fails.
+      void current?.restrictPasskeys().catch(() => undefined)
 
       return load(binding, id, identity)
     }
