@@ -703,12 +703,6 @@ export function selectTarget(
   return { ok: true, connectionID: connection.connectionID, tab }
 }
 
-/** Whether a desktop is attached to the session or attaching to it. */
-export function hasAttachment(state: ConnectionState, sessionID: Session.ID) {
-  const entry = state.status === "active" ? state.sessions.get(sessionID) : undefined
-  return entry !== undefined && entry.status !== "revoking"
-}
-
 // Lists the session's open tabs, bounded, so the next call can use one directly.
 function tabUnavailable(tabID: Browser.TabID, tabs: readonly Browser.Tab[]) {
   const listed = tabs

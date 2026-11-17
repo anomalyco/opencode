@@ -461,17 +461,6 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       })
       return { connectionID: connection.connectionID, site: origin, tabID: tab?.id, agent: tool.agent } satisfies Approval
     }),
-    /** Whether a desktop is attached to the session or attaching to it. */
-    attached: (sessionID: Session.ID) => Effect.sync(() => BrowserMachine.hasAttachment(machine.state, sessionID)),
-    /**
-     * Fails with `[browser.disconnected]` unless a desktop is attached to the session. A session without one has no
-     * grant, so `authorize` would answer with core's bare denial; this says why instead, and reads no tab.
-     */
-    connected: (sessionID: Session.ID) =>
-      Effect.suspend(() => {
-        const connection = BrowserMachine.selectConnection(machine.state, sessionID)
-        return connection.ok ? Effect.void : Effect.fail(connection.error)
-      }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action, approved?: Approval) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error
