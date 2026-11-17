@@ -1073,13 +1073,15 @@ impl surface::Viewer for Viewer {
             return;
         }
         let running = guest.map(|guest| guest.js.get());
+        // A mount of an activation a reload handed on ends as the reload's replacement mounts its own (CT-21).
+        let handover = running.is_none();
         let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
         if !mount.started {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
         let seq = scripts.next();
-        scripts.send(Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone() }, None);
+        scripts.send(Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover }, None);
     }
 }
 

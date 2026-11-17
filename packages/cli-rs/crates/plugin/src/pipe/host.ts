@@ -233,7 +233,7 @@ interface Surface {
   // A view that returns `undefined` has no tree yet: it views again when a snapshot comes (P8).
   view: (cx: ViewContext) => Json
   // P8: a mount of it ended.
-  unmount?: (mount: Json) => void
+  unmount?: (mount: Json, handover?: boolean) => void
 }
 
 interface ViewContext {
@@ -526,7 +526,7 @@ function context(plugin: Plugin) {
         on?: (event: Json) => unknown
         layers?: Json[]
         mounts?: boolean
-        unmount?: (mount: Json) => void
+        unmount?: (mount: Json, handover?: boolean) => void
       },
     ) {
       plugin.surfaces.push({
@@ -1038,7 +1038,8 @@ async function handle(message: Json) {
     case "unmount": {
       const mount = plugin?.mounts.get(mountKey(message.mount))
       plugin?.mounts.delete(mountKey(message.mount))
-      if (plugin && mount) within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id))
+      // A reload's end of a mount it begins again (`handover`), which the layer may take the state of (CT-21).
+      if (plugin && mount) within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id, !!message.handover))
       return
     }
     case "adopted": {

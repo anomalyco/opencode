@@ -29,8 +29,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **A command a component registers** (`keymap.layer` in a render) runs nothing once the component ended, but the
   host lists it 250 ms longer, unless a new mount registered it again. A registration after setup (such a layer, a
   store made late, the scroll keys a dialog with a `<scrollbox>` registers) reloads the plugin's registrations: its
-  open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), but its session panel closes and the route on
-  screen mounts again. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
+  open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), but its session panel closes. Each mount the
+  reload ends and begins again keeps its components, which do not run again, as TS takes a registration without a
+  remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`); a mount begun 250 ms after
+  its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`) and
   a command's `enabled` are kept; its `priority`, `bindings` and slash `aliases` are not mapped. Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window

@@ -64,6 +64,10 @@ const STATES = ["disabled", "pressed", "focused", "selected", "hovered"]
 const FIELDS = new Set(["input", "textarea"])
 const SEQUENCES: Record<string, string> = { return: "\r", escape: "\x1b", tab: "\t", backspace: "\x7f", space: " " }
 
+// How long a mount that ended waits for the mount that begins it again after a reload of the registrations, as long
+// as the JS host keeps a command a component's end retired (`host.ts` `UNCOMMAND`).
+const REMOUNT = 250
+
 // A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
 interface Registration {
   retired: boolean
@@ -512,7 +516,8 @@ export function context(base: Base, carrier: Carrier) {
   })
 
   // Surfaces: each mount renders its claim's JSX under a Solid root; its view reads that tree.
-  const rendered = new Map<string, Mounted & { pending: number; input: Json; setInput: (input: Json) => void }>()
+  type Rendered = Mounted & { pending: number; input: Json; setInput: (input: Json) => void }
+  const rendered = new Map<string, Rendered>()
   const size = createRoot(() => createSignal({ width: 0, height: 0 }))
   // What `useTerminalDimensions` reads: the terminal's size, as the host says it.
   const screen: Screen = {
@@ -650,6 +655,17 @@ export function context(base: Base, carrier: Carrier) {
   const surface = (name: string, place: Json, input: (cx: Json) => Json, render: (input: Json) => unknown, where: string) => {
     let removed = false
     const key = (cx: Json) => `${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`
+    // The mount of a surface and key that ended last, kept for [`REMOUNT`] ms for the mount that begins it again.
+    const parked = new Map<string, { entry: Rendered; timer: ReturnType<typeof setTimeout> }>()
+    const adopt = (cx: Json) => {
+      const slot = `${cx.mount.surface}\u0000${cx.mount.key}`
+      const kept = parked.get(slot)
+      if (!kept) return undefined
+      clearTimeout(kept.timer)
+      parked.delete(slot)
+      rendered.set(key(cx), kept.entry)
+      return kept.entry
+    }
     // As TS's plugin boundary: the render shows nothing from now on, and one toast says why.
     const crashed = (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
@@ -668,7 +684,7 @@ export function context(base: Base, carrier: Carrier) {
     const draw = (cx: Json) => {
       if (cx.input.width || cx.input.height) size[1]({ width: cx.input.width, height: cx.input.height })
       missing.clear()
-      let entry = rendered.get(key(cx))
+      let entry = rendered.get(key(cx)) ?? adopt(cx)
       if (entry && entry.crashed === undefined && JSON.stringify(entry.input) !== JSON.stringify(input(cx))) {
         entry.input = input(cx)
         const before = rendering
@@ -731,11 +747,28 @@ export function context(base: Base, carrier: Carrier) {
     // context's `theme` follows `Down::Theme`. A surface that read the palette would be viewed again instead, and keep
     // its old colors, as its tree did not change.
     carrier.surface(name, place, view, {
-      unmount(mount: Json) {
+      // A mount a reload of the registrations ends (`handover`) is kept a moment: the reload begins it again in a later
+      // message, and the new mount of the same surface and key adopts it, so its components do not run again. TS takes
+      // a registration without a remount; a component that registers anew as it mounts (opencode-navigator names each
+      // binding by a count) reloaded without end (CT-21). Any other end ends its components at once.
+      unmount(mount: Json, handover?: boolean) {
         const at = `${mount.surface}\u0000${mount.key}\u0000${mount.generation}`
-        rendered.get(at)?.dispose()
+        const entry = rendered.get(at)
         rendered.delete(at)
         presses.delete(at)
+        if (!entry || entry.crashed !== undefined || !handover) return entry?.dispose()
+        const slot = `${mount.surface}\u0000${mount.key}`
+        const before = parked.get(slot)
+        if (before) {
+          clearTimeout(before.timer)
+          before.entry.dispose()
+        }
+        const timer = setTimeout(() => {
+          if (parked.get(slot)?.entry !== entry) return
+          parked.delete(slot)
+          entry.dispose()
+        }, REMOUNT)
+        parked.set(slot, { entry, timer })
       },
       on: (event: Json) => fieldEvent(name, event),
       // A route or a panel holds the focus, and a field in it: each key while it does comes to the field the plugin
