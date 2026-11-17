@@ -38,9 +38,15 @@ Keep guidance that applies everywhere in the global file. Put repository-wide gu
 
 If the workspace is outside the project root, only the global file is loaded. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project `AGENTS.md` discovery without disabling the global file.
 
-<Callout type="note">
-  OpenCode V2 recognizes `AGENTS.md` only. It does not use `CLAUDE.md` as a fallback.
-</Callout>
+### CLAUDE.md fallback
+
+In any directory without an `AGENTS.md`, OpenCode reads `CLAUDE.md` instead. Without a global
+`~/.config/opencode/AGENTS.md`, it reads `~/.claude/CLAUDE.md`. A directory's `AGENTS.md` always wins over its
+`CLAUDE.md`, so a symlink between the two loads once.
+
+Set `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1` to skip only `~/.claude/CLAUDE.md`, or `OPENCODE_DISABLE_CLAUDE_CODE=1` to
+skip every `CLAUDE.md` and `.claude` skills. The server reads both when it starts. For the background service, persist
+them with `opencode service set env` and run `opencode service restart`.
 
 ## Discovery
 

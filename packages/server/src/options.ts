@@ -40,6 +40,14 @@ export const ServerOptions = Schema.Struct({
       content: Schema.optional(Schema.String),
     }),
   ),
+  instructions: Schema.optional(
+    Schema.Struct({
+      // false skips the per-directory CLAUDE.md fallback.
+      claude: Schema.optional(Schema.Boolean),
+      // false skips the ~/.claude/CLAUDE.md fallback.
+      claudeGlobal: Schema.optional(Schema.Boolean),
+    }),
+  ),
   windows: Schema.optional(
     Schema.Struct({
       gitbash: Schema.optional(Schema.String),
