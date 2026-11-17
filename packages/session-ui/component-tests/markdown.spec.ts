@@ -184,6 +184,24 @@ story("keeps a formula inside an application link label", async ({ page }) => {
   await expect(link).toContainText("bold")
 })
 
+story("bounds author-sized math to its own line box", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: "Before $\\raisebox{-40em}{\\colorbox{red}{\\rule{60em}{30em}}}$ after.\n\nNext paragraph." })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator(".katex")).toHaveCount(1)
+  const box = await md.evaluate((root) => ({
+    widest: Math.max(...Array.from(root.querySelectorAll(".katex-html *"), (node) => node.getBoundingClientRect().width)),
+    em: parseFloat(getComputedStyle(root.querySelector(".katex")!).fontSize),
+    overflow: getComputedStyle(root.querySelector(".katex .katex-base")!).overflow,
+  }))
+  // KaTeX caps every authored size at maxSize (10em, plus the colour box's padding), and each line box clips the ink
+  // that offsets and negative margins push out.
+  expect(box.widest).toBeLessThan(box.em * 11)
+  expect(box.overflow).toBe("clip")
+})
+
 story("retains local and download link routing and bounds untrusted application metadata", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)

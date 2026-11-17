@@ -47,7 +47,7 @@ const inlineParenMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
 const blockMathRegex = /^(\${1,2})\n((?:\\[^]|[^\\])+?)\n\1(?:\n|$)/
 
 function renderMath(token: Tokens.Generic) {
-  return katex.renderToString(token.text, { throwOnError: false, displayMode: token.displayMode })
+  return katex.renderToString(token.text, { throwOnError: false, displayMode: token.displayMode, trust: false, maxSize: 10, maxExpand: 1000 })
 }
 
 function mathExtension(render: (token: Tokens.Generic) => string): MarkedExtension {
