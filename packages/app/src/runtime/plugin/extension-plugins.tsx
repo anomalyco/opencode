@@ -256,6 +256,7 @@ function PluginUpdateButton(props: { plugin: PluginInfo; updates?: ExtensionPlug
         <Button
           size="small"
           variant="ghost"
+          class="shrink-0 whitespace-nowrap"
           disabled={current().updating}
           aria-busy={current().updating}
           aria-label={language.t("settings.plugins.update.label", { name: pluginLabel(props.plugin) })}
