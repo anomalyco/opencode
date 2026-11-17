@@ -1,6 +1,7 @@
 //! Export dialogs (E.10a, rows DLG31 and DLG32): `ui/dialog-export-options.tsx` and `ui/dialog-export-result.tsx`,
 //! as they look under `new-designs`. The options pick a format (Markdown with or without thinking and tools, or
-//! JSON, sanitized or not) and an action (copy or save to a file); the result shows where the file went.
+//! JSON, sanitized or not), where a saved file goes, and an action (copy or save to a file); the result shows where
+//! the file went.
 
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout_with};
 use opencode_ui::select::{ActionRun, FooterHint, Group, SelectAction};
@@ -11,6 +12,13 @@ use crate::prelude::*;
 pub enum Format {
     Markdown,
     Json,
+}
+
+/// Where Export saves the file (#62490): the TUI's working directory or the system's temporary directory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Location {
+    Project,
+    Temp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +32,7 @@ pub enum Action {
 pub struct Choice {
     pub action: Action,
     pub format: Format,
+    pub location: Location,
     pub thinking: bool,
     pub tools: bool,
     pub sanitize: bool,
@@ -33,6 +42,7 @@ pub type OnConfirm = Rc<dyn Fn(&Tui, Choice)>;
 
 struct State {
     format: Cell<Format>,
+    location: Cell<Location>,
     thinking: Cell<bool>,
     tools: Cell<bool>,
     sanitize: Cell<bool>,
@@ -43,6 +53,7 @@ impl State {
         Choice {
             action,
             format: self.format.get(),
+            location: self.location.get(),
             thinking: self.thinking.get(),
             tools: self.tools.get(),
             sanitize: self.sanitize.get(),
@@ -53,6 +64,7 @@ impl State {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Row {
     Format,
+    Location,
     Thinking,
     Tools,
     Sanitize,
@@ -65,6 +77,7 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
     // Outside the build, so a build in a new theme keeps the values.
     let state = Rc::new(State {
         format: Cell::new(Format::Markdown),
+        location: Cell::new(Location::Project),
         thinking: Cell::new(default_thinking),
         tools: Cell::new(true),
         sanitize: Cell::new(false),
@@ -85,14 +98,24 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                     };
                     let include = |value: bool| if value { "include" } else { "exclude" };
                     let format = state.format.get();
-                    let mut options = vec![choice(
-                        Row::Format,
-                        "Format",
-                        match format {
-                            Format::Markdown => "markdown",
-                            Format::Json => "json",
-                        },
-                    )];
+                    let mut options = vec![
+                        choice(
+                            Row::Format,
+                            "Format",
+                            match format {
+                                Format::Markdown => "markdown",
+                                Format::Json => "json",
+                            },
+                        ),
+                        choice(
+                            Row::Location,
+                            "Location",
+                            match state.location.get() {
+                                Location::Project => "project",
+                                Location::Temp => "temp",
+                            },
+                        ),
+                    ];
                     match format {
                         Format::Markdown => options.extend([
                             choice(Row::Thinking, "Thinking", include(state.thinking.get())).category("Options"),
@@ -122,6 +145,10 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
                         Row::Format => state.format.set(match state.format.get() {
                             Format::Markdown => Format::Json,
                             Format::Json => Format::Markdown,
+                        }),
+                        Row::Location => state.location.set(match state.location.get() {
+                            Location::Project => Location::Temp,
+                            Location::Temp => Location::Project,
                         }),
                         Row::Thinking => state.thinking.set(!state.thinking.get()),
                         Row::Tools => state.tools.set(!state.tools.get()),

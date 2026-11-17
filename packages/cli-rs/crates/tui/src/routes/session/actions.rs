@@ -293,8 +293,8 @@ impl Inner {
         );
     }
 
-    /// `session.export`: the options, then the transcript to the clipboard or to a file in the working directory,
-    /// whose path the result dialog shows.
+    /// `session.export`: the options, then the transcript to the clipboard or to a file in the working directory or
+    /// the temporary directory, whose path the result dialog shows.
     fn export(&self, tui: &Tui, _: Option<&str>) {
         if !self.known(tui) {
             return;
@@ -318,10 +318,12 @@ impl Inner {
                             export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
                             export::Action::Export => {
                                 let extension = if json { "json" } else { "md" };
-                                // `paths.cwd`: the TUI's working directory (#62253).
-                                let path = std::env::current_dir()
-                                    .unwrap_or_default()
-                                    .join(format!("session-{}.{extension}", opencode_local::id::v4()));
+                                // `paths.cwd`, the TUI's working directory (#62253), or `os.tmpdir()` (#62490).
+                                let directory = match choice.location {
+                                    export::Location::Project => std::env::current_dir().unwrap_or_default(),
+                                    export::Location::Temp => opencode_local::paths::temp(),
+                                };
+                                let path = directory.join(format!("session-{}.{extension}", opencode_local::id::v4()));
                                 std::fs::write(&path, content).map(|_| Some(path.display().to_string())).map_err(drop)
                             }
                         });
