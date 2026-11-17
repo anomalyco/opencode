@@ -203,7 +203,7 @@ export function registry() {
       // A new process reports its version, login and models, which keeps the model list current without a separate check.
       if (starting) {
         const configDir = request.connection?.CLAUDE_CONFIG_DIR
-        yield* input.status.report({ type: "ready", probe: opened.probe, configDir })
+        yield* input.status.report({ type: "ready", probe: opened.probe, configDir, fromChat: true })
         // Fail before sending the prompt, because Claude Code's own error does not say which folder needs a login.
         if (!ClaudeProbe.isLoggedIn(opened.probe.account)) {
           yield* stop(entry)

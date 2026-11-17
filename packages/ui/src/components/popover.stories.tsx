@@ -1,7 +1,5 @@
-// @ts-nocheck
-import { createSignal } from "solid-js"
-import * as mod from "./popover"
-import { create } from "../storybook/scaffold"
+import { createEffect, createSignal } from "solid-js"
+import { Popover, type PopoverProps } from "./popover"
 
 const docs = `### Overview
 Composable popover with optional title, description, and close button.
@@ -26,24 +24,31 @@ Use for small contextual details; avoid long forms.
 
 `
 
-const story = create({
+export default {
   title: "UI/Popover",
-  mod,
+  id: "components-popover",
+  component: Popover,
   args: {
     trigger: "Open popover",
     title: "Popover",
     description: "Optional description",
     defaultOpen: true,
+    portal: true,
     children: "Popover content",
   },
-})
+  render: (props: PopoverProps) => {
+    const [open, setOpen] = createSignal(props.defaultOpen)
+    createEffect(() => setOpen(props.defaultOpen))
 
-export default {
-  title: "UI/Popover",
-  id: "components-popover",
-  component: story.meta.component,
+    return <Popover {...props} open={open()} onOpenChange={setOpen} />
+  },
   tags: ["autodocs"],
   parameters: {
+    gridPreview: () => (
+      <Popover trigger="Open popover" title="Popover" portal={false} defaultOpen>
+        Popover content
+      </Popover>
+    ),
     docs: {
       description: {
         component: docs,
@@ -52,12 +57,12 @@ export default {
   },
 }
 
-export const Basic = story.Basic
+export const Basic = {}
 
 export const NoHeader = {
   args: {
-    title: undefined,
-    description: undefined,
+    title: "",
+    description: "",
     children: "Popover body only",
   },
 }
@@ -70,19 +75,10 @@ export const Inline = {
 }
 
 export const Controlled = {
-  render: () => {
-    const [open, setOpen] = createSignal(true)
-
-    return (
-      <mod.Popover
-        open={open()}
-        onOpenChange={setOpen}
-        trigger="Toggle popover"
-        title="Controlled"
-        description="Open state is controlled"
-      >
-        Controlled content
-      </mod.Popover>
-    )
+  args: {
+    trigger: "Toggle popover",
+    title: "Controlled",
+    description: "Open state is controlled",
+    children: "Controlled content",
   },
 }

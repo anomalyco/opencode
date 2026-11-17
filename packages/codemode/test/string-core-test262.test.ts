@@ -151,7 +151,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 type Argument = string | number | undefined
 type Outcome = "undefined" | "length" | "RangeError"

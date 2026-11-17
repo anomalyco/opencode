@@ -417,7 +417,23 @@ describe("server connect form", () => {
     expect(closes(saved.effects)).toEqual([])
     expect(saved.effects).toContainEqual({
       type: "save",
-      action: { type: "connect", http: { url: "http://localhost:4096", password: "token" } },
+      action: { type: "connect", http: { url: "http://localhost:4096", password: "token" }, displayName: undefined },
+    })
+  })
+
+  test("a QR code names the server it adds, unless the user typed a name", () => {
+    const qr = JSON.stringify({ code: "abc", urls: ["http://new:4096"], name: "Anomaly Box" })
+
+    const save = (events: readonly ServerConnectEvent[]) =>
+      replay({ kind: "add" }, [...events, succeeded(1, "http://new:4096", "token")]).effects.find(
+        (effect) => effect.type === "save",
+      )
+
+    expect(save([field("link", qr), submitted])).toMatchObject({
+      action: { type: "add", connection: { displayName: "Anomaly Box" } },
+    })
+    expect(save([field("name", "Mine"), field("link", qr), submitted])).toMatchObject({
+      action: { type: "add", connection: { displayName: "Mine" } },
     })
   })
 

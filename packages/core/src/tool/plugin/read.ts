@@ -5,6 +5,9 @@ import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
@@ -28,7 +31,6 @@ const LocationInput = Schema.Struct({
 })
 export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
-const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -41,18 +43,33 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const environment = yield* Environment.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
-          options: { codemode: false },
-          description:
-            "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          options: { codemode: codeMode },
+          description: [
+            "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+            ...(codeMode
+              ? [
+                  "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference.",
+                ]
+              : [
+                  "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+                ]),
+            "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          ].join(" "),
           input: Input,
-          output: Output,
+          output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              if (input.limit === 0)
+                return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
@@ -117,7 +134,7 @@ export const Plugin = {
                           () => missing({ input: input.path, requested, context }),
                         ),
                       )
-                      if (content.type === "list-page") return yield* missing({ input: input.path, requested, context })
+                      if (content.type === "directory") return yield* missing({ input: input.path, requested, context })
                       return {
                         content,
                         target,
@@ -139,7 +156,7 @@ export const Plugin = {
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
                   targets: [FILENAME],
-                  start: result.content.type === "list-page" ? resolved : dirname(resolved),
+                  start: result.content.type === "directory" ? resolved : dirname(resolved),
                   stop: root,
                   type: "file",
                 })
@@ -155,9 +172,17 @@ export const Plugin = {
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({
-                output: result.output,
+                output:
+                  result.output.type === "media"
+                    ? {
+                        type: result.output.type,
+                        uri: result.output.uri,
+                        mime: result.output.mime,
+                        name: result.output.name,
+                      }
+                    : result.output,
                 content: toModelContent(result.path, input.offset, result.output),
-                metadata: { truncated: result.output.type === "file" ? false : result.output.truncated },
+                metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
               })),
               Effect.mapError((error) => {
                 if (error instanceof ToolFailure) return error
@@ -172,8 +197,8 @@ export const Plugin = {
               }),
             )
           },
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
@@ -320,44 +345,46 @@ function parseSkillUri(value: string) {
   return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
-export const toModelContent = (path: string, offset: number | undefined, output: typeof Output.Type) => {
-  if (output.type === "file" && output.encoding === "base64")
+export const toModelContent = (
+  path: string,
+  offset: number | undefined,
+  output: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+) => {
+  if (output.type === "media")
     return [
       { type: "text", text: output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully" },
       {
         type: "file",
-        uri: `data:${output.mime};base64,${output.content}`,
+        uri: `data:${output.mime};base64,${Buffer.from(output.bytes).toString("base64")}`,
         mime: output.mime,
         name: path,
       },
     ] as const
 
-  if (output.type === "list-page") {
+  if (output.type === "directory") {
     const start = offset || 1
     const content = [
       output.entries.length === 0
         ? `Read directory ${path}, 0 entries`
         : `Read directory ${path}, entries ${start}-${start + output.entries.length - 1}`,
+      ...output.entries,
     ]
-    output.entries.forEach((entry) => content.push(entry.path))
-    if (output.truncated && output.next !== undefined)
-      content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+    if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
     return content.join("\n")
   }
 
-  const start = output.type === "text-page" ? output.offset : 1
-  // Pages already join selected lines; a trailing newline represents a selected blank line.
-  const text = output.type === "file" ? output.content.replace(/\n$/, "") : output.content
-  const lines = output.content === "" ? [] : text.split("\n")
+  const start = output.offset
+  // Whole-file content keeps its final newline and a selected trailing blank line is an empty last
+  // line, so the line count decides which pieces are lines.
+  const lines = output.lineCount === 0 ? [] : output.content.split("\n").slice(0, output.lineCount)
   // A page that starts before the requested offset is the file's tail, returned for an offset past the end.
   const total = start + lines.length - 1
-  const pastEnd = output.type === "text-page" && offset !== undefined && start < offset
+  const pastEnd = offset !== undefined && start < offset
   const content = [
     (lines.length === 0 ? `Read file ${path}, 0 lines` : `Read file ${path}, lines ${start}-${total}`) +
       (pastEnd ? ` (offset ${offset} is past the end; the file has ${total} ${total === 1 ? "line" : "lines"})` : ""),
   ]
   lines.forEach((line, index) => content.push(`${start + index}: ${line}`))
-  if (output.type === "text-page" && output.truncated && output.next !== undefined)
-    content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+  if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
   return content.join("\n")
 }

@@ -60,7 +60,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
-import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import { attached, typeLabel } from "../components/message-file"
 import {
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
@@ -134,17 +134,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "outline-copy"} size="small" />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -214,7 +212,7 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+export function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -580,13 +578,6 @@ export function CurrentUserMessageDisplay(props: {
               return "height" in current ? current.height : undefined
             }
 
-            const placeholderStyle = () =>
-              imageAttachmentPlaceholderStyle({
-                width: width(),
-                height: height(),
-                loaded: mediaView().status === "ready",
-              })
-
             return (
               <Show
                 when={!image()}
@@ -598,7 +589,6 @@ export function CurrentUserMessageDisplay(props: {
                     data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
-                    style={placeholderStyle()}
                     onClick={(event) => {
                       const src = mediaView().src
                       const origin = event.currentTarget
@@ -945,7 +935,6 @@ function CompactionDivider(props: { label: string }) {
 
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -992,7 +981,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}
@@ -1248,7 +1237,7 @@ export function AssistantTextContent(props: {
         data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
       >
         <MessageActionButton
-          icon={copy.copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
           label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}

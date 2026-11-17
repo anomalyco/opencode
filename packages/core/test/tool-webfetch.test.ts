@@ -3,6 +3,8 @@ import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { Permission } from "@opencode/core/permission"
@@ -17,7 +19,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNod
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WebFetchTool.Plugin)),
-  deps: [Tool.node, Permission.node, LayerNodePlatform.httpClient],
+  deps: [Tool.node, Config.node, Flag.node, Permission.node, LayerNodePlatform.httpClient],
 })
 
 const sessionID = Session.ID.make("ses_webfetch_test")

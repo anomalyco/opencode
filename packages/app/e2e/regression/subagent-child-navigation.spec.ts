@@ -78,7 +78,7 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
   }
 })
 
-test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
+test("navigates from a running subagent card without a background control", async ({ page }) => {
   const runningChildID = "ses_running_child"
   await setupTimeline(page, {
     settings: { timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } } },
@@ -95,11 +95,12 @@ test("navigates from a running subagent card and hides background controls in th
             id: "call_subagent",
             name: "subagent",
             state: {
-              status: "running",
+              status: "completed",
               input: { description: "Inspect code" },
               metadata: { status: "running", sessionID: runningChildID },
+              content: [{ type: "text", text: "The subagent is working in the background." }],
             },
-            time: { created: 2 },
+            time: { created: 2, completed: 3 },
           },
         ],
         time: { created: 2 },
@@ -109,7 +110,7 @@ test("navigates from a running subagent card and hides background controls in th
     sessionStatus: { [sessionID]: { type: "busy" }, [runningChildID]: { type: "busy" } },
   })
   const hint = page.getByRole("button", { name: /move running work to the background/i })
-  await expect(hint).toBeVisible()
+  await expect(hint).toHaveCount(0)
   await page.locator('[data-component="task-tool-card"]').click()
   await expect(page).toHaveURL(new RegExp(`/session/${runningChildID}$`))
   await expect(hint).toHaveCount(0)

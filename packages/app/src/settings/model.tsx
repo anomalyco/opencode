@@ -136,6 +136,8 @@ const generalSchema = Persistence.struct({
   foldUserMessages: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
+  // The redesigned session timeline, off until it ships.
+  newTimeline: Persistence.optional(Schema.Boolean),
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -303,7 +305,7 @@ export const settingsPersistence = Persistence.migrate(
 export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
-    showCustomAgents: false,
+    showCustomAgents: true,
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
@@ -347,7 +349,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
+      usePlatform().platform,
+      import.meta.env.VITE_OPENCODE_CHANNEL,
+    )
       ? ["list", "projects", "customize", "recent"]
       : ["list", "projects", "customize"]
 
@@ -433,6 +438,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
+        },
+        newTimeline: withFallback(() => store.general?.newTimeline, false),
+        setNewTimeline(value: boolean) {
+          setStore("general", "newTimeline", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {

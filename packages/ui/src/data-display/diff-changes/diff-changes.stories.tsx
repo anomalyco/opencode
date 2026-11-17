@@ -1,70 +1,63 @@
+import type { ComponentProps } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 
-const docs = `### Overview  
-Summarize additions/deletions as compact text.
+type Args = Pick<ComponentProps<typeof DiffChanges>, "appearance" | "markEmpty"> & {
+  additions: number
+  deletions: number
+  multipleFiles: boolean
+}
 
-Pair with \`Diff\`/\`DiffSSR\` to contextualize a change set.
+const count = { control: { type: "range", min: 0, max: 100, step: 1 } }
 
-### API
-- Required: \`changes\` as { additions, deletions } or an array of those objects.
-- Optional: \`appearance\` is \`compact\` (default) or \`standard\`.
+const docs = `### Overview
+Summarize additions/deletions as compact text. Pair with Diff or DiffSSR to contextualize a change set.
 
-### Variants and states
-- Handles zero-change state (renders nothing).
+### API and behavior
+Changes accepts one { additions, deletions } object or an array. Adjust the first file’s counts; Multiple files adds two more changes (+8/−3 and +2/−0).
+The component aggregates totals and renders nothing for zero changes. Marking empty sides lets the caller hide them.
 
-### Behavior
-- Aggregates arrays into total additions/deletions.
+### Appearance and accessibility
+Choose compact or standard. Provide surrounding context for the counts. The component uses data-component="diff-changes" and diff color tokens.`
 
-### Accessibility
-- Ensure surrounding context conveys meaning of the counts/bars.
+function Preview(args: Args) {
+  const file = () => ({ additions: args.additions, deletions: args.deletions })
 
-### Theming/tokens
-- Uses \`data-component="diff-changes"\` and diff color tokens.
-
-`
-
-const changes = { additions: 12, deletions: 5 }
+  return (
+    <DiffChanges
+      class="[&_[data-empty]]:hidden"
+      appearance={args.appearance}
+      markEmpty={args.markEmpty}
+      changes={args.multipleFiles ? [file(), { additions: 8, deletions: 3 }, { additions: 2, deletions: 0 }] : file()}
+    />
+  )
+}
 
 export default {
   title: "UI/DiffChanges",
   id: "ui-diff-changes",
   component: DiffChanges,
   tags: ["autodocs"],
-  parameters: {
-    docs: {
-      description: {
-        component: docs,
-      },
-    },
+  parameters: { docs: { description: { component: docs } } },
+  args: { additions: 12, deletions: 5, appearance: "compact", markEmpty: false, multipleFiles: false } satisfies Args,
+  argTypes: {
+    additions: count,
+    deletions: count,
+    appearance: { control: "select", options: ["compact", "standard"] },
   },
-  args: {
-    changes,
-  },
+  render: Preview,
 }
 
 export const Default = {}
 
 export const Appearances = {
-  render: () => (
-    <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
-      <DiffChanges appearance="standard" changes={changes} />
-      <DiffChanges appearance="compact" changes={changes} />
+  render: (args: Args) => (
+    <div class="flex items-center gap-4">
+      <Preview {...args} appearance="standard" />
+      <Preview {...args} appearance="compact" />
     </div>
   ),
 }
 
-export const MultipleFiles = {
-  args: {
-    changes: [
-      { additions: 4, deletions: 1 },
-      { additions: 8, deletions: 3 },
-      { additions: 2, deletions: 0 },
-    ],
-  },
-}
+export const MultipleFiles = { args: { multipleFiles: true, additions: 4, deletions: 1 } }
 
-export const Zero = {
-  args: {
-    changes: { additions: 0, deletions: 0 },
-  },
-}
+export const Zero = { args: { additions: 0, deletions: 0 } }

@@ -32,7 +32,8 @@ done
 
 : "${CLOUDFLARE_API_TOKEN:?Set CLOUDFLARE_API_TOKEN}"
 # Pinned in targets/ and in the token issuer's config (anomalyco/secrets).
-export CLOUDFLARE_ACCOUNT_ID=15d29c8639fd3733b1b5486a2acfd968
+CLOUDFLARE_ACCOUNT_ID=$(stage_account "$mode")
+export CLOUDFLARE_ACCOUNT_ID
 
 unexpected=$(cd "$src" && find . ! -type d ! -type f -o -type f ! -path ./SHA256SUMS \
   ! -path ./v0/config.json \

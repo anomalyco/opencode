@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "node:path"
 import { Effect, Fiber, Layer, Option, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -110,25 +111,24 @@ describe("PersistentPty rename", () => {
   )
 })
 
-// Pipe mode is Unix-only: Windows daemons reject create_pipe, so OpenCode keeps spawning shell commands there.
-describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", () => {
-  const input = {
-    program: "/bin/sh",
-    args: ["-c", "echo hi"],
-    cwd: "/tmp",
-    env: { PATH: "/usr/bin" },
-    groupID: "proj_test",
-    outputPath: "/tmp/sh_test.out",
-    metadata: { id: "sh_test", command: "echo hi" },
-  }
+const pipeInput = (cwd: string) => ({
+  program: process.execPath,
+  args: ["--version"],
+  cwd,
+  env: { TEST: "1" },
+  groupID: "proj_test",
+  outputPath: path.join(cwd, "sh_test.out"),
+  metadata: { id: "sh_test", command: "--version" },
+})
 
+describe("PersistentPty pipe processes", () => {
   it.live("knows a handoff is prepared until a shutdown or until its ticket expires", () =>
     Effect.gen(function* () {
       const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
         expect(pty.handoffPrepared()).toBe(false)
-        yield* pty.createPipe(input)
+        yield* pty.createPipe(pipeInput(daemon.options.root))
         expect(yield* pty.handoff()).not.toBeNull()
         expect(pty.handoffPrepared()).toBe(true)
         // Abandoned by a shutdown.
@@ -141,7 +141,7 @@ describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", ()
       expiring.handoffTTL.ms = 50
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
-        yield* pty.createPipe(input)
+        yield* pty.createPipe(pipeInput(expiring.options.root))
         expect(yield* pty.handoff()).not.toBeNull()
         expect(pty.handoffPrepared()).toBe(true)
         yield* Effect.sleep(80)
@@ -155,20 +155,21 @@ describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", ()
       const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
+        const input = pipeInput(daemon.options.root)
         const created = yield* pty.createPipe(input)
         expect(daemon.requests.at(-1)).toEqual({
           op: "create_pipe",
-          program: "/bin/sh",
-          args: ["-c", "echo hi"],
-          cwd: "/tmp",
-          env: { PATH: "/usr/bin" },
+          program: input.program,
+          args: input.args,
+          cwd: input.cwd,
+          env: input.env,
           group_id: "proj_test",
-          output_path: "/tmp/sh_test.out",
-          metadata: { id: "sh_test", command: "echo hi" },
+          output_path: input.outputPath,
+          metadata: input.metadata,
         })
         expect(created).toMatchObject({
           groupID: "proj_test",
-          outputPath: "/tmp/sh_test.out",
+          outputPath: input.outputPath,
           lifecycle: { status: "running" },
           metadata: input.metadata,
           exitedAt: undefined,
@@ -210,7 +211,7 @@ describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", ()
           title: "test",
           env: {},
         })
-        const pipe = yield* pty.createPipe(input)
+        const pipe = yield* pty.createPipe(pipeInput(directory.path))
 
         expect((yield* pty.list()).map((item) => item.id)).toEqual([terminal.id])
         expect((yield* pty.listPipes()).map((item) => item.id)).toEqual([pipe.id])
@@ -225,6 +226,7 @@ describe.skipIf(process.platform === "win32")("PersistentPty pipe processes", ()
       const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
+        const input = pipeInput(daemon.options.root)
         expect(yield* Effect.flip(pty.createPipe({ ...input, cwd: "relative" }))).toEqual(
           new PersistentPty.RequestError({ message: "cwd must be absolute" }),
         )
@@ -278,21 +280,13 @@ const layer = (daemon: { readonly options: PersistentPty.Options }) =>
     ],
   )
 
-describe.skipIf(process.platform === "win32")("PersistentPty handoff", () => {
+describe("PersistentPty handoff", () => {
   it.live("prepares a handoff more than once on the same owner connection", () =>
     Effect.gen(function* () {
       const daemon = yield* fakeDaemon()
       yield* Effect.gen(function* () {
         const pty = yield* PersistentPty.Service
-        yield* pty.createPipe({
-          program: "/bin/sh",
-          args: ["-c", "echo hi"],
-          cwd: "/tmp",
-          env: {},
-          groupID: "proj_test",
-          outputPath: "/tmp/sh_handoff.out",
-          metadata: {},
-        })
+        yield* pty.createPipe(pipeInput(daemon.options.root))
         expect(yield* pty.handoff()).toMatchObject({ ticket: "next" })
         expect(yield* pty.handoff()).toMatchObject({ ticket: "next" })
       }).pipe(Effect.provide(layer(daemon)))

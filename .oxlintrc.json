@@ -24,6 +24,40 @@
   },
   "overrides": [
     {
+      "files": ["packages/ai/src/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "Reflect",
+            "message": "Use typed property access or direct invocation. Suppress this rule only for genuine reflection."
+          },
+          {
+            "name": "fetch",
+            "message": "Send HTTP through RequestExecutor, which applies executor-wide and scoped middleware (HTTP hooks). A request sent any other way skips them."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect/http",
+                "importNames": ["HttpClient", "FetchHttpClient"],
+                "message": "Send HTTP through RequestExecutor, which applies executor-wide and scoped middleware (HTTP hooks). Only route/executor.ts holds the HTTP client."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/ai/src/route/executor.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
       "files": [
         "packages/app/**",
         "packages/desktop/**",

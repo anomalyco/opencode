@@ -584,6 +584,22 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 - [x] `sort` in place, numeric ascending by default (`[10, 9, 1]` sorts to `[1, 9, 10]`) or by comparator.
 - [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
 
+## Buffer
+
+Node's `Buffer`, where the host has one (Node and Bun; not browsers). It is a `Uint8Array`, so every `Uint8Array`
+method works on it, and its text conversions default to UTF-8.
+
+- [x] `Buffer.from(string, encoding)`, `Buffer.from(bytes | array | array-like | { type: "Buffer", data })`,
+      `alloc`, `allocUnsafe`, `concat`, `byteLength`, `compare`, `isBuffer`, and `isEncoding`, with the encodings
+      utf8, hex, base64, base64url, latin1/binary, ascii, and utf16le/ucs2. An unknown encoding is a `TypeError` with
+      code `ERR_UNKNOWN_ENCODING`.
+- [x] `toString(encoding, start, end)` (so string coercion and templates give UTF-8 text), `toJSON` as
+      `{ type: "Buffer", data }`, `slice` and `subarray` as Buffer views on the same bytes, `equals`, `compare`,
+      `indexOf`, `lastIndexOf`, `includes`, `write`, `fill`, `copy`, and the `read`/`write` integer and float methods.
+      `console.log` prints `<Buffer ..>`.
+- [x] A host Buffer crosses into the program as a Buffer, and a program Buffer crosses out as one; snapshots keep it.
+- [ ] The 64-bit `readBigInt64*`/`writeBigInt64*` methods, since programs have no BigInt.
+
 ## Web platform helpers
 
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws a
@@ -596,14 +612,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
       `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
-      `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
+      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental Uint8Array input;
+      `decode()` flushes the stream.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
 - [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, `entries`, and
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
-- [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
+- [ ] `crypto.subtle` and non-UTF-8 `TextDecoder` encodings.
 
 ## Extensions
 
@@ -630,6 +648,9 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       `code`, `errno`, `syscall`, and `path` reach the program and `err.code === "ENOENT"` works. `stack` stays on its
       own side, no field may shadow an Error method, and a field that cannot cross (a class instance, a function) is
       left behind rather than replacing the error.
+- [x] A synchronous global that returns an Effect blocks the program until the Effect completes and returns its
+      value or throws its error, as `fs.readFileSync` does. An `async` global (or one marked `Extension.async`) hands
+      the program a promise instead.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
 - [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
       step if `new X()` in a program is ever needed.

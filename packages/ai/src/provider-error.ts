@@ -131,6 +131,12 @@ const CONTENT_POLICY_CODES = new Set([
   "refusal",
   "datainspectionfailed",
   "moderation_blocked",
+  // Gemini Decisions rejects blocked input with these `error.code` strings on a 400.
+  "safety",
+  "prohibited_content",
+  "blocklist",
+  "image_safety",
+  "content_blocked",
 ])
 // OpenCode Zen replaces upstream codes outside its allow-list but keeps the original
 // as a `[code]` label at the start of the rewritten message.
