@@ -92,6 +92,8 @@ function SessionTabSlot(
     shortcut?: number
     fallbackTitle?: string
     fallbackDirectory?: string
+    muted?: boolean
+    menuItems?: () => JSX.Element
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -144,6 +146,8 @@ function SessionTabSlot(
         hideAvatar={props.hideAvatar}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
+        muted={props.muted}
+        menuItems={props.menuItems}
         onDelete={props.onDelete}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
@@ -174,6 +178,8 @@ function SessionTabEntry(
     serverCtx: ServerCtx | undefined
     view: SessionTabView
     shortcut?: number
+    muted?: boolean
+    menuItems?: () => JSX.Element
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -191,8 +197,8 @@ function SessionTabEntry(
     () => true,
   )
 
-  // A busy session shows its progress indicator instead of the unread dot.
-  const unread = createMemo(() => status.unread() && !status.loading())
+  // A busy session shows its progress indicator instead of the unread dot; a muted one shows neither.
+  const unread = createMemo(() => status.unread() && !status.loading() && !props.muted)
 
   function DeleteDialog() {
     const confirm = async () => {
@@ -238,6 +244,8 @@ function SessionTabEntry(
   }
 
   createEffect(() => props.onUnreadChange(unread()))
+
+  onCleanup(() => props.onUnreadChange(false))
 
   createEffect(() => {
     const ctx = props.serverCtx
@@ -318,6 +326,8 @@ function SessionTabEntry(
           }[props.view.fallbackTitle]
         }
         fallbackDirectory={props.view.fallbackDirectory}
+        muted={props.muted}
+        menuItems={props.menuItems}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
@@ -561,6 +571,14 @@ export type TabStripSection = {
   hideAvatars?: boolean
 }
 
+export type TabStripLeading = {
+  content: JSX.Element
+  /** Row keys in display order, in `tabKey` form so the current tab can match one. */
+  keys: string[]
+  unread: (key: string) => boolean
+  navigate: (key: string, reveal: boolean) => void
+}
+
 export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   highlightActive?: boolean
@@ -571,6 +589,12 @@ export function TitlebarTabStrip(props: {
   tabFooter?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: a faint trailing label on a tab row (e.g. its server). */
   tabLabel?: (tab: Tab) => string | undefined
+  /** Vertical only: menu items shown above a session tab's own. */
+  tabMenu?: (tab: SessionTab) => JSX.Element
+  /** Vertical only: whether a session tab is muted, which swaps its unread dot for a muted mark. */
+  tabMuted?: (tab: SessionTab) => boolean
+  /** Vertical only: rows rendered above the tabs that share their shortcuts, numbered first (e.g. pinned sessions). */
+  leading?: TabStripLeading
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -720,10 +744,19 @@ export function TitlebarTabStrip(props: {
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
+  const leading = () => (vertical() ? props.leading : undefined)
+
+  const leadingKeys = () => leading()?.keys ?? []
+
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
   createEffect(() => {
     if (!vertical()) return
-    setSidebarUnread(props.tabs.some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]))
+    const current = props.currentTab ? tabKey(props.currentTab) : undefined
+
+    setSidebarUnread(
+      props.tabs.some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]) ||
+        leadingKeys().some((key) => key !== current && !!leading()?.unread(key)),
+    )
     onCleanup(() => setSidebarUnread(false))
   })
 
@@ -731,17 +764,28 @@ export function TitlebarTabStrip(props: {
   const tabRefs = new Map<string, () => HTMLDivElement | undefined>()
 
   const hints = createSessionRowNavigation({
-    keys: visibleTabIds,
+    keys: () => [...leadingKeys(), ...visibleTabIds()],
     current: () => (props.currentTab ? tabKey(props.currentTab) : undefined),
-    unread: (key) => !!unread[key],
+    unread: (key) => !!unread[key] || (leadingKeys().includes(key) && !!leading()?.unread(key)),
     navigate: (key, reveal) => {
+      if (leadingKeys().includes(key)) {
+        leading()?.navigate(key, reveal)
+
+        return
+      }
+
       const tab = props.tabs.find((item) => tabKey(item) === key)
 
       if (tab) props.onNavigate(tab, reveal ? tabRefs.get(key)?.() : undefined)
     },
   })
 
-  const shortcut = (index: number) => (index >= 0 && index < 9 ? index + 1 : undefined)
+  const shortcut = (index: number) => {
+    if (index < 0) return
+    const position = index + leadingKeys().length
+
+    return position < 9 ? position + 1 : undefined
+  }
 
   function renderTab(tab: Tab, section?: TabStripSection) {
     const id = tabKey(tab)
@@ -791,6 +835,8 @@ export function TitlebarTabStrip(props: {
           serverCtx={serverCtx()}
           view={views().get(id) ?? hiddenTabView}
           shortcut={shortcut(visibleIndex())}
+          muted={vertical() ? props.tabMuted?.(tab) : undefined}
+          menuItems={vertical() && props.tabMenu ? () => props.tabMenu?.(tab) : undefined}
           onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
             ref = element
@@ -851,6 +897,7 @@ export function TitlebarTabStrip(props: {
           if (vertical()) measureFade()
         }}
       >
+        {leading()?.content}
         <DragDropProvider
           sensors={[
             PointerSensor.configure({

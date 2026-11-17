@@ -1058,7 +1058,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
   )
 }
 
-function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
+export function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
   const language = useLanguage()
   const dialog = useDialog()
   const layer = useDialogLayer()
