@@ -1176,6 +1176,24 @@ story("preserves streamed math through completion and a fresh render", async ({ 
   await expect(markdown.locator(".katex-error")).toHaveCount(0)
 })
 
+story("keeps an unchanged streamed formula, and a selection in it, while text after it streams", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Formula $x^2$ and", streaming: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  const math = await markdown.locator("math").elementHandle()
+  await markdown.locator("math").evaluate((node) => getSelection()?.selectAllChildren(node))
+  // Typing would move the selection into the field; the stream changes the text without focus.
+  await harness.getByLabel("Markdown text").evaluate((field: HTMLTextAreaElement) => {
+    field.value = "Formula $x^2$ and more words"
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await expect(markdown).toContainText("more words")
+  expect(await markdown.locator("math").evaluate((node, kept) => [node === kept, getSelection()?.anchorNode === kept], math)).toEqual([true, true])
+})
+
 for (const theme of ["light", "dark"]) {
   story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
     await page.setViewportSize({ width: 390, height: 900 })

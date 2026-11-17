@@ -1,4 +1,4 @@
-import { For, onMount } from "solid-js"
+import { createMemo, For, onMount } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Dynamic, render } from "solid-js/web"
 
@@ -39,7 +39,11 @@ function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) 
 
   if (node.type === "text") return node.text
 
-  if (node.type === "math") return <>{node.element}</>
+  if (node.type === "math") {
+    const math = createMemo(() => node.element, undefined, { equals: (a, b) => a.isEqualNode(b) })
+
+    return <>{math()}</>
+  }
 
   if (node.type === "word") {
     let ref: HTMLSpanElement | undefined

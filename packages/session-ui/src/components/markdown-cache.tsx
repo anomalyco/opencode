@@ -44,6 +44,9 @@ const purifier = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
 const rendered = typeof window !== "undefined" ? DOMPurify(window) : DOMPurify
 
+// Sanitized renderer output by its source HTML, most recently used last.
+const renderedFragments = new Map<string, Node>()
+
 if (typeof window !== "undefined" && purifier.isSupported) {
   const appLinks = new WeakMap<HTMLAnchorElement, string>()
   const files = new WeakMap<HTMLAnchorElement, string>()
@@ -94,6 +97,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ...config,
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
+    RETURN_DOM_FRAGMENT: true,
     ADD_ATTR: [...config.ADD_ATTR, "aria-label", "aria-hidden"],
     ALLOWED_TAGS: [
       ...prose,
@@ -292,23 +296,42 @@ function svgPaint(name: string, value: string) {
 
 export function sanitizeMarkdown(html: MarkdownHTML) {
   if (!purifier.isSupported) return ""
-
-  // SAFETY: MarkdownHTML is the worker's typed union; a string is the common case with no renderer fragments.
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
-  if (typeof html === "string") return purifier.sanitize(html)
   const template = document.createElement("template")
-  template.innerHTML = purifier.sanitize(html.html)
+  // SAFETY: MarkdownHTML is the worker's typed union; strings have no out-of-band fragments.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
+  const plain = typeof html === "string"
+  template.content.append(purifier.sanitize(plain ? html : html.html, { RETURN_DOM_FRAGMENT: true }))
+
+  if (plain) return template.innerHTML
 
   for (const [key, output] of html.fragments) {
     // Replace the complete slot, never bless it or its children. Author input cannot populate the worker's map.
     const slot = template.content.getElementById(`user-content-${key}`)
 
     if (!slot) continue
-    const fragment = rendered.sanitize(output, { RETURN_DOM_FRAGMENT: true })
-    slot.replaceWith(fragment)
+    slot.replaceWith(rendererFragment(output))
   }
 
   return template.innerHTML
+}
+
+// A streamed block is sanitized again on every delta while its formulas and code stay the same.
+function rendererFragment(output: string) {
+  const kept = renderedFragments.get(output)
+
+  if (kept) {
+    renderedFragments.delete(output)
+    renderedFragments.set(output, kept)
+
+    return kept.cloneNode(true)
+  }
+
+  const fragment = rendered.sanitize(output, { RETURN_DOM_FRAGMENT: true })
+  renderedFragments.set(output, fragment.cloneNode(true))
+
+  if (renderedFragments.size > 64) renderedFragments.delete(renderedFragments.keys().next().value ?? "")
+
+  return fragment
 }
 
 /** Only the desktop session installs a reviewer for inert application targets. */
