@@ -20,10 +20,12 @@ pub mod openapi;
 mod ops;
 mod program;
 mod promise;
+mod reach;
 mod run;
 mod schema;
 mod search;
 mod snapshot;
+mod streaming;
 mod strings;
 #[cfg(feature = "test262")]
 #[doc(hidden)]
@@ -38,6 +40,7 @@ pub use program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Sus
 pub use schema::Schema;
 pub use serde_json::Value as Json;
 pub use snapshot::{Snapshot, SnapshotError, from_bytes, to_bytes};
+pub use streaming::{HttpBody, StreamingResponse};
 pub use tool::{
     BoxFuture, ConfigError, Execute, Interrupted, Tool, ToolContext, ToolDescription, ToolError,
     tool_expression,

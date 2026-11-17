@@ -197,9 +197,18 @@ pub struct RunHost<'rt> {
     pub unhandled: Vec<(Id, Value)>,
     pub(crate) modules: FxHashMap<String, Value>,
     pub(crate) namespaces: FxHashMap<String, Value>,
+    /// Counts the points where the reference hands queued calls to the host, for streaming responses.
+    pub(crate) epoch: crate::streaming::Epoch,
 }
 
 impl<'rt> RunHost<'rt> {
+    /// A point where the reference starts the calls queued so far: a new job, or a finished synchronous call.
+    #[inline]
+    pub fn next_epoch(&self) {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.epoch.store(self.epoch.load(Relaxed) + 1, Relaxed);
+    }
+
     pub fn new(setup: &'rt Setup, run_id: Option<String>) -> Self {
         Self {
             setup,
@@ -218,6 +227,7 @@ impl<'rt> RunHost<'rt> {
             unhandled: Vec::new(),
             modules: FxHashMap::default(),
             namespaces: FxHashMap::default(),
+            epoch: Default::default(),
         }
     }
 
@@ -1175,6 +1185,7 @@ fn from_host(
         }
         HostValue::Bytes(data) => crate::builtins::bytes::new_bytes(vm, data.clone(), false),
         HostValue::Buffer(data) => crate::builtins::bytes::new_bytes(vm, data.clone(), true),
+        HostValue::Response(response) => response_from_host(vm, response, label, entry, depth)?,
         HostValue::Map(entries) => {
             let proto = vm.realm.map_proto;
             let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));
@@ -1238,6 +1249,83 @@ fn from_host(
     })
 }
 
+/// A streaming response as the reference hands it over: its fields, a live `bodyUsed`, the reading methods, and a
+/// `body` with a live `locked`, `cancel`, `getReader` and async iteration.
+fn response_from_host(
+    vm: &mut Vm,
+    response: &crate::streaming::StreamingResponse,
+    label: &str,
+    entry: Option<(&str, bool)>,
+    depth: usize,
+) -> Result<Value, Value> {
+    use crate::streaming::Live;
+    let surface = crate::streaming::surface(response, &vm.host.epoch);
+    let proto = vm.realm.object_proto;
+    let body_used = vm.atoms.intern_static("bodyUsed");
+    let result = vm.alloc(Obj::new(
+        Some(proto),
+        Kind::Live(Box::new(Live {
+            accessors: vec![(body_used, surface.body_used)],
+        })),
+    ));
+    let body = match surface.body {
+        Some((cancel, get_reader, iterate, locked)) => {
+            let key = vm.atoms.intern_static("locked");
+            let body = vm.alloc(Obj::new(
+                Some(proto),
+                Kind::Live(Box::new(Live {
+                    accessors: vec![(key, locked)],
+                })),
+            ));
+            let methods = [
+                (vm.atoms.intern_static("cancel"), cancel, "cancel"),
+                (vm.atoms.intern_static("getReader"), get_reader, "getReader"),
+                (
+                    crate::object::SYM_ASYNC_ITERATOR,
+                    iterate,
+                    "[Symbol.asyncIterator]",
+                ),
+            ];
+            for (key, f, name) in methods {
+                let path = if name.starts_with('[') {
+                    format!("{label}.body{name}")
+                } else {
+                    format!("{label}.body.{name}")
+                };
+                let f = wrap(vm, &f, &path, entry);
+                vm.define(body, key, f);
+            }
+            Value::Obj(body)
+        }
+        None => Value::Null,
+    };
+    let fields = [
+        ("url", HostValue::String(response.url.clone())),
+        ("status", HostValue::Number(response.status as f64)),
+        (
+            "statusText",
+            HostValue::String(response.status_text.clone()),
+        ),
+        ("ok", HostValue::Bool(response.ok())),
+        ("headers", HostValue::Headers(response.headers.clone())),
+    ];
+    for (key, v) in fields {
+        let v = from_host(vm, &v, &format!("{label}.{key}"), entry, depth + 1)?;
+        let key = vm.atoms.intern(key);
+        vm.define(result, key, v);
+    }
+    let key = vm.atoms.intern_static("redirected");
+    vm.define(result, key, Value::Bool(response.redirected));
+    let key = vm.atoms.intern_static("body");
+    vm.define(result, key, body);
+    for (key, f) in surface.methods {
+        let f = wrap(vm, &f, &format!("{label}.{key}"), entry);
+        let key = vm.atoms.intern(key);
+        vm.define(result, key, f);
+    }
+    Ok(Value::Obj(result))
+}
+
 /// A host call's result copied in. When its extension has `snapshot` hooks and the value holds functions, the value
 /// is kept so a suspend can save them.
 fn result_from_host(
@@ -1277,17 +1365,15 @@ pub fn snapshot_natives() -> [crate::vm::NativeFn; 4] {
 
 /// A function the run lost on resume: calling it throws.
 pub fn lost_function(name: &str) -> HostFunction {
+    let shown = if name.is_empty() { "(anonymous)" } else { name };
     let message = format!(
-        "The function {name} came from the host and was lost when the run was suspended; get it again after resuming."
+        "The function {shown} came from the host and was lost when the run was suspended; get it again after resuming."
     );
-    HostFunction::new(name, 0, move |_| {
-        Err(HostValue::Error(Box::new(HostError {
-            name: "TypeError".into(),
-            message: message.clone(),
-            cause: None,
-            fields: Vec::new(),
-        })))
-    })
+    HostFunction {
+        name: name.to_owned(),
+        length: 0,
+        body: Body::Lost(message.into()),
+    }
 }
 
 /// A host function as a program function, at `label`. Inside a global object, it is an entry point.
@@ -1313,6 +1399,10 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         return Ok(Value::Undef);
     };
     let entry = &vm.host.functions[index as usize];
+    if let Body::Lost(message) = &entry.f.body {
+        let message = message.clone();
+        return Err(vm.type_error(&message));
+    }
     let (f, label, extension, hooked) = (
         entry.f.clone(),
         entry.label.clone(),
@@ -1352,6 +1442,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
             }
             let result = body(host_args);
             shared.leave_sync();
+            vm.host.next_epoch();
             if let (Some(call), Some(after)) = (&invocation, &hooks.extension_after) {
                 report(after.as_ref(), call, &result);
             }
@@ -1360,6 +1451,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                 Err(thrown) => Err(from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e)),
             }
         }
+        Body::Lost(_) => unreachable!("refused above"),
         Body::Async(body) => {
             let p = vm.new_promise();
             let body = body.clone();

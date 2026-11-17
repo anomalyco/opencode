@@ -18,6 +18,7 @@ pub fn is_exotic(kind: &Kind) -> bool {
             | Kind::SearchParams(_)
             | Kind::Map(_)
             | Kind::Set(_)
+            | Kind::Live(_)
     )
 }
 
@@ -31,6 +32,7 @@ pub fn get(vm: &mut Vm, id: Id, key: Atom) -> Option<Value> {
         Kind::SearchParams(_) if key == vm.names.size => {
             Some(Value::Num(web::params_size(vm, id) as f64))
         }
+        Kind::Live(l) => l.getter(key).map(|g| g()),
         _ => None,
     }
 }
@@ -44,6 +46,12 @@ pub fn set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), Valu
         Kind::SearchParams(_) | Kind::Map(_) | Kind::Set(_) if key == vm.names.size => Some(Err(
             vm.type_error("Cannot assign to read only property 'size'."),
         )),
+        Kind::Live(l) if l.has(key) => {
+            let k = vm.atoms.text(key).to_owned();
+            Some(Err(vm.type_error(&format!(
+                "Cannot assign to read only property '{k}'."
+            ))))
+        }
         Kind::TextDecoder(_)
             if matches!(vm.atoms.text(key), "encoding" | "fatal" | "ignoreBOM") =>
         {
@@ -60,6 +68,7 @@ pub fn set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), Valu
 pub fn has_own(vm: &Vm, id: Id, key: Atom) -> bool {
     match &vm.heap[id as usize].kind {
         Kind::Bytes(_) => bytes::has_own(vm, id, key),
+        Kind::Live(l) => l.has(key),
         _ => false,
     }
 }
@@ -71,6 +80,10 @@ pub fn delete(vm: &mut Vm, id: Id, key: Atom) -> Option<Result<bool, Value>> {
             let k = vm.atoms.text(key).to_owned();
             Some(Err(vm.type_error(&format!("Cannot delete property '{k}'."))))
         }
+        Kind::Live(_) => match &mut vm.heap[id as usize].kind {
+            Kind::Live(l) => l.remove(key).then_some(Ok(true)),
+            _ => None,
+        },
         _ => None,
     }
 }

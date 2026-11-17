@@ -1,0 +1,2841 @@
+{
+  "programs": [
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}})\n   return [r.url, r.status, r.statusText, r.ok, r.redirected, r.headers.get(\"content-type\"), [...r.headers], r.bodyUsed,\n     r.body === null, r.body.locked, typeof r.text, typeof r.body.getReader, Object.keys(r), Object.keys(r.body),\n     r.text.name, r.body.getReader.name, r.headers instanceof Headers]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "",
+          201,
+          "Created",
+          true,
+          false,
+          "text/plain",
+          [
+            [
+              "content-type",
+              "text/plain"
+            ],
+            [
+              "x-a",
+              "1"
+            ]
+          ],
+          false,
+          false,
+          false,
+          "function",
+          "function",
+          [
+            "url",
+            "status",
+            "statusText",
+            "ok",
+            "headers",
+            "redirected",
+            "body",
+            "text",
+            "json",
+            "bytes",
+            "arrayBuffer"
+          ],
+          [
+            "cancel",
+            "getReader"
+          ],
+          "",
+          "",
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const t = await r.text(); return [t, r.bodyUsed, r.body.locked]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "hello",
+          true,
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"{\\\"a\\\":\",\"[1,2]}\"],\"headers\":{\"content-type\":\"application/json\"}}); return [await r.json(), r.bodyUsed]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "a": [
+              1,
+              2
+            ]
+          },
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const b = await r.bytes(); return [b instanceof Uint8Array, [...b]]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            104,
+            101,
+            108,
+            108,
+            111
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const b = await r.arrayBuffer(); return [b instanceof Uint8Array, [...b]]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            104,
+            101,
+            108,
+            108,
+            111
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"{\"], headers: { \"content-type\": \"application/json\" } })\n   try { await r.json() } catch (e) { return [e.name, e.message, r.bodyUsed] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "SyntaxError",
+          "JSON Parse error: Expected '}'",
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); await r.text()\n   try { await r.text() } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Body already used"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); await r.text()\n   try { r.body.getReader() } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid state: ReadableStream is locked"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader()\n   const reads = []\n   for (let i = 0; i < 4; i++) { const { done, value } = await reader.read(); reads.push([done, value === undefined ? null : [...value]]) }\n   return [r.body.locked, r.bodyUsed, reads]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          true,
+          [
+            [
+              false,
+              [
+                104,
+                101,
+                108
+              ]
+            ],
+            [
+              false,
+              [
+                108,
+                111
+              ]
+            ],
+            [
+              true,
+              null
+            ],
+            [
+              true,
+              null
+            ]
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); r.body.getReader()\n   try { r.body.getReader() } catch (e) { return [e.name, e.message, r.body.locked] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid state: ReadableStream is locked",
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); r.body.getReader()\n   try { await r.text() } catch (e) { return [e.name, e.message, r.bodyUsed] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid state: ReadableStream is locked",
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); reader.releaseLock()\n   const after = r.body.locked\n   try { await reader.read() } catch (e) { return [after, e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          "TypeError",
+          "Invalid state: The reader is not attached to a stream"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); await reader.read(); reader.releaseLock()\n   return [r.body.locked, r.bodyUsed, await r.body.getReader().read().then((x) => [x.done, [...x.value]])]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          true,
+          [
+            false,
+            [
+              108,
+              111
+            ]
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}})\n   try { r.body.getReader({ mode: \"byob\" }) } catch (e) { return [e.name, e.message, r.body.locked] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Only the default stream reader is supported.",
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const out = await r.body.cancel(\"enough\")\n   return [out === undefined, r.bodyUsed, r.body.locked, await r.text()]",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "TypeError: Body already used"
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "cancel",
+          "enough"
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); await reader.read()\n   const out = await reader.cancel(\"stop\")\n   return [out === undefined, r.body.locked, await reader.read()]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          true,
+          {
+            "done": true
+          }
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "cancel",
+          "stop"
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); r.body.getReader()\n   try { await r.body.cancel() } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid state: ReadableStream is locked"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const parts = []\n   for await (const chunk of r.body) parts.push([...chunk])\n   return [parts, r.bodyUsed, r.body.locked]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              104,
+              101,
+              108
+            ],
+            [
+              108,
+              111
+            ]
+          ],
+          true,
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const parts = []\n   for await (const chunk of r.body) { parts.push([...chunk]); break }\n   return [parts, r.body.locked, await r.text().catch((e) => e.message)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              104,
+              101,
+              108
+            ]
+          ],
+          false,
+          "Body already used"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "cancel",
+          null
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\", \"b\"], fail: 1 }); const reader = r.body.getReader()\n   const first = await reader.read()\n   try { await reader.read() } catch (e) { return [[...first.value], e.name, e.message, r.body.locked] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            97
+          ],
+          "Error",
+          "boom",
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\"], fail: 0 })\n   try { await r.text() } catch (e) { return [e.name, e.message, r.bodyUsed] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Error",
+          "boom",
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\"], fail: 0 }); const parts = []\n   try { for await (const c of r.body) parts.push([...c]) } catch (e) { return [parts, e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [],
+          "Error",
+          "boom"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ status: 204 })\n   return [r.body, r.bodyUsed, r.ok, await r.text(), r.bodyUsed, await r.text()]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          null,
+          false,
+          true,
+          "",
+          false,
+          ""
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const r = await fetch({ status: 404, statusText: \"Not Found\", chunks: [\"missing\"], redirected: true })\n   return [r.ok, r.status, r.statusText, r.redirected, await r.text()]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          404,
+          "Not Found",
+          true,
+          "missing"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return r",
+      "outcome": {
+        "ok": true,
+        "value": {
+          "url": "",
+          "status": 201,
+          "statusText": "Created",
+          "ok": true,
+          "headers": {
+            "content-type": "text/plain",
+            "x-a": "1"
+          },
+          "redirected": false,
+          "body": {}
+        }
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return JSON.stringify(r)",
+      "outcome": {
+        "ok": true,
+        "value": "{\"url\":\"\",\"status\":201,\"statusText\":\"Created\",\"ok\":true,\"headers\":{\"content-type\":\"text/plain\",\"x-a\":\"1\"},\"redirected\":false,\"body\":{}}"
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); return [Object.keys(reader), typeof reader.read]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "read",
+            "cancel",
+            "releaseLock"
+          ],
+          "function"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); try { r.bodyUsed = true } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Cannot assign to read only property 'bodyUsed'."
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); try { r.body.locked = true } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Cannot assign to read only property 'locked'."
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}})\n   const before = [\"bodyUsed\" in r, r.hasOwnProperty(\"bodyUsed\"), Object.keys(r).includes(\"bodyUsed\"), \"locked\" in r.body]\n   const deleted = [delete r.bodyUsed, \"bodyUsed\" in r, r.bodyUsed, delete r.body.locked, \"locked\" in r.body, r.body.locked]\n   r.bodyUsed = 5; r.body.locked = 6\n   return [before, deleted, r.bodyUsed, r.body.locked, Object.keys(r).includes(\"bodyUsed\"), Object.keys(r.body)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            true,
+            true,
+            false,
+            true
+          ],
+          [
+            true,
+            false,
+            null,
+            true,
+            false,
+            null
+          ],
+          5,
+          6,
+          true,
+          [
+            "cancel",
+            "getReader",
+            "locked"
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); r.status = 5; delete r.text; return [r.status, typeof r.text, Object.keys(r).length]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          5,
+          "undefined",
+          10
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader()\n   return [r.text.length, r.json.length, r.body.cancel.length, r.body.getReader.length, r.body[Symbol.asyncIterator].length,\n     r.body[Symbol.asyncIterator].name, reader.read.length, reader.cancel.length, reader.releaseLock.length, reader.read.name]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          0,
+          0,
+          1,
+          1,
+          0,
+          "",
+          0,
+          1,
+          0,
+          "read"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); console.log(r); console.log(r.body); console.log(r.body.getReader()); return [String(r), String(r.body), Object.entries(r.body)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "[object Object]",
+          "[object Object]",
+          [
+            [
+              "cancel",
+              null
+            ],
+            [
+              "getReader",
+              null
+            ]
+          ]
+        ],
+        "logs": [
+          "{\"url\":\"\",\"status\":201,\"statusText\":\"Created\",\"ok\":true,\"headers\":Headers {\"content-type\":\"text/plain\",\"x-a\":\"1\"},\"redirected\":false,\"body\":{\"cancel\":[opaque reference],\"getReader\":[opaque reference]},\"text\":[opaque reference],\"json\":[opaque reference],\"bytes\":[opaque reference],\"arrayBuffer\":[opaque reference]}",
+          "{\"cancel\":[opaque reference],\"getReader\":[opaque reference]}",
+          "{\"read\":[opaque reference],\"cancel\":[opaque reference],\"releaseLock\":[opaque reference]}"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return [JSON.stringify(r.body), JSON.stringify({ ...r.body }), Object.keys(r.body)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{}",
+          "{}",
+          [
+            "cancel",
+            "getReader"
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); await reader.read()\n   try { await r.text() } catch (e) { return [e.name, e.message, r.bodyUsed, r.body.locked] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Body already used",
+          true,
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); await reader.read(); reader.releaseLock()\n   try { await r.text() } catch (e) { return [e.name, e.message, r.bodyUsed, r.body.locked] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Body already used",
+          true,
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); await r.body.cancel(); const after = [r.bodyUsed, r.body.locked]\n   try { await r.bytes() } catch (e) { return [after, e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            true,
+            false
+          ],
+          "TypeError",
+          "Body already used"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "cancel",
+          null
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ status: 204 })\n   const out = [[...(await r.bytes())], [...(await r.arrayBuffer())]]\n   try { await r.json() } catch (e) { out.push([e.name, e.message]) }\n   return out",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [],
+          [],
+          [
+            "SyntaxError",
+            "Unexpected end of JSON input"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const out = []\n   for (const body of [\"\",\" \",\"{\",\"[1,\",\"abc\",\"nul\",\"tru\",\"1 2\",\"{\\\"a\\\":1}x\",\"{\\\"a\\\" 1}\",\"{a:1}\",\"[1,]\",\"{\\\"a\\\":1,}\",\"\\\"x\",\"\\\"\\\\q\\\"\",\"\\\"\\\\u12\\\"\",\"01\",\"-\",\"1.\",\"1e\",\".5\",\"+1\",\"[1 2]\",\"{\\\"a\\\":1 \\\"b\\\":2}\",\"'x'\",\"  1\",\"\\\"\\t\\\"\",\"{\\\"__proto__\\\":1,\\\"a\\\":2,\\\"a\\\":3}\",\"1e400\",\"-0\",\"[[[[]]]]\",\"{\\\"\\\":\\\"\\\"}\",\"NaN\",\"Infinity\",\"undefined\",\"true false\",\":\",\",\",\"}\",\"]\",\"[\",\"\\\"a\\\\\\\"\",\"{\\\"a\\\":}\",\"{\\\"a\\\":1,\\\"b\\\"}\",\"{,}\",\"[,1]\",\"1e+\",\"0x10\",\"1_0\",\"\\\"\\\\x41\\\"\",\"\\\"\\\\u00e9\\\"\",\"  1\",\"[1]]\",\"{}}\",\"nulll\",\"truex\",\" \\n\\t\\r 7 \",\"\\f1\",\"\\\"\\u0000\\\"\",\"{\\\"a\\\":[}\",\"123abc\",\"[-]\",\"[1,,2]\",\"\\\"\\\\\\\"\",\"1.5e3\",\"-1.5E-3\",\"1e-400\",\"9007199254740993\",\"{\\\"a\\\":{\\\"b\\\":[1,{\\\"c\\\":null}]}}\"]) {\n     const r = await fetch({ chunks: [body] })\n     try { const v = await r.json(); out.push([\"ok\", v, Object.is(v, -0)]) } catch (e) { out.push([e.name, e.message]) }\n   }\n   return out",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected EOF"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected EOF"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected EOF"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"abc\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"nul\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"tru\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected ':' before value in object property definition"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected comma at the end of array expression"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Property name must be a string literal"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unterminated string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Invalid escape character q"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: \\u must be followed by 4 hex digits"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Invalid number"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Invalid digits after decimal point"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token '.'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unrecognized token '+'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected ']'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Single quotes (') are not allowed in JSON"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unrecognized token ' '"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unterminated string"
+          ],
+          [
+            "ok",
+            {
+              "a": 3
+            },
+            false
+          ],
+          [
+            "ok",
+            null,
+            false
+          ],
+          [
+            "ok",
+            0,
+            true
+          ],
+          [
+            "ok",
+            [
+              [
+                [
+                  []
+                ]
+              ]
+            ],
+            false
+          ],
+          [
+            "ok",
+            {
+              "": ""
+            },
+            false
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"NaN\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"Infinity\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected identifier \"undefined\""
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token ':'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token ','"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token ']'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected EOF"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unterminated string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected ':' before value in object property definition"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Expected '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token ','"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Invalid escape character x"
+          ],
+          [
+            "ok",
+            "é",
+            false
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unrecognized token ' '"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "ok",
+            7,
+            false
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unrecognized token '\f'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unterminated string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token '}'"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unable to parse JSON string"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Invalid number"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unexpected token ','"
+          ],
+          [
+            "SyntaxError",
+            "JSON Parse error: Unterminated string"
+          ],
+          [
+            "ok",
+            1500,
+            false
+          ],
+          [
+            "ok",
+            -0.0015,
+            false
+          ],
+          [
+            "ok",
+            0,
+            false
+          ],
+          [
+            "ok",
+            9007199254740992,
+            false
+          ],
+          [
+            "ok",
+            {
+              "a": {
+                "b": [
+                  1,
+                  {
+                    "c": null
+                  }
+                ]
+              }
+            },
+            false
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [[0xef, 0xbb, 0xbf, 0x7b, 0x7d]] }); return await r.json().catch((e) => e.message)",
+      "outcome": {
+        "ok": true,
+        "value": {}
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const p = r.text(); await null; await null; const now = [r.body.locked, r.bodyUsed]; await p; return now",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const out = []\n   for (const chunks of [[[0xef, 0xbb, 0xbf, 0x68, 0x69]], [[0xff, 0x61]], [[0xe2, 0x82], [0xac]], [[0xe2, 0x82]], [[0xef, 0xbb], [0xbf, 0x7b, 0x7d]],\n       [[0xed, 0xa0, 0x80]], [[0xf0, 0x9f, 0x98, 0x80]], [[0xc0, 0x80]]]) {\n     const t = await (await fetch({ chunks })).text()\n     const j = await (await fetch({ chunks: [...chunks, [0x22]].map((c, i) => i === 0 ? [0x22, ...c] : c) })).json().catch((e) => e.message)\n     out.push([[...t].map((c) => c.codePointAt(0)), typeof j === \"string\" ? [...j].map((c) => c.codePointAt(0)) : j])\n   }\n   return out",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              104,
+              105
+            ],
+            [
+              65279,
+              104,
+              105
+            ]
+          ],
+          [
+            [
+              65533,
+              97
+            ],
+            [
+              65533,
+              97
+            ]
+          ],
+          [
+            [
+              8364
+            ],
+            [
+              8364
+            ]
+          ],
+          [
+            [
+              65533
+            ],
+            [
+              65533
+            ]
+          ],
+          [
+            [
+              123,
+              125
+            ],
+            [
+              65279,
+              123,
+              125
+            ]
+          ],
+          [
+            [
+              65533,
+              65533,
+              65533
+            ],
+            [
+              65533,
+              65533,
+              65533
+            ]
+          ],
+          [
+            [
+              128512
+            ],
+            [
+              128512
+            ]
+          ],
+          [
+            [
+              65533,
+              65533
+            ],
+            [
+              65533,
+              65533
+            ]
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          3
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          3
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const p = r.text(); const now = [r.body.locked, r.bodyUsed]; await p; return now",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); const p = reader.read(); const now = r.bodyUsed; await p; return now",
+      "outcome": {
+        "ok": true,
+        "value": false
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}})\n   const all = await Promise.allSettled([r.text(), r.text(), r.json()])\n   return all.map((x) => x.status === \"fulfilled\" ? x.value : [x.reason.name, x.reason.message])",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "hello",
+          [
+            "TypeError",
+            "Body already used"
+          ],
+          [
+            "TypeError",
+            "Body already used"
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader()\n   const all = await Promise.all([reader.read(), reader.read(), reader.read(), reader.read()])\n   return all.map((x) => [Object.keys(x), x.done, x.value === undefined ? null : [...x.value]])",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              "value",
+              "done"
+            ],
+            false,
+            [
+              104,
+              101,
+              108
+            ]
+          ],
+          [
+            [
+              "value",
+              "done"
+            ],
+            false,
+            [
+              108,
+              111
+            ]
+          ],
+          [
+            [
+              "value",
+              "done"
+            ],
+            true,
+            null
+          ],
+          [
+            [
+              "value",
+              "done"
+            ],
+            true,
+            null
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); r.body.getReader()\n   try { r.body[Symbol.asyncIterator]() } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid state: ReadableStream is locked"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const it = r.body[Symbol.asyncIterator]()\n   const locked = r.body.locked\n   try { r.body[Symbol.asyncIterator]() } catch (e) { return [locked, e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          "TypeError",
+          "Invalid state: ReadableStream is locked"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const it = r.body[Symbol.asyncIterator]()\n   const steps = []\n   for (let i = 0; i < 4; i++) { const x = await it.next(); steps.push([Object.keys(x), x.done, x.value === undefined ? null : [...x.value], r.body.locked]) }\n   const ret = await it.return()\n   return [steps, Object.keys(ret), ret, r.bodyUsed]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              [
+                "value",
+                "done"
+              ],
+              false,
+              [
+                104,
+                101,
+                108
+              ],
+              true
+            ],
+            [
+              [
+                "value",
+                "done"
+              ],
+              false,
+              [
+                108,
+                111
+              ],
+              true
+            ],
+            [
+              [
+                "value",
+                "done"
+              ],
+              true,
+              null,
+              false
+            ],
+            [
+              [
+                "value",
+                "done"
+              ],
+              true,
+              null,
+              false
+            ]
+          ],
+          [
+            "value",
+            "done"
+          ],
+          {
+            "done": true
+          },
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const it = r.body[Symbol.asyncIterator]()\n   const ret = await it.return(); const again = await it.next()\n   return [Object.keys(ret), ret.done, again.done, r.body.locked, r.bodyUsed, await r.text().catch((e) => e.message)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "value",
+            "done"
+          ],
+          true,
+          true,
+          false,
+          true,
+          "Body already used"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "cancel",
+          null
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\"], fail: 0 }); const it = r.body[Symbol.asyncIterator]()\n   const first = await it.next().catch((e) => [e.name, e.message])\n   return [first, r.body.locked, await it.next().then((x) => x.done, (e) => e.message)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "Error",
+            "boom"
+          ],
+          false,
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\", \"b\"], fail: 1 }); const reader = r.body.getReader(); await reader.read()\n   const failed = await reader.read().catch((e) => e.message)\n   const again = await reader.read().catch((e) => e.message)\n   const cancelled = await reader.cancel(\"x\").catch((e) => e.message)\n   reader.releaseLock()\n   return [failed, again, cancelled, r.body.locked, await r.body.cancel().catch((e) => e.message), await r.text().catch((e) => e.message)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "boom",
+          "boom",
+          "boom",
+          false,
+          "boom",
+          "Body already used"
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); await reader.cancel()\n   const cancelled = await reader.cancel(\"again\"); reader.releaseLock()\n   return [cancelled === undefined, await r.body.cancel(\"third\"), await r.body.getReader().read()]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          null,
+          {
+            "done": true
+          }
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "cancel",
+          null
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); try { await r.body.cancel(() => 1) } catch (e) { return [e.name, e.message, r.bodyUsed] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Argument 1 to fetch.body.cancel contains a function, which cannot be passed to an extension.",
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader()\n   try { await reader.cancel(Symbol.iterator) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Argument 1 to fetch.body.getReader.cancel contains a symbol, which cannot be passed to an extension."
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}})\n   const out = []\n   for (const o of [undefined, null, {}, { mode: undefined }, 5, \"byob\", { mode: \"default\" }]) {\n     try { const reader = r.body.getReader(o); reader.releaseLock(); out.push(\"ok\") } catch (e) { out.push(e.message) }\n   }\n   return out",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "ok",
+          "ok",
+          "ok",
+          "ok",
+          "ok",
+          "ok",
+          "Only the default stream reader is supported."
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); reader.releaseLock(); return [await reader.read().catch((e) => e.name), reader.closed]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          null
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\"], delay: 5 }); const reader = r.body.getReader(); const p = reader.read()\n   await null; await null; reader.releaseLock()\n   return [await p.then((x) => x.done, (e) => [e.name, e.message]), r.body.locked, r.bodyUsed]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "TypeError",
+            "Invalid state: Releasing reader"
+          ],
+          false,
+          true
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({ chunks: [\"a\"], delay: 5 }); const reader = r.body.getReader(); const p = reader.read()\n   await null; await null; const c = await reader.cancel(\"c\")\n   return [c === undefined, await p.then((x) => [Object.keys(x), x.done, x.value === undefined], (e) => [e.name, e.message])]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            [
+              "value",
+              "done"
+            ],
+            true,
+            true
+          ]
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "cancel",
+          "c"
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const out = []\n   for (const v of [r, r.body, r.headers, { ...r, text: 1, json: 1, bytes: 1, arrayBuffer: 1, body: 1 }]) {\n     try { out.push(echo(v)) } catch (e) { out.push([e.name, e.message]) }\n   }\n   return out",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "TypeError",
+            "Argument 1 to echo contains a function, which cannot be passed to an extension."
+          ],
+          [
+            "TypeError",
+            "Argument 1 to echo contains a function, which cannot be passed to an extension."
+          ],
+          {
+            "content-type": "text/plain",
+            "x-a": "1"
+          },
+          {
+            "url": "",
+            "status": 201,
+            "statusText": "Created",
+            "ok": true,
+            "headers": {
+              "content-type": "text/plain",
+              "x-a": "1"
+            },
+            "redirected": false,
+            "body": 1,
+            "text": 1,
+            "json": 1,
+            "bytes": 1,
+            "arrayBuffer": 1
+          }
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return [typeof r.clone, typeof r.formData, typeof r.blob, r.type, typeof r.body.tee, typeof r.body.pipeTo, r.body.values]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "undefined",
+          "undefined",
+          "undefined",
+          null,
+          "undefined",
+          "undefined",
+          null
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const copy = { ...r }; return [Object.keys(copy), copy.bodyUsed]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "url",
+            "status",
+            "statusText",
+            "ok",
+            "headers",
+            "redirected",
+            "body",
+            "text",
+            "json",
+            "bytes",
+            "arrayBuffer"
+          ],
+          null
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const reader = r.body.getReader(); reader.releaseLock(); reader.releaseLock(); return [await reader.cancel().catch((e) => e.message), r.body.locked]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Invalid state: The reader is not attached to a stream",
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const it = r.body[Symbol.asyncIterator](); const a = await it.next(); const b = await it.return(); return [[...a.value], a.done, b, r.body.locked]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            104,
+            101,
+            108
+          ],
+          false,
+          {
+            "done": true
+          },
+          false
+        ]
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "cancel",
+          null
+        ]
+      ]
+    }
+  ],
+  "suspensions": [
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); await tools.wait({}); return [r.status, r.bodyUsed]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const t = await r.text(); await tools.wait({}); return t",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const s = r.status; const h = r.headers; await tools.wait({}); return [s, h.get(\"x-a\")]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const { status, statusText } = r; await tools.wait({}); return [status, statusText]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const text = r.text; await tools.wait({}); return await text()",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const body = r.body; await tools.wait({}); return body.locked",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "async function get() { const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return await r.text() }\n   const t = await get(); await tools.wait({}); return t",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": "hello"
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "async function get() { const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return r.body }\n   const body = await get(); await tools.wait({}); return body.locked",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor locked has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "async function get() { const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); return r.text }\n   const text = await get(); await tools.wait({}); return await text()",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "TypeError: The function (anonymous) came from the host and was lost when the run was suspended; get it again after resuming. (line 2, col 65)"
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    }
+  ]
+}

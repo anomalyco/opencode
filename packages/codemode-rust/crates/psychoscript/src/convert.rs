@@ -110,7 +110,7 @@ fn to_json_inner(
                     }
                     Json::Object(map)
                 }
-                Kind::Ordinary | Kind::Arguments(_) => {
+                Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
                     let mut map = serde_json::Map::new();
                     for (k, val) in vm.own_entries(id) {
                         if vm.atoms.text(k) == "__proto__" {
@@ -335,7 +335,7 @@ fn write_json(
                         );
                         e
                     }
-                    Kind::Ordinary | Kind::Arguments(_) => vm.own_entries(id),
+                    Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => vm.own_entries(id),
                     _ => Vec::new(),
                 };
                 let entries: Vec<(Atom, Value)> = match &opts.allow {
@@ -722,7 +722,7 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                     }
                     out.push(']');
                 }
-                Kind::Ordinary | Kind::Arguments(_) => {
+                Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
                     out.push('{');
                     for (i, (k, val)) in vm.own_entries(id).into_iter().enumerate() {
                         if i > 0 {

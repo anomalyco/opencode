@@ -2562,6 +2562,7 @@ impl<'rt> Vm<'rt> {
             }
             if let Some(job) = self.jobs.pop_front() {
                 self.tick()?;
+                self.host.next_epoch();
                 self.run_job(job)?;
                 continue;
             }

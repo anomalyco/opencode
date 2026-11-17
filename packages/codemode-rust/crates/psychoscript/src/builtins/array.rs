@@ -173,7 +173,8 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let iterable = match &src {
         Value::Str(_) => true,
         Value::Obj(id) => {
-            !matches!(vm.heap[*id as usize].kind, Kind::Ordinary) || vm.has_key(*id, SYM_ITERATOR)
+            !matches!(vm.heap[*id as usize].kind, Kind::Ordinary | Kind::Live(_))
+                || vm.has_key(*id, SYM_ITERATOR)
         }
         _ => false,
     };

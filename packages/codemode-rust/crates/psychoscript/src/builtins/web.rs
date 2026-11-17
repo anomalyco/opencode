@@ -112,7 +112,7 @@ fn is_runtime_reference(vm: &Vm, v: &Value) -> bool {
     match v {
         Value::Obj(id) => !matches!(
             vm.heap[*id as usize].kind,
-            Kind::Ordinary | Kind::Array(_) | Kind::Error(_)
+            Kind::Ordinary | Kind::Array(_) | Kind::Error(_) | Kind::Live(_)
         ),
         _ => false,
     }
@@ -1008,7 +1008,7 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
         Kind::Bytes(b) => Plan::Bytes(b.to_vec()),
         Kind::Error(_) => Plan::Error,
         Kind::Array(items) => Plan::Array(items.len()),
-        Kind::Ordinary | Kind::Arguments(_) | Kind::TextDecoder(_) => Plan::Object,
+        Kind::Ordinary | Kind::Arguments(_) | Kind::TextDecoder(_) | Kind::Live(_) => Plan::Object,
         _ => Plan::Reject,
     };
     match plan {

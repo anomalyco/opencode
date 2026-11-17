@@ -213,6 +213,7 @@ jobs:
         run: |
           bun conformance/generate.ts
           bun conformance/catalog.ts
+          bun conformance/streaming.ts
           git status --porcelain -- conformance
           git diff --exit-code -- conformance
           test -z "$(git status --porcelain -- conformance)"

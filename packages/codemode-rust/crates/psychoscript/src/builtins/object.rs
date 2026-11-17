@@ -727,7 +727,7 @@ fn contains_opaque(vm: &Vm, v: &Value, seen: &mut Vec<Id>) -> bool {
     let Value::Obj(id) = v else { return false };
     let o = &vm.heap[*id as usize];
     match &o.kind {
-        Kind::Ordinary | Kind::Error(_) | Kind::Arguments(_) | Kind::Array(_) => {}
+        Kind::Ordinary | Kind::Error(_) | Kind::Arguments(_) | Kind::Array(_) | Kind::Live(_) => {}
         Kind::Map(_)
         | Kind::Set(_)
         | Kind::WeakMap(_)

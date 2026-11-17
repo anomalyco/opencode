@@ -516,6 +516,7 @@ fn describe(v: &HostValue) -> Json {
         HostValue::Headers(p) => json!({ "headers": pairs(p) }),
         HostValue::Buffer(b) => json!({ "buffer": b }),
         HostValue::Bytes(b) => json!({ "bytes": b }),
+        HostValue::Response(_) => panic!("the boundary programs make no streaming response"),
         HostValue::Map(entries) => {
             json!({ "map": entries.iter().map(|(k, v)| json!([describe(k), describe(v)])).collect::<Vec<_>>() })
         }

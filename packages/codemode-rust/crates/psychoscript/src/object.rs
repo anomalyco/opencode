@@ -316,6 +316,8 @@ pub enum Kind {
         sync: Id,
         next: Value,
     },
+    /// An object with accessors the host answers, such as a streaming response.
+    Live(Box<crate::streaming::Live>),
 }
 
 pub struct Combinator {

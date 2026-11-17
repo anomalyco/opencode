@@ -356,8 +356,21 @@ impl Enc<'_, '_> {
             }
         }
         let mut rest = Vec::new();
-        for o in &vm.heap[base.heap..] {
-            rest.push(self.obj(o)?);
+        // A streaming response's live accessors have no data form: one the run can still reach fails the resume, as
+        // in the reference.
+        let live = vm.heap[base.heap..]
+            .iter()
+            .any(|o| matches!(o.kind, Kind::Live(_)))
+            .then(|| crate::reach::reachable(vm));
+        for (i, o) in vm.heap.iter().enumerate().skip(base.heap) {
+            let mut encoded = self.obj(o)?;
+            if let (Kind::Live(l), Some(live)) = (&o.kind, &live)
+                && live[i]
+            {
+                let names: Vec<&str> = l.accessors.iter().map(|(k, _)| vm.atoms.text(*k)).collect();
+                encoded[3] = json!(["live", names]);
+            }
+            rest.push(encoded);
         }
         let mut global_map: Vec<(&u32, &Value)> = vm.global_map.iter().collect();
         global_map.sort_by_key(|(a, _)| **a);
@@ -602,6 +615,7 @@ impl Enc<'_, '_> {
                 json!(["ag", self.gen_state(&a.state)?, phase, queue])
             }
             Kind::AsyncFromSync { sync, next } => json!(["afs", sync, val(next)]),
+            Kind::Live(_) => json!(["live", []]),
         })
     }
 
@@ -911,6 +925,7 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Headers(entries) => json!(["hd", entries]),
         HostValue::Bytes(b) => json!(["u8", bytes_hex(b)]),
         HostValue::Buffer(b) => json!(["buf", bytes_hex(b)]),
+        HostValue::Response(_) => json!(["resp"]),
         HostValue::Error(e) => json!([
             "e",
             e.name,
@@ -972,6 +987,7 @@ fn host_value_from(j: &J) -> R<HostValue> {
             Some("hd") => HostValue::Headers(pairs(at(j, 1)?)?),
             Some("u8") => HostValue::Bytes(hex_bytes(&string(at(j, 1)?)?)?),
             Some("buf") => HostValue::Buffer(hex_bytes(&string(at(j, 1)?)?)?),
+            Some("resp") => return Err(invalid("the accessor bodyUsed has no original.")),
             Some("e") => HostValue::Error(Box::new(HostError {
                 name: string(at(j, 1)?)?,
                 message: string(at(j, 2)?)?,
@@ -1546,6 +1562,13 @@ impl Dec<'_> {
             "h" => Kind::Headers(Box::new(crate::builtins::web::HeaderList {
                 list: pairs(f(1)?)?,
             })),
+            "live" => match list(Some(f(1)?))?.first() {
+                Some(name) => {
+                    let name = string(name)?;
+                    return Err(invalid(format!("the accessor {name} has no original.")));
+                }
+                None => Kind::Ordinary,
+            },
             "ag" => {
                 let phase = match uint(f(2)?)? {
                     0 => AsyncPhase::Start,

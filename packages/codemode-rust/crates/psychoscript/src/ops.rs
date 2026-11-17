@@ -291,7 +291,7 @@ impl<'rt> Vm<'rt> {
             let o = &self.heap[id as usize];
             if let Kind::Array(items) | Kind::Arguments(items) = &o.kind {
                 pending.extend(items.iter().filter_map(Value::as_obj));
-            } else if !matches!(o.kind, Kind::Ordinary | Kind::Error(_)) {
+            } else if !matches!(o.kind, Kind::Ordinary | Kind::Error(_) | Kind::Live(_)) {
                 continue;
             }
             pending.extend(o.props.items.iter().filter_map(|p| p.value.as_obj()));
@@ -1151,7 +1151,7 @@ impl<'rt> Vm<'rt> {
             Value::Str(_) => "a string",
             Value::Sym(_) => "a symbol",
             Value::Obj(id) => match &self.heap[*id as usize].kind {
-                Kind::Ordinary => "a data object",
+                Kind::Ordinary | Kind::Live(_) => "a data object",
                 Kind::Array(_) => "an array",
                 Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
                 Kind::Promise(_) => "an un-awaited Promise",

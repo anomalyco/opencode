@@ -42,6 +42,8 @@ pub enum HostValue {
     Bytes(Vec<u8>),
     /// A Node `Buffer`.
     Buffer(Vec<u8>),
+    /// A live HTTP response whose body the host streams, the reference's `Extension.StreamingResponse`.
+    Response(crate::streaming::StreamingResponse),
 }
 
 impl HostValue {
@@ -130,6 +132,9 @@ impl HostValue {
             | HostValue::RegExp { .. }
             | HostValue::SearchParams(_)
             | HostValue::Headers(_) => Json::Object(Default::default()),
+            HostValue::Response(r) => {
+                serde_json::json!({ "response": {}, "redirected": r.redirected })
+            }
             HostValue::Date(t) => match t.is_finite() {
                 true => Json::String(crate::builtins::date::iso_string(*t)),
                 false => Json::Null,
@@ -246,6 +251,8 @@ type AsyncFn = dyn Fn(Vec<HostValue>) -> BoxFuture<'static, HostResult> + Send +
 pub(crate) enum Body {
     Sync(Arc<SyncFn>),
     Async(Arc<AsyncFn>),
+    /// A function a resumed run lost: calling it throws this message at the call.
+    Lost(Arc<str>),
 }
 
 /// A host function the program can call.
