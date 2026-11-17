@@ -3,7 +3,7 @@ import { scheduler } from "node:timers/promises"
 import { navigationTurn, replacementNavigation } from "./navigation-turn"
 import { accessibilitySnapshot } from "./snapshot"
 import { documentRefs } from "./refs"
-import { agentRendering } from "./agent-rendering"
+import { agentRendering, needsWakeFrame } from "./agent-rendering"
 import { extensionResource } from "./profile/extension-api/resource"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import electron, { type BrowserWindow, type WebContents } from "electron"
@@ -1144,12 +1144,13 @@ export function createBrowserPage(
     async execute(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user"): Promise<Browser.Result> {
       using active = new DisposableStack()
 
-      const hidden = !view.getVisible() && !undrawable({ platform: process.platform, visible: win.isVisible(), minimized: win.isMinimized(), appHidden: process.platform === "darwin" && electron.app.isHidden() })
+      const hidden = !view.getVisible() && win.isVisible() && !win.isMinimized() && !(process.platform === "darwin" && electron.app.isHidden())
+      const shouldPaint = () => needsWakeFrame(command.action.type, documentState.status === "loaded" && !documentState.busy && !documentState.pending, !!selectOpenDialog(dialogGate))
 
-      const hold = origin === "agent" ? active.use(rendering.hold(hidden ? async () => {
+      const hold = origin === "agent" ? active.use(rendering.hold(hidden && shouldPaint() ? async () => {
         await ready
 
-        if (closed() || agentRefusal({ type: "snapshot" }, mainDocument())) return
+        if (!shouldPaint() || agentRefusal({ type: "snapshot" }, mainDocument())) return
         await withFrames(false, pageLifetime.signal, async stop => {
           const frame = (await cdp.send("Page.getFrameTree")).frameTree.frame.id
           const world = await cdp.send("Page.createIsolatedWorld", { frameId: frame, worldName: "opencode-browser-paint" })

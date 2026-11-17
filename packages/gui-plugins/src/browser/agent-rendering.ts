@@ -1,3 +1,10 @@
+import type { Browser } from "@opencode/plugin-browser/rpc"
+
+/** A paused page cannot paint the frame that its dialog or a recovery navigation would unblock. */
+export function needsWakeFrame(method: Browser.Method, loaded: boolean, dialog: boolean) {
+  return loaded && !dialog && ["snapshot", "find", "wait", "evaluate", "click", "check", "fill", "fill_form", "select", "press", "type", "hover", "drag", "scroll", "screenshot"].includes(method)
+}
+
 // Long enough to cover thinking between a snapshot and its follow-up; a forgotten tab doesn't animate indefinitely.
 const idleMs = 30_000
 
@@ -15,16 +22,15 @@ export function agentRendering(signal: AbortSignal, throttle: (enabled: boolean)
 
       if (!awake) {
         throttle(false)
-        paint = onWake?.()
-        // Later commands may retry a failed wake; overlapping holders await the same frame.
-        void paint?.then(() => { paint = undefined }, () => { awake = false; paint = undefined })
+        paint = onWake?.().catch(() => undefined)
+        void paint?.then(() => { paint = undefined })
       }
 
       awake = true
       holds++
 
       return {
-        painted: paint,
+        painted: onWake ? paint : undefined,
         [Symbol.dispose]() {
           if (--holds || signal.aborted) return
           cancel = after(idleMs, () => {

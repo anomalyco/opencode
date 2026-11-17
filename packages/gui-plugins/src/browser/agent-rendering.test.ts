@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { agentRendering } from "./agent-rendering"
+import { agentRendering, needsWakeFrame } from "./agent-rendering"
 
 test("only the last command starts the idle clock; wake before the next command and cancel at disposal", () => {
   const lifetime = new AbortController()
@@ -40,4 +40,18 @@ test("overlapping commands await the same first frame", async () => {
   await first.painted
   first[Symbol.dispose]()
   second[Symbol.dispose]()
+})
+
+test("a missing frame never prevents acting; dialog and navigation bypass even a pending wake", async () => {
+  const render = agentRendering(new AbortController().signal, () => {}, () => () => {})
+  const frame = Promise.withResolvers<void>()
+  const shot = render.hold(() => frame.promise)
+  expect(needsWakeFrame("dialog", true, true)).toBe(false)
+  expect(needsWakeFrame("navigate", true, false)).toBe(false)
+  expect(needsWakeFrame("click", true, true)).toBe(false)
+  expect(needsWakeFrame("snapshot", false, false)).toBe(false)
+  expect(needsWakeFrame("evaluate", true, false)).toBe(true)
+  expect(render.hold().painted).toBeUndefined()
+  frame.reject(new Error("no frame"))
+  await expect(shot.painted).resolves.toBeUndefined()
 })
