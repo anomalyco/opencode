@@ -2639,6 +2639,30 @@ fn a_fence_node_alone_draws_as_the_host_code_view() {
     }
 }
 
+// Expected (carbon c2a-2): the host's code view of a claimed fence keeps the code whole, also a line of three backticks
+// in a fence opened with four, or with tildes: the fence node, and the host's row of a declined fence, draw what the
+// transcript draws with no plugin.
+#[test]
+fn a_fence_node_keeps_a_fence_in_its_code() {
+    for text in [
+        "````probe\nbefore\n```\n# NOT A HEADING\n````\n\nAfter.\n",
+        "~~~probe\nbefore\n```\n# NOT A HEADING\n~~~\n\nAfter.\n",
+    ] {
+        for carrier in CARRIERS {
+            let bare = World::with(Vec::new());
+            bare.emit("session.text.started", json!({ "ordinal": 0 }));
+            bare.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
+            bare.settle();
+            let bare = bare.frame();
+            assert!(bare.text().contains("# NOT A HEADING"), "{text:?}: the host's own view:\n{}", bare.text());
+            for how in [Fenced::Alone, Fenced::Declined] {
+                let (_world, frame) = fenced(carrier, how, text);
+                assert!(frame.cells == bare.cells, "{carrier:?} {how:?} {text:?}:\n{}", frame.text());
+            }
+        }
+    }
+}
+
 // Expected (contract 2.x additions, `fence-node`): the fence node follows the fence as it streams, while the claim's
 // card stays the tree it kept; the host's row never shows.
 #[test]
