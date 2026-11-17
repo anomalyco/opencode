@@ -7,8 +7,9 @@
 //! runtime, `ReadableStream` errors included.
 //!
 //! Like any asynchronous extension call in the reference, a read or cancel the program starts takes effect at the
-//! next point where the reference hands calls to the host: when the current job ends, or after a synchronous
-//! extension call. Until then `locked` and `bodyUsed` read as before the call.
+//! next point where the reference hands calls to the host: when the current job ends, after a synchronous extension
+//! call, when a throw unwinds, or when its interpreter's fuel runs out (see `HANDOVER_FUEL` in `vm.rs`). Until then
+//! `locked` and `bodyUsed` read as before the call.
 
 use std::collections::VecDeque;
 use std::fmt;

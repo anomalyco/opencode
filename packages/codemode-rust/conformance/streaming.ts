@@ -58,10 +58,17 @@ const respond = (spec: Spec, log: Array<unknown>) => {
   return new Extension.StreamingResponse(response, spec.redirected ?? false)
 }
 
-const web = (log: Array<unknown>) =>
+const web = (log: Array<unknown>, fetched?: () => void) =>
   Extension.make({
     name: "web",
-    globals: { fetch: Extension.async(async (spec: Spec) => respond(spec, log)), echo: (value: unknown) => value },
+    globals: {
+      fetch: Extension.async(async (spec: Spec) => {
+        const response = respond(spec, log)
+        if (fetched !== undefined) setTimeout(fetched, 50)
+        return response
+      }),
+      echo: (value: unknown) => value,
+    },
   })
 
 const text = { chunks: ["hel", "lo"], status: 201, statusText: "Created", headers: { "Content-Type": "text/plain", "X-A": "1" } }
@@ -245,6 +252,54 @@ const record = async (code: string) => {
   }
 }
 
+// Busy loops: the reference starts queued calls whenever its interpreter runs out of fuel (10,000 units: one per loop
+// back-edge, function call and job, fifty per call of a built-in or extension function), so a loop sees `locked` or
+// `bodyUsed` change at a fixed iteration.
+const busy = (setup: string, loop: string, op = "r.text()", flag = "r.body.locked") =>
+  `const r = await fetch(${JSON.stringify(text)}); ${setup}; const p = ${op}; let flip = -1; const seen = () => flip < 0 && ${flag}
+   ${loop}
+   await p.catch(() => 0); return flip`
+programs.push(
+  busy("", "for (let i = 0; i < 30000; i++) { if (seen()) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) if (flip < 0 && r.body.locked) flip = i"),
+  busy("let i = 0", "while (i < 30000) { if (flip < 0 && r.body.locked) flip = i; i++ }"),
+  busy("let i = 0", "do { if (flip < 0 && r.body.locked) flip = i; i++; if (i % 2) continue } while (i < 30000)"),
+  busy("", "for (let i = 0; ; i++) { if (i % 3 === 0) continue; if (flip < 0 && r.body.locked) { flip = i; break } }"),
+  busy("", "outer: for (let i = 0; i < 300; i++) for (let j = 0; j < 100; j++) { if (j === 50) continue outer; if (flip < 0 && r.body.locked) flip = i * 1000 + j }"),
+  busy("const f = (x) => x", "for (let i = 0; i < 30000; i++) { f(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("function f(x) { return x }", "for (let i = 0; i < 30000; i++) { f?.(f(i)); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const o = { m(x) { return x } }", "for (let i = 0; i < 30000; i++) { o.m(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const f = (...x) => x; const g = f.bind(null, 1)", "for (let i = 0; i < 30000; i++) { f(...[i]); g(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) { Math.abs(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const a = []", "for (let i = 0; i < 30000; i++) { a.push(String(i)); JSON.stringify(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) { new Map(); [i].length; if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) { echo(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) { try { if (i % 7 === 0) throw new Error('x') } catch {} finally { if (flip < 0 && r.body.locked) flip = i } }"),
+  busy("const tag = (s, v) => v", "for (let i = 0; i < 30000; i++) { tag`a${i}b`; if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const i of a) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const o = {}; for (let i = 0; i < 20000; i++) o['k' + i] = i", "for (const k in o) { if (flip < 0 && r.body.locked) flip = o[k] }"),
+  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "const it = gen(); for (let x = it.next(); !x.done; x = it.next()) { if (flip < 0 && r.body.locked) flip = x.value }"),
+  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "const all = [...gen()]; for (const i of all) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("function* gen() { for (let i = 0; i < 3; i++) yield i }", "for (let i = 0; i < 30000; i++) { const [a, b] = gen(); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i; function* gen() { yield* a }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("function* inner() { for (let i = 0; i < 30000; i++) yield i } function* gen() { yield* inner() }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }", "for (const i of it) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const m = new Map(); for (let i = 0; i < 30000; i++) m.set(i, i)", "for (const [k] of m) { if (flip < 0 && r.body.locked) flip = k }"),
+  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const i of a.values()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const [i] of a.entries()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (const c of 'x'.repeat(30000)) { if (flip < 0 && r.body.locked) flip = 1 }"),
+  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for await (const i of a) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("async function* gen() { for (let i = 0; i < 30000; i++) yield i }", "for await (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }; function* gen() { yield* it }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("function* gen() { yield 1; yield 2 }", "for (let i = 0; i < 30000; i++) { for (const x of gen()) break; if (flip < 0 && r.body.locked) flip = i }"),
+  busy("const h = async (x) => x", "for (let i = 0; i < 30000; i++) { await h(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy("for (let i = 0; i < 25000; i++) {}", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy("", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.bodyUsed) flip = i }", "r.body.cancel()", "r.bodyUsed"),
+  busy("const reader = r.body.getReader()", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.bodyUsed) flip = i }", "reader.read()", "r.bodyUsed"),
+  busy("", "for (let j = 0; j < 3; j++) { const q = r.body.cancel(); for (let i = 0; i < 9000; i++) { if (flip < 0 && r.bodyUsed) flip = j * 100000 + i } await q.catch(() => 0) }", "Promise.resolve()", "r.bodyUsed"),
+)
+
 // Suspending while a run holds a response: `tools.wait` is idempotent and answers only once the run resumed.
 const suspensions: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)}); await tools.wait({}); return [r.status, r.bodyUsed]`,
@@ -259,6 +314,8 @@ const suspensions: Array<string> = [
    const body = await get(); await tools.wait({}); return body.locked`,
   `async function get() { const r = await fetch(${JSON.stringify(text)}); return r.text }
    const text = await get(); await tools.wait({}); return await text()`,
+  // Suspended while a response has arrived but the run has not taken it yet: a busy loop holds the run.
+  `const p = fetch(${JSON.stringify(text)}); for (let i = 0; i < 200000000; i++) {} const r = await p; return r.status`,
 ]
 
 const suspend = async (code: string) => {
@@ -278,7 +335,8 @@ const suspend = async (code: string) => {
           }),
     ),
   })
-  const runtime = CodeMode.make({ tools: { wait }, extensions: [web(log)] })
+  // Without `tools.wait`, the suspend comes once the response has arrived.
+  const runtime = CodeMode.make({ tools: { wait }, extensions: [web(log, code.includes("tools.wait") ? undefined : started)] })
   const program = runtime.program(code)
   const fiber = Effect.runFork(program.run())
   await waiting
@@ -304,7 +362,10 @@ const suspend = async (code: string) => {
 
 const expected = {
   programs: await Promise.all(programs.map(record)),
-  suspensions: await Promise.all(suspensions.map(suspend)),
+  suspensions: await suspensions.reduce(
+    async (done, code) => [...(await done), await suspend(code)],
+    Promise.resolve([] as Array<unknown>),
+  ),
 }
 writeFileSync(join(import.meta.dir, "streaming.json"), JSON.stringify(expected, null, 2) + "\n")
 console.log(`${expected.programs.length} programs, ${expected.suspensions.length} suspensions`)

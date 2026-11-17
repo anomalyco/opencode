@@ -101,13 +101,17 @@ fn respond(spec: &HostValue, log: &Log) -> HostValue {
     HostValue::Response(response)
 }
 
-fn web(log: &Log) -> Extension {
+/// `fetched`, when given, is told each time `fetch` answered.
+fn web(log: &Log, fetched: Option<Waiting>) -> Extension {
     let log = log.clone();
     Extension::new("web")
         .function(
             "fetch",
             HostFunction::new_async("fetch", 1, move |args| {
                 let response = respond(&args[0], &log);
+                if let Some(w) = &fetched {
+                    w.enter();
+                }
                 async move { Ok(response) }
             }),
         )
@@ -170,7 +174,7 @@ fn streaming_responses_match_the_reference() {
     let mut failures = Vec::new();
     for program in programs {
         let log: Log = Arc::default();
-        let rt = Runtime::new().extension(web(&log));
+        let rt = Runtime::new().extension(web(&log, None));
         let code = program["code"].as_str().unwrap();
         let o = rt.execute(code, &serde_json::Map::new());
         let actual = json!({ "outcome": outcome(&o), "log": *log.lock().unwrap() });
@@ -199,8 +203,7 @@ impl Waiting {
         Tool::idempotent("Waits until the run resumed", move |_, _| {
             let resumed = this.0.2.load(Ordering::SeqCst);
             if !resumed {
-                *this.0.0.lock().unwrap() = true;
-                this.0.1.notify_all();
+                this.enter();
             }
             async move {
                 if !resumed {
@@ -211,6 +214,11 @@ impl Waiting {
         })
         .input(Schema::validated(json!({ "type": "object" })))
         .output(Schema::validated(json!({ "type": "number" })))
+    }
+
+    fn enter(&self) {
+        *self.0.0.lock().unwrap() = true;
+        self.0.1.notify_all();
     }
 
     fn entered(&self) {
@@ -248,12 +256,17 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
     for case in suspensions {
         let log: Log = Arc::default();
         let waiting = Waiting::default();
+        let code = case["code"].as_str().unwrap();
+        // Without `tools.wait`, the suspend comes once the response has arrived, while a busy loop holds the run.
+        let busy = !code.contains("tools.wait");
         let rt = Runtime::new()
             .with_tool("wait", waiting.tool())
-            .extension(web(&log));
-        let code = case["code"].as_str().unwrap();
+            .extension(web(&log, busy.then(|| waiting.clone())));
         let (run, suspend) = background(rt.program(code, &Default::default(), None), |s| {
             waiting.entered();
+            if busy {
+                thread::sleep(Duration::from_millis(20));
+            }
             loop {
                 match s.suspend(None) {
                     Err(e) if !e.running.is_empty() => thread::sleep(Duration::from_millis(1)),

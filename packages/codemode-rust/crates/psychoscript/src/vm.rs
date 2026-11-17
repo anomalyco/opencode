@@ -22,7 +22,11 @@ pub const MAX_DEPTH: usize = 10_000;
 const MAX_OBJECTS: usize = 2_000_000;
 const MAX_STRINGS: usize = 4_000_000;
 const MAX_NATIVE_DEPTH: usize = 400;
-const FUEL: u32 = 20_000;
+pub(crate) const FUEL: i32 = 20_000;
+/// The reference's fuel: it starts the host calls a program queued whenever this runs out, so streaming responses
+/// count it the same way. A loop back-edge, a function call or a job costs one, a call of a native function fifty.
+pub(crate) const HANDOVER_FUEL: i32 = 10_000;
+const NATIVE_FUEL: i32 = 50;
 
 #[derive(Clone, Copy)]
 pub struct Handler {
@@ -227,7 +231,9 @@ pub struct Vm<'rt> {
     pub tool_refs: FxHashMap<Rc<str>, Id>,
     pub limits: Limits,
     pub start: Instant,
-    fuel: u32,
+    /// Steps left before `budget_out`: the nearer of the reference's fuel and this VM's own check of the clock and of
+    /// suspend requests, both kept in `host.meter`.
+    budget: i32,
     pub fatal: Option<(DiagnosticKind, String)>,
     pub outcome: Option<Result<Value, Value>>,
     native_depth: usize,
@@ -309,7 +315,7 @@ impl<'rt> Vm<'rt> {
             tool_refs: FxHashMap::default(),
             limits,
             start: Instant::now(),
-            fuel: FUEL,
+            budget: HANDOVER_FUEL,
             fatal: None,
             outcome: None,
             native_depth: 0,
@@ -366,7 +372,9 @@ impl<'rt> Vm<'rt> {
                 DiagnosticKind::ExecutionFailure,
                 "Execution exceeded its memory limit.".into(),
             ));
-            self.fuel = 1;
+            self.settle_budget();
+            self.host.meter.fuel = 1;
+            self.rebudget();
         }
     }
 
@@ -492,15 +500,117 @@ impl<'rt> Vm<'rt> {
 
     // ---------- fuel and limits ----------
 
+    /// A back-edge, a function call or a job.
     #[inline]
     fn tick(&mut self) -> Result<(), Value> {
-        self.fuel = self.fuel.saturating_sub(1);
-        if self.fuel == 0 {
-            self.fuel = FUEL;
-            self.checkpoint();
-            return self.check_time();
+        self.budget -= 1;
+        if self.budget <= 0 {
+            return self.budget_out(true);
         }
         Ok(())
+    }
+
+    /// The reference's fuel alone, spent where the clock is not checked: a native call costs this VM's own count
+    /// nothing.
+    #[inline]
+    fn spend(&mut self, n: i32) {
+        self.budget -= n;
+        self.host.meter.fuel += n;
+        if self.budget <= 0 {
+            let _ = self.budget_out(false);
+        }
+    }
+
+    #[cold]
+    fn budget_out(&mut self, check: bool) -> Result<(), Value> {
+        self.settle_budget();
+        if self.host.meter.handover <= 0 {
+            self.host.meter.handover = HANDOVER_FUEL;
+            self.host.next_epoch();
+        }
+        let mut r = Ok(());
+        if check && self.host.meter.fuel <= 0 {
+            self.host.meter.fuel = FUEL;
+            self.checkpoint();
+            r = self.check_time();
+        }
+        self.rebudget();
+        r
+    }
+
+    /// Charges what was spent since the budget was set to both counters.
+    fn settle_budget(&mut self) {
+        let used = self.host.meter.start - self.budget;
+        self.host.meter.handover -= used;
+        self.host.meter.fuel -= used;
+        self.host.meter.start = self.budget;
+    }
+
+    fn rebudget(&mut self) {
+        let b = self.host.meter.handover.min(self.host.meter.fuel).max(1);
+        self.budget = b;
+        self.host.meter.start = b;
+    }
+
+    /// What opening `v` costs the reference: nothing for a value it walks itself, else the call of its
+    /// `Symbol.iterator` method. `yield*` always calls it.
+    fn open_fuel(&mut self, v: &Value, ctx: u8) -> i32 {
+        let Value::Obj(id) = v else { return 0 };
+        let walked = matches!(
+            self.heap[*id as usize].kind,
+            Kind::Array(_)
+                | Kind::Arguments(_)
+                | Kind::Map(_)
+                | Kind::Set(_)
+                | Kind::SearchParams(_)
+                | Kind::Headers(_)
+                | Kind::Bytes(_)
+                | Kind::ArrayIter { .. }
+                | Kind::MapIter { .. }
+                | Kind::StrIter { .. }
+                | Kind::ListIter { .. }
+                | Kind::ExoticIter { .. }
+                | Kind::IterHelper(_)
+        );
+        if walked && ctx != crate::bytecode::ITER_DELEGATE {
+            return 0;
+        }
+        let method = self.get_obj(*id, SYM_ITERATOR);
+        if self.is_closure(&method) {
+            0
+        } else {
+            NATIVE_FUEL
+        }
+    }
+
+    /// What closing `it` early costs the reference: the call of a generator's or custom iterator's native `return`.
+    fn close_fuel(&mut self, it: &Value) -> i32 {
+        let Value::Obj(id) = it else { return 0 };
+        match self.heap[*id as usize].kind {
+            Kind::Generator(_) => NATIVE_FUEL,
+            Kind::Ordinary => {
+                let key = self.names.return_;
+                let method = self.get_obj(*id, key);
+                if matches!(&method, Value::Obj(m) if matches!(self.heap[*m as usize].kind, Kind::Native { .. }))
+                {
+                    NATIVE_FUEL
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        }
+    }
+
+    fn is_closure(&self, v: &Value) -> bool {
+        matches!(v, Value::Obj(id) if matches!(self.heap[*id as usize].kind, Kind::Closure(_)))
+    }
+
+    /// Fills the reference's fuel as a program starts; entering the program's own frame costs it nothing there.
+    pub fn start_handover_fuel(&mut self) {
+        self.settle_budget();
+        self.host.meter.handover = HANDOVER_FUEL + 1;
+        self.rebudget();
     }
 
     pub fn handlers_ref(&self) -> &Vec<Handler> {
@@ -523,7 +633,7 @@ impl<'rt> Vm<'rt> {
     #[cold]
     fn checkpoint(&mut self) {
         if self.roundtrip_every > 0 {
-            self.fuel = self.roundtrip_every;
+            self.host.meter.fuel = self.roundtrip_every as i32;
             self.suspend_wanted = true;
         }
         if self
@@ -539,7 +649,9 @@ impl<'rt> Vm<'rt> {
     /// Starts counting steps for the round-trip test mode.
     pub fn start_roundtrip(&mut self, every: u32) {
         self.roundtrip_every = every;
-        self.fuel = every;
+        self.settle_budget();
+        self.host.meter.fuel = every as i32;
+        self.rebudget();
     }
 
     pub fn check_time(&mut self) -> Result<(), Value> {
@@ -757,6 +869,7 @@ impl<'rt> Vm<'rt> {
                         Slot::UNDEF
                     };
                     self.stack.truncate(fpos);
+                    self.spend(NATIVE_FUEL);
                     if self.enter_generator(g, Resume::Result, false) {
                         self.stack.push(sent);
                     }
@@ -770,6 +883,7 @@ impl<'rt> Vm<'rt> {
                 args.clear();
                 self.arg_pool.push(args);
                 self.push(r?);
+                self.spend(NATIVE_FUEL);
                 Ok(false)
             }
             Kind::Bound(b) => {
@@ -886,6 +1000,8 @@ impl<'rt> Vm<'rt> {
     /// Unwinds to the nearest handler. `Err` carries what `run` must return when the base frame is left.
     #[inline(never)]
     fn handle_throw(&mut self, e: Value) -> Result<(), Result<Exit, Value>> {
+        // The reference unwinds a throw in its driver loop, which starts the host calls queued so far.
+        self.host.next_epoch();
         let fatal = self.fatal.is_some();
         loop {
             let Some(f) = self.frames.last_mut() else {
@@ -1045,8 +1161,13 @@ impl<'rt> Vm<'rt> {
         f.kind = FrameKind::Generator(g, resume);
         f.is_base = is_base;
         f.hbase = hbase;
-        f.yield_pc != NO_YIELD
-            && !matches!(f.func.code.get(f.yield_pc as usize), Some(Op::YieldDrop(_)))
+        let at = f.func.code.get(f.yield_pc as usize);
+        let pushes = f.yield_pc != NO_YIELD && !matches!(at, Some(Op::YieldDrop(_)));
+        // The reference's `yield*` loops back through a back-edge each time it is resumed.
+        if matches!(at, Some(Op::YieldStar(_))) {
+            self.spend(1);
+        }
+        pushes
     }
 
     /// Switches back to the resumer's stack after the generator's frame was popped: suspended again with `frame`,
@@ -2345,6 +2466,8 @@ impl<'rt> Vm<'rt> {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
                         let it = tri!(self.get_iterator_in(&v, ctx));
+                        let cost = self.open_fuel(&v, ctx);
+                        self.spend(cost);
                         let next = tri!(self.record_next(&it));
                         self.stack[base + slot as usize] = Slot::pack(it);
                         self.stack[base + slot as usize + 1] = Slot::pack(next);
@@ -2375,6 +2498,10 @@ impl<'rt> Vm<'rt> {
                         let kind = flags & 3;
                         let received = self.stack.pop().unwrap_or_default();
                         let it = self.stack[base + slot as usize];
+                        // The reference calls the delegated iterator's method each step, a native one for fifty.
+                        if !self.is_closure(&self.stack[base + slot as usize + 1].get()) {
+                            self.spend(NATIVE_FUEL);
+                        }
                         if flags & DELEGATE_ASYNC == 0 {
                             if kind == REQ_NEXT
                                 && let Some(g) = self.suspended_generator(it)
@@ -2497,7 +2624,9 @@ impl<'rt> Vm<'rt> {
                     Op::IterClose(slot) | Op::IterCloseQuiet(slot) => {
                         self.frames[fi].pc = pc;
                         let it = std::mem::take(&mut self.stack[base + slot as usize]).get();
+                        let cost = self.close_fuel(&it);
                         let r = self.iter_close(&it);
+                        self.spend(cost);
                         if matches!(op, Op::IterClose(_)) || self.fatal.is_some() {
                             tri!(r);
                         }

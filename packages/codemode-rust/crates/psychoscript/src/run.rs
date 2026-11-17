@@ -206,6 +206,7 @@ pub fn call_main(vm: &mut Vm) {
         })),
     )));
     vm.resumable_run = true;
+    vm.start_handover_fuel();
     let r = vm.call(&main, Value::Undef, &[]);
     vm.resumable_run = false;
     if let Err(e) = r

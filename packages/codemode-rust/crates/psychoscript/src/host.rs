@@ -199,6 +199,16 @@ pub struct RunHost<'rt> {
     pub(crate) namespaces: FxHashMap<String, Value>,
     /// Counts the points where the reference hands queued calls to the host, for streaming responses.
     pub(crate) epoch: crate::streaming::Epoch,
+    /// The VM's fuel counters, which it checks only when its step budget runs out.
+    pub(crate) meter: Meter,
+}
+
+/// The reference's fuel left (`handover`) and the steps left until the VM next checks the clock (`fuel`), as of when
+/// the VM's step budget was last set to `start`.
+pub(crate) struct Meter {
+    pub start: i32,
+    pub handover: i32,
+    pub fuel: i32,
 }
 
 impl<'rt> RunHost<'rt> {
@@ -228,6 +238,11 @@ impl<'rt> RunHost<'rt> {
             modules: FxHashMap::default(),
             namespaces: FxHashMap::default(),
             epoch: Default::default(),
+            meter: Meter {
+                start: crate::vm::HANDOVER_FUEL,
+                handover: crate::vm::HANDOVER_FUEL,
+                fuel: crate::vm::FUEL,
+            },
         }
     }
 
