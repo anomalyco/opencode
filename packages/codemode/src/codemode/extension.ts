@@ -22,6 +22,8 @@ import type { Effect } from "effect"
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
   readonly globals: Globals
+  /** Module names that load one of these globals, as `{ bun: "Bun" }` makes `import { file } from "bun"` work. */
+  readonly modules?: Readonly<Record<string, keyof Globals & string>> | undefined
   /** How a suspended run saves the values this extension's functions returned; see `Snapshot`. */
   readonly snapshot?: Snapshot | undefined
 }
@@ -57,9 +59,17 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
       throw new TypeError(`Extension "${options.name}" global "${name}" must be a function or an object.`)
     }
   }
+  for (const [module, global] of Object.entries(options.modules ?? {})) {
+    if (!Object.hasOwn(options.globals, global)) {
+      throw new TypeError(
+        `Extension "${options.name}" module "${module}" names "${global}", which isn't one of its globals.`,
+      )
+    }
+  }
   return {
     name: options.name,
     globals: { ...options.globals },
+    ...(options.modules === undefined ? {} : { modules: { ...options.modules } }),
     ...(options.snapshot === undefined ? {} : { snapshot: options.snapshot }),
   }
 }

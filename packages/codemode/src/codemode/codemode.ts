@@ -239,6 +239,13 @@ export function make<
       bound.add(name)
     }
   }
+  const modules = new Set<string>()
+  for (const extension of extensions) {
+    for (const name of Object.keys(extension.modules ?? {})) {
+      if (modules.has(name)) throw new TypeError(`Extension "${extension.name}" module "${name}" is already defined.`)
+      modules.add(name)
+    }
+  }
   // One language runtime for each set of the runtime's extensions a run picks, made when first picked.
   const runtimes = new Map<string, Language.Runtime.Runtime<R>>()
   const runtimeFor = (selected: ReadonlyArray<Extension> = extensions) => {
@@ -265,6 +272,7 @@ export function make<
           ),
         ),
       }),
+      modules: Object.assign({}, ...picked.map((extension) => extension.modules ?? {})),
       limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
       // Arguments cross as JSON would carry them: functions are left out and promises are awaited.
       translate: { functions: "drop", promises: "await" },
