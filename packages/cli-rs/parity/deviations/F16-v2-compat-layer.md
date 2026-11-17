@@ -143,11 +143,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
 - **Absolute nodes**: a render of absolute nodes alone takes its mount's box out of the flow to fill the slot's parent,
   as TS's `<Slot>` is a fragment; OpenTUI's Rust layout has no way back, so the box stays absolute if a later render
   of the claim is in the flow.
-- **Not mapped**, each reported once a plugin with a warning toast (`<id>: <feature> is not supported by
-  opencode-native yet`) and doing nothing (a list answers empty): `markdown.registerCodeBlockRenderer`,
+- **Not mapped**, each reported once a plugin in the client's log, by the plugin's name (`plugin <id>: <id>: <feature>
+  is not supported by opencode-native yet`), and doing nothing (a list answers empty). The report is no toast: a toast
+  covered the plugin's own surface until it timed out (`P.8/file-browser`'s field focus, navigator's `minWidth`), which
+  TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `markdown.registerCodeBlockRenderer`,
   `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
-  returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS with the toast beside),
+  returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
   `maxWidth`,
   `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.

@@ -83,6 +83,8 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     palette: () => ({ mode: "dark", colors: {} }),
     changed() {},
     toasts: () => fake.effects.filter((effect) => effect.type === "toast").map((effect) => effect.message),
+    warnings: () =>
+      fake.effects.filter((effect) => effect.type === "log" && effect.level === "warn").map((effect) => effect.message),
   }
   return fake
 }
@@ -132,7 +134,7 @@ test("a read the host could not answer rejects its sync", async () => {
   await expect(ctx.data.session.message.sync("big")).rejects.toThrow("over 262144")
   await expect(ctx.data.session.message.sync("small")).resolves.toBeUndefined()
   await expect(ctx.data.session.message.sync("big")).rejects.toThrow("over 262144")
-  expect(fake.toasts()).toEqual(["t.errors: a read failed: the read is 300000 bytes, over 262144"])
+  expect(fake.warnings()).toEqual(["t.errors: a read failed: the read is 300000 bytes, over 262144"])
 })
 
 // Bigboi P8-2: a first render waits for its own reads alone: a read another operation made, which never answers, does
@@ -467,7 +469,9 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   route.options.on({ type: "change", node: "elsewhere", text: "x" })
   expect(events).toEqual(["key down", "input ab", "submit ab"])
   // The contract's focus refuses a field.
-  expect(fake.toasts()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
+  // Said once in the client's log, not in a toast over the plugin's own route (P.8/file-browser's searching).
+  expect(fake.warnings()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
+  expect(fake.toasts()).toEqual([])
 })
 
 // CT-18: a box's border as OpenTUI's: `true` or an array of sides draws, anything else (`{ type: "single" }`, the
@@ -528,7 +532,7 @@ test("a spinner draws and an inert async method resolves", async () => {
   const ctx = plugin("t.spinner", fake)
   ctx.ui.slot({ append: "home.footer", render: () => h("box", { children: h("spinner", { frames: ["a", "b"], interval: 120 }) }) })
   expect(view(fake, 0, "a").draw().children[0].children).toEqual([{ type: "spinner", label: "" }])
-  expect(fake.toasts()).toEqual([
+  expect(fake.warnings()).toEqual([
     "t.spinner: <spinner> frames is not supported by opencode-native yet",
     "t.spinner: <spinner> interval is not supported by opencode-native yet",
   ])
@@ -556,7 +560,7 @@ test("a built renderable adds nothing and the renderer has a root", () => {
   expect(["currentFocusedEditor" in renderer, "currentFocusedRenderable" in renderer]).toEqual([true, true])
   expect(typeof renderer.root.add).toBe("function")
   expect(renderer.currentFocusedEditor).toBeUndefined()
-  expect(fake.toasts()).toEqual([
+  expect(fake.warnings()).toEqual([
     "t.built: a renderable built with new is not supported by opencode-native yet",
     "t.built: renderer.root is not supported by opencode-native yet",
     "t.built: renderer.currentFocusedEditor is not supported by opencode-native yet",
@@ -656,7 +660,7 @@ test("a built renderable returned draws nothing, and a node's layout is the host
   const core = modules["@opentui/core"] as Json
   ctx.ui.slot({ append: "home.footer", render: () => new core.BoxRenderable({}, {}) })
   expect(view(fake, 0, "a").draw().children ?? []).toEqual([])
-  expect(fake.toasts()).toEqual(["t.layout: a renderable built with new is not supported by opencode-native yet"])
+  expect(fake.warnings()).toEqual(["t.layout: a renderable built with new is not supported by opencode-native yet"])
   const refs: Json = {}
   const sizes: number[] = []
   ctx.ui.slot({
@@ -855,7 +859,7 @@ test("each dialog settles once, and clear closes it", async () => {
   expect(await prompted).toBeUndefined()
   await turn()
   expect(fake.effects.at(-1).dialog).toEqual({ type: "close", key: "" })
-  expect(fake.toasts()).toContain("t.dialogs: ui.dialog.prompt value is not supported by opencode-native yet")
+  expect(fake.warnings()).toContain("t.dialogs: ui.dialog.prompt value is not supported by opencode-native yet")
   ctx.ui.dialog.show(() => h("text", { children: "big" }))
   ctx.ui.dialog.set({ size: "large", centered: true })
   ctx.ui.dialog.clear()
@@ -908,7 +912,7 @@ test("a dialog's scrollbox says it does not scroll", () => {
   expect(scroll?.keybind).toBe("up,down,pageup,pagedown")
   fake.commands.get("t.scroll.compat.dialog-scroll")!()
   fake.commands.get("t.scroll.compat.dialog-scroll")!()
-  expect(fake.toasts()).toEqual(["t.scroll: scrolling a <scrollbox> in ui.dialog.show is not supported by opencode-native yet"])
+  expect(fake.warnings()).toEqual(["t.scroll: scrolling a <scrollbox> in ui.dialog.show is not supported by opencode-native yet"])
 })
 
 // Carbon-3: a dialog that replaced another is a panel of its own, so its close (escape) closes it and calls its
@@ -964,7 +968,7 @@ test("an unmapped hook is reported for the plugin that used it", () => {
   quiet.ui.slot({ append: "sidebar.content", render: () => h("text", { children: "y" }) })
   view(fake, 0, "a").draw()
   view(fake, 1, "b").draw()
-  expect(fake.toasts()).toEqual(["t.loud: usePaste is not supported by opencode-native yet"])
+  expect(fake.warnings()).toEqual(["t.loud: usePaste is not supported by opencode-native yet"])
 })
 
 // Carbon-4: a claim goes to the host as it is: a `replace` of a path the host does not publish is the host's to
@@ -1056,7 +1060,7 @@ test("the renderer's missing methods do nothing", async () => {
   expect(ctx.renderer.on("resize", () => {}).off("resize", () => {})).toBe(ctx.renderer)
   expect(ctx.renderer.notAMember).toBeUndefined()
   await ctx.renderer.idle()
-  expect(fake.toasts()).toEqual([
+  expect(fake.warnings()).toEqual([
     "t.renderer: renderer.prependInputHandler is not supported by opencode-native yet",
     "t.renderer: renderer.setBackgroundColor is not supported by opencode-native yet",
     "t.renderer: renderer.on is not supported by opencode-native yet",

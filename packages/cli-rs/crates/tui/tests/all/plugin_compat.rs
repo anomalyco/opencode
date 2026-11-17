@@ -161,14 +161,15 @@ fn an_intrinsic_without_a_node_is_reported_as_a_crash() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected: what the layer does not map warns once a plugin and feature, and does nothing; an API that answers whether
-// it did answers false, as TS's `ui.panel.open` does outside a session.
+// Expected: what the layer does not map warns once a plugin and feature in the client's log, shows no toast over the
+// plugin's surface, and does nothing; an API that answers whether it did answers false, as TS's `ui.panel.open` does
+// outside a session. A warning toast covered `P.8/file-browser`'s route until it timed out, so whether the checkpoint
+// saw it depended on the machine's speed.
 #[test]
 fn what_does_not_map_warns_once_and_answers_false() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe(config);
     toasts(&pipe);
-    // The toasts each use shows: the host shows one at a time.
     let shown: Vec<Vec<String>> = (0..2)
         .map(|_| {
             pipe.harness.tui.keymap.dispatch("v2probe.unmapped", None);
@@ -176,8 +177,7 @@ fn what_does_not_map_warns_once_and_answers_false() {
             toasts(&pipe)
         })
         .collect();
-    let warning = "Plugin: example.v2probe: markdown.registerCodeBlockRenderer is not supported by opencode-native yet";
-    assert_eq!(shown, [vec![warning.to_owned()], vec![]]);
+    assert_eq!(shown, [Vec::<String>::new(), vec![]]);
     assert_eq!(calls(&log), [json!({ "panel": false }), json!({ "panel": false })]);
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
