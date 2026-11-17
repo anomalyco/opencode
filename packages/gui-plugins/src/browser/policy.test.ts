@@ -4,6 +4,7 @@ import {
   agentFrame,
   agentDriven,
   childActivity,
+  createdActivity,
   agentFrames,
   agentRefusal,
   inputDocument,
@@ -375,6 +376,28 @@ test("sticky agent provenance is inherited without inheriting a running command"
   const later: TabActivity = { agentRuns: 0, control: "reclaimed" }
   expect(childActivity(later)).toEqual(later)
   expect(agentDriven(later)).toBe(true)
+})
+
+// Who made the tab, the tab that opened it (none for the person's own new tab or the agent's), whether that opener has
+// an agent command in flight, and whose the new tab then is. A person's new tab never sees another tab's state.
+test.each([
+  ["user", undefined, false, "user", false],
+  ["agent", undefined, false, "agent", true],
+  ["agent", "person", true, "agent", true],
+  ["user", "person", false, "user", false],
+  ["user", "person", true, "agent", true],
+  ["user", "agent", false, "agent", true],
+  ["user", "agent", true, "agent", true],
+  ["user", "reclaimed", false, "user", true],
+  ["user", "reclaimed", true, "agent", true],
+] as const)("%s makes a tab, opener %s, agent command in flight %s: %s owns it", (origin, opener, running, owner, driven) => {
+  const control = opener === "person" ? undefined : opener
+
+  const created = createdActivity(origin, "build", opener && { agentRuns: Number(running), control })
+
+  expect(activityOwner(created)).toBe(owner)
+  expect(agentDriven(created)).toBe(driven)
+  expect(created.agentRuns).toBe(0)
 })
 
 test.each([

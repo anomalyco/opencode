@@ -137,6 +137,17 @@ export function childActivity(activity: Readonly<TabActivity>): TabActivity {
 }
 
 /**
+ * Whose a new tab is, by who made it: the agent's own tab is the agent's; one a page made (a pop-up, its menu's new
+ * tab, an extension acting on it) carries that `opener`'s provenance; one the person made is the person's. An agent
+ * command in flight in another tab is not provenance: nothing about other tabs reaches here.
+ */
+export function createdActivity(origin: "agent" | "user", agent: string | undefined, opener?: Readonly<TabActivity>): TabActivity {
+  if (origin === "agent") return { agentRuns: 0, control: "agent", agent }
+
+  return opener ? childActivity(opener) : { agentRuns: 0 }
+}
+
+/**
  * Extension bytes must not go to the agent; neither may an agent-driven extension download open a native picker.
  */
 export function downloadOwner(

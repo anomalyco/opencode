@@ -11,7 +11,7 @@ import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plug
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure, CodedError, missingArtifact } from "./errors"
 import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "./network"
-import { activityOwner, agentDriven, agentRefusal, childActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
+import { activityOwner, agentDriven, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
 import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
@@ -758,9 +758,8 @@ export function createBrowserPane(input: {
     if (entry?.status !== "attached" || !handle?.network)
       throw new Error("Browser network is not ready; no tab was opened.")
     const id = options.restore?.id ?? Browser.TabID.make(`tab_${crypto.randomUUID()}`)
-    const running = !options.restore && Array.from(handle.activity.values()).find((tab) => tab.agentRuns > 0)
-    const inherited = options.activity && agentDriven(options.activity) ? options.activity : running ? childActivity(running) : undefined
-    const activity = handle.activity.get(id) ?? inherited ?? options.activity ?? { agentRuns: 0 }
+    // Whoever makes the tab says whose it is (`createdActivity`). An agent command running in another tab does not.
+    const activity = handle.activity.get(id) ?? options.activity ?? { agentRuns: 0 }
     handle.activity.set(id, activity)
     handle.passkeys.join(id, options.opener)
     const attempt = entry.nextAttempt
@@ -992,8 +991,6 @@ export function createBrowserPane(input: {
 
   async function execute(binding: string, command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", intent: "present" | "new" = "new", inherited?: TabActivity, created?: (id: Browser.TabID) => void): Promise<Browser.Result> {
     const action = command.action
-    const driven: TabActivity = { agentRuns: 0, control: "agent", agent: command.agent }
-
     const present = (tabID: Browser.TabID, reveal = false, active = true) => {
       if (origin === "user") return dispatchBinding(binding, { type: "tab.focused", tabID })
       announce(binding, tabID, reveal, active)
@@ -1042,7 +1039,7 @@ export function createBrowserPane(input: {
         const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
 
         if (existing) handles.get(binding)?.pluginTabs.forget(existing.id)
-        const tab = existing ? acquire(existing.id) : create(binding, {activity: origin === "agent" ? driven : undefined})
+        const tab = existing ? acquire(existing.id) : create(binding, { activity: createdActivity(origin, command.agent) })
 
         if (!tab) throw new Error("Workspace preview tab is unavailable.")
         using opening = new DisposableStack()
@@ -1096,7 +1093,7 @@ export function createBrowserPane(input: {
         }
       }
 
-      const opened = create(binding, { activity: origin === "agent" ? driven : inherited })
+      const opened = create(binding, { activity: createdActivity(origin, command.agent, inherited) })
       const tabID = opened.state().id
 
       if (origin === "agent" && action.focus === false) handles.get(binding)?.background.add(tabID)
