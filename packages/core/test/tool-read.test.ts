@@ -114,6 +114,8 @@ const permission = permissionLayer({
   allows: (input) => Effect.succeed(allow && !input.resources.some((resource) => resource === deniedResource)),
 })
 const config = Config.testLayer()
+const nativeDescription =
+  "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files."
 const imageLayer = AppNodeBuilder.build(Image.node)
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -202,14 +204,12 @@ describe("ReadTool", () => {
       const snapshot = yield* registry.snapshot()
       const read = snapshot.definitions.find((tool) => tool.name === "read")
 
-      expect(read?.description).toBe(
-        "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-      )
+      expect(read?.description).toBe(nativeDescription)
       expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).not.toContain("read")
     }),
   )
 
-  codeModeIt.effect("moves read into Code Mode with attachment guidance when full_codemode is enabled", () =>
+  codeModeIt.effect("moves read into Code Mode and adds only attachment guidance with full_codemode", () =>
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       const snapshot = yield* registry.snapshot()
@@ -218,7 +218,13 @@ describe("ReadTool", () => {
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(read?.line).toContain("Reading an image or PDF automatically attaches it to the execute result")
       expect(read?.line).toContain("even if the program doesn't return or print the media reference")
-      expect(read?.line).not.toContain("Each text line is prefixed")
+      const registered = (yield* registry.list()).find((tool) => tool.id === "read")
+      expect(
+        registered?.description.replace(
+          "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference. ",
+          "",
+        ),
+      ).toBe(nativeDescription)
 
       const result = yield* executeTool(registry, {
         sessionID,
