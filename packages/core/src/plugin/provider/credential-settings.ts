@@ -23,7 +23,17 @@ export const activeCredential = Effect.fnUntraced(function* (
  * Reads the active connection's stored credential without resolving it, so it never refreshes a token. Use it to
  * classify a connection by its method or metadata: a failed refresh must not make it look like another kind.
  */
-export const storedCredential = Effect.fnUntraced(function* (ctx: Context, integrationID: string) {
+export const storedCredential = Effect.fnUntraced(function* (
+  ctx: Context,
+  integrationID: string,
+): Effect.fn.Return<
+  {
+    readonly connection: Effect.Success<ReturnType<Context["integration"]["connection"]["active"]>>
+    readonly credential: Credential.Value | undefined
+  },
+  never,
+  Credential.Service
+> {
   const credentials = yield* Credential.Service
   const connection = yield* ctx.integration.connection.active(integrationID)
   const stored =
