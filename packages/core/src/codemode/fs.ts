@@ -11,7 +11,6 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
-import { Permission } from "../permission.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
 import { CodeModeExecution } from "./execution.js"
 
@@ -446,17 +445,6 @@ const nodeError = (error: unknown, syscall: string, file: string) => {
       path: file,
     })
   if (error instanceof Environment.Failed && error.cause instanceof Error) return error.cause
-  // A denial carries Node's EACCES, so a program can tell it from a missing file. The feedback is the user talking to
-  // the model, so it must reach the program as the error's message.
-  if (error instanceof Permission.BlockedError || error instanceof Permission.CorrectedError)
-    return Object.assign(
-      new Error(
-        error instanceof Permission.CorrectedError
-          ? `The user rejected ${syscall} ${file}: ${error.feedback}`
-          : `EACCES: ${error.message}, ${syscall} '${file}'`,
-      ),
-      { code: "EACCES", errno: -os.errno.EACCES, syscall, path: file },
-    )
   return error
 }
 

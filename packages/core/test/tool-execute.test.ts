@@ -543,7 +543,7 @@ describe("fs", () => {
       createCodeMode(new Map(), permissionService(denyEdits), fileServices(tmp.path, denyEdits)).execute(
         {
           code: `let thrown
-            try { fs.writeFileSync("a.txt", "x") } catch (e) { thrown = [e.message, e.code] }
+            try { fs.writeFileSync("a.txt", "x") } catch (e) { thrown = [e.message] }
             const [rejected] = await Promise.allSettled([fs.promises.writeFile("b.txt", "x")])
             return [thrown, rejected.status, fs.existsSync("a.txt")]`,
         },
@@ -553,8 +553,6 @@ describe("fs", () => {
 
     const [thrown, status, exists] = JSON.parse(result.output.output)
     expect(thrown[0]).toContain("Permission denied")
-    // EACCES, as Node reports a denied file, so a program can tell it from ENOENT.
-    expect(thrown[1]).toBe("EACCES")
     expect([status, exists]).toEqual(["rejected", false])
     expect(await fs.readdir(tmp.path)).toEqual([])
   })
@@ -741,7 +739,7 @@ describe("fs", () => {
       createCodeMode(new Map(), permissionService(denyOutside), fileServices(tmp.path, denyOutside)).execute(
         {
           code: `fs.writeFileSync("a.txt", "a")
-            const code = (run) => { try { run(); return "ok" } catch (e) { return e.code } }
+            const code = (run) => { try { run(); return "ok" } catch (e) { return e.message } }
             return [
               code(() => fs.rmSync(${at("here.txt")})),
               code(() => fs.rmSync(${at("missing.txt")}, { force: true })),
@@ -756,7 +754,7 @@ describe("fs", () => {
     )
 
     // Every call fails the same way whether or not the outside path exists, and nothing outside changed.
-    expect(JSON.parse(result.output.output)).toEqual(["EACCES", "EACCES", "EACCES", "EACCES", "EACCES", "EACCES"])
+    expect(JSON.parse(result.output.output)).toEqual(Array(6).fill("Permission denied: external_directory"))
     expect(await Bun.file(path.join(outside.path, "here.txt")).text()).toBe("x")
   })
 })
