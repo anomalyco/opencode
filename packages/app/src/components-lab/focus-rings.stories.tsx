@@ -28,12 +28,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import { TextInput } from "@opencode/ui/text-input"
 import { Textarea } from "@opencode/ui/textarea"
 import { createEffect, For, onCleanup, type JSX } from "solid-js"
-
-// Focus rings only show while an element matches :focus-visible, and only one element can. To show every ring at once,
-// the story copies each stylesheet rule that mentions :focus, :focus-visible or :focus-within into a lab-only sheet,
-// with those pseudo-classes replaced by [data-lab-focus] (and :focus-within by the attribute on the element or a descendant). Each specimen
-// marks its focus target with that attribute, so it renders with the production declarations and their real cascade
-// layer, specificity and context.
+import { focusTarget, forceFocusStyles } from "./force-focus"
 
 type Specimen = {
   name: string
@@ -63,9 +58,6 @@ const buttonVariants = [
 ] as const
 
 const iconButtonVariants = ["neutral", "contrast", "submit", "ghost", "ghost-muted"] as const
-
-const focusable =
-  'button:not(:disabled), input:not(:disabled), textarea, select, a[href], [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
 
 const groups: Group[] = [
   {
@@ -519,29 +511,18 @@ function FocusRings(props: FocusArgs) {
   createEffect(() => {
     if (!props.forced) return
 
-    const style = document.createElement("style")
-
-    style.dataset.labFocusRings = ""
-    style.textContent = [...document.styleSheets]
-      .filter((sheet) => !sheet.href || new URL(sheet.href).origin === location.origin)
-      .flatMap((sheet) => focusRules(sheet.cssRules))
-      .join("\n")
-    document.head.append(style)
+    const removeStyles = forceFocusStyles()
 
     // Some controls (Select) replace their trigger after the first render, so targets are marked a frame later.
     const frame = requestAnimationFrame(() =>
-      root?.querySelectorAll<HTMLElement>("[data-focus-specimen]").forEach((specimen) => {
-        const target = specimen.dataset.focusTarget
-          ? specimen.querySelector(specimen.dataset.focusTarget)
-          : specimen.querySelector(focusable)
-
-        target?.setAttribute("data-lab-focus", "")
-      }),
+      root
+        ?.querySelectorAll<HTMLElement>("[data-focus-specimen]")
+        .forEach((specimen) => focusTarget(specimen)?.setAttribute("data-lab-focus", "")),
     )
 
     onCleanup(() => {
       cancelAnimationFrame(frame)
-      style.remove()
+      removeStyles()
       root?.querySelectorAll("[data-lab-focus]").forEach((element) => element.removeAttribute("data-lab-focus"))
     })
   })
@@ -612,30 +593,6 @@ function FocusRings(props: FocusArgs) {
       </For>
     </main>
   )
-}
-
-// Copies the rules that style focus, keeping the @layer, @media and nesting they sit in, with focus swapped for the
-// lab attribute.
-function focusRules(rules: CSSRuleList): string[] {
-  return [...rules].flatMap((rule) => {
-    if (!rule.cssText.includes(":focus")) return []
-
-    if (rule instanceof CSSStyleRule && rule.selectorText.includes(":focus")) return [forceFocus(rule.cssText)]
-
-    if (rule instanceof CSSStyleRule) return [`${rule.selectorText} { ${focusRules(rule.cssRules).join("\n")} }`]
-
-    if (rule instanceof CSSGroupingRule)
-      return [`${rule.cssText.slice(0, rule.cssText.indexOf("{"))} { ${focusRules(rule.cssRules).join("\n")} }`]
-
-    return []
-  })
-}
-
-function forceFocus(css: string) {
-  return css
-    .replaceAll(":focus-within", ":is([data-lab-focus], :has([data-lab-focus]))")
-    .replaceAll(":focus-visible", "[data-lab-focus]")
-    .replace(/:focus(?![-\w])/g, "[data-lab-focus]")
 }
 
 const heading = {
