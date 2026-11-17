@@ -63,7 +63,13 @@ type ServerRequest = {
 
 const Files = Schema.Array(Schema.Struct({ uri: Schema.String, name: Schema.optional(Schema.String) }))
 const Delivery = Schema.optional(Schema.String)
-const PromptBody = Schema.Struct({ id: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
+const PromptBody = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  files: Files,
+  delivery: Delivery,
+  resume: Schema.optional(Schema.Boolean),
+})
 const CommandBody = Schema.Struct({ name: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
 const CompactBody = Schema.Struct({ id: Schema.String })
 const SyntheticBody = Schema.Struct({
@@ -380,6 +386,31 @@ export function toolFailed(
   })
 }
 
+/** The calls of a shell the model ran in the background. */
+export function backgroundShell(sessionID: string, shellID: string) {
+  return [
+    toolStarted(sessionID, `call_${shellID}`, "shell"),
+    toolCalled(sessionID, `call_${shellID}`, { command: "build", background: true }),
+    toolSucceeded(sessionID, `call_${shellID}`, { shellID, status: "running" }, "backgrounded"),
+  ]
+}
+
+/** A finished shell's notice. A background job's carries its job ID; a user's shell command's has none. */
+export function shellNotice(sessionID: string, inboxID: string, shellID: string, options = { job: true }) {
+  return durableEvent("session.inbox.enqueued", {
+    sessionID,
+    inboxID,
+    item: {
+      type: "synthetic",
+      payload: {
+        text: `<shell id="${shellID}" state="completed">`,
+        metadata: { source: "shell", shellID, ...(options.job ? { jobID: shellID } : {}) },
+      },
+      delivery: "steer",
+    },
+  })
+}
+
 export function permissionAsked(
   sessionID: string,
   id: string,
@@ -499,6 +530,12 @@ export async function startWire(options: WireOptions = {}) {
       return until(() => counts.handled >= target, "client handlers for every agent message (is one missing?)")
     })
 
+  const requestExt = (method: string, params: unknown): Promise<unknown> =>
+    connection.agent.request(method, params).finally(() => {
+      const target = counts.sent
+      return until(() => counts.handled >= target, "client handlers for every agent message (is one missing?)")
+    })
+
   const initialize = (capabilities: InitializeOptions = {}) =>
     request("initialize", {
       protocolVersion: 1,
@@ -522,6 +559,7 @@ export async function startWire(options: WireOptions = {}) {
     elicitations,
     logs,
     request,
+    requestExt,
     until,
     initialize,
     notify: <Method extends AgentNotificationMethod>(method: Method, params: AgentNotificationParamsByMethod[Method]) =>
@@ -599,6 +637,7 @@ function startServer(options: WireOptions, changed: () => void) {
       return submissions.filter((item): item is PromptSubmission => item.kind === "prompt")
     },
     selections,
+    active: new Set<string>(),
     interrupts,
     replies,
     cancelledForms,
@@ -735,6 +774,9 @@ function startServer(options: WireOptions, changed: () => void) {
             }),
           }),
         ),
+      },
+      "/api/session/active": {
+        GET: route(() => Response.json({ data: Object.fromEntries([...fake.active].map((id) => [id, { type: "running" }])) })),
       },
       "/api/session/:sessionID": {
         GET: route((req) => {

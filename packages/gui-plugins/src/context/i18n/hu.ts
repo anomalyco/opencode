@@ -28,4 +28,5 @@ export default {
   "export.success.description": "A munkamenet elmentve ide: {{filename}}",
   "export.failed.title": "Nem sikerült exportálni a munkamenetet",
   "export.failed.description": "Hiba történt a munkamenet exportálása közben",
+  "usage.toggle": "Munkamenet kontextusának megjelenítése/elrejtése",
 }

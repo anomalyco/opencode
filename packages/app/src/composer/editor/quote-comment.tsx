@@ -8,6 +8,7 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import type { ComposerDelivery } from "../adapter"
+import type { QuoteCommentView } from "../quote-comment-machine"
 
 const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -25,28 +26,28 @@ export function QuoteCommentEditor(props: {
   anchor: HTMLElement
   source?: ComposerQuoteAnchor
   text: string
+  /** The saved comment. */
   comment: string
+  view: QuoteCommentView
   mention: (query: string) => Promise<string[]>
+  onInput: (draft: string) => void
   onSubmit: (comment: string) => void
   onClose: (focus?: boolean) => void
   send?: {
     available: boolean
     delivery: ComposerDelivery | undefined
-    onSubmit: (comment: string) => Promise<boolean>
+    onSubmit: (comment: string) => void
   }
 }) {
   const language = useLanguage()
 
   const [state, setState] = createStore({
-    draft: props.comment,
     rect: bounds(props.anchor),
     viewport: window.innerWidth,
     viewportHeight: window.innerHeight,
     revision: 0,
     height: 0,
     openingHeight: 0,
-    sending: false,
-    failed: false,
   })
 
   const width = () => Math.min(WIDTH, state.viewport - GAP * 2)
@@ -64,8 +65,6 @@ export function QuoteCommentEditor(props: {
 
   let frame: number | undefined
 
-  let mounted = true
-
   const schedule = () => {
     if (frame !== undefined) return
     frame = requestAnimationFrame(() => {
@@ -80,8 +79,6 @@ export function QuoteCommentEditor(props: {
   }
 
   onCleanup(() => {
-    mounted = false
-
     if (frame !== undefined) cancelAnimationFrame(frame)
   })
 
@@ -93,7 +90,7 @@ export function QuoteCommentEditor(props: {
 
     if (target instanceof Node && (element?.contains(target) || props.anchor.contains(target))) return
 
-    if (!state.sending && state.draft.trim() === props.comment.trim()) props.onClose()
+    if (props.view.canDismissOutside) props.onClose()
   })
 
   const left = () => Math.min(Math.max(source()?.left ?? state.rect.left, GAP), state.viewport - width() - GAP)
@@ -118,16 +115,7 @@ export function QuoteCommentEditor(props: {
       label: language.t(sendLabels[send.delivery ?? "send"]),
       keys: [IS_MAC ? "⌘" : language.t("common.key.ctrl"), "⏎"],
       disabled: !send.available,
-      onSubmit: async (comment: string) => {
-        setState({ sending: true, failed: false })
-
-        const sent = await send.onSubmit(comment)
-
-        if (!mounted) return
-        setState({ sending: false, failed: !sent })
-
-        if (sent) props.onClose()
-      },
+      onSubmit: send.onSubmit,
     }
   })
 
@@ -163,17 +151,17 @@ export function QuoteCommentEditor(props: {
           <LineCommentEditor
             variant="compact"
             style={{ "--line-comment-preview-lines": props.source ? 2 : 4 }}
-            value={state.draft}
-            onInput={(value) => setState("draft", value)}
+            value={props.view.draft}
+            onInput={props.onInput}
             onCancel={() => props.onClose(true)}
             onSubmit={props.onSubmit}
-            submitting={state.sending}
+            submitting={props.view.sending}
             alternateSubmit={alternateSubmit()}
             placeholder={language.t("session.quote.optionalCommentPlaceholder")}
             submitLabel={language.t(
               props.comment.trim()
                 ? "common.save"
-                : state.draft.trim()
+                : props.view.draft.trim()
                   ? "session.quote.addComment"
                   : "session.quote.done",
             )}
@@ -181,7 +169,7 @@ export function QuoteCommentEditor(props: {
             mention={{ items: props.mention }}
             selection={<span dir="auto">{props.text}</span>}
           />
-          <Show when={state.failed}>
+          <Show when={props.view.failed}>
             <p
               role="alert"
               class="rounded-b-[8px] bg-v2-background-bg-layer-01 px-3 pb-3 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-base"

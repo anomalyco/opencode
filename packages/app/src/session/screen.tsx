@@ -93,12 +93,11 @@ function SessionScreenContent(props: {
     closed: attachment.closed,
     open: (key) => attachment.openTab(key, props.view()),
     side: () => session.layout.view().side,
-    // Closing the last tab closes the side region, which opens with a new tab next time. The user's own hand closed
-    // it, so it goes at once.
+    // Closing the last tab closes the side region, which opens with a new tab next time. It slides shut as the toggle
+    // closes it.
     onEmptied: () => {
       if (!session.layout.view().side.opened()) return
       session.layout.view().side.toggle()
-      sideMotion.sync(false)
     },
     settled: (run) => sideMotion.whenSettled(run),
   })
@@ -126,7 +125,11 @@ function SessionScreenContent(props: {
     widths: useLayout().panelWidth,
   })
 
-  const timeline = createSessionTimelineInteraction(session)
+  const mobileView = attachment.mobile.current
+
+  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
+
+  const timeline = createSessionTimelineInteraction(session, conversationVisible)
 
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
@@ -139,11 +142,9 @@ function SessionScreenContent(props: {
 
   const [store, setStore] = createStore<{
     timelineScrollbarHidden: boolean
-    sideMounted: boolean
     mobileCached: string[]
   }>({
     timelineScrollbarHidden: false,
-    sideMounted: false,
     mobileCached: [],
   })
 
@@ -167,7 +168,6 @@ function SessionScreenContent(props: {
   // direction mounts its contents mid-flight, and a reopen reuses their style and layout.
   let sideContent: HTMLDivElement | undefined
   let sideGlyph: SVGPathElement | undefined
-  let sideClosed = 0
   // While the left sidebar moves the side panel's edge, its contents keep the width they land at, and centred content,
   // like a Markdown preview, keeps its place rather than jumping by half the change. The side region's content box is
   // the one element whose own width reads the hold.
@@ -177,15 +177,14 @@ function SessionScreenContent(props: {
     () => sideContent?.querySelector<HTMLElement>('[data-slot="session-review-content"]'),
   )
   // The toggle's pane fills from the panel's edge as far as the panel is open.
-  const paintSideGlyph = () => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - sideClosed))
+  const paintSideGlyph = (closed: number) => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - closed))
 
   const sideMotion = createPanelMotion({
     open: sideVisible,
     identity: session.layout.tabKey,
     // The chat's real width moves the side panel's edge, whose contents keep their open width pinned to it.
     paint: (closed) => {
-      sideClosed = closed
-      paintSideGlyph()
+      paintSideGlyph(closed)
 
       // Dims the contents as they leave and fades them in as they arrive.
       if (sideContent) sideContent.style.opacity = panelOpacity(closed)
@@ -214,19 +213,11 @@ function SessionScreenContent(props: {
     setStore("timelineScrollbarHidden", false)
   }
 
-  createEffect(() => {
-    if (screen.side.open()) setStore("sideMounted", true)
-  })
-
-  const mobileView = attachment.mobile.current
-
   const mobileEntry = createMemo(() => {
     const key = mobileView()
 
     return key === "session" ? undefined : mobile.find(key)
   })
-
-  const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
 
   // Narrow-screen views that ask to stay mounted once shown, e.g. a terminal that keeps its shell's screen.
   createEffect(() => {
@@ -301,7 +292,6 @@ function SessionScreenContent(props: {
         <PluginLinks session={own()} active={active()}>
           <MessageTimeline
             active={active()}
-            caughtUp={timeline.resource.state === "ready" && timeline.resource.latest === source.identity.sessionID()}
             hideHeader={!isDesktop()}
             registerHeaderGap={registerHeaderGap}
             session={source}
@@ -323,7 +313,6 @@ function SessionScreenContent(props: {
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
             setRevealMessage={timeline.view.setRevealMessage}
-            setRevealPart={timeline.view.setRevealPart}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
             setPage={timeline.view.setPage}
@@ -449,7 +438,6 @@ function SessionScreenContent(props: {
               screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
-              onReveal={timeline.actions.revealPart}
             />
           )}
         </Show>
@@ -474,7 +462,7 @@ function SessionScreenContent(props: {
                 onToggle={region.toggle}
                 glyph={(fill) => {
                   sideGlyph = fill
-                  paintSideGlyph()
+                  paintSideGlyph(sideMotion.closed())
                 }}
               />
             </div>
@@ -500,7 +488,7 @@ function SessionScreenContent(props: {
 
             {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
                 selectors in the transcript then restyle every element in it as the side panel starts to close. */}
-            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={() => screen.size.start()}>
+            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-end-1"
                 direction="horizontal"
@@ -516,7 +504,7 @@ function SessionScreenContent(props: {
             </div>
           </div>
 
-          <Show when={sideMotion.present() || store.sideMounted}>
+          <Show when={sideMotion.mounted()}>
             <div
               ref={sidePresence}
               data-slot="session-side-panel-presence"
@@ -533,20 +521,18 @@ function SessionScreenContent(props: {
                 class="absolute inset-y-0 start-0 size-full [contain:layout_style] will-change-[opacity]"
               >
                 <div data-slot="session-side-region" class="absolute inset-0 min-h-0 overflow-visible">
-                  <Show when={store.sideMounted}>
-                    <div data-slot="session-side-region-presence" class="absolute inset-0">
-                      <SideRegion
-                        screen={props.screen}
-                        view={props.view()}
-                        region={region}
-                        sidebar={sidebar}
-                        present={sideMotion.present()}
-                        size={screen.size}
-                        contentWidth={screen.side.contentWidth}
-                        drag={drag}
-                      />
-                    </div>
-                  </Show>
+                  <div data-slot="session-side-region-presence" class="absolute inset-0">
+                    <SideRegion
+                      screen={props.screen}
+                      view={props.view()}
+                      region={region}
+                      sidebar={sidebar}
+                      present={sideMotion.present()}
+                      size={screen.size}
+                      contentWidth={screen.side.contentWidth}
+                      drag={drag}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -561,7 +547,7 @@ function SessionScreenContent(props: {
             classList={{ hidden: !bottomOpen() }}
             style={{ height: `${session.layout.view().bottom.height()}px` }}
           >
-            <div onPointerDown={() => screen.size.start()}>
+            <div onPointerDown={(event) => screen.size.start(event)}>
               <ResizeHandle
                 class="-top-1"
                 direction="vertical"

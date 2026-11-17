@@ -6,7 +6,6 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { Predicate } from "effect"
 import {
   createTimelineProjection,
   reasoningHeading,
@@ -255,59 +254,6 @@ describe("reuseTimelineRows", () => {
 })
 
 describe("createTimelineProjection", () => {
-  test("keeps new tools folded into seen work above the new-messages notice", () => {
-    const messages = [
-      { id: "user", type: "user", text: "Read files", time: { created: 1 } },
-      {
-        id: "assistant",
-        type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
-        time: { created: 2, completed: 3 },
-        content: [
-          ...["seen", "new"].map(
-            (id): SessionMessageAssistantTool => ({
-              type: "tool",
-              id,
-              name: "read",
-              state: {
-                status: "completed",
-                input: { filePath: `${id}.ts` },
-                content: [{ type: "text", text: id }],
-                metadata: {},
-              },
-              time: { created: 2, completed: 3 },
-            }),
-          ),
-          { type: "text", text: "The result" },
-        ],
-      },
-    ] satisfies SessionMessageInfo[]
-
-    const folded = createTimelineProjection({
-      sessionMessages: messages,
-      status: { type: "idle" },
-      reasoningMode: "full",
-      newMessages: new Set(["new"]),
-    })
-
-    expect(folded.rows.some((row) => Predicate.isTagged(row, "NewMessages"))).toBe(false)
-
-    const result = createTimelineProjection({
-      sessionMessages: messages,
-      status: { type: "idle" },
-      reasoningMode: "full",
-      newMessages: new Set(["new", "assistant:text:0"]),
-    })
-
-    const index = result.rows.findIndex((row) => Predicate.isTagged(row, "NewMessages"))
-
-    expect(result.rows[index]).toEqual(
-      new TimelineRow.NewMessages({ userMessageID: "user", partID: "assistant:text:0", read: false }),
-    )
-    expect(result.rows[index + 1]).toEqual(folded.rows[index])
-  })
-
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
@@ -356,58 +302,6 @@ describe("createTimelineProjection", () => {
     expect(result.messageLastRowIndex.get("user-1")).toBe(3)
     expect(result.lastAssistantGroupKey.get("user-1")).toBe("part:assistant-1:assistant-1:text:0")
     expect(result.rowByKey.get("user-message:user-1")).toBe(result.rows[2])
-  })
-
-  test("indexes the agent and model each prompt's predecessor chose, ignoring later switches in its turn", () => {
-    const first = { id: "first", providerID: "provider" } satisfies ModelRef
-    const second = { id: "second", providerID: "provider", variant: "high" } satisfies ModelRef
-
-    const messages = [
-      { id: "user-1", type: "user", text: "first", time: { created: 1 } },
-      {
-        id: "assistant-1",
-        type: "assistant",
-        agent: "build",
-        model: first,
-        content: [{ type: "text", text: "answer" }],
-        time: { created: 2, completed: 3 },
-      },
-      // A steer's selection reconfigures the running turn before the steer is delivered.
-      { id: "model", type: "model-switched", model: second, time: { created: 4 } },
-      {
-        id: "assistant-2",
-        type: "assistant",
-        agent: "build",
-        model: second,
-        content: [{ type: "text", text: "more" }],
-        time: { created: 5, completed: 6 },
-      },
-      {
-        id: "user-2",
-        type: "user",
-        text: "steer",
-        metadata: { agent: "build", model: { modelID: "second", providerID: "provider", variant: "high" } },
-        time: { created: 7 },
-      },
-      {
-        id: "user-3",
-        type: "user",
-        text: "another steer",
-        metadata: { agent: "plan", model: { modelID: "second", providerID: "provider", variant: "high" } },
-        time: { created: 8 },
-      },
-    ] satisfies SessionMessageInfo[]
-
-    const result = createTimelineProjection({
-      sessionMessages: messages,
-      status: { type: "busy" },
-      reasoningMode: "full",
-    })
-
-    expect(result.previousSelectionByID.has("user-1")).toBe(false)
-    // Without metadata, the first prompt chose what its first reply ran with, not the switch a later steer made.
-    expect(result.previousSelectionByID.get("user-2")).toEqual({ agent: "build", model: first })
-    expect(result.previousSelectionByID.get("user-3")).toEqual({ agent: "build", model: second })
   })
 
   test("reuses a stable projected row array", () => {

@@ -2,6 +2,7 @@ import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { AISDK } from "@opencode/core/aisdk"
+import { ModelRetry } from "@opencode/core/model-retry"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
@@ -317,7 +318,6 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
     })
 
     const cases = [
-      ["@ai-sdk/github-copilot", "copilot", { reasoningEffort: "high" }],
       ["@ai-sdk/amazon-bedrock/mantle", "openai", { reasoningEffort: "high", forceReasoning: true }],
       ["@ai-sdk/openai-compatible", "test-provider", { reasoningEffort: "high" }],
       ["@jerome-benoit/sap-ai-provider-v2", "sap-ai", { reasoningEffort: "high" }],
@@ -1195,6 +1195,21 @@ it.effect("classifies native fetch failures as request transport errors", () =>
     expect(error.message).toBe("connect ECONNREFUSED 127.0.0.1:443")
     expect(error.reason.cause).toBe(cause)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("keeps the code of a host name that didn't resolve", () =>
+  Effect.gen(function* () {
+    const dns = Object.assign(new Error("getaddrinfo ENOTFOUND api.example.com"), { code: "ENOTFOUND" })
+    const raw = yield* streamFailure(dns)
+    expect(raw.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "ENOTFOUND" })
+    expect(ModelRetry.isUnreachable(raw)).toBeTrue()
+
+    const wrapped = yield* streamFailure(
+      apiCallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND", isRetryable: true, cause: dns }),
+    )
+    expect(wrapped.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "ENOTFOUND" })
+    expect(ModelRetry.isUnreachable(wrapped)).toBeTrue()
   }),
 )
 

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -10,11 +10,24 @@ import { Menu } from "@opencode/ui/menu"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { displayName } from "@opencode/ui/project-avatar"
+import { displayName, ProjectAvatar } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
+import { showToast } from "@/shell/notifications/toast"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
+import {
+  INITIAL_TAB_RENAME_STATE,
+  isTabRenaming,
+  selectTabMenuOpen,
+  selectTabPreviewBlocked,
+  transitionTabRename,
+  type TabRenameEffect,
+  type TabRenameEvent,
+  type TabRenameSource,
+} from "./tab-rename-machine"
 import "./tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -48,8 +61,13 @@ function TabCloseMenuItems(props: TabCloseActions & { orientation?: "horizontal"
   )
 }
 
+type SessionTabActions = TabCloseActions & {
+  onDelete: () => void
+}
+
+/** A session row: an open tab with its close actions, or a list row with its own menu that can start the inline rename. */
 export function TabNavItem(
-  props: TabCloseActions & {
+  props: (SessionTabActions | { menu: (rename: () => void) => JSX.Element }) & {
     ref?: Ref<HTMLDivElement>
     href: string
     server: ServerConnection.Key
@@ -58,10 +76,13 @@ export function TabNavItem(
     unread: boolean
     attention: boolean
     loading: boolean
+    shortcut?: number
+    /** A faint trailing label, such as the tab's server. */
+    label?: string
+    /** Hides the project avatar under a header that already names the project; shortcut hints still show. */
+    hideAvatar?: boolean
     fallbackTitle?: string
     fallbackDirectory?: string
-    onRename: (title: string) => Promise<void>
-    onDelete: () => void
     onNavigate: () => void
     active?: boolean
     suppressNavigation?: boolean
@@ -72,34 +93,66 @@ export function TabNavItem(
   },
 ) {
   const language = useLanguage()
-  const [menu, setMenu] = createStore({ open: false, rename: false })
-  const [editing, setEditing] = createSignal(false)
+  const actions = "onClose" in props ? props : undefined
+  const [renameState, setRenameState] = createSignal(INITIAL_TAB_RENAME_STATE)
+  const editing = () => isTabRenaming(renameState())
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
   let measureFrame: number | undefined
+  let armFrame: number | undefined
+  const saves = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    props.onClose()
+    actions?.onClose()
   }
 
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
 
+  const exporter = createSessionExporter()
+
+  // Shows the optimistic title, or the one to restore when its save fails.
+  const rememberTitle = (sessionID: string, title: string | undefined) => {
+    const ctx = serverCtx()
+    const current = ctx?.data.session.get(sessionID) ?? (props.session?.id === sessionID ? props.session : undefined)
+
+    if (current) ctx?.data.session.remember({ ...current, title })
+  }
+
+  // A pointer resting on a row usually clicks it next, so its transcript loads during the dwell. Passing over loads nothing.
+  let intent: number | undefined
+
+  const hover = (hovered: boolean) => {
+    window.clearTimeout(intent)
+    const ctx = serverCtx()
+    const session = props.session
+
+    if (!hovered || !ctx || !session || props.active || ctx.sdk.connection.status() !== "connected") return
+    intent = window.setTimeout(() => void ctx.data.session.message.sync(session.id).catch(() => undefined), 100)
+  }
+
+  onCleanup(() => window.clearTimeout(intent))
+
   // The project icon stays put; status shows where the close button appears on hover.
   const status = () => {
     if (props.preparing || props.loading) return "busy"
 
-    if (!props.session || props.active) return
+    if (!props.session) return
+
+    if (props.active && !serverCtx()?.notification.session.manuallyUnread(props.session.id)) return
 
     if (props.attention) return "attention"
 
-    if (props.unread) return "unread"
+    if (!props.unread) return
+
+    // As in the inbox, an unread run that ended in failure gets the danger dot instead of the accent one.
+    return props.session.outcome === "failed" ? "failed" : "unread"
   }
 
-  const dotted = () => status() === "attention" || status() === "unread"
+  const dotted = () => status() === "attention" || status() === "unread" || status() === "failed"
 
   const project = createMemo(() => {
     const session = props.session
@@ -162,7 +215,9 @@ export function TabNavItem(
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
-  const previewBlocked = () => !!props.dragging || editing() || menu.open || !!props.pressed || !props.session
+
+  const previewBlocked = () =>
+    !!props.dragging || selectTabPreviewBlocked(renameState()) || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -204,21 +259,141 @@ export function TabNavItem(
     selection?.addRange(range)
   }
 
-  const closeRename = async (save: boolean) => {
-    if (!editing()) return
+  const focusTitle = (select: boolean) => {
+    titleEl.focus()
 
-    const original = props.session?.title ?? ""
-    const next = (titleEl.textContent ?? "").trim()
+    if (select) selectTitle()
+  }
 
-    titleEl.scrollLeft = 0
-    setEditing(false)
+  const dispatchRename = (event: TabRenameEvent) => {
+    const previous = untrack(renameState)
+    const next = transitionTabRename(previous, event)
 
-    if (!save || !next || next === original) {
+    if (next.state !== previous) setRenameState(next.state)
+    next.effects.forEach(runRenameEffect)
+  }
+
+  function runRenameEffect(effect: TabRenameEffect) {
+    if (effect.type === "editor.arm") {
+      titleEl.textContent = effect.text
+
+      if (effect.source === "pointer") {
+        focusTitle(true)
+
+        return armAfter(effect.attempt, 1)
+      }
+
+      // A menu pick arms from `onCloseAutoFocus`; two frames on, it arms anyway in case the menu closed without it.
+      return armAfter(effect.attempt, 2)
+    }
+
+    if (effect.type === "editor.disarm") return disarm()
+
+    if (effect.type === "editor.reset") {
+      titleEl.scrollLeft = 0
+
       return
     }
 
-    await props.onRename(next)
+    if (effect.type === "session.remember") return rememberTitle(effect.sessionID, effect.title)
+
+    if (effect.type === "save.start") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+
+      const timer = setTimeout(
+        () => dispatchRename({ type: "save.timed-out", attempt, currentTitle: props.session?.title }),
+        effect.timeoutMs,
+      )
+
+      saves.set(attempt, { controller, timer })
+      const ctx = serverCtx()
+      void (
+        ctx
+          ? ctx.sdk.api.session.update(
+              { sessionID: effect.sessionID, title: effect.title },
+              { signal: controller.signal },
+            )
+          : Promise.reject(new Error(language.t("common.requestFailed")))
+      ).then(
+        () => {
+          clearSave(attempt)
+          dispatchRename({ type: "save.succeeded", attempt, title: effect.title })
+        },
+        (error) => {
+          clearSave(attempt)
+
+          // Only a timeout aborts a save, and the machine already left it.
+          if (controller.signal.aborted) return
+          dispatchRename({ type: "save.failed", attempt, currentTitle: props.session?.title, error })
+        },
+      )
+
+      return
+    }
+
+    if (effect.type === "save.abort") {
+      saves.get(effect.attempt)?.controller.abort()
+
+      return clearSave(effect.attempt)
+    }
+
+    // A committed save keeps going when the tab unmounts, as when the tab layout changes.
+    if (effect.type === "save.clear-timers") return [...saves.keys()].forEach(clearSave)
+
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: effect.error instanceof Error ? effect.error.message : undefined,
+    })
   }
+
+  function clearSave(attempt: number) {
+    clearTimeout(saves.get(attempt)?.timer)
+    saves.delete(attempt)
+  }
+
+  // After the attempt's frames the title holds focus, so a blur ends the edit from then on.
+  function armAfter(attempt: number, frames: number) {
+    disarm()
+    armFrame = requestAnimationFrame(() => {
+      armFrame = undefined
+
+      if (frames > 1) return armAfter(attempt, frames - 1)
+      const current = untrack(renameState)
+
+      if (current.status !== "arming" || current.attempt !== attempt) return
+
+      if (document.activeElement !== titleEl) focusTitle(!current.edited)
+      dispatchRename({ type: "edit.armed", attempt })
+    })
+  }
+
+  function disarm() {
+    if (armFrame !== undefined) cancelAnimationFrame(armFrame)
+    armFrame = undefined
+  }
+
+  const startRename = (source: TabRenameSource) =>
+    dispatchRename({
+      type: "edit.start",
+      source,
+      sessionID: props.session?.id,
+      title: props.session?.title ?? "",
+      enabled: !props.dragging,
+    })
+
+  // Reads the title's text first, so the machine saves what the field shows.
+  const endRename = (type: "edit.submit" | "edit.blur") => {
+    dispatchRename({ type: "edit.input", value: titleEl.textContent ?? "" })
+    dispatchRename({ type, currentTitle: props.session?.title })
+  }
+
+  createEffect(() => {
+    const sessionID = props.session?.id
+    untrack(() => dispatchRename({ type: "session.changed", sessionID }))
+  })
+
+  onCleanup(() => dispatchRename({ type: "disposed" }))
 
   createEffect(() => {
     if (editing()) return
@@ -229,23 +404,6 @@ export function TabNavItem(
     if (value === undefined) return
     titleEl.textContent = value
   })
-
-  const openRename = (event?: MouseEvent) => {
-    event?.preventDefault()
-    event?.stopPropagation()
-
-    if (props.dragging || editing()) return
-    const session = props.session
-
-    if (!session) return
-    titleEl.textContent = session.title ?? ""
-    setEditing(true)
-
-    requestAnimationFrame(() => {
-      titleEl.focus()
-      selectTitle()
-    })
-  }
 
   createEffect(() => {
     if (!editing()) return
@@ -259,7 +417,7 @@ export function TabNavItem(
         if (!(target instanceof Node)) return
 
         if (tabRoot.contains(target)) return
-        void closeRename(true)
+        endRename("edit.submit")
       },
       { capture: true },
     )
@@ -279,19 +437,22 @@ export function TabNavItem(
       data-orientation={props.orientation ?? "horizontal"}
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
+      data-avatar={props.hideAvatar ? "hidden" : undefined}
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
       data-status={status()}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
+      onPointerEnter={() => hover(true)}
+      onPointerLeave={() => hover(false)}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
         event.preventDefault()
         event.stopPropagation()
       }}
       onAuxClick={(event) => {
-        if (event.button !== MIDDLE_MOUSE_BUTTON) return
+        if (event.button !== MIDDLE_MOUSE_BUTTON || !actions) return
         closeTab(event)
       }}
     >
@@ -302,9 +463,10 @@ export function TabNavItem(
         as="a"
         disabled={editing() || props.dragging}
         aria-haspopup="menu"
-        aria-expanded={menu.open}
+        aria-expanded={selectTabMenuOpen(renameState())}
         data-slot="tab-link"
         data-titlebar-tab-link
+        aria-current={props.active ? "page" : undefined}
         href={props.href}
         draggable={false}
         onDragStart={(event) => {
@@ -340,7 +502,14 @@ export function TabNavItem(
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
           >
-            {(directory) => <SessionTabAvatarView project={project()} directory={directory()} unread={false} />}
+            {(directory) => (
+              <SessionTabAvatarView
+                project={project()}
+                directory={directory()}
+                unread={false}
+                label={props.shortcut?.toString()}
+              />
+            )}
           </Show>
           <Show when={dotted()}>
             <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
@@ -360,23 +529,27 @@ export function TabNavItem(
             "select-text": editing(),
           }}
           contenteditable={editing() ? "plaintext-only" : undefined}
-          onDblClick={openRename}
+          onDblClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            startRename("pointer")
+          }}
           onKeyDown={(event) => {
             event.stopPropagation()
 
             if (event.key === "Enter") {
               event.preventDefault()
-              void closeRename(true)
+              endRename("edit.submit")
 
               return
             }
 
             if (event.key !== "Escape") return
             event.preventDefault()
-            titleEl.textContent = props.session?.title ?? ""
-            void closeRename(false)
+            dispatchRename({ type: "edit.cancel" })
           }}
-          onBlur={() => void closeRename(true)}
+          onInput={() => dispatchRename({ type: "edit.input", value: titleEl.textContent ?? "" })}
+          onBlur={() => endRename("edit.blur")}
           onPointerDown={(event) => {
             if (!editing()) return
             event.stopPropagation()
@@ -387,25 +560,38 @@ export function TabNavItem(
           }}
         />
       </Menu.Context.Trigger>
+      <Show when={props.label}>
+        {(label) => (
+          <span
+            data-slot="tab-label"
+            class="me-7 max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+          >
+            {label()}
+          </span>
+        )}
+      </Show>
 
-      <div data-slot="tab-close">
+      <div data-slot="tab-close" classList={{ "pointer-events-none": !actions }}>
         <span data-slot="tab-status" aria-hidden="true">
           <ActivityRing data-mark="busy" />
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
+          <span data-mark="failed" data-slot="tab-status-dot" />
         </span>
-        <IconButton
-          size="small"
-          variant="ghost-muted"
-          class="hover-reveal relative z-10"
-          onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-          onClick={closeTab}
-          icon={<Icon name="xmark-small" />}
-          aria-label={language.t("common.closeTab")}
-        />
+        <Show when={actions}>
+          <IconButton
+            size="small"
+            variant="ghost-muted"
+            class="hover-reveal relative z-10"
+            onPointerDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={closeTab}
+            icon={<Icon name="xmark-small" />}
+            aria-label={language.t("common.closeTab")}
+          />
+        </Show>
       </div>
     </div>
   )
@@ -414,7 +600,7 @@ export function TabNavItem(
     <Menu.Context
       modal={false}
       onOpenChange={(open) => {
-        setMenu("open", open)
+        dispatchRename({ type: "menu.changed", open })
 
         if (open) setPopoverOpen(false)
       }}
@@ -437,25 +623,48 @@ export function TabNavItem(
       <Menu.Context.Portal>
         <Menu.Context.Content
           onCloseAutoFocus={(event) => {
-            if (!menu.rename) return
+            // The title, not the trigger, takes focus while renaming.
+            const current = untrack(renameState)
+
+            if (!isTabRenaming(current)) return
             event.preventDefault()
-            setMenu("rename", false)
-            openRename()
+
+            if (current.status !== "arming") return
+            focusTitle(!current.edited)
+            armAfter(current.attempt, 1)
           }}
         >
-          <Menu.Item disabled={!props.session} onSelect={() => setMenu("rename", true)}>
-            {language.t("common.rename")}
-          </Menu.Item>
-          <TabCloseMenuItems
-            orientation={props.orientation}
-            onClose={props.onClose}
-            onCloseOthers={props.onCloseOthers}
-            onCloseAfter={props.onCloseAfter}
-          />
-          <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!props.session} onSelect={props.onDelete}>
-            {language.t("session.delete.title")}…
-          </Menu.Item>
+          {"menu" in props ? (
+            props.menu(() => startRename("menu"))
+          ) : (
+            <>
+              <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
+                {language.t("common.rename")}
+              </Menu.Item>
+              <Menu.Item
+                disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
+                onSelect={() => {
+                  const session = props.session
+
+                  if (session) exporter.export({ server: props.server, sessionID: session.id })
+                }}
+              >
+                {language.t("common.export")}…
+              </Menu.Item>
+              <SessionReadMenuItem server={props.server} session={props.session} />
+              <Menu.Separator />
+              <TabCloseMenuItems
+                orientation={props.orientation}
+                onClose={props.onClose}
+                onCloseOthers={props.onCloseOthers}
+                onCloseAfter={props.onCloseAfter}
+              />
+              <Menu.Separator />
+              <Menu.Item disabled={!props.session} onSelect={props.onDelete}>
+                {language.t("common.delete")}…
+              </Menu.Item>
+            </>
+          )}
         </Menu.Context.Content>
       </Menu.Context.Portal>
     </Menu.Context>
@@ -467,6 +676,9 @@ export function DraftTabItem(
     ref?: Ref<HTMLDivElement>
     href: string
     title: string
+    shortcut?: number
+    /** A faint trailing label, such as the tab's server. */
+    label?: string
     active?: boolean
     onNavigate: () => void
     suppressNavigation?: boolean
@@ -541,8 +753,9 @@ export function DraftTabItem(
           }}
           class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
         >
-          <span class="flex size-4 shrink-0 items-center justify-center">
+          <span class="relative flex size-4 shrink-0 items-center justify-center">
             <svg
+              data-slot="tab-icon-face"
               class="text-v2-icon-icon-muted group-data-[active='true']:text-v2-icon-icon-base"
               width="16"
               height="16"
@@ -556,6 +769,13 @@ export function DraftTabItem(
                 stroke="currentColor"
               />
             </svg>
+            <Show when={props.shortcut}>
+              {(shortcut) => (
+                <span data-slot="tab-shortcut-face" aria-hidden="true">
+                  <ProjectAvatar fallback="" label={shortcut().toString()} variant="outline" />
+                </span>
+              )}
+            </Show>
           </span>
           <span
             data-titlebar-tab-title
@@ -564,6 +784,16 @@ export function DraftTabItem(
             {props.title}
           </span>
         </Menu.Context.Trigger>
+        <Show when={props.label}>
+          {(label) => (
+            <span
+              data-slot="tab-label"
+              class="me-7 max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
+            >
+              {label()}
+            </span>
+          )}
+        </Show>
         <div data-slot="tab-close">
           <IconButton
             size="small"

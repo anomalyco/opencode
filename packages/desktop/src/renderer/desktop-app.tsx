@@ -36,6 +36,7 @@ import {
   selectSplashDeep,
   selectStartupFailure,
   selectStartupLocale,
+  selectStartupRevealed,
   transitionStartup,
   type StartupEffect,
   type StartupEvent,
@@ -119,6 +120,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
               api={props.api}
               initialUrl={initialUrl}
               pending={selectFirstLaunch(startup.state())}
+              revealed={selectStartupRevealed(startup.state())}
               dispatch={startup.dispatch}
             />
             <DesktopEffects api={props.api} />
@@ -271,7 +273,7 @@ function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void })
 
 function DesktopEffects(props: { api: ElectronAPI }) {
   const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+  onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
 
   createEffect(() => {

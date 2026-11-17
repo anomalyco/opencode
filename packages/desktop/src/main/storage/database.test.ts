@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import { copyFileSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { DatabaseSync } from "node:sqlite"
 import path from "node:path"
 import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-sqlite"
 import { migrate, openDatabase } from "./database"
 import { migrations } from "./migration.gen"
+import { readWindowSnapshot } from "./window-snapshot"
 
 const tables = (db: ReturnType<typeof drizzle>) =>
   db
@@ -59,6 +62,42 @@ describe("database", () => {
     expect(db.all(sql`SELECT id, enabled, manifest, revision FROM extension ORDER BY id`)).toEqual(saved)
     native.close()
   })
+
+  // Symlinks need elevated privileges on Windows.
+  test.each(["symlink", "copy"].filter((link) => link === "copy" || process.platform !== "win32"))(
+    "moves aside a drafts.sqlite that is the CLI database (%s) without writing to it",
+    (link) => {
+      const root = mkdtempSync(path.join(tmpdir(), "opencode-drafts-cli-"))
+      const cli = path.join(root, "opencode.db")
+      const drafts = path.join(root, "drafts.sqlite")
+      const seeded = new DatabaseSync(cli)
+      seeded.exec(
+        "CREATE TABLE session_v2 (id TEXT PRIMARY KEY); CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL); INSERT INTO migration VALUES ('20261010180456_project_time_archived', 0)",
+      )
+      seeded.close()
+
+      if (link === "symlink") symlinkSync(cli, drafts)
+
+      if (link === "copy") copyFileSync(cli, drafts)
+
+      readWindowSnapshot(root, ["settings"])
+      const database = openDatabase(drafts)
+
+      expect(tables(database.db)).toEqual(expected)
+      expect(database.moved).toStartWith(`${drafts}.cli-`)
+      database.close()
+      const moved = drizzle({ client: new DatabaseSync(database.moved ?? "") })
+      const original = drizzle({ client: new DatabaseSync(cli) })
+
+      for (const db of [moved, original]) {
+        expect(tables(db)).toEqual(["migration", "session_v2"])
+        expect(db.all(sql`SELECT id FROM migration`)).toEqual([{ id: "20261010180456_project_time_archived" }])
+        db.$client.close()
+      }
+
+      rmSync(root, { recursive: true, force: true })
+    },
+  )
 
   test("a failed migration rolls back the journal without losing existing data", () => {
     const native = new DatabaseSync(":memory:")

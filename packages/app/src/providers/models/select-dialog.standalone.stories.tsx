@@ -101,11 +101,11 @@ const models: StoryModel[] = [
 
 const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
 
-function SelectorStory(props: { favorite?: boolean }) {
+function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: boolean }) {
   const dialog = useDialog()
 
   const [store, setStore] = createStore<{ current: string; favorite: string[]; variant?: string }>({
-    current: "opencode:claude-opus-5-5",
+    current: props.empty ? "" : "opencode:claude-opus-5-5",
     favorite: props.favorite ? ["anthropic:claude-sonnet-5"] : [],
   })
 
@@ -128,7 +128,7 @@ function SelectorStory(props: { favorite?: boolean }) {
         setStore("favorite", (ids) => (ids.includes(id) ? ids.filter((entry) => entry !== id) : [id, ...ids]))
       },
     },
-    list: () => models,
+    list: () => (props.empty ? [] : models),
     cycle() {},
     set: (key: { providerID: string; modelID: string } | undefined) => {
       if (key) setStore("current", `${key.providerID}:${key.modelID}`)
@@ -137,7 +137,6 @@ function SelectorStory(props: { favorite?: boolean }) {
     setVisibility() {},
     variant: {
       configured: () => undefined,
-      selected: () => store.variant,
       current: () => store.variant,
       list: () => Object.keys(find(store.current)?.variants ?? {}),
       set: (variant: string | undefined) => setStore("variant", variant),
@@ -145,14 +144,14 @@ function SelectorStory(props: { favorite?: boolean }) {
     },
   } satisfies ModelSelection
 
-  const open = () => void dialog.show(() => <DialogSelectModel model={selection} />)
+  const open = () => void dialog.show(() => <DialogSelectModel model={selection} provider={props.provider} />)
 
   onMount(open)
 
   return (
     <div class="flex min-h-[280px] items-end justify-center">
       <Button variant="ghost-muted" onClick={open}>
-        {find(store.current)?.name}
+        {find(store.current)?.name ?? "Select model"}
       </Button>
     </div>
   )
@@ -175,6 +174,22 @@ export const Favorites = {
   render: () => (
     <DialogStoryRuntime>
       <SelectorStory favorite />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const ProviderOnly = {
+  render: () => (
+    <DialogStoryRuntime>
+      <SelectorStory provider="opencode" />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const NoModels = {
+  render: () => (
+    <DialogStoryRuntime>
+      <SelectorStory empty />
     </DialogStoryRuntime>
   ),
 }

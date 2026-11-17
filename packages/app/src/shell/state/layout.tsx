@@ -1,6 +1,6 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Predicate, Schema, SchemaGetter } from "effect"
-import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -19,12 +19,30 @@ import {
   closeSessionTab,
   moveSessionTab,
   openSessionTab,
+  paneTargetMatches,
   placeSessionTabs,
   previewSessionTab,
   type SessionPane,
   type SessionTabs,
   type SessionTabState,
 } from "./session-tabs"
+import {
+  createLayoutIntentState,
+  navigationPending,
+  selectNavigationIntent,
+  selectPaneTarget,
+  transitionLayoutIntent,
+  type LayoutIntentEffect,
+  type LayoutIntentEvent,
+} from "./intent-machine"
+import {
+  canPruneSessions,
+  INITIAL_SCOPED_SESSION_STATE,
+  selectActiveSessionKey,
+  transitionScopedSession,
+  type ScopedSessionEffect,
+  type ScopedSessionEvent,
+} from "./scoped-machine"
 
 const DEFAULT_SIDEBAR_WIDTH = 344
 
@@ -33,8 +51,6 @@ const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 
 const DEFAULT_DOCK_HEIGHT = 280
-
-const PANE_TARGET_TTL_MS = 10_000
 
 export type LocalProject = Partial<Project> & { worktree: string }
 
@@ -117,6 +133,8 @@ const closedTabSchema = Schema.Struct({
   file: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   data: Schema.optional(Schema.String),
+  pane: Schema.optional(Schema.Literals(["side", "split", "bottom"])),
+  index: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   closed: Schema.Finite,
 })
 
@@ -129,8 +147,6 @@ const sessionViewSchema = Persistence.struct({
   reviewOpen: Schema.optional(Persistence.array(Schema.String)),
   reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   reviewFile: Schema.optional(Schema.String),
-  pendingMessage: Schema.optional(Schema.String),
-  pendingMessageAt: Schema.optional(Schema.Finite),
 })
 
 export const layoutSchema = Persistence.struct({
@@ -219,9 +235,6 @@ export const layoutPersistence = Persistence.migrate(
   ),
 )
 
-/** The session key the user is on, whether pruning ran, and when each session key was last used. */
-type SessionKeyUsage = { active: string | undefined; pruned: boolean; used: Map<string, number> }
-
 export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
@@ -251,20 +264,80 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const [ephemeral, setEphemeral] = createStore<{
       sessionTabPreview: Record<string, string | undefined>
-      // The pane a pane's "+" menu asked the next new tab to open in.
-      sessionTabTarget: Record<string, { pane: SessionPane; at: number } | undefined>
     }>({
       sessionTabPreview: {},
-      sessionTabTarget: {},
     })
+
+    const route = useCurrentRoute()
+
+    // One-shot work a shortcut or a pane's "+" menu leaves for the screen or tab it opens.
+    const [intentState, setIntentState] = createSignal(createLayoutIntentState())
+    let navTimer: ReturnType<typeof setTimeout> | undefined
+    const paneTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+    const dispatchIntent = (event: LayoutIntentEvent) => {
+      const result = transitionLayoutIntent(untrack(intentState), event)
+      setIntentState(result.state)
+      result.effects.forEach(runIntentEffect)
+    }
+
+    // Whether `target`, mounting now, has a pending intent of `kind`; taking it clears it.
+    const takeIntent = (kind: "home-search" | "draft-project-search", target: LayoutRoute) => {
+      const intent = selectNavigationIntent(untrack(intentState), kind, target)
+
+      if (!intent) return false
+      dispatchIntent({ type: "navigation.taken", attempt: intent.attempt })
+
+      return true
+    }
+
+    const runIntentEffect = (effect: LayoutIntentEffect) => {
+      if (effect.type === "nav-timer.clear" || effect.type === "nav-timer.start") {
+        clearTimeout(navTimer)
+        navTimer =
+          effect.type === "nav-timer.start"
+            ? setTimeout(
+                () => dispatchIntent({ type: "navigation.expired", attempt: effect.attempt }),
+                effect.timeoutMs,
+              )
+            : undefined
+
+        return
+      }
+
+      if (effect.type === "pane-timer.clear") {
+        effect.sessions.forEach((session) => {
+          clearTimeout(paneTimers.get(session))
+          paneTimers.delete(session)
+        })
+
+        return
+      }
+
+      clearTimeout(paneTimers.get(effect.session))
+      paneTimers.set(
+        effect.session,
+        setTimeout(() => {
+          paneTimers.delete(effect.session)
+          dispatchIntent({ type: "pane.expired", session: effect.session, attempt: effect.attempt })
+        }, effect.timeoutMs),
+      )
+    }
+
+    // Follows the route only while a shortcut's intent waits for one.
+    createEffect(() => {
+      if (!navigationPending(intentState())) return
+      const current = route()
+      untrack(() => dispatchIntent({ type: "route.synced", route: current }))
+    })
+    onCleanup(() => dispatchIntent({ type: "disposed" }))
 
     /** Writes a session's strip and selection, carrying pane placement over from the stored strip. */
     const writeTabs = (session: string, next: SessionTabs, preview?: { value: string | undefined }) =>
       untrack(() => {
         const previous = store.sessionTabs[session] ?? { all: [] }
-        const target = ephemeral.sessionTabTarget[session]
-        const pending = target && Date.now() - target.at < PANE_TARGET_TTL_MS ? target.pane : undefined
-        const placed = placeSessionTabs(previous, next, pending)
+        const target = selectPaneTarget(intentState(), session)
+        const placed = placeSessionTabs(previous, next, target)
 
         batch(() => {
           setStore("sessionTabs", session, {
@@ -286,10 +359,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               "closed",
               closed.filter((entry) => !placed.all.includes(entry.key)),
             )
-
-          if (target && placed.all.some((tab) => !previous.all.includes(tab)))
-            setEphemeral("sessionTabTarget", session, undefined)
         })
+
+        if (target && placed.all.some((tab) => !previous.all.includes(tab) && paneTargetMatches(target, tab)))
+          dispatchIntent({ type: "pane.consumed", session, attempt: target.attempt })
       })
 
     const tabState = (session: string): SessionTabState => ({
@@ -299,12 +372,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const applyTabs = (session: string, next: SessionTabState) => writeTabs(session, next.tabs, { value: next.preview })
 
-    // Opening Home with its shortcut focuses session search, so typing filters immediately.
-    let homeSearchFocus = false
-
-    // Search projects outside a draft opens a new draft, which then opens its project picker.
-    let draftProjectSearch = false
-
     // Names of other session-scoped stores, e.g. plugin storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
       Persist.global("layout.scoped"),
@@ -313,12 +380,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     )
 
     const MAX_SESSION_KEYS = 50
-    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
 
-    const usage: SessionKeyUsage = {
-      active: undefined,
-      pruned: false,
-      used: new Map<string, number>(),
+    // When each session key was last used.
+    const used = new Map<string, number>()
+
+    const [scopedState, setScopedState] = createSignal(INITIAL_SCOPED_SESSION_STATE)
+
+    // Pruning reads the layout store, so a touch from inside a memo must not subscribe to it.
+    const dispatchScoped = (event: ScopedSessionEvent) =>
+      untrack(() => {
+        const result = transitionScopedSession(scopedState(), event)
+        setScopedState(result.state)
+        result.effects.forEach(runScopedEffect)
+      })
+
+    const runScopedEffect = (effect: ScopedSessionEffect) => {
+      if (effect.type === "session.prune") return prune(effect.keep)
+      setScoped((names) => {
+        const missing = effect.names.filter((name) => !names.includes(name))
+
+        return missing.length ? [...names, ...missing] : names
+      })
     }
 
     const dropSessionState = (keys: string[]) => {
@@ -343,12 +425,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function prune(keep?: string) {
-      if (!scopedReady()) return
+      if (!canPruneSessions(untrack(scopedState))) return
 
       const drop = pruneSessionKeys({
         keep,
         max: MAX_SESSION_KEYS,
-        used: usage.used,
+        used,
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
       })
@@ -374,20 +456,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       )
 
       for (const key of drop) {
-        usage.used.delete(key)
+        used.delete(key)
       }
+
+      dispatchIntent({ type: "sessions.pruned", keys: drop })
     }
 
     function touch(sessionKey: string) {
-      usage.active = sessionKey
-      usage.used.set(sessionKey, Date.now())
-
-      if (!ready() || !scopedReady()) return
-
-      if (usage.pruned) return
-
-      usage.pruned = true
-      prune(sessionKey)
+      used.set(sessionKey, Date.now())
+      dispatchScoped({ type: "touch", sessionKey })
     }
 
     const scroll = createScrollPersistence({
@@ -395,7 +472,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
       onFlush: (sessionKey, next) => {
         const current = store.sessionView[sessionKey]
-        const keep = usage.active ?? sessionKey
+        const keep = selectActiveSessionKey(untrack(scopedState)) ?? sessionKey
 
         if (!current) {
           setStore("sessionView", sessionKey, { scroll: next })
@@ -412,15 +489,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
     createEffect(() => {
-      if (!ready() || !scopedReady()) return
-
-      if (usage.pruned) return
-      const active = usage.active
-
-      if (!active) return
-      usage.pruned = true
-      prune(active)
+      if (ready() && scopedReady()) untrack(() => dispatchScoped({ type: "hydrated" }))
     })
+    onCleanup(() => dispatchScoped({ type: "disposed" }))
 
     onMount(() => {
       const flush = () => batch(() => scroll.flushAll())
@@ -439,47 +510,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     return {
-      route: useCurrentRoute(),
+      route,
       ready,
       home: {
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
         },
+        /** Opening Home with its shortcut focuses session search, so typing filters immediately. */
         searchFocus: {
           request() {
-            homeSearchFocus = true
+            dispatchIntent({ type: "home-search.requested", currentRoute: untrack(route) })
           },
           take() {
-            const requested = homeSearchFocus
-            homeSearchFocus = false
-
-            return requested
+            return takeIntent("home-search", { type: "home" })
           },
         },
       },
       draft: {
+        /** Search projects outside a draft opens a new draft, which then opens its project picker. */
         projectSearch: {
-          request() {
-            draftProjectSearch = true
+          request(draftID: string) {
+            dispatchIntent({ type: "draft-search.requested", draftID, currentRoute: untrack(route) })
           },
-          take() {
-            const requested = draftProjectSearch
-            draftProjectSearch = false
-
-            return requested
+          take(draftID: string) {
+            return takeIntent("draft-project-search", { type: "draft", draftID })
           },
         },
       },
       sessionState: {
         /** Records a session-scoped store, so pruning a session's layout state drops it too. */
         track(name: string) {
-          untrack(() => {
-            const add = () => setScoped((names) => (names.includes(name) ? names : [...names, name]))
-
-            if (scopedReady()) return add()
-            void scopedReady.promise?.then(add)
-          })
+          dispatchScoped({ type: "track", name })
         },
       },
       session: {
@@ -517,53 +579,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
-        },
-      },
-      pendingMessage: {
-        set(sessionKey: string, messageID: string) {
-          const at = Date.now()
-          touch(sessionKey)
-          const current = store.sessionView[sessionKey]
-
-          if (!current) {
-            setStore("sessionView", sessionKey, {
-              scroll: {},
-              pendingMessage: messageID,
-              pendingMessageAt: at,
-            })
-            prune(usage.active ?? sessionKey)
-
-            return
-          }
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              draft.pendingMessage = messageID
-              draft.pendingMessageAt = at
-            }),
-          )
-        },
-        consume(sessionKey: string) {
-          const current = store.sessionView[sessionKey]
-          const message = current?.pendingMessage
-          const at = current?.pendingMessageAt
-
-          if (!message || !at) return
-
-          setStore(
-            "sessionView",
-            sessionKey,
-            produce((draft) => {
-              delete draft.pendingMessage
-              delete draft.pendingMessageAt
-            }),
-          )
-
-          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
-
-          return message
         },
       },
       /** The side region of a shell tab, and the session panel width beside it. */
@@ -637,7 +652,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
          */
         copy(from: string, to: string) {
           const current = store.sessionTabs[from]
-          usage.used.set(to, Date.now())
+          used.set(to, Date.now())
           batch(() => {
             scroll.flush(from)
             setStore("sessionTabs", to, {
@@ -657,7 +672,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
                 ]),
               ),
             })
-            prune(usage.active ?? to)
+            prune(selectActiveSessionKey(untrack(scopedState)) ?? to)
           })
         },
         /** The side tabs closed in a session, newest first. Reactive. */
@@ -665,11 +680,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return store.sessionView[session]?.closed ?? []
         },
         setClosed(session: string, entries: readonly ClosedSideTab[]) {
-          usage.used.set(session, Date.now())
+          used.set(session, Date.now())
 
           if (store.sessionView[session]) return setStore("sessionView", session, "closed", [...entries])
           setStore("sessionView", session, { scroll: {}, closed: [...entries] })
-          prune(usage.active ?? session)
+          prune(selectActiveSessionKey(untrack(scopedState)) ?? session)
         },
         scroll(session: string, tab: string) {
           return scroll.scroll(session, tab)
@@ -754,9 +769,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!current?.all.includes(tab)) return
             writeTabs(session, moveSessionTab(current, tab, pane, before))
           },
-          /** Opens the next new tab, e.g. one a pane's "+" menu creates, in `pane`. */
-          target(pane: SessionPane) {
-            setEphemeral("sessionTabTarget", key(), { pane, at: Date.now() })
+          /**
+           * Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab, and with
+           * `index`, at that position in the strip.
+           */
+          target(pane: SessionPane, plugin?: string, index?: number) {
+            dispatchIntent({ type: "pane.targeted", session: key(), pane, plugin, index })
           },
         }
       },

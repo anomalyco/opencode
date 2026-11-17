@@ -3,6 +3,7 @@ export * as AISDK from "./aisdk.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { APICallError } from "@ai-sdk/provider"
+import { ClientTls } from "#client-tls"
 import type {
   JSONSchema7,
   JSONValue,
@@ -134,6 +135,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
 
   const customFetch = settings.fetch
   const timeouts = Provider.timeouts(settings)
+  const tls = Provider.tls(settings)
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
@@ -160,7 +162,12 @@ function prepareOptions(model: RuntimeInfo, pkg: string, outbound: Fetch) {
       }
     }
 
-    const send: Fetch = isFetch(customFetch) ? customFetch : outbound
+    const https = String(input instanceof Request ? input.url : input).startsWith("https:")
+    const certified = tls && https ? ClientTls.sender(tls) : undefined
+    if (tls && https && !certified) throw new Error("Client certificates aren't supported on this runtime")
+    // A followed redirect keeps the TLS options, so it would present the client certificate to another host.
+    if (certified) Object.assign(opts, certified.init, { redirect: "error" })
+    const send: Fetch = certified ? certified.fetch : isFetch(customFetch) ? customFetch : outbound
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware
@@ -389,7 +396,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       prepare: (input) => Effect.succeed(input.body),
       execute: () => Effect.succeed({ frames: Stream.empty }),
     },
-    defaults: {
+    options: {
       headers: info.headers,
       http: projected.body === undefined ? undefined : { body: { ...projected.body } },
       providerOptions: projected.settings,
@@ -438,7 +445,6 @@ function providerOptionKey(packageName: string | undefined, providerID: Provider
   if (packageName === "@ai-sdk/amazon-bedrock") return "bedrock"
   if (packageName === "@ai-sdk/amazon-bedrock/mantle") return "openai"
   if (packageName === "@ai-sdk/azure") return "azure"
-  if (packageName === "@ai-sdk/github-copilot") return "copilot"
   if (packageName === "@jerome-benoit/sap-ai-provider-v2") return "sap-ai"
   if (packageName === "@ai-sdk/openai-compatible") return providerID.split(".")[0]
   if (packageName === "@openrouter/ai-sdk-provider") return "openrouter"
@@ -934,7 +940,8 @@ function llmError(error: unknown, operation: "request" | "read") {
 const errorValue = (error: unknown) => (isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
-// Bun network error list in handleFetchError; the messages are undici's fetch
+// Bun network error list in handleFetchError, plus the unreachable-host codes that list leaves out and
+// ModelRetry gives a longer budget; the messages are undici's fetch
 // TypeError and stream termination strings plus our header and chunk timeout errors.
 // Unrecognized shapes still retry via the UnknownProvider default; this match
 // only adds transport semantics (continuation eligibility, display).
@@ -943,6 +950,11 @@ const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ETIMEDOUT",
   "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENETDOWN",
   "ConnectionRefused",
   "ConnectionClosed",
   "FailedToOpenSocket",
@@ -989,6 +1001,8 @@ function apiCallError(error: APICallError) {
     cause: error,
   })
   if (error.statusCode !== undefined || !error.isRetryable) return failure
+  // "Cannot connect to API" wraps the runtime's error; keep its code so retry and display can tell why.
+  const code = networkFailure(error.cause)?.code
   return new AIError({
     reason: new TransportError({
       message: failure.message,
@@ -998,6 +1012,7 @@ function apiCallError(error: APICallError) {
       transport: "http",
       operation: "request",
       url: error.url,
+      ...(code === undefined ? {} : { code }),
     }),
   })
 }

@@ -1,12 +1,19 @@
-import { createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { usePlugin } from "@opencode/plugin/gui"
 import { motionGlobals, motionTuning } from "@opencode/ui/motion-tuning"
 import { duration } from "@opencode/util/duration"
 import { SessionTurn } from "@opencode/util/session-turn"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
+import {
+  initialFocusToggleState,
+  isFocusToggleActive,
+  transitionFocusToggle,
+  type FocusToggleEvent,
+} from "./focus-machine"
 
 const fixed = (n?: number, digits = 0) => {
   if (n === undefined || Number.isNaN(n)) return
@@ -106,6 +113,49 @@ function ToggleCell(props: {
   )
 }
 
+function CopyCell(props: { inline?: boolean; label: string; onClick?: () => void; tip: string; value: string }) {
+  const content = () => (
+    <button
+      type="button"
+      disabled={!props.onClick}
+      aria-label={`${props.label}: ${props.value}`}
+      classList={{
+        "flex min-w-0 items-center font-mono enabled:hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus": true,
+        "min-h-[20px] w-fit justify-start rounded px-1.5 py-0.5 text-left": !!props.inline,
+        "min-h-[42px] w-full flex-col justify-center rounded-[8px] px-0.5 py-1 text-center": !props.inline,
+      }}
+      onClick={() => props.onClick?.()}
+    >
+      <span
+        classList={{
+          flex: true,
+          "-translate-y-px items-baseline gap-1.5": !!props.inline,
+          "flex-col items-center": !props.inline,
+        }}
+      >
+        <span dir="ltr" class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">
+          {props.label}
+        </span>
+        <span
+          dir="ltr"
+          classList={{
+            "text-[11px] leading-none font-bold tabular-nums": true,
+            "uppercase opacity-70": !props.onClick,
+          }}
+        >
+          {props.value}
+        </span>
+      </span>
+    </button>
+  )
+
+  return (
+    <Tooltip appearance={props.inline ? "compact" : "standard"} value={props.tip} placement="top">
+      {content()}
+    </Tooltip>
+  )
+}
+
 export default function DebugBar(props: {
   /** The dev server's layout tools: the direction and focus toggles. */
   devTools?: boolean
@@ -119,7 +169,7 @@ export default function DebugBar(props: {
   const locale = ctx.locale
   const desktop = ctx.desktop
   const sessions = ctx.sessions
-  const [focus, setFocus] = createSignal(false)
+  const [focus, setFocus] = createSignal(initialFocusToggleState)
 
   const target = createMemo(
     () => {
@@ -167,16 +217,49 @@ export default function DebugBar(props: {
 
   const na = () => ctx.t("na").toUpperCase()
 
-  const toggleFocus = async () => {
+  const dispatchFocus = (event: FocusToggleEvent) => {
     if (!desktop) return
-    const enabled = !focus()
-    await desktop.forceFocus(enabled)
-    setFocus(enabled)
+    const next = transitionFocusToggle(untrack(focus), event)
+    setFocus(next.state)
+    next.effects.forEach((effect) => {
+      switch (effect.type) {
+        case "set":
+          return void desktop.forceFocus(effect.enabled).then(
+            () => dispatchFocus({ type: "set.succeeded", attempt: effect.attempt }),
+            () => dispatchFocus({ type: "set.failed", attempt: effect.attempt }),
+          )
+        case "reset":
+          return void desktop.forceFocus(false).catch(() => undefined)
+        case "notify-failed":
+          return void showToast({ title: ctx.t("common.requestFailed") })
+      }
+    })
   }
 
-  onCleanup(() => {
-    if (focus()) void desktop?.forceFocus(false).catch(() => undefined)
-  })
+  onCleanup(() => dispatchFocus({ type: "disposed" }))
+
+  const sessionID = () => target()?.id
+
+  const sessionTip = () => {
+    const id = sessionID()
+
+    return id ? ctx.t("session.tip", { id }) : ctx.t("session.none")
+  }
+
+  const copySessionID = () => {
+    const id = sessionID()
+
+    if (!id) return
+    void ctx.system.copy(id).then(
+      () => showToast({ variant: "success", title: ctx.t("common.copied"), description: id }),
+      (cause) =>
+        showToast({
+          variant: "error",
+          title: ctx.t("session.copyFailed"),
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
+  }
 
   return (
     <aside
@@ -209,6 +292,13 @@ export default function DebugBar(props: {
             />
           </Tooltip>
         </Show>
+        <CopyCell
+          label={ctx.t("session.label")}
+          tip={sessionTip()}
+          value={shortSessionID(sessionID()) ?? na()}
+          inline={props.inline}
+          onClick={sessionID() ? copySessionID : undefined}
+        />
         <Cell
           label={ctx.t("duration.label")}
           tip={ctx.t("duration.tip")}
@@ -234,12 +324,12 @@ export default function DebugBar(props: {
           />
           <Show when={desktop}>
             <ToggleCell
-              active={focus()}
+              active={isFocusToggleActive(focus())}
               inline={props.inline}
               label={ctx.t("focus.label")}
               tip={ctx.t("focus.tip")}
-              value={ctx.t(focus() ? "focus.on" : "focus.off")}
-              onClick={() => void toggleFocus()}
+              value={ctx.t(isFocusToggleActive(focus()) ? "focus.on" : "focus.off")}
+              onClick={() => dispatchFocus({ type: "toggle" })}
             />
           </Show>
         </Show>
@@ -305,6 +395,12 @@ export default function DebugBar(props: {
       </div>
     </aside>
   )
+}
+
+function shortSessionID(id: string | undefined) {
+  if (!id) return
+
+  return `${id.slice(0, 8)}…${id.slice(-4)}`
 }
 
 // The bar's speed cell steps through the common slow-downs, then back to full speed.

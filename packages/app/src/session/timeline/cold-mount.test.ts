@@ -81,7 +81,7 @@ describe("cold mount", () => {
 
     const shown = run(exposed.state, ...check(1, "settled"))
     expect(shown.state).toEqual({ type: "revealed" })
-    expect(shown.effects).toEqual([{ type: "release" }, { type: "reveal" }])
+    expect(shown.effects).toEqual([{ type: "release" }])
   })
 
   // Before the machine, a Markdown block that never set data-markdown-ready (or a view that stayed detached) kept
@@ -96,7 +96,7 @@ describe("cold mount", () => {
 
       const next = transitionColdMount(stuck.state, { type: "timeout", attempt: 1 })
       expect(next.state).toEqual({ type: "revealed" })
-      expect(next.effects).toEqual([{ type: "release" }, { type: "pin" }, { type: "reveal" }])
+      expect(next.effects).toEqual([{ type: "release" }, { type: "pin" }])
       expect(transitionColdMount(next.state, CHECK_REQUESTED).state).toBe(next.state)
     },
   )

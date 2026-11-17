@@ -50,6 +50,7 @@ export type QueuedOperation =
   | EditOperation
   | { readonly type: "steer"; readonly id: string }
   | { readonly type: "remove"; readonly id: string }
+  | { readonly type: "first"; readonly id: string }
 
 // Operations that leave the composer free, so a row can be edited while one runs. `cancelling` means the server
 // admitted every replacement, so a later failure must not hand the edit back to the composer.
@@ -80,7 +81,32 @@ type QueueBase = {
   readonly seq: number
   readonly items: readonly QueuedPrompt[]
   readonly gone: readonly GoneEntry[]
+  // Each inbox ID a finished edit or reorder replaced, mapped to the ID admitted in its place, so the strip can swap
+  // the row in place. An entry is dropped once no ID along its chain is queued.
+  readonly moved: Readonly<Record<string, string>>
 }
+
+const NO_MOVES: Readonly<Record<string, string>> = Object.freeze({})
+
+/**
+ * Bounds an edit, reorder or undo, whose chains include local media reads and one request per rewritten prompt. Each
+ * request already fails on its own after the request queue's 60 s wait for headers; a steer or removal is one request,
+ * so it needs no other bound.
+ */
+export const QUEUE_MUTATION_TIMEOUT_MS = 60_000
+
+/**
+ * How far a timed-out operation got. `committed`: a step it cannot take back is in flight (an undo's cancel, a steered
+ * edit's admission, or the cancels of a rewrite's originals once every copy is in), so the operation waits for its
+ * result. `settled`: the server holds the whole change and only re-reading its queue stalled.
+ */
+export type QueueMutationStage = "running" | "committed" | "settled"
+
+// After unmount, an operation still in flight can owe the composer's saved draft a prompt: an edit the server never
+// admitted, or an undo whose cancel the server may still apply.
+type DisposedReturn =
+  | { readonly type: "edit"; readonly attempt: number; readonly prompt: Prompt }
+  | { readonly type: "undo"; readonly attempt: number }
 
 // Operations run one at a time in the order they were requested: `active` is in flight and `pending` waits for it.
 export type QueueState =
@@ -97,6 +123,9 @@ export type QueueState =
       readonly active: ConcurrentOperation
       readonly pending: readonly QueuedOperation[]
     })
+  | { readonly status: "disposed"; readonly returning?: DisposedReturn }
+
+type LiveQueueState = Exclude<QueueState, { status: "disposed" }>
 
 export type QueueEvent =
   | { readonly type: "inbox.synced"; readonly items: readonly QueuedPrompt[] }
@@ -112,7 +141,9 @@ export type QueueEvent =
       readonly ids: readonly string[]
     }
   | { readonly type: "reorder.requested"; readonly inboxIDs: readonly string[]; readonly reverted: boolean }
+  | { readonly type: "first.requested"; readonly id: string; readonly reverted: boolean }
   | { readonly type: "steer.requested"; readonly id: string }
+  | { readonly type: "steer-first.requested" }
   | { readonly type: "remove.requested"; readonly id: string }
   | { readonly type: "undo.requested"; readonly id: string; readonly mode: "normal" | "shell" }
   | { readonly type: "mutation.moved"; readonly attempt: number; readonly moved: Readonly<Record<string, string>> }
@@ -126,6 +157,13 @@ export type QueueEvent =
     }
   // `hidden` lists the inbox IDs the failed operation already withdrew or cancelled.
   | { readonly type: "mutation.failed"; readonly attempt: number; readonly hidden: readonly string[] }
+  // `hidden` as for a failure: what the operation withdrew or cancelled before the bound ran out.
+  | {
+      readonly type: "mutation.timed-out"
+      readonly attempt: number
+      readonly hidden: readonly string[]
+      readonly stage: QueueMutationStage
+    }
   | { readonly type: "gone.expired"; readonly expiry: number }
   | { readonly type: "dispose" }
 
@@ -136,13 +174,23 @@ export type QueueEffect =
   // `keep` is the prompt the edit was loaded from: changes made to it join the restored draft.
   | { readonly type: "draft.restore"; readonly stash: EditStash; readonly focus: boolean; readonly keep?: QueuedPrompt }
   | { readonly type: "draft.pinned"; readonly blobs: ReadonlyMap<string, BlobReference> }
-  | { readonly type: "draft.merge"; readonly prompt: Prompt; readonly context: readonly ContextItem[] }
+  // `focus: false` after unmount, when the merge lands in the session's saved draft.
+  | {
+      readonly type: "draft.merge"
+      readonly prompt: Prompt
+      readonly context: readonly ContextItem[]
+      readonly focus?: false
+    }
   | {
       readonly type: "media.pin"
       readonly attempt: number
       readonly attachments: readonly (ImageAttachmentPart | PathAttachmentPart)[]
     }
   | { readonly type: "mutation.run"; readonly operation: ActiveOperation }
+  // Stops the operation at its next step; a request already sent still finishes.
+  | { readonly type: "mutation.abort"; readonly attempt: number }
+  | { readonly type: "mutation.timer.start"; readonly attempt: number }
+  | { readonly type: "mutation.timer.clear" }
   | { readonly type: "timer.start"; readonly expiry: number }
   | { readonly type: "timer.clear"; readonly expiry: number }
   | { readonly type: "timer.clearAll" }
@@ -157,13 +205,17 @@ export type QueueView = {
   readonly undoing: boolean
   readonly delivery: ComposerDelivery
   readonly alternate: ComposerDelivery | undefined
+  /** Inbox IDs replaced by an edit or reorder, finished or in flight, mapped to their replacements. */
+  readonly moved: Readonly<Record<string, string>>
 }
 
 export function createQueueState(items: readonly QueuedPrompt[]): QueueState {
-  return { status: "idle", seq: 0, items, gone: [] }
+  return { status: "idle", seq: 0, items, gone: [], moved: NO_MOVES }
 }
 
 export function transitionQueue(state: QueueState, event: QueueEvent): QueueTransition {
+  if (state.status === "disposed") return settleDisposed(state, event)
+
   if (event.type === "inbox.synced") return synced(state, event.items)
 
   if (event.type === "edit.start") return startEdit(state, event)
@@ -183,7 +235,25 @@ export function transitionQueue(state: QueueState, event: QueueEvent): QueueTran
 
   if (event.type === "reorder.requested") return reorder(state, event)
 
+  if (event.type === "first.requested") {
+    if (event.reverted) return changed(state, [{ type: "toast", key: "session.queue.reverted" }])
+
+    const rows = selectQueueRows(state)
+
+    if (!rows.some((row) => row.id === event.id) || rows[0]?.id === event.id) return unchanged(state)
+
+    return enqueue(state, { type: "first", id: event.id })
+  }
+
   if (event.type === "steer.requested") return request(state, { type: "steer", id: event.id })
+
+  if (event.type === "steer-first.requested") {
+    if (state.status !== "idle") return unchanged(state)
+
+    const first = selectQueueRows(state)[0]
+
+    return first && !first.pending ? request(state, { type: "steer", id: first.id }) : unchanged(state)
+  }
 
   if (event.type === "remove.requested") return request(state, { type: "remove", id: event.id })
 
@@ -197,16 +267,68 @@ export function transitionQueue(state: QueueState, event: QueueEvent): QueueTran
 
   if (event.type === "dispose") {
     const edit = editOf(state)
-    const closed = state.status === "editing" || state.status === "editing-while-mutating" ? closeEdit(state) : state
+    const active = state.status === "mutating" || state.status === "editing-while-mutating" ? state.active : undefined
 
-    // Operations in flight still finish: the server may already hold half of an edit.
-    return changed({ ...closed, gone: [] }, [...(edit ? [restore(edit, false)] : []), { type: "timer.clearAll" }])
+    const returning: DisposedReturn | undefined =
+      active?.type === "edit" && active.phase === "admitting"
+        ? { type: "edit", attempt: active.attempt, prompt: active.prompt }
+        : active?.type === "undo"
+          ? { type: "undo", attempt: active.attempt }
+          : undefined
+
+    // Operations in flight still finish, since the server may already hold half of an edit, but waiting ones never
+    // start. An undo stops before its cancel if it can: nothing would show the restored prompt.
+    return changed(returning ? { status: "disposed", returning } : { status: "disposed" }, [
+      ...(edit ? [restore(edit, false)] : []),
+      ...(active?.type === "undo" ? [{ type: "mutation.abort" as const, attempt: active.attempt }] : []),
+      { type: "timer.clearAll" },
+    ])
   }
+
+  if (event.type === "mutation.timed-out") return timedOut(state, event)
 
   return settle(state, event)
 }
 
+function settleDisposed(state: Extract<QueueState, { status: "disposed" }>, event: QueueEvent): QueueTransition {
+  const returning = state.returning
+
+  if (!returning || !("attempt" in event) || event.attempt !== returning.attempt) return unchanged(state)
+
+  if (event.type === "mutation.admitted" || event.type === "mutation.succeeded") return changed({ status: "disposed" })
+
+  if (event.type === "mutation.undone")
+    return changed({ status: "disposed" }, [
+      { type: "draft.merge", prompt: event.prompt, context: event.context, focus: false },
+    ])
+
+  if (event.type !== "mutation.failed") return unchanged(state)
+
+  return changed(
+    { status: "disposed" },
+    returning.type === "edit" ? [{ type: "draft.merge", prompt: returning.prompt, context: [], focus: false }] : [],
+  )
+}
+
+// An operation past its bound ends as it got: a finished change succeeds, an undo whose cancel is in flight waits for
+// it, and anything else fails with what it already withdrew, while its chain stops at the next step.
+function timedOut(state: LiveQueueState, event: Extract<QueueEvent, { type: "mutation.timed-out" }>) {
+  if (state.status !== "mutating" && state.status !== "editing-while-mutating") return unchanged(state)
+
+  if (state.active.attempt !== event.attempt || event.stage === "committed") return unchanged(state)
+
+  const next = settle(
+    state,
+    event.stage === "settled"
+      ? { type: "mutation.succeeded", attempt: event.attempt }
+      : { type: "mutation.failed", attempt: event.attempt, hidden: event.hidden },
+  )
+
+  return changed(next.state, [{ type: "mutation.abort", attempt: event.attempt }, ...next.effects])
+}
+
 export function selectQueueRows(state: QueueState): QueueRow[] {
+  if (state.status === "disposed") return []
   const operations = operationsOf(state)
 
   const hidden = [
@@ -256,14 +378,36 @@ export function viewQueue(
     undoing: state.status === "mutating" && state.active.type === "undo",
     delivery: context.working ? context.behavior : "steer",
     alternate: editing ? "steer" : context.working ? (context.behavior === "queue" ? "steer" : "queue") : undefined,
+    moved: selectQueueMoved(state),
   }
+}
+
+export function selectQueueMoved(state: QueueState) {
+  if (state.status === "disposed") return NO_MOVES
+  const active = state.status === "mutating" || state.status === "editing-while-mutating" ? state.active : undefined
+
+  if ((active?.type !== "edit" && active?.type !== "reorder") || !Object.keys(active.moved).length) return state.moved
+
+  return { ...state.moved, ...active.moved }
+}
+
+/** The first ID along `id`'s chain of replacements that `listed` holds. */
+export function movedTarget(moved: Readonly<Record<string, string>>, id: string, listed: ReadonlySet<string>) {
+  // Every replacement is a freshly minted ID, so a chain cannot loop; the bound only guards malformed input.
+  const hops = Object.keys(moved).length
+
+  for (let next = moved[id], step = 0; next !== undefined && step < hops; next = moved[next], step++) {
+    if (listed.has(next)) return next
+  }
+
+  return undefined
 }
 
 export function editingID(state: QueueState) {
   return editOf(state)?.id
 }
 
-function synced(state: QueueState, items: readonly QueuedPrompt[]): QueueTransition {
+function synced(state: LiveQueueState, items: readonly QueuedPrompt[]): QueueTransition {
   if (items === state.items) return unchanged(state)
   const listed = new Set(items.map((item) => item.id))
   const gone = state.gone.filter((entry) => listed.has(entry.id))
@@ -272,7 +416,15 @@ function synced(state: QueueState, items: readonly QueuedPrompt[]): QueueTransit
     gone.some((entry) => entry.expiry === expiry) ? [] : [{ type: "timer.clear", expiry }],
   )
 
-  const next = { ...state, items, gone }
+  // A replacement in flight can continue a finished one's chain.
+  const chains = selectQueueMoved(state)
+
+  const kept = Object.entries(state.moved).filter(
+    ([, id]) => listed.has(id) || movedTarget(chains, id, listed) !== undefined,
+  )
+
+  const moved = kept.length === Object.keys(state.moved).length ? state.moved : Object.fromEntries(kept)
+  const next = { ...state, items, gone, moved }
 
   if (next.status !== "editing" && next.status !== "editing-while-mutating") return changed(next, cleared)
 
@@ -283,7 +435,7 @@ function synced(state: QueueState, items: readonly QueuedPrompt[]): QueueTransit
   return changed(closeEdit(next), [...cleared, restore(next.edit, true, next.edit.item)])
 }
 
-function startEdit(state: QueueState, event: Extract<QueueEvent, { type: "edit.start" }>): QueueTransition {
+function startEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "edit.start" }>): QueueTransition {
   // Other rows stay editable while an edit, steer or removal is in flight; the row it is changing ignores clicks and
   // shows as pending until the server catches up.
   if (state.status === "mutating" && !isConcurrent(state.active)) return unchanged(state)
@@ -312,7 +464,7 @@ function startEdit(state: QueueState, event: Extract<QueueEvent, { type: "edit.s
     ...(attachments.length ? [{ type: "media.pin" as const, attempt: edit.pin, attachments }] : []),
   ]
 
-  const base = { seq: edit.pin, items: state.items, gone: state.gone }
+  const base = { seq: edit.pin, items: state.items, gone: state.gone, moved: state.moved }
 
   if (state.status === "idle" || state.status === "editing")
     return changed({ ...base, status: "editing", edit }, effects)
@@ -325,7 +477,7 @@ function startEdit(state: QueueState, event: Extract<QueueEvent, { type: "edit.s
   )
 }
 
-function confirmEdit(state: QueueState, event: Extract<QueueEvent, { type: "edit.confirm" }>): QueueTransition {
+function confirmEdit(state: LiveQueueState, event: Extract<QueueEvent, { type: "edit.confirm" }>): QueueTransition {
   if (state.status !== "editing" && state.status !== "editing-while-mutating") return unchanged(state)
 
   if (event.reverted) return changed(state, [{ type: "toast", key: "session.queue.reverted" }])
@@ -365,7 +517,7 @@ function confirmEdit(state: QueueState, event: Extract<QueueEvent, { type: "edit
   )
 }
 
-function reorder(state: QueueState, event: Extract<QueueEvent, { type: "reorder.requested" }>): QueueTransition {
+function reorder(state: LiveQueueState, event: Extract<QueueEvent, { type: "reorder.requested" }>): QueueTransition {
   if (state.status !== "idle" && state.status !== "editing") return unchanged(state)
 
   if (event.reverted) return changed(state, [{ type: "toast", key: "session.queue.reverted" }])
@@ -377,15 +529,20 @@ function reorder(state: QueueState, event: Extract<QueueEvent, { type: "reorder.
 
   // The rewrite can replace the row being edited, so the edit closes first and keeps what was typed into it.
   return changed(
-    { seq: active.attempt, items: state.items, gone: state.gone, status: "mutating", active, pending: [] },
-    [
-      ...(state.status === "editing" ? [restore(state.edit, true, state.edit.item)] : []),
-      { type: "mutation.run", operation: active },
-    ],
+    {
+      seq: active.attempt,
+      items: state.items,
+      gone: state.gone,
+      moved: state.moved,
+      status: "mutating",
+      active,
+      pending: [],
+    },
+    [...(state.status === "editing" ? [restore(state.edit, true, state.edit.item)] : []), ...start(active)],
   )
 }
 
-function request(state: QueueState, operation: Extract<QueuedOperation, { type: "steer" | "remove" }>) {
+function request(state: LiveQueueState, operation: Extract<QueuedOperation, { type: "steer" | "remove" }>) {
   const row = selectQueueRows(state).find((entry) => entry.id === operation.id)
 
   if (!row || row.pending) return unchanged(state)
@@ -396,7 +553,7 @@ function request(state: QueueState, operation: Extract<QueuedOperation, { type: 
   return enqueue(state, operation)
 }
 
-function undo(state: QueueState, event: Extract<QueueEvent, { type: "undo.requested" }>): QueueTransition {
+function undo(state: LiveQueueState, event: Extract<QueueEvent, { type: "undo.requested" }>): QueueTransition {
   if (state.status !== "idle") return unchanged(state)
   const row = selectQueueRows(state).find((entry) => entry.id === event.id)
   const item = state.items.find((entry) => entry.id === event.id)
@@ -407,13 +564,21 @@ function undo(state: QueueState, event: Extract<QueueEvent, { type: "undo.reques
   const active = { type: "undo" as const, attempt: state.seq + 1, item }
 
   return changed(
-    { seq: active.attempt, items: state.items, gone: state.gone, status: "mutating", active, pending: [] },
-    [{ type: "mutation.run", operation: active }],
+    {
+      seq: active.attempt,
+      items: state.items,
+      gone: state.gone,
+      moved: state.moved,
+      status: "mutating",
+      active,
+      pending: [],
+    },
+    start(active),
   )
 }
 
 function settle(
-  state: QueueState,
+  state: LiveQueueState,
   event: Extract<
     QueueEvent,
     { type: "mutation.moved" | "mutation.admitted" | "mutation.succeeded" | "mutation.undone" | "mutation.failed" }
@@ -458,7 +623,12 @@ function settle(
           : Object.keys(active.moved)
 
     const hidden = hide(state, confirmed)
-    const next = advance(hidden.state, active.type === "edit" || active.type === "reorder" ? active.moved : {})
+    const moved = active.type === "edit" || active.type === "reorder" ? active.moved : NO_MOVES
+
+    const next = advance(
+      moved === NO_MOVES ? hidden.state : { ...hidden.state, moved: { ...hidden.state.moved, ...moved } },
+      moved,
+    )
 
     return changed(next.state, [...hidden.effects, ...next.effects])
   }
@@ -523,39 +693,78 @@ function advance(state: Mutating, moved: Readonly<Record<string, string>>): Queu
         : { ...operation, id: remap(operation.id) },
   )
 
-  const base = { seq: state.seq, items: state.items, gone: state.gone }
+  const base = { seq: state.seq, items: state.items, gone: state.gone, moved: state.moved }
+  // `state.active` is the operation that just finished.
+  const clear: QueueEffect[] = bounded(state.active) ? [{ type: "mutation.timer.clear" }] : []
 
   if (!head)
     return changed(
       state.status === "editing-while-mutating"
         ? { ...base, status: "editing", edit: state.edit }
         : { ...base, status: "idle" },
+      clear,
     )
-  const active = activate(head, state.seq + 1)
+  const active = activate(head, state.seq + 1, state)
   const next = { ...base, seq: active.attempt, active, pending: rest }
 
   return changed(
-    state.status === "editing-while-mutating"
-      ? { ...next, status: "editing-while-mutating", edit: state.edit }
+    state.status === "editing-while-mutating" && isConcurrent(active)
+      ? { ...next, status: "editing-while-mutating", edit: state.edit, active }
       : { ...next, status: "mutating" },
-    [{ type: "mutation.run", operation: active }],
+    [
+      ...clear,
+      ...(state.status === "editing-while-mutating" && !isConcurrent(active)
+        ? [restore(state.edit, true, state.edit.item)]
+        : []),
+      ...start(active),
+    ],
   )
 }
 
-function enqueue(state: QueueState, operation: QueuedOperation, effects: QueueEffect[] = []): QueueTransition {
-  if (state.status === "mutating" || state.status === "editing-while-mutating")
-    return changed({ ...state, pending: [...state.pending, operation] }, effects)
-  const active = activate(operation, state.seq + 1)
-  const base = { seq: active.attempt, items: state.items, gone: state.gone, active, pending: [] }
-  const run: QueueEffect = { type: "mutation.run", operation: active }
+function start(operation: ActiveOperation): QueueEffect[] {
+  const run: QueueEffect = { type: "mutation.run", operation }
 
-  if (state.status === "editing")
-    return changed({ ...base, status: "editing-while-mutating", edit: state.edit }, [...effects, run])
-
-  return changed({ ...base, status: "mutating" }, [...effects, run])
+  return bounded(operation) ? [run, { type: "mutation.timer.start", attempt: operation.attempt }] : [run]
 }
 
-function activate(operation: QueuedOperation, attempt: number): ConcurrentOperation {
+function bounded(operation: ActiveOperation) {
+  return operation.type !== "steer" && operation.type !== "remove"
+}
+
+function enqueue(state: LiveQueueState, operation: QueuedOperation, effects: QueueEffect[] = []): QueueTransition {
+  if (state.status === "mutating" || state.status === "editing-while-mutating")
+    return changed({ ...state, pending: [...state.pending, operation] }, effects)
+  const active = activate(operation, state.seq + 1, state)
+  const base = { seq: active.attempt, items: state.items, gone: state.gone, moved: state.moved, active, pending: [] }
+
+  if (state.status === "editing" && isConcurrent(active))
+    return changed({ ...base, status: "editing-while-mutating", edit: state.edit, active }, [
+      ...effects,
+      ...start(active),
+    ])
+
+  return changed({ ...base, status: "mutating" }, [
+    ...effects,
+    ...(state.status === "editing" ? [restore(state.edit, true, state.edit.item)] : []),
+    ...start(active),
+  ])
+}
+
+function activate(operation: QueuedOperation, attempt: number, state: LiveQueueState): ActiveOperation {
+  if (operation.type === "first") {
+    const current = queuedPromptRows(
+      state.items,
+      [],
+      state.gone.map((entry) => entry.id),
+    )
+
+    const first = current.find((row) => row.id === operation.id)
+
+    const rows = first ? [first, ...current.filter((row) => row !== first)] : current
+
+    return { type: "reorder", attempt, inboxIDs: rows.map((row) => row.id), rows, moved: {} }
+  }
+
   if (operation.type === "edit") return { ...operation, attempt, phase: "admitting" }
 
   return { ...operation, attempt }
@@ -567,8 +776,8 @@ function withActive(state: Mutating, active: ActiveOperation): QueueState {
   return isConcurrent(active) ? { ...state, active } : state
 }
 
-function closeEdit(state: Extract<QueueState, { edit: ActiveEdit }>): QueueState {
-  const base = { seq: state.seq, items: state.items, gone: state.gone }
+function closeEdit(state: Extract<QueueState, { edit: ActiveEdit }>): LiveQueueState {
+  const base = { seq: state.seq, items: state.items, gone: state.gone, moved: state.moved }
 
   if (state.status === "editing") return { ...base, status: "idle" }
 

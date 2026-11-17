@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} kehabisan waktu setelah {{timeout}}ms",
   "error.failedPort": "Gagal mendapatkan porta",
   "menu.remove": "Hapus",
+  "error.busy": "{{distro}} sedang sibuk dengan tugas lain. Coba lagi setelah selesai.",
 }

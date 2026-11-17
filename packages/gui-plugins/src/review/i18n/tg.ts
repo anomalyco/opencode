@@ -12,4 +12,12 @@ export default {
   noChanges: "Тағйирот нест",
   "settings.wrapLines.title": "Сатрҳоро печонед",
   "settings.wrapLines.description": "Сатрҳои дарозро дар diff-ҳои мобилӣ ба ҷойи ҳаракати уфуқӣ печонед",
+  "menu.count.one": "{{count}} файл тағйир ёфт",
+  "menu.count.other": "{{count}} файл тағйир ёфт",
+  "folder.more": "{{count}} · боқимонда нишон дода нашуд",
+  "folder.failed": "Тағйиротро бор карда натавонист",
+  "command.open": "Кушодани баррасӣ",
+  "load.failed": "Тағйиротро бор карда натавонист",
+  "load.timeout": "Сервер хеле дер ҷавоб дод",
+  offline: "Ба ин сервер расида намешавад",
 }

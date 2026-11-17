@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Pridėti serverį",
   "menu.delete": "Ištrinti",
+  "error.unavailable": "SSH nepasiekiamas",
 }

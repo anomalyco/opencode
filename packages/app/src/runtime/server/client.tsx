@@ -161,7 +161,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     )
   }
 
-  onCleanup(() => dispatchEndpoint({ type: "disposed" }))
+  onCleanup(() => {
+    dispatchEndpoint({ type: "disposed" })
+    transport.dispose()
+  })
 
   return {
     server,
@@ -218,6 +221,8 @@ export interface ServerTransport {
   readonly http: ServerConnection.HttpBase
   /** The current API client. */
   readonly api: ServerApi
+  /** Cancels every queued and in-flight request; later requests reject at once. */
+  dispose(): void
 }
 
 export function createServerTransport(input: {
@@ -252,6 +257,7 @@ export function createServerTransport(input: {
     get api() {
       return state.current.api
     },
+    dispose: queue.dispose,
   }
 }
 

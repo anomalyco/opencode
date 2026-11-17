@@ -12,6 +12,7 @@ import {
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
 import { stripEffortUpdates } from "../../effort-updates.js"
+import { foldToolUpdates } from "../../tool-updates.js"
 import { Endpoint } from "../../route/endpoint.js"
 import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
@@ -86,10 +87,13 @@ export const make = (
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
-    // The standalone compaction endpoint rejects histories containing configuration updates.
-    const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
+    // The standalone compaction endpoint rejects effort updates (`configuration_update`). Every tool goes in
+    // top-level `tools`: after compacting a history whose tools were only in `additional_tools`, small models lost
+    // track of them more often.
+    const folded = foldToolUpdates(stripEffortUpdates(request))
+    const native = yield* OpenResponses.lowerConversation(folded, adapter)
     const generation = OpenResponses.lowerGeneration(request)
-    const tools = request.tools.length === 0 ? undefined : yield* lowerTools(request)
+    const tools = folded.tools.length === 0 ? undefined : yield* lowerTools(folded)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {
@@ -117,7 +121,7 @@ export const make = (
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
-    const response = yield* executor.execute(
+    const response = yield* RequestExecutor.withTls(executor.execute, request.http?.tls)(
       ProviderShared.jsonPost({
         url: parts.url,
         body: parts.bodyText,

@@ -30,35 +30,27 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
 
   const setStore = () => tuple()[1]
 
-  const clearRetry = () => {
-    if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
-  }
-
   return {
     get state() {
       return store()
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
-      // Persisted setters encode on every call, even inside a reactive batch.
-      const update: Partial<ComposerPersistedState> = { prompt, retry: undefined }
-
-      if (cursor !== undefined) update.cursor = cursor
-      batch(() => setStore()(update))
+      // Persisted setters encode on every call, even inside a reactive batch, so prompt and cursor go in one write.
+      batch(() => setStore()(cursor === undefined ? { prompt } : { prompt, cursor }))
     },
     setCursor(cursor: number) {
       if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
     },
     setMode(mode: "normal" | "shell") {
-      if (untrack(() => store().mode === mode && store().retry === undefined)) return
-      setStore()({ mode, retry: undefined })
+      if (untrack(() => (store().mode ?? "normal") === mode)) return
+      setStore()("mode", mode)
     },
     setText(content: string) {
       batch(() =>
         setStore()((state) => ({
           prompt: [{ type: "text", content, start: 0, end: content.length }, ...state.prompt.filter(isAttachment)],
           cursor: content.length,
-          retry: undefined,
         })),
       )
     },
@@ -68,7 +60,6 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         setStore()((state) => ({
           prompt: insertText(state.prompt, cursor, content),
           cursor: cursor + content.length,
-          retry: undefined,
         })),
       )
     },
@@ -78,11 +69,10 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       const prompt = removeTextBefore(store().prompt, cursor, content)
 
       if (!prompt) return
-      batch(() => setStore()({ prompt, cursor: cursor - content.length, retry: undefined }))
+      batch(() => setStore()({ prompt, cursor: cursor - content.length }))
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
-      clearRetry()
     },
     addMention(
       mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
@@ -101,11 +91,9 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
       setStore()("prompt", insertMention(prompt, start, end, mention))
       setStore()("cursor", start + mention.content.length + 1)
-      clearRetry()
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
-      clearRetry()
     },
   }
 }

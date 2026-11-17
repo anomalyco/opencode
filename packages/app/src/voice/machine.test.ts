@@ -42,6 +42,23 @@ function live(delegationID: string | null, nested: LiveResponseEvent) {
   return next
 }
 
+// Live rejects a client event with an error naming it; nothing else arrives for that request.
+function rejection(requestID: string) {
+  const event = decodeEvent(
+    JSON.stringify({
+      type: "error",
+      event_id: "evt_server",
+      error: { type: "invalid_request_error", code: "conversation_already_has_active_response", event_id: requestID },
+    }),
+  )
+
+  const next = event && responseEvent(event)
+
+  if (!next) throw new Error("not a delegation event")
+
+  return next
+}
+
 const opened = (id: string): VoiceDelegationEvent => ({
   type: "delegation.created",
   id,
@@ -107,7 +124,11 @@ test("an untagged response reaches the open delegation while another runs tools"
     second.state,
   )
 
-  expect(first.effects).toContainEqual({ type: "outputs", outputs: [{ call_id: "call_1", output: "{}" }] })
+  expect(first.effects).toContainEqual({
+    type: "outputs",
+    outputs: [{ call_id: "call_1", output: "{}" }],
+    requestID: expect.any(String),
+  })
   expect(finishes(first.effects)).toEqual([{ type: "finish", id: "del_1", outcome: "answered" }])
   // Session replies wait on this; before, del_2 never finished and replies were never announced.
   expect(delegating(first.state)).toBe(false)
@@ -203,6 +224,7 @@ test("a tool round that times out keeps finished outputs and reports only unfini
         { call_id: "call_1", output: admitted },
         { call_id: "call_2", output: TIMED_OUT },
       ],
+      requestID: expect.any(String),
     },
     { type: "deadline", id: "del_1", attempt: attempt(timedOut.state, "del_1"), ms: RESPONSE_TIMEOUT },
   ])
@@ -213,6 +235,23 @@ test("a tool round that times out keeps finished outputs and reports only unfini
   )
 
   expect(answered.effects).toEqual([{ type: "finish", id: "del_1", outcome: "answered" }])
+})
+
+test("Live rejecting the response.create after a round ends that delegation at once, not at its deadline", () => {
+  const running = replay([opened("del_1"), opened("del_2"), called("call_1"), ended("resp_1", "completed", "del_1")])
+  const resumed = replay([ran(running.state, "del_1", "call_1")], running.state)
+  const outputs = resumed.effects.find((effect) => effect.type === "outputs")
+
+  if (outputs?.type !== "outputs") throw new Error("expected tool outputs")
+
+  // A rejection of some other client event, such as session.update, leaves every delegation open.
+  expect(replay([rejection("evt_session_update")], resumed.state)).toEqual({ state: resumed.state, effects: [] })
+
+  const rejected = replay([rejection(outputs.requestID)], resumed.state)
+
+  expect(rejected.effects).toEqual([{ type: "finish", id: "del_1", outcome: "discarded" }])
+  expect(rejected.state.delegations.map((delegation) => delegation.id)).toEqual(["del_2"])
+  expect(replay([rejection(outputs.requestID)], rejected.state)).toEqual({ state: rejected.state, effects: [] })
 })
 
 test("a runaway delegation is discarded after the last allowed round", () => {

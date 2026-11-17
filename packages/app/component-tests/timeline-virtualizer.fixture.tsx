@@ -99,7 +99,7 @@ export function mountTimelineVirtualizer(input: {
     })
 
     return (
-      <div data-testid="timeline-controls" data-pinned={follow.following()}>
+      <div data-testid="timeline-controls" data-pinned={follow.following()} data-anchored={!!follow.anchor()}>
         <button type="button" onClick={() => setState("ready", true)}>
           Complete Markdown
         </button>
@@ -127,6 +127,15 @@ export function mountTimelineVirtualizer(input: {
         <button type="button" onClick={() => setState("grown", true)}>
           Grow last row
         </button>
+        {/* A tool inside a group of several, which names them all on the group, as a reveal anchors it. */}
+        <button
+          type="button"
+          onClick={() =>
+            follow.dispatch({ type: "anchor", anchor: { key: TimelineRow.key(rows[0]!), partID: "prt_grouped" } })
+          }
+        >
+          Anchor first row
+        </button>
         <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
@@ -138,6 +147,7 @@ export function mountTimelineVirtualizer(input: {
                 style={{
                   height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
                 }}
+                data-timeline-part-ids={row().userMessageID === "message-0" ? "prt_first,prt_grouped" : undefined}
               >
                 {row().userMessageID}
               </div>

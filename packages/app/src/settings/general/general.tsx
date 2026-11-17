@@ -1,10 +1,12 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
+import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { ExternalLink } from "@/runtime/platform/external-link"
 import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
@@ -17,7 +19,7 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import type { ShellSettingsController } from "./controllers"
+import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -69,11 +71,7 @@ const WorkspaceDestinationSetting: Component = () => {
   )
 }
 
-export const ShellSetting: Component<{
-  controller: ShellSettingsController
-  /** Search reveals the row with the default action; the Servers page names the other servers' rows apart. */
-  action?: string
-}> = (props) => {
+export const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
   const language = useLanguage()
 
   const options = createMemo(() =>
@@ -89,7 +87,7 @@ export const ShellSetting: Component<{
       description={language.t("settings.general.row.shell.description")}
     >
       <Select
-        data-action={props.action ?? "settings-shell"}
+        data-action="settings-shell"
         options={options()}
         current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
         placement="bottom-end"
@@ -235,30 +233,21 @@ export const SettingsGeneral: Component = () => {
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => desktop() && "getPinchZoomEnabled" in platform,
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
+  const pinchZoom = createOptimisticSetting({
+    source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getPinchZoomEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setPinchZoomEnabled?.(checked),
+  })
 
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
-
-  const [spellcheck, { mutate: setSpellcheck }] = createResource(
-    () => desktop() && "getSpellcheckEnabled" in platform,
-    () => platform.getSpellcheckEnabled?.().catch(() => true) ?? true,
-    { initialValue: true },
-  )
-
-  const onSpellcheckChange = (checked: boolean) => {
-    setSpellcheck(checked)
-    void platform.setSpellcheckEnabled?.(checked).catch(() => setSpellcheck(!checked))
-  }
+  const spellcheck = createOptimisticSetting({
+    source: () => (desktop() && "getSpellcheckEnabled" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSpellcheckEnabled?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setSpellcheckEnabled?.(checked),
+  })
 
   const GeneralSection = () => (
     <div class="settings-section">
@@ -290,7 +279,7 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.pinchZoom.description")}
           >
             <div data-action="settings-pinch-zoom">
-              <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+              <Switch checked={pinchZoom.value()} onChange={pinchZoom.select} />
             </div>
           </SettingsRow>
           <SettingsRow
@@ -298,7 +287,7 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.spellcheck.description")}
           >
             <div data-action="settings-spellcheck">
-              <Switch checked={spellcheck.latest} onChange={onSpellcheckChange} />
+              <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
         </Show>
@@ -331,6 +320,16 @@ export const SettingsGeneral: Component = () => {
             <span class="text-11-regular text-v2-text-text-muted">
               {language.t("settings.preferences.description")}
             </span>
+          </div>
+          <div class="settings-tab-header-actions">
+            <ExternalLink
+              data-action="settings-help-feedback"
+              href="https://opencode.ai/desktop-feedback"
+              class="inline-flex items-center gap-1.5 text-13-regular text-v2-text-text-muted no-underline hover:text-v2-text-text-base hover:underline"
+            >
+              {language.t("settings.helpFeedback")}
+              <Icon name="arrow-up-right" size="small" />
+            </ExternalLink>
           </div>
         </div>
       </div>

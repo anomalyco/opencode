@@ -12,6 +12,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { useCommand } from "@/shell/commands/command"
 import { useSettingsServers } from "./servers/inventory"
+import { canIndexServerSettings } from "./servers/machine"
 import { useSettingsSurface } from "./surface"
 import { rankSettings, type SettingsSearchResult } from "./search-results"
 import { settingsSearchIndex } from "./search-index"
@@ -37,7 +38,7 @@ export function SettingsSearch() {
     })
   }
 
-  createEffect(on(() => search.state.query, updateOverflow))
+  createEffect(on(search.query, updateOverflow))
   onMount(() => {
     if (input) createResizeObserver(input, updateOverflow)
     const screen = root?.closest<HTMLElement>(".settings-screen")
@@ -63,7 +64,7 @@ export function SettingsSearch() {
 
   const catalog = createSettingsSearchCatalog()
 
-  const matches = createMemo(() => rankSettings(search.state.query, catalog()))
+  const matches = createMemo(() => rankSettings(search.query(), catalog()))
 
   const category = (item: SettingsSearchResult) =>
     item.topLevel
@@ -99,7 +100,7 @@ export function SettingsSearch() {
     return item.projectName ?? ""
   }
 
-  const expanded = () => !!search.state.query.trim() && (!state.narrow || search.state.expanded)
+  const expanded = () => search.active() && (!state.narrow || search.expanded())
 
   const select = (item: SettingsSearchResult) => {
     list?.setActive(item.id)
@@ -120,9 +121,9 @@ export function SettingsSearch() {
   }
 
   return (
-    <div ref={root} class="settings-search" data-empty={!search.state.query.trim()}>
+    <div ref={root} class="settings-search" data-empty={!search.active()}>
       <SearchList
-        query={search.state.query}
+        query={search.query()}
         onQuery={(query) => search.input(query)}
         placeholder={language.t("settings.search.placeholder")}
         label={language.t("settings.search.results")}
@@ -146,18 +147,18 @@ export function SettingsSearch() {
             </Show>
           </>
         )}
-        empty={<SettingsSearchEmpty query={search.state.query} />}
+        empty={<SettingsSearchEmpty query={search.query()} />}
         footer={matches().length > shown().length ? language.t("settings.search.refine") : undefined}
-        scrollTop={search.state.scrollTop}
+        scrollTop={search.scrollTop()}
         onScroll={(top) => search.scroll(top)}
         ref={(handle) => {
           list = handle
-          handle.setActive(search.state.highlighted || undefined)
+          handle.setActive(search.highlighted())
         }}
         onActive={(item) => item && search.highlight(item.id)}
         onSelect={select}
         onKeyDown={(event) => {
-          if (event.key === "Escape" && search.state.query) {
+          if (event.key === "Escape" && search.query()) {
             event.preventDefault()
             event.stopPropagation()
             clear()
@@ -167,7 +168,7 @@ export function SettingsSearch() {
 
           if (
             !expanded() &&
-            search.state.query.trim() &&
+            search.active() &&
             (event.key === "ArrowDown" || event.key === "ArrowUp") &&
             !event.shiftKey &&
             !event.ctrlKey &&
@@ -183,7 +184,7 @@ export function SettingsSearch() {
             {...field}
             ref={input}
             type="search"
-            value={search.state.query}
+            value={search.query()}
             leadingIcon={<Icon name="magnifying-glass" size="small" />}
             placeholder={language.t("settings.search.placeholder")}
             aria-label={language.t("settings.search.placeholder")}
@@ -216,7 +217,7 @@ export function SettingsSearch() {
                     { title: item().title, scope: item().owner, page: item().page },
                   )
             }
-            aria-current={search.state.selected === item().id ? "location" : undefined}
+            aria-current={search.selected() === item().id ? "location" : undefined}
             data-setting-target={item().view.target}
             data-result-id={item().id}
             title={[item().owner, item().page].filter(Boolean).join(" › ")}
@@ -257,11 +258,12 @@ export function createSettingsSearchCatalog() {
 
   const inventory = createMemo(() =>
     servers().map((server) => {
-      const context = server.connection ? global.serverCtx(server.key) : undefined
+      // Indexed exactly while the server's pages can open, so a result never leads to its unavailable state.
+      const context = canIndexServerSettings(server.availability) ? global.serverCtx(server.key) : undefined
 
       return {
         ...server,
-        connected: context?.sdk.connection.status() === "connected",
+        connected: !!context,
         projects: context ? context.projects.list() : [],
       }
     }),

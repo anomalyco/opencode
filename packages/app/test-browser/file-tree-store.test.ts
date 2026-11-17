@@ -9,7 +9,7 @@ const file = (path: string): FileNode => ({ path, type: "file", name: path, abso
 
 type Call = { dir: string; resolve: (nodes: FileNode[]) => void; reject: (error: Error) => void }
 
-function setup(scope = () => "/repo") {
+function setup() {
   const calls: Call[] = []
   const errors: string[] = []
 
@@ -18,7 +18,6 @@ function setup(scope = () => "/repo") {
     errors,
     dispose,
     store: createFileTreeStore({
-      scope,
       normalizeDir: (input) => input,
       list: (dir) => new Promise((resolve, reject) => calls.push({ dir, resolve, reject })),
       onError: (message) => errors.push(message),
@@ -55,10 +54,8 @@ describe("file tree store", () => {
   })
 
   test("a listing from the previous workspace neither reports nor releases the new workspace's listing", async () => {
-    const workspace = { directory: "/a" }
-    const tree = setup(() => workspace.directory)
+    const tree = setup()
     void tree.store.listDir("")
-    workspace.directory = "/b"
     tree.store.reset()
     void tree.store.listDir("")
 

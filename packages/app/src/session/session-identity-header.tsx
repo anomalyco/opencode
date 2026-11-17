@@ -28,10 +28,12 @@ import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { ServerLabel } from "@/servers/registry/label"
 import { fileManagerApp } from "@/home/projects/file-manager"
+import { useProjectBrowser } from "@/home/projects/browse"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useLayout, type LocalProject } from "@/shell/state/layout"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"
@@ -112,6 +114,8 @@ export function SessionLocation(props: {
   const platform = usePlatform()
   const layout = useLayout()
   const settingsSurface = useSettingsSurface()
+  const projectNavigation = useProjectNavigation()
+  const browse = useProjectBrowser()
   const navigate = useNavigate()
   const collapse = useContext(SessionHeaderCollapse)
   const [store, setStore] = createStore({ open: false })
@@ -185,6 +189,9 @@ export function SessionLocation(props: {
     const project = props.project
 
     if (!project) return
+
+    if (projectNavigation()) return browse({ server: server.key, directory: project.worktree })
+
     server.ctx.projects.touch(project.worktree)
     layout.home.setSelection({ server: server.key, directory: project.worktree })
     navigate("/")
@@ -435,7 +442,8 @@ export function SessionLocation(props: {
         </Menu.Portal>
       </Menu>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator gap={8} before={6} after={4} />
+        {/* A child's lineage follows, whose buttons pad 6px; a title pads 4px. */}
+        <SessionHeaderSeparator gap={8} before={6} after={props.compact ? 6 : 4} />
       </Show>
     </>
   )
@@ -499,21 +507,20 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                classList={{ "ps-1": index() === 0 }}
+                class="h-7 max-w-[min(200px,40vw)] shrink-0 truncate rounded-[6px] px-1.5 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
                 <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
-                <SessionHeaderSeparator gap={8} before={0} after={0} />
+                <SessionHeaderSeparator gap={8} before={6} after={6} />
               </Show>
             </>
           )}
         </For>
       </div>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator gap={8} before={0} after={4} />
+        <SessionHeaderSeparator gap={8} before={6} after={4} />
       </Show>
     </div>
   )

@@ -11,7 +11,9 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Identifier } from "@opencode/schema/identifier"
+import { CallID } from "@opencode/schema/tool"
+import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
@@ -74,8 +76,9 @@ export type Inventory = {
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
   "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-  "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
+  "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
@@ -90,6 +93,7 @@ export const create = (
     name: "execute",
     description,
     input: CodeMode.Input,
+    freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
@@ -125,11 +129,18 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // Its own ID, so plugin hooks and traces can tell the program's calls apart. It has no row, so
+                  // until the program ends its permission requests show on this call's.
+                  const id = CallID.make(`call_${Identifier.ascending()}`)
+                  yield* permission.nested(id, context.id).pipe(Scope.provide(scope))
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
+                    id,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
+                    // A stop is the execute call's to handle: a nested call never fails it with its own error.
+                    cancel: undefined,
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
@@ -145,7 +156,8 @@ export const create = (
             Effect.onError(() =>
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
-            Effect.provideService(CodeModeExecution.Service, context),
+            // Readers outlive the fetch call that returned them, up to the end of this program's scope.
+            Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
           )
         const toolCalls = yield* Ref.get(calls)
@@ -230,7 +242,10 @@ export const catalog = (inventory: Inventory) => {
       type: "tool",
       name: tool.path.split(".").at(-1) ?? tool.path,
       description: tool.description,
-      signature: tool.signature,
+      // Rendered only for the tools the catalog shows.
+      get signature() {
+        return tool.signature
+      },
       pinned: pinned.has(tool.path),
     }
   return {
@@ -287,7 +302,11 @@ export const check = (
   limits: CodeMode.ExecutionLimits,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
-  CodeMode.make({ tools: inventoryTools(inventory), hooks: runHooks, limits })
+  CodeMode.make({
+    tools: inventoryTools(inventory),
+    hooks: runHooks,
+    limits,
+  })
     .execute(code, bindings)
     .pipe(
       Effect.provideService(Run, {
@@ -305,7 +324,10 @@ function inventoryTools(inventory: Inventory) {
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,
-      output: child.outputSchema ?? Schema.NullOr(Schema.String),
+      freeform: registration.freeform !== undefined,
+      // JSON Schema, which Code Mode renders but does not check: Core has validated the result of the tool that ran,
+      // and a plugin may have renamed the call to a tool with another output.
+      output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
@@ -412,12 +434,15 @@ function formatResult(result: CodeMode.Result) {
       ? `Warnings:\n${result.warnings.map((item) => `- [${item.kind}] ${item.message}`).join("\n")}`
       : undefined
   const logs = result.logs && result.logs.length > 0 ? `Logs:\n${result.logs.join("\n")}` : undefined
-  return [output, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+  // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
+  const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
+  return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
 }
 
+// Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
 function formatValue(value: CodeMode.DataValue) {
   if (typeof value === "string") return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  return JSON.stringify(value) ?? String(value)
 }
 
 function outputFiles(content: ReadonlyArray<Content>): Array<typeof ExecuteFile.Type> {

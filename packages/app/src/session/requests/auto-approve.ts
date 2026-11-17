@@ -7,13 +7,15 @@ import { uuid } from "@opencode/util/uuid"
 import type { ServerSDK } from "@/runtime/server/client"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import {
-  AUTO_APPROVE_RETRY_DELAY_MS,
-  AUTO_APPROVE_RETRY_LIMIT,
   INITIAL_AUTO_APPROVE_STATE,
+  INITIAL_AUTO_APPROVE_SWEEP_STATE,
   transitionAutoApprove,
+  transitionAutoApproveSweep,
   type AutoApproveEffect,
   type AutoApproveEvent,
   type AutoApproveState,
+  type AutoApproveSweepEffect,
+  type AutoApproveSweepEvent,
 } from "./auto-approve-machine"
 
 const repliedLimit = 1000
@@ -29,8 +31,12 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
 
   // Requests in the initial `pending` state have no entry.
   const [requests, setRequests] = createStore<Record<string, AutoApproveState | undefined>>({})
-  const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const replyTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const retries = new Map<string, ReturnType<typeof setTimeout>>()
   const scope = new AbortController()
+  let sweepState = INITIAL_AUTO_APPROVE_SWEEP_STATE
+  let sweepRun: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
+  let sweepRetry: ReturnType<typeof setTimeout> | undefined
 
   const unsubscribe = [
     input.sdk.event.on("permission.asked", (event) => {
@@ -42,6 +48,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   onCleanup(() => {
     abort(scope)
     unsubscribe.forEach((stop) => stop())
+    dispatchSweep({ type: "sweep.cancel" })
     // Back to pending, so replies still in flight settle into nothing and no retry is scheduled.
     untrack(() => Object.keys(requests)).forEach((id) => dispatch(id, { type: "cancel" }))
   })
@@ -49,12 +56,11 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // The event stream does not replay requests asked while this client was
   // disconnected, and requests may already be pending before the setting turns
   // on, so sweep on every connect while the setting is on. A newer connect or
-  // a change of the setting aborts the sweep and its scheduled retries.
+  // a change of the setting replaces the sweep and its scheduled retries.
   createEffect(() => {
-    if (!enabled() || input.sdk.connection.status() !== "connected") return
-    const controller = new AbortController()
-    onCleanup(() => abort(controller))
-    void sweepWithRetry(controller.signal, 0)
+    const on = enabled() && input.sdk.connection.status() === "connected"
+
+    untrack(() => dispatchSweep(on ? { type: "sweep.start", runId: uuid() } : { type: "sweep.cancel" }))
   })
 
   // Approves pending requests that reach the local store, which is how a
@@ -93,27 +99,81 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   }
 
   function execute(requestID: string, effect: AutoApproveEffect) {
+    if (effect.type === "clear-reply-timer") {
+      clearTimeout(replyTimers.get(requestID))
+      replyTimers.delete(requestID)
+
+      return
+    }
+
     if (effect.type === "reply") {
-      // A request another client already answered counts as replied.
+      const result = { runId: effect.runId, attempt: effect.attempt }
+
+      replyTimers.set(
+        requestID,
+        setTimeout(() => dispatch(requestID, { type: "reply.timed-out", ...result }), effect.timeoutMs),
+      )
+      // A request another client, or an earlier attempt whose response was lost, already answered counts as replied.
       void input.data.session.permission.reply({ sessionID: effect.sessionID, requestID, decision: "once" }).then(
-        () => dispatch(requestID, { type: "reply.succeeded", runId: effect.runId, attempt: effect.attempt }),
-        () => dispatch(requestID, { type: "reply.failed", runId: effect.runId, attempt: effect.attempt }),
+        () => dispatch(requestID, { type: "reply.succeeded", ...result }),
+        () => dispatch(requestID, { type: "reply.failed", ...result }),
       )
 
       return
     }
 
-    clearTimeout(timers.get(requestID))
-    timers.delete(requestID)
+    clearTimeout(retries.get(requestID))
+    retries.delete(requestID)
 
     if (effect.type === "cancel-retry") return
-    timers.set(
+    retries.set(
       requestID,
       setTimeout(() => {
-        timers.delete(requestID)
+        retries.delete(requestID)
         dispatch(requestID, { type: "retry.due", runId: effect.runId, attempt: effect.attempt })
       }, effect.delayMs),
     )
+  }
+
+  function dispatchSweep(event: AutoApproveSweepEvent) {
+    const result = transitionAutoApproveSweep(sweepState, event)
+    sweepState = result.state
+    result.effects.forEach(executeSweep)
+  }
+
+  function executeSweep(effect: AutoApproveSweepEffect) {
+    if (effect.type === "sweep.abort") {
+      clearTimeout(sweepRun?.timer)
+      abort(sweepRun?.controller)
+      sweepRun = undefined
+
+      return
+    }
+
+    if (effect.type === "sweep.run") {
+      const controller = new AbortController()
+      const result = { runId: effect.runId, attempt: effect.attempt }
+
+      sweepRun = {
+        controller,
+        timer: setTimeout(() => dispatchSweep({ type: "sweep.timed-out", ...result }), effect.timeoutMs),
+      }
+      void sweep(controller.signal).then(
+        (complete) => dispatchSweep({ type: complete ? "sweep.succeeded" : "sweep.failed", ...result }),
+        () => dispatchSweep({ type: "sweep.failed", ...result }),
+      )
+
+      return
+    }
+
+    clearTimeout(sweepRetry)
+    sweepRetry = undefined
+
+    if (effect.type === "sweep.cancel-retry") return
+    sweepRetry = setTimeout(() => {
+      sweepRetry = undefined
+      dispatchSweep({ type: "sweep.retry-due", runId: effect.runId, attempt: effect.attempt })
+    }, effect.delayMs)
   }
 
   function pruneReplied() {
@@ -125,30 +185,18 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     setRequests(produce((draft) => replied.slice(0, replied.length - repliedLimit).forEach((id) => delete draft[id])))
   }
 
-  // An incomplete sweep leaves pending requests hidden with no later trigger
-  // to recover them, so retry it a bounded number of times.
-  async function sweepWithRetry(signal: AbortSignal, attempt: number) {
-    const complete = await sweep(signal)
-
-    if (complete || attempt >= AUTO_APPROVE_RETRY_LIMIT || signal.aborted) return
-
-    const timer = setTimeout(
-      () => void sweepWithRetry(signal, attempt + 1),
-      AUTO_APPROVE_RETRY_DELAY_MS * (attempt + 1),
-    )
-
-    signal.addEventListener("abort", () => clearTimeout(timer), { once: true })
-  }
-
   async function sweep(signal: AbortSignal) {
-    const inventory = await sweepLocations()
+    const inventory = await sweepLocations(signal)
+
+    if (signal.aborted) return false
 
     const listed = await Promise.all(
       inventory.locations.map((location) =>
         input.sdk.api.permission.request
-          .list({ location: { directory: location.directory } })
+          .list({ location: { directory: location.directory } }, { signal })
           .then((pending) => {
-            if (!signal.aborted) pending.data.forEach((request) => consider(request, signal))
+            // A request already found still gets its project looked up if a slower location runs the sweep out.
+            if (!signal.aborted) pending.data.forEach((request) => consider(request, scope.signal))
 
             return true
           })
@@ -166,8 +214,10 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // external session.permission.create API can park a request on an idle
   // session. A detached request on a session this client never loaded is the
   // one case that stays uncovered.
-  async function sweepLocations() {
-    const active = await input.sdk.api.session.active().catch(() => undefined)
+  async function sweepLocations(signal: AbortSignal) {
+    const active = await input.sdk.api.session.active({ signal }).catch(() => undefined)
+
+    if (signal.aborted) return { locations: [], complete: false }
     const ids = Object.keys(active ?? {})
 
     // Resync every active session rather than trusting cached info: another
@@ -195,9 +245,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     ]
 
     return {
-      locations: [
-        ...new Map(locations.map((item) => [item.directory, item])).values(),
-      ],
+      locations: [...new Map(locations.map((item) => [item.directory, item])).values()],
       complete: active !== undefined && synced.every(Boolean),
     }
   }
@@ -207,7 +255,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   function consider(permission: PermissionRequest, signal: AbortSignal) {
     if (covers(undefined) || input.data.session.get(permission.sessionID)) return approve(permission)
     void input.sdk.api.session
-      .get({ sessionID: permission.sessionID })
+      .get({ sessionID: permission.sessionID }, { signal })
       .then((session) => {
         if (!signal.aborted) approve(permission, session.projectID)
       })

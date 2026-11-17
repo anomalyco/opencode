@@ -6,8 +6,9 @@ import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
-// `path` opens a route other than Home.
-export function mount(input: { server: string; path?: string; os?: "macos"; openApps?: boolean }) {
+// `path` opens a route other than Home. `holdOpen` records an opened path but never answers, like an editor that keeps
+// the launch running until it exits.
+export function mount(input: { server: string; path?: string; os?: "macos"; openApps?: boolean; holdOpen?: boolean }) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")
@@ -62,7 +63,12 @@ export function mount(input: { server: string; path?: string; os?: "macos"; open
 
     if (input.openApps) {
       platform.checkAppExists = async (app) => app === "Visual Studio Code" || app === "code"
-      platform.openPath = async (path, app) => void setStore("opened", (opened) => [...opened, { path, app }])
+      platform.openPath = (path, app) => {
+        setStore("opened", (opened) => [...opened, { path, app }])
+
+        return input.holdOpen ? new Promise<void>(() => undefined) : Promise.resolve()
+      }
+
       platform.revealPath = async () => true
     }
 

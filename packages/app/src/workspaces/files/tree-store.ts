@@ -17,7 +17,6 @@ import {
 } from "./tree-machine"
 
 type TreeStoreOptions = {
-  scope: () => string
   normalizeDir: (input: string) => string
   list: (input: string) => Promise<FileNode[]>
   onError: (message: string) => void

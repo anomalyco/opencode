@@ -55,9 +55,16 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
   }
 
+  // `new` selects the terminal and asks it to take focus, unless the user moved on while it was created. Then opening
+  // its tab, which asks for focus again, gives that up.
   const create = (session: MountedSession, terminal: TerminalSession) =>
     void terminal.new().then((id) => {
-      if (id && !ctx.signal.aborted) show(session, terminal, id)
+      if (!id || ctx.signal.aborted) return
+      const focused = terminal.focusRequested(id)
+
+      layout.open(key(id), session, layout.narrow() ? undefined : { tab: "select" })
+
+      if (!focused) terminal.cancelFocus()
     })
 
   ctx.add(BuiltinSlot, {
@@ -140,7 +147,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
         const target = current()
         const id = target?.terminal.active()
 
-        if (target && id) void target.terminal.close(id)
+        if (target && id) target.terminal.close(id)
       },
     }),
   )
@@ -208,8 +215,8 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
           label={label()}
           title={info()?.title ?? ""}
           // A tab shown for a list that failed has no terminal to rename yet.
-          rename={info() ? (title) => void terminal().rename(id, title) : undefined}
-          close={() => void terminal().close(id)}
+          rename={info() ? (title) => terminal().rename(id, title) : undefined}
+          close={() => terminal().close(id)}
         />
       ),
     }
@@ -267,7 +274,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
 
       tabs.get(input.session.key)?.delete(input.tab.id)
 
-      if (terminal.get(input.tab.id)) void terminal.close(input.tab.id)
+      if (terminal.get(input.tab.id)) terminal.close(input.tab.id)
     },
     // Before the server lists the session's terminals, a restored tab is selected on trust; `active` honours the
     // selection once it is listed.

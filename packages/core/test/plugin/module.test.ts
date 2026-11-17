@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { cp } from "node:fs/promises"
+import { cp, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
@@ -40,6 +40,15 @@ it.live("watches creation of an external helper with missing parent directories"
     const modules = yield* PluginModule.make()
     const operation = { type: "add" as const, target: path.dirname(entry), options: {} }
     expect(Exit.isFailure(yield* modules.load(operation).pipe(Effect.exit))).toBe(true)
+    // Parcel's Windows backend starts reading changes on its own thread after subscribe resolves, so a file created
+    // right away can go unseen. Create probe directories, one event each, until the watch reports one.
+    const armed = yield* modules.changes().pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+    let probes = 0
+    yield* Effect.promise(() => mkdir(path.join(directory.path, `probe-${probes++}`))).pipe(
+      Effect.andThen(Fiber.join(armed).pipe(Effect.timeout("500 millis"))),
+      Effect.retry(Schedule.forever),
+      Effect.timeout("10 seconds"),
+    )
     const changed = yield* modules
       .changes()
       .pipe(Stream.runHead, Effect.timeout("5 seconds"), Effect.forkScoped({ startImmediately: true }))

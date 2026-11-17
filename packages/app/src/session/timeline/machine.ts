@@ -9,8 +9,8 @@ export const ZOOM_SLACK = 4
 // A scroll range at or below this does not overflow.
 export const MIN_OVERFLOW = 1
 
-/** A revealed tool call (`partID`) or the unread-messages notice, whose top edge stays put until the reader scrolls. */
-export type FollowAnchor = { readonly key: string; readonly partID?: string }
+/** A revealed tool call, whose top edge stays put until the reader scrolls. */
+export type FollowAnchor = { readonly key: string; readonly partID: string }
 
 /**
  * The reader's contact with the timeline. A held pointer or touch is what separates the reader's own upward scroll
@@ -26,7 +26,7 @@ export type FollowState =
   | { readonly type: "returning"; readonly attempt: number; readonly gesture?: FollowGesture }
   /** Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it. */
   | { readonly type: "detached"; readonly gesture?: FollowGesture; readonly endPending: boolean }
-  /** Holds a revealed tool call or the unread-messages notice in place. */
+  /** Holds a revealed tool call in place. */
   | { readonly type: "anchored"; readonly anchor: FollowAnchor }
 
 export type FollowEvent =
@@ -44,8 +44,13 @@ export type FollowEvent =
   /** Wheel, scroll key or page. Only an upward one over overflowing content stops following. */
   | { readonly type: "scroll.intent"; readonly upward: boolean; readonly overflow: boolean }
   | { readonly type: "pointer.down" }
-  /** The pointer is released, cancelled, or the window lost it (blur, hidden). */
+  /** The pointer is released or cancelled. A touch's pointerup also lands here, so it ends only a pointer gesture. */
   | { readonly type: "pointer.up" }
+  /**
+   * The view lost the reader's contact without a release (window blur, hidden document, deactivation): a held pointer
+   * or touch, or momentum, ends. An anchor stays.
+   */
+  | { readonly type: "contact.lost" }
   | { readonly type: "touch.start"; readonly nested: boolean }
   /** The finger drags the content downward, revealing earlier messages. */
   | { readonly type: "touch.drag"; readonly overflow: boolean }
@@ -65,6 +70,8 @@ type Unanchored = Exclude<FollowState, { type: "anchored" }>
 const FOLLOWING: FollowState = Object.freeze({ type: "following" })
 
 const DETACHED: FollowState = Object.freeze({ type: "detached", endPending: false })
+
+export const CONTACT_LOST_EVENT: FollowEvent = Object.freeze({ type: "contact.lost" })
 
 export function createFollowState(): FollowState {
   return FOLLOWING
@@ -105,6 +112,8 @@ export function transitionFollow(state: FollowState, event: FollowEvent): Follow
 
   if (event.type === "pointer.up") return state.gesture === "pointer" ? withGesture(state, undefined) : state
 
+  if (event.type === "contact.lost") return withGesture(state, undefined)
+
   if (event.type === "touch.start") return withGesture(state, event.nested ? "nested-touch" : "touch")
 
   // A nested scrollport owns its drag. If it chains into the timeline, the timeline's own upward scroll detaches.
@@ -127,10 +136,58 @@ export function followAnchor(state: FollowState) {
   return state.type === "anchored" ? state.anchor : undefined
 }
 
+/** History entries whose route reveal was attempted, kept so going Back to one does not reveal it again. */
+export const ROUTE_REVEAL_HISTORY_LIMIT = 32
+
+/**
+ * The tool call a route asks the timeline to open on, attempted once per history entry whether or not it was found.
+ * Kept apart from `FollowState`: it changes only on navigation and when the timeline attaches, never while scrolling.
+ */
+export type RouteRevealState =
+  | { readonly status: "idle"; readonly consumed: readonly string[] }
+  | {
+      readonly status: "pending"
+      readonly entryKey: string
+      readonly target: string
+      readonly consumed: readonly string[]
+    }
+
+export type RouteRevealEvent =
+  | { readonly type: "route.synced"; readonly entryKey: string; readonly target: string | undefined }
+  | { readonly type: "reveal.attempted"; readonly entryKey: string }
+
+export function createRouteRevealState(): RouteRevealState {
+  return { status: "idle", consumed: [] }
+}
+
+export function transitionRouteReveal(state: RouteRevealState, event: RouteRevealEvent): RouteRevealState {
+  if (event.type === "reveal.attempted") {
+    if (state.status !== "pending" || state.entryKey !== event.entryKey) return state
+
+    return { status: "idle", consumed: [...state.consumed, event.entryKey].slice(-ROUTE_REVEAL_HISTORY_LIMIT) }
+  }
+
+  if (!event.target || state.consumed.includes(event.entryKey))
+    return state.status === "idle" ? state : { status: "idle", consumed: state.consumed }
+
+  if (state.status === "pending" && state.entryKey === event.entryKey && state.target === event.target) return state
+
+  return { status: "pending", entryKey: event.entryKey, target: event.target, consumed: state.consumed }
+}
+
+export function routeRevealTarget(state: RouteRevealState) {
+  return state.status === "pending" ? state : undefined
+}
+
 // iOS defers native scroll writes until momentum ends, so a detached touch scroll keeps its visual anchor by deferring
 // size compensation until then.
 export function defersAdjustments(state: FollowState) {
   return state.type === "detached" && !!state.gesture && state.gesture !== "pointer"
+}
+
+/** The reader's finger is on the timeline. Read on every scroll, so it allocates nothing. */
+export function isTouchHeld(state: FollowState) {
+  return state.type !== "anchored" && touchHeld(state.gesture)
 }
 
 // Probing the zoomed end writes scrollTop, so it waits for a settled scroll and a lifted finger.

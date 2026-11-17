@@ -61,7 +61,7 @@ function setup() {
     const turnDiffSources = new Map<string, TurnDiffSource>()
 
     const turnDiffSource = (label: string) => {
-      const source = turnDiffSources.get(label) ?? { get: () => undefined, load: () => {} }
+      const source = turnDiffSources.get(label) ?? { state: () => ({ status: "loading" }) as const, load: () => {} }
       turnDiffSources.set(label, source)
 
       return source
@@ -110,9 +110,6 @@ function setup() {
           },
           sessionID: undefined,
           agents: true,
-          get backgroundCompaction() {
-            return state.directory === "/other"
-          },
           navigateToSession: undefined,
           sessionHref: undefined,
           shellRunning: undefined,
@@ -215,7 +212,6 @@ function setup() {
               workspace().directory,
               data.directory,
               (readImage && imageReaders.get(readImage)) ?? "",
-              data.backgroundCompaction ? "/other" : "/repo",
             ]
           })
           createComputed(() => {
@@ -313,6 +309,21 @@ test("disposes a detached view once its transcript is evicted, but never the sel
 
     input.setState("id", "ses_a")
     expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
+})
+
+test("a view whose transcript was evicted while selected goes once another session is selected", () => {
+  const input = setup()
+
+  try {
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    expect(input.disposed).toEqual([])
+    input.setState("id", "ses_b")
+    input.cache()
+    expect(input.disposed).toEqual(["ses_a"])
   } finally {
     input.dispose()
   }
@@ -462,8 +473,8 @@ test("a view first reading its providers while another Location is selected read
     input.cache()
     input.setState("deferred", true)
     expect(input.deferredReads).toEqual({
-      "ses_a in /repo": ["/repo", "/repo", "/repo", "/repo"],
-      "ses_b in /other": ["/other", "/other", "/other", "/other"],
+      "ses_a in /repo": ["/repo", "/repo", "/repo"],
+      "ses_b in /other": ["/other", "/other", "/other"],
     })
   } finally {
     input.dispose()

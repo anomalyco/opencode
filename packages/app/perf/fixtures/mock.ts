@@ -12,13 +12,19 @@ type Fulfill = {
 }
 
 /**
- * `page`, with its routes answered through strobe's `mock` (`prepare`'s `ctx.mock`). Playwright's routing turns the
- * browser's HTTP cache off for the whole page, so a case that reloads in `reset` would refetch every script, which no
- * person does; `mock` pauses only the mocked URLs. Everything else on the page is Playwright's, so the e2e mock server
- * and its fixtures run unchanged: routes keep Playwright's order (the latest answers first, `fallback` passes on).
- * Routes take URL globs and last for the whole case.
+ * The block's page for the e2e mock server and the fixtures, with its routes answered through strobe's `mock`
+ * (`prepare`'s `ctx.mock`). Playwright's routing turns the browser's HTTP cache off for the whole page, so a case that
+ * reloads in `reset` would refetch every script, which no person does; `mock` pauses only the mocked URLs. Routes keep
+ * Playwright's order (the latest answers first, `fallback` passes on), take URL globs and last for the whole case.
+ *
+ * In Chromium it is Playwright's page, so the mock server and its fixtures run as in the e2e suites. Other engines
+ * (`--engine firefox`) have no Playwright page: a stand-in takes init scripts through strobe's `addInitScript` and
+ * cannot evaluate in the page, so the mock server publishes no events there after a mutation.
  */
-export function cached(page: Page, mock: PrepareContext<unknown>["mock"]) {
+export function cached(ctx: Pick<PrepareContext<unknown>, "playwright" | "mock" | "addInitScript">) {
+  const page = playwrightPage(ctx) ?? standIn(ctx.addInitScript)
+  const { mock } = ctx
+
   page.route = async (url, handler) => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminates Playwright's own URL matcher union
     if (typeof url !== "string") throw new Error("strobe mocks URL globs; no benchmark routes by RegExp or predicate")
@@ -32,6 +38,34 @@ export function cached(page: Page, mock: PrepareContext<unknown>["mock"]) {
   page.routeWebSocket = async () => {}
 
   return page
+}
+
+// `ctx.playwright` is Chromium's: reading it in another engine throws.
+function playwrightPage(ctx: Pick<PrepareContext<unknown>, "playwright">): Page | undefined {
+  try {
+    // SAFETY: strobe hands Chromium blocks Playwright's own page.
+    return ctx.playwright.page as Page
+  } catch {
+    return undefined
+  }
+}
+
+// The members of a page the e2e mock server and the fixtures use, over strobe's calls. `route` is set by `cached`.
+function standIn(addInitScript: PrepareContext<unknown>["addInitScript"]) {
+  const page = {
+    addInitScript,
+    // The block's browser closes with the block.
+    on: () => page,
+    isClosed: () => false,
+    // The mock server's event delivery treats a missing stream as retryable and drops the events.
+    evaluate: async () => {
+      throw new Error("No mock event stream: strobe drives this engine without Playwright")
+    },
+  }
+
+  // SAFETY: the e2e mock server and the benchmark fixtures call only these members (and `route`, `routeWebSocket`).
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  return page as unknown as Page
 }
 
 async function kept() {

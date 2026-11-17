@@ -31,7 +31,7 @@ export function toConfig({ apiKey, baseURL, body, headers, ...providerOptions }:
 type BearerInput = ProviderAuthOption<"optional"> & { readonly baseURL?: string }
 
 /**
- * Turns provider config into route defaults with `Authorization: Bearer` auth. The endpoint falls back to
+ * Turns provider config into route options with `Authorization: Bearer` auth. The endpoint falls back to
  * `baseURL` when given, otherwise it is left to the route.
  */
 export function bearerRouteDefaults<Input extends BearerInput>(

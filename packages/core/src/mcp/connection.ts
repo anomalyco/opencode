@@ -1,6 +1,6 @@
 export * as McpConnection from "./connection.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -51,8 +51,10 @@ export interface Input {
    */
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  /** Declares MCP Events; see `McpClient.ConnectOptions.events`. */
+  readonly mcpEvents?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface
@@ -120,7 +122,6 @@ export function make(input: Input): Connection {
 
   const refreshPrompts = (client: McpClient.Connection) =>
     client.prompts().pipe(
-      Effect.orElseSucceed(() => []),
       Effect.map((prompts) => {
         state.prompts = prompts
       }),
@@ -185,6 +186,7 @@ export function make(input: Input): Connection {
         elicitation: input.elicitation,
         clientInfo: input.clientInfo,
         roots: !input.shared,
+        events: input.mcpEvents,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>

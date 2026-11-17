@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sesioni u ruajt në {{filename}}",
   "export.failed.title": "Eksportimi i sesionit dështoi",
   "export.failed.description": "Ndodhi një gabim gjatë eksportimit të sesionit",
+  "usage.toggle": "Shfaq/fshih kontekstin e sesionit",
 }

@@ -152,42 +152,45 @@ export const make = Effect.fn("Session.make")(function* () {
     (sessionID: SessionSchema.ID, inboxID: SessionMessage.ID) => mutatePending(sessionID, inboxID, admission.queue),
     Effect.uninterruptible,
   )
-  const prompt = Effect.fn("Session.prompt")((sessionID: SessionSchema.ID, input: PromptRequest) =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const session = yield* get(sessionID)
-        const messageID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* Effect.gen(function* () {
-          const existing = yield* admission.reconcile({
-            id: messageID,
-            sessionID: session.id,
-            type: "user",
-            delivery: input.delivery ?? "steer",
-          })
-          if (existing) return existing
-          // Preparation, the staged revert commit and admission share one acquisition of the session's location
-          // services, so projections see its config whoever called prompt.
-          return yield* Effect.gen(function* () {
-            const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
-            // Commit a staged revert only after preparation succeeds, before admitting new work.
-            if (session.revert) yield* SessionRevert.commit(bus, session)
-            return yield* admission.admit({
+  const prompt = Effect.fn("Session.prompt")(
+    (sessionID: SessionSchema.ID, input: PromptRequest, onAccepted?: Effect.Effect<void>) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const session = yield* get(sessionID)
+          const messageID = input.id ?? SessionMessage.ID.create()
+          const admitted = yield* Effect.gen(function* () {
+            const existing = yield* admission.reconcile({
               id: messageID,
               sessionID: session.id,
-              item,
+              type: "user",
+              delivery: input.delivery ?? "steer",
             })
+            if (existing) return existing
+            // Preparation, the staged revert commit and admission share one acquisition of the session's location
+            // services, so projections see its config whoever called prompt.
+            return yield* Effect.gen(function* () {
+              const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
+              // Commit a staged revert only after preparation succeeds, before admitting new work.
+              if (session.revert) yield* SessionRevert.commit(bus, session)
+              return yield* admission.admit({
+                id: messageID,
+                sessionID: session.id,
+                item,
+              })
+            }).pipe(
+              instances.provide(session),
+              Effect.provideService(Database.Service, database),
+              Effect.provideService(FSUtil.Service, fs),
+            )
           }).pipe(
-            instances.provide(session),
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(FSUtil.Service, fs),
+            Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
           )
-        }).pipe(
-          Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
-        )
-        if (input.resume !== false) yield* execution.wake(sessionID)
-        return admitted
-      }),
-    ),
+          if (input.resume !== false) yield* execution.wake(sessionID)
+          // Checkpoint an accepted handoff before observing cancellation. Prompt preparation above stays interruptible.
+          if (onAccepted) yield* onAccepted
+          return admitted
+        }),
+      ),
   )
   const shell = Effect.fn("Session.shell")(function* (
     sessionID: SessionSchema.ID,

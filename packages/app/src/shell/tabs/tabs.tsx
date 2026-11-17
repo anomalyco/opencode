@@ -14,7 +14,14 @@ import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { sessionHref } from "@/shell/routes/session"
 import { createTabMemory } from "./memory"
 import { createSessionPreview } from "./preview"
-import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
+import {
+  latestClosedTime,
+  nextTabAfterClose,
+  pushClosedTab,
+  removeClosedTabs,
+  takeClosedTab,
+  type ClosedTab,
+} from "./closed"
 import {
   createDraftComposerState,
   createMemoryComposerState,
@@ -34,6 +41,13 @@ import {
   type TabPromotionEffect,
   type TabPromotionEvent,
 } from "./promotion-machine"
+import {
+  createTabsHydrationState,
+  selectRecentTabKey,
+  transitionTabsHydration,
+  type TabsHydrationEffect,
+  type TabsHydrationEvent,
+} from "./hydration-machine"
 
 export type SessionTab = typeof TabStorage.Session.Type
 
@@ -110,35 +124,64 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const memory = createTabMemory(getOwner())
     const currentRoute = useCurrentRoute()
 
-    // Only the newest write made before the persisted value loads applies once it does.
-    let recentWrite = 0
+    const [hydration, setHydration] = createSignal(
+      createTabsHydrationState({ recent: recentReady(), closed: closedReady() }),
+    )
 
-    const recentKey = () => recent.key
-
-    const setRecentKey = (key: string | undefined) => {
-      const write = ++recentWrite
-
-      if (recentReady()) {
-        setRecent("key", key)
-
-        return
-      }
-
-      void recentReady.promise?.then(() => {
-        if (write === recentWrite) setRecent("key", key)
-      })
+    const dispatchHydration = (event: TabsHydrationEvent) => {
+      const result = transitionTabsHydration(untrack(hydration), event)
+      setHydration(result.state)
+      result.effects.forEach(runHydrationEffect)
     }
 
-    const updateClosed = (update: (stack: ClosedTab[]) => ClosedTab[]) => {
-      const apply = () => setClosed((stack) => update(stack))
+    const runHydrationEffect = (effect: TabsHydrationEffect) => {
+      if (effect.type === "recent.commit") return setRecent("key", effect.key)
+      // Each operation runs on its own, so one that throws can't drop the ones queued after it.
+      effect.ops.forEach((op) =>
+        Promise.try(() => {
+          if (op.kind === "update") return setClosed((stack) => op.update(stack))
+          reopenClosedTabNow(op.target, op.options)
+        }).catch((error) => console.error("[tabs] closed tab operation failed", error)),
+      )
+    }
 
-      if (closedReady()) {
-        apply()
+    // Both run once each store loads, or fails to and runs from its initial value.
+    createEffect(() => {
+      if (recentReady()) untrack(() => dispatchHydration({ type: "recent.hydrated", persistedKey: recent.key }))
+    })
+    createEffect(() => {
+      if (closedReady()) untrack(() => dispatchHydration({ type: "closed.hydrated" }))
+    })
+    onCleanup(() => dispatchHydration({ type: "disposed" }))
 
-        return
-      }
+    const recentKey = () => selectRecentTabKey(hydration(), recent.key)
 
-      void closedReady.promise?.then(apply)
+    const setRecentKey = (key: string | undefined) =>
+      dispatchHydration({ type: "recent.set", key, persistedKey: untrack(() => recent.key) })
+
+    const updateClosed = (update: (stack: ClosedTab[]) => ClosedTab[]) =>
+      dispatchHydration({ type: "closed.op", op: { kind: "update", update } })
+
+    function reopenClosedTabNow(target?: SessionTab, options?: { append?: boolean }) {
+      const result = takeClosedTab(closed, store, target)
+
+      if (result.stack.length === closed.length) return
+      setClosed(() => result.stack)
+      const entry = result.entry
+
+      if (!entry) return
+      const index = options?.append ? store.length : Math.min(entry.index, store.length)
+
+      if (entry.info) setInfo(tabKey(entry.tab), entry.info)
+      void startTransition(() => {
+        setStore(
+          produce((tabs) => {
+            if (tabs.some((item) => tabKey(item) === tabKey(entry.tab))) return
+            tabs.splice(index, 0, entry.tab)
+          }),
+        )
+        navigateTab(entry.tab)
+      })
     }
 
     const removeDraftPersisted = (draftID: string) => {
@@ -259,8 +302,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const known = () =>
       new Set<string>([...servers.list.map(ServerConnection.key), ...pluginServers.entries().map((item) => item.key)])
 
+    const serversReady = () => servers.hydrated() && pluginServers.ready()
+
     createEffect(() => {
-      if (!ready() || !recentReady()) return
+      if (!ready() || !recentReady() || !serversReady()) return
       const serversSet = known()
       const next = store.filter((tab) => serversSet.has(tab.server))
       dispatchPromotion({ type: "keep.servers", servers: serversSet })
@@ -297,7 +342,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      if (!closedReady()) return
+      if (!closedReady() || !serversReady()) return
       const serversSet = known()
       const next = closed.filter((entry) => serversSet.has(entry.tab.server))
 
@@ -388,6 +433,37 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const actions = {
+      restoreReady() {
+        if (!ready() || !recentReady() || !servers.hydrated()) return false
+
+        if (pluginServers.ready()) return true
+        // Plugin discovery only matters when a saved server is still missing.
+        const listed = new Set(servers.list.map(ServerConnection.key))
+
+        return (!recent.target || listed.has(recent.target.server)) && store.every((tab) => listed.has(tab.server))
+      },
+      restoreTab(source?: LayoutRoute) {
+        const listed = new Set(servers.list.map(ServerConnection.key))
+
+        const open = store.filter((tab) => listed.has(tab.server))
+
+        const current = preview.current()
+
+        if (source) {
+          const tab = open.find((tab) => tabMatchesRoute(tab, source))
+
+          if (tab) return tab
+        }
+
+        if (current && listed.has(current.server)) return current
+
+        return open.find((tab) => tabKey(tab) === recentKey()) ?? open.at(-1)
+      },
+      lastTarget: () => recent.target,
+      rememberTarget(server: ServerConnection.Key, directory: string | undefined) {
+        if (recent.target?.server === server && recent.target.directory === directory) return
+        setRecent("target", { server, directory })
+      },
       preview: preview.current,
       previewSession(tab: Omit<SessionTab, "type">) {
         void startTransition(() => preview.open(tab))
@@ -463,9 +539,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         return tab
       },
-      async newDraft(draft: Omit<DraftTab, "type" | "draftID">, prompt?: string, model?: PromptModel) {
-        const draftID = uuid()
-        const tab = { type: "draft" as const, draftID, ...draft }
+      /** Opens a draft tab; pass `draftID` to know it before the draft opens. */
+      async newDraft(
+        draft: Omit<DraftTab, "type" | "draftID"> & { draftID?: string },
+        prompt?: string,
+        model?: PromptModel,
+      ) {
+        const draftID = draft.draftID ?? uuid()
+        const tab = { ...draft, type: "draft" as const, draftID }
         memory.ensure(tabKey(tab), "prompt", () => createDraftComposerState(draftID, { prompt, model }))
         await startTransition(() => {
           preview.clear()
@@ -597,32 +678,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         })
         entries.forEach((entry) => disposeTab(entry.tab))
       },
+      lastClosedTime: () => latestClosedTime(closed, store),
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
-        if (!closedReady()) {
-          void closedReady.promise?.then(() => actions.reopenClosedTab(target, options))
-
-          return
-        }
-
-        const result = takeClosedTab(closed, store, target)
-
-        if (result.stack.length === closed.length) return
-        setClosed(() => result.stack)
-        const entry = result.entry
-
-        if (!entry) return
-        const index = options?.append ? store.length : Math.min(entry.index, store.length)
-
-        if (entry.info) setInfo(tabKey(entry.tab), entry.info)
-        void startTransition(() => {
-          setStore(
-            produce((tabs) => {
-              if (tabs.some((item) => tabKey(item) === tabKey(entry.tab))) return
-              tabs.splice(index, 0, entry.tab)
-            }),
-          )
-          navigateTab(entry.tab)
-        })
+        dispatchHydration({ type: "closed.op", op: { kind: "reopen", target, options } })
       },
       removeSessionTab(input: Omit<SessionTab, "type">) {
         const current = preview.current()
@@ -663,7 +721,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const key of removed) removeInfo(key)
 
-        if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
+        if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
       },
@@ -725,7 +783,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
               }),
             )
 
-            if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
+            if (removed.some((key) => key === recentKey())) setRecentKey(undefined)
           },
         )
 

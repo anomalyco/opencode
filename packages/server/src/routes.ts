@@ -14,12 +14,15 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
+import { BlobStore } from "@opencode/core/blob-store"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { Shell } from "@opencode/core/shell"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -29,9 +32,8 @@ import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { ModelsDev } from "@opencode/core/models-dev"
-import { ConsoleAccess } from "@opencode/core/console-access"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
-import { Schedule } from "@opencode/core/schedule"
+import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -47,6 +49,7 @@ import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
 import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
@@ -55,11 +58,17 @@ import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
+  App.node,
   Global.node,
   FSUtil.node,
   Database.node,
   KV.node,
   Bus.node,
+  // Before the jobs and sessions, so they are released after them: a shutdown's interrupted shell calls and jobs
+  // still reach the daemon to stop their commands, and a command being created never falls back to spawning.
+  PersistentPty.node,
+  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
+  Shell.daemonNode,
   EventLogger.node,
   httpClient,
   Job.node,
@@ -74,14 +83,17 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
-  PersistentPty.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
-  Schedule.node,
+  Automation.node,
+  // Its hourly cleanup belongs to the server.
+  BlobStore.node,
+  // Its polling fibers belong to the server, not to the request that started them.
+  VideoGeneration.node,
   Workspace.node,
   FileWatch.node,
 ] as const
@@ -129,7 +141,6 @@ function makeRoutes<AuthError, AuthServices>(
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
     httpFetch.replace(fetchLayer(options.fetch)),
-    ConsoleAccess.node.replace(ConsoleAccess.configured(options.console)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
     FileWatch.node.replace(FileWatch.configured({ enabled: options.fs?.filewatcher })),
     FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),
@@ -196,6 +207,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
+        Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
       )

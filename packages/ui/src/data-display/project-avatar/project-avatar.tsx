@@ -147,6 +147,8 @@ export interface ProjectAvatarProps extends ComponentProps<"div"> {
   unread?: boolean
   /** Seeds the generated default avatar shown when there is no image; see getProjectAvatarGenerated. */
   generated?: string
+  /** Text stacked over the avatar, hidden until the caller's CSS reveals `[data-slot="project-avatar-label"]`. */
+  label?: string
 }
 
 export function ProjectAvatar(props: ProjectAvatarProps) {
@@ -156,6 +158,7 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
     "variant",
     "unread",
     "generated",
+    "label",
     "class",
     "classList",
     "style",
@@ -184,12 +187,22 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
         <Show
           when={split.src}
           fallback={
-            <Show when={generated()} fallback={first(split.fallback)}>
+            <Show
+              when={generated()}
+              fallback={<span data-slot="project-avatar-initial">{first(split.fallback)}</span>}
+            >
               {(key) => <GeneratedAvatar seed={key()} />}
             </Show>
           }
         >
           {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
+        </Show>
+        <Show when={split.label}>
+          {(label) => (
+            <span data-slot="project-avatar-label" aria-hidden="true">
+              {label()}
+            </span>
+          )}
         </Show>
       </div>
       <Show when={split.unread}>

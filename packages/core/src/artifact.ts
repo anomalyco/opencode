@@ -20,7 +20,7 @@ import { Global } from "@opencode/util/global"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Bus } from "./bus.js"
-import { Config } from "./config.js"
+import { Flag } from "./flag.js"
 import { KV } from "./kv.js"
 import { Location } from "./location.js"
 import { Mime } from "./mime.js"
@@ -204,7 +204,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const config = yield* Config.Service
+    const flags = yield* Flag.Service
     const global = yield* Global.Service
     const kv = yield* KV.Service
     const location = yield* Location.Service
@@ -263,10 +263,7 @@ const layer = Layer.effect(
       notify: State.changes(snapshotProviders, () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid)),
     })
 
-    const isEnabled = Effect.fn("Artifact.enabled")(function* () {
-      const entries = yield* config.entries()
-      return Config.latest(entries, "experimental")?.artifacts === true
-    })
+    const isEnabled = Effect.fn("Artifact.enabled")(() => flags.enabled("artifacts"))
 
     const requireEnabled = () =>
       isEnabled().pipe(Effect.flatMap((on) => (on ? Effect.void : Effect.fail(new DisabledError()))))
@@ -455,7 +452,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Config.node, Global.node, KV.node, Location.node, Session.node],
+  deps: [Bus.node, Flag.node, Global.node, KV.node, Location.node, Session.node],
 })
 
 function encodeStringFiles(files: Readonly<Record<string, string>>) {
