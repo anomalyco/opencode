@@ -29,10 +29,23 @@ export function RefusalBar(props: {
 
     const visibility = new IntersectionObserver(
       ([entry]) => {
-        inView = entry?.intersectionRatio === 1
+        // At a fractional zoom the clip is snapped to device pixels while the box is not, so a fully shown target can
+        // report a ratio just under 1. A cut of less than one device pixel on every edge cannot hide a glyph row; a
+        // ratio tolerance could hide a whole last line of a tall target.
+        const pixel = 1 / window.devicePixelRatio
+        const box = entry?.boundingClientRect
+        const clip = entry?.intersectionRect
+        inView =
+          !!entry?.isIntersecting &&
+          !!box &&
+          !!clip &&
+          clip.left - box.left < pixel &&
+          clip.top - box.top < pixel &&
+          box.right - clip.right < pixel &&
+          box.bottom - clip.bottom < pixel
         setFits(fullyShown())
       },
-      { threshold: 1 },
+      { threshold: [0, 0.99, 1] },
     )
 
     observer.observe(text)
