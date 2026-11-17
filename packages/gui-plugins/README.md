@@ -344,6 +344,7 @@ when the agent uses the tab. `close` returns true only for a tab closed now; a p
 | `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                           |
 | `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                         |
 | `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
+| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                |
 | `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
 | `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
 | `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |

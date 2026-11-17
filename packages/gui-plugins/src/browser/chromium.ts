@@ -243,7 +243,7 @@ export function createBrowserPage(
     partition: string
     network: BrowserNetwork | null
     publish: (error?: string) => void
-    refused: (notice: RefusalNotice, token: string) => void
+    refused: (notice: RefusalNotice, token: string, site?: string) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
     /** Reports the page's icon or zoom changing. */
@@ -357,9 +357,12 @@ export function createBrowserPage(
 
   if (detachNetwork) constructing.defer(detachNetwork)
   let nativeMenu = true
+  // Tab focus and browser chrome commands also update activity.userInputAt. Neither is input to this document.
+  let documentInput = false
   contents.on("before-mouse-event", (_event, mouse) => {
     // Unlike keyboard events, Electron 44 does not expose the Blink modifiers on mouse events.
     if (mouse.type === "mouseDown" && activity.agentRuns === 0) {
+      documentInput = true
       nativeMenu = true
       recordPageInput(activity, "user")
       options.userInput()
@@ -372,6 +375,7 @@ export function createBrowserPage(
 
     if (!hardware || input.type !== "keyDown") return
 
+    documentInput = true
     nativeMenu = true
     recordPageInput(activity, "user")
     options.userInput()
@@ -484,9 +488,16 @@ export function createBrowserPage(
   const attachFrames = (sessionID?: string) => attachChildren(cdp, sessionID)
 
   const activity = options.activity
-  const notices = noticeActions(options.refused, options.menu.open)
+
+  const notices = noticeActions((notice, token) => options.refused(notice, token, destinationOrigin(contents.getURL())), {
+    tab: options.menu.open,
+    app: (url) => electron.shell.openExternal(url),
+    copy: (url) => electron.clipboard.writeText(url),
+  })
+
+  constructing.defer(notices.clear)
   const registerArtifactLinks = artifactLinks(cdp, () => artifactHost, target => notices.show({reason:"popup",target,action:"tab"}))
-  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity)))
+  const refused = (url: string) => notices.show(navigationNotice(url, policy, activityOwner(activity), documentInput))
   let popupReport: Protocol.Page.WindowOpenEvent | undefined
   cdp.on("Page.windowOpen", (event) => { popupReport = event })
   let dialogGate = createDialogGateState()
@@ -719,6 +730,9 @@ export function createBrowserPage(
   contents.on("did-start-loading", () => dispatch({ type: "loading.started" }))
   contents.on("did-stop-loading", () => dispatch({ type: "loading.stopped", title: pageTitle() }))
   contents.on("did-start-navigation", (event) => {
+    // A load no frame started (the address bar, a link from the conversation, history) may redirect before it commits.
+    // Input in the page it leaves is not input in the page that redirects.
+    if (event.isMainFrame && !event.isSameDocument && !event.initiator) documentInput = false
     navigation.nativeStart(event)
     dispatch({
       type: "navigation.started",
@@ -731,6 +745,7 @@ export function createBrowserPage(
     dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
   )
   contents.on("did-navigate", () => {
+    documentInput = false
     const url = contents.getURL()
 
     if (options.artifacts?.display(url)) artifactHost = new URL(url).host
@@ -746,6 +761,7 @@ export function createBrowserPage(
   )
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame) return
+    documentInput = false
     const report = (address: string) => dispatch({ type: "navigation.in-page", url: address, title: pageTitle(address), isMainFrame })
 
     if (!/^(?:oc-preview|file):/i.test(url)) return report(url)
@@ -1200,6 +1216,7 @@ export function createBrowserPage(
     answerNotice: notices.answer,
     personCommand,
     openPage,
+    reviewLink: (url: string) => notices.show(navigationNotice(url, policy, "conversation")),
     /** Refuses passkeys in the browser process from now on, for a tab the agent drives or a tab that can script one. */
     restrictPasskeys,
     ready,
@@ -1347,6 +1364,7 @@ export function createBrowserPage(
     async dispose() {
       if (closed()) return
       pageLifetime.abort()
+      notices.clear()
       // Even a failed cleanup of an embed, recorder or already detached debugger must not orphan its native page.
       using closing = new DisposableStack()
       closing.defer(() => { if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false }) })

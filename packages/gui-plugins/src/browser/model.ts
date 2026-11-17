@@ -68,7 +68,7 @@ type ModelState = {
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
   chrome: Record<
     string,
-    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string }; prompt?: PromptView } | undefined> | undefined
+    Record<string, { find?: FindView; notice?: RefusalNotice & { token: string; site?: string }; prompt?: PromptView } | undefined> | undefined
   >
 }
 
@@ -326,7 +326,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "find" || event.type === "refusal") {
       setState("chrome", sessionKey, (old) => ({ ...old, [event.tabID]: {
-        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token } }),
+        ...old?.[event.tabID], ...(event.type === "find" ? { find: event.view ?? undefined } : { notice: { ...event.notice, token: event.token, site: event.site } }),
       } }))
 
       return
@@ -682,33 +682,51 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** A page's icon and zoom, once this desktop reported them. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     search: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.find,
+    reviewLink(session: SessionRef, url: string) {
+      if (!available(session)) return
+
+      if (url.length > 2048) {
+        ctx.toast.show({ title: describe("browser.address.web") })
+
+        return Promise.resolve()
+      }
+
+      return registration(session)?.reviewLink(url).then((id) => {
+        if (!ctx.signal.aborted && sessions.current()?.key === session.key) layout.open(key(id), session, { tab: "select" })
+      })
+    },
     notice(session: Session, tabID: string) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
 
       if (!notice) return
+      const conversation = "source" in notice && notice.source === "conversation"
+      const origin = conversation ? ctx.t("notice.conversation") : notice.site ? ctx.t("notice.site", { site: notice.site }) : ctx.t("notice.page")
 
       if (notice.reason === "external" || notice.reason === "popup") return {
         token: notice.token,
-        text: ctx.t(notice.reason === "external" ? "refused.external" : "refused.popup"), target: notice.target,
+        origin,
+        opensApp: notice.action === "open",
+        text: notice.reason === "external" ? ctx.t("refused.scheme", { scheme: notice.target.split(":", 1)[0] }) : ctx.t("refused.popup"), target: notice.target,
         label: notice.action && ctx.t(notice.action === "copy" ? "link.copy" : "refused.open"),
       }
 
       // Where the system's dialog works, a new tab does; elsewhere the action brings the site's sign-in from the user's
       // own browser, which the pane opens the import for, with the site chosen only in a tab of the person's.
       if (notice.reason === "browser.passkey.off")
-        return { token: notice.token, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
+        return { token: notice.token, origin, text: ctx.t("refused.passkey.off"), label: ctx.t("refused.passkey.newTab"), passkey: { newTab: true } }
 
       if (notice.reason === "browser.passkey" || notice.reason === "browser.passkey.agent")
         return {
           token: notice.token,
+          origin,
           text: ctx.t("refused.passkey"),
           label: ctx.t("refused.passkey.import"),
           passkey: { site: notice.site, choose: notice.reason === "browser.passkey" },
         }
 
-      return { token: notice.token, text: describe(notice.reason) }
+      return { token: notice.token, origin, text: describe(notice.reason) }
     },
-    async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean) {
+    async answerNotice(session: Session, tabID: Browser.TabID, dismiss: boolean, copy?: boolean) {
       const notice = state.chrome[session.key]?.[tabID]?.notice
 
       if (!notice) return
@@ -716,7 +734,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const target = registration(session)
 
       if (!target) throw new Error("browser.pane.unavailable")
-      await target.notice(tabID, notice.token, dismiss)
+      await target.notice(tabID, notice.token, dismiss, copy)
     },
     /** What the tab waits on the user for. */
     prompt: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.prompt,

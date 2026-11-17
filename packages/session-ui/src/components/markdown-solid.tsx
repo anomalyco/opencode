@@ -1,4 +1,4 @@
-import { For, onMount } from "solid-js"
+import { createMemo, For, onMount } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Dynamic, render } from "solid-js/web"
 
@@ -12,6 +12,7 @@ type MarkdownNode =
       animate?: true
     }
   | { key: string; type: "text"; text: string }
+  | { key: string; type: "math"; element: MathMLElement }
   | { key: string; type: "word"; text: string; animate?: true }
 
 export function createMarkdownRenderer(root: HTMLDivElement, source: ParentNode, words: boolean) {
@@ -37,6 +38,12 @@ function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) 
   const node = props.node
 
   if (node.type === "text") return node.text
+
+  if (node.type === "math") {
+    const math = createMemo(() => node.element, undefined, { equals: (a, b) => a.isEqualNode(b) })
+
+    return <>{math()}</>
+  }
 
   if (node.type === "word") {
     let ref: HTMLSpanElement | undefined
@@ -84,6 +91,10 @@ function parseNode(node: Node, key: string, words: boolean, animate: boolean, in
   }
 
   if (!(node instanceof Element)) return []
+
+  // Keep the MathML namespace: Dynamic would recreate its descendants as HTML elements.
+  if (node.localName === "math" && typeof MathMLElement !== "undefined" && node instanceof MathMLElement)
+    return [{ key: `${key}:math`, type: "math", element: node }]
   const code = node.tagName === "CODE" && node.parentElement?.tagName !== "PRE"
 
   const element: Extract<MarkdownNode, { type: "element" }> = {

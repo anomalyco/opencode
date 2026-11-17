@@ -160,7 +160,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     createTab: async (input, caller) => (await pane()).createTab(caller.window, input.binding, input.owner, input.url),
     closeTab: async (input, caller) => (await pane()).closeTab(caller.window, input.binding, input.owner, input.id),
     find: async (input, caller) => (await pane()).find(caller.window, input.binding, input.tabID, input.action),
-    notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss),
+    notice: async (input, caller) => (await pane()).notice(caller.window, input.binding, input.tabID, input.token, input.dismiss, input.copy),
+    reviewLink: async (input, caller) => (await pane()).reviewLink(caller.window, input.binding, input.url),
     answer: async (input, caller) =>
       (await pane()).answer(caller.window, input.binding, input.tabID, input.id, input.answer),
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),

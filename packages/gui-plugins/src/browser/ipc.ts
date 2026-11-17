@@ -42,7 +42,7 @@ const FindView = Schema.Struct({
 export type FindView = typeof FindView.Type
 
 const RefusalNotice = Schema.Union([
-  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]) }),
+  Schema.Struct({ reason: Schema.Literals(["browser.address.credentials", "browser.address.workspace", "browser.address.web", "browser.preview.restricted", "browser.preview.agentRestricted"]), source: Schema.optionalKey(Schema.Literal("conversation")) }),
   // A site asked for a passkey or security key, refused at once: this browser shows no request for it, in a tab of the
   // person's or (`agent`) one the agent drives; or (`off`) the system's dialog would answer, but the tab refuses since
   // the agent used it or a window linked to it. `site` is the page's registrable domain.
@@ -50,7 +50,7 @@ const RefusalNotice = Schema.Union([
     reason: Schema.Literals(["browser.passkey", "browser.passkey.agent", "browser.passkey.off"]),
     site: Schema.optionalKey(text(255)),
   }),
-  Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), action: Schema.Literals(["open", "copy"]) }),
+  Schema.Struct({ reason: Schema.Literal("external"), target: text(2048), source: Schema.Literals(["conversation", "page"]), action: Schema.Literals(["open", "copy"]) }),
   Schema.Struct({ reason: Schema.Literal("popup"), target: text(16384), action: Schema.optionalKey(Schema.Literal("tab")) }),
 ])
 
@@ -150,7 +150,7 @@ export type PromptAnswer = typeof PromptAnswer.Type
 
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("find"), tabID: Browser.TabID, view: Schema.NullOr(FindView) }),
-  Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice, token: text(128) }),
+    Schema.Struct({ type: Schema.Literal("refusal"), tabID: Browser.TabID, notice: RefusalNotice, token: text(128), site: Schema.optional(Schema.String) }),
   // What the tab waits on the user for; null once nothing waits.
   Schema.Struct({ type: Schema.Literal("prompt"), tabID: Browser.TabID, prompt: Schema.NullOr(PromptView) }),
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
@@ -239,7 +239,8 @@ export const BrowserPane = Ipc.define({
     createTab: { input: Schema.Struct({ binding, owner: text(128), url: text(16_384) }), output: PluginTabHandle },
     closeTab: { input: Schema.Struct({ binding, owner: text(128), id: PluginTabHandle }), output: Schema.Boolean },
     find: { input: Schema.Struct({ binding, tabID: Browser.TabID, action: FindAction }) },
-    notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean }) },
+    notice: { input: Schema.Struct({ binding, tabID: Browser.TabID, token: text(128), dismiss: Schema.Boolean, copy: Schema.optional(Schema.Boolean) }) },
+    reviewLink: { input: Schema.Struct({ binding, url: text(2048) }), output: Browser.TabID },
     // The user answers what the tab waits for; an answer to a prompt that already ended does nothing.
     answer: { input: Schema.Struct({ binding, tabID: Browser.TabID, id: Schema.Int, answer: PromptAnswer }) },
     // Starts or stops the page's element picker; the page reports picks and exits as inspect events.

@@ -34,7 +34,11 @@ import {
   type CodeBlockProps,
   type MountedSession,
 } from "@opencode/plugin/gui"
-import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
+import { BuiltinAppLink, BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
+import { usePlatform } from "@/runtime/platform/platform"
+import { useLanguage } from "@/runtime/i18n/language"
+import { showToast } from "@/shell/notifications/toast"
+import { createAppLinks } from "./app-links"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost, type Item } from "./host"
 import { createLinkCheck } from "./link-check"
@@ -156,6 +160,7 @@ export function PluginThemes(props: { loaded: () => boolean }) {
 export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
+  const desktop = usePlatform().platform === "desktop"
 
   // Checks untracked: markdown calls this inside its render effect, which must not follow the routed session.
   const localFileExists = createLinkCheck(
@@ -165,6 +170,7 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 
   const Links = (inner: ParentProps<{ codeBlocks: MarkdownCodeBlocks | false }>) => (
     <MarkdownProvider
+      appLinks={desktop}
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
       localFileExists={localFileExists}
@@ -196,6 +202,14 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
  */
 export function createWebLinks(session: () => MountedSession) {
   const host = usePluginHost()
+  const language = useLanguage()
+
+  if (usePlatform().platform === "desktop") createAppLinks((href) => {
+    const handler = host.items(BuiltinAppLink)[0]
+
+    if (handler) return handler.value.review(href)
+    showToast({ title: language.t("common.requestFailed") })
+  })
 
   makeEventListener(document, "click", (event) => {
     const href = webLink(event, session)

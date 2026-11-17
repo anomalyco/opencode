@@ -9,6 +9,20 @@ import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
 
+/** Receives a person's activation of an application link on the desktop session screen. Unlike Links.open, this
+ * registry is not a programmatic way to open a URL.
+ * @example
+ * ```ts
+ * ctx.add(BuiltinAppLink, { review: (href) => review(href) })
+ * ```
+ */
+export const BuiltinAppLink = Registry.define<{
+  /** Reviews the target; never launches the address directly.
+   * @param href - The written target, not the link's label.
+   */
+  review(href: string): void
+}>("app-link")
+
 /**
  * Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Load lazy
  * chunks this way from setup, so they are compiled before a session first opens.

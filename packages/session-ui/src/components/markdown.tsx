@@ -34,6 +34,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import {
   getCachedMarkdown,
+  enableMarkdownAppLinks,
   getReadyMarkdown,
   renderCachedMarkdown,
   touchCachedMarkdown,
@@ -1111,7 +1112,7 @@ export function Markdown(
 
       const check = kept
         ? inlineCodeChecks.get(current)?.pending
-        : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
+          : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, markdown?.appLinks, localFileExists)
 
       return check ? [check] : []
     })
@@ -1273,9 +1274,10 @@ function updateBlock(
   plugins: CodePlugins | undefined,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
+  appLinks: boolean | undefined,
   localFileExists?: MarkdownLocalFileExists,
 ) {
-  const current = container.children[index]
+    const current = container.children[index]
 
   if (block.mode === "code") {
     updateCodeBlock(container, current, block, labels, plugins)
@@ -1311,6 +1313,8 @@ function updateBlock(
 
   if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
+
+  if (appLinks) enableMarkdownAppLinks(source)
   const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)
   wrapTables(source)

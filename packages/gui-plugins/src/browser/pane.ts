@@ -417,10 +417,23 @@ export function createBrowserPane(input: {
 
       return target?.nativeID
     },
-    notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean) {
+    notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean) {
       owned(window, binding)
 
-      return page(binding, tabID)?.answerNotice(token, dismiss)
+      return page(binding, tabID)?.answerNotice(token, dismiss, copy)
+    },
+    async reviewLink(window: number, binding: string, url: string) {
+      owned(window, binding)
+      const focused = selectBinding(machine.state, binding)?.focusedTabID
+      const tab = (focused && page(binding, focused)) || create(binding)
+      const id = tab.state().id
+      await tab.ready
+
+      if (page(binding, id) !== tab) throw new Error("browser.pane.unavailable")
+      dispatchBinding(binding, { type: "tab.focused", tabID: id })
+      tab.reviewLink(url)
+
+      return id
     },
     find(window: number, binding: string, tabID: Browser.TabID, action: FindAction) {
       owned(window, binding)
@@ -828,8 +841,8 @@ export function createBrowserPane(input: {
         void runtime.runFork(Effect.logWarning(message))
       },
       fail,
-      refused: (notice, token) => {
-        if (current()) emit(binding, { type: "refusal", tabID: id, notice, token })
+      refused: (notice, token, site) => {
+        if (current()) emit(binding, { type: "refusal", tabID: id, notice, token, site })
       },
       publish: (error) => {
         if (current()) dispatchBinding(binding, { type: "tab.published", tabID: id, attempt, tab: page.state(), error })

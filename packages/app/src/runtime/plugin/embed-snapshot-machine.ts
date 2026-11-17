@@ -36,7 +36,7 @@ export type EmbedSnapshotState =
       readonly issued: number
       readonly attempt: number
       readonly id: string
-      readonly url: string
+      readonly url: string | undefined
     }
   | { readonly status: "disposed" }
 
@@ -85,6 +85,8 @@ const EMPTY_EFFECTS: readonly EmbedSnapshotEffect[] = Object.freeze([])
 
 const LAYOUT: readonly EmbedSnapshotEffect[] = Object.freeze([{ type: "layout.schedule" }])
 
+const THAW_STOP: readonly EmbedSnapshotEffect[] = Object.freeze([{ type: "thaw-timer.stop" }])
+
 export function transitionEmbedSnapshot(state: EmbedSnapshotState, event: EmbedSnapshotEvent): EmbedSnapshotTransition {
   // A capture that settles after its attempt ended still owns its URL.
   if (event.type === "capture.settled" && (state.status !== "capturing" || state.attempt !== event.attempt))
@@ -101,9 +103,11 @@ export function transitionEmbedSnapshot(state: EmbedSnapshotState, event: EmbedS
 
     return {
       state: { status: "painting", issued: state.issued, attempt: state.attempt, id: state.id, url: event.url },
+      // Measure again: a warm still already on screen can take over from the native view now the capture is done.
       effects: [
         { type: "capture-timer.stop" },
         { type: "paint-timer.start", attempt: state.attempt, delayMs: SNAPSHOT_PAINT_TIMEOUT_MS },
+        { type: "layout.schedule" },
       ],
     }
   }
@@ -118,7 +122,11 @@ export function transitionEmbedSnapshot(state: EmbedSnapshotState, event: EmbedS
     return frozen(state, state.url, LAYOUT)
 
   if (event.type === "thaw.settled" && state.status === "thawing" && state.attempt === event.attempt)
-    return { state: { status: "live", issued: state.issued }, effects: [{ type: "url.revoke", url: state.url }] }
+    return {
+      state: { status: "live", issued: state.issued },
+      // Measure again: a warm still that covered the thaw comes down with it.
+      effects: state.url ? [{ type: "url.revoke", url: state.url }, { type: "layout.schedule" }] : LAYOUT,
+    }
 
   return unchanged(state)
 }
@@ -132,9 +140,19 @@ export function selectSnapshotUrl(state: EmbedSnapshotState, id: string | undefi
   return state.id === id ? state.url : undefined
 }
 
-/** Whether the native view of `id` hides under the cover, because a frame has presented its still. */
-export function selectSnapshotHidesNative(state: EmbedSnapshotState, id: string | undefined, covered: boolean) {
-  return covered && id !== undefined && state.status === "frozen" && state.id === id
+/**
+ * Whether the native view of `id` hides under the cover: a frame has presented its still, or a warm still is already
+ * on screen and the capture, which needs the view visible, has returned.
+ */
+export function selectSnapshotHidesNative(state: EmbedSnapshotState, id: string | undefined, covered: boolean, warm = false) {
+  if (!covered || id === undefined || state.status === "live" || state.status === "disposed" || state.id !== id) return false
+
+  return state.status === "frozen" || (warm && state.status === "painting")
+}
+
+/** Whether the box wants a still under or instead of the native view: while covered, and until the view repaints. */
+export function selectSnapshotWantsStill(state: EmbedSnapshotState, id: string | undefined, covered: boolean) {
+  return covered || (state.status === "thawing" && state.id === id)
 }
 
 /** The still Element Timing should report, or undefined when none waits for its frame. */
@@ -179,7 +197,7 @@ function syncStep(
   if (state.status === "frozen") {
     if (covered) return "keep"
 
-    return shown && state.url !== undefined ? "thaw" : "release"
+    return shown ? "thaw" : "release"
   }
 
   if (covered) return "refreeze"
@@ -208,7 +226,7 @@ function sync(
     }
   }
 
-  if (step === "thaw" && state.status === "frozen" && state.url !== undefined) {
+  if (step === "thaw" && state.status === "frozen") {
     const attempt = state.issued + 1
 
     return {
@@ -230,7 +248,8 @@ function release(state: EmbedSnapshotState): readonly EmbedSnapshotEffect[] {
 
   if (state.status === "frozen") return state.url ? [{ type: "url.revoke", url: state.url }] : EMPTY_EFFECTS
 
-  if (state.status === "thawing") return [{ type: "thaw-timer.stop" }, { type: "url.revoke", url: state.url }]
+  if (state.status === "thawing")
+    return state.url ? [{ type: "thaw-timer.stop" }, { type: "url.revoke", url: state.url }] : THAW_STOP
 
   return EMPTY_EFFECTS
 }

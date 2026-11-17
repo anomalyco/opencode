@@ -1031,10 +1031,10 @@ export default function SessionBrowserPane(props: {
               {(notice) => (
                 <RefusalBar
                   notice={notice()}
-                  answer={async (dismiss) => {
+                  answer={async (dismiss, copy) => {
                     const passkey = notice().passkey
 
-                    if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss)
+                    if (dismiss || !passkey) return props.model.answerNotice(props.session, id, dismiss, copy)
 
                     if ("newTab" in passkey) {
                       const url = address()

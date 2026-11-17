@@ -1,4 +1,5 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { uuid } from "@opencode/util/uuid"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
@@ -54,10 +55,12 @@ import SessionBrowserPane from "./panel"
 import { BrowserPane, PluginTabHandle, type PaneEvent, type PromptAnswer, type PromptView } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
+import { navigationNotice } from "./refusal-notice"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
+  createAppLinks(review: (href: string) => void): void
   createEmbeds(input: {
     bridge: Bridge | undefined
     zoom: () => number
@@ -85,6 +88,7 @@ type PaneFixtureState = {
   loadErrors: Record<string, string | undefined>
   error: string | undefined
   layouts: Record<string, BridgeLayout | undefined>
+  layoutCalls: number
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
@@ -94,6 +98,8 @@ type PaneFixtureState = {
   dialog: boolean
   captures: number
   holdCapture: boolean
+  /** Main returns no still, as when the view cannot be captured. */
+  failCapture: boolean
   picker: Record<string, boolean | undefined>
   /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
   dropInspect: boolean
@@ -192,12 +198,14 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       loadErrors: scenario === "Failed" ? { Alpha: "ERR_CONNECTION_REFUSED" } : {},
       error: scenario === "Suspended" ? "browser.pane.suspended" : undefined,
       layouts: {},
+      layoutCalls: 0,
       covered: false,
       moving: false,
       width: 640,
       dialog: false,
       captures: 0,
       holdCapture: false,
+      failCapture: false,
       picker: {},
       dropInspect: false,
       highlights: [],
@@ -242,12 +250,17 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         return () => windowFocus.delete(listener)
       },
-      embed: (id, layout) => setStore("layouts", id, layout),
+      embed: (id, layout) => batch(() => {
+        setStore("layoutCalls", count => count + 1)
+        setStore("layouts", id, layout)
+      }),
       capture: async () => {
         const count = store.captures + 1
         setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
+
+        if (store.failCapture) return undefined
         // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
         const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
@@ -481,6 +494,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         } })
       },
       notice: async () => undefined,
+      reviewLink: async ({ url }) => {
+        const tabID = tabs[0].id
+        emit(store.session, { type: "refusal", tabID, token: uuid(), notice: navigationNotice(url, {}, "conversation") })
+
+        return tabID
+      },
       // Main answers the page, which then waits on nothing.
       answer: async (value) => {
         setStore("answers", (answers) => [...answers, value.answer])
@@ -548,6 +567,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
+
+    if ("createAppLinks" in input) input.createAppLinks((href) => {
+      const view = session()
+
+      if (view) void model.reviewLink(view, href)
+    })
 
     const pick = (rect?: ElementRect) => {
       const selector = () => {
@@ -738,6 +763,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
           {/* Below the pane, so the pane keeps the place the geometry specs measure. */}
           <nav>
+            <button onClick={() => setStore("failCapture", true)}>Fail capture</button>
             <button
               onClick={() =>
                 emit(store.session, {
@@ -906,6 +932,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             {(tab) => (
               <div
                 data-testid={`native-${tab.title}`}
+                data-x={store.layouts[`embed-${tab.title}`]?.bounds?.x}
+                data-layout-calls={store.layoutCalls}
                 data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >
@@ -1278,6 +1306,7 @@ export function mountBrowserRegion(input: RegionHost) {
       clearCache: async () => undefined,
       find: async () => undefined,
       notice: async () => undefined,
+      reviewLink: async () => tabID,
       // Main answers the page, which then waits on nothing.
       answer: async () => ask(null),
       reveal: async () => undefined,
