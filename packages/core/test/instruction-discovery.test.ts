@@ -622,7 +622,9 @@ describe("ConfigInstructionPlugin.Plugin", () => {
             const watcher = yield* Watcher.Test
             expect(yield* watcher.subscriptions()).toEqual([
               { path: path.join(global, "AGENTS.md"), type: "file" },
+              { path: path.join(home, ".claude", "CLAUDE.md"), type: "file" },
               { path: path.join(directory, "AGENTS.md"), type: "file" },
+              { path: path.join(directory, "CLAUDE.md"), type: "file" },
             ])
             expect((yield* readInitial(yield* discovery.load())).text).toBe(
               `Instructions from: ${path.join(directory, "AGENTS.md")}\nproject`,
