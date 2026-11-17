@@ -1544,3 +1544,26 @@ fn a_kept_fence_counts_against_the_one_a_tree_holds() {
         assert_eq!(apply(&host, &mut tree, &parent, &alone), Err(Refused::Fence), "outside a fence claim: {first:?}");
     }
 }
+
+// Expected (carbon c2a-3): a fence node on a theme's token, kept by a revision in a new theme, takes the new theme's
+// color, as the same tree adopted afresh in that theme has it.
+#[test]
+fn a_kept_fence_node_restyles() {
+    let tree = || {
+        let fence = v2::Node::fence().bg("background.raised.base").with_id("code");
+        vec![v2::Node::column(vec![v2::Node::column(vec![fence]).with_id("card")]).with_id("page")]
+    };
+    let host = host(0);
+    let parent = root(&host);
+    let mut kept = Tree::default();
+    apply_fenced(&host, &mut kept, &parent, &tree()).unwrap();
+    *host.theme.borrow_mut() = theme(1);
+    apply_fenced(&host, &mut kept, &parent, &[v2::Node::keep("page")]).unwrap();
+    let restyled = host.app.render();
+    let fresh = self::host(1);
+    let parent = root(&fresh);
+    apply_fenced(&fresh, &mut Tree::default(), &parent, &tree()).unwrap();
+    let built = fresh.app.render();
+    assert_ne!(theme(0).background.raised.base, theme(1).background.raised.base, "the themes share the color");
+    assert!(restyled.cells == built.cells, "the kept fence kept its old color:\n{}", restyled.text());
+}
