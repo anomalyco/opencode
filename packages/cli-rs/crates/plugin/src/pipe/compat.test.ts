@@ -355,7 +355,8 @@ test("@opencode/plugin/effect serves Rpc", () => {
 
 // CT-2: an element is an event emitter, as an OpenTUI renderable is, so file-browser's `element.on("focus", …)` does
 // not crash its route; `focus()` of a field asks the host to focus it by its id and emits `focused`, another node's
-// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone.
+// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone. A scroll box's
+// moves are the contract's verbs.
 test("an element's focus is the host's and it emits as OpenTUI's renderables", async () => {
   const fake = host()
   const ctx = plugin("t.focus", fake)
@@ -394,10 +395,13 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   fake.push(`scroll:${surface}:list`, { offset: 4, viewport: 10, extent: 30 })
   expect([refs.list.scrollTop, refs.list.viewport.height, refs.list.scrollHeight]).toEqual([4, 10, 30])
   refs.list.scrollBy(2)
+  // `scrollChildIntoView` is the least scroll that shows the row (opencode-session-manager's selection).
+  refs.list.scrollChildIntoView("row-3")
   await turn()
   const target = { type: "node", surface, id: "list" }
   expect(fake.effects.filter((effect: Json) => effect.type === "scroll")).toEqual([
     { type: "scroll", target, verb: { type: "offset", offset: 6 } },
+    { type: "scroll", target, verb: { type: "to", node: "row-3", align: { type: "nearest" } } },
   ])
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
 })
@@ -472,6 +476,19 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   // Said once in the client's log, not in a toast over the plugin's own route (P.8/file-browser's searching).
   expect(fake.warnings()).toEqual(["t.keys: focus() of an <input> is not supported by opencode-native yet"])
   expect(fake.toasts()).toEqual([])
+})
+
+// Ports trio (opencode-session-manager): TS renders a route into a column that fills the page, so the root of a
+// route's tree grows, and a `flexGrow` box in it fills the page; a slot's root does not.
+test("a route's tree fills the page", () => {
+  const fake = host()
+  const ctx = plugin("t.fill", fake)
+  ctx.ui.router.register({ name: "page", render: () => h("box", { flexGrow: 1, children: h("text", { children: "p" }) }) })
+  ctx.ui.slot({ append: "home.footer", render: () => h("text", { children: "s" }) })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  const tree = route.view({ mount: { surface: "page", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  expect([tree.layout, tree.children[0].layout]).toEqual([{ grow: true }, { grow: true }])
+  expect(view(fake, fake.surfaces.indexOf(fake.surfaces.find((surface: Json) => surface.place.type !== "route")), "a").draw().layout).toBeUndefined()
 })
 
 // CT-18: a box's border as OpenTUI's: `true` or an array of sides draws, anything else (`{ type: "single" }`, the

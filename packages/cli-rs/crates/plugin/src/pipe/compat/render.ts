@@ -31,6 +31,7 @@ export interface Focus {
 export interface Scrolls {
   state(node: VNode): { offset: number; viewport: number; extent: number } | undefined
   to(node: VNode, offset: number): void
+  into?(node: VNode, child: string): void
   rect?(node: VNode): Rect | undefined
 }
 
@@ -148,6 +149,12 @@ export class VNode {
 
   scrollBy(by: number | { y?: number }) {
     this.scrollTo(this.scrollTop + (typeof by === "number" ? by : (by?.y ?? 0)))
+  }
+
+  // OpenTUI's `ScrollBoxRenderable.scrollChildIntoView`: the least scroll that shows the descendant with id `id`, the
+  // contract's `to` verb with the nearest alignment (ports trio: opencode-session-manager keeps its selection in view).
+  scrollChildIntoView(id: string) {
+    rootOf(this).owner?.scrolls?.into?.(this, id)
   }
 
   // A field's text, as OpenTUI's `InputRenderable.value`: what was typed in the host's field, else the plugin's.

@@ -740,6 +740,8 @@ export function context(base: Base, carrier: Carrier) {
     return {
       state: (node) => read(`scroll:${surface}:${idOf(node)}`, { type: "scroll-state", target: target(node) }) ?? undefined,
       to: (node, offset) => void carrier.effect({ type: "scroll", target: target(node), verb: { type: "offset", offset } }),
+      into: (node, child) =>
+        void carrier.effect({ type: "scroll", target: target(node), verb: { type: "to", node: child, align: { type: "nearest" } } }),
       rect(node) {
         const key = `rect:${surface}:${idOf(node)}`
         measuring.set(key, node)
@@ -849,6 +851,9 @@ export function context(base: Base, carrier: Carrier) {
         const tree = serialize(entry.root, reading)
         for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
         missing.clear()
+        // TS renders a route into a column that fills the page, so a `flexGrow` box in it fills the page's height, and
+        // a scrollbox in that its rest (ports trio: opencode-session-manager drew no rows). The root fills it here too.
+        if (place.type === "route") tree.layout = { ...tree.layout, grow: true }
         return tree
       } catch (error) {
         crashed(error)
