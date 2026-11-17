@@ -1,34 +1,13 @@
 import { expect, test } from "bun:test"
 import { TextareaRenderable } from "@opentui/core"
+import type { Config } from "../src/config"
 import { createAppFixture } from "./fixture/app"
 import { session } from "./fixture/local"
 import { directory, json } from "./fixture/tui-client"
 
 test("Down moves through a multiline prompt before opening the subagent picker with history disabled", async () => {
-  const active = session("ses_prompt_arrow")
-  await using setup = await createAppFixture({
-    width: 100,
-    height: 30,
-    args: { sessionID: active.id },
-    config: {
-      animations: false,
-      tabs: { mode: "off" },
-      keybinds: { "prompt.history.next": "none", "prompt.history.previous": "none" },
-    },
-    fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [active], cursor: {} })
-      if (url.pathname === `/api/session/${active.id}`) return json({ data: active })
-      if (url.pathname === `/api/session/${active.id}/message`) return json({ data: [], cursor: {} })
-      if (url.pathname === `/api/session/${active.id}/inbox`) return json({ data: [] })
-    },
-  })
-  await setup.ready
-  await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
-  const prompt = setup.renderer.currentFocusedEditor
-  if (!(prompt instanceof TextareaRenderable)) throw new Error("Missing focused session prompt")
-  prompt.setText("First line\nSecond line\nThird line")
-  prompt.cursorOffset = 0
-  await setup.renderOnce()
+  await using setup = await createPromptFixture()
+  const prompt = await fillMultilinePrompt(setup)
 
   setup.mockInput.pressArrow("down")
   expect(setup.renderer.currentFocusedEditor).toBe(prompt)
@@ -42,10 +21,53 @@ test("Down moves through a multiline prompt before opening the subagent picker w
   await setup.waitForFrame((frame) => setup.renderer.currentFocusedEditor !== prompt && frame.includes("Subagents"))
 })
 
-test("Home and End navigate a subagent transcript", async () => {
-  const session = {
+test("Down opens the subagent picker from the middle of a prompt when cursor movement uses another key", async () => {
+  await using setup = await createPromptFixture({ "input.move.down": "ctrl+n" })
+  const prompt = await fillMultilinePrompt(setup)
+
+  setup.mockInput.pressKey("n", { ctrl: true })
+  expect(prompt.cursorOffset).toBe("First line\n".length)
+
+  setup.mockInput.pressArrow("down")
+  await setup.waitForFrame((frame) => setup.renderer.currentFocusedEditor !== prompt && frame.includes("Subagents"))
+})
+
+async function createPromptFixture(keybinds?: Config.Info["keybinds"]) {
+  const active = session("ses_prompt_arrow")
+  return createAppFixture({
+    width: 100,
+    height: 30,
+    args: { sessionID: active.id },
+    config: {
+      animations: false,
+      tabs: { mode: "off" },
+      keybinds: { "prompt.history.next": "none", "prompt.history.previous": "none", ...keybinds },
+    },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [active], cursor: {} })
+      if (url.pathname === `/api/session/${active.id}`) return json({ data: active })
+      if (url.pathname === `/api/session/${active.id}/message`) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${active.id}/inbox`) return json({ data: [] })
+    },
+  })
+}
+
+async function fillMultilinePrompt(setup: Awaited<ReturnType<typeof createPromptFixture>>) {
+  await setup.ready
+  await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  const prompt = setup.renderer.currentFocusedEditor
+  if (!(prompt instanceof TextareaRenderable)) throw new Error("Missing focused session prompt")
+  prompt.setText("First line\nSecond line\nThird line")
+  prompt.cursorOffset = 0
+  await setup.renderOnce()
+  return prompt
+}
+
+test("Home and End navigate a subagent transcript and Up returns to its parent", async () => {
+  const parent = session("ses_subagent_parent")
+  const child = {
     id: "ses_subagent_navigation",
-    parentID: "ses_parent",
+    parentID: parent.id,
     title: "Subagent",
     agent: "build",
     projectID: "proj_test",
@@ -63,14 +85,24 @@ test("Home and End navigate a subagent transcript", async () => {
   await using setup = await createAppFixture({
     width: 100,
     height: 30,
-    config: { animations: false, tabs: { mode: "off" } },
-    args: { sessionID: session.id },
+    config: {
+      animations: false,
+      tabs: { mode: "off" },
+      keybinds: { "prompt.history.next": "none", "prompt.history.previous": "none" },
+    },
+    args: { sessionID: child.id },
     fetch: (url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-      if (url.pathname === `/api/session/${session.id}/message`)
+      if (url.pathname === "/api/session") return json({ data: [parent, child], cursor: {} })
+      if (url.pathname === `/api/session/${parent.id}`) return json({ data: parent })
+      if (url.pathname === `/api/session/${child.id}`) return json({ data: child })
+      if (url.pathname === `/api/session/${child.id}/message`)
         return json({ data: messages.toReversed(), cursor: {} })
-      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
+      if (url.pathname === `/api/session/${parent.id}/message`)
+        return json({
+          data: [{ id: "msg_parent", type: "user", text: "Parent transcript", time: { created: 0 } }],
+          cursor: {},
+        })
+      if (url.pathname.endsWith("/inbox")) return json({ data: [] })
     },
   })
   await setup.ready
@@ -81,4 +113,6 @@ test("Home and End navigate a subagent transcript", async () => {
   expect(await setup.waitForFrame((frame) => frame.includes("Message 0"))).not.toContain("Message 19")
   setup.mockInput.pressKey("END")
   expect(await setup.waitForFrame((frame) => frame.includes("Message 19"))).not.toContain("Message 0")
+  setup.mockInput.pressArrow("up")
+  await setup.waitForFrame((frame) => frame.includes("Parent transcript"))
 })

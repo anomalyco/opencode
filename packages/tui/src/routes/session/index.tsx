@@ -32,7 +32,6 @@ import {
   RGBA,
   MouseEvent,
   TextareaRenderable,
-  type KeyEvent,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
@@ -402,6 +401,20 @@ export function Session(props: {
     seeded = true
     r.set(route.prompt)
   }
+
+  // The picker and cursor movement both default to Down. While the editor can move, prefer its configured binding.
+  Keymap.createLayer(() => ({
+    priority: 1,
+    enabled: () => {
+      if (!prompt()?.focused) return false
+      const editor = renderer.currentFocusedEditor
+      return (
+        editor instanceof TextareaRenderable &&
+        editor.scrollY + editor.visualCursor.visualRow < editor.editorView.getTotalVirtualLineCount() - 1
+      )
+    },
+    bindings: ["input.move.down"],
+  }))
 
   /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
   const afterLayout = (continuation: () => void) => {
@@ -1405,26 +1418,7 @@ export function Session(props: {
       title: "Toggle subagent picker",
       id: "session.child.first",
       group: "Session",
-      run: (tab?: string, event?: KeyEvent) => {
-        // Let the editor handle Down while there is another visual row to move to.
-        if (
-          event?.name === "down" &&
-          !event.ctrl &&
-          !event.meta &&
-          !event.shift &&
-          !event.option &&
-          !event.super &&
-          !event.hyper &&
-          prompt()?.focused
-        ) {
-          const editor = renderer.currentFocusedEditor
-          if (
-            editor instanceof TextareaRenderable &&
-            editor.scrollY + editor.visualCursor.visualRow < editor.editorView.getTotalVirtualLineCount() - 1
-          )
-            return false
-        }
-
+      run: (tab?: string) => {
         if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
