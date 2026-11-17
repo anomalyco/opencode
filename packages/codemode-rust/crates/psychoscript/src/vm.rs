@@ -2625,9 +2625,41 @@ pub fn js_rem(x: f64, y: f64) -> f64 {
     x % y
 }
 
+/// `**` and `Math.pow` as JavaScriptCore computes them: square roots for ±0.5, square-and-multiply for small
+/// non-negative integer exponents, and libm otherwise, so results match the reference to the last bit.
 pub fn js_pow(x: f64, y: f64) -> f64 {
     if y.is_nan() || ((x == 1.0 || x == -1.0) && y.is_infinite()) {
         return f64::NAN;
+    }
+    let abs = x.abs();
+    if y == 0.5 {
+        return if abs == 0.0 {
+            0.0
+        } else if abs == f64::INFINITY {
+            f64::INFINITY
+        } else {
+            x.sqrt()
+        };
+    }
+    if y == -0.5 {
+        return if abs == 0.0 {
+            f64::INFINITY
+        } else if abs == f64::INFINITY {
+            0.0
+        } else {
+            1.0 / x.sqrt()
+        };
+    }
+    if y.fract() == 0.0 && (0.0..=1000.0).contains(&y) {
+        let (mut n, mut result, mut base) = (y as u32, 1.0, x);
+        while n != 0 {
+            if n & 1 == 1 {
+                result *= base;
+            }
+            base *= base;
+            n >>= 1;
+        }
+        return result;
     }
     x.powf(y)
 }
