@@ -1455,6 +1455,42 @@ describe("extension snapshot hooks", () => {
     })
   })
 
+  test("a restored function passed back to the host arrives as the restored host function", async () => {
+    const files = () => {
+      const texts = new WeakSet<Function>()
+      const file = (name: string) => {
+        const text = () => name
+        texts.add(text)
+        return { name, text }
+      }
+      return Extension.make({
+        name: "files",
+        globals: { file, known: (text: Function) => texts.has(text) },
+        snapshot: {
+          encode: (value) => ({ name: (value as { readonly name: string }).name }),
+          decode: (data) => file((data as { readonly name: string }).name),
+        },
+      })
+    }
+    const jobs = durableJobs()
+    const run = background(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [files()] }).program(
+        `const f = file("a"); await tools.job({ value: 1 }); return known(f.text)`,
+        undefined,
+        { runId: "h" },
+      ),
+    )
+    await jobs.waiting()
+    const suspended = suspendedOf(await Effect.runPromise(run.suspend))
+    jobs.reset()
+    const resumed = background(
+      CodeMode.make({ tools: { job: jobs.tool }, extensions: [files()] }).resume(CodeMode.toBytes(suspended.state)),
+    )
+    await jobs.waiting()
+    jobs.finish("h:1", 1)
+    expect(await Effect.runPromise(resumed.result)).toMatchObject({ ok: true, value: true })
+  })
+
   test("a suspend fails, and the run goes on, when encode throws or returns non-plain data", async () => {
     const cases: ReadonlyArray<readonly [Partial<Extension.Snapshot>, string]> = [
       [

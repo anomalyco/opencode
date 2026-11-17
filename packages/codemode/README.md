@@ -263,8 +263,17 @@ const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Ef
 ```
 
 Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
-copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
-extension throws at `CodeMode.make`.
+copies, and a function inside a result is callable the same way. When the program passes such a function back to an
+extension, it arrives as the host function itself, so `copy(dest, file(src))` can tell what it was given. Globals and
+the program's own functions never cross back: they are left out, as in tool arguments. A global that shadows a
+built-in or another extension throws at `CodeMode.make`.
+
+Mark a global with `Extension.constructible` to let programs call it with `new`, as they would a class. `new` calls
+it the same way a plain call does, and the program gets what it returns:
+
+```ts
+Extension.make({ name: "glob", globals: { Glob: Extension.constructible((pattern: string) => makeGlob(pattern)) } })
+```
 
 Functions inside a result have no data form, so a suspended run loses them by default: after a resume, calling one
 throws a `TypeError`. An extension can preserve them across suspend and resume with `snapshot` hooks. `encode` receives
@@ -364,7 +373,11 @@ yield* runtime.resume(bytes).run()
   (`<runId>:<callId>`). `sync` (the default) blocks the program: an Effect runs until it ends, and a returned Promise
   is a promise. `async` hands the program a promise. `sync-thenable` returns the result at once, with hidden
   `then`/`catch`/`finally`. `idempotent: true`, only with `async`, lets a suspend interrupt a call in progress, which
-  runs again on resume under the same key; any other call in progress refuses a suspend.
+  runs again on resume under the same key; any other call in progress refuses a suspend. `constructible: true` lets
+  the program call it with `new`. `takesFunctions: true` lets the program pass back a function that was inside a
+  result, which arrives as the host function itself, and a call holding one refuses a suspend until it completes;
+  without it, such a function is treated like any other function in an argument: refused, or left out when the
+  runtime's `translate.functions` is `"drop"`.
 - **`Host.durableFn({ start, wait, cancel })`.** `start` gives JSON data, saved with the run; `wait(data)` runs right
   after, and again after a resume; `cancel(data)` only when the run is interrupted or ends with the work still running.
 - **`Host.namespace({ keys, resolve })`.** A lazy object of functions addressed by path, for catalogs too large to

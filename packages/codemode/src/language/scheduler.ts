@@ -92,6 +92,8 @@ export class HostCall {
   fn: Fn<unknown> | DurableFn<unknown> | undefined = undefined
   /** What a host function returned and left pending (an Effect, or a Promise), which the driver waits on. */
   work: unknown = undefined
+  /** Whether host functions crossed back among its arguments: they have no data form, so it blocks a suspend. */
+  holdsFunctions = false
   /** What the program names it by, where it is among the host globals, and whose hooks save what it returns. */
   readonly label: string
   readonly path: ReadonlyArray<string> | undefined
