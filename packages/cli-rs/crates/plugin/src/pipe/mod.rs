@@ -1937,6 +1937,11 @@ impl Scripts {
         self.aside.borrow().iter().any(|aside| aside == command)
     }
 
+    /// Whether the key put back now is one a command declined, which the JS plugins' listeners heard already.
+    pub(crate) fn replaying_declined(&self) -> bool {
+        !self.aside.borrow().is_empty()
+    }
+
     /// Command `call` declined the key that ran it: the key goes on first of what its hold keeps, past the commands that
     /// declined it.
     fn declined(&self, call: &Call) {
