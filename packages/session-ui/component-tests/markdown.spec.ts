@@ -133,6 +133,31 @@ story("renders task-list boxes but never authored form controls or embedded docu
   await expect(md.locator('li input[disabled][checked]')).toHaveCount(1)
   await expect(md.locator('li input[disabled]:not([checked])')).toHaveCount(1)
   await expect(md.locator("figcaption")).toHaveText("Caption")
+  // A submitted form would navigate the window to its own address and reload the app.
+  await page.evaluate(() => Object.assign(window, { notReloaded: true }))
+  await md.getByText("Sample label").click()
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+  expect(await page.evaluate(() => "notReloaded" in window)).toBe(true)
+})
+
+story("keeps the document markup models write", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: [
+        "<details open><summary>Summary</summary>Press <kbd>Enter</kbd>: H<sub>2</sub>O, x<sup>2</sup>, <mark>marked</mark>, <abbr title=\"HyperText\">HTML</abbr><br>next</details>",
+        "<center>Centred</center>\n\n<hr>\n\n<figure><img width=\"64\" alt=\"Figure\" src=\"https://example.invalid/figure.png\"><figcaption>Caption</figcaption></figure>",
+        "<div align=\"center\"><span style=\"color:teal\">Teal</span></div>",
+        "<table><caption>Rows</caption><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody><tfoot><tr><td>Sum</td></tr></tfoot></table>",
+      ].join("\n\n"),
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator("details[open] > summary")).toHaveText("Summary")
+
+  for (const tag of ["kbd", "sub", "sup", "mark", "abbr[title]", "br", "hr", "center", "figure", "figcaption", "img[width]", "caption", "thead", "tbody", "tfoot", "div[align]"])
+    await expect(md.locator(tag), tag).toHaveCount(1)
+  await expect(md.getByText("Teal", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
 })
 
 story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
