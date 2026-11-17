@@ -24,6 +24,8 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
 type PendingLookup = { controller: AbortController; timer: ReturnType<typeof setTimeout> }
 
+const RESULT_LIMIT = 50
+
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
@@ -75,9 +77,11 @@ export function createHomeSessionSearchController(home: HomeController, sessions
 
     if (!value) return []
 
+    // Each result mounts a row on the keystroke; the newest 50 fill the ~8-row dropdown, and typing more finds older.
     const records = sessions.data
       .searchRecords()
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
+      .slice(0, RESULT_LIMIT)
 
     const exact = selectSearchExact(searchState())
 
