@@ -324,6 +324,50 @@ fn a_panicking_draw_is_contained_on_every_carrier() {
     }
 }
 
+// Expected (`carrier-equal` for tasks, await-rust): the board's task awaits a confirm, which enter answers, then a
+// fetch of the session list, and toasts what each gave; another, whose confirm escape declines, ends without a fetch.
+// The frames (the confirm open, the card each answer bumps), toasts and status are the same linked, through the byte
+// shims, and as a real library.
+#[test]
+fn a_task_awaits_a_confirm_then_a_fetch_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        settle(&board.harness);
+        let mut seen = Vec::new();
+        tui.keymap.dispatch("board.ask", None);
+        settle(&board.harness);
+        seen.push(("asking", app.render().text(), observe(&board.harness)));
+        app.press("return");
+        board.harness.wait("the fetch's reply", || {
+            app.advance(Duration::from_millis(1));
+            tui.toasts.current().is_some()
+        });
+        seen.push(("counted", app.render().text(), observe(&board.harness)));
+        tui.keymap.dispatch("board.ask", None);
+        settle(&board.harness);
+        app.press("escape");
+        settle(&board.harness);
+        seen.push(("declined", app.render().text(), observe(&board.harness)));
+        seen
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    let at = |name: &str| linked.iter().find(|seen| seen.0 == name).unwrap();
+    assert!(at("asking").1.contains("Count the sessions?"), "the confirm did not open: {}", at("asking").1);
+    assert!(at("asking").2.1.is_empty(), "{:?}", at("asking").2.1);
+    assert_eq!(at("counted").2.1, ["Info None asked Some(true), counted Ok(0)"]);
+    assert!(at("counted").1.contains("card 5: 2"), "the answers bumped no card: {}", at("counted").1);
+    assert!(!at("counted").1.contains("Count the sessions?"), "the confirm stayed open");
+    assert_eq!(at("declined").2.1, ["Info None asked Some(false)"]);
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((name, _, linked), (_, text, seen)) in linked.iter().zip(run(other)) {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {name}: toasts and status");
+            assert!(linked.0 == seen.0, "{other:?} at {name}: the frames differ:\n{text}");
+        }
+    }
+}
+
 /// The board's `files` route on `run`: a windowed list whose estimates are not its files' heights, through a `To`, hunk
 /// steps, a `Nearest`, the wheel and a resize. Each checkpoint's frame shows the offset, the header `layout` painted
 /// from the top file, where the last step landed, and how many `layout` calls ran.
