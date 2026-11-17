@@ -117,11 +117,21 @@ pub const V1_MINOR: u32 = 6;
 pub const ENTRY_V1: &str = "opencode_plugin_v1";
 
 /// The optional features this crate's host side knows ([`HostApi::features`]).
-pub const FEATURES: &[&str] = &[IMAGE_BOUNDS];
+pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
 
 /// 2.0: the host answers [`HostRequest::ImageBounds`] with the bounds of the images it decodes, so the SDK answers
 /// [`Read::image_size`] of bytes past them without sending them (PL-9). A host without it is asked every time.
 pub const IMAGE_BOUNDS: &str = "image-bounds";
+
+/// 2.0: [`Host::focus`] gives the focus to a [`v2::Node::Input`] with an id, as a click does, so what the user types
+/// goes into the field. A host without it refuses that focus, and the field takes the focus only from the user's click.
+/// A plugin that cannot work without it names it in `requires` on [`plugin!`]; one that can reads
+/// [`Read::abi`]'s [`Abi::has_feature`].
+pub const FOCUS_INPUT: &str = "focus-input";
+
+/// 2.0: the host draws [`v2::Node::Fence`], its own code view of a claimed fence, in a fence claim's tree. A host
+/// without it fails a plugin that sends one; [`v2::View::or`] lowers it for that host.
+pub const FENCE_NODE: &str = "fence-node";
 
 /// What [`HostRequest::ImageBounds`] answers: the most bytes one image may have, and the most pixels a side its header
 /// may name, as the host decodes images; past either, [`Read::image_size`] is `None`.
@@ -2345,7 +2355,7 @@ pub enum HostRequest {
     CloseOverlay {
         surface: String,
     },
-    /// 2.0 (P2): [`Host::focus`], once the current call returns.
+    /// 2.0 (P2): [`Host::focus`], once the current call returns; of a field too, on a host with [`FOCUS_INPUT`].
     Focus {
         node: String,
     },
@@ -2848,6 +2858,12 @@ pub struct Confirm {
     #[serde(default, skip_serializing_if = "ConfirmLabel::is_default")]
     pub label: ConfirmLabel,
     pub action: Action,
+    /// 2.0: the dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PanelSize>,
+    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centered: bool,
 }
 
 /// The labels of a [`Confirm`]'s buttons; `confirm` and `cancel` when unset.
@@ -2876,6 +2892,12 @@ pub struct Alert {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
+    /// 2.0: the dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PanelSize>,
+    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centered: bool,
 }
 
 /// A [`Dialog::Select`] (TS `dialog.select`).
@@ -2930,6 +2952,10 @@ pub struct Select {
     /// 2.0 (P6c): a line under the rows (TS `footer`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<Span>,
+    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`). A host that
+    /// does not know it places the select as before.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centered: bool,
 }
 
 /// 2.0 (P6c): a setter of each field, since `Select` is `#[non_exhaustive]`: a plugin builds it from
@@ -3030,6 +3056,12 @@ impl Select {
         self.note = note;
         self
     }
+
+    /// Sets [`Self::centered`].
+    pub fn with_centered(mut self, centered: bool) -> Self {
+        self.centered = centered;
+        self
+    }
 }
 
 impl Select {
@@ -3053,6 +3085,7 @@ impl Select {
             filterless: false,
             empty: None,
             note: None,
+            centered: false,
         }
     }
 }
@@ -3766,8 +3799,11 @@ pub trait Host: Read {
     fn overlay(&self, _overlay: interact::Overlay) {}
     /// 2.0: closes the plugin's overlay `surface`, if it shows.
     fn close_overlay(&self, _surface: &str) {}
-    /// 2.0: gives the focus to the node with id `id` of the running call's mount; a node without
-    /// [`interact::Interact::focusable`], another plugin's node and a host widget are refused.
+    /// 2.0: gives the focus to the node with id `id` of the running call's mount: a box with
+    /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`], as a click does, so
+    /// what the user types goes into the field. Any other node, one in a hidden box, another plugin's node and a host
+    /// widget are refused, as is any focus while a host dialog is open; a host without [`FOCUS_INPUT`] refuses a field.
+    /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it.
     fn focus(&self, _id: &str) {}
     /// 2.0: takes the focus from the running call's mount, if it has it, and gives it to the composer.
     fn blur(&self) {}
@@ -4944,8 +4980,13 @@ impl Registered {
     /// Refuses a tree that holds a node kind the host lacks, before it crosses: the author lowers it with
     /// [`v2::View::or`] (big-boi 13).
     fn lowered(&self, node: &v2::Node) -> Result<(), String> {
-        let Some(minor) = self.abi.as_ref().and_then(|abi| v2::unknown_to(node, abi)) else { return Ok(()) };
         let host = self.abi.as_ref().map_or_else(String::new, |abi| format!("{}.{}", abi.major, abi.minor));
+        if let Some(feature) = self.abi.as_ref().and_then(|abi| v2::unknown_feature(node, abi)) {
+            return Err(format!(
+                "the view returned a node of the feature {feature}, which this host ({host}) lacks; lower it with View::or"
+            ));
+        }
+        let Some(minor) = self.abi.as_ref().and_then(|abi| v2::unknown_to(node, abi)) else { return Ok(()) };
         Err(format!(
             "the view returned a node of ABI {ABI_MAJOR}.{minor}, which this host ({host}) lacks; lower it with View::or"
         ))
@@ -6171,6 +6212,7 @@ mod tests {
                     filterless: false,
                     empty: None,
                     note: None,
+                    centered: false,
                 })),
             },
         ];
@@ -6469,6 +6511,7 @@ mod tests {
             filterless: false,
             empty: None,
             note: None,
+            centered: false,
         });
         let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
         assert_eq!(serde_json::to_string(&select).unwrap(), json);
@@ -6548,6 +6591,8 @@ mod tests {
                     message: "M".into(),
                     label: ConfirmLabel::default(),
                     action: Action::Command { name: "x.a".into(), input: None },
+                    size: None,
+                    centered: false,
                 }))
                 .unwrap(),
             ),
@@ -6557,6 +6602,8 @@ mod tests {
                     title: "T".into(),
                     message: "M".into(),
                     action: Some(Action::Command { name: "x.a".into(), input: None }),
+                    size: None,
+                    centered: false,
                 }))
                 .unwrap(),
             ),
@@ -6640,10 +6687,8 @@ mod tests {
         assert_eq!(host.composer(), None);
         host.edit_composer(ComposerEdit::Submit);
         let action = Action::Command { name: "x.a".into(), input: None };
-        let confirm =
-            Confirm { title: "T".into(), message: "M".into(), label: ConfirmLabel::default(), action: action.clone() };
-        host.dialog(Dialog::Confirm(confirm));
-        host.dialog(Dialog::Alert(Alert { title: "T".into(), message: "M".into(), action: None }));
+        host.dialog(Dialog::Confirm(Confirm::new("T", "M", action.clone())));
+        host.dialog(Dialog::Alert(Alert::new("T", "M")));
         assert_eq!(known.load(std::sync::atomic::Ordering::SeqCst), 0);
         host.dialog(Dialog::Prompt { title: "T".into(), placeholder: None, action });
         host.toast(Toast::new(Variant::Info, "a"));

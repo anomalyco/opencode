@@ -203,6 +203,8 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
         let _ = &held;
         called(activation, B, Kind::Command(Which::Confirm));
         host.dialog(abi::Dialog::Confirm(abi::Confirm {
+            size: None,
+            centered: false,
             title: format!("Probe confirm b{B}"),
             message: String::new(),
             label: abi::ConfirmLabel::default(),
@@ -214,7 +216,13 @@ fn probe<const B: u8>(setup: &mut abi::Setup) -> Result<(), String> {
         let _ = &held;
         called(activation, B, Kind::Command(Which::Alert));
         let (title, message) = (format!("Probe alert b{B}"), String::new());
-        host.dialog(abi::Dialog::Alert(abi::Alert { title, message, action: Some(confirmed()) }));
+        host.dialog(abi::Dialog::Alert(abi::Alert {
+            size: None,
+            centered: false,
+            title,
+            message,
+            action: Some(confirmed()),
+        }));
     });
     let (held, counted) = (token.clone(), count.clone());
     setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), move |_, _, _| {

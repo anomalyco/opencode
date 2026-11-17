@@ -319,6 +319,8 @@ struct Core {
     fallen: Cell<bool>,
     /// The last revision the host decided shows the claim's tree.
     shows: Cell<bool>,
+    /// A fence's code view, which a [`Node::Fence`] of its tree shows; `None` for a tool call, whose tree may hold none.
+    fence: RefCell<Option<Rc<FenceCode>>>,
 }
 
 #[derive(Default)]
@@ -375,6 +377,7 @@ impl Core {
             switch: RefCell::default(),
             fallen: Cell::new(false),
             shows: Cell::new(false),
+            fence: RefCell::default(),
         });
         book(|ledger| ledger.mounts += 1);
         LIVE.with(|live| live.borrow_mut().push(Rc::downgrade(&core)));
@@ -660,6 +663,14 @@ impl Core {
         };
         let has = |handle: ContentRef| bytes(&handle).is_some() || unheld.contains(&handle);
         let gone = |handle: ContentRef| unheld.contains(&handle);
+        // A fence claim's tree may show the host's code view of its part once, with the newest revision.
+        let code = self.fence.borrow().clone();
+        let part = self.part.borrow().clone();
+        let fence_view = || match (&code, &part) {
+            (Some(code), Some(Part::Fence(fence))) => Some(code.show(fence).as_any()),
+            _ => None,
+        };
+        let fence: Option<&dyn Fn() -> Option<AnyWidget>> = code.is_some().then_some(&fence_view);
         // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
         // and hover events reach none, and its clicks run through `act` (P1).
         let env = Env {
@@ -677,6 +688,7 @@ impl Core {
             owner: None,
             plugin: Some(plugin),
             item: false,
+            fence,
         };
         let mut applied = Ok(());
         ADOPTING.set(ADOPTING.get() + 1);
@@ -714,6 +726,11 @@ impl Core {
             ledger.content -= 1;
             ledger.content_bytes -= bytes.len() as i64;
         });
+    }
+
+    /// Whether the last accepted tree shows the fence's code view ([`Node::Fence`]).
+    fn holds_fence(&self) -> bool {
+        self.state.borrow().tree.holds_fence()
     }
 
     /// Drops the tree, so a later view builds whole, and the pictures of inline images, which only the tree named.
@@ -858,13 +875,9 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
                 // The fence holds the widget's children and not the widget, whose handlers hold the fence.
                 let slot = View::new(block.app).column().shrink(0.0).visible(false);
                 let widget = View::new(block.app).column().shrink(0.0).child(&core.root).child(&slot);
-                let fence = Rc::new(Fence {
-                    app: block.app.clone(),
-                    slot,
-                    core,
-                    look: RefCell::new((theme.clone(), block.conceal)),
-                    code: RefCell::default(),
-                });
+                let code = FenceCode::new(block.app, (theme.clone(), block.conceal));
+                core.fence.replace(Some(code.clone()));
+                let fence = Rc::new(Fence { slot, core, code });
                 let held = fence.clone();
                 widget.on_focus(move |_, _| {
                     let _ = &held;
@@ -893,7 +906,7 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
                 (widget.as_any(), fence)
             }
         };
-        *fence.look.borrow_mut() = (theme.clone(), block.conceal);
+        *fence.code.look.borrow_mut() = (theme.clone(), block.conceal);
         fence.core.show(part);
         fence.place();
         Some(widget)
@@ -903,36 +916,42 @@ pub(crate) fn fence(claim: Rc<Registered>) -> crate::CodeBlockRender {
 /// A fence a claim took: the two children of the widget Markdown holds for the block, the claim's tree and the
 /// host's code view, and what they show.
 struct Fence {
-    app: App,
     /// Holds the host's code view of the fence while the claim does not draw it.
     slot: View,
     core: Rc<Core>,
-    /// The theme and the concealment Markdown last rendered the block in.
+    code: Rc<FenceCode>,
+}
+
+/// The host's code view of a claimed fence: the fence again as Markdown has it, in a document of its own, in the
+/// theme and the concealment Markdown last rendered the block in. One holder keeps it for the fence's life: the
+/// block's slot shows it while the claim does not draw the fence, and a [`Node::Fence`] of the claim's tree while it
+/// does. Either way it follows the newest revision with no view.
+struct FenceCode {
+    app: App,
+    holder: View,
     look: RefCell<(Theme, bool)>,
     code: RefCell<Option<Code>>,
 }
 
-/// The host's code view of a fence: the source it shows, in a theme and a concealment.
+/// The source a code view shows, in a theme and a concealment.
 struct Code {
     markdown: opentui::widget::Markdown,
     source: String,
     look: (Theme, bool),
 }
 
-impl Fence {
-    /// Shows the claim's tree while the claim draws the fence, else the host's code view of its newest revision.
-    fn place(&self) {
-        let shows = self.core.shows.get();
-        self.core.root.visible(shows);
-        self.slot.visible(!shows);
-        if shows {
-            if self.code.take().is_some() {
-                self.slot.clear();
-            }
-            return;
-        }
-        let Some(Part::Fence(fence)) = self.core.part.borrow().clone() else { return };
-        // The fence again as Markdown has it, in a document of its own: the host's code view, as the block's own.
+impl FenceCode {
+    fn new(app: &App, look: (Theme, bool)) -> Rc<Self> {
+        Rc::new(Self {
+            app: app.clone(),
+            holder: View::new(app).column().shrink(0.0),
+            look: RefCell::new(look),
+            code: RefCell::default(),
+        })
+    }
+
+    /// The holder, showing `fence` in the last look.
+    fn show(&self, fence: &FencePart) -> View {
         let close = if fence.closed { "\n```" } else { "" };
         let source = format!("```{}\n{}{close}", fence.info, fence.code);
         let look = self.look.borrow().clone();
@@ -952,10 +971,41 @@ impl Fence {
                 let markdown = opencode_ui::markdown::view(&self.app, theme, &syntax, &renderers, *conceal, true)
                     .set_markdown(source.clone())
                     .streaming(fence.streaming);
-                self.slot.clear();
-                self.slot.add(&markdown);
+                self.holder.clear();
+                self.holder.add(&markdown);
                 *code = Some(Code { markdown, source, look });
             }
+        }
+        self.holder.clone()
+    }
+
+    /// Drops the code view: nothing shows it.
+    fn hide(&self) {
+        if self.code.take().is_some() {
+            self.holder.clear();
+        }
+    }
+}
+
+impl Fence {
+    /// Shows the claim's tree while the claim draws the fence, else the host's code view of its newest revision. A
+    /// fence node of the tree shows that code view too, current with each revision, whether a view ran or not.
+    fn place(&self) {
+        let shows = self.core.shows.get();
+        self.core.root.visible(shows);
+        self.slot.visible(!shows);
+        let Some(Part::Fence(fence)) = self.core.part.borrow().clone() else { return };
+        if shows {
+            match self.core.holds_fence() {
+                true => drop(self.code.show(&fence)),
+                false => self.code.hide(),
+            }
+            return;
+        }
+        let holder = self.code.show(&fence);
+        if !self.slot.children().iter().any(|child| child.id() == holder.id()) {
+            self.slot.clear();
+            self.slot.add(&holder);
         }
     }
 }

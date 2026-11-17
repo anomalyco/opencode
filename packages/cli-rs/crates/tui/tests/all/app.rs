@@ -447,6 +447,8 @@ fn p0a_plugin() -> abi::Plugin {
         let then = |name: &str| abi::Action::Command { name: name.to_owned(), input: None };
         setup.command(command("parity.p0a.confirm", Some("f6")), move |host, _| {
             host.dialog(abi::Dialog::Confirm(abi::Confirm {
+                size: None,
+                centered: false,
                 title: "Delete the draft?".to_owned(),
                 message: "It cannot be undone.".to_owned(),
                 label: abi::ConfirmLabel { confirm: Some("delete".to_owned()), cancel: Some("keep".to_owned()) },
@@ -458,6 +460,8 @@ fn p0a_plugin() -> abi::Plugin {
         });
         setup.command(command("parity.p0a.alert", Some("f7")), move |host, _| {
             host.dialog(abi::Dialog::Alert(abi::Alert {
+                size: None,
+                centered: false,
                 title: "Heads up".to_owned(),
                 message: "The plugin says hello.".to_owned(),
                 action: Some(then("parity.p0a.closed")),

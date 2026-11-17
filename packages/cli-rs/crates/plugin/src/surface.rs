@@ -1184,6 +1184,7 @@ impl Surface {
             owner: owner.as_ref(),
             plugin: Some(&self.plugin),
             item: false,
+            fence: None,
         };
         f(&env, tree)
     }

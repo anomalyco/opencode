@@ -66,7 +66,12 @@ Versions only grow by appending:
   plugins (up to 2.0) and ABI 1.x plugins (up to 1.6); rebuild the plugin against opencode-plugin-abi 2".
 - Nothing is removed from the ABI inside a major; an alias stays until 3.0 (O-125 (6)). A plugin that needs an
   optional host feature lists it in `Metadata::requires` (`plugin!(id = .., requires = ["feature"], setup)`); a host
-  without it refuses the plugin at load and names it. A 2.0 host has no optional features yet.
+  without it refuses the plugin at load and names it. A 2.0 host has three (`HostApi::features`, `Read::abi`):
+  `image-bounds` (the bounds of the images it decodes), `focus-input` (`Host::focus` of a field) and `fence-node` (the
+  host's code view of a claimed fence in a claim's tree, `Node::Fence`). The last two came after 2.0's first release
+  candidate, with no new minor (O-168): what they add is optional on the wire, a plugin built before them loads and
+  behaves as it did, and one built after them lowers a `fence` node for a host without `fence-node` with `View::or`
+  (Contract 2.0 surfaces, below).
 - What the host takes from a plugin is decoded before anything of the call applies. An answer it cannot decode (cut
   short, not JSON, a node kind it does not know) fails the plugin and leaves no effect, as a panic does.
 - The host opens a copy of each build. On macOS the copy keeps the file's quarantine, so the system checks it as it
@@ -233,7 +238,11 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   { title, message, label, action }` (TS `dialog.confirm`): `Confirm` runs the action with the input `true`, `Cancel`
   and escape with `false`, and a dialog that replaces it runs nothing, as TS resolves `true`, `false` or `undefined`;
   or an `Alert { title, message, action }` (TS `dialog.alert`), whose action runs once after it closes, by enter,
-  escape, or another dialog, as TS resolves its promise in each case. Every dialog of a plugin belongs to the
+  escape, or another dialog, as TS resolves its promise in each case. A `Select`, an `Alert` and a `Confirm` may be
+  `centered`, in the middle of the screen and not a quarter of the way down, and an `Alert` and a `Confirm` have a
+  `size` as a select has (TS `dialog.set({ size, centered })`, contract 2.x additions); a host that does not know them
+  places the dialog as before. A keyed select shown again with another `centered` moves and keeps its filter and its
+  selected row. Every dialog of a plugin belongs to the
   activation that showed it: it closes when that activation ends (disable, failure, a reload that passed), and an
   answer reaches nobody once the activation is not live, not even a command of the host or another plugin that the
   action names. A reload that fails keeps the running activation and its dialog.
@@ -290,7 +299,15 @@ nor the content its view gave, the host asks at once for a whole tree (`SurfaceI
 nothing), and a second refusal in a row fails the plugin. The view runs again when its surface's size changes. A
 theme switch restyles the widgets in place with no call, unless the surface reads the palette (`Surface::palette`).
 A `Diff` or `Markdown` may name a tool call's output (`Source::PartOutput`) instead of carrying it; the host shows
-the call's output as the transcript does, once it arrives. The schema is `crates/plugin-abi/schema/v2.json`,
+the call's output as the transcript does, once it arrives. A fence claim's tree may hold one `Fence` node (the feature
+`fence-node`): the claimed fence as the host's own code view draws it, in the transcript's theme, concealment and
+streaming state, on `bg` or the page's background, which the host keeps current with each revision of the fence with
+no view, so a claim that only frames the code memoizes its frame. It costs one node and one row against the tree's
+limits, whatever its code: a fence of 2,000 lines framed this way draws whole, where a `Code` of the same lines is past
+the rows and a placeholder. A surface's tree that holds a `Fence`, and a claim's tree that holds two or is a tool
+call's, is refused whole: a surface's view then fails the plugin as any refused tree does, and a claim's part shows
+the host's row. A library lowers it for a host without the feature (`View::or(Node::fence(), fallback)`), and the SDK
+refuses before it crosses a tree that still holds it. The schema is `crates/plugin-abi/schema/v2.json`,
 generated from the types in the crate (its root is a `Node`). Over the C ABI (P4) the host runs a surface's view as the request `View` with the mount, the input and
 the content handle to number from; the plugin answers the tree, the content it gave and released, and the size of its
 memo table, and `Unmount` drops that table when the mount ends. Only a surface that declares it reads the palette gets
@@ -323,7 +340,7 @@ host's dialogs, at a cell, under a node of the opening mount, against a screen e
 plugin that shows (a panel, a slot) against one of its edges; anchored to one that does not show, it does not open.
 An overlay takes the focus; escape (in any of its modes) and a press outside it close it, and its opener's handler
 gets `Event::Closed`; the focus goes to the overlay below it, else back to where it was opened from. While a host
-dialog is open, no overlay opens and `Host::focus` does nothing. An overlay stays on the screen as it shrinks, and a
+dialog is open, no overlay opens and `Host::focus` does nothing (also for a field). An overlay stays on the screen as it shrinks, and a
 wheel outside it closes it as a press does. A panel's or an overlay's first view runs once the host lays it out, so it
 sees its size and how it shows; a panel follows every resize, a splitter drag too, and a theme or mode switch restyles
 it and the plugin's overlays in place, with no new mount. A focused node that a new tree builds again keeps the focus;
@@ -354,7 +371,12 @@ back to the route before it. Only where none has the input is it `app.exit`'s. T
 rebound `app.exit` changes none of it. A bind with `hold` keeps the keys and pastes after it, at
 most 256, until its owner calls `Host::release_keys`, its own 50 ms pass or the limit is reached; then they are routed
 in order, and those meant for a focus that a press or a command moved since are dropped. A press is not kept: OpenTUI
-gives it to its widget first. What a handler asks for applies before the next event of the same read. A box's
+gives it to its widget first. What a handler asks for applies before the next event of the same read. A field
+(`Input`) with an id takes the focus from `Host::focus` as from a click (the feature `focus-input`), and then what the
+user types, as the composer would, after the layers whose scope holds (FT-14); `Read::focused` names it, a
+`LayerScope::Node` of it holds while it has the focus, a new tree that builds it again keeps the focus, and one in a
+hidden box takes none. A focus from a call the user did not cause (a wake, a reply) is taken too, as TS takes it and as
+for a box: the user's typing then goes to the field. A box's
 `Interact` makes it focusable (`Host::focus`, `Host::blur`), gives `Event::Pointer` for press, release, drag after a
 consumed press, wheel and drop, and a hover background with no call, or `Event::Hover`; a text with an id and
 `hover_events` gives `Event::Hover` too. A capture ends with the release, the node leaving the tree, a move of the
@@ -839,7 +861,10 @@ The conformance suite (phase Pc) holds the C ABI still for every binding. `crate
 lists scripted sessions: activation and its end, commands and the host requests they make, a route surface with
 content and a memoized subtree, the mailbox and a wake, a canvas and its draws, scroll verbs, a scroll read, a step
 and where it landed, and `layout` (P3), input and surfaces (P2: every verb and read once; a key a layer consumes, one it
-passes, a paste and a pointer press; a search), renderer claims of a tool call and of a fence (Pr), the built-ins'
+passes, a paste and a pointer press; a search; a field given the focus), renderer claims of a tool call and of a fence
+(Pr; the fence's claim draws a `Fence` node, a second claim's tree holds two, which the host refuses, and the same
+fence on a host that states no `fence-node` shows the library lowering it), a `Fence` node in a surface's tree, which
+fails the plugin, a centered select, alert and confirm, the built-ins'
 contract (P6a: a surface that hears its mount begin and end, a view told what changed that keeps its root, a hidden
 box, a read of one message), a panic, a refused tree, a setup that
 fails, an overrun, and the same plugin as a 1.x library. Each is recorded from `crates/plugin/examples/conformance`
@@ -863,8 +888,9 @@ Each transcript is checked on both sides (`crates/plugin/src/conformance/tests.r
   no host knows inside each call, which the host answers with an error);
 - a fake host drives the reference built as a `cdylib`, and `examples/conformance/plugin.c`, built with symbols hidden
   and every warning an error, through every transcript of their major, also as a host of a later minor (a longer
-  table, minor 1, an unknown feature, an unknown field in every request, and after `create` a request no library
-  knows, which it answers with an error); the host loading each library records every transcript too;
+  table, minor 1, the transcript's features and one unknown, an unknown field in every request, and after `create` a
+  request no library knows, which it answers with an error); the host loading each library records every transcript
+  too;
 - every part of every entry changed, or the entry dropped, fails the side that writes it.
 
 `the_version_gate_is_exact` runs a grid of tables (each entry, majors 0 to 3, minors at, below and above the host's,

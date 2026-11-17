@@ -167,7 +167,8 @@ pub enum Button {
 #[serde(default)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Interact {
-    /// The node can take the focus, by a click or [`Host::focus`]; it needs an id.
+    /// The node can take the focus, by a click or [`Host::focus`]; it needs an id. A field ([`crate::v2::Node::Input`])
+    /// with an id takes it by nature, on a host with [`crate::FOCUS_INPUT`].
     #[serde(skip_serializing_if = "is_false")]
     pub focusable: bool,
     /// Press, release, drag, wheel and drop on the node come as [`Event::Pointer`]. A consumed press captures the
@@ -258,7 +259,8 @@ pub enum LayerScope {
     /// While the focus is in the mount's surface (a route, a panel, an overlay). A layer of setup has no surface.
     #[default]
     Surface,
-    /// While the focus is in the node with this id, in the mount's tree.
+    /// While the focus is in the node with this id, in the mount's tree: a focusable box, or a field
+    /// ([`crate::v2::Node::Input`]) while the user types in it.
     Node(String),
     /// While the composer has the focus.
     Composer,

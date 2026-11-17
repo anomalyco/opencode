@@ -103,12 +103,15 @@
   },
   {
     "transcript": "interact",
-    "about": "input and surfaces (P2): every verb and read of a command (focus, the focus read, a rect, a mode and its read, held keys released, a blur, a panel and an overlay opened and closed), with a key layer of setup in the manifest",
+    "about": "input and surfaces (P2): every verb and read of a command (focus, the focus read, a rect, a mode and its read, held keys released, the focus of a field and the focus read, a blur, a panel and an overlay opened and closed), with a key layer of setup in the manifest; then a field given the focus (focus-input), which the host shows focused",
     "library": 2,
     "script": [
       { "do": "load" },
       { "do": "open", "route": "rows" },
       { "do": "command", "name": "conf.ui" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "command", "name": "conf.field" },
       { "do": "advance" },
       { "do": "observe" },
       { "do": "close" },
@@ -162,7 +165,7 @@
   },
   {
     "transcript": "fence",
-    "about": "a renderer claim of a fence language (Pr): Markdown with a fence the claim draws, then gone",
+    "about": "a renderer claim of a fence language (Pr): Markdown with a fence the claim draws around the host's code view of it (a fence node), then gone",
     "library": 2,
     "script": [
       { "do": "load" },
@@ -173,6 +176,54 @@
       { "do": "advance" },
       { "do": "observe" }
     ]
+  },
+  {
+    "transcript": "fence-older",
+    "about": "the same fence claim on a host that states no fence-node: the library lowers the fence node to text before it crosses",
+    "library": 2,
+    "script": [
+      { "do": "load", "features": ["image-bounds"] },
+      { "do": "markdown", "text": "```conf-fence\nhello\n```\n" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "fence-twice",
+    "about": "a fence claim whose tree holds two fence nodes: the host refuses the tree, and the fence shows the host's code view; the plugin stays active",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "markdown", "text": "```conf-fences\nhello\n```\n" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" },
+      { "do": "observe" }
+    ]
+  },
+  {
+    "transcript": "fence-refused",
+    "about": "a view of a route surface whose tree holds a fence node, which only a fence claim's tree may: the host refuses it whole, the plugin fails, and its surface shows nothing",
+    "library": 2,
+    "script": [
+      { "do": "load" },
+      { "do": "open", "route": "conf" },
+      { "do": "command", "name": "conf.fence" },
+      { "do": "advance" },
+      { "do": "observe" },
+      { "do": "close" },
+      { "do": "advance" }
+    ]
+  },
+  {
+    "transcript": "dialogs",
+    "about": "dialogs of the contract 2.x additions: a select, an alert and a confirm, each centered, the select and the alert extra large, as the host takes them",
+    "library": 2,
+    "script": [{ "do": "load" }, { "do": "command", "name": "conf.dialogs" }, { "do": "advance" }, { "do": "observe" }]
   },
   {
     "transcript": "claim",

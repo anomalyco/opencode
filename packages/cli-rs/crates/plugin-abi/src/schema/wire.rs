@@ -409,7 +409,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 actions: array(reference("SelectAction")), binds: array(reference("PanelBind")),
                 search: nullable(string()), size: nullable(reference("PanelSize")), focus: nullable(string()),
                 query: nullable(reference("Action")), query_delay: uint16(), filterless: boolean(),
-                empty: nullable(reference("Span")), note: nullable(reference("Span")),
+                empty: nullable(reference("Span")), note: nullable(reference("Span")), centered: boolean(),
             }),
         ),
         (
@@ -445,7 +445,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             "Confirm",
             object!(Confirm, "A question with two answers.", {
                 title: string(), message: string(), action: reference("Action"),
-            } { label: reference("ConfirmLabel") }),
+            } { label: reference("ConfirmLabel"), size: nullable(reference("PanelSize")), centered: boolean() }),
         ),
         (
             "ConfirmLabel",
@@ -455,7 +455,9 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         ),
         (
             "Alert",
-            object!(Alert, "A notice.", { title: string(), message: string() } { action: nullable(reference("Action")) }),
+            object!(Alert, "A notice.", { title: string(), message: string() } {
+                action: nullable(reference("Action")), size: nullable(reference("PanelSize")), centered: boolean(),
+            }),
         ),
         (
             "ErrorDetails",

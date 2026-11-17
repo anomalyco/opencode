@@ -131,7 +131,7 @@ A plugin binary carries its ABI version. The host is ABI 2.0, and loads every 1.
 | The 1.4 SDK | yes; a 1.3 host refuses it, naming both versions | The 1.4 requests |
 | The 1.5 SDK | yes; a 1.3 host refuses it, and a 1.4 host loads it and offers what it has: `composer()` reads `None`, and `edit_composer`, `Dialog::Confirm` and `Dialog::Alert` do nothing | The 1.4 requests; 1.5 adds only what the plugin asks of the host |
 | The 1.6 SDK | yes; a 1.3 host refuses it. On a 1.4 or 1.5 host the reads and verbs of 1.6 answer their defaults (see below) | The 1.4 requests, and `Deltas` to a plugin with `on_deltas` |
-| The 2.0 SDK, this crate | yes | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
+| The 2.0 SDK, this crate | yes; a binary built before the features `focus-input` and `fence-node` loads and behaves as it did | The requests of 1.6, and the 2.0 ones: surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
 | A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
 
 A plugin of 1.6 rebuilt on the 2.0 SDK keeps every entry and request of 1.6 until 3.0, and what 2.0 adds is in
@@ -160,7 +160,7 @@ the contract that a later 2.x may extend is `#[non_exhaustive]` from 2.0 on, to 
   `Overlay::new(..)`, `Foreground::new("sh").with_args(..)`, `Interact::default().with_focusable(true)`,
   `Layout::default().width(..).grow()`, `LayoutReply::default().paint(..).again()`.
 - A node of `v2::Node` is built with its constructors (`Node::column`, `row`, `text`, `scroll`, `list`, `input`,
-  `diff`, `code`, `image`, `markdown`, `spinner`, `canvas`, `slot`, `keep`) and its setters (`with_id`, `bg`,
+  `diff`, `code`, `image`, `markdown`, `spinner`, `canvas`, `slot`, `keep`, `fence`) and its setters (`with_id`, `bg`,
   `border`, `placeholder`, `numbers`, …); a pattern of a variant needs `..`: `Node::Keep { key, .. }`.
 - A `match` on an enum of the contract (`interact::Event`, `claim::Part`, `v2::Cause`, `SessionStatus`, …) needs a
   `_` arm, which a kind a later 2.x adds reaches; a pattern of an event's fields needs `..`:
@@ -178,6 +178,31 @@ addition. That feature is for the host only and is not covered by this promise: 
 on any later 2.x, so a plugin never turns it on. `tests/sdk.rs` builds a pinned author crate, `tests/pinned`, against this SDK and
 against the additions a later 2.x makes (the `next` feature), so a change that breaks that source fails the SDK's own
 tests.
+
+### What 2.0 added after its first release candidate
+
+These are additive on the wire, with no new minor (O-168): a plugin built on the SDK of before them loads and
+behaves as it did, and a plugin built on this one meets an older 2.0 host by the rules below.
+
+- **Named features.** `Read::abi().features` lists the host's optional features, and `Abi::has_feature` asks for one:
+  `image-bounds` (`IMAGE_BOUNDS`), `focus-input` (`FOCUS_INPUT`) and `fence-node` (`FENCE_NODE`). A plugin that cannot
+  work without one names it, `plugin!(id = "my.plugin", requires = ["focus-input"], setup)`, and a host without it
+  refuses the plugin at load; one that can checks the feature and falls back.
+- **The focus of a field** (`focus-input`). `Host::focus` gives the focus to a `Node::Input` with an id as a click
+  does, so what the user types goes into the field; a `LayerScope::Node` of the field holds while it has the focus,
+  and `Read::focused` names it. The rules of any focus stand: none while a host dialog is open, none in a hidden box,
+  none during setup or from a view. A call the user did not cause may ask for it, as for a focusable box. A host
+  without the feature refuses the focus, and the field takes it only from the user's click.
+- **The host's code view of a claimed fence** (`fence-node`). `Node::fence()`, with `bg`, in a fence claim's tree:
+  the fence as the host's own code view draws it, in the transcript's theme, concealment and streaming state, current
+  with each revision with no view. It is one node and one row, whatever its code, so a long fence draws whole. Only a
+  fence claim's tree may hold it, once: a surface's view that holds it fails the plugin, and a claim's tree that holds
+  it twice shows the host's row. For a host without the feature, lower it: `view.or(Node::fence(), |view| ...)`, as
+  `View::or` lowers a kind of a later minor; the SDK refuses a tree that still holds it before it crosses.
+- **Where a dialog sits.** `Select::with_centered`, and `with_size` and `with_centered` on `Alert` and `Confirm`: in
+  the middle of the screen, not a quarter of the way down, and medium, large or extra large (TS `dialog.set({ size,
+  centered })`). A host that does not know them places the dialog as before. A keyed select shown again with another
+  `centered` moves and keeps its filter and its selected row.
 
 ABI 1.6 adds the small reads and verbs: a claim's own size (`Setup::sized`), the streaming deltas (`Setup::on_deltas`),
 the model's variants, the session tabs, the keymap's state, the mouse selection, a program in the foreground, the

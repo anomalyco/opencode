@@ -7,7 +7,7 @@ use crate::interact::{self, Anchor};
 use crate::v2::{self, Fit, MountId, Node, Paint, Source, Split};
 use crate::{
     Absolute, Action, Alert, Attention, Border, Click, Color, Confirm, ConfirmLabel, ErrorDetails, Foreground, Layout,
-    PanelAction, PanelBind, Press, SelectAction, Sound, SoundName, Span, When,
+    PanelAction, PanelBind, PanelSize, Press, SelectAction, Sound, SoundName, Span, When,
 };
 
 /// `with_` setters of `$ty`'s fields, each documented as setting its field.
@@ -136,22 +136,29 @@ setters!(ErrorDetails {
 impl Confirm {
     /// A question that runs `action` when confirmed, with the host's labels.
     pub fn new(title: impl Into<String>, message: impl Into<String>, action: Action) -> Self {
-        Self { title: title.into(), message: message.into(), label: ConfirmLabel::default(), action }
+        Self {
+            title: title.into(),
+            message: message.into(),
+            label: ConfirmLabel::default(),
+            action,
+            size: None,
+            centered: false,
+        }
     }
 }
 
-setters!(Confirm { with_label: label: ConfirmLabel });
+setters!(Confirm { with_label: label: ConfirmLabel, with_size: size: Option<PanelSize>, with_centered: centered: bool });
 
 setters!(ConfirmLabel { with_confirm: confirm: Option<String>, with_cancel: cancel: Option<String> });
 
 impl Alert {
     /// A notice under `title`, closed with no action.
     pub fn new(title: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { title: title.into(), message: message.into(), action: None }
+        Self { title: title.into(), message: message.into(), action: None, size: None, centered: false }
     }
 }
 
-setters!(Alert { with_action: action: Option<Action> });
+setters!(Alert { with_action: action: Option<Action>, with_size: size: Option<PanelSize>, with_centered: centered: bool });
 
 impl SelectAction {
     /// A footer action `title` that runs `action`.

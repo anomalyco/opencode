@@ -183,8 +183,13 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
             let mut shown = None;
             for step in &header.script {
                 match step {
-                    Step::Load { options } => {
+                    Step::Load { options, features } => {
                         let options = (!options.is_empty()).then_some(options.as_str());
+                        // Left stated for the run, which ends by restoring the host's own.
+                        let stated = features.as_ref().map(|features| {
+                            &*Vec::leak(serde_json::to_vec(features).unwrap_or_else(|_| b"[]".to_vec()))
+                        });
+                        native::STATED.set(stated);
                         let loaded = load_plugin(&host, header.library, load, options);
                         match loaded {
                             Ok((definition, error)) => {
@@ -276,6 +281,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
         },
     );
     NOW.set(Duration::ZERO);
+    native::STATED.set(None);
     Rc::try_unwrap(recorder).map(RefCell::into_inner).unwrap_or_default().into_entries()
 }
 
@@ -328,8 +334,8 @@ fn completed(tool: &str) -> abi::claim::Part {
     }))
 }
 
-/// What the user sees: the toasts since the last look, the plugin's status in the plugin manager, and the route's
-/// lines while one shows.
+/// What the user sees: the toasts since the last look, the plugin's status in the plugin manager, the dialogs it
+/// showed, and the route's lines and its focused node while one shows.
 fn observe(host: &TestHost, registry: &Registry, route: bool) -> Value {
     // A look is at a frame: its paint runs the updates and wake handlers that wait, and their effects (Pl).
     host.app.render();
@@ -341,7 +347,19 @@ fn observe(host: &TestHost, registry: &Registry, route: bool) -> Value {
         .collect();
     let status = registry.entries().into_iter().find(|entry| entry.target.as_deref() == Some(TARGET));
     let mut seen = json!({ "toasts": toasts, "status": format!("{:?}", status.map(|entry| entry.status)) });
+    // The dialogs the plugin showed since the last look, as the host took them.
+    let dialogs: Vec<Value> = host.dialogs.borrow_mut().drain(..).map(|(_, dialog)| json!(dialog)).collect();
+    if !dialogs.is_empty() {
+        seen["dialogs"] = json!(dialogs);
+    }
     if route {
+        // The node of the plugin's route that has the focus, when one does.
+        let focused = ["conf", "pad", "rows", "kept"].iter().find_map(|surface| {
+            crate::behave::mounts(host.app(), ID, surface).last().and_then(|mount| mount.focused.clone())
+        });
+        if let Some(focused) = focused {
+            seen["focused"] = json!(focused);
+        }
         let text = host.app.text();
         let lines: Vec<&str> = text.lines().map(str::trim_end).filter(|line| !line.is_empty()).collect();
         seen["screen"] = json!(lines);
@@ -510,7 +528,8 @@ fn the_linked_reference_replays_every_transcript() {
 // Expected (unknown kinds, synthesis 4.6): a library of a later minor whose view holds a node kind this host does not
 // know has the tree refused whole, the kind named in the failure, and nothing after it: the transcript holds as
 // recorded up to that view's reply, the user then sees the plugin failed and no tree, and the host calls the library no
-// more, not even to destroy it. (The SDK's lowering of a kind to its fallback comes with the first kind of 2.1.)
+// more, not even to destroy it. (The SDK lowers a kind the host lacks to the author's fallback before it crosses: the
+// transcript `fence-older`, for the `fence` node of a host without `fence-node`.)
 #[test]
 fn a_kind_the_host_does_not_know_is_refused_whole() {
     let mut transcript =

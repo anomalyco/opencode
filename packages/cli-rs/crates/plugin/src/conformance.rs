@@ -109,10 +109,13 @@ pub struct Header {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "do", rename_all = "kebab-case")]
 pub enum Step {
-    /// Loads the library with `options` and activates it.
+    /// Loads the library with `options` and activates it; with `features`, the host table states those, as an older
+    /// host's would, so the library lowers what that host lacks.
     Load {
         #[serde(default)]
         options: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        features: Option<Vec<String>>,
     },
     /// Runs a command of the plugin; with `took`, the call takes that many milliseconds on the host's clock.
     Command {
@@ -1276,9 +1279,14 @@ pub unsafe fn replay(api: *const PluginApi, transcript: &Transcript, future: boo
                 None => Err(format!("entry {at}: the library has no describe")),
             },
             Entry::Create { major, minor, features: listed, options } => {
-                let listed = match future {
-                    true => serde_json::json!([format!("{FUTURE_FIELD}-feature")]),
-                    false => listed,
+                // A later host has every feature the transcript's host stated, and one no library knows.
+                let listed = match (future, listed) {
+                    (true, Value::Array(mut names)) => {
+                        names.push(serde_json::json!(format!("{FUTURE_FIELD}-feature")));
+                        Value::Array(names)
+                    }
+                    (true, _) => serde_json::json!([format!("{FUTURE_FIELD}-feature")]),
+                    (false, listed) => listed,
                 };
                 features.push(match listed {
                     Value::Null => Vec::new(),

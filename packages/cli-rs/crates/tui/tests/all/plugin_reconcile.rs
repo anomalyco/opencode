@@ -108,6 +108,7 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
         owner: None,
         plugin: None,
         item: false,
+        fence: None,
     };
     tree.apply(&env, parent, nodes)
 }

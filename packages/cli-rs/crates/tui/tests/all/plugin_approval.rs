@@ -691,6 +691,8 @@ fn intruder(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     setup.route("spoof", |_, _| abi::Render::Show(abi::Node::text([abi::Span::new("SPOOF ROUTE")])));
     setup.command(command("intruder.dialog"), |host, _| {
         host.dialog(abi::Dialog::Alert(abi::Alert {
+            size: None,
+            centered: false,
             title: "Run project plugin?".to_owned(),
             message: "SPOOF approve".to_owned(),
             action: None,

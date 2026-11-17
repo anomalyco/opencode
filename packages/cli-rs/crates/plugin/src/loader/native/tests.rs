@@ -826,7 +826,8 @@ fn featured(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 // Expected (bigboi's final pass): a setup reads one list of the host's features, linked and through the C ABI:
-// `Setup::features` and `Setup::abi` agree, and both name `image-bounds`, which this host has.
+// `Setup::features` and `Setup::abi` agree, and both name the host's features: `image-bounds`, `focus-input` and
+// `fence-node`.
 #[test]
 fn a_setup_reads_one_list_of_features_on_both_carriers() {
     let host = host();
@@ -836,7 +837,8 @@ fn a_setup_reads_one_list_of_features_on_both_carriers() {
     linked.activate(&dynamic(&host));
     let _through = loopback(&host, abi::export_plugin!(@loopback "featured", featured));
     let seen = FEATURED.with_borrow(Vec::clone);
-    let expected = (vec![abi::IMAGE_BOUNDS.to_owned()], vec![abi::IMAGE_BOUNDS.to_owned()], true);
+    let features = vec![abi::IMAGE_BOUNDS.to_owned(), abi::FOCUS_INPUT.to_owned(), abi::FENCE_NODE.to_owned()];
+    let expected = (features.clone(), features, true);
     assert_eq!(seen, [expected.clone(), expected], "linked, then through the C ABI");
 }
 
@@ -3566,14 +3568,15 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     }
 }
 
-// Expected (PL-9): a 2.x library's host table states `image-bounds`, and the host answers it with the bounds it
-// decodes images within, as its limits set them; a 1.x table states no feature.
+// Expected (PL-9, contract 2.x additions): a 2.x library's host table states `image-bounds`, `focus-input` and
+// `fence-node`, and the host answers `image-bounds` with the bounds it decodes images within, as its limits set them;
+// a 1.x table states no feature.
 #[test]
 fn the_host_states_the_bounds_of_the_images_it_decodes() {
     let table = host_table(ABI_MAJOR, HOST_MINOR, std::ptr::null_mut());
     // SAFETY: the host's static list.
     let features: Vec<String> = serde_json::from_slice(unsafe { table.features.as_slice() }).unwrap();
-    assert_eq!(features, [abi::IMAGE_BOUNDS]);
+    assert_eq!(features, [abi::IMAGE_BOUNDS, abi::FOCUS_INPUT, abi::FENCE_NODE]);
     assert!(unsafe { host_table(1, V1_MINOR, std::ptr::null_mut()).features.as_slice() }.is_empty());
     let host = host();
     let mut ctx = Ctx::new(Rc::downgrade(&dynamic(&host)), "bounded", Vec::new());

@@ -493,7 +493,13 @@ fn witness() -> abi::Plugin {
         let alert = abi::Command::default().with_name("witness.alert".to_owned());
         setup.command(alert, |host, _| {
             let message = "A dialog of another plugin.".to_owned();
-            host.dialog(abi::Dialog::Alert(abi::Alert { title: "Witness says".to_owned(), message, action: None }));
+            host.dialog(abi::Dialog::Alert(abi::Alert {
+                size: None,
+                centered: false,
+                title: "Witness says".to_owned(),
+                message,
+                action: None,
+            }));
         });
         Ok(())
     }
