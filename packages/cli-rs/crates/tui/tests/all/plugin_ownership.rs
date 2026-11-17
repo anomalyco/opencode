@@ -978,9 +978,19 @@ local function ask(host, origin)
     if origin ~= ORIGIN or asked then return end
     asked = true
     if CLOSE == "BeforeDispatch" and origin ~= "MountEnd" then host:navigate({{ type = "home" }}) end
+    -- A request waits in a task of its own, started in this call, so the request is this call's. A task gets no
+    -- request ID: 1 names the one it waits on, 0 a request the host did not take.
     local id
-    if KIND == "Fetch" then id = host:fetch({{ method = "GET", path = "/api/hold" }})
-    elseif KIND == "Foreground" then id = host:foreground({{ command = COMMAND, args = ARGS }})
+    if KIND == "Fetch" or KIND == "Foreground" then
+        local returned = false
+        plugin.spawn(function()
+            local value, error
+            if KIND == "Fetch" then value, error = host:fetch({{ method = "GET", path = "/api/hold" }})
+            else value, error = host:foreground({{ command = COMMAND, args = ARGS }}) end
+            returned = true
+            if id == 1 then record(host, "replies", {{ id = 1, text = describe(value, error) }}) end
+        end)
+        id = if returned then 0 else 1
     elseif KIND == "Overlay" then host:overlay(OTHER)
     elseif KIND == "Mode" then host:setMode("probe")
     elseif KIND == "Focus" then host:focus("n")
@@ -1002,7 +1012,6 @@ return plugin.define(function(setup)
     setup:command({{ name = "probe.global" }}, function(host) ask(host, "Global") end)
     setup:command({{ name = "probe.route", scope = {{ route = "probe" }} }}, function(host) ask(host, "Route") end)
     setup:command({{ name = "probe.overlay" }}, function(host) host:overlay(OTHER) end)
-    setup:onReply(function(host, id, value, error) record(host, "replies", {{ id = id, text = describe(value, error) }}) end)
     local layer = {{ scope = "global", keys = {{ {{ key = "x", name = "probe" }} }} }}
     setup:surface({{ name = "probe", place = {{ type = "route", name = "probe" }}, mounts = true, layers = {{ layer }} }},
         function() return PAGE end,
