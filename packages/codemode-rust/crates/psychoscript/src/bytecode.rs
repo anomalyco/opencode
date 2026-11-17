@@ -247,6 +247,20 @@ pub struct FuncProto {
     pub is_program: bool,
     /// Keeps arguments beyond `nparams` for rest parameters and `arguments`.
     pub needs_extra: bool,
+    /// How each call or `new` names its callee in errors (`o.f`, `f(...)`), by the instruction's index, ascending.
+    /// A callee that cannot be named is not listed.
+    pub callees: Vec<(u32, Box<str>)>,
+}
+
+impl FuncProto {
+    /// The name of the callee of the call or `new` instruction at `at`.
+    pub fn callee(&self, at: usize) -> Option<&str> {
+        let i = self
+            .callees
+            .binary_search_by_key(&(at as u32), |(pc, _)| *pc)
+            .ok()?;
+        Some(&self.callees[i].1)
+    }
 }
 
 pub struct Program {

@@ -470,12 +470,25 @@ fn function_ctor(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
     Err(vm.type_error("Function() is not supported; write a function expression instead"))
 }
 
+/// The receiver of `Function.prototype.call`, `apply` or `bind`, which must be callable.
+fn function_receiver(vm: &mut Vm, this: &Value, method: &str) -> Result<(), Value> {
+    if vm.is_callable(this) {
+        return Ok(());
+    }
+    let d = vm.describe_data(this);
+    Err(vm.type_error(&format!(
+        "Function.prototype.{method} called on incompatible receiver {d}."
+    )))
+}
+
 fn function_call(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    function_receiver(vm, &this, "call")?;
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
     vm.call(&this, arg(args, 0), rest)
 }
 
 fn function_apply(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+    function_receiver(vm, &this, "apply")?;
     let list = match arg(args, 1) {
         Value::Undef | Value::Null => Vec::new(),
         v @ Value::Obj(_) => array_like(vm, &v)?,
@@ -503,9 +516,7 @@ pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {
 }
 
 fn function_bind(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    if !vm.is_callable(&this) {
-        return Err(vm.type_error("Bind must be called on a function"));
-    }
+    function_receiver(vm, &this, "bind")?;
     let rest: Vec<Value> = args.iter().skip(1).cloned().collect();
     // Like the reference: `bound <name>`, and the target's length less the bound arguments, at least 0.
     let (lk, nk) = (vm.names.length, vm.names.name);

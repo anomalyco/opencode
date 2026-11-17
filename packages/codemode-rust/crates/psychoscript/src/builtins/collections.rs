@@ -186,11 +186,8 @@ fn map_clear<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) 
 
 fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = map_of::<SET>(vm, &this, "forEach")?;
-    let f = arg(args, 0);
-    if !vm.is_callable(&f) {
-        let d = vm.describe(&f);
-        return Err(vm.type_error(&format!("{d} is not a function")));
-    }
+    let label = if SET { "Set.forEach" } else { "Map.forEach" };
+    let f = super::require_callback(vm, &arg(args, 0), label)?;
     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
     let this_arg = arg(args, 1);
     let mut i = 0;
@@ -281,8 +278,9 @@ fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     }
     let executor = arg(args, 0);
     if !vm.is_callable(&executor) {
-        let d = vm.describe(&executor);
-        return Err(vm.type_error(&format!("Promise resolver {d} is not a function")));
+        return Err(vm.type_error(
+            "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
+        ));
     }
     let p = vm.new_promise();
     let (res, rej) = vm.create_resolvers(p);
@@ -429,6 +427,11 @@ fn promise_with_resolvers(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> 
 }
 
 fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+    let f = arg(args, 0);
+    if !vm.is_callable(&f) {
+        let d = vm.describe_data(&f);
+        return Err(vm.type_error(&format!("Promise.try expects a function, received {d}.")));
+    }
     let p = vm.new_promise();
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
     match vm.call(&arg(args, 0), Value::Undef, rest) {

@@ -617,7 +617,7 @@ fn u_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         data.sort_unstable();
     } else {
         let list: Vec<Value> = data.iter().map(|b| Value::Num(*b as f64)).collect();
-        let sorted = super::array::sort_values(vm, list, &cmp)?;
+        let sorted = super::array::sort_values(vm, list, &cmp, "Uint8Array.sort")?;
         data = sorted
             .iter()
             .map(|v| match v {

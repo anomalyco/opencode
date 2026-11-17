@@ -605,8 +605,7 @@ impl<'rt> Vm<'rt> {
             return Err(self.range_error("Maximum call stack size exceeded"));
         }
         let Value::Obj(id) = f else {
-            let d = self.describe(f);
-            return Err(self.type_error(&format!("{d} is not a function")));
+            return Err(self.type_error("The called value is not a function."));
         };
         let id = *id;
         match &self.heap[id as usize].kind {
@@ -648,10 +647,7 @@ impl<'rt> Vm<'rt> {
                 let path = path.clone();
                 self.call_tool(&path, args)
             }
-            _ => {
-                let d = self.describe(f);
-                Err(self.type_error(&format!("{d} is not a function")))
-            }
+            _ => Err(self.type_error("The called value is not a function.")),
         }
     }
 
@@ -743,8 +739,7 @@ impl<'rt> Vm<'rt> {
         let callee = self.stack[fpos].get();
         let Value::Obj(id) = callee else {
             self.stack.truncate(fpos);
-            let d = self.describe(&callee);
-            return Err(self.type_error(&format!("{d} is not a function")));
+            return Err(self.not_a_function());
         };
         match &self.heap[id as usize].kind {
             Kind::Closure(_) => {
@@ -797,10 +792,26 @@ impl<'rt> Vm<'rt> {
             }
             _ => {
                 self.stack.truncate(fpos);
-                let d = self.describe(&callee);
-                Err(self.type_error(&format!("{d} is not a function")))
+                Err(self.not_a_function())
             }
         }
+    }
+
+    /// How the running call or `new` instruction names its callee, as the reference does: `o.f`, or "The called
+    /// value" when it cannot be named.
+    fn callee_name(&self) -> String {
+        let named = self
+            .frames
+            .last()
+            .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)));
+        named.unwrap_or("The called value").to_owned()
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn not_a_function(&mut self) -> Value {
+        let name = self.callee_name();
+        self.type_error(&format!("{name} is not a function."))
     }
 
     #[inline(never)]
@@ -809,24 +820,32 @@ impl<'rt> Vm<'rt> {
         let callee = self.stack[fpos].get();
         let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
         self.stack.truncate(fpos);
-        if let Value::Obj(id) = callee {
-            match &self.heap[id as usize].kind {
-                Kind::Native { f, ctor: true, .. } => {
-                    let f = *f;
-                    let r = f(self, Value::Uninit, &args, id)?;
-                    self.push(r);
-                    return Ok(());
-                }
-                Kind::Closure(_) => {
-                    return Err(self.type_error(
-                        "User-defined constructors are not supported; call a function that returns an object instead",
-                    ));
-                }
-                _ => {}
-            }
+        if let Value::Obj(id) = callee
+            && let Kind::Native { f, ctor: true, .. } = &self.heap[id as usize].kind
+        {
+            let f = *f;
+            let r = f(self, Value::Uninit, &args, id)?;
+            self.push(r);
+            return Ok(());
         }
-        let d = self.describe(&callee);
-        Err(self.type_error(&format!("{d} is not a constructor")))
+        Err(self.not_a_constructor(callee))
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn not_a_constructor(&mut self, callee: Value) -> Value {
+        let name = self.callee_name();
+        let kind = callee.as_obj().map(|id| &self.heap[id as usize].kind);
+        let message = match kind {
+            Some(Kind::Closure(_)) => format!(
+                "{name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead."
+            ),
+            Some(Kind::Native { .. }) => {
+                format!("new {name}(...) is not supported; call {name}(...) without new instead.")
+            }
+            _ => format!("{name} is not a constructor."),
+        };
+        self.type_error(&message)
     }
 
     pub fn call_tool(&mut self, path: &str, args: &[Value]) -> Res {

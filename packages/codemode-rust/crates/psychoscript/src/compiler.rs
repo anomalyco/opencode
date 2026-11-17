@@ -334,6 +334,7 @@ struct FnState<'a> {
     is_async: bool,
     is_generator: bool,
     needs_extra: bool,
+    callees: Vec<(u32, Box<str>)>,
     /// The instruction index a jump may land on; no instruction fuses across it.
     barrier: usize,
 }
@@ -1052,6 +1053,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 is_arrow: false,
                 is_program: true,
                 needs_extra: false,
+                callees: f.callees,
             },
         );
         // Closure instructions index `protos` assuming the program is not in the list; shift them.
@@ -1242,6 +1244,7 @@ impl<'a, 's> Compiler<'a, 's> {
             is_arrow: spec.is_arrow,
             is_program: false,
             needs_extra: f.needs_extra,
+            callees: f.callees,
         });
         Ok(self.protos.len() as u32 - 1)
     }
@@ -2342,10 +2345,11 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.emit(Op::Undef);
                 let argc = self.args(&n.arguments)?;
                 self.pos = n.span.start;
-                match argc {
+                let at = match argc {
                     Some(argc) => self.emit(Op::New(argc)),
                     None => self.emit(Op::NewSpread),
                 };
+                self.name_callee(at, &n.callee);
             }
             Expression::StaticMemberExpression(m) => {
                 self.expr(&m.object)?;
@@ -2707,11 +2711,19 @@ impl<'a, 's> Compiler<'a, 's> {
         self.pos = c.span.start;
         let argc = self.args(&c.arguments)?;
         self.pos = c.span.start;
-        match argc {
+        let at = match argc {
             Some(argc) => self.emit(Op::Call(argc)),
             None => self.emit(Op::CallSpread),
         };
+        self.name_callee(at, &c.callee);
         Ok(())
+    }
+
+    /// Notes how the call or `new` at `at` names its callee in errors, when it can be named.
+    fn name_callee(&mut self, at: usize, callee: &Expression) {
+        if let Some(name) = callee_name(callee) {
+            self.f().callees.push((at as u32, name.into()));
+        }
     }
 
     fn unary(&mut self, u: &'a UnaryExpression<'a>) -> R<()> {
@@ -2961,8 +2973,28 @@ impl<'a> FnState<'a> {
             is_async: false,
             is_generator: false,
             needs_extra: false,
+            callees: Vec::new(),
             barrier: 0,
         }
+    }
+}
+
+/// How the reference names a callee, like native engines: identifiers, member chains with plain keys, and calls of
+/// those (`search(...).catch`). A chain with any other link has no name.
+fn callee_name(e: &Expression) -> Option<String> {
+    match e {
+        Expression::Identifier(id) => Some(id.name.to_string()),
+        Expression::CallExpression(c) => Some(format!("{}(...)", callee_name(&c.callee)?)),
+        Expression::StaticMemberExpression(m) => {
+            Some(format!("{}.{}", callee_name(&m.object)?, m.property.name))
+        }
+        Expression::ComputedMemberExpression(m) => match &m.expression {
+            Expression::StringLiteral(s) => {
+                Some(format!("{}.{}", callee_name(&m.object)?, js_str(&s.value)))
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 

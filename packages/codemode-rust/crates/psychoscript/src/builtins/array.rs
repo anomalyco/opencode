@@ -134,13 +134,8 @@ fn items_mut<'a>(vm: &'a mut Vm, id: Id, growing: bool) -> Result<&'a mut Vec<Va
     }
 }
 
-fn callback(vm: &mut Vm, args: &[Value]) -> Result<Value, Value> {
-    let f = arg(args, 0);
-    if !vm.is_callable(&f) {
-        let d = vm.describe(&f);
-        return Err(vm.type_error(&format!("{d} is not a function")));
-    }
-    Ok(f)
+fn callback(vm: &mut Vm, args: &[Value], method: &str) -> Result<Value, Value> {
+    super::require_callback(vm, &arg(args, 0), &format!("Array.{method}"))
 }
 
 fn array_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -207,9 +202,7 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     };
     let f = arg(args, 1);
     if !matches!(f, Value::Undef) {
-        if !vm.is_callable(&f) {
-            return Err(vm.type_error("Array.from mapper is not a function"));
-        }
+        super::require_callback(vm, &f, "Array.from")?;
         let this_arg = arg(args, 2);
         for (i, v) in list.iter_mut().enumerate() {
             let x = std::mem::take(v);
@@ -473,11 +466,12 @@ fn each<T>(
     vm: &mut Vm,
     this: &Value,
     args: &[Value],
+    method: &str,
     reverse: bool,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
     let id = arr_id(vm, this)?;
-    let f = callback(vm, args)?;
+    let f = callback(vm, args, method)?;
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     for k in 0..n {
@@ -496,10 +490,11 @@ fn each_present<T>(
     vm: &mut Vm,
     this: &Value,
     args: &[Value],
+    method: &str,
     mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
 ) -> Result<Option<T>, Value> {
     let id = arr_id(vm, this)?;
-    let f = callback(vm, args)?;
+    let f = callback(vm, args, method)?;
     let this_arg = arg(args, 1);
     let n = len(vm, id);
     for i in 0..n {
@@ -515,28 +510,28 @@ fn each_present<T>(
 }
 
 fn a_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(each(vm, &this, args, false, |vm, _, v, r| {
+    Ok(each(vm, &this, args, "find", false, |vm, _, v, r| {
         vm.truthy(&r).then_some(v)
     })?
     .unwrap_or_default())
 }
 
 fn a_find_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(vm, &this, args, false, |vm, i, _, r| {
+    let r = each(vm, &this, args, "findIndex", false, |vm, i, _, r| {
         vm.truthy(&r).then_some(i)
     })?;
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
 }
 
 fn a_find_last(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(each(vm, &this, args, true, |vm, _, v, r| {
+    Ok(each(vm, &this, args, "findLast", true, |vm, _, v, r| {
         vm.truthy(&r).then_some(v)
     })?
     .unwrap_or_default())
 }
 
 fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(vm, &this, args, true, |vm, i, _, r| {
+    let r = each(vm, &this, args, "findLastIndex", true, |vm, i, _, r| {
         vm.truthy(&r).then_some(i)
     })?;
     Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
@@ -544,13 +539,16 @@ fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn a_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each_present(vm, &this, args, |vm, _, _, r| vm.truthy(&r).then_some(()))?.is_some(),
+        each_present(vm, &this, args, "some", |vm, _, _, r| {
+            vm.truthy(&r).then_some(())
+        })?
+        .is_some(),
     ))
 }
 
 fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(
-        each_present(vm, &this, args, |vm, _, _, r| {
+        each_present(vm, &this, args, "every", |vm, _, _, r| {
             (!vm.truthy(&r)).then_some(())
         })?
         .is_none(),
@@ -558,13 +556,13 @@ fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    each_present(vm, &this, args, |_, _, _, _| None::<()>)?;
+    each_present(vm, &this, args, "forEach", |_, _, _, _| None::<()>)?;
     Ok(Value::Undef)
 }
 
 fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let mut out = Vec::new();
-    each_present(vm, &this, args, |vm, _, v, r| {
+    each_present(vm, &this, args, "filter", |vm, _, v, r| {
         if vm.truthy(&r) {
             out.push(v);
         }
@@ -577,7 +575,7 @@ fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     // Skipped indexes stay holes.
     let mut out = vec![Value::Uninit; len(vm, id)];
-    each_present(vm, &this, args, |_, i, _, r| {
+    each_present(vm, &this, args, "map", |_, i, _, r| {
         out[i] = r;
         None::<()>
     })?;
@@ -586,7 +584,7 @@ fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     let id = arr_id(vm, &this)?;
-    let f = callback(vm, args)?;
+    let f = callback(vm, args, if reverse { "reduceRight" } else { "reduce" })?;
     let n = len(vm, id);
     let index = |k: usize| if reverse { n - 1 - k } else { k };
     let mut k = 0;
@@ -624,9 +622,15 @@ fn a_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     reduce(vm, this, args, true)
 }
 
-pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<Vec<Value>, Value> {
-    if !matches!(cmp, Value::Undef) && !vm.is_callable(cmp) {
-        return Err(vm.type_error("The comparison function must be either a function or undefined"));
+/// Sorts `list` for `method` (`Array.sort`), with the comparator `cmp` or by string when it is undefined.
+pub(super) fn sort_values(
+    vm: &mut Vm,
+    list: Vec<Value>,
+    cmp: &Value,
+    method: &str,
+) -> Result<Vec<Value>, Value> {
+    if !matches!(cmp, Value::Undef) {
+        super::require_callback(vm, cmp, method)?;
     }
     let (mut defined, undefs): (Vec<Value>, Vec<Value>) =
         list.into_iter().partition(|v| !matches!(v, Value::Undef));
@@ -719,7 +723,7 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         .into_iter()
         .filter(|v| !matches!(v, Value::Uninit))
         .collect();
-    let mut sorted = sort_values(vm, list, &arg(args, 0))?;
+    let mut sorted = sort_values(vm, list, &arg(args, 0), "Array.sort")?;
     sorted.resize(sorted.len() + holes, Value::Uninit);
     if let Kind::Array(items) = &mut vm.heap[id as usize].kind {
         *items = sorted;
@@ -730,7 +734,7 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = arr_id(vm, &this)?;
     let list = without_holes(items(vm, id));
-    let sorted = sort_values(vm, list, &arg(args, 0))?;
+    let sorted = sort_values(vm, list, &arg(args, 0), "Array.toSorted")?;
     Ok(vm.new_array(sorted))
 }
 
@@ -766,7 +770,7 @@ fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     // A returned array is read like the callback methods read theirs: live, skipping indexes not in it.
     let mut out = Vec::new();
-    each_present(vm, &this, args, |vm, _, _, r| {
+    each_present(vm, &this, args, "flatMap", |vm, _, _, r| {
         match r {
             Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
                 let mut at = 0;
