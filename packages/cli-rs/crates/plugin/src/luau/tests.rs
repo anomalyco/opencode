@@ -222,6 +222,70 @@ fn a_spinning_render_is_stopped_and_draws_nothing() {
     assert!(!text.contains("n"), "{text}");
 }
 
+// Expected (luau-calls): one pattern match that runs past the limit, with no loop of the plugin's around it, is stopped
+// inside the match: the interrupt, armed at the deadline, is seen at the matcher's next step.
+#[test]
+fn a_long_pattern_match_is_stopped() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "match" }, function(host)
+                -- Three lazy repetitions over 3000 bytes with no match: billions of matcher steps.
+                local found = string.rep("a", 3000):find(".-.-.-b")
+                host:toast({ variant = "info", message = tostring(found) })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    let start = Instant::now();
+    keymap(&host).dispatch("match", None);
+    let took = start.elapsed();
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("the match was stopped");
+    assert!(error.contains("CPU") && error.contains("Luau budget"), "{error}");
+    assert!(took < Duration::from_millis(1500), "the match held the thread {took:?}");
+    assert!(host.toasts.borrow().iter().all(|toast| toast.message != "nil"));
+}
+
+// Expected (luau-calls): an interrupt armed for one call, as the deadline thread arms it, never stops a later call of
+// the same VM, nor a call of another plugin's VM; nor does a call that was stopped leave its latch to the next one.
+#[test]
+fn an_armed_interrupt_stays_with_its_call_and_its_vm() {
+    let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
+    // A limit far past the row's own time: only an arm of the interrupt ends a call early.
+    let new = || {
+        let vm = vm::Vm::new(&compiled, Duration::from_secs(10), MEMORY).unwrap();
+        vm.start(&compiled).unwrap();
+        vm
+    };
+    let (one, other) = (new(), new());
+    let work = |vm: &vm::Vm| {
+        let f = vm.lua.load("local n = 0 for i = 1, 1e5 do n += i end return n").into_function().unwrap();
+        vm.call(|| f.call::<f64>(()))
+    };
+    // Armed outside any call: the next call of either VM runs to its end.
+    one.arm_interrupt();
+    assert_eq!(work(&other), Ok(5_000_050_000.0));
+    assert_eq!(work(&one), Ok(5_000_050_000.0));
+    // A refusal the plugin caught stops its call at the next safepoint, long before the budget would; the call after it
+    // runs.
+    let refused = one
+        .lua
+        .create_function(|lua, ()| {
+            vm::refuse(lua, "refused");
+            Ok(())
+        })
+        .unwrap();
+    let caught = one.lua.load("local refuse = ... pcall(refuse) while true do end").into_function().unwrap();
+    let start = Instant::now();
+    let error = one.call(|| caught.call::<()>(refused.clone())).unwrap_err();
+    assert!(error.contains("refused") && !error.contains("CPU"), "{error}");
+    assert!(start.elapsed() < Duration::from_secs(5), "the refused call ran {:?}", start.elapsed());
+    assert_eq!(work(&one), Ok(5_000_050_000.0));
+    assert_eq!(work(&other), Ok(5_000_050_000.0));
+}
+
 // Expected (luau-spike 1.3): a VM's heap is capped; an allocation past it fails the call and the plugin, and the
 // process's memory is not touched.
 #[test]
