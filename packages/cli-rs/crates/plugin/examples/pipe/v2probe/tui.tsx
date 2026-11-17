@@ -2,9 +2,10 @@
 // The V2 probe of the compatibility layer's tests (P8): a `{ id, setup }` module written against `@opencode/plugin/tui`
 // as an npm plugin is, with JSX over OpenTUI's intrinsics. It logs each call, one JSON line, to the file its `log`
 // option names. Its commands add an item to the list its home footer claim draws, make that render throw, spin, use an
-// intrinsic without a node or bare text, flood the host with toasts, ask the host's dialogs, show a dialog of its own,
-// open its pages (one whose commands have no `id`, one whose registrations never settle), toast a theme color, and use
-// what the layer does not map. An event it hears is logged.
+// intrinsic without a node or bare text, flood the host with toasts, ask the host's dialogs (also sized and centered),
+// show a dialog of its own, open its pages (one whose commands have no `id`, one whose registrations never settle, one
+// that shows a field and focuses it in one handler), toast a theme color, and use what the layer does not map. An event
+// it hears is logged.
 
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
@@ -98,6 +99,19 @@ export default Plugin.define({
             log({ alerted: true })
           },
         },
+        // A select, then an alert, each sized and centered by `dialog.set` right after, as opencode-session-time's
+        // `/time` (contract 2.x, addition 4).
+        {
+          id: "v2probe.centered",
+          run: async () => {
+            const turn = context.ui.dialog.select({ title: "Turns", options: [{ title: "Turn 1", value: 1 }] })
+            context.ui.dialog.set({ size: "xlarge", centered: true })
+            log({ turn: (await turn) ?? null })
+            const told = context.ui.dialog.alert({ title: "Turn details", message: "It took long." })
+            context.ui.dialog.set({ size: "xlarge", centered: true })
+            await told
+          },
+        },
         {
           id: "v2probe.show",
           run: () => {
@@ -132,6 +146,7 @@ export default Plugin.define({
         },
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
         { id: "v2probe.inline", run: () => context.ui.router.navigate({ type: "plugin", name: "inline" }) },
+        { id: "v2probe.findpage", run: () => context.ui.router.navigate({ type: "plugin", name: "find" }) },
         { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
@@ -186,6 +201,28 @@ export default Plugin.define({
                 <text>{`line ${index}`}</text>
               ))}
             </scrollbox>
+          </box>
+        )
+      },
+    })
+    // A page whose command shows a field that asks for the focus as it is created (`focused`), as file-browser's editor
+    // does: the focus comes to the host with the handler's effects, the field with the next revision. What it hears is
+    // logged.
+    const [finding, setFinding] = createSignal(false)
+    context.ui.router.register({
+      name: "find",
+      render: () => {
+        context.keymap.layer(() => ({ commands: [{ id: "v2probe.find", run: () => setFinding(true) }] }))
+        return (
+          <box flexDirection="column">
+            <text>find page</text>
+            {() =>
+              finding() ? (
+                <input id="find" focused placeholder="find" onInput={(text: string) => log({ found: text })} />
+              ) : (
+                <text>no field</text>
+              )
+            }
           </box>
         )
       },

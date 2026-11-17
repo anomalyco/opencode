@@ -445,6 +445,26 @@ impl Guest {
         }
     }
 
+    /// Applies `effects` the JS host sent outside a call as `mount`'s, as that mount's call would have asked for them: to
+    /// it, or, once it closed, nowhere, answering each with nothing (the ownership rule of 2.8).
+    pub(crate) fn mount_effects(self: &Rc<Self>, key: &str, mount: &v2::MountId, effects: Vec<HostRequest>) {
+        if self.ended() {
+            return;
+        }
+        let owner = self.activation.owners().into_iter().find(|owner| owner.id() == Some(mount));
+        let Some(owner) = owner else {
+            log::debug!("plugin {}: effects of mount {mount:?}, which closed, apply nowhere", self.id());
+            let (activation, results) = (self.js.get(), vec![serde_json::Value::Null; effects.len()]);
+            self.send(Down::Answered { id: self.id().to_owned(), activation, key: key.to_owned(), results }, None);
+            return;
+        };
+        let apply = || self.effects(key, effects, false, "update");
+        self.owners.as_owner(&owner, || match owner.mounted() {
+            Some(alive) => self.owners.owned_by(&alive, apply),
+            None => apply(),
+        });
+    }
+
     /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
     /// tells the JS host what they answered under `key`. More than [`EFFECTS`] at once fail the plugin: each runs on the
     /// UI thread (review carbon-8).

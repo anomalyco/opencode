@@ -110,10 +110,13 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   A plugin that reads a nested node within a few timer ticks still loses the race. Other renderable members are
   undefined.
 - **Fields** (CT-11): an `<input>` or `<textarea>` hears the host's field: `onInput` each edit, `onChange` and
-  `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. The contract's focus takes
-  only a node with `interact.focusable`, so the host refuses a field's `focus()`, which is reported once: the plugin
-  holds its own focus of it, but what the user types goes elsewhere until the user moves into the field. It would
-  need `Host::focus` to accept a field (`Node::Input`). While the plugin's focused field sits in a route or a panel,
+  `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. A field's `focus()` and
+  its `focused` prop (one microtask after it changes) are the contract's focus of the field (contract 2.x,
+  `focus-input`), as the request of the mount whose render holds it, whichever call runs: what the user types goes
+  into it, as in TS (`P.8/file-browser`'s `typed`). A field its revision has not shown yet takes the focus once it
+  does, unless another focus, a blur or the mount's end came first; a mount that closed takes nothing. A field in no
+  mount (a dialog of the plugin's own) has no focus on the host, which is reported once. While the plugin's focused
+  field sits in a route or a panel,
   each key there is its `onKeyDown`, through a listener layer of the surface: the key also goes on to the host's
   field and keys, as a listener cannot take it (`preventDefault` says so once in the JS host's log). It would need the
   contract to answer a listener's key after the JS host does. TS's `<scrollbox>` draws a scrollbar beside its content
@@ -129,11 +132,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `undefined` on escape, the backdrop, another plugin's dialog, `clear()` or the plugin's end). A select's `search`
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
   once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
-  after `dialog.select` sizes the select as in TS; its `centered` is not mapped for a select, which the host places
-  as its own selects, where TS centers it (opencode-session-time's `/time`). It would need `abi::Select` to carry
-  `centered`, as `abi::Panel` does, and the host to place a centered select in the middle of the screen. A select's
-  `actions` and
-  a prompt's `value` and `description` are reported, not mapped. `ui.dialog.show` shows the plugin's JSX
+  after `dialog.select`, `alert` or `confirm` sizes and centers it as in TS (contract 2.x, addition 4,
+  `P.8/session-time`); one after the dialog showed is reported once. A select's `actions` and a prompt's `value` and
+  `description` are reported, not mapped: TS draws a select's actions under its rows, so its select is taller, and a
+  centered one sits higher (`P.8/session-time`'s timeline). `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a node of ABI 1.x: a `<scrollbox>` in it is a box that does not
   scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
@@ -202,10 +204,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `github-copilot/gemini-3.8-flash` after the `/`, the host's after `gemini-`, which is OpenTUI's Rust wrap, not the
   layer's. A panel sized by its box's width (CT-28: opencode-tui-context's gauges and legend, `P.8/context-gauge`)
   draws as TS once the host's layout reaches it (above).
-- **Dialog size**: `dialog.set({ size, centered })` sizes a `ui.dialog.show` dialog; after an `alert` or a `confirm`
-  it is not carried, and the JS host's log says so once (CT-35: the joe-broadhead status alerts are `large` in TS,
-  about 88 columns, and medium here, so their long lines wrap earlier). It would need `size` and `centered` on the
-  contract's `Alert` and `Confirm` (contract 2.x proposal, addition 4, the recommended fields).
+- **Dialog size**: `dialog.set({ size, centered })` sizes a `ui.dialog.show` dialog, and an `alert`, a `confirm` or a
+  `select` it follows right away (above; CT-35's joe-broadhead status alerts are `large`, as in TS).
 - **Border titles**: a box's `title` and `titleAlignment` are the contract border's; its `bottomTitle` and
   `bottomTitleAlignment` are not drawn, which would need the contract's border to carry a bottom title
   (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the

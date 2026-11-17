@@ -283,6 +283,8 @@ interface Plugin {
   // What setup watches, told after it was answered, as the host knows the plugin from then on.
   setupWatches: Json[]
   callEffects?: Request[]
+  // The mount the call that runs is of, when it is a surface's input: an effect of that mount is the call's.
+  callMount?: Json
   // Who waits for the answer of each effect of the call or setup that runs.
   resolvers: Array<(value: Json) => void>
   commands: Command[]
@@ -362,7 +364,9 @@ function thrown(error: unknown) {
 
 // Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer. A
 // call ends at its handler's first `await`: what it asks for after that is a batch's, the activation's, not the mount's.
-function effect(plugin: Plugin, request: Request): Promise<Json> {
+// A request of `mount` (the layer's focus of a field in that mount's tree, contract 2.x, step B) is that mount's: in
+// its own call, the call's; anywhere else, a batch that names the mount, which the host applies to it or nowhere.
+function effect(plugin: Plugin, request: Request, mount?: Json): Promise<Json> {
   return new Promise((resolve) => {
     if (plugin.failed) return resolve(undefined)
     if (plugin.setting) {
@@ -370,15 +374,20 @@ function effect(plugin: Plugin, request: Request): Promise<Json> {
       plugin.resolvers.push(resolve)
       return
     }
-    if (plugin.callEffects) {
+    if (plugin.callEffects && (!mount || sameMount(plugin.callMount, mount))) {
       plugin.callEffects.push(request)
       plugin.resolvers.push(resolve)
       return
     }
     const seq = ++plugin.batch
     plugin.answers.set(`b${seq}`, [resolve])
-    sendFor(plugin, { type: "effects", id: plugin.id, activation: plugin.activation, seq, effects: [request] })
+    const batch = { type: "effects", id: plugin.id, activation: plugin.activation, seq, effects: [request] }
+    sendFor(plugin, mount ? { ...batch, mount } : batch)
   })
+}
+
+function sameMount(a: Json, b: Json) {
+  return !!a && !!b && a.surface === b.surface && a.key === b.key && a.generation === b.generation
 }
 
 function view(plugin: Plugin, mount: Mount) {
@@ -587,7 +596,7 @@ function context(plugin: Plugin) {
     on(types: string[], handler: (event: Json) => unknown) {
       plugin.events.push({ types, handler })
     },
-    effect: (request: Request) => effect(plugin, request),
+    effect: (request: Request, mount?: Json) => effect(plugin, request, mount),
     watch(key: string, request: Request) {
       const watch = { type: "watch", id: plugin.id, activation: plugin.activation, key, request }
       if (plugin.setting) plugin.setupWatches.push(watch)
@@ -919,6 +928,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
   if (!plugin.active || plugin.failed)
     return send({ type: "done", seq, ...(request.type === "command" ? { declined: true } : {}) })
   plugin.callEffects = []
+  plugin.callMount = request.type === "input" && request.to?.type === "surface" ? request.to.mount : undefined
   plugin.resolvers = []
   let error: string | undefined
   let result: unknown
@@ -949,6 +959,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
   const effects = plugin.callEffects
   const resolvers = plugin.resolvers
   plugin.callEffects = undefined
+  plugin.callMount = undefined
   plugin.resolvers = []
   if (error) {
     plugin.failed = true

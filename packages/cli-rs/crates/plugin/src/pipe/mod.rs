@@ -617,6 +617,9 @@ pub enum Fault {
 pub enum Tamper {
     /// It is kept, so [`Scripts::replay`] can deliver it again later, when it is stale.
     Keep,
+    /// It is held, not delivered, until [`Scripts::replay`] delivers it: a revision that comes after what its JS host
+    /// sent next, as a slow frame has it.
+    Hold,
     /// Its tree is a keep of a key the host does not hold.
     UnknownKeep,
 }
@@ -1470,6 +1473,10 @@ impl Scripts {
                 child::Event::Tree(mut tree) => {
                     match self.tamper.take() {
                         Some(Tamper::Keep) => *self.kept.borrow_mut() = Some(tree.clone()),
+                        Some(Tamper::Hold) => {
+                            *self.kept.borrow_mut() = Some(tree);
+                            continue;
+                        }
                         // Its memo table is the keep's alone: only the keep is wrong.
                         Some(Tamper::UnknownKeep) => {
                             tree.node = serde_json::json!({ "type": "keep", "key": "no-such" });
@@ -1647,7 +1654,12 @@ impl Scripts {
             return;
         };
         match up {
-            Up::Effects { seq, effects, .. } => guest.effects(&format!("b{seq}"), effects, false, "update"),
+            Up::Effects { seq, effects, mount: None, .. } => {
+                guest.effects(&format!("b{seq}"), effects, false, "update")
+            }
+            Up::Effects { seq, effects, mount: Some(mount), .. } => {
+                guest.mount_effects(&format!("b{seq}"), &mount, effects)
+            }
             Up::Watch { key, request, .. } => guest.watch(key, request),
             Up::Unwatch { key, .. } => guest.unwatch(&key),
             Up::Fail { error, .. } => guest.fail(error),
@@ -1698,7 +1710,7 @@ impl Scripts {
     /// each, to the activation that sent it, so what waits for it settles once; anything else is dropped, as the
     /// activation fails.
     fn refuse_spilled(&self, up: Up) {
-        if let Up::Effects { id, activation, seq, effects } = up {
+        if let Up::Effects { id, activation, seq, effects, .. } = up {
             let results = vec![serde_json::Value::Null; effects.len()];
             self.settle(&Down::Answered { id, activation, key: format!("b{seq}"), results }, 0);
         }

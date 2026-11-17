@@ -1108,6 +1108,10 @@ impl Surface {
         if let (Some(owner), Some(focused)) = (self.holder(), focused) {
             owner.restore_focus(host, focused.node.as_deref());
         }
+        // A focus its calls asked for before this tree showed the node.
+        if let Some(owner) = self.holder() {
+            owner.apply_pending(host);
+        }
         let live = self.live.borrow().clone();
         if let (true, Some(live)) = (slots_changed, live) {
             crate::settle(host, &live);

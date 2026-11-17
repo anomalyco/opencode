@@ -275,7 +275,7 @@ for (const name of [
   })
 }
 
-function rootOf(node: VNode) {
+export function rootOf(node: VNode) {
   let at = node
   while (at.parent) at = at.parent
   return at
@@ -331,11 +331,16 @@ const renderer = createRenderer<VNode>({
     return node.tag === "#text"
   },
   setProperty(node, name, value) {
+    const was = node.props.focused
     // A node other than a span takes each prop of a `style` as its own. A span is read by its `style` and `href` alone
     // (`inner`), as OpenTUI's spans are.
     if (!SPANS.has(node.tag) && name === "style") Object.assign(node.props, value ?? {})
     else node.props[name === "text" ? "content" : name] = value
     touch(node)
+    // A field's `focused` focuses it as it turns true, also as the field is created, and blurs it as it turns false, as
+    // OpenTUI's does; once the field is in its mount, a microtask later (contract 2.x, `focus-input`).
+    if (name === "focused" && (node.tag === "input" || node.tag === "textarea") && !!value !== !!was)
+      queueMicrotask(() => (value ? node.focus() : node.blur()))
   },
   // A renderable the plugin built itself (`new BoxRenderable(…)`), which a render returned or a ref added, is inert and
   // draws nothing: it goes nowhere, and says so (CT-15: opencode-quick-quote returns one as its slot's element).

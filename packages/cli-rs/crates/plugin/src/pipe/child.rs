@@ -1226,8 +1226,9 @@ mod tests {
     #[test]
     fn ordered_messages_past_the_bound_end_the_stream() {
         let limits = Limits { ordered: 8, ..Limits::default() };
-        let effects =
-            |id: &str| control(&Up::Effects { id: id.to_owned(), activation: 1, seq: 1, effects: Vec::new() });
+        let effects = |id: &str| {
+            control(&Up::Effects { id: id.to_owned(), activation: 1, seq: 1, effects: Vec::new(), mount: None })
+        };
         // With the hello and the quiet one: 8 messages, then 9.
         for (count, ends) in [(6, false), (7, true)] {
             let mut frames = hello();
@@ -1457,7 +1458,8 @@ mod tests {
             level: opencode_plugin_abi::Level::Info,
             message: "x".repeat(20 << 10),
         };
-        let effects = control(&Up::Effects { id: "loud".to_owned(), activation: 1, seq: 1, effects: vec![request] });
+        let effects =
+            control(&Up::Effects { id: "loud".to_owned(), activation: 1, seq: 1, effects: vec![request], mount: None });
         for (count, ends) in [(2, false), (4, true)] {
             let mut frames = hello();
             (0..count).for_each(|_| frames.extend(&effects));

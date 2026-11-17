@@ -225,6 +225,88 @@ fn confirm_prompt_and_alert_answer_their_promises() {
     assert_eq!(logged(&pipe, &log, expected.len()), expected);
 }
 
+// Expected (contract 2.x, step B, `focus-input` on the pipe): a field a handler shows with `focused` takes the focus
+// once the revision that shows it is adopted, though the focus came first, with the handler's effects: what the user
+// types then is the field's. The revision is held until the focus has come (`Tamper::Hold`), as a slow frame holds it.
+#[test]
+fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.keymap.dispatch("v2probe.findpage", None);
+    pipe.harness.wait_for("no field");
+    pipe.settle();
+    pipe.scripts().tamper(opencode_plugin::pipe::Tamper::Hold);
+    tui.keymap.dispatch("v2probe.find", None);
+    // The call answered, with its focus; a settle would wait for the held revision.
+    pipe.harness.wait("the call answered", || {
+        app.advance(Duration::from_millis(1));
+        pipe.scripts().idle()
+    });
+    for _ in 0..20 {
+        app.advance(Duration::from_millis(1));
+        app.render();
+    }
+    assert!(app.text().contains("no field"), "the revision was not held:\n{}", app.text());
+    pipe.scripts().replay();
+    pipe.settle();
+    assert!(!app.text().contains("no field"), "the held revision did not show:\n{}", app.text());
+    app.type_text("ab");
+    pipe.settle();
+    assert_eq!(logged(&pipe, &log, 2), [json!({ "found": "a" }), json!({ "found": "ab" })]);
+}
+
+// Expected (contract 2.x, step B, the ownership rule of 2.8): a field's focus is its mount's, and applies to it or
+// nowhere: one the JS host sent while the mount was open, which the host takes only after the mount closed, moves
+// nothing; the composer the user went back to keeps the focus and what they type.
+#[test]
+fn a_fields_focus_after_its_mount_closed_moves_nothing() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.keymap.dispatch("v2probe.findpage", None);
+    pipe.harness.wait_for("no field");
+    pipe.settle();
+    // What the JS host answers waits: the call, its field's focus and the revision that shows the field.
+    pipe.scripts().hold_answers(true);
+    tui.keymap.dispatch("v2probe.find", None);
+    app.wait_until(Duration::from_millis(500), || {
+        app.advance(Duration::from_millis(1));
+        false
+    });
+    tui.navigate(Route::Home);
+    for _ in 0..5 {
+        app.advance(Duration::from_millis(1));
+        app.render();
+    }
+    pipe.scripts().hold_answers(false);
+    pipe.settle();
+    assert!(opencode_plugin::Host::composer_focused(&**tui), "the closed mount's focus moved it:\n{}", app.text());
+    app.type_text("ab");
+    pipe.settle();
+    let typed = tui.textarea.borrow().as_ref().map(|area| area.text()).unwrap_or_default();
+    assert_eq!(typed, "ab");
+    assert_eq!(calls(&log), Vec::<Value>::new());
+}
+
+// Expected (contract 2.x, addition 4, on the pipe): a select and then an alert, each sized and centered by `dialog.set`
+// right after, as opencode-session-time's `/time`, show extra large and centered.
+#[test]
+fn a_dialog_set_right_after_sizes_and_centers_the_dialog() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    let presented = || (tui.dialogs.size(), tui.dialogs.centered());
+    let xlarge = (opencode_ui::dialog::DialogSize::XLarge, true);
+    tui.keymap.dispatch("v2probe.centered", None);
+    pipe.harness.wait_for("Turn 1");
+    assert_eq!(presented(), xlarge);
+    app.press("return");
+    pipe.harness.wait_for("It took long.");
+    assert_eq!(presented(), xlarge);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "turn": 1 })]);
+}
+
 // Expected (the audit's most used layout): a plugin's route draws its bordered, titled box with its padding, the data
 // its navigation gave, and a scroll the wheel moves.
 #[test]
