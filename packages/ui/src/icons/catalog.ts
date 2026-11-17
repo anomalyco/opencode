@@ -238,6 +238,12 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M8.00001 14.4445C9.47277 14.4445 10.6667 11.5592 10.6667 8.00001C10.6667 4.44085 9.47277 1.55557 8.00001 1.55557M8.00001 14.4445C6.52725 14.4445 5.33335 11.5592 5.33335 8.00001C5.33335 4.44085 6.52725 1.55557 8.00001 1.55557M8.00001 14.4445C11.5592 14.4445 14.4444 11.5592 14.4444 8C14.4444 4.44083 11.5592 1.55557 8.00001 1.55557M8.00001 14.4445C4.44085 14.4445 1.55556 11.5592 1.55556 8C1.55556 4.44083 4.44085 1.55557 8.00001 1.55557M1.87203 6.00001H14.128M2.03555 10.4445H13.9644" stroke="currentColor"/>`,
   },
+  // A browser extension, as every browser draws it: a piece with a tab on top and on the right, and a notch on the
+  // left and at the bottom. OpenCode's own extensions keep `extensions`.
+  puzzle: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 4.5H4.5V3.5a2 2 0 0 1 4 0V4.5H11.5V7.5H12.5a2 2 0 0 1 0 4H11.5V14.5H8.5V13.5a2 2 0 0 0-4 0V14.5H1.5V11.5H2.5a2 2 0 0 0 0-4H1.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   "outline-globe-plus": {
     viewBox: "0 0 16 16",
     body: `<path d="M7 12.6667C5.71133 12.6667 4.66667 10.1296 4.66667 7C4.66667 3.87039 5.71133 1.33333 7 1.33333C8.2426 1.33333 9.25833 3.69221 9.32933 6.66667" stroke="currentColor" stroke-miterlimit="10"/><path d="M12.6667 6.66667H1.33333" stroke="currentColor"/><path d="M12.6667 7.72825V7C12.6667 3.87039 10.1296 1.33333 7 1.33333C3.8704 1.33333 1.33333 3.87039 1.33333 7C1.33333 10.1296 3.8704 12.6667 7 12.6667H7.58694" stroke="currentColor" stroke-miterlimit="10"/><path d="M9.5 11.5H13.5M11.5 9.5V13.5" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,

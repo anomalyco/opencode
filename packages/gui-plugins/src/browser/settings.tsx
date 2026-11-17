@@ -378,7 +378,7 @@ function ExtensionRow(props: {
       title={
         <Identity
           image={props.extension.icon}
-          fallback="extensions"
+          fallback="puzzle"
           name={props.extension.name}
           detail={props.extension.version}
           message={message()}
@@ -660,7 +660,7 @@ const ACTION_COLUMN = "min-w-24 justify-center"
 function ChoiceRow(props: { image?: string; name: string; children: JSX.Element }) {
   return (
     <div class="flex h-11 items-center gap-3">
-      <Glyph image={props.image} fallback="extensions" />
+      <Glyph image={props.image} fallback="puzzle" />
       <span class="min-w-0 flex-1 truncate text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base" title={props.name}>{props.name}</span>
       {props.children}
     </div>

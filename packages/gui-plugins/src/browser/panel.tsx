@@ -862,7 +862,8 @@ export default function SessionBrowserPane(props: {
                   variant="ghost-muted"
                   size="large"
                   data-action="browser-extensions"
-                  icon={<Icon name="extensions" />}
+                  // A browser extension's own mark, not the one for OpenCode's extensions.
+                  icon={<Icon name="puzzle" />}
                   aria-label={plugin.t("extensions.menu")}
                 />
               </Tooltip>
@@ -878,7 +879,7 @@ export default function SessionBrowserPane(props: {
                         }
                         onSelect={() => chooseExtension(extension())}
                       >
-                        <Glyph image={extension().action?.icon ?? extension().icon} fallback="extensions" class="!size-4" />
+                        <Glyph image={extension().action?.icon ?? extension().icon} fallback="puzzle" class="!size-4" />
                         <span class="min-w-0 flex-1 truncate">{extension().action?.title ?? extension().name}</span>
                         <Show when={extension().action?.badge}>
                           {(badge) => (

@@ -136,6 +136,7 @@ export type IconName =
   | "post-skill"
   | "prompt"
   | "providers"
+  | "puzzle"
   | "refresh"
   | "reset"
   | "review"
