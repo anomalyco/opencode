@@ -8,6 +8,9 @@ import { CodeMode, Extension, Tool } from "../src/index.js"
 
 const Value = Schema.Struct({ value: Schema.Number })
 
+/** How many tool calls a saved run had admitted, from the run's metadata. */
+const admitted = (state: CodeMode.Snapshot) => (state.header.metadata as { calls: Array<unknown> }).calls.length
+
 /** Runs a program in a fiber of its own: its outcome, and a way to suspend it. */
 const background = <E>(program: CodeMode.Program<never, E>) => {
   const fiber = Effect.runFork(program.run())
@@ -410,7 +413,7 @@ describe("suspend", () => {
     const program = CodeMode.make().program(`return 1`)
     expect(await Effect.runPromise(program.run())).toMatchObject({ ok: true, value: 1 })
     const exit = await Effect.runPromise(Effect.exit(program.run()))
-    expect(String(exit)).toContain("A CodeMode program runs once")
+    expect(String(exit)).toContain("A program runs once")
   })
 
   test("interrupting run interrupts the program and its running calls", async () => {
@@ -450,7 +453,9 @@ describe("suspend", () => {
 
   test("the snapshot codec does not import Effect", async () => {
     for (const file of ["codec.ts", "snapshot.ts"]) {
-      expect(await Bun.file(path.join(import.meta.dir, "../src/snapshot", file)).text()).not.toMatch(/from "effect"/)
+      expect(await Bun.file(path.join(import.meta.dir, "../src/language/snapshot", file)).text()).not.toMatch(
+        /from "effect"/,
+      )
     }
   })
 })
@@ -495,7 +500,8 @@ describe("resume", () => {
       { limits: { maxToolCalls: 2, maxOutputBytes: 10 } },
     )
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
-    expect(suspended.state.header.limits).toEqual({ timeoutMs: null, maxToolCalls: 2, maxOutputBytes: 10 })
+    expect(suspended.state.header.limits).toEqual({ timeoutMs: null, maxOutputBytes: 10 })
+    expect(suspended.state.header.metadata).toMatchObject({ maxToolCalls: 2 })
     // The resuming runtime has no limits of its own; the saved ones apply.
     const result = await Effect.runPromise(
       background(CodeMode.make({ tools: { step: step.tool } }).resume(suspended.state)).result,
@@ -528,7 +534,7 @@ describe("resume", () => {
     await Bun.sleep(210)
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
     expect(suspended.state.header.budget.activeMs).toBeGreaterThanOrEqual(200)
-    expect(suspended.state.header.budget.toolCalls).toBe(1)
+    expect(admitted(suspended.state)).toBe(1)
     // 200ms were used before the suspend; the next 200ms of work go past the 300ms limit.
     const timedOut = await Effect.runPromise(background(runtime.resume(suspended.state)).result)
     expect(timedOut).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" }, toolCalls: [{ name: "step" }] })
@@ -798,7 +804,7 @@ describe("idempotent and durable tools", () => {
     )
     await read.called()
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
-    expect(suspended.state.header.budget.toolCalls).toBe(1)
+    expect(admitted(suspended.state)).toBe(1)
 
     read.reset()
     const resumed = background(runtime().resume(CodeMode.toBytes(suspended.state)))
@@ -1314,7 +1320,7 @@ describe("idempotent and durable tools", () => {
     const toolSets: ReadonlyArray<Record<string, Tool.Tool>> = [{}, { job: plainTool }, { job: read.tool }]
     for (const tools of toolSets) {
       expect((await refusal(CodeMode.make({ tools }).resume(suspendedWhileStarted.state))).message).toContain(
-        "cannot resume because that tool is no longer a durable tool",
+        "cannot resume because that function is no longer a durable function",
       )
     }
 
@@ -1453,15 +1459,15 @@ describe("extension snapshot hooks", () => {
     const cases: ReadonlyArray<readonly [Partial<Extension.Snapshot>, string]> = [
       [
         { encode: () => undefined },
-        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding undefined; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+        "The run's state couldn't be saved: The host function fetch saved a value it returned as data holding undefined; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
       ],
       [
         { encode: () => ({ when: new Date(0) }) },
-        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding a Date; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+        "The run's state couldn't be saved: The host function fetch saved a value it returned as data holding a Date; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
       ],
       [
         { encode: () => ({ run: () => 1 }) },
-        "The run's state couldn't be saved: The extension \"fetch\" saved a value it returned as data holding a function; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
+        "The run's state couldn't be saved: The host function fetch saved a value it returned as data holding a function; snapshot.encode must give plain data (JSON values and Uint8Arrays).",
       ],
       [
         {
@@ -1469,7 +1475,7 @@ describe("extension snapshot hooks", () => {
             throw new Error("no")
           },
         },
-        "The run's state couldn't be saved: The extension \"fetch\" couldn't save a value it returned: no",
+        "The run's state couldn't be saved: The host function fetch couldn't save a value it returned: no",
       ],
     ]
     for (const [snapshot, message] of cases) {
@@ -1524,16 +1530,15 @@ describe("extension snapshot hooks", () => {
     })
   })
 
-  test("a state that holds a hooked value is refused without that extension or without its hooks", async () => {
+  test("a state that holds a hooked value is refused without that extension's globals or without its hooks", async () => {
     const { extension } = web()
     const { jobs, run } = await suspendWith(extension)
     const suspended = suspendedOf(await Effect.runPromise(run.suspend))
     const unhooked = Extension.make({ name: "fetch", globals: extension.globals })
-    const other = Extension.make({ name: "other", globals: extension.globals, snapshot: extension.snapshot })
-    for (const extensions of [[], [unhooked], [other]]) {
+    for (const extensions of [[], [unhooked]]) {
       expect(
         (await refusal(CodeMode.make({ tools: { job: jobs.tool }, extensions }).resume(suspended.state))).message,
-      ).toBe("This state was saved by a runtime with other host globals (extensions); resume it with the same ones.")
+      ).toBe("This state was saved by a runtime with other host globals; resume it with the same ones.")
     }
   })
 })

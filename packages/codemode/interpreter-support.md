@@ -18,16 +18,18 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       TypeScript-only syntax is rejected rather than stripped before execution.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
-- [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
+- [x] The result boundary is `JSON.stringify` plus a short table. The program result crosses as
       what `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
       `undefined` array elements and non-finite numbers become `null`, a cyclic value throws the same `TypeError`,
       and Map, RegExp, and generators serialize as `{}`. A bare `undefined` result is `null`.
       Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
       be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
-      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`, a
-      Uint8Array is rejected with a hint to encode as text, and own `__proto__` keys are dropped so merging tool
-      inputs or results cannot replace a prototype. In-program `JSON.stringify` keeps JS behavior except for the
-      Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
+      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`,
+      and own `__proto__` keys are dropped so merging results cannot replace a prototype. Tool arguments cross as
+      copies, like extension arguments, and the tool layer turns them into JSON with the same table (a Uint8Array is
+      rejected with a hint to encode as text); a program's own `toJSON` is not called there, and a promise or function
+      inside an argument fails the call. In-program `JSON.stringify` keeps JS behavior except for the Error form and a
+      promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
