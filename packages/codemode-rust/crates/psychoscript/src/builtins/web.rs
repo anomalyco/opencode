@@ -108,6 +108,36 @@ fn str_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<String, Value> {
     builtin_string(vm, &arg(args, i))
 }
 
+/// A value as a USVString, as URL and URLSearchParams take it: a lone surrogate becomes U+FFFD.
+fn usv_text(vm: &mut Vm, v: &Value) -> Result<String, Value> {
+    let s = builtin_string(vm, v)?;
+    Ok(match crate::strings::host_text(&s) {
+        std::borrow::Cow::Owned(t) => t,
+        std::borrow::Cow::Borrowed(_) => s,
+    })
+}
+
+fn usv_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<String, Value> {
+    usv_text(vm, &arg(args, i))
+}
+
+/// A name and value as URLSearchParams keeps them (USVStrings); Headers checks the text as given.
+fn usv_pair(headers: bool, name: String, value: String) -> (String, String) {
+    if headers {
+        return (name, value);
+    }
+    let usv = |t: String| match crate::strings::host_text(&t) {
+        std::borrow::Cow::Owned(u) => u,
+        std::borrow::Cow::Borrowed(_) => t,
+    };
+    (usv(name), usv(value))
+}
+
+/// Plain UTF-8 kept by URL, URLSearchParams and Headers, as a string again.
+fn js_text(vm: &mut Vm, s: String) -> Value {
+    vm.string_val(crate::strings::external_text(s))
+}
+
 fn is_runtime_reference(vm: &Vm, v: &Value) -> bool {
     match v {
         Value::Obj(id) => !matches!(
@@ -133,7 +163,7 @@ fn url_text(vm: &mut Vm, v: &Value) -> Result<String, Value> {
     {
         return Ok(u.url.as_str().to_owned());
     }
-    builtin_string(vm, v)
+    usv_text(vm, v)
 }
 
 fn parse_url(vm: &mut Vm, args: &[Value]) -> Result<Result<url::Url, ()>, Value> {
@@ -227,7 +257,7 @@ fn this_url(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 fn url_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = this_url(vm, &this, "toString")?;
     let s = url_data(vm, id).url.as_str().to_owned();
-    Ok(vm.string_val(s))
+    Ok(js_text(vm, s))
 }
 
 const URL_FIELDS: [&str; 11] = [
@@ -258,7 +288,7 @@ pub fn url_get(vm: &mut Vm, id: Id, key: Atom) -> Option<Value> {
         "search" => q::search(u).to_owned(),
         _ => q::hash(u).to_owned(),
     };
-    Some(vm.string_val(s))
+    Some(js_text(vm, s))
 }
 
 pub fn url_set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), Value>> {
@@ -272,7 +302,7 @@ pub fn url_set(vm: &mut Vm, id: Id, key: Atom, val: Value) -> Option<Result<(), 
     if !URL_FIELDS.contains(&name.as_str()) {
         return None;
     }
-    let text = match builtin_string(vm, &val) {
+    let text = match usv_text(vm, &val) {
         Ok(t) => t,
         Err(e) => return Some(Err(e)),
     };
@@ -420,7 +450,7 @@ fn read_pairs(
         for (k, v) in vm.own_entries(*id) {
             let name = vm.atoms.text(k).to_owned();
             let value = builtin_string(vm, &v)?;
-            out.push((name, value));
+            out.push(usv_pair(headers, name, value));
         }
         return Ok(out);
     }
@@ -446,7 +476,7 @@ fn read_pairs(
         .map(|mut r| {
             let v = r.pop().unwrap_or_default();
             let k = r.pop().unwrap_or_default();
-            (k, v)
+            usv_pair(headers, k, v)
         })
         .collect())
 }
@@ -456,7 +486,7 @@ fn params_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let init = arg(args, 0);
     let list = match init {
         Value::Undef => Vec::new(),
-        Value::Str(s) => parse_query(vm.text(s)),
+        Value::Str(s) => parse_query(&crate::strings::host_text(vm.text(s))),
         Value::Null | Value::Num(_) | Value::Bool(_) => {
             let s = builtin_string(vm, &init)?;
             parse_query(&s)
@@ -485,7 +515,7 @@ fn this_params(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 fn p_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "append")?;
     requires_args(vm, args, "URLSearchParams", "append", 2)?;
-    let (k, v) = (str_arg(vm, args, 0)?, str_arg(vm, args, 1)?);
+    let (k, v) = (usv_arg(vm, args, 0)?, usv_arg(vm, args, 1)?);
     params_mut(vm, id).list.push((k, v));
     update(vm, id);
     Ok(Value::Undef)
@@ -494,10 +524,10 @@ fn p_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn p_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "delete")?;
     requires_args(vm, args, "URLSearchParams", "delete", 1)?;
-    let k = str_arg(vm, args, 0)?;
+    let k = usv_arg(vm, args, 0)?;
     let v = match arg(args, 1) {
         Value::Undef => None,
-        v => Some(builtin_string(vm, &v)?),
+        v => Some(usv_text(vm, &v)?),
     };
     params_mut(vm, id)
         .list
@@ -509,14 +539,14 @@ fn p_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn p_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "get")?;
     requires_args(vm, args, "URLSearchParams", "get", 1)?;
-    let k = str_arg(vm, args, 0)?;
+    let k = usv_arg(vm, args, 0)?;
     let found = params_mut(vm, id)
         .list
         .iter()
         .find(|(n, _)| n == &k)
         .map(|(_, v)| v.clone());
     Ok(match found {
-        Some(v) => vm.string_val(v),
+        Some(v) => js_text(vm, v),
         None => Value::Null,
     })
 }
@@ -524,24 +554,24 @@ fn p_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn p_get_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "getAll")?;
     requires_args(vm, args, "URLSearchParams", "getAll", 1)?;
-    let k = str_arg(vm, args, 0)?;
+    let k = usv_arg(vm, args, 0)?;
     let found: Vec<String> = params_mut(vm, id)
         .list
         .iter()
         .filter(|(n, _)| n == &k)
         .map(|(_, v)| v.clone())
         .collect();
-    let items = found.into_iter().map(|v| vm.string_val(v)).collect();
+    let items = found.into_iter().map(|v| js_text(vm, v)).collect();
     Ok(vm.new_array(items))
 }
 
 fn p_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "has")?;
     requires_args(vm, args, "URLSearchParams", "has", 1)?;
-    let k = str_arg(vm, args, 0)?;
+    let k = usv_arg(vm, args, 0)?;
     let v = match arg(args, 1) {
         Value::Undef => None,
-        v => Some(builtin_string(vm, &v)?),
+        v => Some(usv_text(vm, &v)?),
     };
     Ok(Value::Bool(params_mut(vm, id).list.iter().any(|(n, x)| {
         n == &k && v.as_ref().is_none_or(|v| v == x)
@@ -551,7 +581,7 @@ fn p_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn p_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "set")?;
     requires_args(vm, args, "URLSearchParams", "set", 2)?;
-    let (k, v) = (str_arg(vm, args, 0)?, str_arg(vm, args, 1)?);
+    let (k, v) = (usv_arg(vm, args, 0)?, usv_arg(vm, args, 1)?);
     let list = &mut params_mut(vm, id).list;
     match list.iter().position(|(n, _)| n == &k) {
         Some(i) => {
@@ -590,7 +620,7 @@ fn pairs_for_each(
     let f = require_callback(vm, &arg(args, 0), label)?;
     let this_arg = arg(args, 1);
     for (k, v) in pairs {
-        let (k, v) = (vm.string_val(k), vm.string_val(v));
+        let (k, v) = (js_text(vm, k), js_text(vm, v));
         vm.call(&f, this_arg, &[v, k, *this])?;
     }
     Ok(Value::Undef)
@@ -606,7 +636,7 @@ fn p_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn p_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     let id = this_params(vm, &this, "toString")?;
     let s = params_text(vm, id);
-    Ok(vm.string_val(s))
+    Ok(js_text(vm, s))
 }
 
 fn p_iter(vm: &mut Vm, this: &Value, name: &str, kind: IterKind) -> Res {
@@ -636,10 +666,10 @@ pub fn params_size(vm: &Vm, id: Id) -> usize {
 fn pair_step(vm: &mut Vm, pair: Option<(String, String)>, kind: IterKind) -> Option<Value> {
     let (k, v) = pair?;
     Some(match kind {
-        IterKind::Keys => vm.string_val(k),
-        IterKind::Values => vm.string_val(v),
+        IterKind::Keys => js_text(vm, k),
+        IterKind::Values => js_text(vm, v),
         IterKind::Entries => {
-            let (k, v) = (vm.string_val(k), vm.string_val(v));
+            let (k, v) = (js_text(vm, k), js_text(vm, v));
             vm.new_array(vec![k, v])
         }
     })
@@ -786,7 +816,7 @@ fn h_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if values.is_empty() {
         return Ok(Value::Null);
     }
-    Ok(vm.string_val(values.join(", ")))
+    Ok(js_text(vm, values.join(", ")))
 }
 
 fn h_get_set_cookie(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -797,7 +827,7 @@ fn h_get_set_cookie(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
         .filter(|(x, _)| x == "set-cookie")
         .map(|(_, v)| v.clone())
         .collect();
-    let items = values.into_iter().map(|v| vm.string_val(v)).collect();
+    let items = values.into_iter().map(|v| js_text(vm, v)).collect();
     Ok(vm.new_array(items))
 }
 
@@ -865,7 +895,7 @@ pub fn headers_object(vm: &mut Vm, id: Id) -> Value {
     let o = vm.new_object();
     for (k, v) in entries {
         let k = vm.atoms.intern(&k);
-        let v = vm.string_val(v);
+        let v = js_text(vm, v);
         vm.define(o, k, v);
     }
     Value::Obj(o)
@@ -944,7 +974,7 @@ fn crypto_random_uuid(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res 
         &h[16..20],
         &h[20..32]
     );
-    Ok(vm.string_val(s))
+    Ok(js_text(vm, s))
 }
 
 fn crypto_get_random_values(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

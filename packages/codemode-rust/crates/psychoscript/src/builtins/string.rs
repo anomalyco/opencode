@@ -201,7 +201,7 @@ fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Re
     for a in args {
         units.push((to_uint32(vm.number_of(a)?) & 0xffff) as u16);
     }
-    Ok(vm.string_val(String::from_utf16_lossy(&units)))
+    Ok(Value::Str(vm.atoms.alloc_units(&units)))
 }
 
 fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -254,7 +254,7 @@ fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> R
             _ => return Err(vm.range_error(&format!("Invalid code point {}", num_to_string(n)))),
         }
     }
-    Ok(vm.string_val(out))
+    Ok(vm.string_val(crate::strings::external_text(out)))
 }
 
 fn pos_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<f64, Value> {
@@ -514,8 +514,12 @@ fn pad(vm: &mut Vm, this: Value, args: &[Value], at_start: bool) -> Res {
         return Ok(Value::Str(s));
     }
     let need = target as usize - len;
-    let padding: Vec<u16> = fill.encode_utf16().cycle().take(need).collect();
-    let padding = String::from_utf16_lossy(&padding);
+    let padding: Vec<u16> = crate::strings::units_of(&fill)
+        .into_iter()
+        .cycle()
+        .take(need)
+        .collect();
+    let padding = crate::strings::from_units(&padding);
     let out = if at_start {
         padding + vm.text(s)
     } else {
@@ -563,6 +567,27 @@ fn s_split(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
             if vm.text(sep).is_empty() {
                 let units = vm.atoms.sref(s).utf16();
                 units.iter().take(limit).map(|c| vm.char_str(*c)).collect()
+            } else if vm.atoms.is_wtf(s) || vm.atoms.is_wtf(sep) {
+                // A separator can cut a pair, so carriers split by code units.
+                let (h, n) = (vm.atoms.sref(s).utf16(), vm.atoms.sref(sep).utf16());
+                let mut pieces = Vec::new();
+                let (mut start, mut i) = (0, 0);
+                while pieces.len() < limit && i + n.len() <= h.len() {
+                    if h[i..i + n.len()] == n[..] {
+                        pieces.push(h[start..i].to_vec());
+                        i += n.len();
+                        start = i;
+                    } else {
+                        i += 1;
+                    }
+                }
+                if pieces.len() < limit {
+                    pieces.push(h[start..].to_vec());
+                }
+                pieces
+                    .iter()
+                    .map(|p| Value::Str(vm.atoms.alloc_units(p)))
+                    .collect()
             } else {
                 let pieces: Vec<String> = vm
                     .text(s)
@@ -622,6 +647,9 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
         let t = vm.string_of(&rep)?;
         Some(vm.text(t).to_owned())
     };
+    if !(vm.atoms.sref(s).ascii && vm.atoms.sref(pat).ascii) {
+        return replace16(vm, s, pat, &rep, template, all);
+    }
     let subject = vm.text(s).to_owned();
     let needle = vm.text(pat).to_owned();
     let mut positions = Vec::new();
@@ -668,6 +696,100 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
     Ok(vm.string_val(out))
 }
 
+/// `replace` by code units, for a subject or pattern beyond ASCII: matches and an empty pattern's positions fall
+/// between code units, even inside a pair.
+fn replace16(
+    vm: &mut Vm,
+    s: StrId,
+    pat: StrId,
+    rep: &Value,
+    template: Option<String>,
+    all: bool,
+) -> Res {
+    let subject = vm.atoms.sref(s).utf16();
+    let needle = vm.atoms.sref(pat).utf16();
+    let template = template.map(|t| crate::strings::units_of(&t));
+    let mut positions = Vec::new();
+    if needle.is_empty() {
+        if all {
+            positions.extend(0..=subject.len());
+        } else {
+            positions.push(0);
+        }
+    } else {
+        let mut i = 0;
+        while i + needle.len() <= subject.len() {
+            if subject[i..i + needle.len()] == needle[..] {
+                positions.push(i);
+                if !all {
+                    break;
+                }
+                i += needle.len();
+            } else {
+                i += 1;
+            }
+        }
+    }
+    if positions.is_empty() {
+        return Ok(Value::Str(s));
+    }
+    let mut out: Vec<u16> = Vec::with_capacity(subject.len());
+    let mut last = 0;
+    for pos in positions {
+        out.extend_from_slice(&subject[last..pos]);
+        match &template {
+            Some(t) => expand_replacement16(&mut out, t, &needle, pos, &subject),
+            None => {
+                let r = vm.call(
+                    rep,
+                    Value::Undef,
+                    &[Value::Str(pat), Value::Num(pos as f64), Value::Str(s)],
+                )?;
+                let r = vm.string_of(&r)?;
+                out.extend(vm.atoms.sref(r).iter16());
+            }
+        }
+        last = pos + needle.len();
+    }
+    out.extend_from_slice(&subject[last..]);
+    Ok(Value::Str(vm.atoms.alloc_units(&out)))
+}
+
+/// `expand_replacement` in code units.
+fn expand_replacement16(
+    out: &mut Vec<u16>,
+    template: &[u16],
+    matched: &[u16],
+    pos: usize,
+    subject: &[u16],
+) {
+    let dollar = b'$' as u16;
+    let mut i = 0;
+    while i < template.len() {
+        let c = template[i];
+        i += 1;
+        if c != dollar {
+            out.push(c);
+            continue;
+        }
+        match template
+            .get(i)
+            .map(|n| *n as u8 as char)
+            .filter(|_| template[i] < 128)
+        {
+            Some('$') => out.push(dollar),
+            Some('&') => out.extend_from_slice(matched),
+            Some('`') => out.extend_from_slice(&subject[..pos]),
+            Some('\'') => out.extend_from_slice(&subject[pos + matched.len()..]),
+            _ => {
+                out.push(dollar);
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
 fn s_replace(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     replace(vm, this, args, false)
 }
@@ -694,24 +816,68 @@ fn s_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    use icu_collator::{Collator, CollatorBorrowed, options::CollatorOptions};
+    use icu_collator::options::{CollatorOptions, Strength};
+    use icu_collator::{Collator, CollatorBorrowed};
     // The root collation the reference's host uses for its default locale (en-US), built once per process.
     static COLLATOR: std::sync::LazyLock<Option<CollatorBorrowed<'static>>> =
         std::sync::LazyLock::new(|| {
             Collator::try_new(Default::default(), CollatorOptions::default()).ok()
         });
+    static PRIMARY: std::sync::LazyLock<Option<CollatorBorrowed<'static>>> =
+        std::sync::LazyLock::new(|| {
+            let mut options = CollatorOptions::default();
+            options.strength = Some(Strength::Primary);
+            Collator::try_new(Default::default(), options).ok()
+        });
     let s = this_str(vm, &this)?;
     let o = arg_str(vm, args, 0)?;
-    let (a, b) = (vm.text(s), vm.text(o));
-    let order = match COLLATOR.as_ref() {
-        Some(c) => c.compare(a, b),
-        None => a.cmp(b),
+    let (a, b) = (vm.atoms.sref(s), vm.atoms.sref(o));
+    let order = match (COLLATOR.as_ref(), PRIMARY.as_ref()) {
+        (Some(c), Some(p)) if a.units.is_some() || b.units.is_some() => {
+            compare_lone(c, p, &a.utf16(), &b.utf16())
+        }
+        (Some(c), _) => c.compare(a.s, b.s),
+        _ => a.cmp16(b),
     };
     Ok(Value::Num(match order {
         std::cmp::Ordering::Less => -1.0,
         std::cmp::Ordering::Equal => 0.0,
         std::cmp::Ordering::Greater => 1.0,
     }))
+}
+
+/// Collates strings with lone surrogates as the reference's ICU does, where each weighs like an unassigned code
+/// point of its own value: above every assigned character, below private use and U+FFFD. ICU4X weighs them as
+/// U+FFFD, so they stand in as U+D7FF, the unassigned code point just below them, and strings equal at the primary
+/// level then order by their lone surrogates, which ICU tells apart at that level.
+fn compare_lone(
+    full: &icu_collator::CollatorBorrowed,
+    primary: &icu_collator::CollatorBorrowed,
+    a: &[u16],
+    b: &[u16],
+) -> std::cmp::Ordering {
+    let lone = |u: &[u16]| -> (Vec<u16>, Vec<u16>) {
+        let mut text = Vec::with_capacity(u.len());
+        let mut lone = Vec::new();
+        for r in char::decode_utf16(u.iter().copied()) {
+            match r {
+                Ok(c) => {
+                    let mut buf = [0u16; 2];
+                    text.extend_from_slice(c.encode_utf16(&mut buf));
+                }
+                Err(e) => {
+                    text.push(0xD7FF);
+                    lone.push(e.unpaired_surrogate());
+                }
+            }
+        }
+        (text, lone)
+    };
+    let ((ta, la), (tb, lb)) = (lone(a), lone(b));
+    if primary.compare_utf16(&ta, &tb).is_eq() && la != lb {
+        return la.cmp(&lb);
+    }
+    full.compare_utf16(&ta, &tb)
 }
 
 /// A pattern argument: a RegExp as is, anything else converted with the string hint first.
@@ -771,14 +937,18 @@ fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(vm.string_val(out))
 }
 
-// Program strings are stored as UTF-8, which cannot hold a lone surrogate, so every string is well formed.
 fn s_is_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    this_str(vm, &this)?;
-    Ok(Value::Bool(true))
+    let s = this_str(vm, &this)?;
+    Ok(Value::Bool(vm.atoms.sref(s).well_formed()))
 }
 
 fn s_to_well_formed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    Ok(Value::Str(this_str(vm, &this)?))
+    let s = this_str(vm, &this)?;
+    if vm.atoms.sref(s).well_formed() {
+        return Ok(Value::Str(s));
+    }
+    let fixed = String::from_utf16_lossy(&vm.atoms.sref(s).utf16());
+    Ok(vm.string_val(crate::strings::external_text(fixed)))
 }
 
 fn s_iterator(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {

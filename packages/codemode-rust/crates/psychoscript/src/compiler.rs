@@ -2451,12 +2451,10 @@ impl<'a, 's> Compiler<'a, 's> {
     fn template(&mut self, t: &'a TemplateLiteral<'a>) -> R<()> {
         let mut parts = 0u32;
         for (i, q) in t.quasis.iter().enumerate() {
-            let cooked = q
-                .value
-                .cooked
-                .as_ref()
-                .map(js_str)
-                .unwrap_or_else(|| q.value.raw.as_str().to_owned());
+            let cooked =
+                q.value.cooked.as_ref().map(js_str).unwrap_or_else(|| {
+                    crate::strings::external_text(q.value.raw.as_str().to_owned())
+                });
             if !cooked.is_empty() || (t.expressions.is_empty() && i == 0) {
                 self.push_str(&cooked);
                 parts += 1;
@@ -2505,7 +2503,9 @@ impl<'a, 's> Compiler<'a, 's> {
         let raw = quasis
             .iter()
             .map(|q| {
-                let i = self.str_const(q.value.raw.as_str());
+                let i = self.str_const(&crate::strings::external_text(
+                    q.value.raw.as_str().to_owned(),
+                ));
                 self.consts[i as usize]
             })
             .collect();
@@ -3007,8 +3007,8 @@ fn m_as_expr<'x, 'a>(m: &'x MemberExpression<'a>) -> &'x Expression<'a> {
 
 fn js_str(s: &oxc_str::JSStr) -> String {
     match s.as_str() {
-        Some(t) => t.to_owned(),
-        None => String::from_utf16_lossy(&s.encode_utf16().collect::<Vec<u16>>()),
+        Some(t) => crate::strings::external_text(t.to_owned()),
+        None => crate::strings::from_units(&s.encode_utf16().collect::<Vec<u16>>()),
     }
 }
 

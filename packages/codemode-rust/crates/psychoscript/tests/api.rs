@@ -130,3 +130,47 @@ fn string_building_does_not_alias() {
         json!(["0", "01", "012"])
     );
 }
+
+#[test]
+fn lone_surrogates_reach_the_host_as_replacement_characters() {
+    let rt = echo();
+    let outcome = run(
+        &rt,
+        r#"const h = "\ud83d"
+        console.log("log " + h)
+        const back = await tools.echo({ [h]: h + "x" })
+        return { s: h, pair: h + "\ude00", back, keys: Object.keys(back).length, error: (() => { try { throw new Error(h) } catch (e) { return e.message } })() }"#,
+    );
+    assert_eq!(
+        outcome.result.unwrap(),
+        json!({ "s": "\u{fffd}", "pair": "\u{1f600}", "back": { "\u{fffd}": "\u{fffd}x" }, "keys": 1, "error": "\u{fffd}" })
+    );
+    assert_eq!(outcome.logs, vec!["log \u{fffd}"]);
+    assert_eq!(
+        outcome.tool_calls[0].input,
+        json!({ "\u{fffd}": "\u{fffd}x" })
+    );
+}
+
+#[test]
+fn host_text_keeps_the_last_code_point() {
+    let rt = Runtime::new().tool("max", |_| Ok(json!("a\u{10ffff}b")));
+    let outcome = run(
+        &rt,
+        r#"const s = await tools.max({})
+        return [s, s.length, s.codePointAt(1), s.isWellFormed(), s === "a\u{10ffff}b", JSON.stringify(s).length]"#,
+    );
+    assert_eq!(
+        outcome.result.unwrap(),
+        json!(["a\u{10ffff}b", 4, 0x10ffff, true, true, 6])
+    );
+}
+
+#[test]
+fn uncaught_lone_surrogates_are_replaced_in_diagnostics() {
+    let outcome = run(&Runtime::new(), r#"throw new TypeError("bad \udc00")"#);
+    assert_eq!(
+        outcome.result.unwrap_err().message,
+        "TypeError: bad \u{fffd}"
+    );
+}

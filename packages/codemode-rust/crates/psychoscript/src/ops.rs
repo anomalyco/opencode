@@ -1137,17 +1137,17 @@ impl<'rt> Vm<'rt> {
             }
         }
         if let Value::Str(s) = v {
-            let chars: Vec<char> = self.atoms.get(*s).chars().collect();
-            return Ok(chars
-                .into_iter()
-                .map(|c| {
-                    if (c as u32) < 128 {
-                        Value::Str(self.char_strs[c as usize])
-                    } else {
-                        self.string_val(c.to_string())
-                    }
-                })
-                .collect());
+            let text = self.atoms.get(*s).to_owned();
+            let mut out = Vec::new();
+            let mut at = 0;
+            while let Some(cp) = crate::strings::code_point_at(&text, at) {
+                at += cp.len();
+                out.push(match cp.as_bytes() {
+                    [b] if *b < 128 => Value::Str(self.char_strs[*b as usize]),
+                    _ => self.str_val(cp),
+                });
+            }
+            return Ok(out);
         }
         let it = self.get_iterator(v)?;
         let mut out = Vec::new();
@@ -1587,16 +1587,19 @@ impl<'rt> Vm<'rt> {
             }
             Kind::StrIter { s, pos } => {
                 let p = *pos as usize;
-                let Some(c) = self.atoms.get(*s)[p..].chars().next() else {
+                let Some(cp) = crate::strings::code_point_at(self.atoms.get(*s), p) else {
                     return Ok(None);
                 };
-                let v = if (c as u32) < 128 {
-                    self.char_str(c as u16)
-                } else {
-                    self.string_val(c.to_string())
+                let step = cp.len() as u32;
+                let v = match cp.as_bytes() {
+                    [b] if *b < 128 => self.char_str(*b as u16),
+                    _ => {
+                        let cp = cp.to_owned();
+                        self.string_val(cp)
+                    }
                 };
                 if let Kind::StrIter { pos, .. } = &mut self.heap[id as usize].kind {
-                    *pos += c.len_utf8() as u32;
+                    *pos += step;
                 }
                 Ok(Some(v))
             }

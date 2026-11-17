@@ -364,7 +364,9 @@ pub fn builtin_string(vm: &mut Vm, v: &Value) -> Result<String, Value> {
         }
         Kind::Date(t) => date::display(*t),
         Kind::RegExp(_) => regexp::inspect(vm, id),
-        Kind::Bytes(b) if b.buffer => String::from_utf8_lossy(&b.to_vec()).into_owned(),
+        Kind::Bytes(b) if b.buffer => {
+            crate::strings::external_text(String::from_utf8_lossy(&b.to_vec()).into_owned())
+        }
         Kind::Bytes(b) => {
             let parts: Vec<String> = b.to_vec().iter().map(u8::to_string).collect();
             parts.join(",")

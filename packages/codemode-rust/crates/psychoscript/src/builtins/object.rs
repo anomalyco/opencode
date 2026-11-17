@@ -706,7 +706,7 @@ fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     }
     match arg(args, 2) {
         Value::Num(n) => opts.indent = " ".repeat(n.clamp(0.0, 10.0) as usize),
-        Value::Str(s) => opts.indent = vm.text(s).chars().take(10).collect(),
+        Value::Str(s) => opts.indent = vm.atoms.sref(s).slice16(0, 10),
         _ => {}
     }
     Ok(match convert::stringify(vm, &arg(args, 0), &opts)? {
@@ -725,7 +725,7 @@ fn log_line(vm: &mut Vm, prefix: &str, args: &[Value]) -> Res {
         }
         line.push_str(&convert::format_value(vm, a));
     }
-    vm.logs.push(line);
+    vm.logs.push(crate::strings::host_text(&line).into_owned());
     Ok(Value::Undef)
 }
 
@@ -914,7 +914,8 @@ fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         }
         lines.push(line.join("\t"));
     }
-    vm.logs.push(lines.join("\n"));
+    vm.logs
+        .push(crate::strings::host_text(&lines.join("\n")).into_owned());
     Ok(Value::Undef)
 }
 

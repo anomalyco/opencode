@@ -922,7 +922,7 @@ fn encoder_encode(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         Value::Undef => String::new(),
         v => {
             let s = vm.string_of(&v)?;
-            vm.text(s).to_owned()
+            crate::strings::host_text(vm.text(s)).into_owned()
         }
     };
     Ok(new_bytes(vm, s.into_bytes(), false))
@@ -1116,7 +1116,7 @@ fn decoder_decode(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         Some(rest) if strip => rest.to_owned(),
         _ => text,
     };
-    Ok(vm.string_val(text))
+    Ok(vm.string_val(crate::strings::external_text(text)))
 }
 
 // ---------- atob and btoa ----------

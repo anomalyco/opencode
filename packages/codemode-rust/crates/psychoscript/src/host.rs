@@ -853,7 +853,7 @@ fn run_search(vm: &mut Vm, args: &[Value]) -> Result<Json, Box<Failed>> {
     let setup = vm.host.setup;
     let args: Vec<Value> = match args.first() {
         Some(Value::Str(s)) => {
-            let query = vm.text(*s).to_owned();
+            let query = crate::strings::host_text(vm.text(*s)).into_owned();
             let id = vm.new_object();
             let q = vm.str_val(&query);
             let key = vm.atoms.intern("query");
@@ -976,7 +976,11 @@ fn to_host(
         Value::Null => return Ok(HostValue::Null),
         Value::Bool(b) => return Ok(HostValue::Bool(*b)),
         Value::Num(n) => return Ok(HostValue::Number(*n)),
-        Value::Str(s) => return Ok(HostValue::String(vm.text(*s).to_owned())),
+        Value::Str(s) => {
+            return Ok(HostValue::String(
+                crate::strings::host_text(vm.text(*s)).into_owned(),
+            ));
+        }
         Value::Sym(_) => {
             let msg = format!("{label} contains a symbol, which cannot be passed to an extension.");
             return Err(vm.type_error(&msg));
@@ -1064,7 +1068,10 @@ fn to_host(
         }
         Kind::Error(_) => {
             let (name, message) = crate::convert::error_parts(vm, id);
-            let mut error = HostError::named(name, message);
+            let mut error = HostError::named(
+                crate::strings::host_text(&name).into_owned(),
+                crate::strings::host_text(&message).into_owned(),
+            );
             let cause_key = vm.names.cause;
             if vm.has_own(id, cause_key) {
                 let cause = vm.get_obj(id, cause_key);
@@ -1073,7 +1080,7 @@ fn to_host(
                 }
             }
             for (k, val) in vm.own_entries(id) {
-                let key = vm.atoms.text(k).to_owned();
+                let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
                 if matches!(
                     key.as_str(),
                     "stack"
@@ -1096,7 +1103,7 @@ fn to_host(
         _ => {
             let mut out = Vec::new();
             for (k, val) in vm.own_entries(id) {
-                let key = vm.atoms.text(k).to_owned();
+                let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
                 if key == "__proto__" {
                     continue;
                 }
@@ -1130,7 +1137,7 @@ fn from_host(
         HostValue::Null => Value::Null,
         HostValue::Bool(b) => Value::Bool(*b),
         HostValue::Number(n) => Value::Num(*n),
-        HostValue::String(s) => vm.str_val(s),
+        HostValue::String(s) => vm.string_val(crate::strings::external_text(s.clone())),
         HostValue::Function(f) => wrap(vm, f, label, entry),
         HostValue::Array(items) => {
             if items.len() > 10_000_000 {
@@ -1626,7 +1633,7 @@ fn require_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res
     let Some(Value::Str(s)) = args.first() else {
         return Err(vm.type_error("require expects a module name string."));
     };
-    let specifier = vm.text(*s).to_owned();
+    let specifier = crate::strings::host_text(vm.text(*s)).into_owned();
     module(vm, &specifier)
 }
 
@@ -1634,11 +1641,11 @@ fn require_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res
 /// named export, 3 a side-effect import, 4 `import()`.
 fn import_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res {
     let specifier = match args.first() {
-        Some(Value::Str(s)) => vm.text(*s).to_owned(),
+        Some(Value::Str(s)) => crate::strings::host_text(vm.text(*s)).into_owned(),
         Some(other) => {
             let other = *other;
             let s = vm.string_of(&other)?;
-            vm.text(s).to_owned()
+            crate::strings::host_text(vm.text(s)).into_owned()
         }
         None => String::new(),
     };

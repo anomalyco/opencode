@@ -19,7 +19,15 @@ pub fn setup(vm: &mut Vm) {
     }
 }
 
-fn encode(s: &str, keep: &str) -> String {
+/// Percent-encodes `s` as UTF-8, or fails on a lone surrogate, which has no UTF-8 form.
+fn encode(s: &str, keep: &str) -> Option<String> {
+    let decoded;
+    let s = if crate::strings::has_mark(s) {
+        decoded = String::from_utf16(&crate::strings::units_of(s)).ok()?;
+        &decoded
+    } else {
+        s
+    };
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         if c.is_ascii_alphanumeric() || keep.contains(c) {
@@ -31,7 +39,7 @@ fn encode(s: &str, keep: &str) -> String {
             }
         }
     }
-    out
+    Some(out)
 }
 
 fn hex(b: &[u8], i: usize) -> Option<u8> {
@@ -83,6 +91,10 @@ fn decode(s: &str, reserved: &str) -> Option<String> {
         // from_utf8 rejects overlong forms, surrogates and code points above U+10FFFF, as the spec does.
         let ch = std::str::from_utf8(&seq).ok()?;
         out.extend_from_slice(ch.as_bytes());
+        if ch == "\u{10FFFF}" {
+            // The rest of the output is the input's text, so a decoded MARK is doubled to stay one.
+            out.extend_from_slice(ch.as_bytes());
+        }
         i = j;
     }
     String::from_utf8(out).ok()
@@ -98,9 +110,14 @@ fn run(vm: &mut Vm, args: &[Value], name: &str, f: impl Fn(&str) -> Option<Strin
         Some(out) => Ok(vm.string_val(out)),
         None => {
             let p = vm.realm.std.uri_error;
+            let why = if name.starts_with("encode") {
+                "String contained an illegal UTF-16 sequence."
+            } else {
+                "URI error"
+            };
             Err(vm.failure(
                 p,
-                &format!("{name} received malformed URI data: URI error"),
+                &format!("{name} received malformed URI data: {why}"),
                 crate::DiagnosticKind::ExecutionFailure,
             ))
         }
@@ -109,13 +126,11 @@ fn run(vm: &mut Vm, args: &[Value], name: &str, f: impl Fn(&str) -> Option<Strin
 
 fn encode_uri(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let keep = format!("{URI_RESERVED}{URI_MARKS}#");
-    run(vm, args, "encodeURI", |s| Some(encode(s, &keep)))
+    run(vm, args, "encodeURI", |s| encode(s, &keep))
 }
 
 fn encode_uri_component(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    run(vm, args, "encodeURIComponent", |s| {
-        Some(encode(s, URI_MARKS))
-    })
+    run(vm, args, "encodeURIComponent", |s| encode(s, URI_MARKS))
 }
 
 fn decode_uri(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

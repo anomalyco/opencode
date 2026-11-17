@@ -383,7 +383,7 @@ impl<'rt> Vm<'rt> {
     pub fn char_str(&mut self, c: u16) -> Value {
         match self.char_strs.get(c as usize) {
             Some(s) => Value::Str(*s),
-            None => self.string_val(String::from_utf16_lossy(&[c])),
+            None => self.string_val(crate::strings::from_units(&[c])),
         }
     }
 

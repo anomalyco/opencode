@@ -56,9 +56,10 @@ fn received(vm: &mut Vm, v: &Value) -> String {
         Value::Undef | Value::Uninit => "undefined".into(),
         Value::Null => "null".into(),
         Value::Str(s) => {
-            let t = vm.text(*s);
-            let short: String = t.chars().take(25).collect();
-            let more = if t.chars().count() > 25 { "..." } else { "" };
+            // Node cuts the value at 25 code units.
+            let r = vm.atoms.sref(*s);
+            let short = r.slice16(0, 25);
+            let more = if r.len16() > 25 { "..." } else { "" };
             format!("type string ('{short}'{more})")
         }
         Value::Num(n) => format!("type number ({})", num_to_string(*n)),
@@ -114,9 +115,12 @@ fn encoding(vm: &mut Vm, v: &Value) -> Result<Option<Enc>, Value> {
     }
 }
 
-fn encode(s: &str, enc: Enc) -> Vec<u8> {
+/// A string's bytes in `enc`: UTF-8 writes a lone surrogate as U+FFFD, the single-byte and UTF-16 encodings take
+/// its code units.
+fn encode(r: crate::strings::StrRef, enc: Enc) -> Vec<u8> {
+    let s = r.s;
     match enc {
-        Enc::Utf8 => s.as_bytes().to_vec(),
+        Enc::Utf8 => crate::strings::host_text(s).as_bytes().to_vec(),
         Enc::Hex => {
             let b = s.as_bytes();
             let mut out = Vec::new();
@@ -132,14 +136,14 @@ fn encode(s: &str, enc: Enc) -> Vec<u8> {
             out
         }
         Enc::Base64 | Enc::Base64Url => base64_decode_node(s),
-        Enc::Latin1 | Enc::Ascii => s.encode_utf16().map(|u| u as u8).collect(),
-        Enc::Utf16le => s.encode_utf16().flat_map(|u| u.to_le_bytes()).collect(),
+        Enc::Latin1 | Enc::Ascii => r.iter16().map(|u| u as u8).collect(),
+        Enc::Utf16le => r.iter16().flat_map(|u| u.to_le_bytes()).collect(),
     }
 }
 
 fn decode(data: &[u8], enc: Enc) -> String {
     match enc {
-        Enc::Utf8 => String::from_utf8_lossy(data).into_owned(),
+        Enc::Utf8 => crate::strings::external_text(String::from_utf8_lossy(data).into_owned()),
         Enc::Hex => hex_encode(data),
         Enc::Base64 => base64_encode(data, false, true),
         Enc::Base64Url => base64_encode(data, true, false),
@@ -152,7 +156,8 @@ fn decode(data: &[u8], enc: Enc) -> String {
                 .iter()
                 .map(|p| u16::from_le_bytes(*p))
                 .collect();
-            String::from_utf16_lossy(&units)
+            // Lone surrogates stay, as the reference decodes them.
+            crate::strings::from_units(&units)
         }
     }
 }
@@ -225,7 +230,7 @@ fn this_buf(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 fn bytes_from(vm: &mut Vm, value: &Value, second: &Value, third: &Value) -> Result<Vec<u8>, Value> {
     if let Value::Str(s) = value {
         let enc = encoding(vm, second)?.unwrap_or(Enc::Utf8);
-        return Ok(encode(vm.text(*s), enc));
+        return Ok(encode(vm.atoms.sref(*s), enc));
     }
     if let Some(data) = bytes_of(vm, value) {
         let offset = match second {
@@ -317,7 +322,7 @@ fn size(vm: &mut Vm, v: &Value) -> Result<usize, Value> {
 fn fill_with(vm: &mut Vm, data: &mut [u8], value: &Value, enc: Option<Enc>) -> Result<(), Value> {
     let pattern = match value {
         Value::Str(s) => {
-            let p = encode(vm.text(*s), enc.unwrap_or(Enc::Utf8));
+            let p = encode(vm.atoms.sref(*s), enc.unwrap_or(Enc::Utf8));
             if p.is_empty() && !data.is_empty() {
                 vec![0]
             } else {
@@ -369,9 +374,9 @@ fn buffer_byte_length(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let enc = encoding(vm, &arg(args, 1))?.unwrap_or(Enc::Utf8);
     let text = vm.text(s);
     let n = match enc {
-        Enc::Utf8 => text.len(),
-        Enc::Latin1 | Enc::Ascii => text.encode_utf16().count(),
-        Enc::Utf16le => text.encode_utf16().count() * 2,
+        Enc::Utf8 => crate::strings::host_text(text).len(),
+        Enc::Latin1 | Enc::Ascii => vm.atoms.sref(s).len16(),
+        Enc::Utf16le => vm.atoms.sref(s).len16() * 2,
         Enc::Hex => text.len() / 2,
         Enc::Base64 | Enc::Base64Url => {
             let mut len = text.len();
@@ -595,7 +600,7 @@ fn needle(vm: &mut Vm, v: &Value, enc: &Value) -> Result<Vec<u8>, Value> {
     match v {
         Value::Str(s) => {
             let enc = encoding(vm, enc)?.unwrap_or(Enc::Utf8);
-            Ok(encode(vm.text(*s), enc))
+            Ok(encode(vm.atoms.sref(*s), enc))
         }
         Value::Num(n) => Ok(vec![to_u8(*n)]),
         v => match bytes_of(vm, v) {
@@ -709,8 +714,7 @@ fn b_write(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let offset = range_arg(vm, &offset, "offset", 0, len)?;
     let length = range_arg(vm, &length, "length", len - offset, len)?;
     let enc = encoding(vm, &enc)?.unwrap_or(Enc::Utf8);
-    let text = vm.text(s).to_owned();
-    let mut data = encode(&text, enc);
+    let mut data = encode(vm.atoms.sref(s), enc);
     let room = length.min(len - offset);
     if data.len() > room {
         data.truncate(room);

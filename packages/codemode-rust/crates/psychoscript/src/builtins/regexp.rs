@@ -73,11 +73,21 @@ pub fn compile(pattern: &str, flags: &str) -> Result<(regress::Regex, String), C
     let expanded = rewrite_named_refs(pattern, rflags.unicode_sets)?;
     let pattern = expanded.as_deref().unwrap_or(pattern);
     // Without the unicode flags a pattern is code units, like the text it matches.
-    let compiled = if rflags.unicode || rflags.unicode_sets {
+    // A carrier pattern holds lone surrogates, which only code points can pass on.
+    let compiled = if (rflags.unicode || rflags.unicode_sets) && crate::strings::has_mark(pattern) {
+        let points = char::decode_utf16(crate::strings::units_of(pattern)).map(|r| match r {
+            Ok(c) => c as u32,
+            Err(e) => e.unpaired_surrogate() as u32,
+        });
+        regress::Regex::from_unicode(points, rflags)
+    } else if rflags.unicode || rflags.unicode_sets {
         regress::Regex::with_flags(pattern, rflags)
     } else {
-        regress::Regex::from_unicode(pattern.encode_utf16().map(u32::from), rflags)
-            .or_else(|_| regress::Regex::with_flags(pattern, rflags))
+        regress::Regex::from_unicode(
+            crate::strings::units_of(pattern).into_iter().map(u32::from),
+            rflags,
+        )
+        .or_else(|_| regress::Regex::with_flags(pattern, rflags))
     };
     match compiled {
         Ok(r) => Ok((r, ordered)),
@@ -431,7 +441,7 @@ impl Subject {
             return String::new();
         }
         match &self.units {
-            Some(u) => String::from_utf16_lossy(&u[a..b]),
+            Some(u) => crate::strings::from_units(&u[a..b]),
             None => self.text[a..b].to_owned(),
         }
     }
@@ -633,9 +643,16 @@ fn regexp_escape(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let Value::Str(s) = arg(args, 0) else {
         return Err(vm.type_error("RegExp.escape expects a string."));
     };
-    let text = vm.text(s).to_owned();
+    let units = vm.atoms.sref(s).utf16();
     let mut out = String::new();
-    for (i, c) in text.chars().enumerate() {
+    for (i, c) in char::decode_utf16(units).enumerate() {
+        let c = match c {
+            Ok(c) => c,
+            Err(e) => {
+                out.push_str(&format!("\\u{:04x}", e.unpaired_surrogate()));
+                continue;
+            }
+        };
         if i == 0 && c.is_ascii_alphanumeric() {
             out.push_str(&format!("\\x{:x}", c as u32));
             continue;
@@ -663,7 +680,7 @@ fn regexp_escape(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
                     }
                 }
             }
-            c => out.push(c),
+            c => crate::strings::push_char(&mut out, c),
         }
     }
     Ok(vm.string_val(out))

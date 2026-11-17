@@ -296,6 +296,10 @@ fn diagnostic_json(d: &Diagnostic) -> Json {
 }
 
 fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
+    let message = match crate::strings::host_text(&message) {
+        std::borrow::Cow::Owned(m) => m,
+        std::borrow::Cow::Borrowed(_) => message,
+    };
     Diagnostic {
         kind,
         message,
@@ -304,7 +308,16 @@ fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
     }
 }
 
+/// The diagnostic for an uncaught value, with its text as the host gets it.
 fn diagnose(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
+    let mut d = diagnose_text(vm, e, code);
+    if let std::borrow::Cow::Owned(m) = crate::strings::host_text(&d.message) {
+        d.message = m;
+    }
+    d
+}
+
+fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
     if let Value::Obj(id) = e
         && let Kind::Error(failure) = &vm.heap[*id as usize].kind
     {

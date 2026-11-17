@@ -3,11 +3,20 @@
 use std::fmt::Write as _;
 
 use crate::object::*;
+use crate::strings::{external_text, has_mark, host_text};
 use crate::value::{Id, Value, write_num};
 use crate::vm::{Res, Vm};
 use crate::{DiagnosticKind, Json};
 
 pub const MAX_VALUE_DEPTH: usize = 32;
+
+/// A string as the host gets it; only a carrier needs converting.
+fn host_string(vm: &Vm, s: crate::strings::StrId) -> String {
+    if vm.atoms.is_wtf(s) {
+        return host_text(vm.text(s)).into_owned();
+    }
+    vm.text(s).to_owned()
+}
 
 /// Host JSON as a fresh program value.
 pub fn from_json(vm: &mut Vm, j: &Json) -> Value {
@@ -15,6 +24,7 @@ pub fn from_json(vm: &mut Vm, j: &Json) -> Value {
         Json::Null => Value::Null,
         Json::Bool(b) => Value::Bool(*b),
         Json::Number(n) => Value::Num(n.as_f64().unwrap_or(f64::NAN)),
+        Json::String(s) if has_mark(s) => vm.string_val(external_text(s.clone())),
         Json::String(s) => vm.str_val(s),
         Json::Array(items) => {
             let vals = items.iter().map(|i| from_json(vm, i)).collect();
@@ -24,7 +34,11 @@ pub fn from_json(vm: &mut Vm, j: &Json) -> Value {
             let id = vm.new_object();
             for (k, v) in map {
                 let val = from_json(vm, v);
-                let a = vm.atoms.intern(k);
+                let a = if has_mark(k) {
+                    vm.atoms.intern(&external_text(k.clone()))
+                } else {
+                    vm.atoms.intern(k)
+                };
                 vm.define(id, a, val);
             }
             Value::Obj(id)
@@ -59,7 +73,7 @@ fn to_json_inner(
         Value::Null => Json::Null,
         Value::Bool(b) => Json::Bool(*b),
         Value::Num(n) => json_number(*n),
-        Value::Str(s) => Json::String(vm.text(*s).to_owned()),
+        Value::Str(s) => Json::String(host_string(vm, *s)),
         Value::Undef | Value::Uninit | Value::Sym(_) => return Ok(None),
         Value::Obj(id) => {
             let id = *id;
@@ -97,10 +111,13 @@ fn to_json_inner(
                 Kind::Error(_) => {
                     let mut map = serde_json::Map::new();
                     let (name, message) = error_parts(vm, id);
-                    map.insert("name".into(), Json::String(name));
-                    map.insert("message".into(), Json::String(message));
+                    map.insert("name".into(), Json::String(host_text(&name).into_owned()));
+                    map.insert(
+                        "message".into(),
+                        Json::String(host_text(&message).into_owned()),
+                    );
                     for (k, val) in vm.own_entries(id) {
-                        let ks = vm.atoms.text(k).to_owned();
+                        let ks = host_text(vm.atoms.text(k)).into_owned();
                         if ks == "__proto__" || ks == "name" || ks == "message" {
                             continue;
                         }
@@ -117,7 +134,7 @@ fn to_json_inner(
                             continue;
                         }
                         if let Some(j) = to_json_inner(vm, &val, Key::Atom(k), stack)? {
-                            map.insert(vm.atoms.text(k).to_owned(), j);
+                            map.insert(host_string(vm, vm.atoms.atom_str(k)), j);
                         }
                     }
                     Json::Object(map)
@@ -259,7 +276,7 @@ fn write_json(
                 out.push_str("null");
             }
         }
-        Value::Str(s) => quote(out, vm.text(*s)),
+        Value::Str(s) => quote_str(vm, out, *s),
         Value::Undef | Value::Uninit | Value::Sym(_) => return Ok(false),
         Value::Obj(id) => {
             let id = *id;
@@ -356,7 +373,7 @@ fn write_json(
                         out.push('\n');
                         out.push_str(&inner);
                     }
-                    quote(out, vm.atoms.text(k));
+                    quote_str(vm, out, vm.atoms.atom_str(k));
                     out.push(':');
                     if !opts.indent.is_empty() {
                         out.push(' ');
@@ -391,7 +408,27 @@ fn write_json(
     Ok(true)
 }
 
+/// Quotes text as JSON.stringify does, checking it for a carrier first.
 pub fn quote(out: &mut String, s: &str) {
+    if crate::strings::has_mark(s) {
+        return quote_units(out, s);
+    }
+    quote_plain(out, s);
+}
+
+/// Quotes a run's string, whose carrier flag says how.
+#[inline]
+fn quote_str(vm: &Vm, out: &mut String, s: crate::strings::StrId) {
+    if vm.atoms.is_wtf(s) {
+        quote_units(out, vm.text(s));
+    } else {
+        quote_plain(out, vm.text(s));
+    }
+}
+
+/// Quotes text that is not a carrier.
+#[inline]
+fn quote_plain(out: &mut String, s: &str) {
     out.push('"');
     let bytes = s.as_bytes();
     let mut start = 0;
@@ -416,6 +453,32 @@ pub fn quote(out: &mut String, s: &str) {
         start = i + 1;
     }
     out.push_str(&s[start..]);
+    out.push('"');
+}
+
+/// `quote` for a carrier text: a lone surrogate is written as a `\\u` escape, as well-formed JSON.stringify does.
+#[cold]
+#[inline(never)]
+fn quote_units(out: &mut String, s: &str) {
+    out.push('"');
+    for r in char::decode_utf16(crate::strings::units_of(s)) {
+        match r {
+            Ok('"') => out.push_str("\\\""),
+            Ok('\\') => out.push_str("\\\\"),
+            Ok('\n') => out.push_str("\\n"),
+            Ok('\r') => out.push_str("\\r"),
+            Ok('\t') => out.push_str("\\t"),
+            Ok('\u{8}') => out.push_str("\\b"),
+            Ok('\u{c}') => out.push_str("\\f"),
+            Ok(c) if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            Ok(c) => crate::strings::push_char(out, c),
+            Err(e) => {
+                let _ = write!(out, "\\u{:04x}", e.unpaired_surrogate());
+            }
+        }
+    }
     out.push('"');
 }
 
@@ -635,7 +698,7 @@ impl<'s> Parser<'s> {
                                 self.i += 2;
                                 units.push(self.hex4(vm)?);
                             }
-                            out.push_str(&String::from_utf16_lossy(&units));
+                            out.push_str(&crate::strings::from_units(&units));
                         }
                         _ => {
                             self.i -= 1;
@@ -692,7 +755,7 @@ pub fn format_value(vm: &mut Vm, v: &Value) -> String {
 fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
     match v {
         Value::Undef | Value::Uninit | Value::Null => out.push_str("null"),
-        Value::Str(s) => quote(out, vm.text(*s)),
+        Value::Str(s) => quote_str(vm, out, *s),
         Value::Num(n) => write_num(out, *n),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Sym(s) => out.push_str(vm.atoms.text(*s)),
@@ -728,7 +791,7 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                         if i > 0 {
                             out.push(',');
                         }
-                        quote(out, vm.atoms.text(k));
+                        quote_str(vm, out, vm.atoms.atom_str(k));
                         out.push(':');
                         format_inner(vm, out, &val, seen);
                     }
