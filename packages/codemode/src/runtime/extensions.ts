@@ -359,7 +359,8 @@ const pending = <R>(ctx: Interpreter<R>, call: ExtensionRequest, site: AstNode |
 
 /**
  * Calls a synchronous extension function's host function, once its `extension.before` hook allowed it: a promise for
- * a result that settles later (an Effect or a Promise), or the request that settles what it returned or threw now.
+ * a returned Promise, or the request that settles what it returned or threw. A returned Effect settles through that
+ * request too, so the program blocks until it completes, as `fs.readFileSync` does.
  */
 export const startExtensionCall = <R>(
   ctx: Interpreter<R>,
@@ -370,10 +371,7 @@ export const startExtensionCall = <R>(
 ): PromiseObj | ExtensionRequest => {
   const [result, threw] = callHost(host, args)
   const request = { stage: "settle", ...call, host: result, args, threw } as const
-  // A synchronous global's Effect blocks the program until it completes, as `fs.readFileSync` does; the request
-  // settles it in place. An asynchronous global's Effect, and any Promise, become a program promise.
-  if (!threw && Effect.isEffect(result) && !isAsync(host)) return request
-  if (!threw && (Effect.isEffect(result) || result instanceof Promise)) return pending(ctx, request, site)
+  if (!threw && result instanceof Promise) return pending(ctx, request, site)
   return request
 }
 

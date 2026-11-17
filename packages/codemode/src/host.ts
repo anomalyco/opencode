@@ -257,8 +257,8 @@ const arrayOf = (vm: HostVm, values: Array<Value>) => new Arr(vm.ctx.builtins.Ar
 
 /**
  * A synchronous extension function's call, staged here so its host values never enter a frame: the `extension.before`
- * hook (blocking), then the host function; what it returns settles now (blocking) unless it is an Effect or a Promise,
- * which the program holds a promise for. The call is active, holding live host values, until its result is a program
+ * hook (blocking), then the host function; what it returns settles now (blocking, an Effect
+ * included) unless it is a Promise, which the program holds a promise for. The call is active, holding live host values, until its result is a program
  * value or its concurrent call is queued.
  */
 export const callExtension = (
