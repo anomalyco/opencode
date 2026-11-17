@@ -437,6 +437,11 @@ export function createExtensionTabs(input: {
 
   return {
     module,
+    current(context: ExtensionContext) {
+      const id = currentWindow(context)
+
+      return id === undefined ? undefined : activeOf(id)?.contents.id
+    },
     /**
      * Hands a pane tab to extensions until the returned release; `tabs.onCreated` hears of it, and of every change
      * Chrome reports through `tabs.onUpdated`.

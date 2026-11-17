@@ -149,8 +149,11 @@ export default function SessionBrowserPane(props: {
 
   // An extension's button opens its popup or tells it of the click; one without a button opens its options page.
   const chooseExtension = (extension: ProfileExtension) => {
+    if (!visible()) return
     const current = profile()
     const rect = extensionsButton.element?.getBoundingClientRect()
+    const binding = props.model.binding(props.session)
+    const tab = state()
 
     const fallback = () => {
       const page = extension.options ?? extension.popup
@@ -158,9 +161,9 @@ export default function SessionBrowserPane(props: {
       if (page) props.model.openURL(props.session, page)
     }
 
-    if (current.status !== "active" || !rect) return fallback()
+    if (current.status !== "active" || !rect || !binding || !tab) return fallback()
     const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    void current.value.click({ id: extension.id, anchor }).then((handled) => {
+    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor }).then((handled) => {
       if (!handled) fallback()
     }, fallback)
   }
@@ -326,7 +329,7 @@ export default function SessionBrowserPane(props: {
   // The address field always shows the whole URL; at rest it draws the host emphasized.
   const webParts = createMemo(() => hostDisplay(addressBar().field))
   const parts = () => webParts() ?? addressParts(addressBar().field)
-  const site = () => !!addressBar().field && !addressBar().editing
+  const site = () => !!addressBar().field && !addressBar().editing && !page()?.retryOnly
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the

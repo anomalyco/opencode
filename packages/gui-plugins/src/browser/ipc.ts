@@ -163,8 +163,9 @@ export const PaneEvent = Schema.Union([
   // Details only this desktop shows, kept out of the server's tab state: the page's icon as a data URL, and its zoom
   // factor, 1 at 100%.
   Schema.Struct({
-    type: Schema.Literal("page"),
-    tabID: Browser.TabID,
+      type: Schema.Literal("page"),
+      tabID: Browser.TabID,
+      retryOnly: Schema.optionalKey(Schema.Boolean),
     icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
   }),

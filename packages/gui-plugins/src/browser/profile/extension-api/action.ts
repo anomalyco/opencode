@@ -86,6 +86,7 @@ const MEMBERS = [
  * extension through `onClicked` when it has none.
  */
 export function createActions(input: {
+  grant: (extension: Extension, tabId: number) => void
   tabs: ExtensionTabs
   emit: Emit
   changed: () => void
@@ -244,12 +245,14 @@ export function createActions(input: {
      * The user chose the extension in `window`'s menu: its popup opens over the window, or the extension hears the
      * click. Returns whether it had a button to click.
      */
-    click(window: BrowserWindow, extension: Extension) {
+    click(window: BrowserWindow, extension: Extension, tabId: number) {
       if (!defaults(extension)) return false
-      const tab = input.tabs.activeTab(window)
+      const tab = input.tabs.snapshot(tabId)
       const values = actionFor(stateOf(extension), tab?.id)
 
       if (values.enabled === false) return true
+
+      if (tab) input.grant(extension, tab.id)
       const url = extensionPage(extension.id, values.popup)
 
       if (url) {

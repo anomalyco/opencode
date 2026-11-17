@@ -45,8 +45,11 @@ if (href.startsWith("chrome-extension://")) {
     },
   }
 
-  if (isolated) contextBridge.executeInMainWorld({ func: install, args: [namespaces, bridge] })
-  else install(namespaces, bridge)
+  // Child frames newly receiving the CSS preload get only the guarded stylesheet calls, not the other shims.
+  const api = process.type === "renderer" && process.isMainFrame === false
+    ? namespaces.filter(entry => entry.methods.includes("insertCSS")) : namespaces
+  if (isolated) contextBridge.executeInMainWorld({ func: install, args: [api, bridge] })
+  else install(api, bridge)
 }
 
 // Runs in the extension's own world, so it must not use anything from this file's scope.
@@ -117,8 +120,10 @@ function install(namespaces, bridge) {
     return typeof value === "function" ? undefined : value
   }
 
-  const call = (name, sync) =>
-    function (...args) {
+  const call = (name, sync) => {
+    const scripting = name === "scripting.insertCSS" || name === "scripting.removeCSS"
+    const native = scripting && chrome.scripting?.[name.slice("scripting.".length)]?.bind(chrome.scripting)
+    return function (...args) {
       const callback = typeof args.at(-1) === "function" ? args.pop() : undefined
 
       if (sync && args[0] && typeof args[0] === "object" && args[0].id === undefined)
@@ -127,6 +132,10 @@ function install(namespaces, bridge) {
 
       const result = bridge.invoke(name, clean(args)).then((reply) => {
         if (!reply.ok) throw new Error(reply.message)
+        if (scripting) {
+          if (!native) throw new Error(`chrome.${name} is unavailable in this runtime.`)
+          return native({ ...args[0], target: reply.value })
+        }
 
         return reply.value
       })
@@ -135,13 +144,22 @@ function install(namespaces, bridge) {
       result.then(
         (value) => callback(value),
         (error) => {
-          console.error(`chrome.${name}: ${error?.message ?? error}`)
-          callback()
+          const last = { message: error?.message ?? String(error) }
+          const runtime = chrome.runtime
+          const previous = Object.getOwnPropertyDescriptor(runtime, "lastError")
+          let read = false
+          Object.defineProperty(runtime, "lastError", { configurable: true, get() { read = true; return last } })
+          try { callback() } finally {
+            if (previous) Object.defineProperty(runtime, "lastError", previous)
+            else delete runtime.lastError
+            if (!read) console.error(`Unchecked runtime.lastError: ${last.message}`)
+          }
         },
       )
 
       return id
     }
+  }
 
   /* oxlint-enable anti-slop/no-runtime-typeof */
 
