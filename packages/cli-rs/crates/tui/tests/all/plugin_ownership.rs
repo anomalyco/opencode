@@ -730,7 +730,9 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
     if SEEN.with_borrow(|seen| !seen.0.is_empty()) {
         return;
     }
-    if row.close == Close::BeforeDispatch {
+    // A mount's end asks as it closes: the route is going already. Navigating home again would race the driver's
+    // reopening over the pipe, where it lands after it (bigboi's review of contract 2.x).
+    if row.close == Close::BeforeDispatch && origin != Origin::MountEnd {
         host.navigate(abi::Route::Home);
     }
     let asked = match row.kind {
@@ -868,7 +870,7 @@ export default {{ id: "example.probe", setup(api) {{
   const ask = (origin) => {{
     if (origin !== ORIGIN || asked) return
     asked = true
-    if (CLOSE === "BeforeDispatch") home()
+    if (CLOSE === "BeforeDispatch" && origin !== "MountEnd") home()
     log("asked")
     if (KIND === "Fetch") {{
       carrier.fetch({{ method: "GET", path: "/api/hold" }}).then(
