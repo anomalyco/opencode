@@ -98,12 +98,16 @@ test("lists hosts without reading a value, and imports only the chosen sites' co
     insert.run("mail.test", "session", "", gcm(randomBytes(32), "mail.test", "x"), "/", 0, 0, 1, 1, 1, "", 0)
     // A partitioned cookie of a chosen site stays behind and is counted.
     insert.run("github.com", "chips", "", gcm(key.key, "github.com", "x"), "/", 0, 0, 1, 0, 0, "https://top.test", 0)
+    // Damaged rows, one with a host that is not text and one with no value at all, are each one cookie left behind.
+    insert.run(Buffer.from("github.com"), "blob_host", "", gcm(key.key, "github.com", "x"), "/", 0, 0, 1, 1, 1, "", 0)
+    insert.run("github.com", "no_value", null, null, "/", 0, 0, 1, 1, 1, "", 0)
 
     expect(await readChromiumHosts(file, scratch(directory))).toEqual([
       { host: ".github.com", expires: 1_655_526_400, used: 1_655_526_400 },
       { host: "github.com", expires: undefined, used: 0 },
       { host: "bank.test", expires: undefined, used: 0 },
       { host: "mail.test", expires: undefined, used: 0 },
+      { host: "github.com", expires: undefined, used: 0 },
     ])
 
     const read = await readChromiumCookies(file, key, scratch(directory), (host) => host.replace(/^\./, "") === "github.com")
@@ -114,9 +118,15 @@ test("lists hosts without reading a value, and imports only the chosen sites' co
     ])
     expect({ protected: read.protected, failed: read.failed, skipped: read.skipped }).toEqual({
       protected: 0,
-      failed: 0,
+      failed: 1,
       skipped: 1,
     })
+
+    // An import of every site counts the row whose host names no site too, and still imports the rest.
+    const all = await readChromiumCookies(file, key, scratch(directory))
+
+    expect(all.cookies.map((cookie) => cookie.name)).toEqual(["user_session", "host_only"])
+    expect({ protected: all.protected, failed: all.failed, skipped: all.skipped }).toEqual({ protected: 1, failed: 3, skipped: 1 })
   } finally {
     db.close()
     await rm(directory, { recursive: true, force: true }).catch(() => undefined)

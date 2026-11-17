@@ -72,6 +72,17 @@ function attempt<T>(run: () => T) {
   }
 }
 
+/** A cookie row whose every value has the type Chromium writes; a damaged row has another, which SQLite allows. */
+const WELL_FORMED = [
+  "typeof(host_key) = 'text'",
+  "typeof(name) = 'text'",
+  "typeof(value) = 'text'",
+  "typeof(encrypted_value) = 'blob'",
+  "typeof(path) = 'text'",
+  ...["expires_utc", "has_expires", "is_secure", "is_httponly", "samesite"].map((column) => `typeof(${column}) = 'integer'`),
+  "typeof(top_frame_site_key) IN ('text', 'null')",
+].join(" AND ")
+
 /** Chromium's `samesite` column, by value; -1 is unspecified. */
 const SAME_SITE = ["no_restriction", "lax", "strict"] as const
 
@@ -125,19 +136,27 @@ export async function readChromiumCookies(
   scratch: SnapshotScratch,
   keep?: (host: string) => boolean,
 ): Promise<CookieRead> {
-  const rows = await snapshotDatabase(database, scratch, (db) => {
+  const read = await snapshotDatabase(database, scratch, (db) => {
     const query = db.prepare(
-      "SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies",
+      `SELECT host_key, name, value, encrypted_value, path, expires_utc, has_expires, is_secure, is_httponly, samesite, top_frame_site_key FROM cookies WHERE ${WELL_FORMED}`,
     )
+
+    // Damaged rows, by host where it is text, so an import of chosen sites counts only theirs.
+    const damaged = db.prepare(`SELECT CASE WHEN typeof(host_key) = 'text' THEN host_key END AS host FROM cookies WHERE NOT (${WELL_FORMED})`)
 
     // Chromium's timestamps count microseconds since 1601, past the largest integer a number holds exactly.
     query.setReadBigInts(true)
 
-    // SAFETY: the query names Chromium's cookie table columns, whose SQLite types match `Row`.
-    return query.all() as Row[]
+    // SAFETY: the query names Chromium's cookie table columns and keeps only the rows whose values have the SQLite
+    // types `Row` says; the second one's `host` is text or null.
+    return { rows: query.all() as Row[], damaged: damaged.all() as { host: string | null }[] }
   })
 
-  return rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
+  // A damaged row is one cookie that does not import, as one whose value does not decrypt; one whose host is not text
+  // names no site, so only an import of every site counts it.
+  const failed = read.damaged.filter((row) => (row.host === null ? !keep : !keep || keep(row.host))).length
+
+  return read.rows.reduce<{ cookies: ImportedCookie[]; protected: number; failed: number; skipped: number }>(
     (result, row) => {
       if (keep && !keep(row.host_key)) return result
 
@@ -168,7 +187,7 @@ export async function readChromiumCookies(
 
       return result
     },
-    { cookies: [], protected: 0, failed: 0, skipped: 0 },
+    { cookies: [], protected: 0, failed, skipped: 0 },
   )
 }
 
