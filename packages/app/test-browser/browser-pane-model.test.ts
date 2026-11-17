@@ -23,7 +23,7 @@ const tab = (digit: string, url = `https://${digit}.example/`): Browser.Tab => (
 function fixture() {
   const bindings = new Map<string, string>()
   const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
-  const server = { id: "browser-test", compatible: true, builtin: true, data: { on: () => () => undefined } }
+  const server = { id: "browser-test", compatible: true, builtin: true, data: { on: () => () => undefined, session: { status: () => "idle" } } }
 
   const refs = ["ses_alpha", "ses_beta"].map((id) => ({
     key: `${server.id}\n${id}`,
@@ -69,7 +69,7 @@ function fixture() {
     sessions: { current, list: () => refs },
     screen: { current: () => undefined },
     links: { open: () => undefined },
-    layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {} },
+    layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
     stores: { history },
   }
 
