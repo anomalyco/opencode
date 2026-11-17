@@ -838,6 +838,7 @@ export function context(base: Base, carrier: Carrier) {
         rendered.set(key(cx), entry)
       }
       if (retry(entry)) return undefined
+      entry.root.room = { width: cx.input?.width ?? 0, height: cx.input?.height ?? 0 }
       const reading = pressing(key(cx))
       // What reading the tree reads (where a node is) the mount keeps watching.
       const before = rendering

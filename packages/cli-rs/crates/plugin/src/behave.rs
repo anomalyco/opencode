@@ -603,6 +603,7 @@ impl Hook {
             // A mount whose root no solve has laid out yet has no geometry to tell: it is told once one does.
             let Some(mount) = mount.upgrade().filter(|mount| mount.laid()) else { continue };
             mount.report();
+            mount.laid_out(frame);
             match mount.deliver(frame) {
                 Delivered::Nothing | Delivered::Told => {}
                 Delivered::Again if self.rounds.get() < ROUNDS => mount.draw_again(),
