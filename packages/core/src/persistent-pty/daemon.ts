@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { lstat, readFile, readdir } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -240,30 +240,14 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const readRegistration = Effect.fn("PersistentPty.daemon.readRegistration")(function* (directory: string) {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
     })
-    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))(value).pipe(
+    const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))(value).pipe(
       Effect.mapError((cause) => failure("protocol", cause)),
     )
-  })
-
-  const verify = Effect.fn("PersistentPty.daemon.verify")(function* (current: Registration) {
-    const response = yield* oneShot(current, { op: "ping" })
-    if (
-      response.type !== "pong" ||
-      response.instance_id !== current.instance_id ||
-      response.pid !== current.pid ||
-      response.protocol !== current.protocol
-    )
-      return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "opencode-pty registration mismatch" }))
-    return current
-  })
-
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
-    const decoded = yield* readRegistration(directory)
     if (decoded.protocol !== ProtocolVersion)
       return yield* Effect.fail(
         new DaemonError({
@@ -272,7 +256,15 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           pid: decoded.pid,
         }),
       )
-    return yield* verify(decoded)
+    const response = yield* oneShot(decoded, { op: "ping" })
+    if (
+      response.type !== "pong" ||
+      response.instance_id !== decoded.instance_id ||
+      response.pid !== decoded.pid ||
+      response.protocol !== ProtocolVersion
+    )
+      return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "opencode-pty registration mismatch" }))
+    return decoded
   })
 
   const spawnDaemon = Effect.fn("PersistentPty.daemon.spawn")(function* () {
@@ -463,37 +455,6 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
-  // v8 keeps finished children as zombies. An owner or an outstanding handoff can keep it alive
-  // under another runtime name. Retire these daemons even when the new server has no handoff.
-  const directories = yield* Effect.promise(() => readdir(root, { withFileTypes: true }).catch(() => []))
-  const candidates = new Set(
-    directories.filter((entry) => entry.isDirectory()).map((entry) => path.join(root, entry.name)),
-  )
-  if (inherited) candidates.add(inherited.directory)
-  yield* Effect.forEach(
-    candidates,
-    (directory) =>
-      Effect.gen(function* () {
-        const file = yield* Effect.tryPromise(() => lstat(path.join(directory, "service.json")))
-        if (!file.isFile() || (process.getuid && (file.uid !== process.getuid() || (file.mode & 0o022) !== 0))) return
-        const current = yield* readRegistration(directory)
-        if (current.protocol !== 8) return
-        // A stale file alone cannot identify a process. Authenticate the live instance first.
-        yield* verify(current)
-        const stopped = yield* oneShot(current, { op: "shutdown" }).pipe(
-          Effect.map((reply) => reply.type === "ok"),
-          Effect.orElseSucceed(() => false),
-        )
-        if (stopped) return
-        // The response may have been lost while the daemon was stopping. Only signal a PID
-        // that a fresh authenticated pong still identifies as this protocol-8 instance.
-        yield* verify(current)
-        if (Number.isSafeInteger(current.pid) && current.pid > 1 && current.pid !== process.pid)
-          yield* Effect.try(() => process.kill(current.pid, "SIGTERM"))
-      }).pipe(Effect.ignore),
-    { concurrency: 8, discard: true },
-  )
-
   // A replacement must own its inherited daemon before the server becomes ready. Terminals are
   // best-effort: any failure abandons the old daemon so the restart itself always succeeds.
   if (inherited) {
@@ -513,7 +474,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           yield* Effect.logWarning("Discarding PTY restart handoff; persistent terminals will start fresh", {
             cause: Cause.pretty(cause),
           })
-          if (found?.instance_id === inherited.instanceID) yield* oneShot(found, { op: "shutdown" }).pipe(Effect.ignore)
+          if (found) yield* oneShot(found, { op: "shutdown" }).pipe(Effect.ignore)
           abandon()
         }),
       ),
