@@ -364,6 +364,7 @@ fn the_timeout_interrupts_calls_in_flight() {
         .result
         .unwrap_err();
     assert_eq!(d.kind, DiagnosticKind::TimeoutExceeded);
+    assert_eq!(d.message, "Execution timed out after 30ms.");
     assert!(started.elapsed() < Duration::from_secs(2));
     assert_eq!(
         *events.lock().unwrap(),

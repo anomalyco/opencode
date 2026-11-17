@@ -408,7 +408,7 @@ impl<'rt> Vm<'rt> {
         {
             self.fatal = Some((
                 DiagnosticKind::TimeoutExceeded,
-                format!("Execution exceeded its timeout of {ms} ms."),
+                format!("Execution timed out after {ms}ms."),
             ));
             return Err(Value::Undef);
         }
