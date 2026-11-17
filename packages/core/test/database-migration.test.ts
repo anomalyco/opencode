@@ -200,6 +200,24 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("runs beforePending once before pending migrations, and not when none are pending", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        const calls: string[] = []
+        const beforePending = Effect.sync(() => calls.push("before"))
+        const migration = (id: string): DatabaseMigration.Migration => ({
+          id,
+          up: () => Effect.sync(() => calls.push(id)),
+        })
+        yield* DatabaseMigration.applyOnly(db, [migration("1_a"), migration("2_b")], { beforePending })
+        expect(calls).toEqual(["before", "1_a", "2_b"])
+        yield* DatabaseMigration.applyOnly(db, [migration("1_a"), migration("2_b")], { beforePending })
+        expect(calls).toEqual(["before", "1_a", "2_b"])
+      }),
+    )
+  })
+
   test("adds nullable attention state to existing sessions", async () => {
     await run(
       Effect.gen(function* () {

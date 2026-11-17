@@ -21,7 +21,14 @@ export type Migration = {
 
 // Not serialized here: the Database layer holds a lock scoped to the database
 // it is bootstrapping, since two instances over one file must not race.
-export function apply(db: Database, options = { legacyCredentials: true }) {
+export interface Options {
+  /** Defaults to true. */
+  readonly legacyCredentials?: boolean
+  /** Runs once before the first pending migration, if any is pending. */
+  readonly beforePending?: Effect.Effect<void>
+}
+
+export function apply(db: Database, options: Options = {}) {
   return Effect.gen(function* () {
     // OpenCode owns the unprefixed table namespace. Embedders sharing this
     // database may own underscore-prefixed tables, which bootstrap ignores.
@@ -29,14 +36,14 @@ export function apply(db: Database, options = { legacyCredentials: true }) {
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 1) <> '_'`,
     )
     if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
-      return yield* applyOnly(db, migrations)
+      return yield* applyOnly(db, migrations, options)
     if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
     const started = Date.now()
     yield* Effect.logInfo("database schema bootstrap started", { migrations: migrations.length })
     yield* db.transaction((tx) =>
       Effect.gen(function* () {
         yield* schema.up(tx)
-        if (options.legacyCredentials) yield* legacyCredentials.up(tx)
+        if (options.legacyCredentials ?? true) yield* legacyCredentials.up(tx)
         yield* tx.run(
           sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
         )
@@ -54,7 +61,7 @@ export function apply(db: Database, options = { legacyCredentials: true }) {
   })
 }
 
-export function applyOnly(db: Database, input: Migration[]) {
+export function applyOnly(db: Database, input: Migration[], options: Pick<Options, "beforePending"> = {}) {
   return Effect.gen(function* () {
     yield* db.run(
       sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
@@ -107,6 +114,7 @@ export function applyOnly(db: Database, input: Migration[]) {
       }
     }
 
+    if (options.beforePending && input.some((migration) => !completed.has(migration.id))) yield* options.beforePending
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       const started = Date.now()

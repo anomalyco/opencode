@@ -26,10 +26,10 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
 
-// todo is opt-in only, so the build defaults and both wildcards leave it off.
 const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
-  ...Record.map(ConfigFlag.registry, () => state),
-  todo: { enabled: false, source: "default" },
+  ...Record.map(ConfigFlag.registry, (_, key) =>
+    ConfigFlag.optInOnly.has(key) ? { enabled: false, source: "default" } : state,
+  ),
 })
 
 describe("Flag.resolve", () => {

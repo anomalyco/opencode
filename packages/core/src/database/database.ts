@@ -25,6 +25,20 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
+export interface MigrationHook {
+  /** Runs before the first pending migration, if any is pending. */
+  readonly before: (db: DatabaseShape) => Effect.Effect<void>
+  /** Runs every time a database opens, after migrations and before anything writes. */
+  readonly after: (db: DatabaseShape) => Effect.Effect<void>
+}
+
+const hooks: Array<MigrationHook> = []
+
+/** Register at module load: a database opened earlier skips the hook. */
+export function onMigrate(hook: MigrationHook) {
+  hooks.push(hook)
+}
+
 // The bootstrap lock is scoped to the database being built, never to this
 // module: on workerd every Durable Object in an isolate shares module state, and
 // releasing a shared semaphore resumes the waiting object's fiber inside the
@@ -49,7 +63,12 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
+      yield* semaphore.withPermit(
+        DatabaseMigration.apply(db, {
+          legacyCredentials,
+          beforePending: Effect.forEach(hooks, (hook) => hook.before(db), { discard: true }),
+        }).pipe(Effect.andThen(Effect.forEach(hooks, (hook) => hook.after(db), { discard: true }))),
+      )
 
       return { db }
     }).pipe(Effect.orDie),
