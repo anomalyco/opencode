@@ -87,7 +87,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   the host's scroll verb. A node's `getLayout()`, `width` and `height` are where the host laid it out in its last
   settled frame (`Read::rect`), and `onSizeChange` runs as that changes (CT-15, CT-24: @jasonencode/opencode-context
   sized its dividers by it, `P.8/sessionwatch-width`); the node carries an id from the view after the plugin first
-  asked. OpenTUI answers the layout at once, where the host's comes after a frame: until then `getLayout()` is all zero
+  asked. `onSizeChange` runs as the laid-out size changes, and a 0×0 read (a node the host has not laid out yet) is no
+  size, as OpenTUI never reports one (navigator's section header kept it and cut its "Refresh" to "."). OpenTUI
+  answers the layout at once, where the host's comes after a frame: until then `getLayout()` is all zero
   and `width` the prop, so a plugin that measures itself only within a few timer ticks (opencode-tokscope's sidebar,
   opencode-llm-vibe) draws nothing. That would need the node's layout as the plugin asks. Other renderable members are
   undefined.
