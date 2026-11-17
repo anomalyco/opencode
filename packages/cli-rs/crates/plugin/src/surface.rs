@@ -754,6 +754,15 @@ impl Surface {
         self.draw_sized(host, changed);
     }
 
+    /// Settles a focus the mount's calls asked for before its tree held the node, with this view, the mount's next one
+    /// that gives a tree ([`Owner::settle_pending`]). A view that gives none (the pipe's, while the JS host builds the
+    /// revision) leaves it waiting; the last tree adopted again in a new theme ([`Surface::restyle`]) is no view.
+    fn settle_pending(&self, host: &dyn Host) {
+        if let Some(owner) = self.holder() {
+            owner.settle_pending(host);
+        }
+    }
+
     /// What the mount holds of the input.
     pub fn holder(&self) -> Option<Rc<Owner>> {
         self.holder.borrow().clone()
@@ -794,6 +803,8 @@ impl Surface {
                 let size = remote.unwrap_or(memo.len()) as i64;
                 book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                 (state.memo, state.booked) = (memo, size);
+                drop(state);
+                self.settle_pending(host);
                 return;
             }
             let result = self.adopt(host, &theme, vec![node], &called.staged, full);
@@ -806,6 +817,8 @@ impl Surface {
                     let size = remote.unwrap_or(memo.len()) as i64;
                     book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                     (state.memo, state.booked, state.refused) = (memo, size, false);
+                    drop(state);
+                    self.settle_pending(host);
                     return;
                 }
                 Err(refused) => {
@@ -1107,10 +1120,6 @@ impl Surface {
         self.repaint(restyled);
         if let (Some(owner), Some(focused)) = (self.holder(), focused) {
             owner.restore_focus(host, focused.node.as_deref());
-        }
-        // A focus its calls asked for before this tree showed the node.
-        if let Some(owner) = self.holder() {
-            owner.apply_pending(host);
         }
         let live = self.live.borrow().clone();
         if let (true, Some(live)) = (slots_changed, live) {

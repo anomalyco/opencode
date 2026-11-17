@@ -72,9 +72,9 @@ pub struct Owner {
     /// The ids of its tree's nodes, and of its focusable ones.
     ids: RefCell<Vec<String>>,
     focusable: RefCell<Vec<String>>,
-    /// A node its calls asked to focus that its tree does not hold yet: over the pipe a handler shows a field and
-    /// focuses it in one call, and the focus comes before the revision that shows it (contract 2.x, step B). It waits
-    /// for that revision, one at a time.
+    /// A node its calls asked to focus that its tree does not hold yet: a handler shows a field and focuses it in one
+    /// call, and the focus applies before the view that shows it (contract 2.x, step B). It waits for the mount's next
+    /// view and no longer ([`Owner::settle_pending`]), one at a time.
     pending: RefCell<Option<String>>,
     /// The mount it holds the input of, as long as it lives; `None` for an activation.
     mount: Option<Weak<()>>,
@@ -577,8 +577,8 @@ impl Owner {
         let focusable = self.focusable.borrow().iter().any(|known| known == id);
         match self.lookup.as_ref().and_then(|lookup| lookup(id)).filter(|_| focusable && self.alive()) {
             Some(widget) => refocus(host, || host.app().focus(&widget)),
-            // A node the tree does not hold yet waits for the revision that shows it; one it holds that takes no focus
-            // (a text, a node in a hidden box) is refused.
+            // A node the tree does not hold yet waits for the mount's next view, which may show it; one it holds that
+            // takes no focus (a text, a node in a hidden box) is refused.
             None if self.alive() && self.lookup.is_some() && !self.has(id) => {
                 *self.pending.borrow_mut() = Some(id.to_owned());
             }
@@ -586,16 +586,14 @@ impl Owner {
         }
     }
 
-    /// Gives the focus that waits ([`Owner::focus`]) to its node once the tree the host adopted holds it, if no host
-    /// dialog is open then; a tree that holds the node as one that takes no focus refuses it. A tree without the node
-    /// leaves it waiting, for the mount's life: it ends with the mount, another focus or a blur of its calls.
-    pub(crate) fn apply_pending(&self, host: &dyn Host) {
+    /// Settles the focus that waits ([`Owner::focus`]) with the mount's next view, `tree`: the view after the call
+    /// that asked for it on a linked carrier, the next revision over the pipe. If that view holds the node, the node
+    /// takes the focus, under [`Owner::focus`]'s refusals; if not, the focus is dropped. A resize, a theme or another
+    /// mount's view that comes later never applies it (big-boi's G2 of step B).
+    pub(crate) fn settle_pending(&self, host: &dyn Host) {
         let Some(id) = self.pending.borrow_mut().take() else { return };
-        if !self.alive() || host.modal_open() {
-            return;
-        }
         if !self.has(&id) {
-            *self.pending.borrow_mut() = Some(id);
+            log::warn!("plugin {}: {id:?} is not a node of its mount's next view", self.plugin);
             return;
         }
         self.focus(host, &id);

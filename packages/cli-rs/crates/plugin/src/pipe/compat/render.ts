@@ -6,7 +6,18 @@
 // `<text>`, and a span's `style` and `href` its only props. An intrinsic the contract has no node for throws as it is
 // created, so the plugin's boundary reports it as TS reports a crash in a render.
 import { createRenderer } from "solid-js/universal"
-import { catchError, createComponent, createContext, createMemo, createRenderEffect, onCleanup, useContext } from "solid-js"
+import {
+  catchError,
+  createComponent,
+  createContext,
+  createMemo,
+  createRenderEffect,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+  useContext,
+  type Owner,
+} from "solid-js"
 import { createTextAttributes, isStyledText, RGBA, TextAttributes } from "./core"
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
@@ -50,6 +61,9 @@ export class VNode {
   text?: string
   // The mount a root node belongs to, which a change of its tree asks to view again, and which focuses its nodes.
   owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls; report?: (feature: string) => void }
+  // The Solid owner it was created under, whose mount reports what the plugin asks of it while it is in no mount's
+  // tree: a field it removed, or one it never added, has no focus on the host (contract 2.x, step B).
+  made?: Owner | null
   // It has the focus, as the layer last said ([`VNode.focusChanged`]).
   focused = false
   // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
@@ -117,9 +131,13 @@ export class VNode {
     return list.length > 0
   }
 
-  // The contract's focus of the node, through its mount: a field or a scroll the host focuses (CT-2).
+  // The contract's focus of the node, through its mount: a field or a scroll the host focuses (CT-2). A field or a
+  // scroll the plugin removed from its mount has none, which the plugin's log says once; it focuses no other mount.
   focus() {
-    rootOf(this).owner?.focus?.focus(this)
+    const root = rootOf(this)
+    if (root.owner) return root.owner.focus?.focus(this)
+    const report = this.made && runWithOwner(this.made, () => useContext(ReportContext))
+    if (FOCUSABLE.has(this.tag)) report?.(`focus() of an <${this.tag}> in no mount`)
   }
 
   blur() {
@@ -275,6 +293,9 @@ for (const name of [
   })
 }
 
+// The nodes the contract focuses: a field and a scroll.
+const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
+
 export function rootOf(node: VNode) {
   let at = node
   while (at.parent) at = at.parent
@@ -316,7 +337,9 @@ const renderer = createRenderer<VNode>({
   createElement(tag) {
     if (UNSUPPORTED.has(tag)) throw new Error(`<${tag}> is not supported by opencode-native's JS host`)
     if (!ELEMENTS.has(tag)) throw new Error(`[Reconciler] Unknown component type: ${tag}`)
-    return new VNode(tag)
+    const node = new VNode(tag)
+    node.made = getOwner()
+    return node
   },
   createTextNode(value) {
     const node = new VNode("#text")
@@ -385,6 +408,8 @@ export interface Screen {
 }
 
 export const ScreenContext = createContext<Screen>()
+// What reports a feature of the mount's plugin the layer does not map, for a node of it in no mount's tree.
+const ReportContext = createContext<((feature: string) => void) | undefined>()
 
 export function useRenderer() {
   return useContext(ScreenContext)?.renderer ?? {}
@@ -477,7 +502,12 @@ export function mount(
         createComponent(ScreenContext.Provider, {
           value: screen,
           get children() {
-            return catchError(render, fail)
+            return createComponent(ReportContext.Provider, {
+              value: report,
+              get children() {
+                return catchError(render, fail)
+              },
+            })
           },
         }),
       root,

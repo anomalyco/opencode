@@ -256,6 +256,81 @@ fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
     assert_eq!(logged(&pipe, &log, 2), [json!({ "found": "a" }), json!({ "found": "ab" })]);
 }
 
+// Expected (contract 2.x, step B, the ownership rule of 2.8; big-boi's G2 contrast): a batch the JS host sends as a
+// mount's applies to that mount or nowhere. The route opens, closes and opens again, a new mount with the same fields
+// `guard` and `same`; with `guard` focused, a focus of `same` that names the closed mount moves nothing, where the same
+// focus naming no mount (the activation's) or the new mount focuses `same`.
+#[test]
+fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let plugin = root.path().join("config").join("plugins").join("closed");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("tui.ts"), CLOSED).unwrap();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.closed");
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    let mounts = || opencode_plugin::behave::mounts(app.app(), "example.closed", "pf");
+    let route = Route::Plugin { id: "example.closed".into(), name: "pf".into() };
+    for _ in 0..2 {
+        tui.navigate(route.clone());
+        pipe.harness.wait("the route shows", || {
+            app.advance(Duration::from_millis(1));
+            app.text().contains("closed page") && mounts().len() == 1
+        });
+        pipe.settle();
+        tui.navigate(Route::Home);
+        pipe.harness.wait("the route closes", || {
+            app.advance(Duration::from_millis(1));
+            mounts().is_empty()
+        });
+    }
+    tui.navigate(route);
+    pipe.harness.wait("the route shows again", || {
+        app.advance(Duration::from_millis(1));
+        mounts().len() == 1
+    });
+    pipe.settle();
+    let focus = |command: &str| {
+        tui.keymap.dispatch("pf.guard", None);
+        pipe.settle();
+        tui.keymap.dispatch(command, None);
+        pipe.settle();
+        mounts().pop().and_then(|mount| mount.focused)
+    };
+    assert_eq!(focus("pf.old").as_deref(), Some("guard"), "the closed mount's focus moved the new mount's");
+    assert_eq!(focus("pf.untagged").as_deref(), Some("same"), "the activation's focus did not apply");
+    assert_eq!(focus("pf.new").as_deref(), Some("same"), "the new mount's own focus did not apply");
+}
+
+/// The raw probe of the closed-mount row: a route `pf` with the fields `guard` and `same`, which records each mount it
+/// begins; `pf.guard` focuses `guard` as the newest mount's, and `pf.old`, `pf.untagged` and `pf.new` focus `same` as
+/// the first mount's, the activation's and the newest mount's.
+const CLOSED: &str = r#"export default { id: "example.closed", setup(api) {
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const mounts = []
+  const page = { type: "box", children: [
+    { type: "text", spans: [{ text: "closed page" }] },
+    { type: "input", id: "guard" },
+    { type: "input", id: "same" },
+  ] }
+  carrier.surface("pf", { type: "route", name: "pf" }, () => page, {
+    mounts: true,
+    on: (event) => {
+      if (event.type === "mount" && event.mounted) mounts.push(event.mount)
+    },
+  })
+  const focus = (node, mount) => carrier.effect({ type: "focus", node }, mount)
+  carrier.command({ name: "pf.guard", title: "pf.guard" }, () => focus("guard", mounts.at(-1)))
+  carrier.command({ name: "pf.old", title: "pf.old" }, () => focus("same", mounts[0]))
+  carrier.command({ name: "pf.untagged", title: "pf.untagged" }, () => focus("same"))
+  carrier.command({ name: "pf.new", title: "pf.new" }, () => focus("same", mounts.at(-1)))
+} }
+"#;
+
 // Expected (contract 2.x, step B, the ownership rule of 2.8): a field's focus is its mount's, and applies to it or
 // nowhere: one the JS host sent while the mount was open, which the host takes only after the mount closed, moves
 // nothing; the composer the user went back to keeps the focus and what they type.

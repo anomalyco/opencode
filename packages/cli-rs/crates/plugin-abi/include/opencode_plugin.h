@@ -229,7 +229,9 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet. A "focus" names a box that is
  *   focusable, or, on a host with the feature "focus-input", an "input" with an id, which then takes what the user
- *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken.
+ *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken. A node the mount's tree
+ *   does not hold yet takes the focus if the mount's next view (the one after the call) shows it, and is dropped if
+ *   it does not: a later view, after a resize or a theme, does not apply it.
  * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"), never 0, which names no
  *   request: an SDK refuses an answer of 0 as malformed. One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
