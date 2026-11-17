@@ -58,9 +58,11 @@ export const Plugin = {
             codeMode
               ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
               : "Images and PDFs are presented directly to the model.",
-            codeMode
-              ? "Text results have content (lines without line-number prefixes), offset, lineCount, and optional next. Directory results have entries (entry names) and optional next. If next is missing, you've reached the end."
-              : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+            ...(codeMode
+              ? []
+              : [
+                  "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+                ]),
             "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
           ].join(" "),
           input: Input,
