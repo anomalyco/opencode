@@ -29,15 +29,16 @@ ALIASES.option = "meta"
 ALIASES.alt = "meta"
 
 -- TS `keyIdentity`: a key with its aliases named one way and the modifiers before its last part sorted, so
--- `Shift+Control+X` and `ctrl+shift+x` are one key.
+-- `Shift+Control+X` and `ctrl+shift+x` are one key. A step splits at each `+` with its empty parts kept, as
+-- JavaScript's `split` does: `+`, the plus key, is a key of its own.
 local function identity(key: string): string
-    local steps = {}
-    for step in key:lower():gsub("%s*%+%s*", "+"):gmatch("%S+") do
-        local parts = {}
-        for part in step:gmatch("[^+]+") do
+    local steps: { string } = {}
+    for step in (key:lower():gsub("%s*%+%s*", "+")):gmatch("%S+") do
+        local parts: { string } = {}
+        for _, part in step:split("+") do
             table.insert(parts, ALIASES[part] or part)
         end
-        local last = table.remove(parts)
+        local last = table.remove(parts) :: string
         table.sort(parts)
         table.insert(parts, last)
         table.insert(steps, table.concat(parts, "+"))
