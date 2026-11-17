@@ -266,6 +266,8 @@ export function make<
         ),
       }),
       limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
+      // Arguments cross as JSON would carry them: functions are left out and promises are awaited.
+      translate: { functions: "drop", promises: "await" },
     }) as unknown as Language.Runtime.Runtime<R>
     runtimes.set(key, made)
     return made

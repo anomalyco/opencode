@@ -25,6 +25,8 @@ import {
   HostNamespace,
   MapObj,
   Obj,
+  OMITTED,
+  PromiseObj,
   RegExpObj,
   SetObj,
   URLObj,
@@ -32,7 +34,8 @@ import {
   coerceToString,
   type Value,
 } from "./objects.js"
-import { describeValue, isOpaque } from "./references.js"
+import { describeValue, isOpaque, typeofValue } from "./references.js"
+import type { Translate } from "../runtime.js"
 import { Interruption } from "./signals.js"
 import { type HostOrigin, SnapshotError } from "../snapshot/codec.js"
 
@@ -61,6 +64,7 @@ type Within = {
 export const hostGlobals = <R>(
   ctx: Interpreter<R>,
   globals: Readonly<Record<string, unknown>>,
+  translate: Required<Translate> = { functions: "error", promises: "error" },
 ): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
   // The `snapshot` hooks of the host functions among the globals that have them, by label.
@@ -69,15 +73,36 @@ export const hostGlobals = <R>(
   // The program functions wrapping functions inside values a hooked host function returned, by where they came from.
   const origins = new WeakMap<object, HostOrigin>()
 
-  const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
+  // With `waiting`, a promise that hasn't fulfilled goes there instead, and the copy is to be made again once it settles.
+  const toHost = (
+    value: Value,
+    label: string,
+    depth: number,
+    seen: Set<object>,
+    waiting: Array<PromiseObj> | undefined,
+  ): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
+    if (translate.functions === "drop" && typeofValue(value) === "function") return OMITTED
+    if (seen.has(value as object)) throw typeError(`${label} contains a circular value.`)
+    if (waiting !== undefined && value instanceof PromiseObj) {
+      if (value.state !== "fulfilled") {
+        waiting.push(value)
+        return undefined
+      }
+      seen.add(value)
+      const copied = toHost(value.result as Value, label, depth + 1, seen, waiting)
+      seen.delete(value)
+      return copied
+    }
     if (!(value instanceof Obj) || isOpaque(value)) {
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to the host.`)
     }
-    if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
     seen.add(value)
-    const next = (item: Value) => toHost(item, label, depth + 1, seen)
+    const next = (item: Value) => {
+      const copied = toHost(item, label, depth + 1, seen, waiting)
+      return copied === OMITTED && (value instanceof MapObj || value instanceof SetObj) ? undefined : copied
+    }
     if (value instanceof ErrorObj) {
       const name = coerceToString(get(value, "name"))
       const message = get(value, "message")
@@ -87,7 +112,7 @@ export const hostGlobals = <R>(
       for (const key of new Set(["cause", ...keys(value)])) {
         if (uncrossed.has(key) || !has(value, key)) continue
         const item = crossing(() => next(get(value, key)))
-        if (item === left) continue
+        if (item === left || item === OMITTED) continue
         Object.defineProperty(copied, key, {
           value: item,
           writable: true,
@@ -260,19 +285,27 @@ export const hostGlobals = <R>(
 
   // A host function as a program function: its calls go through the run's host calls (see `HostCalls.call`). The
   // name and length come from the host function, read once, and only as text and a count.
-  const wrap = (fn: Fn<unknown> | DurableFn<unknown>, label: string, target: HostTarget, source?: Function) => {
+  // `callee` is the program function calling it, when that is not the one made here (see `rewrap`).
+  const wrap = (
+    fn: Fn<unknown> | DurableFn<unknown>,
+    label: string,
+    target: HostTarget,
+    source?: Function,
+    callee?: Obj,
+  ) => {
     const named = source ?? (fn instanceof Fn ? fn.run : undefined)
     const own: unknown = named?.name
     // A host function made inline has no name of its own: it is named by where it is.
     const name =
       source === undefined && (typeof own !== "string" || own === "") ? label.slice(label.lastIndexOf(".") + 1) : own
     const length: unknown = named?.length ?? 0
-    return native(builtins, {
+    const made = native(builtins, {
       runtime: "host",
       name: typeof name === "string" ? name : "",
       length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
-      call: (_, values, site) => ctx.vm.hosts.call(fn, values, site, target),
+      call: (_, values, site) => ctx.vm.hosts.call(fn, values, site, target, callee ?? made),
     })
+    return made
   }
 
   // A namespace among the globals: a path the program reads into, whose calls ask `resolve` for the function.
@@ -282,11 +315,17 @@ export const hostGlobals = <R>(
       call: (path, values, site) => {
         const found = value.resolve(path)
         if (found instanceof HostFailure) throw found
-        return ctx.vm.hosts.call(found, values, site, {
-          label: path.reduce<string>((at, key) => member(at, key), label),
-          path: [...global, ...path],
-          owner: undefined,
-        })
+        return ctx.vm.hosts.call(
+          found,
+          values,
+          site,
+          {
+            label: path.reduce<string>((at, key) => member(at, key), label),
+            path: [...global, ...path],
+            owner: undefined,
+          },
+          new HostNamespace(label, path),
+        )
       },
     })
     shape.push(`${label} (namespace)`)
@@ -317,7 +356,17 @@ export const hostGlobals = <R>(
 
   ctx.hosts = {
     shape,
-    toHost: (values, label) => values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`)),
+    toHost: (values, label, waiting) =>
+      values.map((item, index) => {
+        const copied = toHost(
+          item,
+          `Argument ${index + 1} to ${label}`,
+          0,
+          new Set(),
+          translate.promises === "await" ? waiting : undefined,
+        )
+        return copied === OMITTED ? undefined : copied
+      }),
     fromHost: (value, label, owner) =>
       fromHost(value, label, 0, new Set(), {
         within:
@@ -374,7 +423,13 @@ export const hostGlobals = <R>(
           `The host function ${origin.owner} restored a value with no function at ${origin.label}, so this state can't resume.`,
         )
       }
-      const made = wrap(plain(host), origin.label, { label: origin.label, path: undefined, owner: origin.owner }, host)
+      const made = wrap(
+        plain(host),
+        origin.label,
+        { label: origin.label, path: undefined, owner: origin.owner },
+        host,
+        target,
+      )
       // The restored function keeps its own properties; only what calling it does comes from the new one.
       Object.assign(target, { tag: made.tag, call: made.call, construct: made.construct, callback: made.callback })
       origins.set(target, origin)

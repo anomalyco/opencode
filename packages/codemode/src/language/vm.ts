@@ -2177,7 +2177,7 @@ export class Vm {
       const site = callee.callback && callee.call.length < 3 ? undefined : callSiteOf(frame, pc)
       const res = callee.call(thisVal, args, site)
       if (this.tripEvery === 0) this.fuel -= NATIVE_FUEL
-      if ((res as unknown) !== BLOCK && (res === null || typeof res !== "object" || res instanceof Obj)) {
+      if ((res as unknown) !== BLOCK && (res as unknown) !== ENTERED && (res === null || typeof res !== "object" || res instanceof Obj)) {
         normalizeItems(res)
         regs[base - 2] = res
         frame.sp = base - 1
@@ -2303,6 +2303,7 @@ export class Vm {
       return 1
     }
     if ((res as unknown) === BLOCK) return 2
+    if ((res as unknown) === ENTERED) return 1
     if (res instanceof Convert) {
       const builtins = this.ctx.builtins
       this.pushInternalCall(

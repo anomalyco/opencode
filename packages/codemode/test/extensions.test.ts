@@ -73,9 +73,9 @@ describe("extension functions", () => {
   })
 
   test("a function inside a result is named by its path in diagnostics", async () => {
-    expect((await failure(`const res = await fetch("https://a.test/"); res.handlers[0](() => 1)`)).message).toContain(
-      "Argument 1 to fetch.handlers[0] contains a function",
-    )
+    expect(
+      (await failure(`const res = await fetch("https://a.test/"); res.handlers[0]([1].keys())`)).message,
+    ).toContain("Argument 1 to fetch.handlers[0] contains an iterator")
     const target = CodeMode.make({
       extensions: [Extension.make({ name: "odd", globals: { make: () => ({ sym: () => Symbol("s") }) } })],
     })
@@ -220,10 +220,11 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[1]).toBeInstanceOf(Error)
   })
 
-  test("functions, promises, iterators, and symbols cannot be passed in", async () => {
-    expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
+  test("functions are left out and promises awaited, as in tool arguments; iterators and symbols cannot be passed in", async () => {
+    held.length = 0
+    await value(`keep({ f: () => 1, n: later(1) }); keep([() => 1, later(2)]); keep(() => 1); keep(later(3))`)
+    expect(held).toEqual([{ n: 2 }, [null, 3], undefined, 4])
     expect((await failure(`keep([1].keys())`)).message).toContain("Argument 1 to keep contains an iterator")
-    expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
     expect((await failure(`keep(Symbol.iterator)`)).message).toContain("Argument 1 to keep contains a symbol")
   })
 
@@ -639,7 +640,7 @@ describe("configuration", () => {
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a result with functions can't be handed to a tool; its data can", async () => {
+  test("a result with functions is handed to a tool as its data", async () => {
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -651,9 +652,12 @@ describe("configuration", () => {
         }),
       },
     })
-    expect((await failure(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).message).toContain(
-      "contains a function, which cannot be passed to the host",
-    )
+    expect(await value(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).toEqual({
+      status: 200,
+      ok: true,
+      headers: {},
+      handlers: [null],
+    })
     expect(
       await value(
         `const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`,
