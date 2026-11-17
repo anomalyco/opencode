@@ -32,6 +32,15 @@ function toItem(input: {
     ...(input.completed !== undefined ? { completed: input.completed } : {}),
   }
   const recovery = input.recovery
+  if (recovery.kind === "codemode")
+    return {
+      kind: "codemode",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      time,
+      ...(title !== undefined ? { title } : {}),
+    }
   if (recovery.kind === "shell") {
     return {
       kind: "shell",

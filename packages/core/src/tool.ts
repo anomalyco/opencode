@@ -9,6 +9,7 @@ import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
+import { CodeModeJob } from "./codemode/job.js"
 import { CodeModeTool } from "./codemode/tool.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
@@ -325,8 +326,11 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
+              if (name === "execute" && codeModeTool) {
+                const run = (ctx: Tool.Context) => executeTool(codeModeTool, name, event.input, ctx)
+                const background = yield* CodeModeJob.Current
+                return yield* background ? background(context, run) : run(context)
+              }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({

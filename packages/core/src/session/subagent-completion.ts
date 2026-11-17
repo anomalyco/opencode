@@ -43,6 +43,7 @@ export function formatBody(
 ): string {
   if (!background || background.length === 0) return body
   const lines = background.map((item) => {
+    if (item.kind === "codemode") return `- Code Mode script (${item.jobID})`
     if (item.kind === "shell")
       return `- shell (${item.shellID}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${clean(item.command)}`
     if (item.kind === "image")

@@ -8,6 +8,7 @@ import { Bus } from "../../bus.js"
 import { Database } from "../../database/database.js"
 import { Instance } from "../../instance/service.js"
 import { Job } from "../../job.js"
+import { CodeModeJob } from "../../codemode/job.js"
 import { Session } from "../../session.js"
 import { Shell } from "../../shell.js"
 import { ShellTool } from "../../tool/plugin/shell.js"
@@ -117,6 +118,7 @@ export const layer = (options?: Options) =>
       })
 
       const restartMessage = (background: Job.Background, recovery: Exclude<Job.Recovery, { kind: "subagent" }>) => {
+        if (recovery.kind === "codemode") return CodeModeJob.notice(background)
         const state = background.status === "running" ? "cancelled" : background.status
         if (recovery.kind === "shell") {
           const text =
