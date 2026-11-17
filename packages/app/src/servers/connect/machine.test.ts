@@ -447,6 +447,43 @@ describe("server connect form", () => {
     expect(view({ kind: "connect", url: "http://localhost:4096" }).draft.url).toBe("http://localhost:4096")
   })
 
+  test("a connect screen whose health already advertised local-only accounts opens on the account form", () => {
+    const view = (target: ServerConnectTarget) => selectServerConnectView(startServerConnect(target).state, context)
+
+    const local = view({ kind: "connect", url: "http://localhost:4096", methods: ["local"] })
+
+    expect(local.draft).toEqual({
+      method: "password",
+      link: "",
+      url: "http://localhost:4096",
+      name: "",
+      username: "",
+      password: "",
+      account: "signin",
+    })
+    expect(local.localAuth).toBe(true)
+    expect(local.canSubmit).toBe(false)
+
+    const result = replay({ kind: "connect", url: "http://localhost:4096", methods: ["local"] }, [
+      field("username", "user"),
+      field("password", "secret"),
+      submitted,
+    ])
+
+    expect(result.effects[0]).toMatchObject({
+      type: "connect.local",
+      url: "http://localhost:4096",
+      username: "user",
+      password: "secret",
+      create: false,
+    })
+
+    // Servers that also take the shared password keep the pairing-link start: their methods say the form is not the
+    // only way in.
+    expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password"] }).draft.method).toBe("link")
+    expect(view({ kind: "connect", url: "http://localhost:4096", methods: ["password", "local"] }).draft.method).toBe("link")
+  })
+
   test("a local-only server switches the shared-password form to its account form", () => {
     const result = replay({ kind: "add" }, [password, field("url", "new:4096"), submitted, credentials(["local"])])
 

@@ -40,7 +40,7 @@ export type ServerOriginal = {
 
 /** What the form saves to: the connect screen, a new server, or an edited one. */
 export type ServerConnectTarget =
-  | { readonly kind: "connect"; readonly url: string | undefined }
+  | { readonly kind: "connect"; readonly url: string | undefined; readonly methods?: ServerAuthMethods }
   | { readonly kind: "add" }
   | { readonly kind: "edit"; readonly original: ServerOriginal }
 
@@ -150,7 +150,17 @@ export function startServerConnect(
   target: ServerConnectTarget,
   support: ServerCameraSupport = "none",
 ): ServerConnectTransition {
-  const base = { status: "editing", attempt: 0, cameraAttempt: 0, target, draft: initialDraft(target), methods: undefined } as const
+  // The health check may already know the server's 401, so the screen opens on the form that can sign in instead of
+  // the pairing link a cold visit starts from.
+  const methods = target.kind === "connect" ? target.methods : undefined
+  const base = {
+    status: "editing",
+    attempt: 0,
+    cameraAttempt: 0,
+    target,
+    draft: initialDraft(target),
+    methods,
+  } as const
 
   if (support === "probe")
     return {
@@ -360,7 +370,9 @@ function close(state: Form, effects: readonly ServerConnectEffect[]): ServerConn
 function initialDraft(target: ServerConnectTarget): ServerConnectDraft {
   if (target.kind !== "edit")
     return {
-      method: "link",
+      // A server whose 401 already advertised only its own accounts opens on them; anything else starts at the
+      // pairing link, the way in the pairing flow publishes.
+      method: target.kind === "connect" && localOnlyAuth(target.methods) ? "password" : "link",
       link: "",
       url: target.kind === "connect" ? (target.url ?? "") : "",
       name: "",

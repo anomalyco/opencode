@@ -3,16 +3,20 @@ import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Wordmark } from "@opencode/ui/wordmark"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { ServerAuthMethods } from "@/runtime/server/health-machine"
 import { createServerConnectController } from "./controller"
 import { ConnectMethodSwitch, LocalAccountSwitch } from "./method"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
-export function ConnectServerScreen(props: { url?: string } = {}) {
+export function ConnectServerScreen(props: { url?: string; methods?: ServerAuthMethods } = {}) {
   const language = useLanguage()
   // Read once: the screen leaves when the server it signs in to answers, so its address does not change while it shows.
-  const form = createServerConnectController({ surface: "screen", target: { kind: "connect", url: props.url } })
+  const form = createServerConnectController({
+    surface: "screen",
+    target: { kind: "connect", url: props.url, methods: props.methods },
+  })
   const view = form.view
 
   return (

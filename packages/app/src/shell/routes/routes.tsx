@@ -4,7 +4,7 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { isServerUnauthorized } from "@/runtime/server/health-machine"
+
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { ServerSignedOutPanel } from "@/session/server-unavailable-panel"
 import { LayoutProvider } from "@/shell/state/layout"
@@ -110,17 +110,21 @@ function AppLayout(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
 
-  // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
+  // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show. Its 401
+  // already says which sign-ins it takes, so the connect screen can open on that form instead of the pairing link.
   const signedOut = () => {
     const only = servers.list.length === 1 ? servers.list[0] : undefined
 
     if (only?.type !== "http") return
 
-    return isServerUnauthorized(global.servers.health[ServerConnection.key(only)]) ? only : undefined
+    const health = global.servers.health[ServerConnection.key(only)]
+    if (health?.type !== "unauthorized") return
+
+    return { url: only.http.url, methods: health.methods }
   }
 
   return (
-    <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
+    <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.url} methods={signedOut()?.methods} />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <PluginAttachment>
