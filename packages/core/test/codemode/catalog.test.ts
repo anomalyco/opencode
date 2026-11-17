@@ -100,10 +100,11 @@ describe("CodeModeCatalog.summarize", () => {
     expect(catalog.namespaces[0]?.entries[0]?.line).toEndWith("// Summary")
   })
 
-  test("keeps the full first line of inline descriptions", () => {
-    const summary = "x".repeat(121)
-    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", summary)] })
-    expect(catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]).toBe(summary)
+  test("limits inline descriptions to 500 characters", () => {
+    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(501))] })
+    const description = catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]
+    expect(description).toHaveLength(500)
+    expect(description).toEndWith("...")
   })
 
   test("always retains namespace descriptions and charges them before tool listings", () => {
