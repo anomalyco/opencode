@@ -19,6 +19,10 @@ pub const MEMORY: usize = 32 << 20;
 /// The most of one `print` the log keeps, in bytes of the plugin's text.
 pub(crate) const PRINT: usize = 4 << 10;
 
+/// How near its cap a VM's heap may be once a call returned, after a full collection: nearer, the plugin ran out of
+/// memory and caught the error, and every binding would fail at random from then on.
+const MARGIN: usize = 1 << 20;
+
 /// How many interrupts pass between two reads of the clock, as rune-luau's watchdog does.
 const TICKS: u32 = 256;
 
@@ -135,6 +139,8 @@ impl Budget {
 pub(crate) struct Vm {
     pub(crate) lua: Lua,
     budget: Rc<Budget>,
+    /// The heap's cap.
+    cap: usize,
     /// The modules being loaded, outermost first: one asked for again is a cycle.
     loading: Rc<RefCell<Vec<String>>>,
     /// The plugin's ID, which its errors start with.
@@ -164,7 +170,7 @@ impl Vm {
         // Luau's `print` writes to the process's stdout, the terminal under the TUI: escape sequences would reach it, and
         // a big print blocks on it without using CPU time, so the budget never ends it.
         globals.raw_set("print", print(&lua, &compiled.id)?)?;
-        Ok(Self { lua, budget, loading, id: compiled.id.clone() })
+        Ok(Self { lua, budget, loading, id: compiled.id.clone(), cap: memory })
     }
 
     /// Runs the entry module and returns what it returned. Freezes the globals first (`Lua::sandbox`). The entry is
@@ -183,7 +189,8 @@ impl Vm {
     }
 
     /// Calls into the VM within the budget: the outermost call arms it. A Luau error, the budget's interrupt (also
-    /// one the plugin caught) or an allocation over the cap is the error's text, after the plugin's ID ([`report`]).
+    /// one the plugin caught), an allocation over the cap, or a heap the outermost call left at the cap (an allocation
+    /// over it the plugin caught) is the error's text, after the plugin's ID ([`report`]).
     pub(crate) fn call<R>(&self, f: impl FnOnce() -> mlua::Result<R>) -> Result<R, String> {
         let outer = self.budget.armed.get().is_none();
         if outer {
@@ -197,10 +204,23 @@ impl Vm {
             return result.map_err(|error| error.to_string());
         }
         self.budget.armed.set(None);
-        match self.budget.stopped.take() {
-            Some(stopped) => Err(format!("{}: {stopped}", self.id)),
-            None => result.map_err(|error| report(&self.id, &error.to_string())),
+        if let Some(stopped) = self.budget.stopped.take() {
+            return Err(format!("{}: {stopped}", self.id));
         }
+        let result = result.map_err(|error| report(&self.id, &error.to_string()))?;
+        if self.lua.used_memory() + MARGIN >= self.cap {
+            // Garbage does not count: only what a full collection leaves.
+            let _ = self.lua.gc_collect();
+            let used = self.lua.used_memory();
+            if used + MARGIN >= self.cap {
+                return Err(format!(
+                    "{}: holds {used} bytes of its {} MiB heap after a call: out of memory, stopped by the Luau memory cap",
+                    self.id,
+                    self.cap >> 20
+                ));
+            }
+        }
+        Ok(result)
     }
 
     /// The bytes the VM's heap holds.

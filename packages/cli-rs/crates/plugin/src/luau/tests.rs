@@ -392,6 +392,36 @@ fn print_writes_one_escaped_line_to_the_log() {
     assert_eq!(*cut, format!("plugin test.print printed: {}... ({} bytes, cut at 4096)", "x".repeat(4096), 16 << 20));
 }
 
+// Expected (luau-safety 3, safety-audit #11): a plugin that runs out of memory inside `pcall` and keeps its heap at the
+// cap is failed when the call returns, as the budget fails one that catches its error; one that let the garbage go
+// keeps running.
+#[test]
+fn a_plugin_that_catches_running_out_of_memory_fails() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local keep = {}
+        local function fill() while true do table.insert(keep, string.rep("x", 1024) .. #keep) end end
+        return plugin.define(function(setup)
+            setup:command({ name = "drop" }, function(host)
+                pcall(fill)
+                keep = {}
+            end)
+            setup:command({ name = "keep" }, function(host)
+                pcall(fill)
+            end)
+        end)
+    "#;
+    let registry = running(&host, define_with(&sources(init), None, 4 << 20).unwrap().0);
+    keymap(&host).dispatch("drop", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    keymap(&host).dispatch("keep", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("the plugin at its cap failed");
+    assert!(error.contains("out of memory") && error.contains("of its 4 MiB heap"), "{error}");
+}
+
 // Expected (luau-spike 1.4): no file system, no process, no `require` outside the plugin, no `loadstring`, frozen
 // globals; one plugin's VM shares nothing with another's.
 #[test]
