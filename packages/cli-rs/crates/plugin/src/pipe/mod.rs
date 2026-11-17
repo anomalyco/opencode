@@ -512,8 +512,9 @@ struct Call {
 }
 
 /// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
-/// batch's effects, which carry a fetch's ID, a cancellation, and a sequence skipped, which lets the stream go on. It is
-/// never dropped while the JS host runs ([`Scripts::settle`]).
+/// batch's effects, which carry a fetch's ID, a cancellation, a sequence skipped, which lets the stream go on, and a
+/// deactivation, which settles what the activation still awaits (big-boi's catalog review: one the full overflow
+/// refused left two of its promises waiting for good). It is never dropped while the JS host runs ([`Scripts::settle`]).
 fn settles(message: &Down) -> bool {
     matches!(
         message,
@@ -522,6 +523,7 @@ fn settles(message: &Down) -> bool {
             | Down::Answered { .. }
             | Down::Cancelled { .. }
             | Down::Skipped { .. }
+            | Down::Deactivate { .. }
     )
 }
 
