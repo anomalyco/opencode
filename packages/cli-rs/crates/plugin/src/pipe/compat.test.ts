@@ -295,6 +295,29 @@ test("a StyledText content draws its chunks", () => {
   expect(core.isStyledText(core.stringToStyledText("s"))).toBe(true)
 })
 
+// CT-25: as OpenTUI's renderables, a node with a fixed width or height does not shrink unless its `flexShrink` says
+// so (@wpro-eng/opencode-config's 14-cell agent names shrank to their text).
+test("a node with a fixed size does not shrink by default", () => {
+  const fake = host()
+  const ctx = plugin("t.shrink", fake)
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () =>
+      h("box", {
+        flexDirection: "row",
+        get children() {
+          return [
+            h("text", { width: 14, children: "analyst" }),
+            h("text", { width: 14, flexShrink: 1, children: "b" }),
+            h("text", { children: "model" }),
+          ]
+        },
+      }),
+  })
+  const row = view(fake, 0, "a").draw().children[0]
+  expect(row.children.map((node: Json) => node.layout?.shrink)).toEqual([false, true, undefined])
+})
+
 // CT-23: `@opencode/plugin/effect` is served, its `Rpc` the same as `@opencode/plugin/rpc`'s (opencode-superagent's TUI
 // defines its RPC by it and failed to load); its server schemas link, undefined.
 test("@opencode/plugin/effect serves Rpc", () => {
