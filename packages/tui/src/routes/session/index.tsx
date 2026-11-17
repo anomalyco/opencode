@@ -77,6 +77,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { SubagentStatus } from "./subagent-status"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -399,6 +400,17 @@ export function Session(props: {
     if (seeded || !route.prompt || !r) return
     seeded = true
     r.set(route.prompt)
+  }
+  // Escape leaves a subagent only when it means nothing else there: a run keeps it to interrupt, a draft keeps it.
+  const canLeaveChild = () =>
+    !!session()?.parentID &&
+    data.session.status(route.sessionID) === "idle" &&
+    pendingUsers().length === 0 &&
+    prompt()?.mode !== "shell" &&
+    !prompt()?.current.text
+  const leaveChild = () => {
+    const parentID = session()?.parentID
+    if (parentID) navigate({ type: "session", sessionID: parentID })
   }
 
   /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
@@ -1405,7 +1417,7 @@ export function Session(props: {
       group: "Session",
       run: (tab?: string) => {
         if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
-        else if (composer.open || session()?.parentID) setComposer("open", false)
+        else if (composer.open) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
       },
@@ -1422,15 +1434,9 @@ export function Session(props: {
       id: "session.parent",
       group: "Session",
       palette: undefined,
-      enabled: !!session()?.parentID,
+      enabled: canLeaveChild,
       run: () => {
-        const parentID = session()?.parentID
-        if (parentID) {
-          navigate({
-            type: "session",
-            sessionID: parentID,
-          })
-        }
+        leaveChild()
         dialog.clear()
       },
     },
@@ -1600,23 +1606,26 @@ export function Session(props: {
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
+              <Show when={!composer.open && session()?.parentID}>
+                {(parentID) => (
+                  <SubagentStatus
+                    sessionID={route.sessionID}
+                    parentID={parentID()}
+                    width={contentWidth()}
+                    onBack={leaveChild}
+                  />
+                )}
+              </Show>
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
-                onClose={() => {
-                  const parent = session()?.parentID
-                  if (parent) {
-                    navigate({ type: "session", sessionID: parent })
-                    return
-                  }
-                  setComposer("open", false)
-                }}
+                open={composer.open}
+                defaultTab={composer.tab}
+                onClose={() => setComposer("open", false)}
                 terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composer.open}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
                   <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {

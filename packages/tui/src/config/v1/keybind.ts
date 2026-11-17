@@ -106,7 +106,7 @@ export const Definitions = {
   session_queued_prompts: keybind("<leader>q", "View queued prompts"),
   queued_prompt_delete: keybind("ctrl+d", "Delete queued prompt"),
   session_child_first: keybind("down", "Toggle subagent picker"),
-  session_parent: keybind("up", "Go to parent session"),
+  session_parent: keybind("escape,up", "Go to parent session"),
   session_pin_toggle: keybind("ctrl+f", "Pin or unpin session in the session list"),
   session_quick_switch_1: keybind("<leader>1", "Switch to session in quick slot 1"),
   session_quick_switch_2: keybind("<leader>2", "Switch to session in quick slot 2"),

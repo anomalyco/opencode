@@ -320,11 +320,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const id = createMemo(() => params.id || undefined)
 
-    const list = createMemo(() =>
-      normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter(
-        (item) => item.mode !== "subagent" && !item.hidden,
-      ),
+    const visibleAgents = createMemo(() =>
+      normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []).filter((item) => !item.hidden),
     )
+
+    const list = createMemo(() => visibleAgents().filter((item) => item.mode !== "subagent"))
 
     createEffect(() => {
       if (serverSDK.connection.status() !== "connected") return
@@ -425,7 +425,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       list,
       visible: agentsVisible,
       current() {
-        return pickAgent(scope()?.agent ?? durable()?.agent ?? (agentsVisible() ? list()[0]?.name : "build"))
+        const name = scope()?.agent ?? durable()?.agent ?? (agentsVisible() ? list()[0]?.name : "build")
+
+        // A subagent session keeps running its own subagent-mode agent, which the primary list leaves out.
+        if (name && name === durable()?.agent && !list().some((item) => item.name === name)) {
+          const own = visibleAgents().find((item) => item.name === name)
+
+          if (own) return own
+        }
+
+        return pickAgent(name)
       },
       set(name: string | undefined) {
         const item = pickAgent(name)

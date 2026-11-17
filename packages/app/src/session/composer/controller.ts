@@ -55,7 +55,7 @@ export function createSessionComposerController(input: {
   })
 
   const composer = createComposerModel(adapter, { queue })
-  const editable = createMemo(() => region.showComposer() && !region.child())
+  const editable = createMemo(() => region.showComposer() && !region.state.blocked())
   // This controller is recreated when a session becomes active, which is when its composer takes focus
   // (focus-machine.ts). It waits for the draft, the editor and any request dock or dialog to clear.
   focus.bindReal({ target: () => input.sessionID, element: editor, editable })
