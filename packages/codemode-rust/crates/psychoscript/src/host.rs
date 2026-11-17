@@ -83,9 +83,9 @@ pub enum Settlement {
     Json(Json),
     Undefined,
     Failure(Box<Failed>),
-    /// An extension call's value, or what it threw, with the label that names it in conversion errors and the
-    /// extension it came from.
-    Host(Box<(HostResult, String, String)>),
+    /// An extension call's value, or what it threw, with the label that names it in conversion errors, the
+    /// extension it came from, and whether its strings are run text already (`HostFunction::carrier`).
+    Host(Box<(HostResult, String, String, bool)>),
     /// The call interrupts the whole run.
     Interrupted,
 }
@@ -201,6 +201,8 @@ pub struct RunHost<'rt> {
     pub(crate) epoch: crate::streaming::Epoch,
     /// The VM's fuel counters, which it checks only when its step budget runs out.
     pub(crate) meter: Meter,
+    /// Set while a carrier result (`HostFunction::carrier`) crosses in.
+    pub(crate) carrier: bool,
 }
 
 /// The reference's fuel left (`handover`) and the steps left until the VM next checks the clock (`fuel`), as of when
@@ -238,6 +240,7 @@ impl<'rt> RunHost<'rt> {
             modules: FxHashMap::default(),
             namespaces: FxHashMap::default(),
             epoch: Default::default(),
+            carrier: false,
             meter: Meter {
                 start: crate::vm::HANDOVER_FUEL,
                 handover: crate::vm::HANDOVER_FUEL,
@@ -820,11 +823,16 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
             vm.reject(p, e);
         }
         Settlement::Host(host) => match *host {
-            (Ok(v), label, extension) => match result_from_host(vm, v, &label, &extension) {
-                Ok(v) => vm.fulfill(p, v),
-                Err(e) => vm.reject(p, e),
-            },
-            (Err(thrown), label, _) => {
+            (Ok(v), label, extension, carrier) => {
+                vm.host.carrier = carrier;
+                let v = result_from_host(vm, v, &label, &extension);
+                vm.host.carrier = false;
+                match v {
+                    Ok(v) => vm.fulfill(p, v),
+                    Err(e) => vm.reject(p, e),
+                }
+            }
+            (Err(thrown), label, _, _) => {
                 let e = from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e);
                 vm.reject(p, e);
             }
@@ -1156,6 +1164,7 @@ fn from_host(
         HostValue::Null => Value::Null,
         HostValue::Bool(b) => Value::Bool(*b),
         HostValue::Number(n) => Value::Num(*n),
+        HostValue::String(s) if vm.host.carrier => vm.str_val(s),
         HostValue::String(s) => vm.string_val(crate::strings::external_text(s.clone())),
         HostValue::Function(f) => wrap(vm, f, label, entry),
         HostValue::Array(items) => {
@@ -1399,6 +1408,7 @@ pub fn lost_function(name: &str) -> HostFunction {
         name: name.to_owned(),
         length: 0,
         body: Body::Lost(message.into()),
+        carrier: false,
     }
 }
 
@@ -1481,6 +1491,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         Body::Async(body) => {
             let p = vm.new_promise();
             let body = body.clone();
+            let carrier = f.carrier;
             let call_id = vm.host.next_call();
             let path = label.clone();
             let future: BoxFuture<'_, Settlement> = Box::pin(async move {
@@ -1491,6 +1502,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                         Err(HostValue::Error(Box::new(e))),
                         label,
                         extension_name,
+                        false,
                     )));
                 }
                 let guard = ExtensionGuard {
@@ -1499,7 +1511,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                 };
                 let result = body(host_args).await;
                 guard.end(&result);
-                Settlement::Host(Box::new((result, label, extension_name)))
+                Settlement::Host(Box::new((result, label, extension_name, carrier)))
             });
             match vm.host.tasks.spawn(p, future) {
                 Poll::Ready(s) => vm.inbox.push_back((p, s)),

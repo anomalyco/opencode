@@ -265,6 +265,8 @@ pub struct HostFunction {
     pub(crate) name: String,
     pub(crate) length: u8,
     pub(crate) body: Body,
+    /// Its results' strings are already run text, lone surrogates in carrier form (see `strings::from_units`).
+    pub(crate) carrier: bool,
 }
 
 impl HostFunction {
@@ -278,6 +280,7 @@ impl HostFunction {
             name: name.into(),
             length,
             body: Body::Sync(Arc::new(f)),
+            carrier: false,
         }
     }
 
@@ -293,6 +296,7 @@ impl HostFunction {
             name: name.into(),
             length,
             body: Body::Async(Arc::new(move |args| Box::pin(f(args)))),
+            carrier: false,
         }
     }
 

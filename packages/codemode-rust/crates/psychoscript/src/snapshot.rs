@@ -713,7 +713,7 @@ impl Enc<'_, '_> {
                 json!([p, "fail", kind.name(), message, suggestions])
             }
             Settlement::Host(h) => {
-                let (result, label, extension) = h.as_ref();
+                let (result, label, extension, carrier) = h.as_ref();
                 let (ok, v) = match result {
                     Ok(v) => (true, v),
                     Err(v) => (false, v),
@@ -743,7 +743,16 @@ impl Enc<'_, '_> {
                     }
                     _ => (false, v.clone()),
                 };
-                json!([p, "host", ok, label, extension, hooked, host_value(&data)])
+                json!([
+                    p,
+                    "host",
+                    ok,
+                    label,
+                    extension,
+                    hooked,
+                    host_value(&data),
+                    carrier
+                ])
             }
             Settlement::Interrupted => json!([p, "interrupted"]),
         })
@@ -1873,10 +1882,12 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
                 let hooks = hooks_of(vm.host.setup, &extension)?;
                 v = (hooks.decode)(v);
             }
+            let carrier = j.get(7).and_then(J::as_bool).unwrap_or(false);
             Settlement::Host(Box::new((
                 if ok { Ok(v) } else { Err(v) },
                 label,
                 extension,
+                carrier,
             )))
         }
         Some("interrupted") => Settlement::Interrupted,

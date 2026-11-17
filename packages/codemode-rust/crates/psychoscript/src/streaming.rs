@@ -520,7 +520,7 @@ pub(crate) fn surface(response: &StreamingResponse, epoch: &Epoch) -> Surface {
         .map(|(key, kind)| {
             let stream = response.body.clone();
             let epoch = epoch.clone();
-            let f = HostFunction::new_async("", 0, move |_| {
+            let mut f = HostFunction::new_async("", 0, move |_| {
                 let call = stream
                     .as_ref()
                     .map(|s| op_call(s, &epoch, Op::Consume(kind)));
@@ -537,6 +537,7 @@ pub(crate) fn surface(response: &StreamingResponse, epoch: &Epoch) -> Surface {
                     }
                 }
             });
+            f.carrier = matches!(kind, Consume::Json);
             (key, f)
         })
         .collect();
@@ -722,22 +723,19 @@ impl Json<'_> {
         }
     }
 
+    /// A string as run text: lone surrogates from `\u` escapes kept in carrier form.
     fn string(&mut self) -> J<String> {
         self.i += 1;
-        let mut out = String::new();
         let mut units: Vec<u16> = Vec::new();
+        let mut buf = [0u16; 2];
         loop {
             let Some(&c) = self.s.get(self.i) else {
                 return Err("Unterminated string".into());
             };
-            if c != b'\\' && !units.is_empty() {
-                out.push_str(&String::from_utf16_lossy(&units));
-                units.clear();
-            }
             match c {
                 b'"' => {
                     self.i += 1;
-                    return Ok(out);
+                    return Ok(crate::strings::from_units(&units));
                 }
                 0..=0x1f => return Err("Unterminated string".into()),
                 b'\\' => {
@@ -757,9 +755,7 @@ impl Json<'_> {
                         _ => None,
                     };
                     if let Some(ch) = simple {
-                        out.push_str(&String::from_utf16_lossy(&units));
-                        units.clear();
-                        out.push(ch);
+                        units.extend_from_slice(ch.encode_utf16(&mut buf));
                         continue;
                     }
                     if e != b'u' {
@@ -779,7 +775,7 @@ impl Json<'_> {
                 _ => {
                     let ch = self.text[self.i..].chars().next().unwrap_or(' ');
                     self.i += ch.len_utf8();
-                    out.push(ch);
+                    units.extend_from_slice(ch.encode_utf16(&mut buf));
                 }
             }
         }

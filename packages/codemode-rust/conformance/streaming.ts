@@ -84,6 +84,13 @@ const jsonBodies = [
   "123abc", "[-]", "[1,,2]", '"\\"', "1.5e3", "-1.5E-3", "1e-400", "9007199254740993", '{"a":{"b":[1,{"c":null}]}}',
 ]
 
+// Bodies whose JSON holds lone surrogates, escaped pairs and U+10FFFF, as escapes and as UTF-8.
+const surrogateBodies = [
+  ['"\\ud800"'], ['"\\udc00x"'], ['"a\\ud800\\ud800b"'], ['"\\ud83d\\ude00"'], ['"\\udbff\\udfff"'], ['"\\ud800\\udc00\\udc00"'],
+  ['{"\\ud800":"\\udc00"}'], ['{"k\\udfff":"\\udbff\\udfffz"}'], [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0x22]],
+  [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0xf4, 0x8f, 0xbf, 0xbf, 0x5c, 0x75, 0x64, 0x38, 0x30, 0x30, 0x22]], [[0x22, 0xed, 0xa0, 0x80, 0x22]],
+]
+
 const programs: Array<string> = [
   `const r = await fetch(${JSON.stringify(text)})
    return [r.url, r.status, r.statusText, r.ok, r.redirected, r.headers.get("content-type"), [...r.headers], r.bodyUsed,
@@ -171,6 +178,14 @@ const programs: Array<string> = [
    }
    return out`,
   `const r = await fetch({ chunks: [[0xef, 0xbb, 0xbf, 0x7b, 0x7d]] }); return await r.json().catch((e) => e.message)`,
+  `const out = []
+   for (const chunks of ${JSON.stringify(surrogateBodies)}) {
+     const v = await (await fetch({ chunks })).json()
+     const s = typeof v === "string" ? v : Object.keys(v)[0] + "|" + Object.values(v)[0]
+     const t = await (await fetch({ chunks })).text()
+     out.push([s.length, [...s].map((c) => c.codePointAt(0)), JSON.stringify(v), s.isWellFormed(), t.length, [...t].map((c) => c.codePointAt(0))])
+   }
+   return out`,
   `const r = await fetch(${JSON.stringify(text)}); const p = r.text(); await null; await null; const now = [r.body.locked, r.bodyUsed]; await p; return now`,
   `const out = []
    for (const chunks of [[[0xef, 0xbb, 0xbf, 0x68, 0x69]], [[0xff, 0x61]], [[0xe2, 0x82], [0xac]], [[0xe2, 0x82]], [[0xef, 0xbb], [0xbf, 0x7b, 0x7d]],
