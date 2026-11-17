@@ -60,6 +60,18 @@ export const makeMemoryDriver = (): MemoryDriver => {
     nodes.set(target, { type: "directory", mtimeMs: Date.now() })
   }
   const failed = (value: string, cause: unknown) => new Failed({ path: value, cause })
+  // Rewrites a file's bytes through symlinks, creating the file when missing.
+  const change = (value: string, update: (current: Uint8Array) => Uint8Array) =>
+    Effect.try({
+      try: () => {
+        const target = resolveKey(value, true) ?? key(value)
+        const current = nodes.get(target)
+        if (current && current.type !== "file") throw new Error(`Path is not a file: ${value}`)
+        if (!current) requireParent(target)
+        nodes.set(target, { type: "file", bytes: update(current?.bytes ?? new Uint8Array()), mtimeMs: Date.now() })
+      },
+      catch: (cause) => failed(value, cause),
+    })
   const overrides: FilesImpl = {
     stat: (value) =>
       Effect.suspend(() => {
@@ -137,6 +149,23 @@ export const makeMemoryDriver = (): MemoryDriver => {
         })
       }),
     mkdir: (value) => Effect.try({ try: () => mkdirSync(value), catch: (cause) => failed(value, cause) }),
+    append: (value, bytes) =>
+      change(value, (current) => {
+        const next = new Uint8Array(current.length + bytes.length)
+        next.set(current)
+        next.set(bytes, current.length)
+        return next
+      }),
+    truncate: (value, length) =>
+      Effect.gen(function* () {
+        const target = resolveKey(value, true)
+        if (target === undefined || !nodes.has(target)) return yield* new NotFound({ path: value })
+        yield* change(value, (current) => {
+          const next = new Uint8Array(length)
+          next.set(current.subarray(0, length))
+          return next
+        })
+      }),
   }
 
   const spawner = make((command) =>

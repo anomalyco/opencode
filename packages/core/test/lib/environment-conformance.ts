@@ -178,6 +178,20 @@ export const environmentConformance = <E>(
       }),
     )
 
+    check("appends and truncates", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/bytes.txt`
+        yield* harness.files.append(target, bytes("abc"))
+        yield* harness.files.append(target, bytes("def"))
+        expect(text((yield* harness.files.read(target)).bytes)).toBe("abcdef")
+        yield* harness.files.truncate(target, 2)
+        expect(text((yield* harness.files.read(target)).bytes)).toBe("ab")
+        yield* harness.files.truncate(target, 4)
+        expect([...(yield* harness.files.read(target)).bytes]).toEqual([97, 98, 0, 0])
+        expect(yield* Effect.flip(harness.files.truncate(`${harness.root}/missing`, 0))).toBeInstanceOf(NotFound)
+      }),
+    )
+
     check("moves files and removes trees idempotently", (harness) =>
       Effect.gen(function* () {
         const source = `${harness.root}/source/file`

@@ -145,6 +145,12 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     move: (from, to) =>
       run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
+    append: (path, bytes) =>
+      run(path, `cat >> "$1"`, [], bytes).pipe(Effect.flatMap((result) => complete(path, result))),
+    truncate: (path, length) =>
+      run(path, `[ -e "$1" ] || exit ${NOT_FOUND}; truncate -s "$2" -- "$1"`, [String(length)]).pipe(
+        Effect.flatMap((result) => classifyPlain(path, result, () => undefined)),
+      ),
   }
 }
 

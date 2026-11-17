@@ -100,10 +100,7 @@ const ops = {
   }),
   truncate: op("open", function* (host, file, length?: number) {
     const [absolute] = yield* edit(host, [file])
-    const bytes = (yield* host.files.read(absolute!)).bytes
-    const next = new Uint8Array(Math.max(0, length ?? 0))
-    next.set(bytes.subarray(0, next.length))
-    yield* host.files.write(absolute!, next)
+    yield* host.files.truncate(absolute!, Math.max(0, length ?? 0))
   }),
   rm: op("rm", remove),
   unlink: op("unlink", (host, file) => remove(host, file)),
@@ -268,7 +265,7 @@ function* write(host: Host, file: string, content: Uint8Array) {
 function* append(host: Host, file: string, bytes: Uint8Array) {
   const joined = (current: Uint8Array | undefined) => Buffer.concat([current ?? new Uint8Array(), bytes])
   const prepared = yield* prepare(host, file, joined)
-  yield* host.files.write(prepared.target, joined(prepared.current))
+  yield* host.files.append(prepared.target, bytes)
 }
 
 // Resolves a file a write will change, asks edit permission with the resulting change, and checks Node's preconditions.

@@ -672,6 +672,17 @@ describe("fs", () => {
     expect(await fs.readFile(path.join(tmp.path, "ugly.ts"), "utf8")).toBe("const   x   =1;")
   })
 
+  test("concurrent appends to one file keep every chunk", async () => {
+    await using tmp = await tmpdir()
+    await runFs(
+      tmp.path,
+      `await Promise.all(Array.from({ length: 20 }, (_, i) => fs.promises.appendFile("log.txt", i + "\\n")))
+      return []`,
+    )
+    const lines = (await fs.readFile(path.join(tmp.path, "log.txt"), "utf8")).trim().split("\n")
+    expect(lines.map(Number).toSorted((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => i))
+  })
+
   test("path is the host's path module, resolving against the session's directory", async () => {
     await using tmp = await tmpdir()
     const [resolved, relative, posix, win32, sep] = await runFs(
