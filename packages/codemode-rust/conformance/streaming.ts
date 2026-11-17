@@ -476,6 +476,8 @@ programs.push(
   after(doc, "JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); JSON.stringify(doc, (k, v) => v)"),
   after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
   after("const err = new TypeError('boom'); err.extra = [1, 2]", "JSON.stringify({ err, n: [new Date(5)], h: new Headers({ a: 'b' }) }, (k, v) => v)"),
+  // Past depth 100 the internal walk throws through `$Throw`.
+  after("let deep = 1; for (let i = 0; i < 101; i++) deep = { deep }", "for (let j = 0; j < 37; j++) try { JSON.stringify(deep, (k, v) => v) } catch {}"),
   // The native walk gives up at its 2,048th visit of an object it has seen already.
   after("const x = { a: 1 }; const many = Array(2049).fill(x); const fewer = Array(2048).fill(x)", "JSON.stringify(many); JSON.stringify(fewer)"),
   after("const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })", "JSON.stringify(nest); JSON.stringify(nest.slice(0, 600))"),

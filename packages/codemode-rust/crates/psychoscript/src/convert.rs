@@ -374,6 +374,15 @@ fn write_json(
     if mode.restart.get() {
         return Ok(false);
     }
+    // Every value is checked, a primitive too: the native walk stops past depth 32, the internal walk past 100
+    // (`$Throw` in its `visit`, a native that throws and so costs nothing).
+    let depth = stack.len();
+    if mode.walk && depth > 100 {
+        return Err(vm.range_error("Value exceeds the maximum depth of 100."));
+    }
+    if !mode.walk && depth > 32 {
+        return Err(vm.range_error("Value exceeds the maximum depth of 32."));
+    }
     if !mode.walk
         && let Value::Obj(id) = v
         && mode.revisited(vm, id)
