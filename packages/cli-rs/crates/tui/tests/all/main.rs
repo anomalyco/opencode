@@ -57,6 +57,7 @@ mod plugin_npm;
 #[cfg(feature = "ts")]
 mod plugin_ownership;
 mod plugin_p0a;
+mod plugin_pending_focus;
 // The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod plugin_pipe;

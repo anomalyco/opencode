@@ -113,9 +113,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `onSubmit` its submit, and `value` is what was typed. An edit gives it the plugin's focus. A field's `focus()` and
   its `focused` prop (one microtask after it changes) are the contract's focus of the field (contract 2.x,
   `focus-input`), as the request of the mount whose render holds it, whichever call runs: what the user types goes
-  into it, as in TS (`P.8/file-browser`'s `typed`). A field its revision has not shown yet takes the focus once it
-  does, unless another focus, a blur or the mount's end came first; a mount that closed takes nothing. A field in no
-  mount (a dialog of the plugin's own) has no focus on the host, which is reported once. While the plugin's focused
+  into it, as in TS (`P.8/file-browser`'s `typed`). A field the mount's tree does not hold yet takes the focus if the
+  mount's next revision shows it, and the focus is dropped if that revision does not (nor does a later one apply it);
+  a mount that closed takes nothing. A field in no mount (in a dialog of the plugin's own, removed from its mount, or
+  never added) has no focus on the host, which is reported once. While the plugin's focused
   field sits in a route or a panel,
   each key there is its `onKeyDown`, through a listener layer of the surface: the key also goes on to the host's
   field and keys, as a listener cannot take it (`preventDefault` says so once in the JS host's log). It would need the

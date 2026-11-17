@@ -376,7 +376,10 @@ gives it to its widget first. What a handler asks for applies before the next ev
 user types, as the composer would, after the layers whose scope holds (FT-14); `Read::focused` names it, a
 `LayerScope::Node` of it holds while it has the focus, a new tree that builds it again keeps the focus, and one in a
 hidden box takes none. A focus from a call the user did not cause (a wake, a reply) is taken too, as TS takes it and as
-for a box: the user's typing then goes to the field. A box's
+for a box: the user's typing then goes to the field. A call may show a field and focus it: a node the mount's tree does
+not hold yet takes the focus if the mount's next view shows it (the view after the call, or over the pipe the JS host's
+next revision), and the focus is dropped if it does not; a resize or a theme that shows the node later does not apply
+it (contract 2.x, step B). A box's
 `Interact` makes it focusable (`Host::focus`, `Host::blur`), gives `Event::Pointer` for press, release, drag after a
 consumed press, wheel and drop, and a hover background with no call, or `Event::Hover`; a text with an id and
 `hover_events` gives `Event::Hover` too. A capture ends with the release, the node leaving the tree, a move of the

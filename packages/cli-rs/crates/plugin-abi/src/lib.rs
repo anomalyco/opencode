@@ -3803,7 +3803,10 @@ pub trait Host: Read {
     /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`], as a click does, so
     /// what the user types goes into the field. Any other node, one in a hidden box, another plugin's node and a host
     /// widget are refused, as is any focus while a host dialog is open; a host without [`FOCUS_INPUT`] refuses a field.
-    /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it.
+    /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it. A node the
+    /// mount's tree does not hold yet takes the focus if the mount's next view shows it (the view after the call, or
+    /// the JS host's next revision), so a call can show a field and focus it; if that view does not, the focus is
+    /// dropped, and no later view (a resize, a theme) applies it.
     fn focus(&self, _id: &str) {}
     /// 2.0: takes the focus from the running call's mount, if it has it, and gives it to the composer.
     fn blur(&self) {}

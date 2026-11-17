@@ -541,6 +541,45 @@ test("a field's focus names its mount, and a field in no mount has none", async 
   expect(fake.warnings()).toEqual(["t.owned: focus() of an <input> in no mount is not supported by opencode-native yet"])
 })
 
+// Contract 2.x, step B (big-boi's G2): a field in no mount's tree, one the plugin removed and still holds by its ref or
+// one it built and never added, has no focus on the host, by `focus()` or by its `focused` prop; the client's log
+// says so once. It focuses no other mount.
+test("a field removed from its mount, or never added, has no focus and says so once", async () => {
+  // Each its own plugin, as the log says it once a plugin: `stray` is built with its `focused` prop and never added;
+  // `gone` is removed from the tree, and its ref focused twice.
+  const detached = async (id: string, stray: boolean) => {
+    const fake = host()
+    const ctx = plugin(id, fake)
+    const refs: Json = {}
+    const [shown, setShown] = solid.createSignal(true)
+    ctx.ui.router.register({
+      name: "f",
+      render: () => {
+        if (stray) h("input", { id: "stray", focused: true })
+        return h("box", {
+          get children() {
+            return [h("input", { id: "keep" }), shown() ? h("input", { id: "gone", ref: (el: Json) => (refs.gone = el) }) : null]
+          },
+        })
+      },
+    })
+    const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+    route.view({ mount: { surface: "f", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+    await turn()
+    setShown(false)
+    await turn()
+    if (!stray) refs.gone.focus()
+    if (!stray) refs.gone.focus()
+    await turn()
+    return { focus: fake.effects.filter((effect: Json) => effect.type === "focus"), warnings: fake.warnings() }
+  }
+  for (const [id, stray] of [["t.stray", true], ["t.gone", false]] as const)
+    expect(await detached(id, stray)).toEqual({
+      focus: [],
+      warnings: [`${id}: focus() of an <input> in no mount is not supported by opencode-native yet`],
+    })
+})
+
 // Contract 2.x, addition 4: a `dialog.set` right after a select, an alert or a confirm sizes and centers it, as TS's
 // sizes the dialog shown; a dialog without one is medium and placed as the host places it; one after the dialog showed
 // is not carried, which the client's log says once.
