@@ -436,6 +436,10 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         // Wide enough for the panel beside the session, whose composer takes the focus the panel gives back.
         let board = open_on(run, 120, support::deps(Arc::new(session)));
         let (app, tui) = (&board.harness.app, &board.harness.tui);
+        // The session's catalog first: its model shows on the composer's row once `/api/model` answers, which is no
+        // plugin's work, so the first checkpoint would otherwise race it (bigboi's review of contract 2.x).
+        board.harness.wait_for("Model M");
+        settle(&board.harness);
         let mut seen = Vec::new();
         let step = |name: &'static str, seen: &mut Vec<_>| {
             settle(&board.harness);
@@ -509,9 +513,12 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let search = at("search");
     assert!(search.contains("card 3") && !search.contains("card 4"), "the search did not list the rows: {search}");
     for other in [Run::In(CARRIERS[1]), Run::Library] {
-        for ((name, _, linked), (_, _, seen)) in linked.iter().zip(run(other)) {
+        for ((name, _, linked), (_, text, seen)) in linked.iter().zip(run(other)) {
             assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {name}: toasts and status");
-            assert!(linked.0 == seen.0, "{other:?} at {name}: the frames differ");
+            if linked.0 != seen.0 {
+                let at = linked.0.iter().zip(&seen.0).position(|(a, b)| a != b);
+                panic!("{other:?} at {name}: the frames differ, first at cell {at:?} of 120 a row:\n{text}");
+            }
         }
     }
 }
