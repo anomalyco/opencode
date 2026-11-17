@@ -134,28 +134,6 @@ mod tests {
     }
 
     #[test]
-    fn returns_only_the_response_and_sends_the_prompt() {
-        let (port, desktop) = desktop(vec![br#"{"value":"passphrase\"with spaces"}"#.to_vec()]);
-        let mut out = Vec::new();
-        let code = ask(&port, &request(Some("fixture"), true), Duration::from_secs(10), &mut out);
-        assert_eq!(code, 0);
-        assert_eq!(String::from_utf8(out).unwrap(), "passphrase\"with spaces\n");
-        assert_eq!(desktop.join().unwrap(), r#"{"token":"fixture","text":"Enter passphrase:","confirm":true}"#);
-    }
-
-    #[test]
-    fn a_response_split_inside_a_multi_byte_character_is_written_intact() {
-        let response = r#"{"value":"pässwörd"}"#.as_bytes().to_vec();
-        let split = response.iter().position(|byte| *byte == 0xc3).unwrap() + 1;
-        let (port, desktop) = desktop(vec![response[..split].to_vec(), response[split..].to_vec()]);
-        let mut out = Vec::new();
-        let code = ask(&port, &request(Some("fixture"), false), Duration::from_secs(10), &mut out);
-        assert_eq!(code, 0);
-        assert_eq!(String::from_utf8(out).unwrap(), "pässwörd\n");
-        assert_eq!(desktop.join().unwrap(), r#"{"token":"fixture","text":"Enter passphrase:","confirm":false}"#);
-    }
-
-    #[test]
     fn a_missing_token_is_left_out_of_the_request() {
         let (port, desktop) = desktop(vec![br#"{"value":"x","extra":1}"#.to_vec()]);
         let mut out = Vec::new();

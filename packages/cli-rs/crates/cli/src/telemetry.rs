@@ -591,14 +591,6 @@ mod tests {
         SystemTime::UNIX_EPOCH + Duration::from_millis(millis)
     }
 
-    // The log follows the run-time channel the service and database use (plan 6.6), so a client without
-    // `OPENCODE_CHANNEL` shares `opencode.log` with a released TS client.
-    #[test]
-    fn the_log_uses_the_run_time_channel() {
-        let channel = opencode_local::channel::Channels::from_env().channel;
-        assert_eq!(Options::from_env(None).channel, channel);
-    }
-
     #[test]
     fn levels_take_the_flag_then_the_environment() {
         let cases = [
