@@ -865,7 +865,7 @@ impl<'rt> Vm<'rt> {
             self.push_closure_frame(id, fpos, args.len(), true)
                 .map_err(Slot::pack)?;
             self.native_depth += 1;
-            let r = self.run();
+            let r = self.run_callback();
             self.native_depth -= 1;
             return match r {
                 Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v),
@@ -898,7 +898,7 @@ impl<'rt> Vm<'rt> {
                 self.stack.extend(args.iter().map(|v| Slot::pack(*v)));
                 self.push_closure_frame(id, fpos, args.len(), true)?;
                 self.native_depth += 1;
-                let r = self.run();
+                let r = self.run_callback();
                 self.native_depth -= 1;
                 match r {
                     Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v.get()),
@@ -1620,6 +1620,19 @@ impl<'rt> Vm<'rt> {
         let resumable = std::mem::take(&mut self.resumable_run) && self.run_depth == 0;
         self.run_depth += 1;
         let r = self.run_frames(resumable);
+        self.run_depth -= 1;
+        r
+    }
+
+    /// `run` for a function a built-in calls back: only a driver's run, flagged `resumable_run`, can stop for a
+    /// suspend, so every other call skips that bookkeeping, which callbacks pay on each call.
+    #[inline(always)]
+    fn run_callback(&mut self) -> Result<Exit, Value> {
+        if self.resumable_run {
+            return self.run();
+        }
+        self.run_depth += 1;
+        let r = self.run_frames(false);
         self.run_depth -= 1;
         r
     }
