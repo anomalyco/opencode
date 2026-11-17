@@ -386,24 +386,30 @@ fn an_armed_interrupt_stays_with_its_call_and_its_vm() {
 }
 
 // Expected (luau-spike 1.3): a VM's heap is capped; an allocation past it fails the call and the plugin, and the
-// process's memory is not touched.
+// process's memory is not touched. A task holds what it allocated on its stack or in the plugin's own state: either
+// way the failure names the memory (await-luau).
 #[test]
 fn a_plugin_that_allocates_past_its_cap_fails() {
     let host = host();
-    let init = r#"
-        local plugin = require("@opencode/plugin")
-        return plugin.define(function(setup)
-            setup:command({ name = "hog" }, function(host)
-                local keep = {}
-                for i = 1, 1e9 do keep[i] = string.rep("x", 1024) .. i end
+    for keep in ["local keep = {}", "keep = {}"] {
+        let init = format!(
+            r#"
+            local plugin = require("@opencode/plugin")
+            local keep = {{}}
+            return plugin.define(function(setup)
+                setup:command({{ name = "hog" }}, function(host)
+                    {keep}
+                    for i = 1, 1e9 do keep[i] = string.rep("x", 1024) .. i end
+                end)
             end)
-        end)
-    "#;
-    let registry = running(&host, define_with(&sources(init), None, 4 << 20).unwrap().0);
-    keymap(&host).dispatch("hog", None);
-    host.app.advance(Duration::from_millis(1));
-    let error = failure(&registry, "test.luau").expect("the hog failed");
-    assert!(error.contains("memory"), "{error}");
+        "#
+        );
+        let registry = running(&host, define_with(&sources(&init), None, 4 << 20).unwrap().0);
+        keymap(&host).dispatch("hog", None);
+        host.app.advance(Duration::from_millis(1));
+        let error = failure(&registry, "test.luau").expect("the hog failed");
+        assert!(error.contains("memory"), "{keep}: {error}");
+    }
 }
 
 /// The test binary's variable that runs [`a_table_move_past_the_array_limit_raises_and_does_not_crash`]'s plugin in the
@@ -1776,7 +1782,8 @@ fn a_parked_tasks_mount_input_is_its_own() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau): at most 256 tasks of a plugin wait at once; a waiting call past them fails the plugin.
+// Expected (await-luau): at most 256 tasks of a plugin wait at once, and one that went on no longer counts; a waiting
+// call past them fails the plugin.
 #[test]
 fn a_plugin_parks_at_most_256_tasks() {
     let host = host();
@@ -1792,7 +1799,65 @@ fn a_plugin_parks_at_most_256_tasks() {
     );
     run(&host, "many", Some("256"));
     assert_eq!((host.fetches.borrow().len(), failure(&registry, "test.luau")), (256, None));
+    // Tasks that went on no longer count.
+    host.reply();
+    host.app.advance(Duration::from_millis(1));
+    run(&host, "many", Some("256"));
+    assert_eq!((host.fetches.borrow().len(), failure(&registry, "test.luau")), (256, None));
     run(&host, "many", Some("1"));
     let error = failure(&registry, "test.luau").expect("the 257th wait failed");
     assert!(error.contains("host:fetch: more than 256 tasks of the plugin wait"), "{error}");
+}
+
+/// A host that takes every fetch and answers none.
+struct Taking;
+
+impl abi::Read for Taking {
+    fn theme_mode(&self) -> abi::ThemeMode {
+        abi::ThemeMode::Dark
+    }
+
+    fn color(&self, _: &str) -> Option<abi::Rgba> {
+        None
+    }
+}
+
+impl abi::Host for Taking {
+    fn storage_set(&self, _: &str, _: serde_json::Value) {}
+    fn dispatch(&self, _: &str, _: Option<&str>) {}
+    fn toast(&self, _: abi::Toast) {}
+    fn attention(&self, _: abi::Attention) {}
+    fn open_route(&self, _: &str) {}
+    fn navigate(&self, _: abi::Route) {}
+    fn try_fetch(&self, _: abi::Fetch) -> Result<abi::RequestId, String> {
+        Ok(abi::RequestId(1))
+    }
+    fn dialog(&self, _: abi::Dialog) {}
+    fn copy(&self, _: &str, _: Option<abi::Action>) {}
+}
+
+// Expected (await-luau): a key handler that waits has taken its key, as a TS `run` that returns a promise has; one that
+// returns without waiting answers for itself.
+#[test]
+fn a_key_handler_that_waits_takes_its_key() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:layer({ scope = "global", keys = { { key = "x", name = "wait" }, { key = "y", name = "pass" } } }, function(host, event)
+                if event.bind == "wait" then
+                    host:fetch({ method = "GET", path = "/x" })
+                end
+                return "pass"
+            end)
+        end)
+    "#;
+    let mut registered = abi::Registered::new("test.luau", None);
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
+    let _plugin = bind::setup(&compiled, &mut registered.setup(), Duration::from_millis(100), MEMORY, None).unwrap();
+    let handler = registered.layers()[0].1.clone();
+    let key = |bind: &str| -> abi::interact::Event {
+        serde_json::from_value(serde_json::json!({ "type": "key", "key": "x", "bind": bind })).unwrap()
+    };
+    assert_eq!(handler(&Taking, &key("wait")), abi::interact::Handled::Consume);
+    assert_eq!(handler(&Taking, &key("pass")), abi::interact::Handled::Pass);
 }
