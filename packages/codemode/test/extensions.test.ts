@@ -92,6 +92,91 @@ describe("extension functions", () => {
     expect(await value(`return JSON.stringify((await fetch("https://a.test/")).headers)`)).toBe("{}")
   })
 
+  test("a host function passed back arrives as itself, wherever it sits", async () => {
+    const files = new WeakMap<Function, string>()
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "files",
+          globals: {
+            file: (name: string) => {
+              const text = async () => `text of ${name}`
+              files.set(text, name)
+              return { name, text }
+            },
+            copy: async (dest: string, source: { text: () => Promise<string> }) => [
+              dest,
+              files.get(source.text),
+              await source.text(),
+            ],
+          },
+        }),
+      ],
+    })
+    expect(await value(`return await copy("b", file("a"))`, target)).toEqual(["b", "a", "text of a"])
+    expect(await value(`const f = file("a"); return await copy("b", { text: f.text })`, target)).toEqual([
+      "b",
+      "a",
+      "text of a",
+    ])
+  })
+
+  test("a program function or a global passed to the host is left out, like any function", async () => {
+    const taken: Array<unknown> = []
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "gated",
+          globals: { fs: { rm: () => undefined }, take: (value: unknown) => void taken.push(value) },
+        }),
+      ],
+    })
+    await value(
+      `take({ text: async () => "x" }); take({ text: take }); take(fs.rm); take({ a: fs.rm }); take(fs)`,
+      target,
+    )
+    expect(taken).toEqual([{}, {}, undefined, {}, {}])
+  })
+
+  test("a constructible global works with new and returns what the host function returns", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "glob",
+          globals: {
+            Glob: Extension.constructible((pattern: string) => ({ match: (name: string) => name.endsWith(pattern) })),
+          },
+        }),
+      ],
+    })
+    expect(await value(`const g = new Glob(".ts"); return [g.match("a.ts"), g.match("a.js")]`, target)).toEqual([
+      true,
+      false,
+    ])
+    expect(await value(`return Glob(".ts").match("a.ts")`, target)).toBe(true)
+    expect(await value(`return new Glob(...[".ts"]).match("a.ts")`, target)).toBe(true)
+    expect((await failure(`new (new Glob(".ts").match)("a")`, target)).message).toContain("is not supported")
+  })
+
+  test("a constructible global that blocks on the host gives new its value", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "sum",
+          globals: {
+            Sum: Extension.constructible((...values: Array<number>) =>
+              Effect.succeed({ total: values.reduce((total, value) => total + value, 0) }),
+            ),
+          },
+        }),
+      ],
+    })
+    expect(await value(`return new Sum(1, 2).total + 1`, target)).toBe(4)
+    expect(await value(`return new Sum(...[1, 2]).total + 1`, target)).toBe(4)
+    // An argument that is still a promise is awaited first, as in a plain call.
+    expect(await value(`return new Sum((async () => { await null; return 1 })(), 2).total + 1`, target)).toBe(4)
+  })
+
   test("a class global is only a function; calling it throws the host TypeError", async () => {
     const target = CodeMode.make({ extensions: [Extension.make({ name: "cls", globals: { Bag: class Bag {} } })] })
     expect((await failure(`Bag()`, target)).message).toContain("without")

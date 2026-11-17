@@ -47,6 +47,8 @@ import { type HostOrigin, SnapshotError } from "../snapshot/codec.js"
 type Place = {
   readonly global?: ReadonlyArray<string> | undefined
   readonly within?: Within | undefined
+  /** Whether it is among the globals at all, even where no path of names leads: inside an array, a Map or a Set. */
+  readonly installed?: boolean | undefined
 }
 
 type Within = {
@@ -72,17 +74,29 @@ export const hostGlobals = <R>(
   const shape: Array<string> = []
   // The program functions wrapping functions inside values a hooked host function returned, by where they came from.
   const origins = new WeakMap<object, HostOrigin>()
+  // The host function behind each function inside a result, so passing it back to a host function that takes
+  // functions hands the host its own function. The functions among the globals are left out: whatever the host runs
+  // around their calls (permission checks, say) runs when the program calls them, and the host could call one
+  // without it.
+  const hosted = new WeakMap<object, Function>()
 
   // With `waiting`, a promise that hasn't fulfilled goes there instead, and the copy is to be made again once it settles.
+  // `back` collects the host functions that cross back; without it they are treated like any function.
   const toHost = (
     value: Value,
     label: string,
     depth: number,
     seen: Set<object>,
     waiting: Array<PromiseObj> | undefined,
+    back: Array<Function> | undefined,
   ): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
+    const host = value instanceof Obj ? hosted.get(value) : undefined
+    if (back !== undefined && host !== undefined) {
+      back.push(host)
+      return host
+    }
     if (translate.functions === "drop" && typeofValue(value) === "function") return OMITTED
     if (seen.has(value as object)) throw typeError(`${label} contains a circular value.`)
     if (waiting !== undefined && value instanceof PromiseObj) {
@@ -91,7 +105,7 @@ export const hostGlobals = <R>(
         return undefined
       }
       seen.add(value)
-      const copied = toHost(value.result as Value, label, depth + 1, seen, waiting)
+      const copied = toHost(value.result as Value, label, depth + 1, seen, waiting, back)
       seen.delete(value)
       return copied
     }
@@ -100,7 +114,7 @@ export const hostGlobals = <R>(
     }
     seen.add(value)
     const next = (item: Value) => {
-      const copied = toHost(item, label, depth + 1, seen, waiting)
+      const copied = toHost(item, label, depth + 1, seen, waiting, back)
       return copied === OMITTED && (value instanceof MapObj || value instanceof SetObj) ? undefined : copied
     }
     if (value instanceof ErrorObj) {
@@ -146,6 +160,7 @@ export const hostGlobals = <R>(
     if (typeof value === "function") {
       const within = place.within
       const made = wrap(plain(value), label, { label, path: place.global, owner: within?.owner }, value)
+      if (place.installed !== true) hosted.set(made, value)
       if (within !== undefined && within.path !== undefined) {
         origins.set(made, { owner: within.owner, root: within.root, path: within.path, label })
       }
@@ -159,6 +174,7 @@ export const hostGlobals = <R>(
             ...place.within,
             path: key === undefined || place.within.path === undefined ? undefined : [...place.within.path, key],
           },
+          installed: place.installed,
         })
       // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
       // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
@@ -304,6 +320,9 @@ export const hostGlobals = <R>(
       name: typeof name === "string" ? name : "",
       length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
       call: (_, values, site) => ctx.vm.hosts.call(fn, values, site, target, callee ?? made),
+      ...(fn instanceof Fn && fn.constructible
+        ? { construct: (values, _, site) => ctx.vm.hosts.call(fn, values, site, target, callee ?? made) }
+        : {}),
     })
     return made
   }
@@ -356,7 +375,7 @@ export const hostGlobals = <R>(
 
   ctx.hosts = {
     shape,
-    toHost: (values, label, waiting) =>
+    toHost: (values, label, waiting, back) =>
       values.map((item, index) => {
         const copied = toHost(
           item,
@@ -364,6 +383,7 @@ export const hostGlobals = <R>(
           0,
           new Set(),
           translate.promises === "await" ? waiting : undefined,
+          back,
         )
         return copied === OMITTED ? undefined : copied
       }),
@@ -433,16 +453,18 @@ export const hostGlobals = <R>(
       // The restored function keeps its own properties; only what calling it does comes from the new one.
       Object.assign(target, { tag: made.tag, call: made.call, construct: made.construct, callback: made.callback })
       origins.set(target, origin)
+      hosted.set(target, host)
     },
   }
 
   return Object.entries(globals).map(
-    ([name, value]) => [name, fromHost(value, name, 0, new Set(), { global: [name] })] as const,
+    ([name, value]) => [name, fromHost(value, name, 0, new Set(), { global: [name], installed: true })] as const,
   )
 }
 
-// A plain host function (one inside a result, or among the globals) is called like a `sync` host function.
-const plain = (value: Function) => new Fn((args) => value(...args), "sync", false, undefined)
+// A plain host function (one inside a result, or among the globals) is called like a `sync` host function that takes
+// functions.
+const plain = (value: Function) => new Fn((args) => value(...args), "sync", false, undefined, false, true)
 
 // Runs a host function's `snapshot` hook; what goes wrong is the state's problem, said as such.
 const hostStep = <A>(owner: string, what: "save" | "restore", step: () => A): A => {

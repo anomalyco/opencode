@@ -85,18 +85,26 @@ export class Driver<R> {
 
   /**
    * The host calls that block a suspend now: every call in progress except an idempotent call, or a durable call in
-   * `started`. A call queued but not started starts on resume.
+   * `started`. A call queued but not started starts on resume, unless its arguments hold host functions, which
+   * can't be saved.
    */
   blocking(): Array<{ readonly key: string; readonly path: string }> {
     return this.vm
       .calls()
-      .filter((call) => call.status !== "queued" && call.status !== "started" && call.policy !== "idempotent")
+      .filter(
+        (call) =>
+          call.holdsFunctions ||
+          (call.status !== "queued" && call.status !== "started" && call.policy !== "idempotent"),
+      )
       .map((call) => ({ key: call.key, path: call.label }))
   }
 
-  /** Whether the run holds live host values: a call whose function can't be found again, or that waits on its result. */
+  /**
+   * Whether the run holds live host values: a call whose function can't be found again, that waits on its result, or
+   * whose arguments hold host functions.
+   */
   get holdsHostValues(): boolean {
-    return this.vm.calls().some((call) => call.work !== undefined || call.path === undefined)
+    return this.vm.calls().some((call) => call.work !== undefined || call.path === undefined || call.holdsFunctions)
   }
 
   /**

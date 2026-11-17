@@ -97,21 +97,25 @@ export class HostCalls {
   ): HostResult {
     const hosts = this.ctx.hosts!
     const waiting: Array<PromiseObj> = []
+    // The host functions that cross back among the arguments, when the function takes them.
+    const back: Array<Function> | undefined = fn instanceof Fn && fn.takesFunctions ? [] : undefined
     if (fn instanceof DurableFn || fn.type === "async") {
       const resolving = this.promises.resolving(this.promises.newPromise(), site)
       let args: ReadonlyArray<unknown>
       try {
-        args = hosts.toHost(values, target.label, waiting)
+        args = hosts.toHost(values, target.label, waiting, back)
       } catch (error) {
         resolving.reject(error)
         return resolving.promise
       }
       if (waiting.length > 0) return this.wait(waiting, callee, values, site, resolving)
       const policy = fn instanceof DurableFn ? "durable" : fn.idempotent ? "idempotent" : "async"
-      this.queue(target, policy, args, false, resolving, site).fn = fn
+      const call = this.queue(target, policy, args, false, resolving, site)
+      call.fn = fn
+      call.holdsFunctions = back !== undefined && back.length > 0
       return resolving.promise
     }
-    const args = hosts.toHost(values, target.label, waiting)
+    const args = hosts.toHost(values, target.label, waiting, back)
     if (waiting.length > 0) return this.wait(waiting, callee, values, site)
     const id = this.nextID++
     const result = hosts.invoke(fn, args, `${this.runId}:${id}`, target.label)

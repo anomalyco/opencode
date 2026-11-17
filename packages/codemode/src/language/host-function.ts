@@ -45,6 +45,17 @@ export type Options =
       readonly type?: "sync" | "sync-thenable"
       readonly idempotent?: false
       readonly snapshot?: Snapshot | undefined
+      /**
+       * Lets a program call the function with `new`, as it would a class. `new` calls it the same way a plain call
+       * does, and the program gets what it returns.
+       */
+      readonly constructible?: boolean
+      /**
+       * Lets the program pass back a function that was inside a result, on its own or inside an argument: it arrives
+       * as the host function itself, and the run can't be suspended until the call completes. Without it, such a
+       * function is treated like any other function in an argument (see `Runtime.Translate`).
+       */
+      readonly takesFunctions?: boolean
     }
   | {
       readonly type: "async"
@@ -54,6 +65,8 @@ export type Options =
        */
       readonly idempotent?: boolean
       readonly snapshot?: Snapshot | undefined
+      readonly constructible?: boolean
+      readonly takesFunctions?: boolean
     }
 
 /** A host function; see `fn`. */
@@ -64,6 +77,8 @@ export class Fn<R = never> {
     readonly type: Type,
     readonly idempotent: boolean,
     readonly snapshot: Snapshot | undefined,
+    readonly constructible = false,
+    readonly takesFunctions = false,
   ) {}
 }
 
@@ -95,7 +110,14 @@ export const fn = <F extends (args: ReadonlyArray<any>, call: Call) => unknown>(
   f: F,
   options: Options = {},
 ): Fn<Requirements<ReturnType<F>>> =>
-  new Fn(f, options.type ?? "sync", options.type === "async" && options.idempotent === true, options.snapshot)
+  new Fn(
+    f,
+    options.type ?? "sync",
+    options.type === "async" && options.idempotent === true,
+    options.snapshot,
+    options.constructible === true,
+    options.takesFunctions === true,
+  )
 
 /**
  * A host function whose work keeps running across a suspend. `start` begins it and gives JSON data, kept in a saved

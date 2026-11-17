@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { type Extension, isAsync } from "./extension.js"
+import { type Extension, isAsync, isConstructible } from "./extension.js"
 import { scanTools } from "./scan.js"
 import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
@@ -332,7 +332,7 @@ const extensionFunction = <R>(
     // The program sees the extension function's own name and length.
     Object.defineProperty(run, "name", { value: value.name })
     Object.defineProperty(run, "length", { value: value.length })
-    return Host.fn(run, { type, snapshot })
+    return Host.fn(run, { type, snapshot, constructible: isConstructible(value), takesFunctions: true })
   }
   if (before === undefined && after === undefined) return named((args) => value(...args))
   return named((args) =>

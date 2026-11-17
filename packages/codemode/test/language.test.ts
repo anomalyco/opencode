@@ -78,6 +78,38 @@ describe("Host.fn", () => {
     expect(seen).toEqual({ at: new Date(5), m: new Map([["k", 1]]) })
   })
 
+  test("a function inside a result crosses back as itself only to a function that takes functions", async () => {
+    const read = () => "called"
+    const runtime = Runtime.make({
+      globals: () => ({
+        open: Host.fn(() => ({ read })),
+        takes: Host.fn(([input]) => (input as { readonly read: unknown }).read === read, { takesFunctions: true }),
+        refuses: Host.fn(() => true),
+      }),
+    })
+    expect(await value(runtime, `return takes({ read: open().read })`)).toBe(true)
+    for (const code of [`refuses(open().read)`, `takes(takes)`, `takes(() => 1)`]) {
+      expect(await run(runtime, code)).toMatchObject({
+        ok: false,
+        error: { message: expect.stringContaining("contains a function, which cannot be passed to the host") },
+      })
+    }
+  })
+
+  test("a constructible function is called by new, and gives what it returns", async () => {
+    const runtime = Runtime.make({
+      globals: () => ({
+        Box: Host.fn(([item]) => ({ item }), { constructible: true }),
+        Later: Host.fn(([item]) => Effect.succeed({ item }), { constructible: true }),
+        plain: Host.fn(() => 1),
+      }),
+    })
+    expect(await value(runtime, `return [new Box(1).item, new Later(2).item, new Later(...[3]).item]`)).toEqual([
+      1, 2, 3,
+    ])
+    expect(await run(runtime, `new plain()`)).toMatchObject({ ok: false })
+  })
+
   test("idempotent applies only to async functions", () => {
     // @ts-expect-error a sync function can't be idempotent
     Host.fn(() => 1, { idempotent: true })
@@ -164,6 +196,26 @@ describe("per-run state", () => {
       }),
     })
     const program = runtime.program(`await slow()`)
+    const fiber = Effect.runFork(program.run())
+    await called.promise
+    const error = await Effect.runPromise(Effect.flip(program.suspend()))
+    expect(error.running).toMatchObject([{ path: "slow" }])
+    await Effect.runPromise(Fiber.interrupt(fiber))
+  })
+
+  test("a suspend fails while a call holds a host function, even an idempotent one", async () => {
+    const called = latch()
+    const runtime = Runtime.make({
+      globals: () => ({
+        open: Host.fn(() => ({ read: () => "called" })),
+        slow: Host.fn(() => Effect.andThen(Effect.sync(called.resolve), Effect.never), {
+          type: "async",
+          idempotent: true,
+          takesFunctions: true,
+        }),
+      }),
+    })
+    const program = runtime.program(`await slow(open().read)`)
     const fiber = Effect.runFork(program.run())
     await called.promise
     const error = await Effect.runPromise(Effect.flip(program.suspend()))

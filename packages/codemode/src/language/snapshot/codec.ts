@@ -94,9 +94,16 @@ export type HostBridge = {
   readonly shape: ReadonlyArray<string>
   /**
    * Program values as host values, for a call's arguments. When the runtime awaits promises in arguments, one that
-   * hasn't fulfilled goes in `waiting` instead, and the arguments are to cross again once it settles.
+   * hasn't fulfilled goes in `waiting` instead, and the arguments are to cross again once it settles. A function
+   * inside a result crosses back as its host function and is added to `back`; without `back` it is treated like any
+   * function.
    */
-  readonly toHost: (values: ReadonlyArray<Value>, label: string, waiting: Array<PromiseObj>) => ReadonlyArray<unknown>
+  readonly toHost: (
+    values: ReadonlyArray<Value>,
+    label: string,
+    waiting: Array<PromiseObj>,
+    back: Array<Function> | undefined,
+  ) => ReadonlyArray<unknown>
   /** A host value as a program value, for what a call returned; `owner`'s `snapshot` hooks can save it. */
   readonly fromHost: (value: unknown, label: string, owner: string | undefined) => Value
   /** What a call's failure is to the program. */
@@ -298,7 +305,11 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
       "resolving",
       "site",
     ],
-    skip: ["fn", "work"],
+    skip: ["fn", "work", "holdsFunctions"],
+    // A call holding host functions is never saved.
+    reset: (call: { holdsFunctions: boolean }) => {
+      call.holdsFunctions = false
+    },
   },
   { name: "Resolving", ctor: Resolving, fields: ["done", "scheduler", "promise", "site"] },
   { name: "Throw", ctor: Throw, fields: ["value"] },
