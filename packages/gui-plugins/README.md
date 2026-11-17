@@ -23,11 +23,6 @@ flowchart LR
 
 ## Anatomy
 
-The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen. Use
-`const id = await browser.experimental.open(session, url)` and `await browser.experimental.close(id)` from the same
-plugin instance. The branded handle survives a session rebind, not a plugin/window restart or a takeover navigation.
-Close returns true only for a tab closed now; a page awaiting confirmation remains open. `open(session, url)` stays fire-and-forget.
-
 ```text
 src/pairing/
 ├── index.ts          Plugin.define: os, stores, i18n
@@ -328,6 +323,17 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.windows` (main)         | `Windows`                                                                          | The app's main windows                                           |
 | `ctx.embeds` (main)          | `Embeds`                                                                           | `create(view, window)` places a web page                         |
 | `ctx.cli` (main)             | `Cli`                                                                              | The opencode CLI the app runs                                    |
+
+### Contracts
+
+The contracts `file`, `review` and `browser` publish with the SDK as `@opencode/plugin/gui/<name>`. Read one with `ctx.use`.
+
+The desktop `Browser` contract (`@opencode/plugin/gui/browser`) can return a handle to a new tab in the session on screen:
+`const id = await browser.experimental.open(session, url)`, then `await browser.experimental.close(id)` from the same
+plugin instance. Experimental: may change without compatibility guarantees. The branded handle survives a session rebind.
+It ends with the plugin instance or the window, when the person clicks or types in the tab or runs a command on it, and
+when the agent uses the tab. `close` returns true only for a tab closed now; a page that asks "Leave site?" stays open.
+`open(session, url)` stays fire-and-forget.
 
 ### Built-in only
 
