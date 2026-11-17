@@ -26,8 +26,17 @@ function Dynamic(props: Record<string, any>) {
   }) as unknown
 }
 
-function Portal(): never {
-  throw new Error("<Portal> is not supported by opencode-native's JS host")
+// `@opentui/solid`'s `Portal` (CT-10): its children go into the renderer's root, absolute boxes over the screen. A
+// mount draws only in its own room, so they go into a box that fills the room of the mount that renders the portal,
+// over the rest of it, which `ref` gets as the container. In the `app` slot that room is the screen, as in TS
+// (opencode-landstrip's pane); elsewhere it is the slot's. Its `mount` is not followed.
+function Portal(props: { children?: unknown; ref?: (container: unknown) => void }) {
+  const container = render.createElement("box")
+  for (const [name, value] of Object.entries({ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }))
+    render.setProp(container, name, value)
+  props.ref?.(container)
+  render.insert(container, () => props.children)
+  return container
 }
 
 // Every name the real package exports links (FT-5): those the layer lacks are inert (`inert.ts`).
