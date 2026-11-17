@@ -83,6 +83,17 @@ pub fn open_with(
     size: (u16, u16),
     builtins: Vec<opencode_plugin::Builtin>,
 ) -> Pipe {
+    open_on(plugins, config, size, builtins, Arc::new(support::empty()))
+}
+
+/// [`open_with`] on `server`, such as one that has a session to show.
+pub fn open_on(
+    plugins: &[(&str, Option<serde_json::Value>)],
+    config: Config,
+    size: (u16, u16),
+    builtins: Vec<opencode_plugin::Builtin>,
+    server: Arc<dyn opencode_api::transport::Transport>,
+) -> Pipe {
     let root = opencode_util::temp::tempdir().unwrap();
     let config_dir = root.path().join("config");
     let mut entries = Vec::new();
@@ -93,7 +104,7 @@ pub fn open_with(
             entries.push(serde_json::json!({ "package": dir.to_string_lossy(), "options": options }));
         }
     }
-    let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
+    let mut deps = Deps { route: Route::Home, ..support::deps(server) };
     deps.builtins.extend(builtins);
     if !entries.is_empty() {
         let info = support::decode(&serde_json::json!({ "plugins": entries }).to_string());

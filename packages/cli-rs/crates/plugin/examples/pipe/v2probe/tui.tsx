@@ -135,6 +135,7 @@ export default Plugin.define({
         { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
+        { id: "v2probe.panel", run: () => log({ opened: context.ui.panel.open("probe.panel") }) },
         { id: "v2probe.settle", run: () => context.ui.router.navigate({ type: "plugin", name: "settle" }) },
         // A handler that rejects later, after a reload perhaps (carbon-5).
         {
@@ -210,6 +211,15 @@ export default Plugin.define({
       render: () => {
         context.keymap.layer(() => ({ commands: [{ id: `v2probe.churn-${++churns}`, run() {} }] }))
         return <text>churn page</text>
+      },
+    })
+    // A session panel whose render registers a key layer, as opencode-self-improvement's /memory panel does: the
+    // registration reloads the plugin's registrations, and the panel stays open (CT-29).
+    context.ui.slot({
+      append: "session.panel",
+      render: (panel: { name: string }) => {
+        context.keymap.layer(() => ({ commands: [{ id: "v2probe.panel-key", run() {} }] }))
+        return <text>{`probe panel ${panel.name}`}</text>
       },
     })
     // Two pages sized from their own width (contract 2.x, addition 1, R3): `grow` widens its box by a cell each time

@@ -211,6 +211,17 @@ impl Host for Tui {
 
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
+        // A reload of the plugin's registrations replaced the one that ended, which has the panel too: the panel stays
+        // open and mounts again from the new one, as TS takes a registration without closing it (CT-29). A plugin that
+        // failed or ended loses it.
+        let kept = self.panels.current().is_some_and(|target| {
+            target.plugin == id
+                && self.plugins.has_panel(id, &target.name)
+                && self.plugins.entries().iter().any(|entry| entry.id == id && entry.status == Status::Active)
+        });
+        if kept {
+            return self.app.defer(bind!(self, |tui, _| tui.frame.remount_panel(&tui)));
+        }
         self.panels.release(self, id);
     }
 

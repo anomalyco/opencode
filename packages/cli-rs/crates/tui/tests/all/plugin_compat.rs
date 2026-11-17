@@ -454,6 +454,37 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (CT-29): a session panel whose render registers a key layer, as opencode-self-improvement's /memory panel
+// does, stays open: the registration reloads the plugin's registrations, and the panel mounts again from the new ones.
+// The reload closed it, so `/memory` showed nothing.
+#[test]
+fn a_session_panel_stays_open_across_a_reload() {
+    let Some(config) = config() else { return };
+    let log = log_file();
+    let options = json!({ "log": log.to_string_lossy() });
+    let server = Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY)));
+    let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
+    pipe.active(PROBE);
+    pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
+    pipe.harness.wait("the session shows", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        matches!(pipe.harness.tui.route(), Route::Session { .. })
+    });
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    let shows = || pipe.harness.app.text().contains("probe panel probe.panel");
+    pipe.harness.wait("the panel shows", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        shows()
+    });
+    assert!(pipe.harness.tui.panels.current().is_some(), "the panel closed");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
 // Expected (CT-13): a plugin that imports the `effect` package, its root and a module of it by subpath, loads and runs
 // with the one the JS host serves, as TS's runtime serves its own; it failed, "Cannot find package 'effect'".
 #[test]
