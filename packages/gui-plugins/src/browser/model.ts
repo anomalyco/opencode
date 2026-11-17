@@ -367,6 +367,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (sessions.current()?.key !== sessionKey) return
 
     if (event.type === "shortcut") return panes()[0]?.press(event)
+
+    if (event.type === "hardReload") return panes()[0]?.visible() ? panes()[0]?.reload(true) : undefined
     panes()[0]?.focused()
   }
 

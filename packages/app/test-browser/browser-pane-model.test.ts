@@ -120,6 +120,44 @@ test("one session's transitions leave another session's attachment as it was", a
   }
 })
 
+test("the app menu's hard reload runs once, on the pane the window shows", async () => {
+  const app = fixture()
+  const reloads: (boolean | undefined)[] = []
+  const pane = { visible: true }
+  const nothing = () => undefined
+
+  const unmount = app.model.mount({
+    visible: () => pane.visible,
+    address: () => "",
+    reload: (ignoreCache) => void reloads.push(ignoreCache),
+    close: nothing,
+    inspectable: () => false,
+    inspect: nothing,
+    focusAddress: nothing,
+    find: nothing,
+    findMatch: nothing,
+    press: nothing,
+    focused: nothing,
+  })
+
+  try {
+    app.route(app.refs[1])
+    await Bun.sleep(0)
+    // Main sends it to every binding of the window with a tab in front. Only the routed session's pane answers.
+    app.send("ses_alpha", { type: "hardReload" })
+    expect(reloads).toEqual([])
+    app.send("ses_beta", { type: "hardReload" })
+    expect(reloads).toEqual([true])
+    // A pane that is mounted but not on screen, such as behind Review, is not what the person sees.
+    pane.visible = false
+    app.send("ses_beta", { type: "hardReload" })
+    expect(reloads).toEqual([true])
+  } finally {
+    unmount()
+    app.dispose()
+  }
+})
+
 test("a passkey notice names the tab's origin and offers the import for the page's registrable site", async () => {
   const app = fixture()
   const [alpha] = app.sessions

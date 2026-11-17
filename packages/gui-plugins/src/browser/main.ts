@@ -147,9 +147,7 @@ const setup: Plugin.MainSetup = (ctx) => {
         return ctx.t("menu.hardReload")
       },
       enabled: () => !!reload(ctx.windows.focused()?.id),
-      run: (window) => {
-        void reload(window?.id)?.().catch((error: Error) => ctx.log.write("warn", error.message))
-      },
+      run: (window) => reload(window?.id)?.(),
     })
   }
 

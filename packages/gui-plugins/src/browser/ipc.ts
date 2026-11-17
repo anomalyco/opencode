@@ -181,6 +181,9 @@ export const PaneEvent = Schema.Union([
   }),
   // The user put keyboard focus in the page, outside the window's own document.
   Schema.Struct({ type: Schema.Literal("focused"), tabID: Browser.TabID }),
+  // The app menu's "Reload ignoring cache". The window runs it on the pane it shows, as the person's own command: only
+  // the window knows which session's pane is on screen, and a failed page has no native view to tell main.
+  Schema.Struct({ type: Schema.Literal("hardReload") }),
   // The page handed a browser or shell shortcut to the window, which runs it as its own key press.
   Schema.Struct({
     type: Schema.Literal("shortcut"),

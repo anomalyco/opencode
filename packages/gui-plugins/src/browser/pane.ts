@@ -135,14 +135,16 @@ export function createBrowserPane(input: {
   const warned = new Set<string>()
 
   return {
+    /**
+     * The app menu's hard reload, offered while a pane of the window has a tab in front. It goes to the window, which
+     * runs it on the pane it shows through `command`, so it is the person's command there and reaches a failed page.
+     */
     menuReload(window: number | undefined) {
-      for (const [binding, handle] of handles) {
-        if (handle.window !== window) continue
-        const tab = inventory(binding).focusedTabID
+      const bindings = Array.from(handles).flatMap(([binding, handle]) =>
+        handle.window === window && inventory(binding).focusedTabID ? [binding] : [],
+      )
 
-        if (tab && page(binding, tab)?.view.getVisible())
-          return () => execute(binding, { action: { type: "reload", tabID: tab, ignoreCache: true }, files: [] }, handle.abort.signal, "user")
-      }
+      return bindings.length ? () => bindings.forEach((binding) => emit(binding, { type: "hardReload" })) : undefined
     },
     async register(window: number, binding: string, target: Target) {
       const server = input.serverEndpoints.get(target.server)
@@ -470,6 +472,7 @@ export function createBrowserPane(input: {
       const current = () => page(binding, tabID)?.contents.getURL() ?? selectTabSlot(machine.state, binding, tabID)?.tab.url
 
       if (!handle || !origin || destinationOrigin(current() ?? "") !== origin) throw new Error("browser.site.changed")
+      page(binding, tabID)?.personCommand()
       const session = electron.session.fromPartition(handle.partition)
       await session.clearData({ origins: [origin], originMatchingMode: "origin-in-all-contexts", dataTypes: ["cache", "serviceWorkers"] })
 
