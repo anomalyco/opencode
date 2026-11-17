@@ -586,6 +586,7 @@ const aliases = {
   "outline-arrow-left": "arrow-left",
   "outline-arrow-right": "arrow-right",
 } satisfies Record<string, keyof typeof icons>
+
 /** Icon names derived from the shared artwork, with no UI or runtime dependencies. */
 export type IconName = keyof typeof icons | keyof typeof aliases
 
