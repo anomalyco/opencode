@@ -13,6 +13,8 @@ const inputs = {
   "invoker dialog": `${marker}<button command="show-modal" commandfor="user-content-d">Show details</button><dialog id="d" style="width:100vw;height:100vh;max-width:none;max-height:none;margin:0;background:#fff">COVER</dialog>`,
   "fixed tint": `${marker}<div style="position:fixed;inset:0;background:red;opacity:.4;pointer-events:none">x</div>`,
   "author-sized math": `${marker} $\\raisebox{-40em}{\\colorbox{white}{\\rule{60em}{30em}}}$`,
+  // A math fence renders as display math, placed through the same slot as a $$ formula.
+  "author-sized math fence": `${marker}\n\n\`\`\`math\n\\raisebox{-40em}{\\colorbox{white}{\\rule{60em}{30em}}}\n\`\`\`\n`,
 }
 
 const legitimate = `${marker}\n\n| West | East |\n| :-- | --: |\n| Lettuce | Ranch |\n\n<img width="96" alt="Sample image" src="https://example.invalid/sample.png">\n\n<span style="color:teal">Teal text</span>`
@@ -21,6 +23,8 @@ for (const delivery of ["text", "tool"] as const) {
   for (const [name, markup] of Object.entries(inputs)) {
     story(`keeps ${name} inside its message as ${delivery}`, async ({ mount, page }) => {
       const root = await open(page, mount, markup, delivery)
+
+      if (name.endsWith("math fence")) await expect(root.locator(".katex-display")).toHaveCount(1)
       await press(root)
       await expectContained(page, root, delivery)
     })

@@ -17,7 +17,7 @@ export function createMarkdownParser(
 const decoder = new TextDecoder()
 
 // The class keeps the fence's own language, even one without a lexer, so the viewer can label it and render Mermaid.
-function codeExtension(render: (html: string, block: boolean) => string): MarkedExtension {
+function codeExtension(render: (html: string, block: boolean, display?: boolean) => string): MarkedExtension {
   const base = new Renderer()
 
   return {
@@ -26,6 +26,11 @@ function codeExtension(render: (html: string, block: boolean) => string): Marked
         return render(base.checkbox(token), false)
       },
       code(token) {
+        // A math fence is a display formula, placed like one; a fence KaTeX cannot parse, such as one cut off
+        // mid-formula, stays highlighted code.
+        const formula = isMathFence(token.lang) && token.text.trim() ? renderFenceMath(token.text) : undefined
+
+        if (formula !== undefined) return render(formula, false, true) + "\n"
         const language = (token.lang?.match(/^\S*/)?.[0] ?? "").toLowerCase().replace(/[^\w#+.-]/g, "") || "text"
 
         const html = decoder.decode(
@@ -50,8 +55,25 @@ const inlineParenMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
 
 const blockMathRegex = /^(\${1,2})\n((?:\\[^]|[^\\])+?)\n\1(?:\n|$)/
 
+const mathFenceLanguages = new Set(["latex", "math"])
+
+/** Whether a fence's info string names display math, as ```` ```latex ```` and ```` ```math ```` do in the TUI. */
+export function isMathFence(lang: string | undefined) {
+  return mathFenceLanguages.has(lang?.match(/^\S*/)?.[0].toLowerCase() ?? "")
+}
+
+const katexLimits = { trust: false, maxSize: 10, maxExpand: 1000 }
+
+function renderFenceMath(source: string) {
+  try {
+    return katex.renderToString(source, { ...katexLimits, throwOnError: true, displayMode: true })
+  } catch {
+    return undefined
+  }
+}
+
 function renderMath(token: Tokens.Generic) {
-  return katex.renderToString(token.text, { throwOnError: false, displayMode: token.displayMode, trust: false, maxSize: 10, maxExpand: 1000 })
+  return katex.renderToString(token.text, { ...katexLimits, throwOnError: false, displayMode: token.displayMode })
 }
 
 function mathExtension(render: (token: Tokens.Generic) => string): MarkedExtension {
