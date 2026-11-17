@@ -1,10 +1,9 @@
 import { Mcp } from "@opencode/schema/mcp"
-import { Session } from "@opencode/schema/session"
 import { Location } from "@opencode/schema/location"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, SessionNotFoundError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
+import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
 
@@ -19,7 +18,7 @@ export function hasMcpClientTicketURL(url: URL) {
   )
 }
 
-const McpClientQuery = Schema.Struct({
+export const McpClientQuery = Schema.Struct({
   ...LocationQuery.fields,
   name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)),
 })
@@ -139,24 +138,6 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
           }),
         ),
     )
-    .add(
-      HttpApiEndpoint.post("session.clientMcp.token", `${SESSION_MCP_CLIENT_PATH}/token`, {
-        params: { sessionID: Session.ID },
-        query: McpClientQuery,
-        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
-        success: Location.response(PtyTicket.ConnectToken),
-        error: [ForbiddenError, SessionNotFoundError],
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.session.clientMcp.token",
-            summary: "Create client MCP WebSocket token",
-            description:
-              "Create a short-lived single-use ticket for opening a client MCP WebSocket connection for this session from a browser. Experimental: may change without compatibility guarantees.",
-          }),
-        ),
-    )
     // The client handler checks origin and ticket before it boots the location itself.
     .middleware(locationMiddleware)
     .add(
@@ -172,24 +153,6 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
             summary: "Attach client MCP server",
             description:
               "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; its tools stay available while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
-            transform: (operation) => ({ ...operation, "x-websocket": true }),
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.clientMcp", SESSION_MCP_CLIENT_PATH, {
-        params: { sessionID: Session.ID },
-        query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
-        success: Schema.Boolean,
-        error: [SessionNotFoundError, ForbiddenError, LocationNotFoundError],
-      })
-        .annotateMerge(locationQueryOpenApi)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "experimental.session.clientMcp",
-            summary: "Attach client MCP server",
-            description:
-              "Upgrade to a WebSocket over which the client hosts an MCP server named after `name`; only the specified session can discover and call its tools while the socket is open. One JSON-RPC message per text frame. Experimental: may change without compatibility guarantees.",
             transform: (operation) => ({ ...operation, "x-websocket": true }),
           }),
         ),

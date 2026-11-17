@@ -87,7 +87,6 @@ export const deprecatedClientPaths = new Set([
   "integration.wellknown.add",
   "mcp.add",
   "mcp.client.token",
-  "session.clientMcp.token",
   "mcp.connect",
   "mcp.disconnect",
   "mcp.remove",

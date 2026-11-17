@@ -217,7 +217,14 @@ it.live(
         yield* llm.push(TestLLM.text("done", "text"))
         yield* sessions.prompt({ sessionID, text: "continue", resume: false })
         yield* sessions.resume(sessionID)
-        return JSON.stringify((yield* llm.requests()).at(-1))
+        const request = (yield* llm.requests()).at(-1)!
+        const text = [
+          ...request.system.map((part) => part.text),
+          ...request.messages.flatMap((message) =>
+            message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+          ),
+        ]
+        return { tools: request.tools, catalog: text.filter((part) => /Code Mode|tool catalog/.test(part)) }
       })
       const url = server.url({ name: "sample" })
       url.pathname = `/api/experimental/session/${a.id}/client-mcp`
@@ -227,18 +234,20 @@ it.live(
             (tools) => tools.length === n,
           ),
         )
-      yield* step(b.id)
+      const baseline = yield* step(b.id)
+      expect(baseline.catalog.length).toBeGreaterThan(0)
       const client = yield* connectClient(url, { authorization }, "read_label")
       yield* count(1)
-      expect(yield* step(a.id, true)).toContain("sample.read_label")
+      expect((yield* step(a.id)).catalog.join("\n")).toContain("sample.read_label")
+      yield* step(a.id, true)
       expect(client.sessions).toEqual([a.id])
-      expect(yield* step(b.id)).not.toContain("read_label")
+      expect(yield* step(b.id)).toEqual(baseline)
       client.socket.close()
       yield* count(0)
-      expect(yield* step(b.id)).not.toContain("read_label")
+      expect(yield* step(b.id)).toEqual(baseline)
       const second = yield* connectClient(url, { authorization }, "read_label")
       yield* count(1)
-      expect(yield* step(b.id)).not.toContain("read_label")
+      expect(yield* step(b.id)).toEqual(baseline)
       expect(JSON.stringify(yield* sessions.messages({ sessionID: b.id }))).not.toContain("read_label")
       const otherURL = new URL(url)
       otherURL.pathname = `/api/experimental/session/${b.id}/client-mcp`
@@ -248,6 +257,12 @@ it.live(
       yield* step(b.id, true)
       expect(second.sessions).toEqual([a.id])
       expect(other.sessions).toEqual([b.id])
+      yield* sessions.setPermissions({
+        sessionID: a.id,
+        permissions: [{ action: "sample_read_label", resource: "*", effect: "deny" }],
+      })
+      yield* step(a.id, true)
+      expect(second.sessions).toEqual([a.id])
       other.socket.close()
       yield* count(0, b.id)
       second.socket.close()
@@ -382,7 +397,10 @@ it.live(
       const b = yield* sessions.create({ location })
       const url = (sessionID?: Session.ID) => {
         const url = server.url({ name: "sample" })
-        if (sessionID) url.pathname = `/api/experimental/session/${sessionID}/client-mcp`
+        if (sessionID) {
+          url.pathname = `/api/experimental/session/${sessionID}/client-mcp`
+          url.searchParams.delete("location[directory]")
+        }
         return url
       }
       const request = (url: URL, method = "GET") => {
@@ -411,6 +429,43 @@ it.live(
       client.socket.close()
       yield* until(() => client.state.closed)
       expect((yield* request(scoped)).status).toBe(403)
+    }),
+  20_000,
+)
+
+it.live(
+  "releases only the moved or deleted owner's socket",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const sessions = Context.get(server.context, Session.Service)
+      const location = Location.Ref.make({ directory: AbsolutePath.make(server.directory) })
+      const a = yield* sessions.create({ location })
+      const b = yield* sessions.create({ location })
+      const attach = Effect.fnUntraced(function* (owner: Session.ID) {
+        const url = server.url({ name: "sample" })
+        url.pathname = `/api/experimental/session/${owner}/client-mcp`
+        const client = yield* connectClient(url, { authorization }, "read_label")
+        yield* until(() =>
+          Effect.runPromise(server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(owner)))).then(
+            (tools) => tools.length === 1,
+          ),
+        )
+        return client
+      })
+      const first = yield* attach(a.id)
+      const sibling = yield* attach(b.id)
+      yield* sessions.move({ sessionID: a.id, directory: AbsolutePath.make((yield* tmpdirScoped()).path) })
+      yield* until(() => first.state.closed)
+      yield* sessions.move({ sessionID: a.id, directory: location.directory })
+      expect(yield* server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(a.id)))).toEqual([])
+      const second = yield* attach(a.id)
+      yield* sessions.remove(a.id)
+      yield* until(() => second.state.closed)
+      expect(sibling.state.closed).toBeFalse()
+      expect(yield* server.inLocation(Mcp.Service.use((mcp) => mcp.sessionTools(b.id)))).toHaveLength(1)
+      sibling.socket.close()
+      yield* until(() => sibling.state.closed)
     }),
   20_000,
 )

@@ -18,6 +18,26 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
+  ExperimentalSessionClientMcpTokenInput,
+  ExperimentalSessionClientMcpTokenOutput,
+  ExperimentalSessionStatsInput,
+  ExperimentalSessionStatsOutput,
+  ExperimentalSessionImportInput,
+  ExperimentalSessionImportOutput,
+  ExperimentalSessionExportInput,
+  ExperimentalSessionExportOutput,
+  ExperimentalSessionSkillInput,
+  ExperimentalSessionSkillOutput,
+  ExperimentalSessionWaitInput,
+  ExperimentalSessionWaitOutput,
+  ExperimentalSessionInstructionsEntryListInput,
+  ExperimentalSessionInstructionsEntryListOutput,
+  ExperimentalSessionInstructionsEntryPutInput,
+  ExperimentalSessionInstructionsEntryPutOutput,
+  ExperimentalSessionInstructionsEntryRemoveInput,
+  ExperimentalSessionInstructionsEntryRemoveOutput,
+  ExperimentalSessionLogInput,
+  ExperimentalSessionLogOutput,
   SessionListInput,
   SessionListOutput,
   SessionCreateInput,
@@ -85,24 +105,6 @@ import type {
   SessionEnvironmentOutput,
   SessionViewInput,
   SessionViewOutput,
-  ExperimentalSessionStatsInput,
-  ExperimentalSessionStatsOutput,
-  ExperimentalSessionImportInput,
-  ExperimentalSessionImportOutput,
-  ExperimentalSessionExportInput,
-  ExperimentalSessionExportOutput,
-  ExperimentalSessionSkillInput,
-  ExperimentalSessionSkillOutput,
-  ExperimentalSessionWaitInput,
-  ExperimentalSessionWaitOutput,
-  ExperimentalSessionInstructionsEntryListInput,
-  ExperimentalSessionInstructionsEntryListOutput,
-  ExperimentalSessionInstructionsEntryPutInput,
-  ExperimentalSessionInstructionsEntryPutOutput,
-  ExperimentalSessionInstructionsEntryRemoveInput,
-  ExperimentalSessionInstructionsEntryRemoveOutput,
-  ExperimentalSessionLogInput,
-  ExperimentalSessionLogOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -164,8 +166,6 @@ import type {
   ExperimentalMcpDisconnectOutput,
   ExperimentalMcpClientTokenInput,
   ExperimentalMcpClientTokenOutput,
-  ExperimentalMcpExperimentalSessionClientMcpTokenInput,
-  ExperimentalMcpExperimentalSessionClientMcpTokenOutput,
   CredentialListOutput,
   CredentialCreateInput,
   CredentialCreateOutput,
@@ -606,6 +606,763 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+    },
+    experimental: {
+      session: {
+        clientMcp: {
+          token: (input: ExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalSessionClientMcpTokenOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
+                query: { location: input["location"], name: input["name"] },
+                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
+        stats: (input?: ExperimentalSessionStatsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionStatsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/stats`,
+              query: {
+                from: input?.["from"],
+                to: input?.["to"],
+                project: input?.["project"],
+                timezone: input?.["timezone"],
+                tools: input?.["tools"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        import: (input: ExperimentalSessionImportInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionImportOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/import`,
+              body: { info: input["info"], messages: input["messages"], location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        export: (input: ExperimentalSessionExportInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionExportOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/export`,
+              query: { sanitize: input["sanitize"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        skill: (input: ExperimentalSessionSkillInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionSkillOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/skill`,
+              body: { id: input["id"], resume: input["resume"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        wait: (input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionWaitOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/wait`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        instructions: {
+          entry: {
+            list: (input: ExperimentalSessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
+              request<{ readonly data: ExperimentalSessionInstructionsEntryListOutput }>(
+                {
+                  method: "GET",
+                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
+                  successStatus: 200,
+                  declaredStatuses: [400, 401, 404],
+                  empty: false,
+                },
+                requestOptions,
+              ).then((value) => value.data),
+            put: (input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions) =>
+              request<ExperimentalSessionInstructionsEntryPutOutput>(
+                {
+                  method: "PUT",
+                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                  body: { value: input["value"] },
+                  successStatus: 204,
+                  declaredStatuses: [400, 401, 404, 413],
+                  empty: true,
+                },
+                requestOptions,
+              ),
+            remove: (input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions) =>
+              request<ExperimentalSessionInstructionsEntryRemoveOutput>(
+                {
+                  method: "DELETE",
+                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                  successStatus: 204,
+                  declaredStatuses: [400, 401, 404],
+                  empty: true,
+                },
+                requestOptions,
+              ),
+          },
+        },
+        log: (
+          input: ExperimentalSessionLogInput,
+          requestOptions?: RequestOptions,
+        ): AsyncIterable<ExperimentalSessionLogOutput> =>
+          sse<ExperimentalSessionLogOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/log`,
+              query: { after: input["after"], follow: input["follow"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
+      generate: {
+        text: (input: ExperimentalGenerateTextInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalGenerateTextOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/generate/text`,
+              body: { prompt: input["prompt"], model: input["model"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 422, 502, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        image: (input: ExperimentalGenerateImageInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalGenerateImageOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/generate/image`,
+              body: {
+                model: input["model"],
+                prompt: input["prompt"],
+                images: input["images"],
+                n: input["n"],
+                aspect: input["aspect"],
+                resolution: input["resolution"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 422, 502, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        video: {
+          create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/generate/video`,
+                body: {
+                  model: input["model"],
+                  prompt: input["prompt"],
+                  start: input["start"],
+                  end: input["end"],
+                  references: input["references"],
+                  duration: input["duration"],
+                  aspect: input["aspect"],
+                  resolution: input["resolution"],
+                  sound: input["sound"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404, 422, 502, 503],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          get: (input: ExperimentalGenerateVideoGetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoGetOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/generate/decisions`,
+              body: { model: input["model"], input: input["input"], questions: input["questions"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 422, 502, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      voice: {
+        models: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalVoiceModelsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/voice/models`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        session: (input: ExperimentalVoiceSessionInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalVoiceSessionOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/voice/session`,
+              body: { model: input["model"], session: input["session"], transport: input["transport"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      integration: {
+        wellknown: {
+          add: (input: ExperimentalIntegrationWellknownAddInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalIntegrationWellknownAddOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/integration/wellknown`,
+                query: { location: input["location"] },
+                body: { url: input["url"] },
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+      },
+      mcp: {
+        add: (input: ExperimentalMcpAddInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMcpAddOutput>(
+            {
+              method: "PUT",
+              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}`,
+              query: { location: input["location"] },
+              body: { config: input["config"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        remove: (input: ExperimentalMcpRemoveInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMcpRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}`,
+              query: { location: input["location"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        connect: (input: ExperimentalMcpConnectInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMcpConnectOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}/connect`,
+              query: { location: input["location"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        disconnect: (input: ExperimentalMcpDisconnectInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMcpDisconnectOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}/disconnect`,
+              query: { location: input["location"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        client: {
+          token: (input: ExperimentalMcpClientTokenInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalMcpClientTokenOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/client-mcp/token`,
+                query: { location: input["location"], name: input["name"] },
+                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
+      },
+      file: {
+        write: (input: ExperimentalFileWriteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFileWriteOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/fs/write`,
+              query: { location: input["location"], path: input["path"] },
+              body: input["payload"],
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binaryBody: true,
+            },
+            requestOptions,
+          ),
+        watch: (input: ExperimentalFileWatchInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFileWatchOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/fs/watch`,
+              query: { location: input["location"] },
+              body: { path: input["path"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        unwatch: (input: ExperimentalFileUnwatchInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFileUnwatchOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/fs/watch`,
+              query: { location: input["location"] },
+              body: { path: input["path"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      persistentPty: {
+        read: (input: ExperimentalPersistentPtyReadInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyReadOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal/read`,
+              query: { lines: input["lines"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        list: (input: ExperimentalPersistentPtyListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input: ExperimentalPersistentPtyCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
+              body: {
+                command: input["command"],
+                args: input["args"],
+                cwd: input["cwd"],
+                title: input["title"],
+                env: input["env"],
+                size: input["size"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        shutdown: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyShutdownOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/persistent-pty/shutdown`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        handoff: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyHandoffOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/persistent-pty/handoff`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        get: (input: ExperimentalPersistentPtyGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        update: (input: ExperimentalPersistentPtyUpdateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyUpdateOutput }>(
+            {
+              method: "PUT",
+              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+              body: { attachmentID: input["attachmentID"], size: input["size"], title: input["title"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 501, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        snapshot: (input: ExperimentalPersistentPtySnapshotInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtySnapshotOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}/snapshot`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        remove: (input: ExperimentalPersistentPtyRemoveInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalPersistentPtyRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        connectToken: (input: ExperimentalPersistentPtyConnectTokenInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPersistentPtyConnectTokenOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+              headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      media: {
+        get: (input: ExperimentalMediaGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMediaGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      blob: {
+        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.id)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      automation: {
+        create: (input: ExperimentalAutomationCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/automation`,
+              body: {
+                sessionID: input["sessionID"],
+                directory: input["directory"],
+                name: input["name"],
+                trigger: input["trigger"],
+                action: input["action"],
+                expires: input["expires"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        list: (input?: ExperimentalAutomationListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/automation`,
+              query: { sessionID: input?.["sessionID"], directory: input?.["directory"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: ExperimentalAutomationGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        pause: (input: ExperimentalAutomationPauseInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationPauseOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/pause`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        resume: (input: ExperimentalAutomationResumeInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationResumeOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/resume`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        delete: (input: ExperimentalAutomationDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAutomationDeleteOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      artifacts: {
+        providers: (input?: ExperimentalArtifactsProvidersInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsProvidersOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/providers`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        list: (input?: ExperimentalArtifactsListInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsListOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts`,
+              query: { location: input?.["location"], sessionID: input?.["sessionID"], provider: input?.["provider"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        create: (input: ExperimentalArtifactsCreateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsCreateOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/artifacts`,
+              query: { location: input["location"] },
+              body: {
+                title: input["title"],
+                files: input["files"],
+                entry: input["entry"],
+                provider: input["provider"],
+                sessionID: input["sessionID"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        get: (input: ExperimentalArtifactsGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        update: (input: ExperimentalArtifactsUpdateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              body: {
+                title: input["title"],
+                files: input["files"],
+                entry: input["entry"],
+                sessionID: input["sessionID"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        delete: (input: ExperimentalArtifactsDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsDeleteOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
+              query: { location: input["location"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        view: (input: ExperimentalArtifactsViewInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalArtifactsViewOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}/view/${encodePath(input.path)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404, 503],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      job: {
+        list: (input?: ExperimentalJobListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalJobListOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/job`,
+              query: {
+                sessionID: input?.["sessionID"],
+                kind: input?.["kind"],
+                status: input?.["status"],
+                descendants: input?.["descendants"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+      },
+      migration: {
+        v1: {
+          status: (requestOptions?: RequestOptions) =>
+            request<ExperimentalMigrationV1StatusOutput>(
+              {
+                method: "GET",
+                path: `/api/experimental/migration/v1`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
+      },
+      usage: {
+        limits: (input?: ExperimentalUsageLimitsInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalUsageLimitsOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/usage/limits`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
+      config: {
+        update: (input: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalConfigUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/config`,
+              body: { shell: input["shell"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
     },
     session: {
       list: (input?: SessionListInput, requestOptions?: RequestOptions) =>
@@ -1059,767 +1816,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-    },
-    experimental: {
-      session: {
-        stats: (input?: ExperimentalSessionStatsInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSessionStatsOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/session/stats`,
-              query: {
-                from: input?.["from"],
-                to: input?.["to"],
-                project: input?.["project"],
-                timezone: input?.["timezone"],
-                tools: input?.["tools"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        import: (input: ExperimentalSessionImportInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSessionImportOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/session/import`,
-              body: { info: input["info"], messages: input["messages"], location: input["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        export: (input: ExperimentalSessionExportInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSessionExportOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/export`,
-              query: { sanitize: input["sanitize"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 500],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        skill: (input: ExperimentalSessionSkillInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionSkillOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/skill`,
-              body: { id: input["id"], resume: input["resume"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        wait: (input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionWaitOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/wait`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        instructions: {
-          entry: {
-            list: (input: ExperimentalSessionInstructionsEntryListInput, requestOptions?: RequestOptions) =>
-              request<{ readonly data: ExperimentalSessionInstructionsEntryListOutput }>(
-                {
-                  method: "GET",
-                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
-                  successStatus: 200,
-                  declaredStatuses: [400, 401, 404],
-                  empty: false,
-                },
-                requestOptions,
-              ).then((value) => value.data),
-            put: (input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions) =>
-              request<ExperimentalSessionInstructionsEntryPutOutput>(
-                {
-                  method: "PUT",
-                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
-                  body: { value: input["value"] },
-                  successStatus: 204,
-                  declaredStatuses: [400, 401, 404, 413],
-                  empty: true,
-                },
-                requestOptions,
-              ),
-            remove: (input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions) =>
-              request<ExperimentalSessionInstructionsEntryRemoveOutput>(
-                {
-                  method: "DELETE",
-                  path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
-                  successStatus: 204,
-                  declaredStatuses: [400, 401, 404],
-                  empty: true,
-                },
-                requestOptions,
-              ),
-          },
-        },
-        log: (
-          input: ExperimentalSessionLogInput,
-          requestOptions?: RequestOptions,
-        ): AsyncIterable<ExperimentalSessionLogOutput> =>
-          sse<ExperimentalSessionLogOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/log`,
-              query: { after: input["after"], follow: input["follow"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
-      generate: {
-        text: (input: ExperimentalGenerateTextInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalGenerateTextOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/generate/text`,
-              body: { prompt: input["prompt"], model: input["model"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 422, 502, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        image: (input: ExperimentalGenerateImageInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalGenerateImageOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/generate/image`,
-              body: {
-                model: input["model"],
-                prompt: input["prompt"],
-                images: input["images"],
-                n: input["n"],
-                aspect: input["aspect"],
-                resolution: input["resolution"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 422, 502, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        video: {
-          create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
-            request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
-              {
-                method: "POST",
-                path: `/api/experimental/generate/video`,
-                body: {
-                  model: input["model"],
-                  prompt: input["prompt"],
-                  start: input["start"],
-                  end: input["end"],
-                  references: input["references"],
-                  duration: input["duration"],
-                  aspect: input["aspect"],
-                  resolution: input["resolution"],
-                  sound: input["sound"],
-                },
-                successStatus: 200,
-                declaredStatuses: [400, 401, 403, 404, 422, 502, 503],
-                empty: false,
-              },
-              requestOptions,
-            ).then((value) => value.data),
-          get: (input: ExperimentalGenerateVideoGetInput, requestOptions?: RequestOptions) =>
-            request<{ readonly data: ExperimentalGenerateVideoGetOutput }>(
-              {
-                method: "GET",
-                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}`,
-                successStatus: 200,
-                declaredStatuses: [400, 401, 403, 404],
-                empty: false,
-              },
-              requestOptions,
-            ).then((value) => value.data),
-        },
-        decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/generate/decisions`,
-              body: { model: input["model"], input: input["input"], questions: input["questions"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 422, 502, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-      },
-      voice: {
-        models: (requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalVoiceModelsOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/voice/models`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        session: (input: ExperimentalVoiceSessionInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalVoiceSessionOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/voice/session`,
-              body: { model: input["model"], session: input["session"], transport: input["transport"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-      },
-      integration: {
-        wellknown: {
-          add: (input: ExperimentalIntegrationWellknownAddInput, requestOptions?: RequestOptions) =>
-            request<ExperimentalIntegrationWellknownAddOutput>(
-              {
-                method: "POST",
-                path: `/api/experimental/integration/wellknown`,
-                query: { location: input["location"] },
-                body: { url: input["url"] },
-                successStatus: 204,
-                declaredStatuses: [400, 401, 404],
-                empty: true,
-              },
-              requestOptions,
-            ),
-        },
-      },
-      mcp: {
-        add: (input: ExperimentalMcpAddInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalMcpAddOutput>(
-            {
-              method: "PUT",
-              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}`,
-              query: { location: input["location"] },
-              body: { config: input["config"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        remove: (input: ExperimentalMcpRemoveInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalMcpRemoveOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}`,
-              query: { location: input["location"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        connect: (input: ExperimentalMcpConnectInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalMcpConnectOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}/connect`,
-              query: { location: input["location"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        disconnect: (input: ExperimentalMcpDisconnectInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalMcpDisconnectOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/mcp/${encodeURIComponent(input.server)}/disconnect`,
-              query: { location: input["location"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        client: {
-          token: (input: ExperimentalMcpClientTokenInput, requestOptions?: RequestOptions) =>
-            request<ExperimentalMcpClientTokenOutput>(
-              {
-                method: "POST",
-                path: `/api/experimental/client-mcp/token`,
-                query: { location: input["location"], name: input["name"] },
-                headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
-                successStatus: 200,
-                declaredStatuses: [400, 401, 403, 404],
-                empty: false,
-              },
-              requestOptions,
-            ),
-        },
-        experimental: {
-          session: {
-            clientMcp: {
-              token: (input: ExperimentalMcpExperimentalSessionClientMcpTokenInput, requestOptions?: RequestOptions) =>
-                request<ExperimentalMcpExperimentalSessionClientMcpTokenOutput>(
-                  {
-                    method: "POST",
-                    path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/client-mcp/token`,
-                    query: { location: input["location"], name: input["name"] },
-                    headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
-                    successStatus: 200,
-                    declaredStatuses: [400, 401, 403, 404],
-                    empty: false,
-                  },
-                  requestOptions,
-                ),
-            },
-          },
-        },
-      },
-      file: {
-        write: (input: ExperimentalFileWriteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalFileWriteOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/fs/write`,
-              query: { location: input["location"], path: input["path"] },
-              body: input["payload"],
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-              binaryBody: true,
-            },
-            requestOptions,
-          ),
-        watch: (input: ExperimentalFileWatchInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalFileWatchOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/fs/watch`,
-              query: { location: input["location"] },
-              body: { path: input["path"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        unwatch: (input: ExperimentalFileUnwatchInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalFileUnwatchOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/fs/watch`,
-              query: { location: input["location"] },
-              body: { path: input["path"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
-      persistentPty: {
-        read: (input: ExperimentalPersistentPtyReadInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyReadOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal/read`,
-              query: { lines: input["lines"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        list: (input: ExperimentalPersistentPtyListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyListOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        create: (input: ExperimentalPersistentPtyCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyCreateOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/terminal`,
-              body: {
-                command: input["command"],
-                args: input["args"],
-                cwd: input["cwd"],
-                title: input["title"],
-                env: input["env"],
-                size: input["size"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        shutdown: (requestOptions?: RequestOptions) =>
-          request<ExperimentalPersistentPtyShutdownOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/persistent-pty/shutdown`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 503],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        handoff: (requestOptions?: RequestOptions) =>
-          request<ExperimentalPersistentPtyHandoffOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/persistent-pty/handoff`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        get: (input: ExperimentalPersistentPtyGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        update: (input: ExperimentalPersistentPtyUpdateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyUpdateOutput }>(
-            {
-              method: "PUT",
-              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
-              body: { attachmentID: input["attachmentID"], size: input["size"], title: input["title"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 501, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        snapshot: (input: ExperimentalPersistentPtySnapshotInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtySnapshotOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}/snapshot`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        remove: (input: ExperimentalPersistentPtyRemoveInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalPersistentPtyRemoveOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        connectToken: (input: ExperimentalPersistentPtyConnectTokenInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalPersistentPtyConnectTokenOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/persistent-pty/${encodeURIComponent(input.ptyID)}/connect-token`,
-              headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-      },
-      media: {
-        get: (input: ExperimentalMediaGetInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalMediaGetOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/media/${encodeURIComponent(input.hash)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-              binary: true,
-            },
-            requestOptions,
-          ),
-      },
-      blob: {
-        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalBlobGetOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/blob/${encodeURIComponent(input.id)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-              binary: true,
-            },
-            requestOptions,
-          ),
-      },
-      automation: {
-        create: (input: ExperimentalAutomationCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalAutomationCreateOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/automation`,
-              body: {
-                sessionID: input["sessionID"],
-                directory: input["directory"],
-                name: input["name"],
-                trigger: input["trigger"],
-                action: input["action"],
-                expires: input["expires"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        list: (input?: ExperimentalAutomationListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalAutomationListOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/automation`,
-              query: { sessionID: input?.["sessionID"], directory: input?.["directory"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        get: (input: ExperimentalAutomationGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalAutomationGetOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        pause: (input: ExperimentalAutomationPauseInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalAutomationPauseOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/pause`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        resume: (input: ExperimentalAutomationResumeInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalAutomationResumeOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/resume`,
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-        delete: (input: ExperimentalAutomationDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalAutomationDeleteOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 403, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
-      artifacts: {
-        providers: (input?: ExperimentalArtifactsProvidersInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsProvidersOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/artifacts/providers`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        list: (input?: ExperimentalArtifactsListInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsListOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/artifacts`,
-              query: { location: input?.["location"], sessionID: input?.["sessionID"], provider: input?.["provider"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        create: (input: ExperimentalArtifactsCreateInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsCreateOutput>(
-            {
-              method: "POST",
-              path: `/api/experimental/artifacts`,
-              query: { location: input["location"] },
-              body: {
-                title: input["title"],
-                files: input["files"],
-                entry: input["entry"],
-                provider: input["provider"],
-                sessionID: input["sessionID"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        get: (input: ExperimentalArtifactsGetInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsGetOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
-              query: { location: input["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        update: (input: ExperimentalArtifactsUpdateInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsUpdateOutput>(
-            {
-              method: "PATCH",
-              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
-              query: { location: input["location"] },
-              body: {
-                title: input["title"],
-                files: input["files"],
-                entry: input["entry"],
-                sessionID: input["sessionID"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-        delete: (input: ExperimentalArtifactsDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsDeleteOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}`,
-              query: { location: input["location"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        view: (input: ExperimentalArtifactsViewInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalArtifactsViewOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/artifacts/${encodeURIComponent(input.artifactID)}/view/${encodePath(input.path)}`,
-              query: { location: input["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 403, 404, 503],
-              empty: false,
-              binary: true,
-            },
-            requestOptions,
-          ),
-      },
-      job: {
-        list: (input?: ExperimentalJobListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalJobListOutput }>(
-            {
-              method: "GET",
-              path: `/api/experimental/job`,
-              query: {
-                sessionID: input?.["sessionID"],
-                kind: input?.["kind"],
-                status: input?.["status"],
-                descendants: input?.["descendants"],
-              },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
-      },
-      migration: {
-        v1: {
-          status: (requestOptions?: RequestOptions) =>
-            request<ExperimentalMigrationV1StatusOutput>(
-              {
-                method: "GET",
-                path: `/api/experimental/migration/v1`,
-                successStatus: 200,
-                declaredStatuses: [400, 401],
-                empty: false,
-              },
-              requestOptions,
-            ),
-        },
-      },
-      usage: {
-        limits: (input?: ExperimentalUsageLimitsInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalUsageLimitsOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/usage/limits`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
-      config: {
-        update: (input: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalConfigUpdateOutput>(
-            {
-              method: "PATCH",
-              path: `/api/experimental/config`,
-              body: { shell: input["shell"] },
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404],
-              empty: true,
-            },
-            requestOptions,
-          ),
-      },
     },
     message: {
       list: (input: MessageListInput, requestOptions?: RequestOptions) =>

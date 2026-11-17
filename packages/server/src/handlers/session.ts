@@ -10,6 +10,7 @@ import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SessionMediaMessageResponse } from "@opencode/protocol/groups/message"
 import { SessionMediaInboxResponse } from "@opencode/protocol/groups/session"
+import { clientMcp } from "./client-mcp"
 import { Api } from "../api"
 import { wantsMediaRefs } from "../media-uri"
 import {
@@ -63,7 +64,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.as(HttpApiSchema.NoContent.make()),
       )
 
+    const client = yield* clientMcp
     return handlers
+      .handle("session.clientMcp.token", (ctx) =>
+        client.sessionToken(ctx.request, ctx.query.name, ctx.params.sessionID),
+      )
+      .handleRaw("session.clientMcp", (ctx) => client.sessionSocket(ctx.request, ctx.query, ctx.params.sessionID))
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {
