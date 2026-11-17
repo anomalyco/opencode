@@ -477,7 +477,12 @@ fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
     assert_eq!(logged(&pipe, &log, 2), [json!({ "percent": "stall" }), json!({ "percent": "pass" })]);
     pipe.settle();
     assert_eq!(harness.text(), "%ab%c", "a late answer put its key back");
-    harness.app.type_text("%x");
+    // Typed before the UI takes anything else, so the command's answer cannot have arrived between the keys.
+    for key in ['%', 'x'] {
+        let event =
+            opentui::prelude::KeyEvent::new(opentui::prelude::KeyCode::Char(key), opentui::prelude::Modifiers::NONE);
+        harness.app.app().dispatch(opentui::prelude::Event::Key(event));
+    }
     assert_eq!(harness.text(), "%ab%c", "the JS host answered: a bound key holds again");
     assert_eq!(logged(&pipe, &log, 3).len(), 3);
     pipe.settle();
