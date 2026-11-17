@@ -522,7 +522,8 @@ jobs:
       - sign-cli-windows
       - build-electron
     if: always() && !failure() && !cancelled() && needs.version.result == 'success'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # npm trusted publishing supports GitHub-hosted runners.
+    runs-on: ubuntu-24.04
     # The npm trusted publisher for publish.yml must use this environment for previews too.
     environment: v1-release
     steps:
