@@ -257,7 +257,7 @@ export type NativeOptions = {
 }
 
 /** The natives still made at run time, each holding state in a host closure that cannot be saved yet. */
-export type RuntimeNative = "extension"
+export type RuntimeNative = "host"
 
 /**
  * Natives are made only with the intrinsics, so each one has an intrinsic name and run state never holds a host

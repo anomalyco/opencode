@@ -223,21 +223,12 @@ function $vmAsyncFromSyncClose(iter) {
   if (ret !== undefined && ret !== null) $Call(ret, iter)
 }
 
-async function $vmCross(roots, path, resolving) {
-  const crossed = []
-  let r = 0
-  while (r < roots.length) {
-    let root = roots[r]
-    if (path === undefined && $IsThenable(root)) root = await root
-    const walk = $vmJsonVisitor(true, undefined, null)({ "": root }, "", 0)
-    let step = walk.next()
-    while (!step.done) step = walk.next(await step.value)
-    crossed[r] = $JsonFinish(true, step.value, null, undefined)
-    r++
-  }
-  if (path === undefined) return crossed[0]
-  if (path === "search") return $HostSearch(crossed)
-  $HostTool(path, crossed, resolving)
+async function $vmResult(value) {
+  const root = $IsThenable(value) ? await value : value
+  const walk = $vmJsonVisitor(true, undefined, null)({ "": root }, "", 0)
+  let step = walk.next()
+  while (!step.done) step = walk.next(await step.value)
+  return $JsonFinish(true, step.value, null, undefined)
 }
 `
 

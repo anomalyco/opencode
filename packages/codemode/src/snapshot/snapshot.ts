@@ -1,6 +1,5 @@
 import type { Interpreter } from "../runtime/interpreter.js"
-import type { ToolCall } from "../tool-runtime.js"
-import { type Encoded, type Record, SnapshotError } from "./codec.js"
+import { type Encoded, type Json, type Record, SnapshotError } from "./codec.js"
 
 export { SnapshotError }
 
@@ -17,7 +16,7 @@ export const fromBytes = (bytes: Uint8Array): unknown => {
 }
 
 /** The snapshot format this build writes and reads (see `src/snapshot.ts`). */
-export const FORMAT = 2
+export const FORMAT = 3
 
 /**
  * A suspended run's whole state as JSON: a header that says which build and sources it belongs to and what budget it
@@ -35,8 +34,8 @@ export type Header = {
   /** The build that wrote it: the package version, and a hash of the opcodes, the prelude's bytecode, codecs, and built-ins. */
   readonly build: string
   /**
-   * A hash of the host's globals (extensions, a test harness), and of each extension's name and whether it has
-   * `snapshot` hooks, which the restoring runtime must have too.
+   * A hash of the host's globals (their names, the namespaces among them, and the host functions with `snapshot`
+   * hooks), which the restoring runtime must have too.
    */
   readonly hosts: string
   readonly runId: string
@@ -49,27 +48,18 @@ export type Header = {
   }>
   readonly limits: {
     readonly timeoutMs: number | null
-    readonly maxToolCalls: number | null
     readonly maxOutputBytes: number | null
   }
-  /** What the run has used so far, across every resume: active milliseconds, and tool calls admitted. */
-  readonly budget: { readonly activeMs: number; readonly toolCalls: number }
-  /** The tool calls admitted so far. */
-  readonly toolCalls: ReadonlyArray<ToolCall>
+  /** What the run has used so far, across every resume: active milliseconds. */
+  readonly budget: { readonly activeMs: number }
+  /** The host's own state for the run (`run.metadata`), given back on resume. */
+  readonly metadata: Json
 }
 
 export type SnapshotHeader = Header
 
 export const hostsId = (ctx: Interpreter<unknown>): string =>
-  hash(
-    [
-      ...ctx.intrinsics.hosts(),
-      ...[...ctx.hostNamespaces.keys()].map((name) => `@${name} (namespace)`),
-      ...(ctx.hosts?.extensions ?? []).map(
-        (extension) => `${extension.name} ${extension.hooked ? "hooks" : "no hooks"}`,
-      ),
-    ].join("\n"),
-  )
+  hash([...ctx.intrinsics.hosts(), ...(ctx.hosts?.shape ?? [])].join("\n"))
 
 // --- Validation ---
 
@@ -90,6 +80,11 @@ const string = (value: unknown, what: string): string =>
 
 const number = (value: unknown, what: string): number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fail(`${what} is not a number.`)
+
+const json = (value: unknown, what: string): Json => {
+  if (value === undefined) fail(`${what} is missing.`)
+  return value as Json
+}
 
 const limit = (value: unknown, what: string): number | null => (value === null ? null : number(value, what))
 
@@ -118,13 +113,10 @@ export const validate = (saved: unknown): Snapshot => {
     }),
     limits: {
       timeoutMs: limit(limits.timeoutMs, "timeoutMs"),
-      maxToolCalls: limit(limits.maxToolCalls, "maxToolCalls"),
       maxOutputBytes: limit(limits.maxOutputBytes, "maxOutputBytes"),
     },
-    budget: { activeMs: number(budget.activeMs, "the active time"), toolCalls: number(budget.toolCalls, "tool calls") },
-    toolCalls: array(header.toolCalls, "the tool calls").map((item) => ({
-      name: string(object(item, "a tool call").name, "a tool name"),
-    })),
+    budget: { activeMs: number(budget.activeMs, "the active time") },
+    metadata: json(header.metadata, "the metadata"),
   }
   const roots = array(root.roots, "the roots")
   if (roots.length < 3) fail("there are fewer than three roots.")

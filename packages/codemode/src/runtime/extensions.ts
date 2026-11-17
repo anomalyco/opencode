@@ -1,12 +1,14 @@
 import { Effect } from "effect"
-import { type Extension, isAsync, StreamingResponse } from "../extension.js"
+import { DurableFn, Fn, Namespace, type Snapshot } from "../host-function.js"
+import type { HostTarget } from "../host.js"
 import { BufferObj } from "../stdlib/buffer.js"
-import { hooked } from "../tool-runtime.js"
+import { StreamingResponse } from "../streaming-response.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue } from "./intrinsics.js"
+import { member } from "./intrinsic-names.js"
 import { MAX_ARRAY_LENGTH, MAX_VALUE_DEPTH } from "./limits.js"
-import { type AstNode, AsyncIteratorSymbol, PendingThrow, rangeError, Throw, typeError } from "./model.js"
+import { AsyncIteratorSymbol, HostFailure, PendingThrow, rangeError, Throw, typeError } from "./model.js"
 import { native } from "./native.js"
 import {
   define,
@@ -20,7 +22,7 @@ import {
   DateObj,
   ErrorObj,
   HeadersObj,
-  PromiseObj,
+  HostNamespace,
   MapObj,
   Obj,
   RegExpObj,
@@ -31,40 +33,47 @@ import {
   type Value,
 } from "./objects.js"
 import { describeValue, isOpaque } from "./references.js"
-import { Push } from "./signals.js"
-import type { ExtensionRequest } from "../scheduler.js"
+import { Interruption } from "./signals.js"
 import { type HostOrigin, SnapshotError } from "../snapshot/codec.js"
 
 /**
- * Where a value crossing from the host is: under an extension's global object (`root` undefined), whose functions are
- * entry points that fire the hooks, or inside a value a function of an extension with `snapshot` hooks returned, at
- * `path` (undefined inside a Map or a Set, where no path leads).
+ * Where a value crossing from the host is: among the run's host globals, at `global` (so a function there can be found
+ * again on resume), or inside a value a host function with `snapshot` hooks returned (`within`), at `path`
+ * (undefined inside a Map or a Set, where no path leads).
  */
+type Place = {
+  readonly global?: ReadonlyArray<string> | undefined
+  readonly within?: Within | undefined
+}
+
 type Within = {
-  readonly extension: Extension
-  readonly root: object | undefined
+  readonly owner: string
+  readonly root: object
   readonly path: ReadonlyArray<string | number> | undefined
 }
 
 /**
- * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and built-in
- * wrappers are copied, a host function becomes a program function whose calls cross the same way, and a host Promise
- * or Effect becomes a program promise.
+ * The global bindings of one run's host globals (see `Host`), and the bridge its calls cross (`ctx.hosts`).
+ * Everything crossing the boundary is converted: plain data and built-in wrappers are copied, a host function becomes
+ * a program function whose calls cross the same way, a namespace becomes a path the program reads into, and a host
+ * Promise or Effect becomes a program promise.
  */
-export const extensionGlobals = <R>(
+export const hostGlobals = <R>(
   ctx: Interpreter<R>,
-  extensions: ReadonlyArray<Extension>,
+  globals: Readonly<Record<string, unknown>>,
 ): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
-  const byName = new Map(extensions.map((extension) => [extension.name, extension]))
-  // The program functions wrapping functions inside values a hooked extension returned, by where they came from.
+  // The `snapshot` hooks of the host functions among the globals that have them, by label.
+  const owners = new Map<string, Snapshot>()
+  const shape: Array<string> = []
+  // The program functions wrapping functions inside values a hooked host function returned, by where they came from.
   const origins = new WeakMap<object, HostOrigin>()
 
   const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
     if (!(value instanceof Obj) || isOpaque(value)) {
-      throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
+      throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to the host.`)
     }
     if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
     seen.add(value)
@@ -94,23 +103,38 @@ export const extensionGlobals = <R>(
     return copied
   }
 
-  // `within` says where the value is, so a function inside it fires the hooks, or can be saved; see `Within`.
-  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), within?: Within): Value => {
+
+  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>(), place: Place = {}): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
-    if (typeof value === "function") return wrap(value, label, within)
+    if (place.global !== undefined) {
+      if (value instanceof Namespace) return namespace(value, label, place.global)
+      if (value instanceof Fn && value.snapshot !== undefined) {
+        owners.set(label, value.snapshot)
+        shape.push(`${label} (snapshot hooks)`)
+      }
+    }
+    if (value instanceof Fn || value instanceof DurableFn) {
+      const owner = value instanceof Fn && value.snapshot !== undefined && place.global !== undefined ? label : undefined
+      return wrap(value, label, { label, path: place.global, owner })
+    }
+    if (typeof value === "function") {
+      const within = place.within
+      const made = wrap(plain(value), label, { label, path: place.global, owner: within?.owner }, value)
+      if (within !== undefined && within.path !== undefined) {
+        origins.set(made, { owner: within.owner, root: within.root, path: within.path, label })
+      }
+      return made
+    }
     if (value !== null && typeof value === "object") {
       const next = (item: unknown, path: string, key?: string | number) =>
-        fromHost(
-          item,
-          path,
-          depth + 1,
-          seen,
-          within && {
-            ...within,
-            path: key === undefined || within.path === undefined ? undefined : [...within.path, key],
+        fromHost(item, path, depth + 1, seen, {
+          global: place.global !== undefined && typeof key === "string" ? [...place.global, key] : undefined,
+          within: place.within && {
+            ...place.within,
+            path: key === undefined || place.within.path === undefined ? undefined : [...place.within.path, key],
           },
-        )
+        })
       // Nothing a host value hands back is kept: results are read as primitives or copied. Where the value's own
       // method could hand back host storage or an object (`getTime`, `slice`, `map`), its internal data is read.
       if (value instanceof Date) return new DateObj(builtins.Date, Date.prototype.getTime.call(value))
@@ -234,49 +258,103 @@ export const extensionGlobals = <R>(
     throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
-  // A host function as a program function. Arguments cross in; for a global or a global object's function, the
-  // `extension.before` hook runs before the host function is called, so a call it denies never reaches the host. The
-  // host's result, or what it threw, crosses out so the program catches a copy, and `extension.after` sees how the
-  // call ended. Functions inside results are part of a value's API and skip the hooks; one inside a value an extension
-  // with `snapshot` hooks returned is known by where it came from, so a suspended run can save it.
-  const wrap = (value: Function, label: string, within: Within | undefined) => {
-    // The host function's own `name` and `length` can be anything, even getters: each is read once, and only text
-    // and a count cross.
-    const name: unknown = value.name
-    const length: unknown = value.length
-    const extension = within?.extension.name
-    const root = within?.root
-    const wrapped = native(builtins, {
-      runtime: "extension",
+  // A host function as a program function: its calls go through the run's host calls (see `HostCalls.call`). The
+  // name and length come from the host function, read once, and only as text and a count.
+  const wrap = (fn: Fn<unknown> | DurableFn<unknown>, label: string, target: HostTarget, source?: Function) => {
+    const named = source ?? (fn instanceof Fn ? fn.run : undefined)
+    const own: unknown = named?.name
+    // A host function made inline has no name of its own: it is named by where it is.
+    const name = source === undefined && (typeof own !== "string" || own === "") ? label.slice(label.lastIndexOf(".") + 1) : own
+    const length: unknown = named?.length ?? 0
+    return native(builtins, {
+      runtime: "host",
       name: typeof name === "string" ? name : "",
       length: typeof length === "number" && Number.isSafeInteger(length) && length >= 0 ? length : 0,
-      call: (_, values, site) => {
-        const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-        const invocation =
-          within !== undefined && root === undefined ? { extension: extension!, name: label, args } : undefined
-        // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
-        if (isAsync(value)) {
-          return pending(ctx, { stage: "run", label, extension, invocation, host: value, args, threw: false }, site)
-        }
-        return new Push("extension call", [value, args, label, invocation, extension])
+      call: (_, values, site) => ctx.vm.hosts.call(fn, values, site, target),
+    })
+  }
+
+  // A namespace among the globals: a path the program reads into, whose calls ask `resolve` for the function.
+  const namespace = (value: Namespace<unknown>, label: string, global: ReadonlyArray<string>) => {
+    ctx.hostNamespaces.set(label, {
+      keys: (path) => value.keys(path),
+      call: (path, values, site) => {
+        const found = value.resolve(path)
+        if (found instanceof HostFailure) throw found
+        return ctx.vm.hosts.call(found, values, site, {
+          label: path.reduce<string>((at, key) => member(at, key), label),
+          path: [...global, ...path],
+          owner: undefined,
+        })
       },
     })
-    if (root !== undefined && within!.path !== undefined) {
-      origins.set(wrapped, { extension: extension!, root, path: within!.path, label })
+    shape.push(`${label} (namespace)`)
+    return new HostNamespace(label, [])
+  }
+
+  const failure = (reason: unknown, label: string): unknown => {
+    if (
+      reason instanceof HostFailure ||
+      reason instanceof PendingThrow ||
+      reason instanceof Interruption ||
+      reason instanceof Throw
+    ) {
+      return reason
     }
-    return wrapped
+    try {
+      return new Throw(fromHost(reason, label))
+    } catch (error) {
+      return error
+    }
+  }
+
+  const hooks = (owner: string) => {
+    const snapshot = owners.get(owner)
+    if (snapshot === undefined) throw new SnapshotError(`The host function ${owner} has no snapshot hooks.`)
+    return snapshot
   }
 
   ctx.hosts = {
-    extensions: extensions.map((extension) => ({ name: extension.name, hooked: extension.snapshot !== undefined })),
+    shape,
+    toHost: (values, label) => values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`)),
+    fromHost: (value, label, owner) =>
+      fromHost(value, label, 0, new Set(), {
+        within:
+          owner !== undefined && ((typeof value === "object" && value !== null) || typeof value === "function")
+            ? { owner, root: value, path: [] }
+            : undefined,
+      }),
+    failure,
+    isPending: (value) => value instanceof Promise || Effect.isEffect(value),
+    invoke: (fn, args, key, label) => {
+      let result: unknown
+      try {
+        result = fn.run(args, { key, suspending: () => false })
+      } catch (reason) {
+        throw failure(reason, label)
+      }
+      if (Effect.isEffect(result)) return { kind: "block", work: result }
+      if (result instanceof Promise) return { kind: "pending", work: result }
+      return { kind: "value", value: result }
+    },
+    resolve: (path) => {
+      let at: unknown = globals
+      for (let index = 0; index < path.length; index++) {
+        if (at instanceof Namespace) {
+          const found = at.resolve(path.slice(index))
+          return found instanceof HostFailure ? undefined : found
+        }
+        if (typeof at !== "object" || at === null || !Object.hasOwn(at, path[index]!)) return undefined
+        at = (at as { readonly [key: string]: unknown })[path[index]!]
+      }
+      return at instanceof Fn || at instanceof DurableFn ? at : undefined
+    },
     origin: (value) => origins.get(value),
-    encode: (name, root) => hostStep(name, "save", () => hooks(name).encode(root)),
-    decode: (name, data) => {
-      const root = hostStep(name, "restore", () => hooks(name).decode(data))
+    encode: (owner, root) => hostStep(owner, "save", () => hooks(owner).encode(root)),
+    decode: (owner, data) => {
+      const root = hostStep(owner, "restore", () => hooks(owner).decode(data))
       if ((typeof root !== "object" && typeof root !== "function") || root === null) {
-        throw new SnapshotError(
-          `The extension "${name}" restored a value it returned as ${typeof root}, not an object.`,
-        )
+        throw new SnapshotError(`The host function ${owner} restored a value it returned as ${typeof root}, not an object.`)
       }
       return root
     },
@@ -290,125 +368,34 @@ export const extensionGlobals = <R>(
       )
       if (typeof host !== "function") {
         throw new SnapshotError(
-          `The extension "${origin.extension}" restored a value with no function at ${origin.label}, so this state can't resume.`,
+          `The host function ${origin.owner} restored a value with no function at ${origin.label}, so this state can't resume.`,
         )
       }
-      const made = wrap(host, origin.label, {
-        extension: byName.get(origin.extension)!,
-        root: origin.root,
-        path: origin.path,
-      })
+      const made = wrap(plain(host), origin.label, { label: origin.label, path: undefined, owner: origin.owner }, host)
       // The restored function keeps its own properties; only what calling it does comes from the new one.
       Object.assign(target, { tag: made.tag, call: made.call, construct: made.construct, callback: made.callback })
       origins.set(target, origin)
     },
   }
 
-  const hooks = (name: string) => {
-    const snapshot = byName.get(name)?.snapshot
-    if (snapshot === undefined) throw new SnapshotError(`The extension "${name}" has no snapshot hooks.`)
-    return snapshot
-  }
-
-  // The Effect each step of an extension call runs as, with the program's services in its requirements.
-  ctx.extensionWork = (request: ExtensionRequest) => {
-    const label = request.label
-    const call = request.invocation
-    const cross = (reason: unknown) => new Throw(fromHost(reason, label))
-    const hooks = ctx.tools.hooks
-    const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
-    if (request.stage === "before") return before ?? Effect.void
-    const after = call && hooks["extension.after"]
-    const extension = request.extension === undefined ? undefined : byName.get(request.extension)
-    // What a function returns is a value of its extension's, which its `snapshot` hooks save, when it has them.
-    const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
-      (after ? hooked(call, undefined, after, effect) : effect).pipe(
-        Effect.mapBoth({
-          onFailure: cross,
-          onSuccess: (result) =>
-            fromHost(
-              result,
-              label,
-              0,
-              new Set(),
-              extension?.snapshot !== undefined &&
-                ((typeof result === "object" && result !== null) || typeof result === "function")
-                ? { extension, root: result, path: [] }
-                : undefined,
-            ),
-        }),
-      )
-    if (request.stage === "settle") return settle(outcome<R>(request.host, request.threw))
-    return Effect.andThen(
-      before ?? Effect.void,
-      settle(Effect.suspend(() => outcome<R>(...callHost(request.host as Function, request.args)))),
-    )
-  }
-
-  return extensions.flatMap((extension) =>
-    Object.entries(extension.globals).map(
-      ([name, value]) =>
-        [name, fromHost(value, name, 0, new Set(), { extension, root: undefined, path: undefined })] as const,
-    ),
+  return Object.entries(globals).map(
+    ([name, value]) => [name, fromHost(value, name, 0, new Set(), { global: [name] })] as const,
   )
 }
 
-// An asynchronous host call: the program holds a promise that settles when the host's work does.
-const pending = <R>(ctx: Interpreter<R>, call: ExtensionRequest, site: AstNode | undefined) => {
-  const resolving = ctx.vm.scheduler.resolving(ctx.vm.scheduler.newPromise(), site)
-  ctx.vm.hosts.host({ kind: "extension", call }, { label: call.label, result: "value", resolving, site })
-  return resolving.promise
-}
+// A plain host function (one inside a result, or among the globals) is called like a `sync` host function.
+const plain = (value: Function) => new Fn((args) => value(...args), "sync", false, undefined)
 
-/**
- * Calls a synchronous extension function's host function, once its `extension.before` hook allowed it: a promise for
- * a returned Promise, or the request that settles what it returned or threw. A returned Effect settles through that
- * request too, so the program blocks until it completes, as `fs.readFileSync` does.
- */
-export const startExtensionCall = <R>(
-  ctx: Interpreter<R>,
-  host: Function,
-  args: ReadonlyArray<unknown>,
-  call: Pick<ExtensionRequest, "label" | "extension" | "invocation">,
-  site: AstNode | undefined,
-): PromiseObj | ExtensionRequest => {
-  const [result, threw] = callHost(host, args)
-  const request = { stage: "settle", ...call, host: result, args, threw } as const
-  if (!threw && result instanceof Promise) return pending(ctx, request, site)
-  return request
-}
-
-// Runs an extension's `snapshot` hook; what goes wrong is the state's problem, said as such.
-const hostStep = <A>(extension: string, what: "save" | "restore", step: () => A): A => {
+// Runs a host function's `snapshot` hook; what goes wrong is the state's problem, said as such.
+const hostStep = <A>(owner: string, what: "save" | "restore", step: () => A): A => {
   try {
     return step()
   } catch (error) {
     if (error instanceof SnapshotError) throw error
     throw new SnapshotError(
-      `The extension "${extension}" couldn't ${what} a value it returned: ${error instanceof Error ? error.message : String(error)}`,
+      `The host function ${owner} couldn't ${what} a value it returned: ${error instanceof Error ? error.message : String(error)}`,
     )
   }
-}
-
-/** Calls a host function: what it returned, or what it threw. */
-const callHost = (value: Function, args: ReadonlyArray<unknown>): [result: unknown, threw: boolean] => {
-  try {
-    return [value.apply(undefined, args), false]
-  } catch (reason) {
-    return [reason, true]
-  }
-}
-
-/**
- * What a host function's call settles as: a returned Effect or Promise settles later; a returned value or a throw
- * settles now.
- */
-const outcome = <R>(result: unknown, threw: boolean): Effect.Effect<unknown, unknown, R> => {
-  if (threw) return Effect.fail(result)
-  // Extension.Services adds an Effect global's requirements to R.
-  if (Effect.isEffect(result)) return result as Effect.Effect<unknown, unknown, R>
-  if (result instanceof Promise) return Effect.tryPromise({ try: () => result, catch: (reason) => reason })
-  return Effect.succeed(result)
 }
 
 /**

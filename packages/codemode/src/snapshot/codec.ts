@@ -1,3 +1,4 @@
+import type { DurableFn, Fn } from "../host-function.js"
 import { Interpreter } from "../runtime/interpreter.js"
 import {
   type AstNode,
@@ -72,28 +73,50 @@ export class SnapshotError extends Error {
 }
 
 /**
- * Where a function inside a value an extension returned came from, so a saved state can name it instead of losing it:
- * the extension, the value its function returned (`root`), which the extension's `snapshot` hooks save, and the path
+ * Where a function inside a value a host function returned came from, so a saved state can name it instead of losing
+ * it: the host function whose `snapshot` hooks save that value (`owner`, by label), the value (`root`), and the path
  * from there to the function.
  */
 export type HostOrigin = {
-  readonly extension: string
+  readonly owner: string
   readonly root: object
   readonly path: ReadonlyArray<string | number>
   /** What the program calls it, for its errors (`fetch.text`). */
   readonly label: string
 }
 
-/** The extension bridge's side of saving and restoring those functions; see `extensionGlobals`. */
+/**
+ * How a run meets its host globals (see `hostGlobals`): values crossing in each direction, calling host functions, and
+ * saving and restoring the functions inside values they returned.
+ */
 export type HostBridge = {
-  /** Each extension's name, and whether it has `snapshot` hooks: a state resumes only where both match. */
-  readonly extensions: ReadonlyArray<{ readonly name: string; readonly hooked: boolean }>
-  /** Where a program function wrapping a host function came from, when its extension can save it. */
+  /** What a saved state must find again on resume: the host functions with `snapshot` hooks, and the namespaces. */
+  readonly shape: ReadonlyArray<string>
+  /** Program values as host values, for a call's arguments. */
+  readonly toHost: (values: ReadonlyArray<Value>, label: string) => ReadonlyArray<unknown>
+  /** A host value as a program value, for what a call returned; `owner`'s `snapshot` hooks can save it. */
+  readonly fromHost: (value: unknown, label: string, owner: string | undefined) => Value
+  /** What a call's failure is to the program. */
+  readonly failure: (reason: unknown, label: string) => unknown
+  /** Whether a call's result is still pending: a Promise or an Effect. */
+  readonly isPending: (value: unknown) => boolean
+  /** Calls a host function now: its value, what it left pending, or the Effect to block on. */
+  readonly invoke: (
+    fn: Fn<unknown>,
+    args: ReadonlyArray<unknown>,
+    key: string,
+    label: string,
+  ) =>
+    | { readonly kind: "value"; readonly value: unknown }
+    | { readonly kind: "pending" | "block"; readonly work: unknown }
+  /** The host function at `path` among the run's host globals, for a resumed call. */
+  readonly resolve: (path: ReadonlyArray<string>) => Fn<unknown> | DurableFn<unknown> | undefined
+  /** Where a program function wrapping a host function came from, when its owner can save it. */
   readonly origin: (value: object) => HostOrigin | undefined
-  /** A returned value as its extension saves it. */
-  readonly encode: (extension: string, root: object) => unknown
+  /** A returned value as its owner saves it. */
+  readonly encode: (owner: string, root: object) => unknown
   /** A returned value back from what `encode` gave. */
-  readonly decode: (extension: string, data: unknown) => object
+  readonly decode: (owner: string, data: unknown) => object
   /** Makes `target`, a restored program function, call the host function `origin` leads to. */
   readonly rewrap: (target: Native, origin: HostOrigin) => void
 }
@@ -258,7 +281,8 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   {
     name: "HostCall",
     ctor: HostCall,
-    fields: ["status", "data", "admitted", "id", "key", "request", "label", "blocking", "result", "resolving", "site"],
+    fields: ["status", "data", "id", "key", "label", "path", "owner", "policy", "args", "blocking", "resolving", "site"],
+    skip: ["fn", "work"],
   },
   { name: "Resolving", ctor: Resolving, fields: ["done", "scheduler", "promise", "site"] },
   { name: "Throw", ctor: Throw, fields: ["value"] },
@@ -272,7 +296,7 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
     ctor: Interpreter,
     anchor: "ctx",
     fields: ["logs", "globalScope", "modules", "namespaces"],
-    skip: ["tools", "builtins", "vm", "intrinsics", "extensionWork", "hosts", "hostNamespaces", "sources", "prelude"],
+    skip: ["builtins", "vm", "intrinsics", "hosts", "hostNamespaces", "sources", "prelude"],
   },
 ]
 
@@ -288,7 +312,7 @@ const builtinRegistry = () => {
   return builtins
 }
 
-// A function an extension made while the program ran, which has no data form: saved as `LostNative`.
+// A function a host function returned while the program ran, which has no data form: saved as `LostNative`.
 const hostFunction: ClassSpec = {
   name: "LostNative",
   ctor: Native,
@@ -344,7 +368,7 @@ class Encoder {
   // A URL's `searchParams` is the same host object its URLSearchParams wraps; it is encoded once every URL is known.
   private readonly owners = new Map<URLSearchParams, URL>()
   private readonly params: Array<readonly [number, URLSearchParams]> = []
-  // One `HostValue` record per value an extension returned, however many of its functions the state holds.
+  // One `HostValue` record per value a host function returned, however many of its functions the state holds.
   private readonly roots = new Map<object, Encoded>()
   private readonly specs: { readonly byCtor: Map<Function, ClassSpec>; readonly byName: Map<string, ClassSpec> }
 
@@ -447,15 +471,15 @@ class Encoder {
       return { t: spec.name, ...this.fields(object, spec) }
     }
     if (object instanceof Native) {
-      // A host function made while the program ran: inside a value an extension returned. Its extension saves that
-      // value when it has `snapshot` hooks; otherwise its name says what was lost.
+      // A host function made while the program ran: inside a value a host function returned. That function saves the
+      // value when it has `snapshot` hooks; otherwise its name says what was lost, which never fails a strict save.
       const origin = this.env.hosts?.origin(object)
       if (origin !== undefined) {
-        const root = this.hostValue(origin.extension, origin.root)
+        const root = this.hostValue(origin.owner, origin.root)
         const fields = this.fields(object, hostFunction, hostFunction.fields)
-        return { t: "HostFunction", e: origin.extension, h: root, k: [...origin.path], l: origin.label, ...fields }
+        return { t: "HostFunction", e: origin.owner, h: root, k: [...origin.path], l: origin.label, ...fields }
       }
-      this.lose(`the function ${functionName(object)}`)
+      this.env.lost.push(`the function ${functionName(object)}`)
       return { t: "LostNative", ...this.fields(object, hostFunction, hostFunction.fields) }
     }
     const proto = Object.getPrototypeOf(object)
@@ -474,6 +498,8 @@ class Encoder {
       this.params.push([id, object])
       return undefined
     }
+    if (object instanceof Date) return { t: "Date", v: this.value(object.getTime()) }
+    if (object instanceof RegExp) return { t: "RegExp", s: object.source, f: object.flags }
     if (object instanceof Headers) return { t: "Headers", e: [...object].map(([key, item]) => [key, item]) }
     if (object instanceof Uint8Array) {
       return { t: "Uint8Array", b: this.ref(object.buffer), o: object.byteOffset, l: object.length }
@@ -485,16 +511,16 @@ class Encoder {
     return { t: "Lost", f: [what] }
   }
 
-  // A value an extension returned, as its `snapshot.encode` saves it: plain data, checked before it is copied.
-  private hostValue(extension: string, root: object): Encoded {
+  // A value a host function returned, as its `snapshot.encode` saves it: plain data, checked before it is copied.
+  private hostValue(owner: string, root: object): Encoded {
     const known = this.roots.get(root)
     if (known !== undefined) return known
-    const data = plainData(this.env.hosts!.encode(extension, root), extension, new Set())
+    const data = plainData(this.env.hosts!.encode(owner, root), owner, new Set())
     const id = this.records.length
     const ref: Encoded = ["r", id]
     this.roots.set(root, ref)
     this.records.push(undefined)
-    this.records[id] = { t: "HostValue", e: extension, d: this.value(data) }
+    this.records[id] = { t: "HostValue", e: owner, d: this.value(data) }
     return ref
   }
 
@@ -602,9 +628,9 @@ class Decoder {
   private readonly filled: Array<boolean>
   // Derived state is rebuilt once every record is filled in, since it reads other records.
   private readonly resets: Array<() => void> = []
-  // Functions inside values extensions returned, wrapped again once every record is filled in.
+  // Functions inside values host functions returned, wrapped again once every record is filled in.
   private readonly hostFunctions: Array<readonly [Native, { readonly [field: string]: unknown }]> = []
-  // Those values, given back once each by their extension's `snapshot.decode`, by `HostValue` record.
+  // Those values, given back once each by their owner's `snapshot.decode`, by `HostValue` record.
   private readonly hostValues = new Map<number, object>()
   private readonly specs: { readonly byCtor: Map<Function, ClassSpec>; readonly byName: Map<string, ClassSpec> }
 
@@ -670,6 +696,12 @@ class Decoder {
         })
         return made
       }
+      case "Date": {
+        const time = this.value(record.v)
+        return new Date(typeof time === "number" ? time : invalid(`record ${id} is not a time.`))
+      }
+      case "RegExp":
+        return new RegExp(text(record.s, "a pattern"), text(record.f, "flags"))
       case "URL":
         return new URL(text(record.h, "a URL"))
       case "URLSearchParams": {
@@ -790,6 +822,8 @@ class Decoder {
         return
       case "HostValue":
       case "Interruption":
+      case "Date":
+      case "RegExp":
       case "URL":
       case "URLSearchParams":
       case "Headers":
@@ -830,30 +864,30 @@ class Decoder {
     for (const reset of this.resets) reset()
     if (this.hostFunctions.length === 0) return
     const hosts =
-      this.env.hosts ?? invalid("a function from an extension is saved, and this runtime has no extensions.")
+      this.env.hosts ?? invalid("a function a host function returned is saved, and this runtime has no host globals.")
     for (const [target, record] of this.hostFunctions) {
-      const extension = text(record.e, "an extension")
+      const owner = text(record.e, "a host function")
       const path = list(record.k, "a path").map((key) =>
         typeof key === "number" ? count(key, "a path index") : text(key, "a path key"),
       )
       hosts.rewrap(target, {
-        extension,
-        root: this.hostValue(hosts, record.h, extension),
+        owner,
+        root: this.hostValue(hosts, record.h, owner),
         path,
         label: text(record.l, "a label"),
       })
     }
   }
 
-  // A value an extension returned, given back once by its `snapshot.decode` from the data it saved.
-  private hostValue(hosts: HostBridge, ref: unknown, extension: string): object {
+  // A value a host function returned, given back once by its `snapshot.decode` from the data it saved.
+  private hostValue(hosts: HostBridge, ref: unknown, owner: string): object {
     const id =
       Array.isArray(ref) && ref[0] === "r" ? count(ref[1], "a record id") : invalid("a host value is not a record.")
     const known = this.hostValues.get(id)
     if (known !== undefined) return known
     const record = id < this.records.length ? this.at(id) : invalid(`record ${id} does not exist.`)
-    if (record.t !== "HostValue" || record.e !== extension) invalid(`record ${id} is not a value of ${extension}.`)
-    const root = hosts.decode(extension, this.value(record.d))
+    if (record.t !== "HostValue" || record.e !== owner) invalid(`record ${id} is not a value of ${owner}.`)
+    const root = hosts.decode(owner, this.value(record.d))
     this.hostValues.set(id, root)
     return root
   }
@@ -946,9 +980,9 @@ class Decoder {
   }
 }
 
-// What an extension's `snapshot.encode` gives must be plain data the codec copies and hands back to `decode`: JSON
+// What a host function's `snapshot.encode` gives must be plain data the codec copies and hands back to `decode`: JSON
 // values and Uint8Arrays. Views (such as a `Buffer` slice on a shared slab) are copied into standalone `Uint8Array`s.
-const plainData = (data: unknown, extension: string, seen: Set<object>): unknown => {
+const plainData = (data: unknown, owner: string, seen: Set<object>): unknown => {
   if (data === null || typeof data === "string" || typeof data === "boolean") return data
   if (typeof data === "number" && Number.isFinite(data)) return data
   if (data instanceof Uint8Array) {
@@ -958,7 +992,7 @@ const plainData = (data: unknown, extension: string, seen: Set<object>): unknown
   }
   const fail = (what: string): never => {
     throw new SnapshotError(
-      `The extension "${extension}" saved a value it returned as data holding ${what}; snapshot.encode must give plain data (JSON values and Uint8Arrays).`,
+      `The host function ${owner} saved a value it returned as data holding ${what}; snapshot.encode must give plain data (JSON values and Uint8Arrays).`,
     )
   }
   if (typeof data !== "object") {
@@ -972,12 +1006,12 @@ const plainData = (data: unknown, extension: string, seen: Set<object>): unknown
   }
   seen.add(data)
   if (Array.isArray(data)) {
-    const out = data.map((item) => plainData(item, extension, seen))
+    const out = data.map((item) => plainData(item, owner, seen))
     seen.delete(data)
     return out
   }
   const out: { [key: string]: unknown } = proto === null ? Object.create(null) : {}
-  for (const [key, item] of Object.entries(data)) out[key] = plainData(item, extension, seen)
+  for (const [key, item] of Object.entries(data)) out[key] = plainData(item, owner, seen)
   seen.delete(data)
   return out
 }

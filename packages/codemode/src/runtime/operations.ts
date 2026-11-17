@@ -31,6 +31,9 @@ import { enumerableSource } from "../stdlib/object.js"
 // The synchronous semantics the VM's ops share: operators, property references, and the checks around them. Nothing
 // here runs program code.
 
+/** Orders two strings by UTF-16 code units, as `Array.prototype.sort` does by default. */
+export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
+
 /** The binary operators that convert object operands through ToPrimitive before acting on primitives. */
 const primitiveOperators = new Set([
   "+",
@@ -160,7 +163,7 @@ export const applyBinaryOperator = (operator: string, lhs: Value, rhs: Value, no
   }
 }
 
-// IsLooselyEqual: objects (including functions and tool references) compare by identity, and a nullish
+// IsLooselyEqual: objects (including functions and namespace paths) compare by identity, and a nullish
 // primitive never equals an object.
 const looselyEqual = (lhs: Value, rhs: Value, node: AstNode): boolean => {
   const lhsObject = lhs !== null && typeof lhs === "object"
@@ -183,7 +186,7 @@ export const operatorConversion = (
 ): { readonly kind: "key" } | { readonly kind: "primitive"; readonly hint: "default" | "number" } | undefined => {
   // `in` checks the right operand before ToPropertyKey on the left, so a bad right side wins over a bad key.
   if (operator === "in" && lhs instanceof Obj && !isOpaque(lhs) && rhs instanceof Obj) return { kind: "key" }
-  // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including tool
+  // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including namespace
   // references, which are not Obj) compare by identity.
   const equality = operator === "==" || operator === "!="
   const other = lhs instanceof Obj ? rhs : lhs

@@ -4,7 +4,6 @@ import { CodeMode } from "../src/index.js"
 import { createBuiltins } from "../src/runtime/intrinsics.js"
 import { Interpreter } from "../src/runtime/interpreter.js"
 import { type Snapshot, SnapshotError } from "../src/snapshot/snapshot.js"
-import { ToolRuntime } from "../src/tool-runtime.js"
 import { hashOf } from "../src/code.js"
 import { compileSource } from "../src/compiler/compile.js"
 import { moduleUrl, parseVmSource, runProgram } from "./run-program.js"
@@ -123,7 +122,6 @@ describe("round trips", () => {
 /** A runtime the way `execute.ts` makes one, with no tools. */
 const runtime = () =>
   new Interpreter<never>({
-    tools: ToolRuntime.make(ToolRuntime.prepare<never>({}), undefined, {}),
     builtins: createBuiltins(),
   }) as Interpreter<unknown>
 
@@ -179,7 +177,7 @@ const refusal = (snapshot: unknown) => {
 describe("snapshots", () => {
   test("hold code by source and function index, with the source's bytecode hash, and never bytecode", () => {
     const snapshot = sliced()
-    expect(snapshot.format).toBe(2)
+    expect(snapshot.format).toBe(3)
     const source = snapshot.header.sources[0]!
     expect(source.id).toBe("main")
     expect(source.bytecode).toBe(hashOf(compileSource(parse(source.code))))
@@ -287,8 +285,7 @@ describe("determinism", () => {
       import { buildId } from ${moduleUrl("../src/snapshot.js")}
       import { createBuiltins } from ${moduleUrl("../src/runtime/intrinsics.js")}
       import { Interpreter } from ${moduleUrl("../src/runtime/interpreter.js")}
-      import { ToolRuntime } from ${moduleUrl("../src/tool-runtime.js")}
-      new Interpreter({ tools: ToolRuntime.make(ToolRuntime.prepare({}), undefined, {}), builtins: createBuiltins() })
+      new Interpreter({ builtins: createBuiltins() })
       const codes = ${JSON.stringify(codes)}
       console.log(JSON.stringify({ hashes: codes.map((code) => hashOf(compileSource(parseVmSource(code).source))), build: buildId() }))`
     const child = Bun.spawn(["bun", "-e", script], { stdout: "pipe", stderr: "inherit" })

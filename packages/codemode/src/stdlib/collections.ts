@@ -126,7 +126,7 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
   return set
 }
 
-// CanBeHeldWeakly: only program objects; tool references are rebuilt on every access, so they could never be found again.
+// CanBeHeldWeakly: only program objects; namespace paths are rebuilt on every access, so they could never be found again.
 export const weakKey = (value: Value, label: string) => {
   if (value instanceof Obj) return value
   throw typeError(`Invalid value used ${label}: ${describeValue(value)} cannot be held weakly.`)

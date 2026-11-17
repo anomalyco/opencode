@@ -639,7 +639,7 @@ describe("configuration", () => {
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a result handed to a tool is plain data", async () => {
+  test("a result with functions can't be handed to a tool; its data can", async () => {
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -651,12 +651,12 @@ describe("configuration", () => {
         }),
       },
     })
-    expect(await value(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).toEqual({
-      status: 200,
-      ok: true,
-      headers: {},
-      handlers: [null],
-    })
+    expect((await failure(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).message).toContain(
+      "contains a function, which cannot be passed to the host",
+    )
+    expect(
+      await value(`const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`, tools),
+    ).toEqual({ status: 200, ok: true })
   })
 
   test("a run can get only some of the runtime's extensions", async () => {

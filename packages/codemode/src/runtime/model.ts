@@ -1,7 +1,20 @@
 import type { Node } from "acorn"
 import type { ErrorType } from "./intrinsics.js"
-import type { DiagnosticKind } from "../codemode.js"
 import type { ErrorObj, Value } from "./objects.js"
+
+/**
+ * A diagnostic's category: one of the language's (`ParseError`, `UnsupportedSyntax`, `InvalidDataValue`,
+ * `TimeoutExceeded`, `ExecutionFailure`, `Truncated`), or one a host function gives with `Host.fail`.
+ */
+export type DiagnosticKind = string
+
+/** A program's failure or warning, as plain data. */
+export type Diagnostic = {
+  readonly kind: DiagnosticKind
+  readonly message: string
+  readonly location?: { readonly line: number; readonly column: number }
+  readonly suggestions?: ReadonlyArray<string>
+}
 
 /** Any parsed node; the compiler narrows on `type`, and diagnostics read `loc`. */
 export type AstNode = Node

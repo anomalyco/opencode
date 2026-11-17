@@ -9,14 +9,12 @@ import { decode, encode } from "../src/snapshot/codec.js"
 import { Lost, PendingThrow } from "../src/runtime/model.js"
 import { normalizeError } from "../src/runtime/errors.js"
 import { Effect } from "effect"
-import { ToolRuntime } from "../src/tool-runtime.js"
 import { nodeId, sourceOf } from "../src/runtime/source.js"
 
 // Groundwork for suspending and resuming a run: everything the state refers to has a stable name.
 
 const interpreter = () =>
   new Interpreter<never>({
-    tools: ToolRuntime.make(ToolRuntime.prepare<never>({}), undefined, {}),
     builtins: createBuiltins(),
   })
 

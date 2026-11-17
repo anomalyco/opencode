@@ -1,5 +1,5 @@
 import { parse, type Expression, type MemberExpression, type NewExpression } from "acorn"
-import type { Diagnostic } from "./codemode.js"
+import type { Diagnostic } from "./runtime/model.js"
 import { conversions } from "./runtime/callback.js"
 import { locate, materialize } from "./runtime/errors.js"
 import type { Interpreter } from "./runtime/interpreter.js"
@@ -102,12 +102,9 @@ import {
 } from "./generators.js"
 import {
   BLOCK,
-  callExtension,
-  callSearch,
   ENTERED,
   type HostResult,
   HostCalls,
-  registerHostIntrinsics,
   VISIT_BUDGET,
 } from "./host.js"
 import {
@@ -233,8 +230,8 @@ export class VmInternalFn {
  *   promise in a later job, in completion order. Unknown or completed ids are ignored. `call(id)`/`calls()` list the
  *   calls handed over and not completed, in the order they were made.
  * - **Snapshots.** `capture` and `restore` run only between `run()`s, synchronously. A capture changes nothing a
- *   later `run()` sees; it fails (throws) only on a codec gap. A state holding live host values (`calls()` with an
- *   extension call, or `activeExtension`) can't be restored faithfully.
+ *   later `run()` sees; it fails (throws) only on a codec gap. A state holding live host values (`calls()` with a call
+ *   whose function or result is still live) can't be restored faithfully.
  */
 export class Vm {
   readonly frames: Array<Frame> = contiguous<Frame>()
@@ -274,7 +271,6 @@ export class Vm {
     registerVmIntrinsics(this.intrinsics, this)
     registerAsyncIntrinsics(this.intrinsics, this)
     registerGeneratorIntrinsics(this.intrinsics, this)
-    registerHostIntrinsics(this.intrinsics, this)
   }
 
   private getIntrinsic(name: string): unknown {
@@ -338,7 +334,7 @@ export class Vm {
       }
       if (this.frames.length > 0) {
         if (hosts.blocked !== undefined) return { kind: "host", calls: [] }
-        // Fuel can run out on a call that then stopped for the host (a built-in or sync extension call costs fuel too):
+        // Fuel can run out on a call that then stopped for the host (a built-in or sync host call costs fuel too):
         // that's a slice point as well, or a loop of such calls would refill forever without yielding.
         if (this.fuel <= 0) {
           this.fuel = this.tripEvery || INITIAL_FUEL
@@ -425,14 +421,6 @@ export class Vm {
     return this.scheduler.diagnostics()
   }
 
-  /**
-   * A synchronous extension call the program is in the middle of, from its `before` hook until its result is a
-   * program value or its concurrent call is running: it holds live host values.
-   */
-  get activeExtension(): { readonly key: string; readonly path: string } | undefined {
-    return this.hosts.extension
-  }
-
   /** Saves the run's state as it is now. */
   capture(options: CaptureOptions) {
     if (this.intrinsics.size === 0) this.initIntrinsics()
@@ -493,7 +481,7 @@ export class Vm {
 
   /**
    * Nearest non-internal frame's AST site, or the bottom internal frame's `origin` (§3.6). A failure the host
-   * boundary's own walk raises (copying out the result, or a tool call's arguments) has no location: the call that
+   * boundary's own walk raises (copying out the result) has no location: the call that
    * crosses reports it.
    */
   currentSite(): AstNode | undefined {
@@ -1918,12 +1906,7 @@ export class Vm {
     }
     this.frames.pop()
     this.release(frame)
-    this.pushInternal(
-      internalCode("$vmCross"),
-      [new Arr(this.ctx.builtins.Array, [value])],
-      undefined,
-      Mode.BOUNDARY_OUT,
-    )
+    this.pushInternal(internalCode("$vmResult"), [value], undefined, Mode.BOUNDARY_OUT)
     return true
   }
 
@@ -2200,7 +2183,7 @@ export class Vm {
       const site = callee.callback && callee.call.length < 3 ? undefined : callSiteOf(frame, pc)
       const res = callee.call(thisVal, args, site)
       if (this.tripEvery === 0) this.fuel -= NATIVE_FUEL
-      if (res === null || typeof res !== "object" || res instanceof Obj) {
+      if ((res as unknown) !== BLOCK && (res === null || typeof res !== "object" || res instanceof Obj)) {
         normalizeItems(res)
         regs[base - 2] = res
         frame.sp = base - 1
@@ -2374,15 +2357,6 @@ export class Vm {
       }
       const promiseHandled = this.scheduler.handlePromisePush(callerFrame, kindName, slots, site ?? callerFrame.origin)
       if (promiseHandled !== undefined) return promiseHandled
-      if (kindName === "search") {
-        return this.hostResult(
-          callerFrame,
-          callSearch(this, this.hosts, slots[0] as Array<Value>, site ?? callerFrame.origin),
-        )
-      }
-      if (kindName === "extension call") {
-        return this.hostResult(callerFrame, callExtension(this.ctx, this.hosts, slots, site ?? callerFrame.origin))
-      }
       throw new NotYetImplemented(`Push kind: ${kindName}`)
     }
     callerFrame.regs[callerFrame.sp++] = res as Value

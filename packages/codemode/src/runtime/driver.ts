@@ -1,9 +1,9 @@
 import { Cause, type Context, Effect, Exit, Fiber } from "effect"
 import type { Json } from "../data.js"
+import { DurableFn, type Fn } from "../host-function.js"
 import type { HostCall } from "../scheduler.js"
-import { type ToolRuntime, toolExpression } from "../tool-runtime.js"
 import { locate } from "./errors.js"
-import { PendingThrow } from "./model.js"
+import { HostFailure, PendingThrow } from "./model.js"
 import type { Vm } from "../vm.js"
 import { abrupt, type Completion, Interruption, normal } from "./signals.js"
 
@@ -16,10 +16,10 @@ export const SUSPENDED: unique symbol = Symbol("codemode.suspended")
  * calls the VM queued, as fibers with the caller's services, reporting each outcome back with `vm.complete`.
  * Fibers live only here, by host call id, and never become part of the VM's state.
  *
- * A durable tool's call runs as two fibers, `start` then `wait`, so suspending can detach the second and keep the JSON
- * data `start` gave. An idempotent tool's running fiber is detached and interrupted on suspend, and its call is saved
- * as queued to run again on resume. The VM and tool bridge can be swapped for restored ones between stops (the
- * round-trip test mode does); a fiber's outcome goes to whichever VM is current, by host call id.
+ * A durable call runs as two fibers, `start` then `wait`, so suspending can detach the second and keep the JSON data
+ * `start` gave. An idempotent call's running fiber is detached and interrupted on suspend, and the call is saved as
+ * queued to run again on resume. The VM can be swapped for a restored one between stops (the round-trip test mode
+ * does); a fiber's outcome goes to whichever VM is current, by host call id.
  */
 export class Driver<R> {
   private readonly fibers = new Map<number, Fiber.Fiber<unknown, unknown>>()
@@ -35,8 +35,7 @@ export class Driver<R> {
 
   constructor(
     public vm: Vm,
-    public tools: ToolRuntime<R>,
-    /** The services host work runs with: the caller's, so tools see its context, tracing, and clock. */
+    /** The services host work runs with: the caller's, so host functions see its context, tracing, and clock. */
     private readonly services: Context.Context<R>,
   ) {}
 
@@ -85,30 +84,19 @@ export class Driver<R> {
   }
 
   /**
-   * The host calls that block a suspend now: every call in progress except an idempotent tool call or a durable tool
-   * call in `started`, plus any queued or synchronous extension call the program is in the middle of, which holds live
-   * host values. A tool call queued but not started starts on resume.
+   * The host calls that block a suspend now: every call in progress except an idempotent call, or a durable call in
+   * `started`. A call queued but not started starts on resume.
    */
   blocking(): Array<{ readonly key: string; readonly path: string }> {
-    const vm = this.vm
-    const calls = vm.calls().filter((call) => {
-      if (call.request.kind === "extension") return true
-      if (call.status === "queued" || call.status === "started") return false
-      if (call.request.kind === "tool" && this.tools.mode(call.request.path)?._tag === "CodeModeIdempotent")
-        return false
-      return true
-    })
-    const running = calls.map((call) => ({ key: call.key, path: callPath(call) }))
-    const active = vm.activeExtension
-    if (active !== undefined && !calls.some((call) => call.blocking && call.request.kind === "extension")) {
-      running.push(active)
-    }
-    return running
+    return this.vm
+      .calls()
+      .filter((call) => call.status !== "queued" && call.status !== "started" && call.policy !== "idempotent")
+      .map((call) => ({ key: call.key, path: call.label }))
   }
 
-  /** Whether the run holds live host values: an extension call in progress. */
+  /** Whether the run holds live host values: a call whose function can't be found again, or that waits on its result. */
   get holdsHostValues(): boolean {
-    return this.vm.calls().some((call) => call.request.kind === "extension") || this.vm.activeExtension !== undefined
+    return this.vm.calls().some((call) => call.work !== undefined || call.path === undefined)
   }
 
   /**
@@ -121,7 +109,7 @@ export class Driver<R> {
     this.wake?.()
   }
 
-  /** Stops host work still running, waiting for its cleanup; a durable tool's work is cancelled unless detached. */
+  /** Stops host work still running, waiting for its cleanup; a durable call's work is cancelled unless detached. */
   interrupt(): Effect.Effect<void> {
     const self = this
     return Effect.uninterruptible(
@@ -131,18 +119,18 @@ export class Driver<R> {
         // A suspended run's durable work keeps running, to be waited on at resume.
         if (self.suspending) return
         for (const call of self.vm.calls()) {
-          const request = call.request
-          if (call.status !== "started" || request.kind !== "tool") continue
+          if (call.status !== "started") continue
           call.status = "completed"
-          yield* Effect.ignore(self.tools.cancel(request.path, call.data as Json)).pipe(
-            Effect.provideContext(self.services),
-          )
+          const fn = self.function(call)
+          if (!(fn instanceof DurableFn)) continue
+          const cancel = Effect.suspend(() => fn.cancel(call.data as Json, self.context(call)))
+          yield* Effect.ignore(cancel as Effect.Effect<void, unknown, R>).pipe(Effect.provideContext(self.services))
         }
       }),
     )
   }
 
-  /** Starts tool calls that were queued (including idempotent calls) and waits on durable calls in `started`. */
+  /** Starts calls that were queued (including idempotent ones) and waits on durable calls in `started`. */
   resume(): void {
     if (this.suspending) return
     for (const call of this.vm.calls()) {
@@ -151,65 +139,65 @@ export class Driver<R> {
     }
   }
 
-  private admit(id: number, name: string): void {
-    const call = this.vm.call(id)
-    if (call?.admitted) return
-    this.tools.record(name)
-    if (call !== undefined) call.admitted = true
-  }
-
   // Starts host work now; its outcome goes back to the VM: a blocking call's continues the job that made it, a
   // concurrent call's waits in the inbox and settles its promise in a later job, in completion order.
   private launch(call: HostCall): void {
     call.status = "running"
-    const request = call.request
-    if (request.kind === "tool") {
-      if (this.tools.mode(request.path)?._tag === "CodeModeDurable") {
-        const started = this.tools.start(request.path, request.args, call.key, (name) => this.admit(call.id, name))
-        return this.fork(call.id, started, (data) => {
+    if (call.work !== undefined) return this.fork(call.id, outcome(call.work))
+    const fn = this.function(call)
+    if (fn === undefined) {
+      return this.fork(
+        call.id,
+        Effect.fail(new HostFailure("ExecutionFailure", `${call.label} is not available in this runtime.`)),
+      )
+    }
+    if (fn instanceof DurableFn) {
+      return this.fork(
+        call.id,
+        Effect.suspend(() => fn.start(call.args, this.context(call))),
+        (data) => {
           const current = this.vm.call(call.id)
           if (current === undefined) return
           current.status = "started"
           current.data = data as Json
           if (this.stopping || this.detached.has(call.id)) return
           this.wait(current)
-        })
-      }
-      return this.fork(
-        call.id,
-        this.tools.execute(request.path, request.args, {
-          key: call.key,
-          admit: (name) => this.admit(call.id, name),
-          detaching: () => this.suspending,
-        }),
+        },
       )
     }
-    if (request.kind === "search") {
-      return this.fork(
-        call.id,
-        this.tools.search(request.args, {
-          key: call.key,
-          admit: (name) => this.admit(call.id, name),
-        }),
-      )
-    }
-    // An extension's work, made by the extension bridge with the program's services in its requirements.
-    return this.fork(call.id, this.vm.ctx.extensionWork!(request.call) as Effect.Effect<unknown, unknown, R>)
-  }
-
-  private wait(call: HostCall): void {
-    const request = call.request
-    if (request.kind !== "tool") return
     this.fork(
       call.id,
-      this.tools.wait(request.path, request.args, call.key, call.data as Json, () => this.suspending),
+      Effect.suspend(() => {
+        try {
+          return outcome(fn.run(call.args, this.context(call)))
+        } catch (reason) {
+          return Effect.fail(reason)
+        }
+      }),
     )
   }
 
-  // Forks `work` with the caller's services; it starts synchronously, so admission and hooks happen before the VM
-  // runs another job. A success goes to `next` when given, otherwise to the VM.
-  private fork(id: number, work: Effect.Effect<unknown, unknown, R>, next?: (value: unknown) => void): void {
-    const fiber = Effect.runForkWith(this.services)(work)
+  private wait(call: HostCall): void {
+    const fn = this.function(call)
+    if (!(fn instanceof DurableFn)) return
+    this.fork(call.id, Effect.suspend(() => fn.wait(call.data as Json, this.context(call))))
+  }
+
+  // The call's host function: the one it was made with, or, in a restored run, the one at its path now.
+  private function(call: HostCall): Fn<unknown> | DurableFn<unknown> | undefined {
+    if (call.fn !== undefined) return call.fn
+    if (call.path === undefined) return undefined
+    return (call.fn = this.vm.ctx.hosts?.resolve(call.path))
+  }
+
+  private context(call: HostCall) {
+    return { key: call.key, args: call.args, suspending: () => this.suspending }
+  }
+
+  // Forks `work` with the caller's services; it starts synchronously, so host functions run before the VM runs
+  // another job. A success goes to `next` when given, otherwise to the VM.
+  private fork(id: number, work: Effect.Effect<unknown, unknown, unknown>, next?: (value: unknown) => void): void {
+    const fiber = Effect.runForkWith(this.services)(work as Effect.Effect<unknown, unknown, R>)
     this.fibers.set(id, fiber)
     fiber.addObserver((exit) => {
       if (this.fibers.get(id) === fiber) this.fibers.delete(id)
@@ -218,10 +206,9 @@ export class Driver<R> {
       if (this.stopping || this.detached.has(id)) return
       const call = this.vm.call(id)
       if (call === undefined) return
-      if (call.blocking) {
+      if (call.blocking && Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
         // Blocking work interrupted on its own interrupts the execution.
-        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) this.interrupted = exit.cause
-        else this.vm.complete(id, Exit.isSuccess(exit) ? normal(exit.value) : abrupt(Cause.squash(exit.cause)))
+        this.interrupted = exit.cause
         this.wake?.()
         return
       }
@@ -255,9 +242,9 @@ export class Driver<R> {
   }
 }
 
-/** A host call as the program wrote it: `tools.x.y`, `search`, or an extension function's path. */
-export const callPath = (call: HostCall): string => {
-  const request = call.request
-  if (request.kind === "tool") return toolExpression(request.path.flatMap((segment) => segment.split(".")).join("."))
-  return request.kind === "search" ? "search" : request.call.label
+// What a host function returned, as the Effect its call waits on: an Effect runs, a Promise settles.
+const outcome = (result: unknown): Effect.Effect<unknown, unknown, unknown> => {
+  if (Effect.isEffect(result)) return result as Effect.Effect<unknown, unknown, unknown>
+  if (result instanceof Promise) return Effect.tryPromise({ try: () => result, catch: (reason) => reason })
+  return Effect.succeed(result)
 }

@@ -1,18 +1,17 @@
 import { Deferred, Effect, Exit, Schema } from "effect"
-import type { Extension } from "./extension.js"
+import { type Extension, isAsync } from "./extension.js"
+import { Host } from "./host-function.js"
 import { scanTools } from "./scan.js"
-import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
+import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
-import { fromJson } from "./data.js"
 import {
-  finishExecution,
+  type Outcome as RunOutcome,
   resumeProgram,
   type Running,
   type Setup,
   startProgram,
   SuspendError,
 } from "./runtime/execute.js"
-import { extensionGlobals } from "./runtime/extensions.js"
 import { globalNames } from "./runtime/globals.js"
 import { fromBytes, type Snapshot, SnapshotError, type SnapshotHeader, toBytes } from "./snapshot/snapshot.js"
 
@@ -238,8 +237,9 @@ export function make<
   type R = Environment<Provided, Extensions>
   const prepared = ToolRuntime.prepare<R>((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
+  const hooks = options.hooks ?? {}
   const extensions: ReadonlyArray<Extension> = options.extensions ?? []
-  const bound = new Set([...globalNames, "tools"])
+  const bound = new Set([...globalNames, "tools", "search"])
   for (const extension of extensions) {
     for (const name of Object.keys(extension.globals)) {
       if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
@@ -255,29 +255,40 @@ export function make<
     // In the runtime's order, so the same extensions picked in any order give the same globals, and resume alike.
     const picked = extensions.filter((extension) => selected.includes(extension))
     return {
-      prepared,
-      limits,
-      hooks: options.hooks ?? {},
-      globals: picked.length === 0 ? undefined : (ctx) => extensionGlobals(ctx, picked),
-      lossy: picked.some((extension) => extension.snapshot === undefined),
+      limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
+      globals: (run) => ({
+        ...ToolRuntime.globals(prepared, hooks, run, limits.maxToolCalls),
+        ...Object.fromEntries(
+          picked.flatMap((extension) =>
+            Object.entries(extension.globals).map(([name, value]) => [
+              name,
+              extensionValue(extension, name, value, hooks),
+            ]),
+          ),
+        ),
+      }),
     }
   }
   const setup = setupFor()
-  const data = (bindings: Readonly<Record<string, DataValue>> | undefined) =>
-    bindings === undefined
-      ? undefined
-      : (ctx: Parameters<typeof fromJson>[0]) =>
-          Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const)
   const program = (code: string, bindings?: Readonly<Record<string, DataValue>>, programOptions?: ProgramOptions) => {
     const run = programOptions?.extensions === undefined ? setup : setupFor(programOptions.extensions)
-    return makeProgram(() => Effect.succeed(startProgram(run, code, data(bindings), programOptions?.runId)))
+    return makeProgram(() => Effect.succeed(startProgram(run, code, bindings, programOptions?.runId)))
   }
   return {
     get catalog() {
       return prepared.catalog
     },
     execute: (code, bindings, runOptions) =>
-      Effect.suspend(() => finishExecution(program(code, bindings, runOptions).run())),
+      Effect.suspend(() =>
+        Effect.map(program(code, bindings, runOptions).run(), (ended): Result => {
+          if (ended.ok !== "suspended") return ended
+          return {
+            ok: false,
+            error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
+            toolCalls: ToolRuntime.toolCalls(ended.state.header.metadata),
+          }
+        }),
+      ),
     program,
     resume: (state, runOptions) => {
       const run = runOptions?.extensions === undefined ? setup : setupFor(runOptions.extensions)
@@ -286,7 +297,71 @@ export function make<
   }
 }
 
-// A program's one run: `start` makes it when `run()` is called, and a suspend waits for it.
+/**
+ * An extension's global as host functions: each function, at any depth of a global object, fires the extension hooks
+ * around its calls and saves the values it returns with the extension's `snapshot` hooks. Other values pass as they are.
+ */
+const extensionValue = <R>(extension: Extension, label: string, value: unknown, hooks: ToolRuntime.Hooks<R>): unknown => {
+  if (typeof value === "function") return extensionFunction(extension, label, value, hooks)
+  if (typeof value !== "object" || value === null) return value
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, extensionValue(extension, `${label}.${key}`, item, hooks)]),
+  )
+}
+
+/**
+ * One extension function as a host function, synchronous unless it is marked `async`. The `extension.before` hook runs
+ * before the function, so a denied call never reaches it, and fails the way the function would: an async one rejects,
+ * a sync one throws. `extension.after` sees how the call ended, once what it returned has settled.
+ */
+const extensionFunction = <R>(
+  extension: Extension,
+  name: string,
+  value: Function,
+  hooks: ToolRuntime.Hooks<R>,
+): Host.Fn<unknown> => {
+  const before = hooks["extension.before"]
+  const after = hooks["extension.after"]
+  const type = isAsync(value) ? "async" : "sync"
+  const snapshot = extension.snapshot
+  const named = (run: (args: ReadonlyArray<unknown>) => unknown) => {
+    // The program sees the extension function's own name and length.
+    Object.defineProperty(run, "name", { value: value.name })
+    Object.defineProperty(run, "length", { value: value.length })
+    return Host.fn(run, { type, snapshot })
+  }
+  if (before === undefined && after === undefined) return named((args) => value(...args))
+  return named((args) =>
+    Effect.gen(function* () {
+      const call: ToolRuntime.ExtensionInvocation = { extension: extension.name, name, args }
+      if (before !== undefined) yield* before(call)
+      let result: unknown
+      try {
+        result = value(...args)
+      } catch (reason) {
+        if (after !== undefined) yield* after(call, { status: "failure", error: reason })
+        return yield* Effect.fail(reason)
+      }
+      const settled = Effect.isEffect(result)
+        ? (result as Effect.Effect<unknown, unknown, R>)
+        : result instanceof Promise
+          ? Effect.tryPromise({ try: () => result as Promise<unknown>, catch: (reason) => reason })
+          : undefined
+      if (settled === undefined) {
+        if (after !== undefined) yield* after(call, { status: "success", value: result })
+        return result
+      }
+      const observed = hooked(call, undefined, after, settled)
+      // A returned Promise is still pending once the call has run: the program holds a promise for it.
+      return type === "sync" && result instanceof Promise ? observed : yield* observed
+    }),
+  )
+}
+
+// A program's one run, its outcome given the run's tool calls; `start` makes it when `run()` is called, and a suspend
+// waits for it.
 const makeProgram = <R, E>(start: () => Effect.Effect<Running<R>, E>): Program<R, E> => {
   let claimed = false
   const started = Deferred.makeUnsafe<Running<R>, SuspendError>()
@@ -306,6 +381,7 @@ const makeProgram = <R, E>(start: () => Effect.Effect<Running<R>, E>): Program<R
               : Deferred.fail(started, new SuspendError({ message: "The program didn't start.", running: [] })),
           ),
           Effect.flatMap((running) => running.run()),
+          Effect.map(outcome),
         )
       }),
     suspend: (options) => {
@@ -313,7 +389,17 @@ const makeProgram = <R, E>(start: () => Effect.Effect<Running<R>, E>): Program<R
       if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
         throw new RangeError("maxBytes must be a safe integer greater than or equal to 0.")
       }
-      return Effect.flatMap(Deferred.await(started), (running) => running.suspend(maxBytes))
+      return Effect.map(
+        Effect.flatMap(Deferred.await(started), (running) => running.suspend(maxBytes)),
+        outcome,
+      )
     },
   }
+}
+
+// A run's outcome as Code Mode reports it: the tool calls in place of the run's metadata.
+const outcome = (ended: RunOutcome): Outcome => {
+  if (ended.ok === "suspended") return ended
+  const { metadata, ...result } = ended
+  return { ...result, toolCalls: ToolRuntime.toolCalls(metadata) } as Result
 }

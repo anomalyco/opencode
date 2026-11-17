@@ -14,7 +14,8 @@ export function scanTools(code: string): Result.Result<ReadonlyArray<string>, Di
     return Result.fail({ kind: "ParseError", message: "Code cannot be empty." })
   }
   const parsed = parseProgram(code)
-  if (!parsed.ok) return Result.fail(parsed.error)
+  // A parse failure's kind is always ParseError.
+  if (!parsed.ok) return Result.fail(parsed.error as Diagnostic)
 
   const found = new Set<string>()
   const scopes: Array<Set<string>> = [collectScope(parsed.program, true)]

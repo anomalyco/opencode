@@ -29,8 +29,6 @@ export type PushKind =
   | "Promise executor"
   | "Promise.try"
   | "Promise combinator"
-  | "search"
-  | "extension call"
 
 /** Continue a suspended generator's frame with `request`: what `next`/`return`/`throw` return once it can run. */
 export class Resume {

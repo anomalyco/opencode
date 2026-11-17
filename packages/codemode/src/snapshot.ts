@@ -28,6 +28,8 @@ export type CaptureOptions = {
   readonly limits?: Header["limits"]
   /** Active milliseconds used so far, across every resume. */
   readonly activeMs?: number
+  /** The run's `run.metadata`. */
+  readonly metadata?: Json
   /** Throw on the first value with no data form, instead of reporting it in `lost`. */
   readonly strict: boolean
 }
@@ -63,7 +65,7 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
       ctor: HostCalls,
       anchor: "hosts",
       fields: ["runId", "queued", "running", "inbox", "nextID", "blocked", "input"],
-      skip: ["ctx", "promises", "extension", "extensionResume"],
+      skip: ["ctx", "promises"],
     },
     {
       name: "Frame",
@@ -168,9 +170,9 @@ export const captureVm = (
         hash: hash(source.code),
         bytecode: vm.sourceCodes.get(source.id)![0]!.source.hash,
       })),
-      limits: options.limits ?? { timeoutMs: null, maxToolCalls: null, maxOutputBytes: null },
-      budget: { activeMs: options.activeMs ?? 0, toolCalls: ctx.tools.calls.length },
-      toolCalls: ctx.tools.calls.map((call) => ({ name: call.name })),
+      limits: options.limits ?? { timeoutMs: null, maxOutputBytes: null },
+      budget: { activeMs: options.activeMs ?? 0 },
+      metadata: options.metadata ?? null,
     },
     roots: encoded.roots,
     records: encoded.records,
@@ -194,7 +196,7 @@ export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snap
   }
   if (header.hosts !== hostsId(ctx)) {
     throw new SnapshotError(
-      "This state was saved by a runtime with other host globals (extensions); resume it with the same ones.",
+      "This state was saved by a runtime with other host globals; resume it with the same ones.",
     )
   }
   for (const source of header.sources) {
@@ -232,7 +234,6 @@ export const restoreVm = (vm: Vm, saved: unknown, options: RestoreOptions): Snap
       return undefined
     },
   })
-  ctx.tools.calls.push(...header.toolCalls.map((call) => ({ name: call.name })))
   return snapshot
 }
 

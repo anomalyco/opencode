@@ -1,19 +1,15 @@
-import type { Diagnostic } from "./codemode.js"
-import { fromJson, type Json } from "./data.js"
-import { startExtensionCall } from "./runtime/extensions.js"
+import type { Code } from "./code.js"
+import { DurableFn, Fn } from "./host-function.js"
 import type { Interpreter } from "./runtime/interpreter.js"
-import { type AstNode, Lost, lostError } from "./runtime/model.js"
-import { Arr, PromiseObj, type Value } from "./runtime/objects.js"
+import type { AstNode, Diagnostic } from "./runtime/model.js"
+import type { PromiseObj, Value } from "./runtime/objects.js"
 import { promiseLike } from "./runtime/promises.js"
 import type { Completion } from "./runtime/signals.js"
-import { type ExtensionRequest, HostCall, type HostRequest, Resolving } from "./scheduler.js"
-import type { ExtensionInvocation } from "./tool-runtime.js"
-import type { Code } from "./code.js"
-import { internalCode, tryFastBoundaryOrJson, VmIntrinsic } from "./internal-prelude.js"
-import { type FrameMode, Mode, type Vm } from "./vm.js"
+import { HostCall, type HostPolicy, Resolving } from "./scheduler.js"
+import type { FrameMode } from "./vm.js"
 
-// The VM's side of host work (plan §4.10): tool calls, `search`, and extension calls, the host calls they queue, and
-// the blocking call a job may wait on.
+// The VM's side of host work (plan §4.10): calls to host functions, the host calls they queue, and the blocking call
+// a job may wait on.
 
 /** What host calls need from the promise scheduler. */
 export type Promises = {
@@ -47,6 +43,16 @@ export type HostVm = {
   ): unknown
 }
 
+/** Where a host function is, and how its calls are named and saved. */
+export type HostTarget = {
+  /** How the program names it in errors: `fetch`, `fs.readFile`, `api.issues.list`. */
+  readonly label: string
+  /** Where it is among the run's host globals, so a resumed run can find it again; none inside a result. */
+  readonly path: ReadonlyArray<string> | undefined
+  /** The host function whose `snapshot` hooks save the values this call returns, by label; see `Host.Snapshot`. */
+  readonly owner: string | undefined
+}
+
 type Delivery = { readonly call: HostCall; readonly completion: Completion }
 
 /** Visited nodes a native fast path may spend before it hands the work to the prelude walk, which slices. */
@@ -54,7 +60,8 @@ export const VISIT_BUDGET = 2048
 
 /**
  * The host calls of one run: queued (written ahead, for the driver to start at the next stop), running, completed and
- * waiting in the inbox, and the blocking call the current job waits on. Ids count up in program order.
+ * waiting in the inbox, and the blocking call the current job waits on. Ids count up in program order, and every call
+ * of a host function takes one, so its key is `<runId>:<id>`.
  */
 export class HostCalls {
   /** Names this run's host calls (`<runId>:<callId>`). */
@@ -67,73 +74,79 @@ export class HostCalls {
   blocked: HostCall | undefined = undefined
   /** A completed blocking call's outcome, which continues the job on the stack before anything else runs. */
   input: { readonly call: HostCall; readonly completion: Completion } | undefined = undefined
-  /** The synchronous extension call the program is in the middle of: see `Vm.activeExtension`. */
-  extension: { readonly key: string; readonly path: string } | undefined = undefined
-  extensionResume: ((completion: Completion) => HostResult) | undefined = undefined
 
   constructor(
     private readonly ctx: Interpreter<unknown>,
     readonly promises: Promises,
   ) {}
 
-  /** Queues concurrent host work; `resolving` settles its promise in a later job, in completion order. */
-  host(
-    request: HostRequest,
-    call: {
-      readonly label: string
-      readonly result: "json" | "value"
-      readonly resolving: Resolving
-      readonly site: AstNode | undefined
-    },
-  ): HostCall {
-    return this.queue(request, call.label, false, call.result, call.resolving, call.site)
-  }
-
-  /** Queues blocking `search` work: the job stops until it completes, then continues with its result. */
-  blockSearch(args: Array<Json | undefined>): typeof BLOCK {
-    return this.block({ kind: "search", args }, "search", undefined)
-  }
-
-  /** Queues blocking extension work: the job stops until it completes, then continues with `resume`. */
-  blockExtension(call: ExtensionRequest, resume: (completion: Completion) => HostResult): typeof BLOCK {
-    this.block({ kind: "extension", call }, "extension", resume)
-    this.extension = { key: this.blocked!.key, path: call.label }
+  /**
+   * Calls a host function from the program. Its arguments cross to the host now. An `async` or durable function's
+   * call is queued and the program gets its promise; a failure crossing rejects it. Any other is called now: its value
+   * crosses back at once, a Promise it returned is a promise, and an Effect blocks the job until it completes.
+   */
+  call(fn: Fn<unknown> | DurableFn<unknown>, values: Array<Value>, site: AstNode | undefined, target: HostTarget): HostResult {
+    const hosts = this.ctx.hosts!
+    if (fn instanceof DurableFn || fn.type === "async") {
+      const resolving = this.promises.resolving(this.promises.newPromise(), site)
+      let args: ReadonlyArray<unknown>
+      try {
+        args = hosts.toHost(values, target.label)
+      } catch (error) {
+        resolving.reject(error)
+        return resolving.promise
+      }
+      const policy = fn instanceof DurableFn ? "durable" : fn.idempotent ? "idempotent" : "async"
+      this.queue(target, policy, args, false, resolving, site).fn = fn
+      return resolving.promise
+    }
+    const args = hosts.toHost(values, target.label)
+    const id = this.nextID++
+    const result = hosts.invoke(fn, args, `${this.runId}:${id}`, target.label)
+    if (result.kind === "value") {
+      const value = hosts.fromHost(result.value, target.label, target.owner)
+      return fn.type === "sync-thenable" ? promiseLike(this.ctx, value) : value
+    }
+    if (result.kind === "pending") return this.pending(target, result.work, site, id)
+    const call = new HostCall(id, `${this.runId}:${id}`, target, fn.type, [], true, undefined, site)
+    call.work = result.work
+    this.queued.push(call)
+    this.blocked = call
     return BLOCK
   }
 
-  private block(
-    request: HostRequest,
-    label: string,
-    resume: ((completion: Completion) => HostResult) | undefined,
-  ): typeof BLOCK {
-    this.blocked = this.queue(request, label, true, "value", undefined, undefined)
-    this.extensionResume = resume
-    return BLOCK
+  // What a host function left pending (a Promise, or an Effect): the program holds a promise for it.
+  private pending(target: HostTarget, work: unknown, site: AstNode | undefined, id = this.nextID++): PromiseObj {
+    const resolving = this.promises.resolving(this.promises.newPromise(), site)
+    const call = new HostCall(id, `${this.runId}:${id}`, target, "sync", [], false, resolving, site)
+    call.work = work
+    this.queued.push(call)
+    return resolving.promise
   }
 
   private queue(
-    request: HostRequest,
-    label: string,
+    target: HostTarget,
+    policy: HostPolicy,
+    args: ReadonlyArray<unknown>,
     blocking: boolean,
-    result: "json" | "value",
     resolving: Resolving | undefined,
     site: AstNode | undefined,
   ): HostCall {
     const id = this.nextID++
-    const call = new HostCall(id, `${this.runId}:${id}`, request, label, blocking, result, resolving, site)
+    const call = new HostCall(id, `${this.runId}:${id}`, target, policy, args, blocking, resolving, site)
     this.queued.push(call)
     return call
   }
 
   /** Continues the job stopped at a blocking call with its outcome. */
   resume(input: { readonly call: HostCall; readonly completion: Completion }): HostResult {
-    const resume = this.extensionResume
-    if (resume !== undefined) {
-      this.extensionResume = undefined
-      return resume(input.completion)
-    }
-    if (!input.completion.ok) throw input.completion.error
-    return promiseLike(this.ctx, fromJson(this.ctx, input.completion.value as Json | undefined))
+    const call = input.call
+    const completion = input.completion
+    const hosts = this.ctx.hosts!
+    if (!completion.ok) throw hosts.failure(completion.error, call.label)
+    if (hosts.isPending(completion.value)) return this.pending(call, completion.value, call.site)
+    const value = hosts.fromHost(completion.value, call.label, call.owner)
+    return call.policy === "sync-thenable" ? promiseLike(this.ctx, value) : value
   }
 
   /** Hands the queued calls to the driver: they are running from now on. */
@@ -150,12 +163,9 @@ export class HostCalls {
     this.running.delete(id)
     // Its outcome is all that is left: the host function, its arguments, and what it returned are dropped.
     call.data = undefined
-    const request = call.request
-    if (request.kind === "extension") {
-      request.call.invocation = undefined
-      request.call.host = undefined
-      request.call.args = []
-    }
+    call.fn = undefined
+    call.work = undefined
+    call.args = []
     if (call.blocking) {
       call.status = "completed"
       if (this.blocked !== call) return
@@ -174,145 +184,19 @@ export class HostCalls {
     const completion = delivery.completion
     call.status = "completed"
     const resolving = call.resolving!
-    if (!completion.ok) resolving.reject(completion.error)
-    else {
-      resolving.resolve(
-        call.result === "json" ? fromJson(this.ctx, completion.value as Json | undefined) : (completion.value as Value),
-      )
+    const hosts = this.ctx.hosts!
+    if (!completion.ok) {
+      resolving.reject(hosts.failure(completion.error, call.label))
+      return true
     }
+    let value: Value
+    try {
+      value = hosts.fromHost(completion.value, call.label, call.owner)
+    } catch (error) {
+      resolving.reject(error)
+      return true
+    }
+    resolving.resolve(value)
     return true
   }
-}
-
-// --- Tool calls ---
-
-/**
- * A tool call returns its promise at once. Plain-data arguments cross on the native fast path; anything else
- * (`toJSON`, a promise, a deep or shared value) crosses through `$vmCross` at the call, which queues the call with the
- * same `Resolving` or rejects it. Either way the call is queued once its arguments have crossed, and the driver starts
- * it before any other job runs.
- */
-export const callTool = (
-  vm: HostVm,
-  hosts: HostCalls,
-  path: ReadonlyArray<string>,
-  args: Array<Value>,
-  site: AstNode | undefined,
-): HostResult => {
-  const resolving = hosts.promises.resolving(hosts.promises.newPromise())
-  const json = crossFast(vm.ctx, args)
-  if (json === undefined) {
-    // A failure while crossing rejects the promise, which the caller receives either way.
-    vm.pushInternal(
-      internalCode("$vmCross"),
-      [arrayOf(vm, args), arrayOf(vm, [...path]), resolving],
-      site,
-      Mode.REJECT_ONLY,
-      resolving,
-      resolving.promise,
-    )
-    return ENTERED
-  }
-  if (json instanceof Failure) {
-    resolving.reject(json.error)
-    return resolving.promise
-  }
-  hosts.host({ kind: "tool", path, args: json }, { label: path.join("."), result: "json", resolving, site })
-  return resolving.promise
-}
-
-/** `search(...)`: blocking; its result can be used directly, or awaited and chained like a Promise. */
-export const callSearch = (vm: HostVm, hosts: HostCalls, args: Array<Value>, site: AstNode | undefined): HostResult => {
-  const json = crossFast(vm.ctx, args)
-  if (json === undefined) {
-    vm.pushInternal(internalCode("$vmCross"), [arrayOf(vm, args), "search"], site)
-    return ENTERED
-  }
-  if (json instanceof Failure) throw json.error
-  return hosts.blockSearch(json)
-}
-
-class Failure {
-  constructor(readonly error: unknown) {}
-}
-
-// Every argument as host JSON on the budgeted fast path; undefined when one needs the prelude walk.
-const crossFast = (ctx: Interpreter<unknown>, args: Array<Value>): Array<Json | undefined> | Failure | undefined => {
-  const json: Array<Json | undefined> = []
-  try {
-    for (const arg of args) {
-      const crossed = tryFastBoundaryOrJson(ctx.builtins, arg, true, VISIT_BUDGET)
-      if (!crossed.ok) return undefined
-      json.push(crossed.json)
-    }
-  } catch (error) {
-    return new Failure(error)
-  }
-  return json
-}
-
-const arrayOf = (vm: HostVm, values: Array<Value>) => new Arr(vm.ctx.builtins.Array, [...values])
-
-// --- Extension calls ---
-
-/**
- * A synchronous extension function's call, staged here so its host values never enter a frame: the `extension.before`
- * hook (blocking), then the host function; what it returns settles now (blocking, an Effect
- * included) unless it is a Promise, which the program holds a promise for. The call is active, holding live host values, until its result is a program
- * value or its concurrent call is queued.
- */
-export const callExtension = (
-  ctx: Interpreter<unknown>,
-  hosts: HostCalls,
-  slots: ReadonlyArray<unknown>,
-  site: AstNode | undefined,
-): HostResult => {
-  const label = slots[2] as string
-  const call = {
-    host: slots[0],
-    args: slots[1] as ReadonlyArray<unknown>,
-    label,
-    invocation: slots[3] as ExtensionInvocation | undefined,
-    extension: slots[4] as string | undefined,
-  }
-  if (call.host instanceof Lost) throw lostError(`The function ${label}`)
-  const run = (): HostResult => {
-    const started = startExtensionCall(ctx, call.host as Function, call.args, call, site)
-    if (started instanceof PromiseObj) {
-      hosts.extension = undefined
-      return started
-    }
-    return hosts.blockExtension(started, (completion) => {
-      hosts.extension = undefined
-      if (!completion.ok) throw completion.error
-      return completion.value as Value
-    })
-  }
-  if (call.invocation === undefined || ctx.tools.hooks["extension.before"] === undefined) return run()
-  const before: ExtensionRequest = { stage: "before", ...call, host: undefined, threw: false }
-  return hosts.blockExtension(before, (completion) => {
-    if (!completion.ok) {
-      hosts.extension = undefined
-      throw completion.error
-    }
-    return run()
-  })
-}
-
-/** The intrinsics the boundary walk calls to queue a tool or search host call. */
-export const registerHostIntrinsics = (map: Map<string, unknown>, vm: Vm): void => {
-  const json = (value: Value) => (value as Arr).items as Array<Json | undefined>
-  map.set(
-    "$HostTool",
-    new VmIntrinsic("$HostTool", ([path, args, resolving]) => {
-      const keys = (path as Arr).items as Array<string>
-      const site = vm.frames[vm.frames.length - 1]?.origin
-      vm.hosts.host(
-        { kind: "tool", path: keys, args: json(args) },
-        { label: keys.join("."), result: "json", resolving: resolving as unknown as Resolving, site },
-      )
-      return undefined
-    }),
-  )
-  map.set("$HostSearch", new VmIntrinsic("$HostSearch", ([args]) => vm.hosts.blockSearch(json(args)) as never))
 }

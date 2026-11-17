@@ -1,5 +1,3 @@
-import type { ToolRuntime } from "../tool-runtime.js"
-import type { ExtensionRequest } from "../scheduler.js"
 import type { HostBridge } from "../snapshot/codec.js"
 import { Vm } from "../vm.js"
 import { globals } from "./globals.js"
@@ -10,7 +8,6 @@ import { moduleName, resolveModule } from "./modules.js"
 import { define, entries, type HostNamespace, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
 import type { HostResult } from "../host.js"
 import { Prelude } from "../prelude/prelude.js"
-import { Push } from "./signals.js"
 import type { NodeId, Source } from "./source.js"
 
 /** What a host namespace does, by the global it is under; see `HostNamespace`. */
@@ -21,9 +18,8 @@ export type NamespaceHandler = {
   readonly call: (path: ReadonlyArray<string>, args: Array<Value>, site: AstNode | undefined) => HostResult
 }
 
-/** One program execution: the tool bridge, the VM that runs it, captured logs, and the global scope built once. */
+/** One program execution: the VM that runs it, captured logs, and the global scope built once. */
 export class Interpreter<R> {
-  readonly tools: ToolRuntime<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
   /** Runs program code, and keeps the job queue, promises, and host calls the program waits on. */
@@ -32,9 +28,7 @@ export class Interpreter<R> {
   readonly intrinsics: IntrinsicNames
   /** The built-ins written in Code Mode, and the scope they close over. */
   readonly prelude: Prelude
-  /** Makes the Effect an extension function's host work runs as; set by the extension bridge. */
-  extensionWork: ((request: ExtensionRequest) => unknown) | undefined
-  /** Saves and restores values returned by extensions with `snapshot` hooks; set by the extension bridge. */
+  /** How the program meets its host globals: calls, values crossing, and saving what they return; see `hostGlobals`. */
   hosts: HostBridge | undefined
   /** The host namespaces among the globals, by the global they are under. */
   readonly hostNamespaces = new Map<string, NamespaceHandler>()
@@ -46,7 +40,6 @@ export class Interpreter<R> {
   private readonly namespaces = new Map<string, Obj>()
 
   constructor(options: {
-    readonly tools: ToolRuntime<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
     /** The host's globals (extensions, a test harness): made again, the same way, when a saved run is restored. */
@@ -54,7 +47,6 @@ export class Interpreter<R> {
     /** Data bound for this program, part of its saved state; host globals of the same name win. */
     readonly bindings?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
-    this.tools = options.tools
     this.builtins = options.builtins
     this.logs = options.logs ?? []
     // Program code has no receiver: top-level `this` is undefined, as in a module.
@@ -139,8 +131,4 @@ export class Interpreter<R> {
     return this.sources.get(id.source)?.node(id)
   }
 
-  /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */
-  search(args: Array<Value>): Push {
-    return new Push("search", [args])
-  }
 }

@@ -182,7 +182,8 @@ const symbolNames = new Map<symbol, string>([
   [prototypeKey, ".[[Prototype]]"],
 ])
 
-const member = (base: string, key: string | symbol): string => {
+/** How a program reads `key` from `base`: `base.key`, or `base["key"]` for a key that isn't a name. */
+export const member = (base: string, key: string | symbol): string => {
   if (typeof key === "symbol") return `${base}${symbolNames.get(key) ?? `[${String(key)}]`}`
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `${base}.${key}` : `${base}[${JSON.stringify(key)}]`
 }

@@ -1,40 +1,79 @@
 import { parse, type Program } from "acorn"
 import { Cause, Deferred, Effect, Option, Schema } from "effect"
-import type { DataValue, Diagnostic, Outcome, ResolvedExecutionLimits, Result, Suspended } from "../codemode.js"
+import { fromJson, type Json } from "../data.js"
+import { DurableFn } from "../host-function.js"
 import { fromBytes, header, type Snapshot, SnapshotError, toBytes } from "../snapshot/snapshot.js"
-import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
+import { hostGlobals } from "./extensions.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
-import { HostNamespace, type Value } from "./objects.js"
-import { callTool } from "../host.js"
-import { formatLocation, sourceLocation } from "./model.js"
-import { callPath, Driver, SUSPENDED } from "./driver.js"
+import type { Value } from "./objects.js"
+import { type Diagnostic, formatLocation, sourceLocation } from "./model.js"
+import { Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
 import type { Vm } from "../vm.js"
 
 /**
  * A suspend that failed, leaving the run running: `running` names each host call that blocked it by its key and its
- * path (`tools.x.y`, `search`, or an extension function's path such as `fetch`). Empty when the state couldn't be
- * saved or was too large.
+ * path (`fetch`, `fs.readFile`, `api.issues.list`). Empty when the state couldn't be saved or was too large.
  */
 export class SuspendError extends Schema.TaggedError<SuspendError>()("SuspendError", {
   message: Schema.String,
   running: Schema.Array(Schema.Struct({ key: Schema.String, path: Schema.String })),
 }) {}
 
+/** A run that ended: its value, or the diagnostic it failed with, plus its logs and its `run.metadata` at the end. */
+export type Result =
+  | {
+      readonly ok: true
+      readonly value: Json
+      readonly warnings?: ReadonlyArray<Diagnostic>
+      readonly logs?: ReadonlyArray<string>
+      readonly truncated?: boolean
+      readonly metadata: Json
+    }
+  | {
+      readonly ok: false
+      readonly error: Diagnostic
+      readonly logs?: ReadonlyArray<string>
+      readonly truncated?: boolean
+      readonly metadata: Json
+    }
+
+/** A run stopped by `program.suspend`: its whole state, to resume with `Runtime.resume`. */
+export type Suspended = {
+  readonly ok: "suspended"
+  readonly state: Snapshot
+}
+
+/** How a run of a program ended: its result, or its saved state once suspended. */
+export type Outcome = Result | Suspended
+
+/**
+ * One run of a program, as its host globals see it. `metadata` is the host's own state for the run, as JSON: saved
+ * with a suspended run and given back on resume, and in the run's result.
+ */
+export type Run = {
+  readonly id: string
+  metadata: Json
+}
+
+/** The budgets every run of a runtime gets. Time counts active time only, across every resume of a run. */
+export type Limits = {
+  readonly timeoutMs: number | undefined
+  readonly maxOutputBytes: number | undefined
+}
+
 type Globals<R> = (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
 
-/** How a runtime runs programs: its tools, limits, hooks, and host globals, shared by every run it starts. */
+/** How a runtime runs programs: its limits and host globals, shared by every run it starts. */
 export type Setup<R> = {
-  readonly prepared: ToolRuntime.Prepared<R>
-  readonly limits: ResolvedExecutionLimits
-  readonly hooks: ToolRuntime.Hooks<R>
-  /** The host's globals, made again for a restored run; see `Interpreter`. */
-  readonly globals?: Globals<R> | undefined
-  /** Whether the host globals can hand the program values with no data form (extensions can). */
-  readonly lossy?: boolean
+  readonly limits: Limits
+  /** Each run's host globals (see `Host`): made when it starts, and again for a restored run. */
+  readonly globals?: ((run: Run) => Readonly<Record<string, unknown>>) | undefined
+  /** Globals made as program values (a test harness), made again the same way for a restored run. */
+  readonly programGlobals?: Globals<R> | undefined
 }
 
 /** Turns a suspended outcome into a failure, for callers that only run programs to their end. */
@@ -44,7 +83,7 @@ export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Ef
     return {
       ok: false,
       error: { kind: "ExecutionFailure", message: "The program suspended, which isn't supported here." },
-      toolCalls: outcome.state.header.toolCalls,
+      metadata: outcome.state.header.metadata,
     }
   })
 
@@ -52,25 +91,26 @@ export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Ef
 export const startProgram = <R>(
   setup: Setup<R>,
   code: string,
-  bindings?: Globals<R>,
+  bindings?: Readonly<Record<string, Json>>,
   runId: string = crypto.randomUUID(),
 ): Running<R> =>
   new Running(setup, 0, () => {
     if (code.trim().length === 0) {
-      return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, toolCalls: [] }
+      return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, metadata: null }
     }
     const parsed = parseProgram(code)
-    if (!parsed.ok) return { ok: false, error: parsed.error, toolCalls: [] }
-    const runtime = instantiate(setup, bindings)
+    if (!parsed.ok) return { ok: false, error: parsed.error, metadata: null }
+    const run: Run = { id: runId, metadata: null }
+    const runtime = instantiate(setup, run, bindings)
     runtime.vm.hosts.runId = runId
     runtime.vm.start(parsed.source)
-    return runtime
+    return [runtime, run] as const
   })
 
 /**
  * Restores a saved run into this runtime, under the limits it was saved with, ready to run as `startProgram`'s.
  * Fails with a `SnapshotError` when the state can't be read or belongs to another build, other host globals, or other
- * sources.
+ * sources, or when a durable call it waits on has no durable function at its path any more.
  */
 export const resumeProgram = <R>(
   setup: Setup<R>,
@@ -79,26 +119,26 @@ export const resumeProgram = <R>(
   Effect.try({
     try: () => {
       const state = saved instanceof Uint8Array ? fromBytes(saved) : saved
-      const limits = header(state).limits
+      const saw = header(state)
       const resumed: Setup<R> = {
         ...setup,
         limits: {
-          timeoutMs: limits.timeoutMs ?? undefined,
-          maxToolCalls: limits.maxToolCalls ?? undefined,
-          maxOutputBytes: limits.maxOutputBytes ?? undefined,
+          timeoutMs: saw.limits.timeoutMs ?? undefined,
+          maxOutputBytes: saw.limits.maxOutputBytes ?? undefined,
         },
       }
-      const fresh = instantiate(resumed)
+      const run: Run = { id: saw.runId, metadata: saw.metadata }
+      const fresh = instantiate(resumed, run)
       const snapshot = restoreInto(state, fresh.vm)
       for (const call of fresh.vm.calls()) {
         if (call.status !== "started") continue
-        if (call.request.kind !== "tool" || fresh.tools.mode(call.request.path)?._tag !== "CodeModeDurable") {
+        if (call.path === undefined || !(fresh.hosts?.resolve(call.path) instanceof DurableFn)) {
           throw new SnapshotError(
-            `The pending durable call ${call.key} (${callPath(call)}) cannot resume because that tool is no longer a durable tool in this runtime.`,
+            `The pending durable call ${call.key} (${call.label}) cannot resume because that function is no longer a durable function in this runtime.`,
           )
         }
       }
-      return new Running(resumed, snapshot.header.budget.activeMs, () => fresh, true)
+      return new Running(resumed, snapshot.header.budget.activeMs, () => [fresh, run] as const, true)
     },
     catch: (error) => (error instanceof SnapshotError ? error : new SnapshotError(String(error))),
   })
@@ -120,23 +160,19 @@ const restoreInto = (saved: unknown, vm: Vm): Snapshot =>
     interruption: () => new Interruption(Cause.interrupt()),
   })
 
-/** The `tools` global: a namespace over the run's tool bridge. */
-export const toolsGlobal = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, Value]> => {
-  ctx.hostNamespaces.set("tools", {
-    keys: (path) => ctx.tools.keys(path),
-    call: (path, args, site) => callTool(ctx.vm, ctx.vm.hosts, path, args, site),
-  })
-  return [["tools", new HostNamespace("tools", [])]]
-}
-
-// A new runtime: intrinsics, the host globals, the program's bindings, a fresh tool bridge, and its VM.
-const instantiate = <R>(setup: Setup<R>, bindings?: Globals<R>): Interpreter<R> => {
+// A new runtime for a run: intrinsics, the host globals, the program's bindings, and its VM.
+const instantiate = <R>(setup: Setup<R>, run: Run, bindings?: Readonly<Record<string, Json>>): Interpreter<R> => {
   const ctx = new Interpreter<R>({
-    tools: ToolRuntime.make(setup.prepared, setup.limits.maxToolCalls, setup.hooks),
     builtins: createBuiltins(),
     logs: [],
-    globals: (ctx) => [...toolsGlobal(ctx), ...(setup.globals?.(ctx) ?? [])],
-    bindings,
+    globals: (ctx) => [
+      ...(setup.programGlobals?.(ctx) ?? []),
+      ...(setup.globals === undefined ? [] : hostGlobals(ctx, setup.globals(run))),
+    ],
+    bindings:
+      bindings === undefined
+        ? undefined
+        : (ctx) => Object.entries(bindings).map(([name, value]) => [name, fromJson(ctx, value)] as const),
   })
   if (roundTrip) ctx.vm.tripEvery = ROUND_TRIP_TICKS
   return ctx
@@ -157,6 +193,7 @@ const ROUND_TRIP_MAX = 200
 /** One run's state: the runtime it is in now (restoring swaps it), its driver, and how much active time it used. */
 export class Running<R> {
   private ctx!: Interpreter<R>
+  private run_!: Run
   private driver!: Driver<R>
   private startedAt = 0
   // Set once the program's body ends, and once a suspend saved the run: either way, `done` gets the outcome next.
@@ -172,7 +209,7 @@ export class Running<R> {
     private readonly setup: Setup<R>,
     /** Active milliseconds used before this run, by earlier ones of the same execution. */
     private readonly activeBefore: number,
-    private readonly prepare: () => Interpreter<R> | Result,
+    private readonly prepare: () => readonly [Interpreter<R>, Run] | Result,
     private readonly resuming = false,
   ) {}
 
@@ -181,12 +218,14 @@ export class Running<R> {
     const self = this
     return Effect.gen(function* () {
       const prepared = self.prepare()
-      if (!(prepared instanceof Interpreter)) {
+      if (!Array.isArray(prepared)) {
         self.finished = true
-        return prepared
+        return prepared as Result
       }
-      self.ctx = prepared
-      self.driver = new Driver(prepared.vm, prepared.tools, yield* Effect.context<R>())
+      const [ctx, run] = prepared as readonly [Interpreter<R>, Run]
+      self.ctx = ctx
+      self.run_ = run
+      self.driver = new Driver(ctx.vm, yield* Effect.context<R>())
       if (roundTrip) self.driver.checkpoint = Effect.sync(() => self.trip())
       self.startedAt = Date.now()
       return yield* self.execute()
@@ -222,10 +261,10 @@ export class Running<R> {
       const logs = self.ctx.logs
       return logs.length > 0 ? { logs: [...logs] } : {}
     }
-    const toolCalls = () => self.ctx.tools.calls
-    const failed = (error: Diagnostic): Result => ({ ok: false, error, ...logged(), toolCalls: toolCalls() })
+    const metadata = () => self.run_.metadata
+    const failed = (error: Diagnostic): Result => ({ ok: false, error, ...logged(), metadata: metadata() })
     // Set only after copy-out so timeouts cannot report invalid values as completed.
-    let returned: { value: DataValue; warnings: () => Array<Diagnostic> } | undefined
+    let returned: { value: Json; warnings: () => Array<Diagnostic> } | undefined
 
     const base = Effect.gen(function* () {
       const driver = self.driver
@@ -235,7 +274,7 @@ export class Running<R> {
       if (outcome === SUSPENDED) return self.suspended!
       self.finished = true
       if (!outcome.ok) return failed(normalizeError(outcome.error))
-      const result = (outcome.value as DataValue | undefined) ?? null
+      const result = (outcome.value as Json | undefined) ?? null
       const vm = self.ctx.vm
       returned = { value: result, warnings: () => vm.diagnostics() }
       // Host work the program left running is interrupted, not awaited.
@@ -246,7 +285,7 @@ export class Running<R> {
         value: result,
         ...(warnings.length > 0 ? { warnings } : {}),
         ...logged(),
-        toolCalls: toolCalls(),
+        metadata: metadata(),
       } satisfies Result
     }).pipe(Effect.ensuring(Effect.suspend(() => self.driver.interrupt())))
     const timeoutMs = limits.timeoutMs
@@ -275,7 +314,7 @@ export class Running<R> {
                       ...returned.warnings(),
                     ],
                     ...logged(),
-                    toolCalls: toolCalls(),
+                    metadata: metadata(),
                   } satisfies Result
                 }),
             }),
@@ -322,12 +361,9 @@ export class Running<R> {
     const limits = this.setup.limits
     const saved = attempt(() =>
       vm.capture({
-        limits: {
-          timeoutMs: limits.timeoutMs ?? null,
-          maxToolCalls: limits.maxToolCalls ?? null,
-          maxOutputBytes: limits.maxOutputBytes ?? null,
-        },
+        limits: { timeoutMs: limits.timeoutMs ?? null, maxOutputBytes: limits.maxOutputBytes ?? null },
         activeMs: this.activeBefore + Date.now() - this.startedAt,
+        metadata: this.run_.metadata,
         strict: false,
       }),
     )
@@ -353,9 +389,10 @@ export class Running<R> {
     return { ok: "suspended", state: snapshot }
   }
 
-  // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime. States that
-  // hold live host values (an extension call in flight, a function an extension without `snapshot` hooks returned)
-  // can't round-trip, so they are skipped; a lost value anywhere else is a codec gap and fails the run.
+  // The round-trip test mode's checkpoint: saves the state to bytes and continues in a brand-new runtime, made with
+  // the run's metadata as it would be on resume. States that hold live host values (a call waiting on what its host
+  // function returned, a function a host function without `snapshot` hooks returned) can't round-trip, so they are
+  // skipped; a value with no data form anywhere else is a codec gap and fails the run.
   private trip(): void {
     const driver = this.driver
     if (this.trips >= ROUND_TRIP_MAX) {
@@ -368,23 +405,24 @@ export class Running<R> {
     }
     if (driver.holdsHostValues) return
     this.trips++
-    const attempted = attempt(() => this.ctx.vm.capture({ strict: !this.setup.lossy }))
-    // An extension's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
+    const attempted = attempt(() => this.ctx.vm.capture({ metadata: this.run_.metadata, strict: true }))
+    // A host function's `snapshot` hooks may refuse to save a value, which fails a suspend, not the run.
     if (!attempted.ok) {
       const error = attempted.error
-      if (error instanceof SnapshotError && error.message.startsWith("The extension ")) return
+      if (error instanceof SnapshotError && error.message.startsWith("The host function ")) return
       throw error
     }
     const saved = attempted.value
     const bytes = toBytes(saved.snapshot)
     this.skip = Math.floor(saved.snapshot.records.length / 200 + bytes.byteLength / 100_000)
     if (saved.lost.length > 0) return
-    const fresh = instantiate(this.setup)
-    restoreInto(fromBytes(bytes), fresh.vm)
-    for (const [key, invocation] of this.ctx.tools.invocations) fresh.tools.invocations.set(key, invocation)
+    const restored = fromBytes(bytes)
+    const run = { id: this.run_.id, metadata: header(restored).metadata }
+    const fresh = instantiate(this.setup, run)
+    restoreInto(restored, fresh.vm)
     this.ctx = fresh
+    this.run_ = run
     driver.vm = fresh.vm
-    driver.tools = fresh.tools
   }
 }
 
@@ -471,7 +509,7 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   const serialized = result.ok ? (JSON.stringify(result.value) ?? "null") : ""
   const valueBytes = result.ok ? utf8ByteLength(serialized) : 0
   const valueTruncated = valueBytes > maxOutputBytes
-  const value: DataValue = !result.ok
+  const value: Json = !result.ok
     ? null
     : valueTruncated
       ? `${utf8Truncate(serialized, maxOutputBytes)} [result truncated: ${valueBytes} bytes exceeds the ${maxOutputBytes}-byte output limit; return a smaller value]`
@@ -497,6 +535,6 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
   const warningsPart = keptWarnings.length > 0 ? { warnings: keptWarnings } : {}
   const logsPart = kept.length > 0 ? { logs: kept } : {}
   return result.ok
-    ? { ok: true, value, ...warningsPart, ...logsPart, truncated: true, toolCalls: result.toolCalls }
-    : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
+    ? { ok: true, value, ...warningsPart, ...logsPart, truncated: true, metadata: result.metadata }
+    : { ok: false, error: result.error, ...logsPart, truncated: true, metadata: result.metadata }
 }

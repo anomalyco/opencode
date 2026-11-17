@@ -1,5 +1,6 @@
 import type { Json } from "./data.js"
-import type { ExtensionInvocation } from "./tool-runtime.js"
+import type { DurableFn, Fn } from "./host-function.js"
+import type { HostTarget } from "./host.js"
 import { locate } from "./runtime/errors.js"
 import type { AstNode } from "./runtime/model.js"
 import type { Callable, Cursor, GeneratorObj, Obj, PromiseObj, Value } from "./runtime/objects.js"
@@ -67,61 +68,53 @@ export type Job =
   | { readonly kind: "thenable"; readonly promise: PromiseObj; readonly thenable: Obj; readonly then: Value }
 
 /**
- * What host work a call asks for, as data the driver turns into an Effect: a tool call, a search, or a step of an
- * extension function's call (see `ExtensionRequest`).
+ * How a host call runs, from its function's options (see `Host.Type`): `sync` and `sync-thenable` calls block the job
+ * or settle a promise for what the function left pending, `async` calls run concurrently, `idempotent` ones may run
+ * again after a suspend, and `durable` ones keep running across it.
  */
-export type HostRequest =
-  | { readonly kind: "tool"; readonly path: ReadonlyArray<string>; readonly args: Array<Json | undefined> }
-  | { readonly kind: "search"; readonly args: Array<Json | undefined> }
-  | { readonly kind: "extension"; readonly call: ExtensionRequest }
-
-/**
- * One step of a call to an extension function: its `extension.before` hook (`before`), settling what the host function
- * returned or threw (`settle`: `host` is that), or calling an async host function and settling its result (`run`:
- * `host` is the function). `invocation` is what the hooks see, for a global or a global object's function. The host
- * function and what it returns are live host values with no data form, dropped once the call completes.
- */
-export type ExtensionRequest = {
-  readonly stage: "before" | "settle" | "run"
-  readonly label: string
-  readonly extension?: string | undefined
-  invocation: ExtensionInvocation | undefined
-  host: unknown
-  args: ReadonlyArray<unknown>
-  readonly threw: boolean
-}
+export type HostPolicy = "sync" | "sync-thenable" | "async" | "idempotent" | "durable"
 
 /**
  * Host work the program waits on. The VM queues it and hands it to the driver at its next stop; the driver runs it and
  * reports how it ended with `Vm.complete`. A concurrent call's outcome waits in the inbox and settles its promise in a
- * later job; a blocking call stops the VM, and no other job runs until it ends.
+ * later job; a blocking call stops the VM, and no other job runs until it ends. Its live parts, the host function and
+ * what it returned, are never saved: a resumed run finds the function again by `path`.
  */
 export class HostCall {
   /**
-   * Where the call is: `queued` (written ahead, not started), `running` (or in `start` for a durable tool),
-   * `started` (a durable tool whose `start` returned its `data`, now in `wait`), or `completed`.
+   * Where the call is: `queued` (written ahead, not started), `running` (or in `start` for a durable call),
+   * `started` (a durable call whose `start` returned its `data`, now in `wait`), or `completed`.
    */
   status: "queued" | "running" | "started" | "completed" = "queued"
-  /** The JSON data a durable tool's `start` returned, saved so a resumed run can call `wait(data)`. */
+  /** The JSON data a durable call's `start` returned, saved so a resumed run can call `wait(data)`. */
   data: Json | undefined = undefined
-  /** Whether a tool call has already been counted against `maxToolCalls` and recorded in `toolCalls`. */
-  admitted = false
+  /** The host function, while the call is in progress. */
+  fn: Fn<unknown> | DurableFn<unknown> | undefined = undefined
+  /** What a host function returned and left pending (an Effect, or a Promise), which the driver waits on. */
+  work: unknown = undefined
+  /** What the program names it by, where it is among the host globals, and whose hooks save what it returns. */
+  readonly label: string
+  readonly path: ReadonlyArray<string> | undefined
+  readonly owner: string | undefined
   constructor(
     readonly id: number,
     /** The call's stable idempotency key, `<runId>:<callId>`. */
     readonly key: string,
-    readonly request: HostRequest,
-    /** What runs: a tool path, or an extension function's label. */
-    readonly label: string,
+    target: HostTarget,
+    readonly policy: HostPolicy,
+    /** The arguments as they crossed to the host. */
+    public args: ReadonlyArray<unknown>,
     /** The running job waits for it: its outcome continues the frame that asked, before any other job. */
     readonly blocking: boolean,
-    /** How a concurrent call's result becomes a program value: a tool's crosses as JSON, an extension's is one. */
-    readonly result: "json" | "value",
     /** Settles a concurrent call's promise. */
     readonly resolving: Resolving | undefined,
     /** The call that started the work, where a defect it raises is located. */
     readonly site: AstNode | undefined,
-  ) {}
+  ) {
+    this.label = target.label
+    this.path = target.path
+    this.owner = target.owner
+  }
 }
 
 /**
