@@ -18,24 +18,4 @@ export namespace Binary {
 
     return { found: false, index: left }
   }
-
-  export function insert<T>(array: T[], item: T, compare: (item: T) => string): T[] {
-    const id = compare(item)
-    let left = 0
-    let right = array.length
-
-    while (left < right) {
-      const mid = Math.floor((left + right) / 2)
-      const midId = compare(array[mid])
-
-      if (midId < id) {
-        left = mid + 1
-      } else {
-        right = mid
-      }
-    }
-
-    array.splice(left, 0, item)
-    return array
-  }
 }
