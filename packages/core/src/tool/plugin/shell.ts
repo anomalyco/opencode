@@ -71,10 +71,6 @@ export const Input = Schema.Struct({
   }),
 })
 
-// The Code Mode catalog shows only the first 120 characters of a description, but every field annotation in full.
-const CODE_MODE_DESCRIPTION =
-  "Run a shell command and wait for it to exit (up to timeout). Read the result fields below."
-
 const CodeModeInput = Schema.Struct({ ...Input.fields, timeout: timeoutInput(CODE_MODE_TIMEOUT_MS) })
 
 const StructuredOutput = Schema.Struct({
@@ -380,7 +376,7 @@ export const Plugin = {
           // With full_codemode, shell is called as `tools.shell` inside `execute` instead of as a direct tool, and is
           // pinned so the Code Mode catalog always lists it, however many other tools there are.
           options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: codeMode ? CODE_MODE_DESCRIPTION : description(),
+          description: description(),
           input: codeMode ? CodeModeInput : Input,
           output: StructuredOutput,
           execute: (input, context) => {
