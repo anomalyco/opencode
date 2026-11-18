@@ -533,8 +533,6 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source(r"\\?\UNC\server\share\x", dir), Some(r"\\server\share\x".into()));
 }
 
-// Expected (win11-runs D2): what the JS host is handed loses a verbatim prefix, which Bun resolves nothing under; a
-// path without one is unchanged.
 #[test]
 fn a_verbatim_path_is_handed_on_plain() {
     for (path, plain_path) in [
@@ -654,7 +652,6 @@ fn a_build_that_never_loaded_is_failed_and_ids_stay_unique() {
     assert_eq!(entry(&entries, &target("c")).source, Source::Configured);
 }
 
-// Expected (D5): a build refused for a taken ID loads once the plugin that had the ID is removed.
 #[test]
 fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -680,8 +677,6 @@ fn a_build_refused_for_a_taken_id_loads_once_the_id_is_free() {
     );
 }
 
-// Expected (bigboi-4): a rebuild refused for a taken ID, while its previous build keeps running, loads once the owner of
-// the ID is removed.
 #[test]
 fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -714,7 +709,6 @@ fn a_running_plugin_takes_the_id_it_waited_for_once_the_owner_is_removed() {
     assert_eq!(b(), ("x".to_owned(), Status::Active));
 }
 
-// Expected (bigboi-4): a build refused for a taken ID loads once the owner's rebuild takes another ID.
 #[test]
 fn a_refused_build_loads_once_the_owner_takes_another_id() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -768,8 +762,6 @@ fn directives_after_an_entry_disable_an_external_plugin() {
     assert_eq!(status("two"), Status::Active);
 }
 
-// Expected: while `<cwd>/.opencode/plugins` is missing, the directory it would be made in is watched, even when
-// `<cwd>/.opencode` is missing too and `cwd` is below the project root.
 #[test]
 fn watch_dirs_cover_a_plugins_directory_made_later() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -812,7 +804,6 @@ pub(crate) fn logged() -> &'static std::sync::Mutex<Vec<String>> {
     &capture.0
 }
 
-// Expected (D6): a configured native library is not logged as a skipped TypeScript plugin; a TypeScript target is.
 #[test]
 fn only_a_target_without_a_native_build_is_logged_as_skipped() {
     let warnings = logged();
@@ -836,9 +827,6 @@ fn only_a_target_without_a_native_build_is_logged_as_skipped() {
     assert_eq!(skipped, [format!("plugin {typescript} skipped: {SKIPPED}")]);
 }
 
-// Expected (r2 review, bigboi-ui-5): changed `plugins` entries apply while running, as TS reconciles on
-// `config.data.plugins`: changed options load the build again with them, a removed entry unloads, and the directives
-// enable and disable plugins again.
 #[test]
 fn changed_plugin_entries_reconcile_while_running() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -951,9 +939,6 @@ fn library(target: &str) -> std::path::PathBuf {
     std::path::Path::new(target).join(entry_file())
 }
 
-// Expected (rich-plugins 3.9, O-125): a build in a project's `.opencode/plugins` is not opened until the user approves
-// it, and it is listed pending; the host asks once a build. The approval names the place and the bytes: it lasts across
-// clients, and a changed library is pending again, which stops the running build.
 #[test]
 fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     let project = Project::new();
@@ -1013,9 +998,6 @@ fn a_project_plugin_waits_for_an_approval_of_its_artifact() {
     assert_eq!(asked(&host).len(), before + 2);
 }
 
-// Expected (bigboi-1, carbon-1): an answer names the build the user was shown. When the library is replaced while the
-// question is open and the watcher reconciles first, neither answer records anything, and the new build is asked
-// about; the build shown is not approved by it either.
 #[test]
 fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
@@ -1039,9 +1021,6 @@ fn an_answer_records_nothing_for_a_build_replaced_while_it_was_asked() {
     }
 }
 
-// Expected (final review big-boi 9): when the library is replaced while the question is open and the answer comes
-// before the watcher's reconcile, neither answer saves anything, for the build shown or the new one; the reconcile
-// after asks about the new build, and the build shown, when it comes back, is still pending.
 #[test]
 fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
     for decision in [approval::Decision::Approved, approval::Decision::Declined] {
@@ -1067,7 +1046,6 @@ fn an_answer_before_the_watcher_saves_nothing_for_a_changed_build() {
     }
 }
 
-// Expected (bigboi-1): a directory link retargeted while the question is open is another build too.
 #[cfg(unix)]
 #[test]
 fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
@@ -1092,8 +1070,6 @@ fn an_answer_records_nothing_for_a_directory_retargeted_while_it_was_asked() {
     assert_eq!(entry(&registry.entries(), &target).status, Status::Pending);
 }
 
-// Expected (bigboi-3): a build that names a dependency the project would supply is refused before the backend opens
-// it, also once approved; a build that names only system libraries loads.
 #[test]
 fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     let project = Project::new();
@@ -1118,8 +1094,6 @@ fn a_build_that_names_a_project_dependency_is_refused_before_it_opens() {
     assert_eq!(fake.loads.get(), 0);
 }
 
-// Expected (final review big-boi 11): under a crash guard, a build whose identity the run record cannot hold is not
-// opened, with an error that says what to do; a build at a short path beside it loads.
 #[test]
 fn a_build_the_crash_record_cannot_name_is_not_opened() {
     let project = Project::new();
@@ -1139,9 +1113,6 @@ fn a_build_the_crash_record_cannot_name_is_not_opened() {
     assert_eq!(fake.loads.get(), 1, "the deep build was opened");
 }
 
-// Expected (final re-review big-boi 11): a build whose ID is too long for the run record, at a short path, is named
-// there by its target and digest, so it loads; removed and restored with the same bytes, it is the same build and
-// loads again, also while the record keeps its slot from before.
 #[test]
 fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     let project = Project::new();
@@ -1167,9 +1138,6 @@ fn the_same_build_with_a_long_id_loads_again_after_it_comes_back() {
     assert_eq!(fake.loads.get(), 2);
 }
 
-// Expected (final re-review big-boi 3, on every platform): a build whose quarantine the system cannot read is not
-// opened: a global one fails with the reason the user sees in the manager, and an approved project one is held back,
-// also once approved; with the attribute readable again, each loads.
 #[test]
 fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     let project = Project::new();
@@ -1199,7 +1167,6 @@ fn a_build_whose_quarantine_cannot_be_read_is_not_opened() {
     assert_eq!(entry(&registry.entries(), &target).status, Status::Active);
 }
 
-// Expected: an approved build that fails is told again when it comes back after a spell as pending, as a new failure.
 #[test]
 fn a_failure_after_a_pending_spell_is_told_again() {
     let project = Project::new();
@@ -1221,9 +1188,6 @@ fn a_failure_after_a_pending_spell_is_told_again() {
     assert_eq!((failed(), entry(&registry.entries(), &target).status.clone()), (2, Status::Failed("boom".to_owned())));
 }
 
-// Expected (3.9, carbon-1): an approval names the plugin directory and the library's real path. Another plugin
-// directory that links to the approved library (another project's) is asked about on its own, and so is the same
-// directory once it links to another file with the same bytes.
 #[cfg(unix)]
 #[test]
 fn an_approval_names_its_directory_and_the_real_path() {
@@ -1252,8 +1216,6 @@ fn an_approval_names_its_directory_and_the_real_path() {
     assert_eq!(entry(&registry.entries(), &a).status, Status::Pending);
 }
 
-// Expected (3.9, carbon-4, bigboi-6): a `cli.json` entry that names a project's plugin needs no approval, however it
-// names it: the directory, the library itself, or a link to either. The plugin is listed once.
 #[test]
 fn a_project_plugin_named_in_cli_json_needs_no_approval() {
     let project = Project::new();
@@ -1276,8 +1238,6 @@ fn a_project_plugin_named_in_cli_json_needs_no_approval() {
     }
 }
 
-// Expected (3.9): a pending plugin claims nothing, so a pending build with a built-in's ID does not replace the
-// built-in, and does not take an ID another plugin then cannot have.
 #[test]
 fn a_pending_plugin_replaces_no_built_in_and_takes_no_id() {
     let project = Project::new();
@@ -1303,9 +1263,6 @@ fn root() -> bool {
     std::fs::metadata("/proc/self").is_ok_and(|metadata| std::os::unix::fs::MetadataExt::uid(&metadata) == 0)
 }
 
-// Expected (bigboi-8, carbon-5): an approved, running project plugin whose library cannot be read any more stops, and
-// is pending without a question or a failure report; an unapproved one that cannot be read is quiet too, and offers
-// nothing to approve.
 #[cfg(unix)]
 #[test]
 fn a_project_plugin_that_cannot_be_read_stops_quietly() {
@@ -1334,8 +1291,6 @@ fn a_project_plugin_that_cannot_be_read_stops_quietly() {
     assert_eq!(host.toasts.borrow().len(), 1);
 }
 
-// Expected (carbon-5): a library over the limit is refused before it is read: a project's is held back with the reason,
-// and another is failed.
 #[test]
 fn a_library_over_the_limit_is_not_read() {
     let project = Project::new();
@@ -1353,8 +1308,6 @@ fn a_library_over_the_limit_is_not_read() {
     assert_eq!(fake.loads.get(), 0);
 }
 
-// Expected (bigboi-8): a project plugin whose library goes between the reconcile's first look and its own turn stops
-// in that reconcile.
 #[test]
 fn a_project_library_gone_in_the_middle_of_a_reconcile_stops_its_plugin() {
     let project = Project::new();
@@ -1383,8 +1336,6 @@ fn artifact(path: &std::path::Path, sha256: &str) -> approval::Artifact {
     approval::Artifact { target, path: path.to_path_buf(), sha256: sha256.into(), script: false }
 }
 
-// Expected (bigboi-4, carbon-3): two clients that decide at once on different plugins lose nothing: each update reads,
-// changes and replaces the store under its lock.
 #[test]
 fn concurrent_clients_keep_each_others_decisions() {
     let project = Project::new();
@@ -1420,7 +1371,6 @@ fn concurrent_clients_keep_each_others_decisions() {
     assert!(left.is_empty(), "{left:?}");
 }
 
-// Expected (bigboi-4): a decision another client replaced stays replaced when this client saves another one.
 #[test]
 fn a_replaced_decision_stays_replaced() {
     let project = Project::new();
@@ -1436,8 +1386,6 @@ fn a_replaced_decision_stays_replaced() {
     assert_eq!(one.decision(&artifact(path, "bb")), Some(approval::Decision::Approved));
 }
 
-// Expected (win11-runs D3): a decision made for a plugin directory spelled plainly holds for its verbatim spelling and the
-// other way round, and stays apart from another directory's.
 #[test]
 fn a_verbatim_spelling_is_the_same_place() {
     let project = Project::new();
@@ -1452,8 +1400,6 @@ fn a_verbatim_spelling_is_the_same_place() {
     assert_eq!(approvals.decision(&artifact(plain, "aa")), Some(approval::Decision::Declined));
 }
 
-// Expected (bigboi-7, carbon-3): a path that is not Unicode is kept exactly, with either answer, and the other
-// decisions stay; the store is private to the user.
 #[cfg(unix)]
 #[test]
 fn a_path_that_is_not_unicode_is_kept_with_the_others() {
@@ -1474,8 +1420,6 @@ fn a_path_that_is_not_unicode_is_kept_with_the_others() {
     assert_eq!(fs::metadata(project.store()).unwrap().permissions().mode() & 0o777, 0o600);
 }
 
-// Expected (bigboi-7, carbon-3): a store that cannot be written or read keeps what it holds, says why, and approves
-// nothing; a store that others could write, or a link, is not trusted.
 #[cfg(unix)]
 #[test]
 fn a_store_that_fails_keeps_what_it_holds_and_approves_nothing() {
@@ -1511,8 +1455,6 @@ fn a_store_that_fails_keeps_what_it_holds_and_approves_nothing() {
     assert_eq!(approvals.decision(&kept), None);
 }
 
-// Expected (bigboi-2): decisions are not saved where the project could reach them, nor in a relative or shared state
-// directory; they last as long as the client then, and the reason is given.
 #[test]
 fn a_store_the_project_could_reach_is_not_used() {
     let project = Project::new();
@@ -1537,8 +1479,6 @@ fn a_store_the_project_could_reach_is_not_used() {
     assert_eq!(project.approvals().unsaved(), None);
 }
 
-// Expected (bigboi-1, bigboi-5): what is loaded is what was hashed. A library rewritten in place between the hash and
-// the read is refused; the same bytes read again pass.
 #[test]
 fn bytes_changed_after_the_hash_are_refused() {
     let project = Project::new();
@@ -1550,7 +1490,6 @@ fn bytes_changed_after_the_hash_are_refused() {
     assert!(artifact.bytes(&mut handle).unwrap_err().contains("changed since it was hashed"));
 }
 
-// Expected (carbon-3): an entry a newer client wrote, which this one cannot read, stays when this one saves.
 #[test]
 fn an_entry_this_client_cannot_read_stays() {
     let project = Project::new();
@@ -1562,8 +1501,6 @@ fn an_entry_this_client_cannot_read_stays() {
     assert_eq!(stored.as_array().unwrap().len(), 2);
 }
 
-// Expected (bigboi-2, carbon-3): a store that is not a regular file, such as a FIFO, is not opened, so nothing waits on
-// it; a temporary file another client left does not stop a save; the state directory made is private.
 #[cfg(unix)]
 #[test]
 fn the_store_is_a_private_regular_file() {
@@ -1583,8 +1520,6 @@ fn the_store_is_a_private_regular_file() {
     assert_eq!(approvals.decision(&shown), Some(approval::Decision::Approved));
 }
 
-// Expected (bigboi-5): a library whose name leads to another file by the time its hash is done is not identified, so
-// nothing is held for approval under the wrong path.
 #[cfg(unix)]
 #[test]
 fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
@@ -1606,8 +1541,6 @@ fn a_link_retargeted_while_it_is_hashed_is_not_identified() {
     assert!(opened.unwrap_err().contains("changed while it was read"));
 }
 
-// Expected (bigboi-1): an approved build rewritten in place between its hash and its read is not loaded, and is held
-// back without a build to approve until it is read again.
 #[test]
 fn an_approved_build_rewritten_while_it_loads_is_held_back() {
     let project = Project::new();
@@ -1627,8 +1560,6 @@ fn an_approved_build_rewritten_while_it_loads_is_held_back() {
     assert!(loader.held(&target).unwrap().unwrap_err().contains("changed since it was hashed"));
 }
 
-// Expected (bigboi-4): another client approves a new build of a plugin this client runs; once the library changes, this
-// client loads the new build without asking, as the decision allows.
 #[test]
 fn a_build_another_client_approved_replaces_the_running_one() {
     let project = Project::new();
@@ -1649,7 +1580,6 @@ fn a_build_another_client_approved_replaces_the_running_one() {
     assert_eq!(fake.loads.get(), 2);
 }
 
-// Expected (bigboi-4): a save waits for a lock another client holds briefly, and succeeds once it is free.
 #[test]
 fn a_save_waits_for_a_lock_held_briefly() {
     let project = Project::new();
@@ -1670,8 +1600,6 @@ fn a_save_waits_for_a_lock_held_briefly() {
     holder.join().unwrap();
 }
 
-// Expected (TS `mergePluginTargets`): a `cli.json` entry that names a global plugin's library is another target, as in
-// TS; only a project's plugin is replaced by the entry that names it (carbon-4).
 #[test]
 fn a_cli_json_entry_for_a_global_library_is_another_target() {
     let project = Project::new();
@@ -1695,9 +1623,6 @@ fn build_of(text: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-// Expected (synthesis 4.5; bigboi 1, 3): a build that crashed the client is never opened again: no load, no setup;
-// the manager lists it failed with the reason. A reload of the same build and an unrelated `cli.json` edit leave it
-// held; the user's enable lets it load and ends the entry; another build at the target loads and ends it too.
 #[test]
 fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1749,9 +1674,6 @@ fn a_crashed_build_is_never_opened_until_enabled_or_rebuilt() {
     assert!(registry.crashed().is_empty());
 }
 
-// Expected (review bigboi-3, P6b): a held build that shares its ID with a loaded built-in is named by its own key: its
-// release leaves the built-in running and opens the build, where a toggle by the ID reaches the built-in. A release
-// the crash list cannot record does not happen, and says why (the review's inherited finding).
 #[test]
 fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1792,9 +1714,6 @@ fn a_held_build_is_released_by_its_key_and_only_once_recorded() {
     assert_eq!(fake.loads.get(), 1);
 }
 
-// Expected (synthesis 4.5; bigboi 1, 3): after a second crash that named no plugin, no external library is opened,
-// not even to learn its ID: each is listed inactive by its target, the built-ins run, a rebuild or a list edit opens
-// nothing, and the user enables them one at a time.
 #[test]
 fn safe_mode_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1825,8 +1744,6 @@ fn safe_mode_opens_no_external_library() {
     assert_eq!(one.status, Status::Active);
 }
 
-// Expected (bigboi 2): a client no parent guards opens no external library; the manager says to restart, and enabling
-// it there is refused, since no restart could follow a crash.
 #[test]
 fn an_unsupervised_client_opens_no_external_library() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1849,8 +1766,6 @@ fn an_unsupervised_client_opens_no_external_library() {
     );
 }
 
-// Expected: the client runs under a parent only when a native build is among the targets: a discovered directory
-// with one, or a configured local library; a directory without one, or a package, is none.
 #[test]
 fn a_native_build_among_the_targets_wants_a_parent() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1866,10 +1781,6 @@ fn a_native_build_among_the_targets_wants_a_parent() {
     assert!(has_native_build(&config, &cwd, &[]));
 }
 
-// Expected (P4c on Pa): one gate decides whether a library opens, and a held target is listed once. In a new client, a
-// project build the user approved and that then crashed the client is held as crashed, not opened, in one row; a new
-// build of it waits for approval, in one row, pending, and is not opened either. In safe mode, a pending build the user
-// approves is held in one row, inactive, not also pending.
 #[test]
 fn a_crashed_project_build_is_held_in_one_row() {
     let project = Project::new();
@@ -1916,9 +1827,6 @@ fn a_crashed_project_build_is_held_in_one_row() {
     assert_eq!((rows(&registry), fake.loads.get()), (vec![Status::Inactive], 0));
 }
 
-// Expected (the artifact of a project's TypeScript plugin, P7): its hash follows what its files hold and where they are,
-// and a dependency's size; a save that changes nothing, a hidden file, and another time on a file of its own do not
-// change it. A file that is not a directory is no such artifact.
 #[test]
 fn a_typescript_plugins_artifact_is_its_files() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1950,9 +1858,6 @@ fn a_typescript_plugins_artifact_is_its_files() {
     assert!(approval::Artifact::tree(&dir.join("tui.ts")).is_err());
 }
 
-// Expected (bigboi P8-1): a TypeScript plugin's approved files are staged as a copy named by their hash, made of the
-// bytes it hashed: the copy's own hash is the approved one, a save after the approval is refused rather than copied,
-// and a copy made before is used again.
 #[test]
 fn a_typescript_plugin_is_staged_only_as_it_was_approved() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1973,8 +1878,6 @@ fn a_typescript_plugin_is_staged_only_as_it_was_approved() {
     assert_eq!(std::fs::read_dir(&staging).unwrap().count(), 0, "a refused copy was left");
 }
 
-// Expected (carbon-2): a TypeScript plugin's subdirectories are watched, so a save of a module in one reloads it; its
-// dependencies are not, as an install touches the directory itself.
 #[cfg(feature = "ts")]
 #[test]
 fn a_typescript_plugins_subdirectories_are_watched() {
@@ -1991,8 +1894,6 @@ fn a_typescript_plugins_subdirectories_are_watched() {
     assert!(!watched.iter().any(|watched| watched.starts_with(dir.join("node_modules"))), "{watched:?}");
 }
 
-// Expected (carbon-1): a `cli.json` entry that names a project's TypeScript plugin through a link replaces it, as one
-// that names a library does: it is listed once, and needs no approval.
 #[cfg(unix)]
 #[test]
 fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
@@ -2007,12 +1908,6 @@ fn a_project_typescript_plugin_named_through_a_link_is_listed_once() {
     assert_eq!(named, [(link.to_str().unwrap(), false)]);
 }
 
-// Expected (TS `context.tsx:663-665`, `Npm.resolve`, js-npm, O-162): with the JS host, a `cli.json` entry and a server
-// plugin's TUI part that name an npm package resolve in the package cache, need no approval when the user's own
-// configuration names them (here the part, in the global opencode config), and keep the generation
-// they resolved to while they are targets, as TS resolves a loaded package once a session; a package is not watched.
-// A server part the cache does not hold is left out, as TS leaves out an optional target. Without the JS host neither
-// resolves, and server parts are not targets.
 #[cfg(feature = "ts")]
 #[test]
 fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
@@ -2059,9 +1954,6 @@ fn a_package_resolves_once_in_the_npm_cache_and_is_not_watched() {
     assert!(!watched.iter().any(|dir| dir.starts_with(&cache)), "{watched:?}");
 }
 
-// Expected (O-146, O-162): a server part inside the project is a project target, and so is a package from the npm cache
-// that only the project's configuration names; a part that names a project's plugin directory another way (a link) is
-// that plugin, one target with one approval.
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
@@ -2091,9 +1983,6 @@ fn a_server_part_inside_the_project_is_the_projects() {
     assert_eq!(targets, [(dir, true), (parts[1].clone(), true), ("pkg@1.0.0".to_owned(), true)]);
 }
 
-// Expected (carbon jsnpm-2, O-162): a project's plugin directory that links outside the project stays pending, its
-// native build unopened, also once the server reports it by the link or by where it leads: a server part never stands in
-// for a project's plugin.
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
@@ -2119,8 +2008,6 @@ fn a_server_part_naming_a_linked_project_plugin_leaves_it_pending() {
     }
 }
 
-// Expected (O-162): a server target never opens a native build, even one the user's own configuration names: the part
-// is left out, and nothing loads.
 #[cfg(feature = "ts")]
 #[test]
 fn a_server_reported_native_build_never_loads() {
@@ -2139,10 +2026,6 @@ fn a_server_reported_native_build_never_loads() {
     assert_eq!((loader.targets(), fake.loads.get()), (Vec::new(), 0));
 }
 
-// Expected (O-162): a package the server reports loads without approval only when the user's own configuration names
-// its spec, exactly as written: the global opencode config or `cli.json`. One only a project's configuration names (the
-// server's list carries no provenance), or that the user names at another version, waits for approval. A local path
-// is vouched for under a global plugin directory or as a path of the user's configuration; any other waits.
 #[cfg(feature = "ts")]
 #[test]
 fn only_the_users_own_configuration_vouches_for_a_server_part() {
@@ -2217,10 +2100,6 @@ fn approvals(loader: &Loader) -> Vec<(String, bool)> {
     loader.targets().into_iter().map(|target| (target.target, target.project)).collect()
 }
 
-// Expected (carbon recheck-1, TS `supervisor.ts`): the user's entries fold in order, as TS's server folds them. A
-// removal (`-<selector>`) withdraws what an earlier entry vouched for, by the spec, by the plugin's ID as the server
-// reports it, or by a `<prefix>.*` or `*` selector; a later entry that names it again, or a selector that enables it
-// again, vouches for it again. An entry that only selects never vouches for a package nobody named.
 #[cfg(feature = "ts")]
 #[test]
 fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
@@ -2264,9 +2143,6 @@ fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
     assert_eq!(approvals(&loader), expected.map(|(spec, project)| (spec.to_owned(), project)));
 }
 
-// Expected (carbon recheck-1, TS `PluginSourceDirectory.discover`): a plugin directly under a global `plugins`
-// directory is the user's own, a link there too, but nothing inside one (its `node_modules`) is; and a removal of its
-// path withdraws that.
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
@@ -2298,9 +2174,6 @@ fn only_a_direct_child_of_a_global_plugins_directory_is_vouched_for() {
     assert_eq!((direct, deep, gone), (true, false, false));
 }
 
-// Expected (carbon recheck-2, TS `mergePluginTargets`): a server's part and a `cli.json` entry for one directory are one
-// target, `cli.json`'s with its options, however the two spell it: the server reports where a link leads, the entry
-// names the link.
 #[cfg(feature = "ts")]
 #[cfg(unix)]
 #[test]
@@ -2325,9 +2198,6 @@ fn a_server_part_and_a_cli_json_entry_for_one_directory_are_one_target() {
     }
 }
 
-// Expected (carbon recheck-2, TS `context.tsx` reconcile): when `cli.json` and a server's part name one package at two
-// versions, `cli.json`'s is the target, as TS folds `cli.json` after the server's parts and its version replaces the
-// server's for the plugin's ID; the server's part is not loaded or asked about, vouched for or not.
 #[cfg(feature = "ts")]
 #[test]
 fn a_cli_json_package_takes_precedence_over_the_servers_version() {
@@ -2342,8 +2212,6 @@ fn a_cli_json_package_takes_precedence_over_the_servers_version() {
     }
 }
 
-// Expected (carbon recheck-3): a path the loader compares or hands to Bun carries no verbatim prefix:
-// `\\?\C:\x` is `C:\x`, and `\\?\UNC\server\share\x` is `\\server\share\x`; other paths are as they were.
 #[test]
 fn a_real_path_has_no_verbatim_prefix() {
     for (path, plain_path) in [
@@ -2356,8 +2224,6 @@ fn a_real_path_has_no_verbatim_prefix() {
     }
 }
 
-// Expected (carbon recheck-3): on Windows, a package found in the cache and a server's local part are real paths
-// without the verbatim prefix `canonicalize` gives, the ones Bun is handed.
 #[cfg(feature = "ts")]
 #[cfg(windows)]
 #[test]
@@ -2377,43 +2243,6 @@ fn windows_paths_reach_the_js_host_without_a_verbatim_prefix() {
     }
 }
 
-/// Scripts whose Bun is looked for lazily, the way the client's are (O-166): `found` decides whether one is found, and
-/// the count says how often it was looked for.
-#[cfg(feature = "ts")]
-fn lazy_scripts(host: &Rc<TestHost>, found: bool) -> (Rc<crate::pipe::Scripts>, Rc<Cell<usize>>) {
-    let looks = Rc::new(Cell::new(0));
-    let find = crate::pipe::Find(Rc::new({
-        let looks = looks.clone();
-        move || {
-            looks.set(looks.get() + 1);
-            found.then(|| crate::pipe::Config::new("bun".into()))
-        }
-    }));
-    let config = crate::pipe::Config { find: Some(find), ..crate::pipe::Config::new(Default::default()) };
-    (crate::pipe::Scripts::new(config, &dynamic(host)), looks)
-}
-
-// Expected (O-166): with the JS host on by default, a client whose plugins are native builds, built-ins or none looks
-// for no Bun and starts nothing; the first TypeScript plugin makes it look, once.
-#[cfg(feature = "ts")]
-#[test]
-fn no_typescript_plugin_looks_for_no_bun() {
-    let project = Project::new();
-    project.plugin("native", "id=native");
-    let (host, registry, fake) = (host(), Registry::define(Vec::new(), []), Rc::new(Fake::default()));
-    let (scripts, looks) = lazy_scripts(&host, false);
-    let loader = project.loader(fake.clone(), Vec::new()).with_scripts(scripts.clone());
-    loader.reconcile(&dynamic(&host), &registry);
-    loader.reconcile(&dynamic(&host), &registry);
-    assert_eq!((looks.get(), scripts.looked(), scripts.pid()), (0, false, None));
-    write(&project.global().join("tui.ts"), "export default {}\n");
-    loader.reconcile(&dynamic(&host), &registry);
-    loader.reconcile(&dynamic(&host), &registry);
-    assert_eq!((looks.get(), scripts.pid()), (1, None));
-}
-
-// Expected (O-166): with the JS host on and no Bun found, a TypeScript plugin is skipped saying Bun is missing, not
-// that the JS host is off; with the JS host turned off, it says how to turn it back on.
 #[cfg(feature = "ts")]
 #[test]
 fn a_typescript_plugin_without_bun_says_bun_is_missing() {
@@ -2421,7 +2250,11 @@ fn a_typescript_plugin_without_bun_says_bun_is_missing() {
     write(&project.global().join("tui.ts"), "export default {}\n");
     let target = project.global().to_string_lossy().into_owned();
     let host = host();
-    let (scripts, _) = lazy_scripts(&host, false);
+    let config = crate::pipe::Config {
+        find: Some(crate::pipe::Find(Rc::new(|| None))),
+        ..crate::pipe::Config::new(Default::default())
+    };
+    let scripts = crate::pipe::Scripts::new(config, &dynamic(&host));
     for (scripts, reason) in [(Some(scripts), crate::SKIPPED_NO_BUN), (None, crate::SKIPPED_JS_OFF)] {
         let registry = Registry::define(Vec::new(), []);
         let loader = project.loader(Rc::new(Fake::default()), Vec::new());
@@ -2434,9 +2267,6 @@ fn a_typescript_plugin_without_bun_says_bun_is_missing() {
     }
 }
 
-// Expected (ts-feature): a build without the `ts` feature has no JS host: a TypeScript plugin directory and a `cli.json`
-// entry that names an npm package are listed as skipped, saying this build has no TypeScript plugin support, not that
-// the JS host is off; a native build beside them loads.
 #[cfg(not(feature = "ts"))]
 #[test]
 fn a_build_without_ts_says_it_has_no_typescript_plugin_support() {

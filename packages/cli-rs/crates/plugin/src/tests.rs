@@ -6,7 +6,7 @@ use opencode_ui::theme::{Catalog, ThemeMode};
 use opentui::keymap::RunResult;
 use opentui::testing::TestApp;
 
-use super::slot::{self, Kind, Placed, Placement, Resolution};
+use super::slot::{self, Placed, Placement, Resolution};
 use super::*;
 
 pub(crate) struct TestHost {
@@ -71,28 +71,6 @@ fn placed(build: impl FnOnce(&mut Placed)) -> Placed {
     let mut placed = Placed::default();
     build(&mut placed);
     placed
-}
-
-#[test]
-fn resolve_places_additive_claims_by_kind_in_enable_order() {
-    let claims = [
-        Placement::append("home.footer"),
-        Placement::before("home.footer"),
-        Placement::prepend("home.footer"),
-        Placement::after("home.footer"),
-        Placement::append("home.footer"),
-    ];
-    let resolution = slot::resolve(&slot::PATHS, &claims);
-    assert_eq!(
-        resolution.placed["home.footer"],
-        placed(|placed| {
-            placed.before = vec![1];
-            placed.prepend = vec![2];
-            placed.append = vec![0, 4];
-            placed.after = vec![3];
-        })
-    );
-    assert!(resolution.suppressed.is_empty() && resolution.degraded.is_empty());
 }
 
 #[test]
@@ -205,7 +183,14 @@ fn mount_orders_claims_around_the_content() {
     let registry = Registry::define(
         vec![
             claiming("a", vec![Placement::append("home.footer"), Placement::before("home.footer")]),
-            claiming("b", vec![Placement::prepend("home.footer"), Placement::after("home.footer")]),
+            claiming(
+                "b",
+                vec![
+                    Placement::prepend("home.footer"),
+                    Placement::after("home.footer"),
+                    Placement::append("home.footer"),
+                ],
+            ),
         ],
         [],
     );
@@ -216,7 +201,7 @@ fn mount_orders_claims_around_the_content() {
     });
     host.app().root().add(&parent);
     let lines: Vec<String> = host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect();
-    assert_eq!(lines, ["a1", "b0", "content", "a0", "b1"]);
+    assert_eq!(lines, ["a1", "b0", "content", "a0", "b2", "b1"]);
     assert!(!mount.is_empty());
 }
 
@@ -448,13 +433,6 @@ fn code_blocks_draw_in_the_theme_of_the_render() {
     host.app.render();
     assert_eq!(*seen.borrow().first().unwrap(), host.theme().background.base);
     assert_eq!(*seen.borrow().last().unwrap(), light.background.base);
-}
-
-#[test]
-fn placement_constructors_name_their_kind() {
-    assert_eq!(Placement::before("app").kind, Kind::Before);
-    assert_eq!(Placement::after("app").kind, Kind::After);
-    assert_eq!(Placement::replace("app").kind, Kind::Replace);
 }
 
 /// A plugin whose one claim at `placement` renders what `render` returns.
