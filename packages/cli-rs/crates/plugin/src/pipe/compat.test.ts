@@ -416,6 +416,18 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
 })
 
+// Carbon c2d-3: a renderable added inside itself, or inside a node under it, throws, as a tree without end would make
+// every view of it run for good; the tree stays as it was.
+test("a renderable added inside itself throws", () => {
+  const { BoxRenderable } = modules["@opentui/core"] as Json
+  const outer = new BoxRenderable(undefined, {})
+  const inner = new BoxRenderable(undefined, {})
+  outer.add(inner)
+  expect(() => outer.add(outer)).toThrow("cannot be added inside itself")
+  expect(() => inner.add(outer)).toThrow("cannot be added inside itself")
+  expect([outer.parent, inner.parent === outer, outer.getChildren().length]).toEqual([undefined, true, 1])
+})
+
 // Carbon c2b-3: an alert, a confirm or a select is built a microtask after it is asked (so a `dialog.set` right after
 // sizes it); one that a `dialog.clear()` or a `dialog.show()` settled before then answers nothing and never shows.
 test("a dialog cleared or replaced before it is built never shows", async () => {
