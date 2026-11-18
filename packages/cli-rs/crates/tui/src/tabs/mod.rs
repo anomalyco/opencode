@@ -274,7 +274,7 @@ fn install_commands(tui: &Rc<Tui>) {
             false,
             Rc::new(move |tui| {
                 if let Some(tab) = tui.tabs.tabs(tui).get(index) {
-                    tui.navigate(Route::Session { id: SessionID(tab.session_id.clone()) });
+                    tui.show_session(SessionID(tab.session_id.clone()));
                 }
             }),
         )
@@ -568,8 +568,7 @@ pub fn select(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned())));
-    tui.navigate(Route::Session { id: root });
+    tui.show_session(tui.data.read(|state| state.root(&SessionID(session.to_owned()))));
 }
 
 /// `open`: a tab for the session's root, without showing it.
@@ -659,7 +658,7 @@ fn cycle(tui: &Tui, forward: bool, unread: bool) {
     })
     .map(|tab| tab.session_id.clone());
     if let Some(session) = target {
-        tui.navigate(Route::Session { id: SessionID(session) });
+        tui.show_session(SessionID(session));
     }
 }
 

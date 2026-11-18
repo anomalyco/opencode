@@ -749,7 +749,7 @@ impl Open {
         tui.app.defer(bind!(tui, |tui, _| {
             tui.dialogs.clear();
             match target {
-                Target::Session(id) => tui.navigate(Route::Session { id }),
+                Target::Session(id) => tui.show_session(id),
                 Target::Project { directory, .. } => {
                     crate::features::location::navigate_home(&tui, Some(opencode_store::Location::new(directory)))
                 }

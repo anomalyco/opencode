@@ -448,6 +448,53 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
     }
 }
 
+// `tabs.select` is `route.navigate`, a reconcile of the route store: the session already shown stays as it is. A
+// remount scrolled the transcript to its end for a frame, then back to the row it was read at (a flicker).
+#[test]
+fn clicking_the_open_tab_leaves_the_transcript_as_it_is() {
+    let mut routes = routes();
+    let messages: Vec<Value> = (1..=40)
+        .rev()
+        .map(|n| json!({ "id": format!("msg_{n:02}"), "type": "user", "text": format!("Line {n}"), "time": { "created": n } }))
+        .collect();
+    let path = "/api/session/ses_a/message";
+    routes.insert(0, MemoryRoute::json("GET", path, 200, &json!({ "data": messages, "cursor": {} })));
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    let config = json!({ "animations": false, "session": { "sidebar": "hide" }, "tabs": { "layout": "vertical" } });
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        roots: support::roots(paths, CHANNEL),
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(120, 30, deps);
+    h.wait_for("Line 40");
+    for _ in 0..5 {
+        h.app.scroll(80, 10, false);
+    }
+    let tab = || {
+        let text = h.app.render().text();
+        let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Fix the parser")).unwrap();
+        (line[..line.find("Fix the parser").unwrap()].chars().count() as u16 + 2, row as u16)
+    };
+    let (x, y) = tab();
+    h.app.hover(x, y);
+    let before = h.app.render().text();
+    assert!(!before.contains("Line 40"), "not scrolled up:\n{before}");
+
+    h.app.click(x, y);
+    let mut painted = Vec::new();
+    for _ in 0..500 {
+        h.app.advance(std::time::Duration::from_millis(1));
+        if h.app.needs_frame() {
+            painted.push(h.app.render().text());
+        }
+    }
+    painted.push(h.app.render().text());
+    let changed = painted.iter().find(|text| **text != before);
+    assert!(changed.is_none(), "before:\n{before}\nafter:\n{}", changed.unwrap());
+}
+
 /// The frames painted over 8 s without input, one each time the app asks for one, as `App::event_loop` does, in
 /// milliseconds from the first. The requests in flight land first: their replies are output, not idle.
 fn frames(h: &Tabs) -> Vec<u128> {

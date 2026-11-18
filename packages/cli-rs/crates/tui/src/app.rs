@@ -182,6 +182,17 @@ impl Tui {
         self.theme.borrow().theme().page()
     }
 
+    /// Shows a session the user picked (a tab, the session list, a link). TS's `route.navigate` reconciles the route
+    /// store, so the session on screen keeps its view, its scroll and its prompt; [`Tui::navigate`] to the route shown
+    /// mounts it again, which only a theme or plugin change wants.
+    pub fn show_session(&self, id: SessionID) {
+        let route = Route::Session { id };
+        if self.view.borrow().is_some() && self.route() == route {
+            return;
+        }
+        self.navigate(route);
+    }
+
     pub fn navigate(&self, route: Route) {
         // Going home from home to another location is a navigation, not a remount.
         let remount =
