@@ -2,12 +2,15 @@
 
 The SDK of native TUI plugins for `opencode-native`. A plugin is a shared library that depends on this crate alone and
 exports itself with `plugin!`, which holds every `unsafe` the C ABI needs. The host loads it at startup and again when
-it changes. [`docs/plugins.md`](../../docs/plugins.md) explains how plugins work, on this carrier and the others (Luau,
-and TypeScript on the JS host). The design, the lifecycle and the callback rules are in
-[`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc (`cargo doc -p opencode-plugin-abi --open`).
+it changes.
 
-Plugins load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). The host opens libraries with `dlopen`, and
-with `LoadLibraryW` on Windows.
+- [`docs/plugins.md`](../../docs/plugins.md) explains how plugins work, on this carrier and the others (Luau, and
+  TypeScript on the JS host): the model, tasks and timers, the limits, and how plugins are found and approved.
+- [`docs/plugin-abi.md`](../../docs/plugin-abi.md) is the reference: the C ABI, what each callback may do, and the
+  lifecycle.
+- The rustdoc documents every type: `cargo doc -p opencode-plugin-abi --open`.
+
+Plugins load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`).
 
 ## Quick start
 
@@ -69,8 +72,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
 plugin!(id = "example.hello", setup);
 ```
 
-`"example.hello"` is the plugin's ID; `plugin!(setup)` takes the crate's package name instead. It names the plugin in `/plugins` and in `cli.json`, and it scopes the plugin's
-storage keys. Build the library:
+`"example.hello"` is the plugin's ID; `plugin!(setup)` takes the crate's package name instead. It names the plugin in
+`/plugins` and in `cli.json`, and it scopes the plugin's storage keys. Build the library:
 
 ```sh
 cargo build --release
@@ -109,9 +112,12 @@ While you work on it, `opencode-native plugin dev <crate dir>` does the build, t
 runs the TUI with the plugin and builds it again on each change. `opencode-native plugin test <crate dir or library>
 [--route NAME] [--command NAME[=INPUT]] [--wait TEXT]...` prints the screen as text, with no server, for a test or a
 quick look, and fails when the plugin fails, the route is not its own, or a command does not run.
+
 A plugin in C uses `include/opencode_plugin.h` instead of this crate; `crates/plugin/examples/c/plugin.c` is one. On
 Linux and macOS build it with `cc -shared -fPIC -I<checkout>/packages/cli-rs/crates/plugin-abi/include plugin.c -o
 plugin.so` (`plugin.dylib` on macOS) and install the library as above.
+
+## Seeing what a plugin does
 
 Open `/plugins` to see the plugin's state. External plugins are listed under TUI, built-ins only after `ctrl+a`.
 Enter disables or enables the selected plugin. A plugin that failed has an `x`, `failed` in its row, and a toast
@@ -120,81 +126,81 @@ setup's `Err`, a panic's message, or why the library was refused; on a library t
 The log file in `~/.local/share/opencode/log/` has the same errors, and each request the plugin answered with an
 error.
 
-## Which binaries load
+## Requests and waiting
 
-A plugin binary carries its ABI version. The host is ABI 2.0:
-
-| Built with | Loads | What the host sends it |
-| --- | --- | --- |
-| The 2.0 SDK, this crate | yes | Renders (`RenderFence`, `Render`, `RenderRoute`), handlers (`Command`, `Event`, `Reply`, `Mount`, `RouteMount`, `Wake`, `FenceGone`, `Deltas`), surfaces (`View`, `Draw`, `Layout`, `Input`, `Unmount`), claims (`Claim`), messages (`Message`), searches (`Search`) and the plugin list (`Plugins`); `schema/v2.json` has each |
-| A 1.x SDK, from this branch's development | no: "plugin ABI 1.x is not supported: … rebuild the plugin against opencode-plugin-abi 2" (decision O-169) | — |
-| A 3.x SDK | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" | — |
-
-`Host::try_fetch` and `Host::try_foreground` return `Result<RequestId, String>`: an `Err` is a request the host did
-not take, as while the effects that wait fill its queue, and no reply comes for it; an ID always gets its one reply.
+`Host::try_fetch` and `Host::try_foreground` return `Result<RequestId, String>`. An `Err` is a request the host did
+not take, as while the effects that wait fill its queue, and no reply comes for it. An ID always gets its one reply.
 
 A handler that waits for a dialog's answer or a reply can do it in a straight line: `Setup::tasks` starts tasks,
 `async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground`, `sleep` and `blocking`
-(module `task`). [`docs/plugins.md`](../../docs/plugins.md), section 2, explains tasks, who owns a request, what a
-mount's close cancels, and timers.
+(module `task`). [`docs/plugins.md`](../../docs/plugins.md#waiting-tasks-await-and-timers) explains tasks, who owns a
+request, what a mount's close cancels, and timers.
 
-### The source promise of 2.x
+## Compatibility
 
-A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carbon-4, big-boi 14). So every type of
-the contract that a later 2.x may extend is `#[non_exhaustive]` from 2.0 on, to the plugin's crate:
+### Which binaries load
+
+A plugin binary carries its ABI version. The host is ABI 2.0, and loads plugins of ABI 2.x:
+
+| Built with | Loads |
+| --- | --- |
+| A 2.x SDK, this crate | yes |
+| An SDK of another major | no: "plugin ABI 3.0 is not supported: … rebuild the plugin against opencode-plugin-abi 2" |
+
+A plugin built with a later 2.x SDK loads on an older 2.x host and uses what that host offers. One that cannot work
+without a newer host says so, `plugin!(id = "my.plugin", requires_minor = 1, setup)`, and an older host refuses it at
+load and says to update `opencode-native`. `schema/v2.json` has every request the host sends a plugin.
+
+### Optional features
+
+A host states its optional features by name. `Read::abi().features` lists them, and `Abi::has_feature` asks for one.
+A plugin that cannot work without one names it, `plugin!(id = "my.plugin", requires = ["focus-input"], setup)`, and a
+host without it refuses the plugin at load. A plugin that can work without it checks the feature and falls back.
+
+| Feature | Constant | What it adds |
+| --- | --- | --- |
+| `image-bounds` | `IMAGE_BOUNDS` | The host states the bounds of the images it decodes |
+| `focus-input` | `FOCUS_INPUT` | `Host::focus` gives the focus to a `Node::Input` or a `Node::Scroll` with an id, as a click does, so what the user types goes into the field, and the arrows and the page keys scroll the scroll. A host without the feature refuses the focus, and the field takes it only from the user's click |
+| `fence-node` | `FENCE_NODE` | `Node::fence()` in a fence claim's tree: the fence as the host's own code view draws it. For a host without the feature, lower it: `view.or(Node::fence(), \|view\| ...)`. The SDK refuses a tree that still holds it before it crosses |
+
+Where a dialog sits needs no feature: `Select::centered`, and `size` and `centered` on `Alert` and `Confirm`. A host
+that does not know them places the dialog as it would without them.
+
+[`docs/plugin-abi.md`](../../docs/plugin-abi.md) has the rules of each.
+
+### Source compatibility within 2.x
+
+A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK. So every type of the contract that a
+later 2.x may extend is `#[non_exhaustive]` to the plugin's crate:
 
 - A struct literal of one does not compile, also with `..Default::default()`. Build it from its constructor or
-  `Default`, and set what it needs with its setters, one a field and named for it: a value takes what converts into
+  `Default`, and set what it needs with its setters, one a field and named for it. A value takes what converts into
   the field (`.title("Say hello")`), an optional field takes the value itself (`.slash("hello")`, no `Some`), a flag
   takes nothing (`.palette()`), and a list takes anything that iterates (`.keys([..])`). For a value that is already
-  an `Option` or a `bool`, `.maybe(focus, Select::focus)` and `.when(centered, Panel::centered)`:
+  an `Option` or a `bool`, use `.maybe(focus, Select::focus)` and `.when(centered, Panel::centered)`. Examples:
   `Command::new("hello.greet").palette()`, `Toast::new(..).title(..)`, `Confirm::new(..).labels("Clear", "Cancel")`,
   `Prompt::new(title, action).placeholder(..)`, `Fetch::new("GET", path).query([("limit", "20")])`,
-  `Layout::default().absolute(Absolute::new().top(0).right(1).z(10))`,
-  `Attention::new(..).sound(..)`, `PanelAction::new(title, action).key(..)`, `OpenPanel::new("notes")`,
-  `Overlay::new(..)`, `Foreground::new("sh").args(..)`, `Interact::default().focusable()`,
-  `Layout::default().width(..).grow()`, `LayoutReply::default().paint(..).again()`.
+  `Layout::default().absolute(Absolute::new().top(0).right(1).z(10))`, `Attention::new(..).sound(..)`,
+  `PanelAction::new(title, action).key(..)`, `OpenPanel::new("notes")`, `Overlay::new(..)`,
+  `Foreground::new("sh").args(..)`, `Interact::default().focusable()`, `Layout::default().width(..).grow()`,
+  `LayoutReply::default().paint(..).again()`.
 - A node of `v2::Node` is built with its constructors (`Node::column`, `row`, `text`, `scroll`, `list`, `input`,
   `diff`, `code`, `image`, `markdown`, `spinner`, `canvas`, `slot`, `keep`, `fence`) and its setters (`with_id`, `bg`,
-  `border`, `placeholder`, `numbers`, …); a pattern of a variant needs `..`: `Node::Keep { key, .. }`.
+  `border`, `placeholder`, `numbers`, …). A pattern of a variant needs `..`: `Node::Keep { key, .. }`.
 - A `match` on an enum of the contract (`interact::Event`, `claim::Part`, `v2::Cause`, `SessionStatus`, …) needs a
-  `_` arm, which a kind a later 2.x adds reaches; a pattern of an event's fields needs `..`:
+  `_` arm, which a kind a later 2.x adds reaches. A pattern of an event's fields needs `..`:
   `Event::Paste { text, .. }`.
-- What the host fills (`SurfaceInput`, `Geometry`, `Session`, …) is read as before.
+- What the host fills (`SurfaceInput`, `Geometry`, `Session`, …) is read as any struct is.
 - Struct variants a plugin builds (a scroll verb, a target, a composer edit, an anchor) do not grow: a later 2.x adds
   a variant for a new form. `Rgba`, `Edges`, `Sides`, the rects and `ThemeMode` are whole and stay open.
 - The table `plugin!` exports is built by the SDK (`runtime::table`), so a table entry a later 2.x appends is no break
   either.
 
-The wire is the other half of the promise: a later 2.x adds only optional fields, request types the host sends only
-to a library of that minor, and node kinds an author lowers for an older host with `v2::View::or` (below). The
-host's own build turns on the crate's `host` feature, which leaves its types exhaustive so the host must handle each
-addition. That feature is for the host only and is not covered by this promise: a crate that turns it on may break
-on any later 2.x, so a plugin never turns it on. `tests/sdk.rs` builds a pinned author crate, `tests/pinned`, against this SDK and
-against the additions a later 2.x makes (the `next` feature), so a change that breaks that source fails the SDK's own
-tests.
+The wire is the other half of the rule: a later 2.x adds only optional fields, request types the host sends only to
+a library of that minor, and node kinds an author lowers for an older host with `v2::View::or`.
 
-### What 2.0 added after its first release candidate
-
-These are optional on the wire, with no new minor (O-168): a plugin that uses one meets a host without it by the rules
-below.
-
-- **Named features.** `Read::abi().features` lists the host's optional features, and `Abi::has_feature` asks for one:
-  `image-bounds` (`IMAGE_BOUNDS`), `focus-input` (`FOCUS_INPUT`) and `fence-node` (`FENCE_NODE`). A plugin that cannot
-  work without one names it, `plugin!(id = "my.plugin", requires = ["focus-input"], setup)`, and a host without it
-  refuses the plugin at load; one that can checks the feature and falls back.
-- **The focus of a field** (`focus-input`). `Host::focus` gives the focus to a `Node::Input` with an id as a click
-  does, so what the user types goes into the field; a `LayerScope::Node` of the field holds while it has the focus,
-  and `Read::focused` names it. The rules of any focus stand: none while a host dialog is open, none in a hidden box,
-  none during setup or from a view. A call the user did not cause may ask for it, as for a focusable box. A host
-  without the feature refuses the focus, and the field takes it only from the user's click.
-- **The host's code view of a claimed fence** (`fence-node`). `Node::fence()`, with `bg`, in a fence claim's tree:
-  the fence as the host's own code view draws it, in the transcript's theme, concealment and streaming state, current
-  with each revision with no view. It is one node and one row, whatever its code, so a long fence draws whole. Only a
-  fence claim's tree may hold it, once: a surface's view that holds it fails the plugin, and a claim's tree that holds
-  it twice shows the host's row. For a host without the feature, lower it: `view.or(Node::fence(), |view| ...)`, as
-  `View::or` lowers a kind of a later minor; the SDK refuses a tree that still holds it before it crosses.
-- **Where a dialog sits.** `Select::centered`, and `size` and `centered` on `Alert` and `Confirm`: in
-  the middle of the screen, not a quarter of the way down, and medium, large or extra large (TS `dialog.set({ size,
-  centered })`). A host that does not know them places the dialog as before. A keyed select shown again with another
-  `centered` moves and keeps its filter and its selected row.
+The host's own build turns on the crate's `host` feature, which leaves its types exhaustive so the host must handle
+each addition. That feature is for the host only and is outside this rule: a crate that turns it on may break on any
+later 2.x, so a plugin never turns it on. `tests/sdk.rs` builds a pinned author crate, `tests/pinned`, against this
+SDK and against the additions a later 2.x makes (the `next` feature), so a change that breaks that source fails the
+SDK's own tests.

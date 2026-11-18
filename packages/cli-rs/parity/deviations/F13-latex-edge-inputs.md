@@ -1,6 +1,6 @@
 # F13: LaTeX edge inputs that TypeScript handles by accident
 
-`crates/latex` ports `packages/latex/src` (`docs/P.2.md`). The P-ORACLE (`parity/fixtures/P.2/layouts.json`, 207
+`crates/latex` ports `packages/latex/src` (`docs/architecture.md`). The P-ORACLE (`parity/fixtures/P.2/layouts.json`, 207
 sources) and the P-COMP fixtures are equal but for `P2-latex-opentui-tex`. These inputs are outside that corpus and
 differ:
 

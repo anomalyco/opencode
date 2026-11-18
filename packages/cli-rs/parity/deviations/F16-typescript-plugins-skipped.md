@@ -4,13 +4,13 @@
 `plugins` entry that names no built-in, every directory under the `plugins` directories, and the server's
 TUI plugins, then runs each one's `setup` beside the built-ins.
 
-**Rust.** The registry (`crates/plugin/src/lib.rs`, `docs/P.1.md`) applies the entries that select
+**Rust.** The registry (`crates/plugin/src/lib.rs`, `docs/plugin-abi.md`) applies the entries that select
 built-ins (`-<id>`, `<id>`, `*`, `<prefix>.*`) exactly as TS does. The loader (`crates/plugin/src/loader`,
-`docs/P.4.md`) discovers the same targets as TS: the subdirectories of the `plugins` directories and the
+`docs/plugins.md`) discovers the same targets as TS: the subdirectories of the `plugins` directories and the
 `cli.json` entries that name no built-in. A target with a native build (a shared library on the C ABI of
 `opencode-plugin-abi`) loads, with hot reload. A directory target without one is a TypeScript plugin. By default it
-runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/P.4.md`, "TypeScript
-plugins on the JS host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
+runs on the JS host (O-166, which reverses O-151's opt-in), a Bun process the client starts (`docs/plugin-abi.md`, "The JS
+host"), through the V2 compatibility layer (P8), which gives a V2 `{ id, setup }` module the context
 and the modules TS gives it. Bun is looked for only when the first TypeScript plugin needs it (`OPENCODE_BUN`, the
 local server's opencode binary run as its own Bun, the opencode bundled beside the client, or `bun` on the path), so a client with none runs no process for
 it. Otherwise the registry lists it with status `Skipped`, its slot claims, commands and routes absent:
