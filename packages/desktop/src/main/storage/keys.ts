@@ -10,6 +10,8 @@ export const SPELLCHECK_ENABLED_KEY = "spellcheckEnabled"
 
 export const SPELLCHECK_LANGUAGES_KEY = "spellcheckLanguages"
 
+export const TRAY_ENABLED_KEY = "trayEnabled"
+
 export const BACKGROUND_COLOR_KEY = "backgroundColor"
 
 export const WINDOW_IDS_KEY = "windowIds"

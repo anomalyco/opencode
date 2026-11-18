@@ -1184,6 +1184,8 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.spellcheck.title": "Spellcheck",
   "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
+  "settings.general.row.tray.title": "Tray icon",
+  "settings.general.row.tray.description": "Keep OpenCode running in the system tray when the window is closed",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",

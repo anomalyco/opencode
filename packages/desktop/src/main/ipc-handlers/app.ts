@@ -6,6 +6,7 @@ import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
 import { DesktopLogging, scoped } from "../native/logging"
 import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
+import { getTrayEnabled, setTrayEnabled } from "../native/tray"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
@@ -44,6 +45,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
       AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
+      AppGetTrayEnabled: () => Effect.sync(getTrayEnabled),
+      AppSetTrayEnabled: ({ enabled }) => Effect.sync(() => setTrayEnabled(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

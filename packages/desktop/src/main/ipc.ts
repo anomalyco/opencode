@@ -1,7 +1,7 @@
 export * as Ipc from "./ipc"
 
 import { app, BrowserWindow, MessageChannelMain } from "electron"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Path } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
@@ -16,12 +16,15 @@ import { storageHandlers } from "./ipc-handlers/storage"
 import { windowHandlers } from "./ipc-handlers/window"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
+import { DesktopPaths } from "./paths"
 import { createCliInstaller } from "./native/install-cli"
 import { createMenu, disposeMenu, refreshMenu } from "./native/menu"
+import { disposeTray, installTray, refreshTray } from "./native/tray"
 import { onNativeTranslations } from "./native/translations"
 import { DesktopCli } from "./service/desktop-cli"
 import { setStorageSnapshotObserver } from "./storage/snapshot"
 import { getLastFocusedWindow } from "./windows"
+import { focusWindow } from "./windows/focus"
 import { isRendererUrl } from "./windows/scheme"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Plugins.layer)
@@ -54,6 +57,23 @@ export const registerIpcHandlers = Effect.gen(function* () {
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),
     relaunch: lifecycle.relaunch,
+  }
+
+  const path = yield* Path.Path
+  const paths = yield* DesktopPaths.resolve
+
+  const tray = {
+    iconPath: path.join(
+      app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(paths.developmentResourcesRoot, "icons"),
+      "32x32.png",
+    ),
+    show: () => {
+      const win = getLastFocusedWindow()
+
+      if (win) focusWindow(win, app)
+      else lifecycle.createWindow()
+    },
+    quit: () => app.quit(),
   }
 
   const wire = (win: BrowserWindow) => {
@@ -90,19 +110,27 @@ export const registerIpcHandlers = Effect.gen(function* () {
   yield* Effect.addFinalizer(() => Effect.sync(stopDisconnects))
   const stopSnapshots = setStorageSnapshotObserver(handoff.prepare)
   yield* Effect.addFinalizer(() => Effect.sync(stopSnapshots))
-  // A language the renderer pushes rebuilds the menu once it is installed.
-  const stopTranslations = onNativeTranslations(refreshMenu)
+
+  // A language the renderer pushes rebuilds the menu and an installed tray once installed.
+  const stopTranslations = onNativeTranslations(() => {
+    refreshMenu()
+    refreshTray()
+  })
+
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       stopTranslations()
       disposeMenu()
+      disposeTray()
     }),
   )
 
   yield* Effect.sync(() => {
     app.on("browser-window-created", onWindowCreated)
     BrowserWindow.getAllWindows().forEach((win) => wire(win))
+    installTray(tray)
   })
+
   yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", onWindowCreated)))
 
   return {

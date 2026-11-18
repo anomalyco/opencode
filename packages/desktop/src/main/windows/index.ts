@@ -33,6 +33,7 @@ import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
+import { keepsRunningWithoutWindows } from "../native/tray"
 
 const revealDrivers = new WeakMap<BrowserWindow, ReturnType<typeof createRevealDriver>>()
 
@@ -104,6 +105,16 @@ export function onMainWindow(listener: (win: BrowserWindow, id: string) => void)
 
 export function setWindowThemeReady(win: BrowserWindow) {
   revealDrivers.get(win)?.dispatch({ type: "theme.ready" })
+}
+
+/** With the tray on, a closed window hides and the app keeps its background service running. */
+function wireCloseToTray(win: BrowserWindow, appState: () => State) {
+  win.on("close", (event) => {
+    if (isQuitting(appState()) || !keepsRunningWithoutWindows()) return
+
+    event.preventDefault()
+    win.hide()
+  })
 }
 
 export const mainWindows = Effect.fn("Window.make")(function* (input: {
@@ -183,6 +194,7 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
     register(win, id)
     wireFullscreen(win)
     wireFocus(win)
+    wireCloseToTray(win, input.appState)
 
     if (!early) loadWindow(win, "index.html")
     wireZoom(win)

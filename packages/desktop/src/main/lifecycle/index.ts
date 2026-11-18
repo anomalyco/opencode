@@ -149,7 +149,11 @@ const runtime = Layer.effect(
     const activate = () => {
       if (!restoresWindows(driver.state())) return
 
-      if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
+      if (BrowserWindow.getAllWindows().length === 0) return restoreWindows()
+
+      // A tray-hidden window is still open; a dock click reveals it instead of restoring nothing.
+      if (!BrowserWindow.getAllWindows().some((win) => win.isVisible()))
+        focusWindow(getLastFocusedWindow())
     }
 
     let windowsWired = false

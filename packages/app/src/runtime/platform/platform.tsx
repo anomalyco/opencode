@@ -114,6 +114,12 @@ type PlatformBase = {
   /** Turn the native spellchecker on or off (desktop only) */
   setSpellcheckEnabled?(enabled: boolean): Promise<void>
 
+  /** Get whether the app keeps running in the system tray when the window is closed (desktop only) */
+  getTrayEnabled?(): Promise<boolean>
+
+  /** Turn the tray icon and close-to-tray behavior on or off (desktop only) */
+  setTrayEnabled?(enabled: boolean): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

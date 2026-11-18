@@ -249,6 +249,14 @@ export const SettingsGeneral: Component = () => {
     write: (checked) => platform.setSpellcheckEnabled?.(checked),
   })
 
+  const tray = createOptimisticSetting({
+    source: () => (desktop() && "getTrayEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getTrayEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setTrayEnabled?.(checked),
+  })
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -288,6 +296,14 @@ export const SettingsGeneral: Component = () => {
           >
             <div data-action="settings-spellcheck">
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.tray.title")}
+            description={language.t("settings.general.row.tray.description")}
+          >
+            <div data-action="settings-tray">
+              <Switch checked={tray.value()} onChange={tray.select} />
             </div>
           </SettingsRow>
         </Show>
