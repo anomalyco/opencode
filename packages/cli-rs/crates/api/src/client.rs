@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use base64::Engine;
 use bytes::Bytes;
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -247,10 +246,27 @@ pub struct Call {
     pub declared_statuses: &'static [u16],
 }
 
-#[derive(Debug)]
-pub enum Body {
-    Json(Value),
-    Bytes(Bytes),
+pub use opencode_api_types::call::Body;
+
+/// The call a generated builder describes ([`opencode_api_types::client`]), to send with this client: an input that did
+/// not serialize is the error.
+impl<T> TryFrom<opencode_api_types::call::Call<T>> for Call {
+    type Error = Error;
+
+    fn try_from(call: opencode_api_types::call::Call<T>) -> Result<Self, Error> {
+        if let Some(error) = call.error {
+            return Err(Error::Transport(error));
+        }
+        Ok(Self {
+            method: call.method,
+            path: call.path,
+            query: call.query,
+            headers: call.headers,
+            body: call.body,
+            success_status: call.success_status,
+            declared_statuses: call.declared_statuses,
+        })
+    }
 }
 
 impl Call {
@@ -299,26 +315,10 @@ impl Call {
 
 /// A path parameter: `String(value)` encoded like `encodeURIComponent`.
 pub fn path_param<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
-    let value = serde_json::to_value(value).map_err(encode_error)?;
-    Ok(utf8_percent_encode(&query::js_string(&value), COMPONENT).to_string())
+    opencode_api_types::call::path_param(value).map_err(Error::Transport)
 }
 
-/// A trailing wildcard path, each segment encoded like `encodeURIComponent`.
-pub fn path_wildcard(value: &str) -> String {
-    value.split('/').map(|segment| utf8_percent_encode(segment, COMPONENT).to_string()).collect::<Vec<_>>().join("/")
-}
-
-/// The characters `encodeURIComponent` escapes: everything except `A-Z a-z 0-9 - _ . ! ~ * ' ( )`.
-const COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'_')
-    .remove(b'.')
-    .remove(b'!')
-    .remove(b'~')
-    .remove(b'*')
-    .remove(b'\'')
-    .remove(b'(')
-    .remove(b')');
+pub use opencode_api_types::call::path_wildcard;
 
 fn set_header(headers: &mut Vec<(String, String)>, name: String, value: String) {
     let name = name.to_ascii_lowercase();

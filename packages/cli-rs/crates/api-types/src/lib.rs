@@ -1,6 +1,8 @@
 //! The HTTP API's generated types and the serde and JavaScript helpers they use. `opencode-api`
 //! re-exports them at their old paths and adds the transports.
 
+pub mod call;
+pub mod client;
 pub mod de;
 pub mod js;
 pub mod ser;
