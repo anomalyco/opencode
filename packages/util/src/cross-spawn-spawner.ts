@@ -26,6 +26,7 @@ import {
 } from "effect/process/ChildProcessSpawner"
 // ast-grep-ignore: no-star-import
 import * as NodeChildProcess from "node:child_process"
+import { win32 as win32Path } from "node:path"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node.js"
@@ -382,6 +383,16 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
+  // cmd.exe, Windows PowerShell and pwsh parse everything after `/c` or `-Command` as a single command line.
+  // Node quotes each argv entry like a regular argument, turning an embedded `"` into `\"` (for example
+  // `echo "hello world"` reaches cmd.exe as `echo \"hello world\"`). Pass the command line verbatim for these
+  // shells so quoted arguments survive.
+  const windowsShells = new Set(["cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"])
+  const windowsVerbatimArguments = (file: string) => {
+    if (globalThis.process.platform !== "win32") return false
+    return windowsShells.has(win32Path.basename(file).toLowerCase())
+  }
+
   const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
@@ -562,6 +573,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
+              windowsVerbatimArguments: windowsVerbatimArguments(command.command),
             }),
             Effect.fnUntraced(
               function* ([proc, closed, exited, stopOutput]) {
