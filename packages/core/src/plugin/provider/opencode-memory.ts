@@ -62,6 +62,9 @@ const Entry = Schema.Struct({
   source: Schema.optional(Source),
   updatedBy: Schema.optional(Schema.Struct({ label: Schema.String })),
   updatedAt: Schema.optional(Schema.String),
+  retired: Schema.optional(
+    Schema.Struct({ at: Schema.String, reason: Schema.String, supersededBy: Schema.optional(Schema.String) }),
+  ),
 })
 type Entry = typeof Entry.Type
 /** What a write answers: the new revision and a short diff of what changed, enough to write again without a read. */
@@ -72,6 +75,7 @@ const Written = Schema.Struct({
   diff: Schema.optional(Schema.String),
   matched: Schema.optional(Schema.Array(Schema.String)),
   rebasedFrom: Schema.optional(Schema.Number),
+  changesSince: Schema.optional(Schema.String),
   warnings: Schema.optional(Schema.Array(Schema.String)),
   replayed: Schema.optional(Schema.Boolean),
 })
@@ -88,7 +92,9 @@ const Problem = Schema.Struct({
   // never hides the message and the next call.
   candidates: Schema.optional(Schema.Array(Schema.Unknown)),
 })
-const decodePassage = Schema.decodeUnknownOption(Schema.Struct({ line: Schema.Number, text: Schema.String }))
+const decodePassage = Schema.decodeUnknownOption(
+  Schema.Struct({ line: Schema.Number, text: Schema.String, similarity: Schema.optional(Schema.Number) }),
+)
 const decodeHit = Schema.decodeUnknownOption(Hit)
 // The tool inputs and results that tell which files a session works on and which commands fail.
 const PathInput = Schema.Struct({ path: Schema.String })
@@ -213,17 +219,12 @@ export const make = Effect.fnUntraced(function* (
         .pipe(Effect.flatMap(expectOk), Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)))
     }).pipe(Effect.scoped)
   // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
-  const write = (sessionID: string, id: string, route: string, change: Record<string, unknown>) =>
+  const write = (sessionID: string, id: string, change: Record<string, unknown>) =>
     Effect.gen(function* () {
-      const written = yield* call(
-        Written,
-        route === "" ? "PATCH" : "POST",
-        `/api/memory/entries/${encodeURIComponent(id)}${route}`,
-        {
-          ...change,
-          source: { ...(yield* checkout), sessionID },
-        },
-      )
+      const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
+        ...change,
+        source: { ...(yield* checkout), sessionID },
+      })
       wrote(sessionID, id, written)
       return { output: written, content: receipt(id, written) }
     }).pipe(Effect.mapError(failure))
@@ -527,7 +528,7 @@ export const make = Effect.fnUntraced(function* (
                 message: "edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors",
               }),
             )
-          return write(context.sessionID, input.id, "", {
+          return write(context.sessionID, input.id, {
             expectedRevision: input.revision,
             ...(edits.length === 0 ? {} : { edits }),
             ...fields,
@@ -546,7 +547,7 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, "", { expectedRevision: input.revision, append: input.text }),
+          write(context.sessionID, input.id, { expectedRevision: input.revision, append: input.text }),
       })
       editor.add({
         name: "rewrite",
@@ -561,7 +562,7 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, "", {
+          write(context.sessionID, input.id, {
             expectedRevision: input.revision,
             body: input.body,
             ...metadata(input),
@@ -582,11 +583,14 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, "/retire", {
+          call(Written, "POST", `/api/memory/entries/${encodeURIComponent(input.id)}/retire`, {
             expectedRevision: input.revision,
             reason: input.reason,
             ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
-          }),
+          }).pipe(
+            Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
+            Effect.mapError(failure),
+          ),
       })
     })
     .pipe(Effect.orDie)
@@ -690,7 +694,9 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
         next !== undefined && said.endsWith(next) ? said.slice(0, -next.length).trim() : said,
         ...(body?.candidates ?? []).flatMap((item) =>
           Option.match(decodePassage(item), {
-            onSome: (passage) => [`line ${passage.line}: ${passage.text}`],
+            onSome: (passage) => [
+              `line ${passage.line}${passage.similarity === undefined ? "" : ` (${Math.round(passage.similarity * 100)}% similar)`}: ${passage.text}`,
+            ],
             onNone: () =>
               Option.match(decodeHit(item), { onSome: (hit) => [OpencodeMemoryPolicy.summary(hit)], onNone: () => [] }),
           }),
@@ -710,6 +716,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
 function receipt(id: string, written: Written) {
   return [
     `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    ...(written.changesSince === undefined ? [] : [`Changes since r${written.rebasedFrom}:`, written.changesSince]),
     ...(written.matched?.includes("fuzzy") ? ["An oldText matched only approximately: check the diff."] : []),
     ...(written.warnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(written.diff ? [written.diff] : []),
@@ -733,5 +740,8 @@ function show(entry: Entry) {
     entry.updatedBy && `${entry.updatedBy.label}${entry.updatedAt ? ` ${entry.updatedAt.slice(0, 10)}` : ""}`,
   ]
   const errors = entry.errors && entry.errors.length > 0 ? `\nErrors: ${entry.errors.join(" | ")}` : ""
-  return `${about.filter(Boolean).join(" · ")}${errors}\n# ${entry.title}\n\n${entry.body}`
+  const retired = entry.retired
+    ? `\nRetired ${entry.retired.at.slice(0, 10)}: ${entry.retired.reason}${entry.retired.supersededBy ? ` (superseded by ${entry.retired.supersededBy})` : ""}`
+    : ""
+  return `${about.filter(Boolean).join(" · ")}${errors}${retired}\n# ${entry.title}\n\n${entry.body}`
 }

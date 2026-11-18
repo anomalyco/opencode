@@ -77,8 +77,7 @@ const injected = (id: string, score: number, revision = 1) => ({
 
 /**
  * Console's memory routes and config, in-process, with the request and response shapes and error tags of Console's
- * contract (`docs/plans/org-library.md`, server commit a902a4fea). Retiring isn't in Console yet; its route here is the
- * one the plugin asked for.
+ * contract (`docs/plans/org-library.md`, server commits a902a4fea and 1695a6575).
  */
 function fakeConsole() {
   const state = {
@@ -90,6 +89,8 @@ function fakeConsole() {
     /** Publishes saved, by idempotency key: the same key answers the first one's result. */
     published: new Map<string, { id: string; revision: number }>(),
     matched: undefined as string[] | undefined,
+    /** Applies a write over changes since its revision, as Console does when they don't touch it. */
+    rebase: false,
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
   }
   const refuse = (status: number, error: Record<string, unknown> & { message: string; next: string }) =>
@@ -129,9 +130,24 @@ function fakeConsole() {
       if (retired && request.method === "POST") return Response.json({ id: retired, revision: 2, nearest: [] })
       const id = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)$/)?.[1]
       if (id === "mem_missing") return Response.json({ _tag: "NotFound" }, { status: 404 })
+      if (id === "mem_retired" && request.method === "GET")
+        return Response.json(
+          entry(id, {
+            retired: { at: new Date(0).toISOString(), reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
+          }),
+        )
       if (id && request.method === "GET") return Response.json(entry(id))
       if (id && request.method === "PATCH") {
         const current = entry(id).body
+        if (state.rebase)
+          return Response.json({
+            id,
+            revision: 3,
+            nearest: [],
+            rebasedFrom: 1,
+            changesSince: "@@ -2 +2 @@\n-More\n+Less",
+            diff: "--- body\n-Body of\n+Use bun for",
+          })
         if (body?.expectedRevision !== 1)
           return refuse(409, {
             _tag: "MemoryConflict",
@@ -150,7 +166,7 @@ function fakeConsole() {
             edit: missed,
             reason: "not-found",
             revision: 1,
-            candidates: [{ line: 1, text: `Body of ${id}` }],
+            candidates: [{ line: 1, text: `Body of ${id}`, similarity: 0.42 }],
             body: current,
             next: "Copy oldText exactly from body and patch again with expectedRevision 1.",
             message: `Edit ${missed + 1}: oldText isn't in revision 1; nothing was written. The closest passages start on lines 1.`,
@@ -442,7 +458,7 @@ describe("OpencodePlugin memory", () => {
         expect(missed.message).toBe(
           [
             "Edit 1: oldText isn't in revision 1; nothing was written. The closest passages start on lines 1.",
-            "line 1: Body of mem_1",
+            "line 1 (42% similar): Body of mem_1",
             "Current body (r1):",
             "Body of mem_1\nMore",
             "Next: Copy oldText exactly from body and patch again with expectedRevision 1.",
@@ -461,6 +477,17 @@ describe("OpencodePlugin memory", () => {
             "Next: Apply your change to the current body and patch again with expectedRevision 2.",
           ].join("\n"),
         )
+
+        // A write applied over changes since its revision says what they were.
+        console.state.rebase = true
+        const rebased = yield* edit.execute(
+          { id: "mem_1", revision: 1, oldText: "Body of", newText: "Use bun for" },
+          context(session.id),
+        )
+        expect(rebased.content).toBe(
+          "mem_1 is now r3 (applied over changes since r1).\nChanges since r1:\n@@ -2 +2 @@\n-More\n+Less\n--- body\n-Body of\n+Use bun for",
+        )
+        console.state.rebase = false
 
         // A fuzzy match is flagged, so the agent checks the diff.
         console.state.matched = ["fuzzy"]
@@ -549,16 +576,14 @@ describe("OpencodePlugin memory", () => {
           context(session.id),
         )
         expect(retired.content).toBe("mem_1 is now r2.")
-        expect(console.state.requests.at(-1)).toMatchObject({
+        expect(console.state.requests.at(-1)).toEqual({
           method: "POST",
           path: "/api/memory/entries/mem_1/retire",
-          body: {
-            expectedRevision: 1,
-            reason: "Deploys moved to the pipeline",
-            supersededBy: "mem_2",
-            source: { sessionID: session.id },
-          },
+          body: { expectedRevision: 1, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
+          authorization: "Bearer secret",
         })
+        const read = yield* (yield* memoryTool("read")).execute({ id: "mem_retired" }, context(session.id))
+        expect(read.content).toContain("\nRetired 1970-01-01: Deploys moved to the pipeline (superseded by mem_2)\n")
       }),
     ),
   )
