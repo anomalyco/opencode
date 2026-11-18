@@ -631,9 +631,15 @@ function HomeSessionGroupHeader(props: {
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
 }) {
+  let element!: HTMLDivElement
+
+  // Index reuses a header in place for whichever group lands at its position, so it reports itself again when its
+  // group changes; a one-time ref would leave it registered under the group it was created for.
+  createEffect(() => props.onSetRef(element))
+
   return (
     <div
-      ref={props.onSetRef}
+      ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
         bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
