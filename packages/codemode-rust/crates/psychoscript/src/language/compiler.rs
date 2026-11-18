@@ -48,7 +48,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     if source.trim().is_empty() {
         return Err(CompileError {
             kind: DiagnosticKind::ParseError,
-            message: "Source is empty.".into(),
+            message: "Code cannot be empty.".into(),
             offset: None,
         });
     }
@@ -78,13 +78,17 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
             await_alias = Some(alias);
         }
     }
-    if let Some(d) = parsed.diagnostics.errors().next() {
-        return Err(parse_error(d));
+    if let Some(d) = parsed
+        .diagnostics
+        .errors()
+        .find(|d| !accepted_by_reference(d))
+    {
+        return Err(parse_error(source, &parsed.program, d));
     }
     if parsed.fatal_error {
         return Err(CompileError {
             kind: DiagnosticKind::ParseError,
-            message: "Unexpected token.".into(),
+            message: parse_message("Unexpected token"),
             offset: None,
         });
     }
@@ -120,7 +124,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
         .with_build_nodes(true)
         .build(program);
     if let Some(d) = semantic.diagnostics.errors().next() {
-        return Err(parse_error(d));
+        return Err(parse_error(source, program, d));
     }
     let scoping = semantic.semantic.scoping();
     let mut c = Compiler::new(scoping, semantic.semantic.nodes(), atoms);
@@ -435,12 +439,617 @@ impl<'a> Visit<'a> for DepthCheck {
     }
 }
 
-fn parse_error(d: &oxc_diagnostics::OxcDiagnostic) -> CompileError {
+/// A parse error as the reference reports it: acorn's wording and position for what oxc found, with the reference's
+/// hint that the code must be a plain JavaScript program body.
+fn parse_error(
+    source: &str,
+    program: &oxc_ast::ast::Program,
+    d: &oxc_diagnostics::OxcDiagnostic,
+) -> CompileError {
+    let (reason, offset) = acorn_error(source, program, d);
     CompileError {
         kind: DiagnosticKind::ParseError,
-        message: format!("SyntaxError: {}", d.message),
-        offset: d.labels.first().map(|l| l.offset()),
+        message: parse_message(&reason),
+        offset,
     }
+}
+
+fn parse_message(reason: &str) -> String {
+    let dot = if reason.ends_with('.') { "" } else { "." };
+    format!("SyntaxError: {reason}{dot} Code must be plain JavaScript written as a program body.")
+}
+
+/// oxc reports these where acorn, parsing a script that allows imports and exports anywhere, reads on: an import
+/// below the top level is ignored or throws when it runs, and a nested export throws as unsupported syntax.
+fn accepted_by_reference(d: &oxc_diagnostics::OxcDiagnostic) -> bool {
+    d.message == "'import statement' declaration can only be used at the top level of a module"
+        || d.message
+            == "'export statement' declaration can only be used at the top level of a module"
+}
+
+/// Acorn's message and offset for an oxc diagnostic. Where acorn stops at a later token than oxc names, the offset
+/// moves there; a diagnostic with no acorn counterpart keeps oxc's text.
+fn acorn_error(
+    source: &str,
+    program: &oxc_ast::ast::Program,
+    d: &oxc_diagnostics::OxcDiagnostic,
+) -> (String, Option<u32>) {
+    let msg: &str = &d.message;
+    let label = |i: usize| d.labels.get(i).map(|l| (l.offset(), l.len()));
+    let Some((at, len)) = label(0) else {
+        return (msg.to_owned(), None);
+    };
+    let second = label(1).map_or(at, |l| l.0);
+    let text = |a: u32, b: u32| source.get(a as usize..b as usize).unwrap_or("");
+    let before = |a: u32| source.get(..a as usize).unwrap_or("");
+    let unexpected = |o: u32| ("Unexpected token".to_owned(), Some(o));
+    let named = |m: &str| -> Option<String> {
+        let rest = msg.strip_prefix(m)?;
+        Some(rest.split('`').next().unwrap_or("").to_owned())
+    };
+    let same = |o: u32| (msg.trim_end_matches('.').to_owned(), Some(o));
+    let r = |m: &str, o: u32| (m.to_owned(), Some(o));
+    match msg {
+        "Unexpected token" if text(at, at + 4) == "enum" => r("The keyword 'enum' is reserved", at),
+        "Unexpected token"
+        | "Invalid function declaration"
+        | "Invalid class declaration"
+        | "Expected function name"
+        | "Invalid rest element target in destructuring pattern"
+        | "Argument of dynamic import cannot be a spread element."
+        | "Unexpected JSX expression" => unexpected(at),
+        "Type assertion expressions can only be used in TypeScript files." => {
+            unexpected(next_token(source, word_end(source, at)))
+        }
+        "The left-hand side of a `for...of` statement may not start with `let`" => r(
+            "The left-hand side of a for-of loop may not start with 'let'.",
+            at,
+        ),
+        "The left-hand side of a `for...of` statement may not be `async`" => {
+            let of = next_token(source, at + len);
+            unexpected(next_token(source, word_end(source, of)))
+        }
+        "Lexical declaration cannot appear in a single-statement context" => {
+            let decl = text(at, at + len);
+            if decl.starts_with("using") || decl.starts_with("await") {
+                r(
+                    "Using declaration cannot appear in the top level when source type is `script` or in the bare case statement",
+                    at,
+                )
+            } else {
+                unexpected(at)
+            }
+        }
+        "Invalid escape sequence" => {
+            let esc = text(at, (at + len.max(2) + 16).min(source.len() as u32));
+            let reason = match esc.get(1..3) {
+                Some("u{") => {
+                    let body = &esc[3..];
+                    let hex = body.split('}').next().unwrap_or("");
+                    let closed = body.len() > hex.len();
+                    if closed && !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                        ("Code point out of bounds", at + 3)
+                    } else {
+                        ("Bad character escape sequence", at + 3)
+                    }
+                }
+                _ => ("Bad character escape sequence", at + 2),
+            };
+            r(reason.0, reason.1)
+        }
+        "Expected a semicolon or an implicit semicolon after a statement, but found none" => {
+            unexpected(next_token(source, at))
+        }
+        "Only a single declaration is allowed in a `for...of` statement" => {
+            unexpected(next_token(source, at + len))
+        }
+        "A 'yield' expression is only allowed in a generator body."
+        | "`await` is only allowed within async functions and at the top levels of modules"
+        | "A rest parameter cannot have an initializer." => {
+            unexpected(next_token(source, word_end(source, at)))
+        }
+        "Generators can only be declared at the top level or inside a block" => {
+            unexpected(next_token(source, word_end(source, at)))
+        }
+        "import() requires a specifier." => {
+            let open = text(at, at + len)
+                .find('(')
+                .map_or(at, |i| at + i as u32 + 1);
+            unexpected(next_token(source, open))
+        }
+        "Missing initializer in const declaration" => unexpected(at + len),
+        "Using declarations must have an initializer." => {
+            r("Missing initializer in using declaration", at + len)
+        }
+        "Missing initializer in destructuring declaration" => r(
+            "Complex binding patterns require an initialization value",
+            at + len,
+        ),
+        "`let` cannot be declared as a variable name inside of a `let` declaration" => {
+            r("let is disallowed as a lexically bound name", at)
+        }
+        "Delete of an unqualified identifier in strict mode." => r(
+            "Deleting local variable in strict mode",
+            keyword_before(before(at), "delete"),
+        ),
+        "The operand of a 'delete' operator cannot be a private identifier." => r(
+            "Private fields can not be deleted",
+            keyword_before(before(at), "delete"),
+        ),
+        "'0'-prefixed octal literals and octal escape sequences are deprecated" => {
+            if text(at, at + 1) == "\"" || text(at, at + 1) == "'" {
+                let slash = text(at, at + len).find('\\').map_or(at, |i| at + i as u32);
+                r("Octal literal in strict mode", slash)
+            } else {
+                r("Invalid number", at)
+            }
+        }
+        "Cannot use `await` as an identifier in an async context" => r(
+            "Cannot use 'await' as identifier inside an async function",
+            at,
+        ),
+        "Cannot use `yield` as an identifier in a generator context" => {
+            r("Cannot use 'yield' as identifier inside a generator", at)
+        }
+        "Unterminated string" => match text(at, at + 1) {
+            "`" => r("Unterminated template", at + 1),
+            _ => r("Unterminated string constant", at),
+        },
+        "Unterminated multiline comment" => r("Unterminated comment", at),
+        "Numeric separators must appear between digits" => {
+            if text(at + 1, at + 2) == "_" {
+                r("Numeric separator must be exactly one underscore", at + 1)
+            } else if before(at).ends_with(|c: char| c.is_ascii_alphanumeric()) {
+                r("Numeric separator is not allowed at the last of digits", at)
+            } else {
+                r(
+                    "Numeric separator is not allowed at the first of digits",
+                    at + 1,
+                )
+            }
+        }
+        "Unexpected end of file" | "Invalid characters after number" => {
+            let prefix = before(at);
+            let radix = |p: &str| {
+                let lower = p.to_ascii_lowercase();
+                [("0x", 16), ("0o", 8), ("0b", 2)]
+                    .into_iter()
+                    .find(|(k, _)| lower.ends_with(k))
+                    .map(|(_, n)| n)
+            };
+            if msg == "Invalid characters after number" && text(at, at + 1) == "_" {
+                r(
+                    "Numeric separator is not allowed at the first of digits",
+                    at,
+                )
+            } else if msg == "Invalid characters after number" {
+                r("Identifier directly after number", at)
+            } else if let Some(n) = radix(prefix) {
+                (format!("Expected number in radix {n}"), Some(at))
+            } else if prefix.ends_with(['e', 'E', '.', '+', '-']) {
+                r("Invalid number", number_start(prefix))
+            } else {
+                unexpected(at)
+            }
+        }
+        "Invalid assignment in object literal" => {
+            let eq = text(at, at + len).find('=').map_or(at, |i| at + i as u32);
+            r(
+                "Shorthand property assignments are valid only in destructuring patterns",
+                eq,
+            )
+        }
+        "A 'get' accessor must not have any formal parameters." => {
+            r("getter should have no params", at)
+        }
+        "A 'set' accessor must have exactly one parameter." => {
+            r("setter should have exactly one param", at)
+        }
+        "A 'set' accessor cannot have rest parameter." => r("Setter cannot use rest params", at),
+        "Logical expressions and coalesce expressions cannot be mixed" => {
+            let span = text(at, at + len);
+            let op = span
+                .match_indices("??")
+                .chain(span.match_indices("||"))
+                .chain(span.match_indices("&&"))
+                .map(|(i, _)| i)
+                .filter(|i| *i > 0)
+                .max()
+                .map_or(at, |i| at + i as u32);
+            r(
+                "Logical expressions and coalesce expressions cannot be mixed. Wrap either by parentheses",
+                op,
+            )
+        }
+        "Missing catch or finally clause" => r(msg, keyword_before(before(at), "try")),
+        "A 'default' clause cannot appear more than once in a 'switch' statement." => {
+            r("Multiple default clauses", second)
+        }
+        "Illegal break statement" => r("Unsyntactic break", at),
+        "Illegal continue statement: no surrounding iteration statement" => {
+            r("Unsyntactic continue", at)
+        }
+        "Use of undefined label" => {
+            let b = before(at).rfind("break");
+            let c = before(at).rfind("continue");
+            let (word, o) = match (b, c) {
+                (Some(b), Some(c)) if c > b => ("continue", c),
+                (Some(b), _) => ("break", b),
+                (None, c) => ("continue", c.unwrap_or(at as usize)),
+            };
+            (format!("Unsyntactic {word}"), Some(o as u32))
+        }
+        "A `continue` statement can only jump to a label of an enclosing `for`, `while` or `do while` statement." => {
+            r(
+                "Unsyntactic continue",
+                keyword_before(before(second), "continue"),
+            )
+        }
+        "Invalid optional chain from new expression." => r(
+            "Optional chaining cannot appear in the callee of new expressions",
+            at,
+        ),
+        "Tagged template expressions are not permitted in an optional chain" => r(
+            "Optional chaining cannot appear in the tag of tagged template expressions",
+            at,
+        ),
+        "The only valid property accesses on import are `import.meta`, `import.source()`, and `import.defer()`" => {
+            r(
+                "The only valid meta property for import is 'import.meta'",
+                after_dot(source, at),
+            )
+        }
+        "The only valid meta property for new is new.target" => r(
+            "The only valid meta property for new is 'new.target'",
+            after_dot(source, at),
+        ),
+        "Unexpected new.target expression" => r(
+            "'new.target' can only be used in functions and class static block",
+            at,
+        ),
+        "'super' can only be referenced in members of derived classes or object literal expressions." => {
+            r("'super' keyword outside a method", at)
+        }
+        "Super calls are not permitted outside constructors or in nested functions inside constructors." => {
+            if in_method(program, at) {
+                r("super() call outside constructor of a subclass", at)
+            } else {
+                r("'super' keyword outside a method", at)
+            }
+        }
+        "'super' can only be referenced in a derived class." => {
+            r("super() call outside constructor of a subclass", at)
+        }
+        "A rest parameter or binding pattern may not have a trailing comma." => {
+            r("Comma is not permitted after the rest element", at)
+        }
+        "Illegal 'use strict' directive in function with non-simple parameter list" => {
+            r(msg, enclosing_function(program, at).unwrap_or(at))
+        }
+        "Cannot assign to this expression" => {
+            if text(at, at + len).contains("?.") {
+                r("Optional chaining cannot appear in left-hand side", at)
+            } else {
+                r("Assigning to rvalue", at)
+            }
+        }
+        "'with' statements are not allowed" => r("'with' in strict mode", at),
+        "'using' declarations are not allowed at the top level of a script"
+        | "'using' declaration cannot appear in the bare case statement." => r(
+            "Using declaration cannot appear in the top level when source type is `script` or in the bare case statement",
+            at,
+        ),
+        "Multiple constructor implementations are not allowed." => {
+            r("Duplicate constructor in the same class", second)
+        }
+        "Classes may not have a static property named 'prototype'" => {
+            r("Classes can't have a static field named 'prototype'", at)
+        }
+        "A 'return' statement cannot be used inside a class static block." => {
+            r("'return' outside of function", at)
+        }
+        "Flag g is mentioned twice in regular expression literal" => r(
+            "Duplicate regular expression flag",
+            regex_start(before(at)) + 1,
+        ),
+        _ => {
+            if let Some(name) = named("Identifier `") {
+                return if name == "__proto__" {
+                    r("Redefinition of __proto__ property", second)
+                } else if label(1).is_some_and(|l| params_hold(program, at, l.0)) {
+                    r("Argument name clash", second)
+                } else {
+                    (
+                        format!("Identifier '{name}' has already been declared"),
+                        Some(second),
+                    )
+                };
+            }
+            if let Some(name) = named("Label `") {
+                return (format!("Label '{name}' is already declared"), Some(second));
+            }
+            if msg.starts_with("Expected `") && msg.contains("` but found `") {
+                return unexpected(at);
+            }
+            if let Some(flag) = msg
+                .strip_prefix("Flag ")
+                .and_then(|m| m.strip_suffix(" is mentioned twice in regular expression literal"))
+                && !flag.is_empty()
+            {
+                return r(
+                    "Duplicate regular expression flag",
+                    regex_start(before(at)) + 1,
+                );
+            }
+            if msg.starts_with("Unexpected flag ")
+                && msg.ends_with(" in regular expression literal")
+            {
+                return r(
+                    "Invalid regular expression flag",
+                    regex_start(before(at)) + 1,
+                );
+            }
+            if let Some(name) = msg
+                .strip_prefix("Cannot assign to '")
+                .and_then(|m| m.strip_suffix("' in strict mode"))
+            {
+                let how = if binds_at(program, at) {
+                    "Binding"
+                } else {
+                    "Assigning to"
+                };
+                return (format!("{how} {name} in strict mode"), Some(at));
+            }
+            if let Some(word) = msg
+                .strip_prefix("Identifier expected. '")
+                .and_then(|m| m.strip_suffix("' is a reserved word that cannot be used here."))
+            {
+                let reserved = matches!(
+                    word,
+                    "enum"
+                        | "implements"
+                        | "interface"
+                        | "let"
+                        | "package"
+                        | "private"
+                        | "protected"
+                        | "public"
+                        | "static"
+                        | "yield"
+                        | "await"
+                );
+                return if reserved {
+                    (format!("The keyword '{word}' is reserved"), Some(at))
+                } else {
+                    (format!("Unexpected keyword '{word}'"), Some(at))
+                };
+            }
+            if let Some(c) = msg
+                .strip_prefix("Invalid Character `")
+                .and_then(|m| m.strip_suffix('`'))
+            {
+                let lower = before(at).to_ascii_lowercase();
+                return match [("0x", 16), ("0o", 8), ("0b", 2)]
+                    .into_iter()
+                    .find(|(k, _)| lower.ends_with(k))
+                {
+                    Some(_) if c == "_" => r(
+                        "Numeric separator is not allowed at the first of digits",
+                        at,
+                    ),
+                    Some((_, n)) => (format!("Expected number in radix {n}"), Some(at)),
+                    None => (format!("Unexpected character '{c}'"), Some(at)),
+                };
+            }
+            if let Some(name) = msg
+                .strip_prefix("Private identifier '")
+                .and_then(|m| m.strip_suffix("' is not allowed outside class bodies"))
+            {
+                return (
+                    format!("Private field '{name}' must be declared in an enclosing class"),
+                    Some(at),
+                );
+            }
+            same(at)
+        }
+    }
+}
+
+/// Acorn's reason for a regular expression literal that the engine's syntax check (worded as the reference's host
+/// words `new RegExp` failures) refuses.
+fn acorn_regex_reason(reason: &str) -> &str {
+    match reason {
+        "missing )" => "Unterminated group",
+        "unmatched parentheses" => "Unmatched ')'",
+        "nothing to repeat" => "Nothing to repeat",
+        "range out of order in character class" => "Range out of order in character class",
+        "missing terminating ] for character class" => "Unterminated character class",
+        "duplicate group specifier name" => "Duplicate capture group name",
+        "invalid group specifier name" => "Invalid capture group name",
+        "invalid property expression" => "Invalid property name",
+        "invalid \\k<> named backreference" => "Invalid named capture referenced",
+        "invalid escaped character for Unicode pattern" => "Invalid escape",
+        "invalid Unicode \\u escape" => "Invalid unicode escape",
+        "invalid class set character" | "invalid operation in class set" => {
+            "Invalid character in character class"
+        }
+        "invalid range in character class for Unicode pattern" => "Invalid character class",
+        "unmatched ] or } bracket for Unicode pattern" => "Lone quantifier brackets",
+        "incomplete {} quantifier for Unicode pattern" => "Incomplete quantifier",
+        "negated class set may contain strings" => "Negated character class may contain strings",
+        "unrecognized character after (?" => "Invalid group",
+        "invalid regular expression modifier" => "Invalid regular expression modifiers",
+        other => other,
+    }
+}
+
+/// Where the next token after `from` starts, past whitespace and comments.
+fn next_token(source: &str, from: u32) -> u32 {
+    let bytes = source.as_bytes();
+    let mut i = from as usize;
+    loop {
+        match bytes.get(i) {
+            Some(b' ' | b'\t' | b'\n' | b'\r') => i += 1,
+            Some(b'/') if bytes.get(i + 1) == Some(&b'/') => {
+                while bytes.get(i).is_some_and(|b| *b != b'\n') {
+                    i += 1;
+                }
+            }
+            Some(b'/') if bytes.get(i + 1) == Some(&b'*') => {
+                match source.get(i + 2..).and_then(|r| r.find("*/")) {
+                    Some(end) => i += end + 4,
+                    None => return i as u32,
+                }
+            }
+            Some(_) if source.get(i..).is_some_and(|r| r.starts_with('\u{a0}')) => i += 2,
+            _ => return i as u32,
+        }
+    }
+}
+
+/// The end of the word that starts at `at`.
+fn word_end(source: &str, at: u32) -> u32 {
+    let rest = source.get(at as usize..).unwrap_or("");
+    let n = rest
+        .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+        .unwrap_or(rest.len());
+    at + n as u32
+}
+
+/// The start of the last `word` in `before`, or its end when there is none.
+fn keyword_before(before: &str, word: &str) -> u32 {
+    before.rfind(word).unwrap_or(before.len()) as u32
+}
+
+/// The offset of the property after `new.` or `import.` at `at`.
+fn after_dot(source: &str, at: u32) -> u32 {
+    let rest = source.get(at as usize..).unwrap_or("");
+    match rest.find('.') {
+        Some(i) => next_token(source, at + i as u32 + 1),
+        None => at,
+    }
+}
+
+/// Where the number literal that `before` ends in starts.
+fn number_start(before: &str) -> u32 {
+    let n = before
+        .bytes()
+        .rev()
+        .take_while(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'))
+        .count();
+    let start = before.len() - n;
+    // A sign belongs to the number only after an exponent.
+    let digits = before[start..].trim_start_matches(['+', '-']);
+    (before.len() - digits.len()) as u32
+}
+
+/// Where the regular expression literal whose flags `before` ends inside starts: the `/` that opens it.
+fn regex_start(before: &str) -> u32 {
+    let close = before.rfind('/').unwrap_or(0);
+    let bytes = before.as_bytes();
+    let mut i = close;
+    while i > 0 {
+        i -= 1;
+        if bytes[i] == b'/' && (i == 0 || bytes[i - 1] != b'\\') {
+            return i as u32;
+        }
+    }
+    close as u32
+}
+
+/// Whether one parameter list holds both offsets: a duplicate parameter, which acorn calls a clash.
+fn params_hold(program: &oxc_ast::ast::Program, a: u32, b: u32) -> bool {
+    struct Find(u32, u32, bool);
+    impl<'a> Visit<'a> for Find {
+        fn visit_formal_parameters(&mut self, it: &FormalParameters<'a>) {
+            if it.span.start <= self.0.min(self.1) && self.0.max(self.1) < it.span.end {
+                self.2 = true;
+            }
+            walk::walk_formal_parameters(self, it);
+        }
+    }
+    let mut f = Find(a, b, false);
+    f.visit_program(program);
+    f.2
+}
+
+/// Whether a name is declared, not assigned, at `at`.
+fn binds_at(program: &oxc_ast::ast::Program, at: u32) -> bool {
+    struct Find(u32, bool);
+    impl<'a> Visit<'a> for Find {
+        fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+            self.1 |= it.span.start == self.0;
+        }
+    }
+    let mut f = Find(at, false);
+    f.visit_program(program);
+    f.1
+}
+
+/// Where the innermost function around `at` starts, with any `async` or `function` keyword before it.
+fn enclosing_function(program: &oxc_ast::ast::Program, at: u32) -> Option<u32> {
+    struct Find(u32, Option<oxc_span::Span>);
+    impl Find {
+        fn see(&mut self, span: oxc_span::Span) {
+            if span.start <= self.0
+                && self.0 < span.end
+                && self.1.is_none_or(|s| span.size() < s.size())
+            {
+                self.1 = Some(span);
+            }
+        }
+    }
+    impl<'a> Visit<'a> for Find {
+        fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+            self.see(it.span);
+            walk::walk_function(self, it, flags);
+        }
+        fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+            self.see(it.span);
+            walk::walk_arrow_function_expression(self, it);
+        }
+    }
+    let mut f = Find(at, None);
+    f.visit_program(program);
+    f.1.map(|s| s.start)
+}
+
+/// Whether the innermost non-arrow function around `at` is a method, where acorn allows `super` but not `super()`.
+fn in_method(program: &oxc_ast::ast::Program, at: u32) -> bool {
+    struct Find {
+        at: u32,
+        methods: FxHashSet<u32>,
+        inner: Option<oxc_span::Span>,
+    }
+    impl<'a> Visit<'a> for Find {
+        fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
+            if it.method || it.kind != PropertyKind::Init {
+                self.methods.insert(it.value.span().start);
+            }
+            walk::walk_object_property(self, it);
+        }
+        fn visit_method_definition(&mut self, it: &MethodDefinition<'a>) {
+            self.methods.insert(it.value.span.start);
+            walk::walk_method_definition(self, it);
+        }
+        fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+            let s = it.span;
+            if s.start <= self.at
+                && self.at < s.end
+                && self.inner.is_none_or(|i| s.size() < i.size())
+            {
+                self.inner = Some(s);
+            }
+            walk::walk_function(self, it, flags);
+        }
+    }
+    let mut f = Find {
+        at,
+        methods: FxHashSet::default(),
+        inner: None,
+    };
+    f.visit_program(program);
+    f.inner.is_some_and(|s| f.methods.contains(&s.start))
 }
 
 /// The reference's orientation to the supported subset, which unsupported syntax reports and suggests.
@@ -2735,10 +3344,19 @@ impl<'a, 's> Compiler<'a, 's> {
                 let pattern = r.regex.pattern.text.as_str();
                 let flags = r.regex.flags.to_string();
                 if let Err(message) = crate::builtins::regexp::validate_literal(pattern, &flags) {
+                    let prefix = format!("Invalid regular expression: /{pattern}/{flags}: ");
+                    let reason = match message.strip_prefix(&prefix) {
+                        Some(reason) => format!(
+                            "Invalid regular expression: /{pattern}/: {}",
+                            acorn_regex_reason(reason)
+                        ),
+                        None => "Invalid regular expression flag".to_owned(),
+                    };
+                    // Acorn locates a literal's errors just after its opening slash.
                     return Err(CompileError {
                         kind: DiagnosticKind::ParseError,
-                        message: format!("SyntaxError: {message}"),
-                        offset: Some(r.span.start),
+                        message: parse_message(&reason),
+                        offset: Some(r.span.start + 1),
                     });
                 }
                 self.push_str(pattern);
