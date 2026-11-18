@@ -307,20 +307,23 @@ mod tests {
     }
 
     #[test]
-    fn close_selects_right_then_left() {
-        assert_eq!(close(&tabs(&["a", "b", "c"]), "b", None), (Some(tabs(&["a", "c"])), Some("c".into())));
-        assert_eq!(close(&tabs(&["a", "b"]), "b", None).1, Some("a".into()));
-        assert_eq!(close(&tabs(&["a"]), "a", None).1, None);
-        assert_eq!(close(&tabs(&["a", "b"]), "missing", None), (None, None));
-    }
-
-    #[test]
-    fn closing_an_already_removed_tab_picks_the_neighbour_at_its_last_index() {
-        let all = tabs(&["a", "c"]);
-        assert_eq!(close(&all, "b", Some(1)), (None, Some("c".into())));
-        assert_eq!(close(&all, "d", Some(2)).1, Some("c".into()));
-        assert_eq!(close(&all, "b", None).1, None);
-        assert_eq!(close(&[], "b", Some(0)).1, None);
+    fn closing_and_reopening_any_tab_restores_its_position_and_title() {
+        let tabs: Vec<_> = (0..8).map(|i| Tab::new(i.to_string(), Some(format!("Session {i}")))).collect();
+        for count in 1..=tabs.len() {
+            let tabs = &tabs[..count];
+            for (i, tab) in tabs.iter().enumerate() {
+                let (rest, next) = close(tabs, &tab.session_id, None);
+                let rest = rest.unwrap();
+                let neighbour = tabs.get(i + 1).or_else(|| tabs.get(i.wrapping_sub(1))).map(|t| t.session_id.clone());
+                assert_eq!(next, neighbour);
+                assert_eq!(close(&rest, &tab.session_id, Some(i)), (None, neighbour));
+                assert_eq!(close(&rest, &tab.session_id, None), (None, None));
+                let mut stack = Vec::new();
+                record_closed(&mut stack, tab.clone(), i);
+                assert_eq!(reopen(&mut stack, &rest, None), Some((tabs.to_vec(), tab.session_id.clone())));
+                assert_eq!(reopen(&mut stack, &rest, None), None);
+            }
+        }
     }
 
     #[test]
@@ -403,17 +406,6 @@ mod tests {
     }
 
     #[test]
-    fn reopens_the_newest_closed_tab_at_its_position() {
-        let mut stack = Vec::new();
-        record_closed(&mut stack, Tab::new("b", Some("Middle".into())), 1);
-        let (tabs_after, session) = reopen(&mut stack, &tabs(&["a", "c"]), None).unwrap();
-        assert_eq!(session, "b");
-        assert_eq!(tabs_after, [Tab::new("a", None), Tab::new("b", Some("Middle".into())), Tab::new("c", None)]);
-        assert!(stack.is_empty());
-        assert_eq!(reopen(&mut Vec::new(), &tabs(&["a"]), None), None);
-    }
-
-    #[test]
     fn reopens_a_chosen_tab_and_keeps_newer_entries() {
         let mut stack = Vec::new();
         record_closed(&mut stack, Tab::new("b", None), 1);
@@ -457,77 +449,50 @@ mod tests {
         assert!(!complete(Some(Unread::Error), false));
     }
 
-    fn ids(count: usize) -> Vec<String> {
-        (0..count).map(|index| index.to_string()).collect()
-    }
-
-    fn refs(ids: &[String]) -> Vec<&str> {
-        ids.iter().map(String::as_str).collect()
+    #[test]
+    fn the_tab_window_fits_the_strip_and_tracks_selection() {
+        let names: Vec<_> = (0..12).map(|i| i.to_string()).collect();
+        let names: Vec<_> = names.iter().map(String::as_str).collect();
+        for n in 1..=names.len() {
+            let tabs = &names[..n];
+            for width in 8..=128 {
+                let mut previous = 0;
+                for i in (0..n).chain((0..n).rev()) {
+                    let view = layout(tabs, Some(tabs[i]), width, previous);
+                    assert!(view.visible().contains(&i));
+                    assert_eq!((view.before, view.after), (view.start, n - view.visible().end));
+                    let markers: usize =
+                        [view.before, view.after].into_iter().filter(|&n| n > 0).map(overflow_width).sum();
+                    let room = (width as usize).saturating_sub(markers).max(1);
+                    let count = view.widths.len();
+                    assert_eq!(view.total, room.min(count * SESSION_TAB_MAX_WIDTH));
+                    assert_eq!(view.widths.iter().sum::<usize>(), view.total);
+                    if room >= count * SESSION_TAB_WIDTH {
+                        assert!(view.widths.windows(2).all(|w| w[0] >= w[1]));
+                        assert!(view.widths[0] - view.widths[count - 1] <= 1);
+                    } else if count > 1 {
+                        let active = view.widths[i - view.start];
+                        assert!(active >= SESSION_TAB_WIDTH);
+                        let mut others = view.widths.iter().enumerate().filter(|(j, _)| *j != i - view.start);
+                        let (_, w) = others.next().unwrap();
+                        assert!(others.all(|(_, other)| other == w));
+                        assert!(active - SESSION_TAB_WIDTH < count - 1);
+                    }
+                    previous = view.start;
+                }
+            }
+        }
     }
 
     #[test]
-    fn layout_expands_the_active_tab() {
-        let all = ["a", "b", "c", "d", "e", "f", "g"];
-        let layout = layout(&all, Some("d"), 76, 0);
-        assert_eq!((layout.before, layout.after, layout.start, layout.total), (0, 0, 0, 76));
-        assert_eq!(layout.widths, [9, 9, 9, 22, 9, 9, 9]);
-    }
-
-    #[test]
-    fn layout_reserves_the_new_session_slot() {
-        let all = ["a", "b", "c", "d", "new"];
-        let layout = layout(&all, Some("new"), 54, 0);
-        assert_eq!(layout.visible(), 0..5);
-        assert_eq!(layout.widths, [8, 8, 8, 8, 22]);
-        assert_eq!(layout.widths.iter().sum::<usize>(), layout.total);
-    }
-
-    #[test]
-    fn layout_window_is_stable_on_home() {
-        let all = ids(10);
-        let selected = layout(&refs(&all), Some("7"), 70, 0);
-        let home = layout(&refs(&all), None, 70, selected.start);
+    fn moving_inside_the_window_or_returning_home_keeps_its_start() {
+        let tabs = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "new"];
+        let selected = layout(&tabs, Some("h"), 70, 0);
         assert!(selected.start > 0);
-        assert_eq!(home.start, selected.start);
-    }
-
-    #[test]
-    fn layout_swaps_active_widths_in_a_sticky_window() {
-        let all = ["a", "b", "c", "d", "e", "f", "g"];
-        let before = layout(&all, Some("c"), 76, 0);
-        let after = layout(&all, Some("d"), 76, before.start);
-        assert_eq!(before.start, after.start);
-        assert_eq!(before.widths, [9, 9, 22, 9, 9, 9, 9]);
-        assert_eq!(after.widths, [9, 9, 9, 22, 9, 9, 9]);
-    }
-
-    #[test]
-    fn layout_shares_roomy_width() {
-        let before = layout(&["a", "b", "c"], Some("a"), 100, 0);
-        assert_eq!(before.widths, [32, 32, 32]);
-        assert_eq!(before.total, 96);
-        assert_eq!(layout(&["a", "b", "c"], Some("c"), 100, 0).widths, before.widths);
-        assert_eq!(layout(&["a"], Some("a"), 100, 0).widths, [32]);
-        assert_eq!(layout(&["a", "b", "c", "d"], Some("b"), 100, 0).widths, [25, 25, 25, 25]);
-    }
-
-    #[test]
-    fn layout_expands_only_the_active_tab_under_pressure() {
-        let all = ["a", "b", "c", "d", "e"];
-        let before = layout(&all, Some("c"), 100, 0);
-        assert_eq!(before.widths, [19, 19, 24, 19, 19]);
-        assert_eq!(layout(&all, Some("d"), 100, before.start).widths, [19, 19, 19, 24, 19]);
-    }
-
-    #[test]
-    fn layout_moves_the_window_once_selection_crosses_its_edge() {
-        let all = ids(10);
-        let initial = layout(&refs(&all), Some("3"), 70, 0);
-        let inside = layout(&refs(&all), Some("4"), 70, initial.start);
-        let crossed = layout(&refs(&all), Some("7"), 70, inside.start);
-        assert_eq!((initial.start, inside.start), (0, 0));
-        assert!(crossed.start > 0);
-        assert!(crossed.visible().contains(&7));
-        assert_eq!(crossed.widths.iter().sum::<usize>(), crossed.total);
+        for i in selected.visible() {
+            let inside = layout(&tabs, Some(tabs[i]), 70, selected.start);
+            assert_eq!(inside.start, selected.start);
+        }
+        assert_eq!(layout(&tabs, None, 70, selected.start).start, selected.start);
     }
 }
