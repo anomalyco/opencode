@@ -54,7 +54,8 @@ const npmLayer = Layer.succeed(
       }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: npm.directory, name }),
-    which: () => Effect.undefined,
+rollback: () => Effect.succeed(false),
+        which: () => Effect.undefined,
   }),
 )
 

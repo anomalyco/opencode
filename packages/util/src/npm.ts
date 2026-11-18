@@ -37,6 +37,8 @@ export interface Interface {
   readonly resolve: (pkg: string) => Effect.Effect<Package>
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
   readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
+  /** Remove the newest installed version, so the previous one is current again. False when there is no previous one. */
+  readonly rollback: (pkg: string) => Effect.Effect<boolean, InstallFailedError | EffectFlock.LockError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -412,6 +414,16 @@ const layer = Layer.effect(
       return installed
     }, Effect.scoped)
 
+    const rollback = Effect.fn("Npm.rollback")(function* (pkg: string) {
+      const dir = directory(pkg, yield* Effect.promise(() => parse(pkg)))
+      yield* flock.acquire(`npm-install:${dir}`)
+      const completed = yield* generations(dir)
+      const newest = completed.at(-1)
+      if (completed.length < 2 || !newest) return false
+      yield* remove(path.join(dir, newest), dir)
+      return true
+    }, Effect.scoped)
+
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const root = directory(pkg, target)
@@ -467,6 +479,7 @@ const layer = Layer.effect(
       resolve,
       check,
       update,
+      rollback,
       which,
     })
   }),
