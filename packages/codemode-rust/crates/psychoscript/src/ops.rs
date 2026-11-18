@@ -139,6 +139,8 @@ impl<'rt> Vm<'rt> {
                     };
                     return self.tool_ref(&child);
                 }
+                // A Map's or Set's only own accessor is `size`, above.
+                Kind::Map(_) | Kind::Set(_) => {}
                 k if cur == id && exotic::is_exotic(k) => {
                     if let Some(v) = exotic::get(self, id, key) {
                         return v;

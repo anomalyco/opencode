@@ -22,7 +22,9 @@ pub fn is_exotic(kind: &Kind) -> bool {
     )
 }
 
-/// An own accessor or element of an exotic object, if `key` names one.
+/// An own accessor or element of an exotic object, if `key` names one. Out of line, so every property read does
+/// not set up what the RegExp accessors need.
+#[inline(never)]
 pub fn get(vm: &mut Vm, id: Id, key: Atom) -> Option<Value> {
     match &vm.heap[id as usize].kind {
         Kind::RegExp(_) => regexp::get_prop(vm, id, key),
