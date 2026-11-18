@@ -122,6 +122,7 @@ fn jsonc_edits_and_parse_match_typescript() {
         return;
     }
     let texts = [
+        r#"{"emoji":"\ud83d\ude00"}"#,
         "{}",
         "{\n}\n",
         "",
@@ -169,8 +170,18 @@ fn jsonc_edits_and_parse_match_typescript() {
             })
         })
         .collect();
+    // Numeric edits must agree with JSON.stringify across the fixed/exponent boundary.
+    for exponent in -12..=24 {
+        for factor in [-2.5, 0.4, 1.0] {
+            cases.push(json!({"text": "{}", "path": ["n"], "value": factor * 10f64.powi(exponent)}));
+        }
+    }
+    for value in [json!(1e300), json!(123456789012345680000.0), json!({"a": [1, {}], "b": "\u{1}"})] {
+        cases.push(json!({"text": "{}", "path": [], "value": value}));
+    }
     cases.extend(texts.iter().chain(&invalid).map(|text| json!({ "text": text })));
     let expected = oracle(&["jsonc"], None, &Value::Array(cases.clone()));
+    assert_eq!(expected.len(), cases.len());
     let mut failures = Vec::new();
     for (case, expected) in cases.iter().zip(&expected) {
         let source = case["text"].as_str().unwrap();

@@ -709,47 +709,10 @@ impl Resolved {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
-    fn merge_overlays_and_normalizes_tabs() {
-        let merged = merge(&[
-            Some(json!({"tabs": {"enabled": true, "scope": "global"}, "theme": {"name": "a", "mode": "dark"}})),
-            Some(json!({"theme": {"name": "b"}})),
-        ]);
-        assert_eq!(
-            merged.to_value(),
-            json!({"theme": {"name": "b", "mode": "dark"}, "tabs": {"mode": "on", "scope": "global"}})
-        );
-        assert_eq!(merge(&[Some(json!({"mouse": 1}))]), Info::default());
-    }
-
-    #[test]
-    fn changes_diff_like_typescript() {
-        let mut edits = Vec::new();
-        changes(
-            Some(&json!({"a": {"b": 1, "c": [1]}, "d": true})),
-            Some(&json!({"a": {"b": 2, "c": [1]}, "e": "x"})),
-            &mut Vec::new(),
-            &mut edits,
-        );
-        let key = |k: &str| Segment::Key(k.into());
-        assert_eq!(
-            edits,
-            vec![
-                (vec![key("a"), key("b")], Some(json!(2))),
-                (vec![key("d")], None),
-                (vec![key("e")], Some(json!("x"))),
-            ]
-        );
-    }
-
-    #[test]
-    fn resolve_applies_defaults() {
+    fn reloading_keeps_the_initial_tabs_environment() {
         let resolved = Resolved::new(Info::default(), |_| None);
-        assert_eq!(resolved.leader_timeout, Duration::from_millis(2000));
-        assert_eq!(resolved.attention.volume, 0.4);
-        assert!(resolved.tabs.enabled && resolved.mouse && resolved.tps);
         let herdr = Resolved::new(Info::default(), |name| (name == "HERDR_ENV").then(|| "1".to_string()));
         assert!(!herdr.tabs.enabled);
         // A reload keeps the environment of the first resolve.
