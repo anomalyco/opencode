@@ -6,6 +6,7 @@ import {
   For,
   Index,
   Match,
+  createComponent,
   on,
   onCleanup,
   Show,
@@ -102,7 +103,9 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
+import { PluginBoundary } from "../../plugin/api"
 import { usePlugin } from "../../plugin/context"
+import type { ToolRender } from "@opencode/plugin/tui/context"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -2578,6 +2581,9 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
+  const plugins = usePlugin()
+  const route = useRoute()
+  const custom = createMemo(() => plugins.tool(props.part.name) ?? plugins.tool(display()))
 
   const toolprops = {
     get metadata() {
@@ -2600,7 +2606,11 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
     },
   }
 
-  const content = (
+  // A function, not a hoisted element: Show reads the fallback through a
+  // getter, so each return to the built-in view mounts a fresh one. A hoisted
+  // element is destroyed when the plugin view first mounts and cannot come
+  // back on dispose.
+  const content = () => (
     <Switch>
       <Match when={display() === "shell"}>
         <Shell {...toolprops} />
@@ -2650,11 +2660,44 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
     </Switch>
   )
   return [
-    content,
+    <Show when={custom()} fallback={content()}>
+      {(item) => (
+        <CustomToolPart
+          id={item().id}
+          render={item().render}
+          part={props.part}
+          sessionID={route.data.type === "session" ? route.data.sessionID : undefined}
+        />
+      )}
+    </Show>,
     <Show when={props.images !== false}>
       <ToolImages parts={[props.part]} />
     </Show>,
   ]
+}
+
+/** Mounts a plugin tool renderer as a component so its Solid state survives part updates. */
+export function CustomToolPart(props: {
+  id: string
+  render: ToolRender
+  part: SessionMessageAssistantTool
+  sessionID: string | undefined
+}) {
+  // Getters, not values: the transcript swaps in a new part object as the call
+  // progresses and settles. Native tool views read `props.part` through a
+  // getter; a captured value would freeze the plugin view at mount time.
+  return (
+    <PluginBoundary id={props.id} where={`tool ${props.part.name}`}>
+      {createComponent(props.render, {
+        get part() {
+          return props.part
+        },
+        get sessionID() {
+          return props.sessionID
+        },
+      })}
+    </PluginBoundary>
+  )
 }
 
 function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {

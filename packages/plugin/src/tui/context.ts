@@ -17,6 +17,7 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionInfo,
+  SessionMessageAssistantTool,
   SessionMessageInfo,
   SessionInboxInfo,
   ShellInfo,
@@ -26,6 +27,7 @@ import type {
 import type { ResolvedTheme } from "@opencode/theme/tui"
 import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
+import type { Component } from "solid-js"
 import type { Store } from "solid-js/store"
 
 export interface Storage {
@@ -487,6 +489,34 @@ export interface Keymap {
   }
 }
 
+/**
+ * The props handed to the plugin that replaced a tool's renderer.
+ *
+ * The transcript swaps the whole `part` object as the call progresses
+ * (streaming, running, then completed or errored, with `state.metadata`
+ * changing along the way), so a renderer must read `part` and `sessionID`
+ * reactively — inside a memo, effect, or JSX expression — rather than
+ * capturing the first values it sees. The host passes both through getter
+ * props for exactly this reason, the same value-shaped convention the
+ * built-in tool views use.
+ *
+ * `sessionID` is the routed session the transcript is showing, not the
+ * session that necessarily owns the message; it is `undefined` when the
+ * transcript is rendered outside a session route.
+ */
+export interface ToolRenderInput {
+  readonly part: SessionMessageAssistantTool
+  readonly sessionID: string | undefined
+}
+
+/**
+ * Draws a tool call wherever it appears in the transcript. Declared as a
+ * Solid component so the host can mount it with `createComponent` and its
+ * state survives `part` swaps; see `ToolRenderInput` for the reactivity
+ * contract.
+ */
+export type ToolRender = Component<ToolRenderInput>
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -536,6 +566,26 @@ export interface UI {
       /** Selects a variant of the selected model, or the model default when undefined. Returns false when no model is selected or the variant is unavailable. */
       set(variant: string | undefined): boolean
     }
+  }
+  readonly tool: {
+    /**
+     * Replaces the built-in renderer for every tool part whose name matches.
+     * The lookup is exact first, then falls back to the part's display
+     * name, so a registration under a canonical spelling also covers
+     * legacy spellings that display to it (`shell` also renders `bash`
+     * parts). Registering `generic` claims every tool the host does not
+     * recognize — only do that to replace the fallback view itself.
+     *
+     * Registering the same name twice within one plugin throws. Across
+     * plugins the first active registration wins. The renderer is mounted
+     * as a component with getter-backed `part`/`sessionID` props, so it
+     * tracks part updates as the call progresses; see `ToolRenderInput`.
+     *
+     * The returned function unregisters this renderer, after which the
+     * built-in view returns. Deactivating the plugin clears the
+     * registration the same way `ui.slot` claims are cleared.
+     */
+    register(name: string, render: ToolRender): () => void
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
