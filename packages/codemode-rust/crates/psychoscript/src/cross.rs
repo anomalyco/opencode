@@ -528,6 +528,7 @@ pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
             }
             wait(vm, id, awaited);
             vm.park = true;
+            vm.park_coroutine = coroutine.unwrap_or(0);
             Ok(Value::Undef)
         }
     }

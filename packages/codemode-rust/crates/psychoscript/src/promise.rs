@@ -1,8 +1,126 @@
 //! Promises and the job queue, following the ECMAScript reaction and thenable-job ordering.
 
+use crate::native::{Frame, Input, Step};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Job, NATIVE_FUEL, REQ_NEXT, REQ_RETURN, REQ_THROW, Reaction, Res, Vm};
+
+/// What a `Settle` frame's call is for (see `settle_step`).
+pub(crate) const THEN: usize = 0;
+pub(crate) const FINALLY: usize = 1;
+pub(crate) const THENABLE: usize = 2;
+pub(crate) const EXECUTOR: usize = 3;
+pub(crate) const TRY: usize = 4;
+
+// The slots of a `Settle` frame: its kind; the promise it settles (for a thenable job, the resolve function); for a
+// thenable job or an executor the reject function, for a `finally` the outcome it restores (its kind, then its value),
+// and for `Promise.try` whether its call was counted; then the call: callee, receiver, argument count and arguments.
+const SETTLE_KIND: usize = 0;
+const SETTLE_TARGET: usize = 1;
+const SETTLE_A: usize = 2;
+const SETTLE_B: usize = 3;
+const SETTLE_F: usize = 4;
+const SETTLE_THIS: usize = 5;
+const SETTLE_ARGC: usize = 6;
+const SETTLE_ARGS: usize = 7;
+
+/// Pushes a `Settle` frame for a promise handler, a `finally` cleanup, a thenable job's `then`, an executor or a
+/// `Promise.try` callback: it calls `f` as the reference enters it (`Step::CallSettling`), then settles with how it
+/// ended.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn enter_settle(
+    vm: &mut Vm,
+    callee: Value,
+    kind: usize,
+    target: Value,
+    a: Value,
+    b: Value,
+    f: Value,
+    this: Value,
+    args: &[Value],
+) -> Res {
+    let mut slots = vec![
+        Value::Num(kind as f64),
+        target,
+        a,
+        b,
+        f,
+        this,
+        Value::Num(args.len() as f64),
+    ];
+    slots.extend_from_slice(args);
+    vm.enter_native_with(
+        crate::native::NativeOp::Settle,
+        callee,
+        Value::Undef,
+        &slots,
+    )
+}
+
+/// The step of a `Settle` frame.
+pub(crate) fn settle_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let kind = fr.index(vm, SETTLE_KIND);
+    let target = fr.get(vm, SETTLE_TARGET);
+    let outcome = match input {
+        Input::Start => {
+            let (f, this, argc) = (
+                fr.slot(vm, SETTLE_F),
+                fr.slot(vm, SETTLE_THIS),
+                fr.index(vm, SETTLE_ARGC),
+            );
+            let at = fr.base() + SETTLE_ARGS;
+            let args: Vec<_> = vm.stack[at..at + argc].to_vec();
+            return Ok(fr.catching_list(vm, f, this, &args, Step::CallSettling));
+        }
+        Input::Returned(r) => Ok(r.get()),
+        Input::Threw(e) => Err(e),
+        Input::Finished => return Ok(Step::Done(Value::Undef)),
+    };
+    let p = target.as_obj().unwrap_or(0);
+    match (kind, outcome) {
+        (THEN, Ok(r)) | (TRY, Ok(r)) => vm.resolve_promise(p, r),
+        (THEN, Err(e)) | (TRY, Err(e)) | (FINALLY, Err(e)) => vm.reject(p, e),
+        (FINALLY, Ok(r)) => {
+            // As the spec chains `then(valueThunk)` onto the cleanup's promise, the reference passes its outcome
+            // through one more promise, a job later.
+            let value = fr.get(vm, SETTLE_B);
+            let restored = match fr.index(vm, SETTLE_A) {
+                0 => Ok(value),
+                _ => Err(value),
+            };
+            let q = vm.promise_resolve(r);
+            let cleaned = vm.new_promise();
+            vm.perform_then(q, Reaction::Resolve(cleaned));
+            vm.perform_then(
+                cleaned,
+                Reaction::Restore {
+                    derived: p,
+                    outcome: restored,
+                },
+            );
+        }
+        (THENABLE, Err(e)) => {
+            if let Some(q) = vm.take_resolver(p) {
+                vm.reject(q, e);
+            }
+        }
+        (EXECUTOR, Err(e)) => {
+            let rej = fr.get(vm, SETTLE_A);
+            vm.call(&rej, Value::Undef, &[e])?;
+        }
+        _ => {}
+    }
+    Ok(Step::Done(match kind {
+        EXECUTOR => target,
+        TRY => {
+            if fr.index(vm, SETTLE_B) != 0 {
+                vm.bytecode_builtin();
+            }
+            target
+        }
+        _ => Value::Undef,
+    }))
+}
 
 impl<'rt> Vm<'rt> {
     pub fn new_promise(&mut self) -> Id {
@@ -129,8 +247,17 @@ impl<'rt> Vm<'rt> {
         (resolve, reject)
     }
 
+    /// Runs the native frame a job pushed, as the base of a run that may stop for a suspend and continue later.
+    fn run_job_frame(&mut self) -> Result<(), Value> {
+        self.take_entered();
+        self.resumable_run = true;
+        let r = self.run();
+        self.resumable_run = false;
+        r.map(|_| ())
+    }
+
     /// Marks a resolver pair used; returns its promise if this is the first use.
-    fn take_resolver(&mut self, callee: Id) -> Option<Id> {
+    pub(crate) fn take_resolver(&mut self, callee: Id) -> Option<Id> {
         let Kind::Native {
             data: Value::Obj(state),
             ..
@@ -161,17 +288,18 @@ impl<'rt> Vm<'rt> {
                     return Ok(());
                 }
                 let (res, rej) = self.create_resolvers(promise);
-                if let Err(e) = self.call_settling(&then, thenable, &[res, rej]) {
-                    if self.fatal.is_some() {
-                        return Err(e);
-                    }
-                    if let Value::Obj(r) = res
-                        && let Some(p) = self.take_resolver(r)
-                    {
-                        self.reject(p, e);
-                    }
-                }
-                Ok(())
+                enter_settle(
+                    self,
+                    Value::Undef,
+                    THENABLE,
+                    res,
+                    rej,
+                    Value::Undef,
+                    then,
+                    thenable,
+                    &[res, rej],
+                )?;
+                self.run_job_frame()
             }
             Job::Reaction(reaction, outcome) => self.run_reaction(reaction, outcome),
         }
@@ -193,15 +321,19 @@ impl<'rt> Vm<'rt> {
                     Err(e) => (on_rej, e, false),
                 };
                 if self.is_callable(&handler) {
-                    match self.call_settling(&handler, Value::Undef, &[arg]) {
-                        Ok(r) => self.resolve_promise(derived, r),
-                        Err(e) => {
-                            if self.fatal.is_some() {
-                                return Err(e);
-                            }
-                            self.reject(derived, e);
-                        }
-                    }
+                    let d = Value::Obj(derived);
+                    enter_settle(
+                        self,
+                        Value::Undef,
+                        THEN,
+                        d,
+                        Value::Undef,
+                        Value::Undef,
+                        handler,
+                        Value::Undef,
+                        &[arg],
+                    )?;
+                    return self.run_job_frame();
                 } else if ok {
                     self.fulfill(derived, arg);
                 } else {
@@ -224,23 +356,23 @@ impl<'rt> Vm<'rt> {
                 Ok(())
             }
             Reaction::Finally { cleanup, derived } => {
-                match self.call_settling(&cleanup, Value::Undef, &[]) {
-                    Ok(r) => {
-                        // As the spec chains `then(valueThunk)` onto the cleanup's promise, the reference passes its
-                        // outcome through one more promise, a job later.
-                        let p = self.promise_resolve(r);
-                        let cleaned = self.new_promise();
-                        self.perform_then(p, Reaction::Resolve(cleaned));
-                        self.perform_then(cleaned, Reaction::Restore { derived, outcome });
-                    }
-                    Err(e) => {
-                        if self.fatal.is_some() {
-                            return Err(e);
-                        }
-                        self.reject(derived, e);
-                    }
-                }
-                Ok(())
+                let (failed, value) = match outcome {
+                    Ok(v) => (0.0, v),
+                    Err(e) => (1.0, e),
+                };
+                let d = Value::Obj(derived);
+                enter_settle(
+                    self,
+                    Value::Undef,
+                    FINALLY,
+                    d,
+                    Value::Num(failed),
+                    value,
+                    cleanup,
+                    Value::Undef,
+                    &[],
+                )?;
+                self.run_job_frame()
             }
             Reaction::Restore {
                 derived,

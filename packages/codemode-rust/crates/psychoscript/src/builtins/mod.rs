@@ -3,10 +3,10 @@
 pub(crate) mod array;
 mod buffer;
 pub mod bytes;
-mod collections;
+pub(crate) mod collections;
 pub mod date;
 pub mod exotic;
-mod fuel;
+pub(crate) mod fuel;
 pub mod iterator;
 mod numfmt;
 mod object;

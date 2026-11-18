@@ -727,6 +727,7 @@ impl Enc<'_, '_> {
                     Resume::Delegate => json!("d"),
                     Resume::Collect(a) => json!(["c", a]),
                     Resume::Result => json!("r"),
+                    Resume::Native => json!("x"),
                 };
                 json!(["g", g, r])
             }
@@ -1356,6 +1357,7 @@ impl Dec<'_> {
                     J::String(s) if s == "i" => Resume::Iter,
                     J::String(s) if s == "d" => Resume::Delegate,
                     J::String(s) if s == "r" => Resume::Result,
+                    J::String(s) if s == "x" => Resume::Native,
                     J::Array(_) => Resume::Collect(self.id(at(r, 1)?)?),
                     _ => return Err(invalid("a generator frame's resume is unknown.")),
                 };

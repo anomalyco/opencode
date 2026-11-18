@@ -1,7 +1,7 @@
 //! Array and Array.prototype.
 
 use super::{arg, fuel, to_index};
-use crate::native::{Frame, Input, Step};
+use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, Input, Step, enter_for_of};
 use crate::object::*;
 use crate::ops::{Hint, MAX_ARRAY_LEN, without_holes};
 use crate::strings::StrId;
@@ -236,7 +236,53 @@ fn array_of(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(vm.new_array(args.to_vec()))
 }
 
-fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+// The slots of `Array.from` over an iterable, after the loop's (see `native::ForOf`).
+const FROM_MAPPER: usize = FOR_OF_SLOTS;
+const FROM_THIS: usize = FOR_OF_SLOTS + 1;
+const FROM_OUT: usize = FOR_OF_SLOTS + 2;
+
+/// The reference's `arrayFromIterable`: each value is mapped as it is read, and a mapper that throws closes the
+/// iterator.
+pub(crate) struct ArrayFromIterable;
+
+impl ForOf for ArrayFromIterable {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        let out = fr.slot(vm, FROM_OUT).obj().unwrap_or(0);
+        let n = len(vm, out);
+        if n >= MAX_ARRAY_LEN {
+            return Err(vm.range_error("Invalid array length."));
+        }
+        let mapper = fr.slot(vm, FROM_MAPPER);
+        if mapper == Slot::UNDEF {
+            if let Kind::Array(items) = &mut vm.heap[out as usize].kind {
+                items.push(x);
+            }
+            return Ok(Flow::Next);
+        }
+        let this_arg = fr.slot(vm, FROM_THIS);
+        Ok(Flow::Call(fr.catching(
+            vm,
+            mapper,
+            this_arg,
+            [Slot::pack(x), Slot::index(n)],
+        )?))
+    }
+
+    fn returned(vm: &mut Vm, fr: Frame, r: Slot) -> Result<Flow, Value> {
+        let out = fr.slot(vm, FROM_OUT).obj().unwrap_or(0);
+        if let Kind::Array(items) = &mut vm.heap[out as usize].kind {
+            items.push(r.get());
+        }
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        vm.bytecode_builtin();
+        Ok(fr.get(vm, FROM_OUT))
+    }
+}
+
+fn array_from(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let src = arg(args, 0);
     let mapper = match arg(args, 1) {
         Value::Undef => None,
@@ -244,22 +290,16 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     };
     let this_arg = arg(args, 2);
     if vm.is_iterable(&src) {
-        // The reference's `arrayFromIterable`: each value is mapped as it is read, and a mapper that throws closes
-        // the iterator.
         fuel::handoff(vm);
-        let mut out = Vec::new();
-        fuel::for_of(vm, &src, |vm, x| {
-            if out.len() >= MAX_ARRAY_LEN {
-                return Err(vm.range_error("Invalid array length."));
-            }
-            out.push(match mapper {
-                Some(f) => vm.call_counted(&f, this_arg, &[x, Value::Num(out.len() as f64)])?,
-                None => x,
-            });
-            Ok(true)
-        })?;
-        vm.bytecode_builtin();
-        return Ok(vm.new_array(out));
+        let out = vm.new_array(Vec::new());
+        return enter_for_of(
+            vm,
+            crate::native::NativeOp::ArrayFromIterable,
+            callee,
+            Value::Undef,
+            src,
+            &[mapper.unwrap_or_default(), this_arg, out],
+        );
     }
     let id = match src {
         Value::Obj(id) if !matches!(vm.heap[id as usize].kind, Kind::Promise(_)) => id,
@@ -858,6 +898,7 @@ pub(crate) fn each_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Va
             k += 1;
         }
         Input::Threw(e) => return Err(e),
+        Input::Finished => {}
     }
     let this = fr.this_slot(vm);
     let Some(id) = this.obj() else {
@@ -1129,6 +1170,7 @@ pub(crate) fn reduce_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
             fuel::step(vm);
         }
         Input::Threw(e) => return Err(e),
+        Input::Finished => {}
     }
     let this = fr.this_slot(vm);
     let Some(id) = this.obj() else {
@@ -1188,38 +1230,35 @@ pub(super) fn sort_comparator(vm: &mut Vm, cmp: &Value, name: &str) -> Result<()
     Ok(())
 }
 
-pub(super) fn sort_values(vm: &mut Vm, list: Vec<Value>, cmp: &Value) -> Result<Vec<Value>, Value> {
-    let (mut defined, undefs): (Vec<Value>, Vec<Value>) =
+/// The default sort of `list`: `undefined` last, the rest by their strings.
+fn sort_default(vm: &mut Vm, list: Vec<Value>) -> Result<Vec<Value>, Value> {
+    let (defined, undefs): (Vec<Value>, Vec<Value>) =
         list.into_iter().partition(|v| !matches!(v, Value::Undef));
-    if let Value::Undef = cmp {
-        // The values are one list of conversions with the string hint (see `fuel::Conversions`). Over `SORT_RUN` the
-        // reference sorts in bounded native steps in its prelude (`sortDefault`).
-        let stepped = defined.len() > SORT_RUN;
-        let mut c = fuel::Conversions::default();
-        let primitives = c.converted(vm, &[Hint::String], &defined, false)?;
-        let mut keys = Vec::with_capacity(primitives.len());
-        for p in primitives.iter() {
-            keys.push(vm.string_of(p)?);
-        }
-        drop(primitives);
-        let keyed: Vec<(StrId, Value)> = keys.into_iter().zip(defined).collect();
-        if stepped {
-            sort_default_fuel(vm, &c, keyed.len());
-        }
-        c.finish(vm, Ok(()))?;
-        let mut sorted = merge_sort(
-            vm,
-            keyed,
-            &mut |vm, a: &(StrId, Value), b: &(StrId, Value)| {
-                Ok(vm.atoms.sref(a.0).cmp16(vm.atoms.sref(b.0)).is_gt())
-            },
-        )?;
-        defined = sorted.drain(..).map(|(_, v)| v).collect();
-    } else {
-        defined = sort_with(vm, defined, *cmp)?;
+    // The values are one list of conversions with the string hint (see `fuel::Conversions`). Over `SORT_RUN` the
+    // reference sorts in bounded native steps in its prelude (`sortDefault`).
+    let stepped = defined.len() > SORT_RUN;
+    let mut c = fuel::Conversions::default();
+    let primitives = c.converted(vm, &[Hint::String], &defined, false)?;
+    let mut keys = Vec::with_capacity(primitives.len());
+    for p in primitives.iter() {
+        keys.push(vm.string_of(p)?);
     }
-    defined.extend(undefs);
-    Ok(defined)
+    drop(primitives);
+    let keyed: Vec<(StrId, Value)> = keys.into_iter().zip(defined).collect();
+    if stepped {
+        sort_default_fuel(vm, &c, keyed.len());
+    }
+    c.finish(vm, Ok(()))?;
+    let mut sorted = merge_sort(
+        vm,
+        keyed,
+        &mut |vm, a: &(StrId, Value), b: &(StrId, Value)| {
+            Ok(vm.atoms.sref(a.0).cmp16(vm.atoms.sref(b.0)).is_gt())
+        },
+    )?;
+    let mut out: Vec<Value> = sorted.drain(..).map(|(_, v)| v).collect();
+    out.extend(undefs);
+    Ok(out)
 }
 
 /// The most values the reference's default sort sorts in one native call, and how many a merge step of the
@@ -1250,51 +1289,184 @@ fn sort_default_fuel(vm: &mut Vm, c: &fuel::Conversions, n: usize) {
     vm.bytecode_builtin();
 }
 
-/// A sort with a comparator as the reference's `sortWith` runs it: a stable top-down merge sort, its merges planned
-/// in post-order so the comparator sees the pairs the recursive sort compares, in the same order. A result that is
-/// not above zero, or NaN, keeps the left value first.
-fn sort_with(vm: &mut Vm, mut work: Vec<Value>, f: Value) -> Result<Vec<Value>, Value> {
-    fn plan(low: usize, high: usize, out: &mut Vec<(usize, usize, usize)>) {
+/// Where a sort with a comparator puts its result (see `sort_with`).
+pub(super) const SORT_IN_PLACE: usize = 0;
+pub(super) const SORT_COPY: usize = 1;
+pub(super) const SORT_BYTES: usize = 2;
+
+// The slots of a sort frame. The values being sorted, the merge buffer and the plan follow them on the frame's stack,
+// already packed: a comparison reads and writes only the frame's own slots.
+const SORT_F: usize = 0;
+/// How many values are sorted: `undefined` and holes are left out.
+const SORT_N: usize = 1;
+const SORT_M: usize = 2;
+/// The merge being made: its bounds, and where it has got to in each half.
+const SORT_LOW: usize = 3;
+const SORT_MIDDLE: usize = 4;
+const SORT_HIGH: usize = 5;
+const SORT_LEFT: usize = 6;
+const SORT_RIGHT: usize = 7;
+const SORT_UNDEFS: usize = 8;
+const SORT_HOLES: usize = 9;
+const SORT_TARGET: usize = 10;
+/// The values, at `SORT_WORK + i`; the buffer a merge fills, at the same indexes past `SORT_WORK + n`; then the
+/// merges to make, in order, as `low, middle, high` triples.
+const SORT_WORK: usize = 11;
+
+/// Starts a sort with the comparator `f` as the reference's `sortWith` runs it: a stable top-down merge sort, its
+/// merges planned in post-order so the comparator sees the pairs the recursive sort compares, in the same order. A
+/// result that is not above zero, or NaN, keeps the left value first. `undefined` sorts after the rest, then
+/// `holes` holes; `target` says where the result goes.
+pub(super) fn sort_with(
+    vm: &mut Vm,
+    callee: Id,
+    this: Value,
+    list: Vec<Value>,
+    f: Value,
+    holes: usize,
+    target: usize,
+) -> Res {
+    fn plan(low: usize, high: usize, out: &mut Vec<Slot>) {
         if high - low <= 1 {
             return;
         }
         let middle = low + (high - low) / 2;
         plan(low, middle, out);
         plan(middle, high, out);
-        out.push((low, middle, high));
+        out.extend([low, middle, high].map(Slot::index));
     }
-    let mut merges = Vec::new();
-    plan(0, work.len(), &mut merges);
+    let (work, undefs): (Vec<Value>, Vec<Value>) =
+        list.into_iter().partition(|v| !matches!(v, Value::Undef));
+    let n = work.len();
+    let mut merges = Vec::with_capacity(3 * n);
+    plan(0, n, &mut merges);
     fuel::handoff(vm);
-    let mut merged = Vec::with_capacity(work.len());
-    for (low, middle, high) in merges {
-        merged.clear();
-        let (mut left, mut right) = (low, middle);
-        while left < middle && right < high {
-            let r = vm.call_counted(&f, Value::Undef, &[work[left], work[right]])?;
-            let order = match r {
-                Value::Num(n) => n,
-                v => vm.number_of(&v)?,
+    let (low, middle, high) = match merges.get(0..3) {
+        Some(t) => (t[0].f(), t[1].f(), t[2].f()),
+        None => (0.0, 0.0, 0.0),
+    };
+    vm.enter_native(
+        crate::native::NativeOp::SortWith,
+        callee,
+        this,
+        &[
+            f,
+            Value::Num(n as f64),
+            Value::Num(0.0),
+            Value::Num(low),
+            Value::Num(middle),
+            Value::Num(high),
+            Value::Num(low),
+            Value::Num(middle),
+            Value::Num(undefs.len() as f64),
+            Value::Num(holes as f64),
+            Value::Num(target as f64),
+        ],
+    )?;
+    vm.stack.extend(work.into_iter().map(Slot::pack));
+    vm.stack.resize(vm.stack.len() + n, Slot::UNDEF);
+    vm.stack.extend(merges);
+    Ok(Value::Undef)
+}
+
+/// The step of a sort frame: one comparison per call.
+pub(crate) fn sort_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let (mut left, mut right) = (fr.index(vm, SORT_LEFT), fr.index(vm, SORT_RIGHT));
+    let (mut middle, mut high) = (fr.index(vm, SORT_MIDDLE), fr.index(vm, SORT_HIGH));
+    let n = fr.index(vm, SORT_N);
+    match input {
+        Input::Start => {}
+        Input::Returned(r) => {
+            let order = match r.is_num() {
+                true => r.f(),
+                false => vm.number_of(&r.get())?,
             };
-            if order <= 0.0 || order.is_nan() {
-                merged.push(work[left]);
+            // Merged values fill the merge's range in order: as many as each half has given.
+            let at = left + right - middle;
+            let item = if order <= 0.0 || order.is_nan() {
                 left += 1;
+                fr.set_index(vm, SORT_LEFT, left);
+                fr.slot(vm, SORT_WORK + left - 1)
             } else {
-                merged.push(work[right]);
                 right += 1;
-            }
+                fr.set_index(vm, SORT_RIGHT, right);
+                fr.slot(vm, SORT_WORK + right - 1)
+            };
+            fr.set_slot(vm, SORT_WORK + n + at, item);
             fuel::step(vm);
         }
-        merged.extend_from_slice(&work[left..middle]);
-        merged.extend_from_slice(&work[right..high]);
-        work[low..high].copy_from_slice(&merged);
-        // `$MergeRest`, and the back-edge to the next merge.
-        fuel::native(vm);
-        fuel::step(vm);
+        Input::Threw(e) => return Err(e),
+        Input::Finished => {}
+    }
+    // Fewer than two values make no merges.
+    if n >= 2 {
+        loop {
+            if left < middle && right < high {
+                let (a, b) = (
+                    fr.slot(vm, SORT_WORK + left),
+                    fr.slot(vm, SORT_WORK + right),
+                );
+                let f = fr.slot(vm, SORT_F);
+                return fr.call_slots(vm, f, Slot::UNDEF, [a, b]);
+            }
+            let low = fr.index(vm, SORT_LOW);
+            let at = left + right - middle;
+            let work = fr.base() + SORT_WORK;
+            let aux = work + n;
+            vm.stack.copy_within(work + left..work + middle, aux + at);
+            vm.stack
+                .copy_within(work + right..work + high, aux + at + middle - left);
+            vm.stack.copy_within(aux + low..aux + high, work + low);
+            // `$MergeRest`, and the back-edge to the next merge.
+            fuel::native(vm);
+            fuel::step(vm);
+            let m = fr.index(vm, SORT_M) + 1;
+            let plan = SORT_WORK + 2 * n + 3 * m;
+            if m + 1 >= n {
+                break;
+            }
+            fr.set_index(vm, SORT_M, m);
+            let (low, mid, hi) = (
+                fr.index(vm, plan),
+                fr.index(vm, plan + 1),
+                fr.index(vm, plan + 2),
+            );
+            (left, right, middle, high) = (low, mid, mid, hi);
+            for (k, i) in [
+                (SORT_LOW, low),
+                (SORT_MIDDLE, mid),
+                (SORT_HIGH, hi),
+                (SORT_LEFT, low),
+                (SORT_RIGHT, mid),
+            ] {
+                fr.set_index(vm, k, i);
+            }
+        }
     }
     fuel::native(vm);
     vm.bytecode_builtin();
-    Ok(work)
+    let work = fr.base() + SORT_WORK;
+    let mut sorted: Vec<Value> = vm.stack[work..work + n].iter().map(|s| s.get()).collect();
+    sorted.resize(n + fr.index(vm, SORT_UNDEFS), Value::Undef);
+    let this = fr.this_slot(vm).get();
+    match fr.index(vm, SORT_TARGET) {
+        SORT_COPY => Ok(Step::Done(vm.new_array(sorted))),
+        SORT_BYTES => {
+            if let Some(id) = this.as_obj() {
+                super::bytes::put_sorted(vm, id, &sorted);
+            }
+            Ok(Step::Done(this))
+        }
+        _ => {
+            sorted.resize(sorted.len() + fr.index(vm, SORT_HOLES), Value::Uninit);
+            if let Some(id) = this.as_obj()
+                && let Kind::Array(items) = &mut vm.heap[id as usize].kind
+            {
+                *items = sorted;
+            }
+            Ok(Step::Done(this))
+        }
+    }
 }
 
 type Greater<'a, T> = dyn FnMut(&mut Vm, &T, &T) -> Result<bool, Value> + 'a;
@@ -1358,18 +1530,21 @@ fn sort_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
     Ok(id)
 }
 
-fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn a_sort(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = sort_id(vm, &this)?;
     // Holes sort last, after undefined, and stay holes; a comparator that throws leaves the array as it was.
     let cmp = arg(args, 0);
     let list = items_mut(vm, id, None)?.clone();
     sort_comparator(vm, &cmp, "Array.sort")?;
     let holes = list.iter().filter(|v| matches!(v, Value::Uninit)).count();
-    let list = list
+    let list: Vec<Value> = list
         .into_iter()
         .filter(|v| !matches!(v, Value::Uninit))
         .collect();
-    let mut sorted = sort_values(vm, list, &cmp)?;
+    if !matches!(cmp, Value::Undef) {
+        return sort_with(vm, callee, this, list, cmp, holes, SORT_IN_PLACE);
+    }
+    let mut sorted = sort_default(vm, list)?;
     sorted.resize(sorted.len() + holes, Value::Uninit);
     if let Kind::Array(items) = &mut vm.heap[id as usize].kind {
         *items = sorted;
@@ -1377,11 +1552,15 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(this)
 }
 
-fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = sort_id(vm, &this)?;
-    sort_comparator(vm, &arg(args, 0), "Array.toSorted")?;
+    let cmp = arg(args, 0);
+    sort_comparator(vm, &cmp, "Array.toSorted")?;
     let list = without_holes(items(vm, id));
-    let sorted = sort_values(vm, list, &arg(args, 0))?;
+    if !matches!(cmp, Value::Undef) {
+        return sort_with(vm, callee, this, list, cmp, 0, SORT_COPY);
+    }
+    let sorted = sort_default(vm, list)?;
     Ok(vm.new_array(sorted))
 }
 

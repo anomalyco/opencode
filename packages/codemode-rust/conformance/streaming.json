@@ -16149,6 +16149,178 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [2, 1].sort((a, b) => S(a) + a - b); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2
+          ],
+          [
+            "call 2",
+            "job",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Array.from([1, 2], (x) => S(x) + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Array.from({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Map({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 0, value: [++n, S(n)] }) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              1,
+              1
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.resolve(1).then((x) => S(x) + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "job",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.reject(1).catch((x) => S(x) + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "job",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.resolve(1).finally(() => S(1)); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "job",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await new Promise((done) => done(S(1))); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.try((x) => S(x) + x, 1); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.resolve({ then(done) { done(S(1)) } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "job",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' }); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
@@ -207515,6 +207687,22 @@
       ]
     },
     {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const n = await Promise.resolve(2).then((x) => { for (let i = 0; i < 200000000; i++) {} return x }); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
       "code": "const r = tools.t.echo({ a: 1, w: tools.wait({}) }); return await r",
       "suspend": {
         "ok": true
@@ -207578,6 +207766,17 @@
           2,
           3
         ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await Promise.resolve(1).then((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": 2
       },
       "log": []
     },

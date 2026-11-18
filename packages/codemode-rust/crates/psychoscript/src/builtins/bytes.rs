@@ -626,29 +626,29 @@ fn u_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(this)
 }
 
-fn u_sort(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn u_sort(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = this_bytes(vm, &this, "sort")?;
     let cmp = arg(args, 0);
     super::array::sort_comparator(vm, &cmp, "Uint8Array.sort")?;
     let mut data = bytes_ref(vm, id).to_vec();
-    if let Value::Undef = cmp {
-        data.sort_unstable();
-    } else {
+    if !matches!(cmp, Value::Undef) {
         let list: Vec<Value> = data.iter().map(|b| Value::Num(*b as f64)).collect();
-        let sorted = super::array::sort_values(vm, list, &cmp)?;
-        data = sorted
-            .iter()
-            .map(|v| match v {
-                Value::Num(n) => to_u8(*n),
-                _ => 0,
-            })
-            .collect();
+        return super::array::sort_with(vm, callee, this, list, cmp, 0, super::array::SORT_BYTES);
     }
+    data.sort_unstable();
     let b = bytes_ref(vm, id);
     for (i, v) in data.into_iter().enumerate() {
         b.put(i, v);
     }
     Ok(this)
+}
+
+/// Writes a sort's result into the bytes `id`.
+pub(super) fn put_sorted(vm: &mut Vm, id: Id, sorted: &[Value]) {
+    let b = bytes_ref(vm, id);
+    for (i, v) in sorted.iter().enumerate() {
+        b.put(i, to_u8(v.as_num()));
+    }
 }
 
 /// A search value: only numbers can equal a byte.

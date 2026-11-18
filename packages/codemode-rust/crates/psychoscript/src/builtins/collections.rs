@@ -1,6 +1,7 @@
 //! Map, Set, Promise, generators and built-in iterators.
 
 use super::{arg, fuel};
+use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of};
 use crate::object::*;
 use crate::value::{Id, Value};
 use crate::vm::{Reaction, Res, Vm};
@@ -108,7 +109,37 @@ fn table<'a>(vm: &'a mut Vm<'_>, id: Id) -> &'a mut OrderedMap {
     }
 }
 
-fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// The reference's `fillCollection` into the Map or Set in the frame's first own slot: for a Map, `$IsObject`, then
+/// `$Table("add")`, for each entry; for a Set, `$Table("add")` for each value.
+pub(crate) struct FillCollection;
+
+impl ForOf for FillCollection {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        let id = fr.slot(vm, FOR_OF_SLOTS).obj().unwrap_or(0);
+        if matches!(vm.heap[id as usize].kind, Kind::Set(_)) {
+            let key = vm.map_key(&x);
+            table(vm, id).set(key, x, Value::Undef);
+            fuel::native(vm);
+            return Ok(Flow::Next);
+        }
+        fuel::native(vm);
+        if !matches!(x, Value::Obj(_)) {
+            return Err(vm.type_error("new Map(...) expects [key, value] pairs as entry objects."));
+        }
+        let k = vm.get_elem(&x, &Value::Num(0.0))?;
+        let v = vm.get_elem(&x, &Value::Num(1.0))?;
+        let key = vm.map_key(&k);
+        table(vm, id).set(key, k, v);
+        fuel::native(vm);
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        Ok(fr.get(vm, FOR_OF_SLOTS))
+    }
+}
+
+fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     if !matches!(this, Value::Uninit) {
         return Err(vm.type_error("Constructor Map requires 'new'"));
     }
@@ -116,27 +147,14 @@ fn map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));
     let src = arg(args, 0);
     if !src.is_nullish() {
-        // The reference's `fillCollection`: `$IsObject`, then `$Table("add")`, for each entry.
         fuel::method(vm);
-        fuel::for_of(vm, &src, |vm, entry| {
-            fuel::native(vm);
-            if !matches!(entry, Value::Obj(_)) {
-                return Err(
-                    vm.type_error("new Map(...) expects [key, value] pairs as entry objects.")
-                );
-            }
-            let k = vm.get_elem(&entry, &Value::Num(0.0))?;
-            let v = vm.get_elem(&entry, &Value::Num(1.0))?;
-            let key = vm.map_key(&k);
-            table(vm, id).set(key, k, v);
-            fuel::native(vm);
-            Ok(true)
-        })?;
+        let op = crate::native::NativeOp::FillCollection;
+        return enter_for_of(vm, op, callee, Value::Undef, src, &[Value::Obj(id)]);
     }
     Ok(Value::Obj(id))
 }
 
-fn set_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn set_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     if !matches!(this, Value::Uninit) {
         return Err(vm.type_error("Constructor Set requires 'new'"));
     }
@@ -144,14 +162,9 @@ fn set_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Set(Box::default())));
     let src = arg(args, 0);
     if !src.is_nullish() {
-        // The reference's `fillCollection`: `$Table("add")` for each value.
         fuel::method(vm);
-        fuel::for_of(vm, &src, |vm, v| {
-            let key = vm.map_key(&v);
-            table(vm, id).set(key, v, Value::Undef);
-            fuel::native(vm);
-            Ok(true)
-        })?;
+        let op = crate::native::NativeOp::FillCollection;
+        return enter_for_of(vm, op, callee, Value::Undef, src, &[Value::Obj(id)]);
     }
     Ok(Value::Obj(id))
 }
@@ -289,7 +302,7 @@ fn gen_throw(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 // ---------- Promise ----------
 
-fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     if !matches!(this, Value::Uninit) {
         return Err(vm.type_error("Promise constructor cannot be invoked without 'new'"));
     }
@@ -301,13 +314,18 @@ fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     }
     let p = vm.new_promise();
     let (res, rej) = vm.create_resolvers(p);
-    if let Err(e) = vm.call_settling(&executor, Value::Undef, &[res, rej]) {
-        if vm.fatal.is_some() {
-            return Err(e);
-        }
-        vm.call(&rej, Value::Undef, &[e])?;
-    }
-    Ok(Value::Obj(p))
+    let kind = crate::promise::EXECUTOR;
+    crate::promise::enter_settle(
+        vm,
+        Value::Obj(callee),
+        kind,
+        Value::Obj(p),
+        rej,
+        Value::Undef,
+        executor,
+        Value::Undef,
+        &[res, rej],
+    )
 }
 
 fn promise_resolve(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -453,7 +471,7 @@ fn promise_with_resolvers(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> 
     Ok(Value::Obj(o))
 }
 
-fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let f = arg(args, 0);
     if !vm.is_callable(&f) {
         let d = vm.describe_data(&f);
@@ -466,20 +484,19 @@ fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     if counted {
         fuel::native(vm);
     }
-    let r = vm.call_settling(&arg(args, 0), Value::Undef, rest);
-    if counted {
-        vm.bytecode_builtin();
-    }
-    match r {
-        Ok(v) => vm.resolve_promise(p, v),
-        Err(e) => {
-            if vm.fatal.is_some() {
-                return Err(e);
-            }
-            vm.reject(p, e);
-        }
-    }
-    Ok(Value::Obj(p))
+    // The frame ends the call as a bytecode built-in's when the call was counted.
+    let (u, c) = (Value::Undef, Value::Num(counted as u8 as f64));
+    crate::promise::enter_settle(
+        vm,
+        Value::Obj(callee),
+        crate::promise::TRY,
+        Value::Obj(p),
+        u,
+        c,
+        f,
+        u,
+        rest,
+    )
 }
 
 fn this_promise(vm: &mut Vm, this: &Value) -> Result<Id, Value> {

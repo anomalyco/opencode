@@ -55,6 +55,9 @@ pub enum Resume {
     Collect(Id),
     /// As an iterator result object, for a direct `next()` call.
     Result,
+    /// To the native frame that resumed it (see `native.rs`): a yielded value as a call's result, the completion as
+    /// `Input::Finished`.
+    Native,
 }
 
 pub struct Frame {
@@ -249,8 +252,9 @@ pub struct Vm<'rt> {
     pub result_json: Option<crate::Json>,
     /// The `search` global, which a call from bytecode runs itself (see `call_op`), or 0.
     pub(crate) search_fn: Id,
-    /// A `search(...)` whose arguments' walk awaits: the call parks its frames (see `park_search`).
+    /// A `search(...)` whose arguments' walk awaits: the call parks its frames (see `park_search`) with this coroutine.
     pub(crate) park: bool,
+    pub(crate) park_coroutine: u32,
     native_depth: usize,
     /// Address near the bottom of the native stack this run started on, and how much of it calls may use.
     pub stack_base: usize,
@@ -345,6 +349,7 @@ impl<'rt> Vm<'rt> {
             result_json: None,
             search_fn: 0,
             park: false,
+            park_coroutine: 0,
             native_depth: 0,
             json_walk: 0,
             json_walks: 0,
@@ -969,37 +974,6 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// Calls a promise reaction's, a `finally` cleanup's, a thenable job's `then`, an executor's or a `Promise.try`
-    /// callback as the reference enters it (`enterSettlingCall`): a plain function's frame directly, for nothing, and
-    /// a promise's resolve or reject function for nothing; anything else through `$vmSettleCall`, as bytecode calls
-    /// it: an async or generator function one unit, a native fifty.
-    pub(crate) fn call_settling(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
-        let Value::Obj(id) = *f else {
-            return self.call(f, this, args);
-        };
-        match &self.heap[id as usize].kind {
-            Kind::Bound(b) => {
-                let (target, bthis, bargs) = (b.0, b.1, b.2.clone());
-                let mut all = bargs;
-                all.extend_from_slice(args);
-                self.call_settling(&target, bthis, &all)
-            }
-            Kind::Closure(c) if !c.proto.is_async && !c.proto.is_generator => {
-                // Its frame's unit is not spent: credit the budget the call takes it from.
-                self.budget += 1;
-                self.call(f, this, args)
-            }
-            Kind::Native {
-                data: Value::Obj(state),
-                ..
-            } if matches!(self.heap[*state as usize].kind, Kind::Resolvers { .. }) => {
-                self.call(f, this, args)
-            }
-            Kind::Native { .. } => self.call_counted(f, this, args),
-            _ => self.call(f, this, args),
-        }
-    }
-
     /// The frames that count toward the call-stack limit: the reference runs its built-ins as internal code, which
     /// does not count, so native frames do not either.
     #[cold]
@@ -1021,11 +995,22 @@ impl<'rt> Vm<'rt> {
         this: Value,
         locals: &[Value],
     ) -> Res {
+        self.enter_native_with(op, Value::Obj(callee), this, locals)
+    }
+
+    /// `enter_native` for a frame no built-in's call made (a job's), or whose callee is not at hand.
+    pub(crate) fn enter_native_with(
+        &mut self,
+        op: crate::native::NativeOp,
+        callee: Value,
+        this: Value,
+        locals: &[Value],
+    ) -> Res {
         if self.frames.len() >= 3 * MAX_DEPTH {
             return Err(self.range_error("Maximum call stack size exceeded"));
         }
         let fpos = self.stack.len();
-        self.push(Value::Obj(callee));
+        self.push(callee);
         self.push(this);
         self.stack.extend(locals.iter().map(|v| Slot::pack(*v)));
         let (func, upvals) = (self.native_proto.clone(), self.no_upvals.clone());
@@ -1051,6 +1036,14 @@ impl<'rt> Vm<'rt> {
         }
         self.entered = true;
         Ok(Value::Undef)
+    }
+
+    /// Makes the native frame a job pushed the base of the run that runs it.
+    pub(crate) fn take_entered(&mut self) {
+        self.entered = false;
+        if let Some(f) = self.frames.last_mut() {
+            f.is_base = true;
+        }
     }
 
     /// Runs the native frame a built-in called from native code pushed, to its result.
@@ -1334,6 +1327,10 @@ impl<'rt> Vm<'rt> {
                 crate::native::Input::Returned(self.stack.pop().unwrap_or_default())
             }
             crate::native::THREW => crate::native::Input::Threw(self.pop()),
+            crate::native::FINISHED => {
+                self.stack.pop();
+                crate::native::Input::Finished
+            }
             _ => crate::native::Input::Start,
         };
         self.frames[fi].pc = crate::native::RETURNED;
@@ -1348,6 +1345,14 @@ impl<'rt> Vm<'rt> {
                 Ok(None)
             }
             crate::native::Step::Pushed => Ok(None),
+            crate::native::Step::CallUncounted(argc) => {
+                self.call_op_uncounted(argc)?;
+                Ok(None)
+            }
+            crate::native::Step::CallSettling(argc) => {
+                self.call_op_settling(argc)?;
+                Ok(None)
+            }
             crate::native::Step::Done(v) => {
                 let frame = self.frames.pop().expect("frame");
                 self.stack.truncate(frame.base - 2);
@@ -1380,6 +1385,80 @@ impl<'rt> Vm<'rt> {
             return Ok(crate::native::Step::Pushed);
         }
         Ok(crate::native::Step::Call(argc))
+    }
+
+    /// The call a native frame asks for with `Step::CallUncounted`: as `call` makes it from native code, so a native
+    /// costs no fifty.
+    #[cold]
+    #[inline(never)]
+    fn call_op_uncounted(&mut self, argc: usize) -> Result<bool, Value> {
+        let fpos = self.stack.len() - argc - 2;
+        let Some(id) = self.stack[fpos].obj() else {
+            return self.call_op(argc);
+        };
+        match &self.heap[id as usize].kind {
+            Kind::Native { f, .. } => {
+                let f = *f;
+                let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
+                let this = self.pop();
+                self.stack.pop();
+                self.host.meter.counted = false;
+                let r = f(self, this, &args, id);
+                if std::mem::take(&mut self.entered) {
+                    return Ok(true);
+                }
+                self.host.meter.bytecode = false;
+                self.push(r?);
+                Ok(false)
+            }
+            Kind::Bound(b) => {
+                let (target, bthis, bargs) = (b.0, b.1, b.2.clone());
+                let n = bargs.len();
+                self.stack[fpos] = Slot::pack(target);
+                self.stack[fpos + 1] = Slot::pack(bthis);
+                let tail = self.stack.split_off(fpos + 2);
+                self.stack.extend(bargs.into_iter().map(Slot::pack));
+                self.stack.extend(tail);
+                self.call_op_uncounted(argc + n)
+            }
+            _ => self.call_op(argc),
+        }
+    }
+
+    /// The call a native frame asks for with `Step::CallSettling`, as the reference enters a promise handler
+    /// (`enterSettlingCall`): a plain function's frame and a promise's resolve function for nothing, an async or
+    /// generator function one unit, a native fifty.
+    #[cold]
+    #[inline(never)]
+    fn call_op_settling(&mut self, argc: usize) -> Result<bool, Value> {
+        let fpos = self.stack.len() - argc - 2;
+        let Some(id) = self.stack[fpos].obj() else {
+            return self.call_op(argc);
+        };
+        match &self.heap[id as usize].kind {
+            Kind::Bound(b) => {
+                let (target, bthis, bargs) = (b.0, b.1, b.2.clone());
+                let n = bargs.len();
+                self.stack[fpos] = Slot::pack(target);
+                self.stack[fpos + 1] = Slot::pack(bthis);
+                let tail = self.stack.split_off(fpos + 2);
+                self.stack.extend(bargs.into_iter().map(Slot::pack));
+                self.stack.extend(tail);
+                self.call_op_settling(argc + n)
+            }
+            Kind::Closure(c) if !c.proto.is_async && !c.proto.is_generator => {
+                // Its frame's unit is not spent: credit the budget the call takes it from.
+                self.budget += 1;
+                self.call_op(argc)
+            }
+            Kind::Native {
+                data: Value::Obj(state),
+                ..
+            } if matches!(self.heap[*state as usize].kind, Kind::Resolvers { .. }) => {
+                self.call_op_uncounted(argc)
+            }
+            _ => self.call_op(argc),
+        }
     }
 
     /// Fills in the location of a failure a native frame raised: the call of the built-in in the nearest bytecode
@@ -1514,14 +1593,21 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// The async function a `search(...)` called now from bytecode would park, frames and all, while its arguments'
-    /// walk awaits, as the reference parks every frame above its nearest async one: `None` when a native call or a
-    /// generator stands in between, which cannot wait.
-    pub(crate) fn search_parkable(&self) -> Option<u32> {
-        for f in self.frames.iter().rev() {
+    /// The coroutine a `search(...)` called now from bytecode would park its frames with while its arguments' walk
+    /// awaits, as the reference parks every frame above its nearest async one, or a promise job's frames when there is
+    /// none: `None` when a native call or a generator stands in between, which cannot wait.
+    pub(crate) fn search_parkable(&mut self) -> Option<u32> {
+        for (i, f) in self.frames.iter().enumerate().rev() {
             match f.kind {
                 FrameKind::Async(c) => return Some(c),
                 FrameKind::Generator(..) => return None,
+                FrameKind::Native(crate::native::NativeOp::Settle) if f.is_base && i == 0 => {
+                    self.coroutines.push(Coroutine {
+                        saved: None,
+                        promise: None,
+                    });
+                    return Some(self.coroutines.len() as u32 - 1);
+                }
                 FrameKind::Normal | FrameKind::Native(_) if f.is_base => return None,
                 FrameKind::Normal | FrameKind::Native(_) => {}
             }
@@ -1529,17 +1615,15 @@ impl<'rt> Vm<'rt> {
         None
     }
 
-    /// Parks the frames from the nearest async function up to the `search(...)` call with that function's coroutine,
-    /// as an `await` there would; returns that function's promise and whether its frame was this run's base.
-    fn park_search(&mut self) -> (Value, bool) {
+    /// Parks the frames from the nearest async function (or the promise job's) up to the `search(...)` call with the
+    /// coroutine `c`, as an `await` there would; returns that function's promise and whether its frame was this run's
+    /// base.
+    fn park_search(&mut self, c: u32) -> (Value, bool) {
         let k = self
             .frames
             .iter()
-            .rposition(|f| matches!(f.kind, FrameKind::Async(_)))
+            .rposition(|f| matches!(f.kind, FrameKind::Async(a) if a == c))
             .unwrap_or(0);
-        let FrameKind::Async(c) = self.frames[k].kind else {
-            return (Value::Undef, false);
-        };
         let mut parked: Vec<Box<Frame>> = self.frames.drain(k..).collect();
         let first = parked.remove(0);
         let (base, hbase) = (first.base, first.hbase);
@@ -1597,7 +1681,8 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     fn parked(&mut self) -> Option<Value> {
         self.park = false;
-        let (result, is_base) = self.park_search();
+        let c = std::mem::replace(&mut self.park_coroutine, 0);
+        let (result, is_base) = self.park_search(c);
         if is_base {
             return Some(result);
         }
@@ -1767,6 +1852,12 @@ impl<'rt> Vm<'rt> {
     fn generator_done(&mut self, resume: Resume, v: Value) {
         match resume {
             Resume::Collect(_) => {}
+            Resume::Native => {
+                if let Some(f) = self.frames.last_mut() {
+                    f.pc = crate::native::FINISHED;
+                }
+                self.push(v);
+            }
             Resume::Result => {
                 let r = self.iter_result(v, true);
                 self.push(r);
@@ -1797,6 +1888,47 @@ impl<'rt> Vm<'rt> {
                     _ => self.push(v),
                 }
             }
+        }
+    }
+
+    /// Resumes a generator for the native frame on top, as `resume_generator` does: `Some` with its value and whether
+    /// it is done when it does not run, `None` once its frame is pushed, which hands the frame below its next yield as
+    /// a call's result or its completion as `Input::Finished`.
+    pub(crate) fn native_resume(
+        &mut self,
+        g: Id,
+        mode: u8,
+        v: Value,
+    ) -> Result<Option<(Value, bool)>, Value> {
+        let started = match &self.heap[g as usize].kind {
+            Kind::Generator(GenState::Suspended(s)) => {
+                s.frame.as_ref().is_some_and(|f| f.yield_pc != NO_YIELD)
+            }
+            Kind::Generator(GenState::Running(_)) => {
+                return Err(self.type_error("Generator is already running"));
+            }
+            _ => {
+                return match mode {
+                    0 => Ok(Some((Value::Undef, true))),
+                    _ => Ok(Some((v, true))),
+                };
+            }
+        };
+        if !started && mode != 0 {
+            self.heap[g as usize].kind = Kind::Generator(GenState::Done);
+            return Ok(Some((v, true)));
+        }
+        let wants = self.enter_generator(g, Resume::Native, false);
+        if mode == 0 {
+            if wants {
+                self.push(v);
+            }
+            return Ok(None);
+        }
+        match self.deliver_abrupt(REQ_RETURN, v) {
+            Ok(()) => Ok(None),
+            Err(Err(e)) => Err(e),
+            Err(Ok(_)) => Ok(None),
         }
     }
 
