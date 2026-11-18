@@ -35,7 +35,7 @@ import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
-import { usePromptStash } from "../../prompt/stash"
+import { usePromptStash, type StashEntry } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
@@ -369,7 +369,8 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
-  const history = usePromptHistory(() => ({ ...unwrap(store.prompt), mode: store.mode }))
+  const currentDraft = () => ({ ...unwrap(store.prompt), mode: store.mode })
+  const history = usePromptHistory(currentDraft)
   let disposed = false
   let pasteQueue = Promise.resolve()
 
@@ -888,6 +889,11 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function restoreStash(entry: StashEntry) {
+    ref.set(entry.prompt)
+    ref.setMode(entry.prompt.mode ?? "normal")
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
@@ -897,7 +903,7 @@ export function Prompt(props: PromptProps) {
         enabled: !!store.prompt.text,
         run: () => {
           if (!store.prompt.text) return
-          stash.push({ prompt: store.prompt })
+          stash.push({ prompt: currentDraft() })
           resetComposer()
           dialog.clear()
         },
@@ -909,7 +915,7 @@ export function Prompt(props: PromptProps) {
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
-          if (entry) ref.set(entry.prompt)
+          if (entry) restoreStash(entry)
           dialog.clear()
         },
       },
@@ -919,7 +925,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
-          dialog.replace(() => <DialogStash onSelect={(entry) => ref.set(entry.prompt)} />)
+          dialog.replace(() => <DialogStash onSelect={restoreStash} />)
         },
       },
     ].map(
