@@ -13,6 +13,7 @@ use opencode_plugin::loader::approval::Decision;
 use opencode_plugin::pipe::{Config, Fault};
 use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route};
+use opentui::input::{MouseButton, MouseEventKind};
 use serde_json::{Value, json};
 
 use crate::plugin_pipe::{Pipe, config, copy, open};
@@ -271,15 +272,7 @@ fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
 #[test]
 fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let plugin = root.path().join("config").join("plugins").join("closed");
-    std::fs::create_dir_all(&plugin).unwrap();
-    std::fs::write(plugin.join("tui.ts"), CLOSED).unwrap();
-    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
-    pipe.active("example.closed");
+    let pipe = raw(config, "closed", CLOSED);
     let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
     let mounts = || opencode_plugin::behave::mounts(app.app(), "example.closed", "pf");
     let route = Route::Plugin { id: "example.closed".into(), name: "pf".into() };
@@ -313,6 +306,161 @@ fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     assert_eq!(focus("pf.untagged").as_deref(), Some("same"), "the activation's focus did not apply");
     assert_eq!(focus("pf.new").as_deref(), Some("same"), "the new mount's own focus did not apply");
 }
+
+/// The TUI with the raw carrier plugin `example.<name>` of `source`, active.
+fn raw(config: Config, name: &str, source: &str) -> Pipe {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let plugin = root.path().join("config").join("plugins").join(name);
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("tui.ts"), source).unwrap();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active(&format!("example.{name}"));
+    pipe
+}
+
+// Expected (carbon c2b-1): a call's effects apply in its order, a field's focus that names a mount among them. A
+// command that closes the plugin's alert and then focuses a field of its route focuses the field, where the focus came
+// first, sent on its own, and the open alert refused it.
+#[test]
+fn a_calls_effects_keep_their_order() {
+    let Some(config) = config() else { return };
+    let pipe = raw(config, "ordered", ORDERED);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.navigate(Route::Plugin { id: "example.ordered".into(), name: "pf".into() });
+    pipe.harness.wait_for("ordered page");
+    pipe.settle();
+    tui.keymap.dispatch("pf.ask", None);
+    pipe.harness.wait_for("Told");
+    tui.keymap.dispatch("pf.close", None);
+    pipe.settle();
+    let focused =
+        opencode_plugin::behave::mounts(app.app(), "example.ordered", "pf").pop().and_then(|mount| mount.focused);
+    assert_eq!((tui.dialogs.is_open(), focused.as_deref()), (false, Some("same")), "{}", app.text());
+}
+
+// Expected (carbon c2b-1): a call that throws asks for nothing, also what it asked for as a mount's: a command that
+// opens the command palette as its route's and then throws fails the plugin, and the palette stays closed. What the JS
+// host sends is handed over one message at a time, the host running between: an effect sent ahead of the call's throw
+// would apply before the throw failed the plugin.
+#[test]
+fn a_thrown_calls_mount_effects_go_with_it() {
+    let Some(config) = config() else { return };
+    let pipe = raw(config, "ordered", ORDERED);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.navigate(Route::Plugin { id: "example.ordered".into(), name: "pf".into() });
+    pipe.harness.wait_for("ordered page");
+    pipe.settle();
+    pipe.scripts().hold_answers(true);
+    tui.keymap.dispatch("pf.throw", None);
+    pipe.harness.wait("the throw failed the plugin", || {
+        pipe.scripts().release_one();
+        app.advance(Duration::from_millis(1));
+        app.render();
+        matches!(pipe.status("example.ordered"), Some(Status::Failed(_)))
+    });
+    pipe.scripts().hold_answers(false);
+    pipe.settle();
+    assert!(!tui.dialogs.is_open(), "the thrown call's dispatch ran:\n{}", app.text());
+}
+
+// Expected (carbon c2b-2): a field's focus that waits for the view showing it is dropped once the user takes the focus
+// back meanwhile: the reserved chord, though the composer had the focus already, or a click into another field. The
+// home footer's slot shows its field `sp` and focuses it in one call, and the revision that shows it is held until
+// then; the composer, or the field clicked, keeps the focus once it comes.
+#[test]
+fn a_pending_focus_goes_when_the_user_takes_the_focus_back() {
+    let Some(config) = config() else { return };
+    let pipe = raw(config, "pending", PENDING);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    let focused =
+        || opencode_plugin::behave::mounts(app.app(), "example.pending", "sp").pop().and_then(|mount| mount.focused);
+    pipe.harness.wait_for("other field");
+    pipe.settle();
+    for (moved, by) in [("the reserved chord", "ctrl+c"), ("a click into another field", "click")] {
+        tui.keymap.dispatch("sp.hide", None);
+        opencode_plugin::Host::focus_composer(&**tui);
+        pipe.settle();
+        pipe.scripts().tamper(opencode_plugin::pipe::Tamper::Hold);
+        tui.keymap.dispatch("sp.show", None);
+        pipe.harness.wait("the call answered", || {
+            app.advance(Duration::from_millis(1));
+            pipe.scripts().idle()
+        });
+        assert!(!app.text().contains("sp field"), "{moved}: the revision was not held:\n{}", app.text());
+        match by {
+            "ctrl+c" => app.press("ctrl+c"),
+            _ => {
+                let (x, y) =
+                    app.text().lines().enumerate().find_map(|(y, line)| Some((line.find("other field")?, y))).unwrap();
+                app.mouse(MouseEventKind::Down(MouseButton::Left), x as u16, y as u16);
+                app.mouse(MouseEventKind::Up(MouseButton::Left), x as u16, y as u16);
+            }
+        }
+        app.render();
+        let before = focused();
+        pipe.scripts().replay();
+        pipe.settle();
+        assert!(app.text().contains("sp field"), "{moved}: the held revision did not show:\n{}", app.text());
+        assert_eq!(focused(), before, "{moved}: the pending focus took the focus back");
+        assert_ne!(focused().as_deref(), Some("sp"), "{moved}");
+    }
+}
+
+/// The raw probe of the pending-focus row: a slot of the home footer with the field `other`, and `sp`, which `sp.show`
+/// shows and focuses in one call and `sp.hide` hides.
+const PENDING: &str = r#"export default { id: "example.pending", setup(api) {
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const mounts = []
+  let shown = false
+  const view = () => ({ type: "box", children: [
+    { type: "input", id: "other", placeholder: "other field" },
+    ...(shown ? [{ type: "text", spans: [{ text: "sp shown" }] }, { type: "input", id: "sp", placeholder: "sp field" }] : []),
+  ] })
+  carrier.surface("sp", { type: "slot", kind: "append", path: "home.footer" }, view, {
+    mounts: true,
+    on: (event) => {
+      if (event.type === "mount" && event.mounted) mounts.push(event.mount)
+    },
+  })
+  carrier.command({ name: "sp.show", title: "sp.show" }, () => {
+    shown = true
+    carrier.effect({ type: "focus", node: "sp" }, mounts.at(-1))
+  })
+  carrier.command({ name: "sp.hide", title: "sp.hide" }, () => {
+    shown = false
+  })
+} }
+"#;
+
+/// The raw probe of the order row: a route `pf` with the field `same`; `pf.ask` shows an alert, `pf.close` closes the
+/// plugin's dialog and then focuses `same` as the route's, and `pf.throw` opens the command palette as the route's and
+/// throws.
+const ORDERED: &str = r#"export default { id: "example.ordered", setup(api) {
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const mounts = []
+  const page = { type: "box", children: [{ type: "text", spans: [{ text: "ordered page" }] }, { type: "input", id: "same" }] }
+  carrier.surface("pf", { type: "route", name: "pf" }, () => page, {
+    mounts: true,
+    on: (event) => {
+      if (event.type === "mount" && event.mounted) mounts.push(event.mount)
+    },
+  })
+  carrier.command({ name: "pf.ask", title: "pf.ask" }, () => {
+    carrier.effect({ type: "dialog", dialog: { type: "alert", title: "Told", message: "It says." } })
+  })
+  carrier.command({ name: "pf.close", title: "pf.close" }, () => {
+    carrier.effect({ type: "dialog", dialog: { type: "close", key: "" } })
+    carrier.effect({ type: "focus", node: "same" }, mounts.at(-1))
+  })
+  carrier.command({ name: "pf.throw", title: "pf.throw" }, () => {
+    carrier.effect({ type: "dispatch", name: "command.palette.show" }, mounts.at(-1))
+    throw new Error("thrown")
+  })
+} }
+"#;
 
 /// The raw probe of the closed-mount row: a route `pf` with the fields `guard` and `same`, which records each mount it
 /// begins; `pf.guard` focuses `guard` as the newest mount's, and `pf.old`, `pf.untagged` and `pf.new` focus `same` as

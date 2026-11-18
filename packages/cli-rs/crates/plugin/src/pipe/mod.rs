@@ -913,6 +913,14 @@ impl Scripts {
         log::debug!("js host: {kept} messages held");
     }
 
+    /// Handles the oldest message [`Scripts::hold_answers`] holds, if any, and keeps holding the rest, so a test runs the
+    /// host between two of them. Whether one was held.
+    #[doc(hidden)]
+    pub fn release_one(self: &Rc<Self>) -> bool {
+        let up = self.held.borrow_mut().as_mut().and_then(|held| (!held.is_empty()).then(|| held.remove(0)));
+        up.map(|up| self.up(up)).is_some()
+    }
+
     /// Arms `fault` for the next handler's message.
     #[doc(hidden)]
     pub fn fault(&self, fault: Fault) {
@@ -1622,7 +1630,7 @@ impl Scripts {
             Up::Unsupported { seq, reason } => self.answered_load(seq, Loading::Unsupported(reason)),
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
-            Up::Done { seq, effects, error, declined } => {
+            Up::Done { seq, effects, mounts, error, declined } => {
                 self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
                 match waiting {
@@ -1640,7 +1648,7 @@ impl Scripts {
                         let replaced =
                             || self.guest(&call.plugin).filter(|guest| guest.activation() == call.activation);
                         if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
-                            guest.done(seq, &call, effects, error);
+                            guest.done(seq, &call, effects, mounts, error);
                         }
                         // A key whose hold ran out went on as declined then: a late answer does not put it back.
                         if !self.late.borrow_mut().remove(&seq) && declined {

@@ -35,6 +35,8 @@ type Listener = (...args: any[]) => unknown
 export interface Focus {
   focus(node: VNode): void
   blur(node: VNode): void
+  // `node` left its tree: the focus the layer records in it goes with it (carbon c2b-2).
+  detached?(node: VNode): void
 }
 
 // A mount's scrolls, as the host keeps them: where one is, once the host said, and a move of one. And where a node
@@ -407,7 +409,10 @@ const renderer = createRenderer<VNode>({
     insertNode(parent, node, anchor instanceof VNode ? anchor : undefined)
   },
   removeNode(parent, node) {
-    if (node instanceof VNode) remove(parent, node)
+    if (!(node instanceof VNode)) return
+    // Solid removes a node here, and moves one with `insertNode`, which keeps its focus.
+    rootOf(parent).owner?.focus?.detached?.(node)
+    remove(parent, node)
   },
   getParentNode(node) {
     return node.parent

@@ -75,7 +75,7 @@ pub struct Owner {
     /// A node its calls asked to focus that its tree does not hold yet: a handler shows a field and focuses it in one
     /// call, and the focus applies before the view that shows it (contract 2.x, step B). It waits for the mount's next
     /// view and no longer ([`Owner::settle_pending`]), one at a time.
-    pending: RefCell<Option<String>>,
+    pending: RefCell<Option<Pending>>,
     /// The mount it holds the input of, as long as it lives; `None` for an activation.
     mount: Option<Weak<()>>,
     /// That mount's ID, which a call for it names to the plugin (big-boi 4).
@@ -580,7 +580,7 @@ impl Owner {
             // A node the tree does not hold yet waits for the mount's next view, which may show it; one it holds that
             // takes no focus (a text, a node in a hidden box) is refused.
             None if self.alive() && self.lookup.is_some() && !self.has(id) => {
-                *self.pending.borrow_mut() = Some(id.to_owned());
+                *self.pending.borrow_mut() = Some(Pending { id: id.to_owned(), from: focused(host.app()) });
             }
             None => log::warn!("plugin {}: {id:?} is not a focusable node of its mount", self.plugin),
         }
@@ -590,10 +590,16 @@ impl Owner {
     /// that asked for it on a linked carrier, the next revision over the pipe. If that view holds the node, the node
     /// takes the focus, under [`Owner::focus`]'s refusals; if not, the focus is dropped. A resize, a theme or another
     /// mount's view that comes later never applies it (big-boi's G2 of step B).
+    /// A focus the user moved meanwhile, a click or the host's own, is dropped too (carbon c2b-2): the user's choice
+    /// stands.
     pub(crate) fn settle_pending(&self, host: &dyn Host) {
-        let Some(id) = self.pending.borrow_mut().take() else { return };
+        let Some(Pending { id, from }) = self.pending.borrow_mut().take() else { return };
         if !self.has(&id) {
             log::warn!("plugin {}: {id:?} is not a node of its mount's next view", self.plugin);
+            return;
+        }
+        if focused(host.app()) != from {
+            log::debug!("plugin {}: the focus moved before {id:?} showed; its focus is dropped", self.plugin);
             return;
         }
         self.focus(host, &id);
@@ -770,6 +776,8 @@ impl Router {
             if let Some(mode) = &*owner.mode.borrow() {
                 mode.ended.set(true);
             }
+            // A focus that waits for a view is dropped: the chord takes the focus back (carbon c2b-2).
+            owner.pending.borrow_mut().take();
         }
         // The keymap's intercept prunes them before the chord reaches any layer, so the host's own handler of it runs in
         // the base mode.
@@ -1266,6 +1274,13 @@ pub(crate) fn key_of(event: &KeyEvent) -> (String, Option<String>) {
         _ => None,
     };
     (Stroke::from_event(event).to_string(), text)
+}
+
+/// A focus that waits for its mount's next view ([`Owner::focus`]): the node, and the widget that had the focus as the
+/// plugin asked.
+struct Pending {
+    id: String,
+    from: Option<u32>,
 }
 
 /// The id of the focused widget.

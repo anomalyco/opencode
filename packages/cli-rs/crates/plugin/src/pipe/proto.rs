@@ -265,6 +265,10 @@ pub enum Up {
         seq: u64,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         effects: Vec<HostRequest>,
+        /// The mount each of `effects` is of where it is another mount's than the call's own (a field's focus, contract
+        /// 2.x step B), else nothing: each applies in the call's order, as that mount's, or nowhere once it closed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        mounts: Vec<Option<v2::MountId>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
         /// A command declined (it returned `false`, or it is disabled or gone): the key that ran it goes on to the host
