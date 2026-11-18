@@ -127,6 +127,22 @@ describe("stats rendering", () => {
     expect(output).not.toContain("no tool calls")
   })
 
+  test("shows running count instead of no tool calls when all calls are still in flight", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        tools: {
+          mode: "detail",
+          totals: { calls: 2, succeeded: 0, failed: 0, unfinished: 2 },
+          usage: [{ name: "shell", calls: 2, succeeded: 0, failed: 0, unfinished: 2, durationP50: undefined }],
+        },
+      },
+      options(),
+    )
+    expect(output).toContain("2 running")
+    expect(output).not.toContain("no tool calls")
+  })
+
   test("labels activity when terminal width truncates the requested range", () => {
     const output = renderStats(
       { ...stats, range: { from: Date.UTC(2020, 0, 1), to: Date.UTC(2026, 0, 8) } },
