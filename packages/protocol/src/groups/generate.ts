@@ -81,7 +81,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.video.create",
         summary: "Create a video generation",
         description:
-          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished video as a blob for 7 days; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )
@@ -95,7 +95,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.video.get",
         summary: "Read a video generation",
         description:
-          "Read a video job: running, completed with the video's blob, or error with a reason. Jobs are kept in memory, so a server restart forgets them; a finished video's blob stays readable. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+          "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

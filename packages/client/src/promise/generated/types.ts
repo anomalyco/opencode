@@ -738,7 +738,7 @@ export type ModelCost = {
 
 export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
-export type BlobInfo = { id: BlobID; mime: string; bytes: number; expiresAt: number }
+export type BlobInfo = { id: BlobID; mime: string; bytes: number }
 
 export type GenerateVideoError = {
   id: GenerateVideoID
