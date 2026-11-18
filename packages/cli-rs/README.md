@@ -63,7 +63,7 @@ For another target, `bun run --cwd packages/cli-rs opentui:native --target aarch
 On Linux and macOS the library is linked statically with its own private libc++, so neither the build nor the binary
 needs `libopentui` or a system libc++.
 
-The Linux builds match OpenTUI's floor (O-164). The glibc builds link with Zig against glibc 2.17:
+The Linux builds match OpenTUI's floor. The glibc builds link with Zig against glibc 2.17:
 `cargo zigbuild --profile dist --target x86_64-unknown-linux-gnu.2.17` (or `aarch64-…`). Their binaries need
 `libc.so.6`, `libm.so.6`, `libpthread.so.0` and `libdl.so.2` at `GLIBC_2.17` or older, and no libstdc++ or libgcc_s.
 The musl builds (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, with OpenTUI's musl library from
@@ -142,24 +142,34 @@ a directory under `~/.config/opencode/plugins/`, or a package that `opencode-nat
 loads native plugins, shared libraries on a C ABI.
 
 [`docs/plugins.md`](docs/plugins.md) explains plugins in one place: the contract and the four ways a plugin runs against
-it, how a handler waits (tasks, `await`, timers), the limits, and the shortest plugin in Rust, Luau and TypeScript.
+it, how a handler waits (tasks, `await`, timers), the limits, the shortest plugin in Rust, Luau and TypeScript, and how
+plugins are found, approved and reloaded. [`docs/plugin-abi.md`](docs/plugin-abi.md) is the reference.
 
 - To write a native plugin, start with the quick start in [`crates/plugin-abi/README.md`](crates/plugin-abi/README.md).
   `opencode-native plugin dev <crate dir>` builds it, runs the TUI with it and reloads it on each change, and
   `opencode-native plugin test <crate dir> [--command NAME] [--wait TEXT]` prints its screen with no server. Neither is
-  in `--help`, which matches the TypeScript CLI's (deviation `D01-plugin-dev-test`); each takes `-h`.
+  in `--help`, which matches the TypeScript CLI's; each takes `-h`.
 - A plugin in C uses [`crates/plugin-abi/include/opencode_plugin.h`](crates/plugin-abi/include/opencode_plugin.h);
   `crates/plugin/examples/c` is one.
 - A Luau plugin is a directory with a `plugin.toml` and an `init.luau` in the same `plugins` directories. It runs in
   process, in a sandboxed Luau VM of its own with a CPU budget and a 32 MiB heap; a project's plugin waits for the
   user's approval. `crates/plugin/examples/luau` holds the examples, and `crates/plugin/src/luau/opencode` the type stub
   that `luau-analyze` and luau-lsp read (`bun run check:luau-types` checks the examples). `OPENCODE_PLUGIN_LUAU=0` turns
-  Luau plugins off. Not yet on x86_64 Windows, whose OpenTUI v0.9.2 library doesn't link beside Luau: a Luau plugin is
-  listed as skipped there.
-- [`docs/P.4.md`](docs/P.4.md) is the reference: discovery, the JS host, and how to debug a TypeScript plugin.
+  Luau plugins off. Luau is not built on x86_64 Windows, where OpenTUI's library does not link beside it: a Luau
+  plugin is listed as skipped there.
 
-`/plugins` shows each plugin's state, and the error of one that failed or was skipped ("view error"). The log (`opencode.log` in the `log`
-directory that `opencode-native debug paths` prints) has every failure.
+`/plugins` shows each plugin's state, and the error of one that failed or was skipped ("view error"). The log
+(`opencode.log` in the `log` directory that `opencode-native debug paths` prints) has every failure.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [`docs/architecture.md`](docs/architecture.md) | The crates, how the client reaches the server, the store, and how the TUI is built |
+| [`docs/plugins.md`](docs/plugins.md) | Plugins: the model, waiting, limits, writing one, and running them |
+| [`docs/plugin-abi.md`](docs/plugin-abi.md) | The plugin contract: the C ABI, callbacks, surfaces, input, the JS host, conformance |
+| [`docs/testing.md`](docs/testing.md) | The parity suites, how to run them, and how to add a scenario |
+| [`docs/windows.md`](docs/windows.md) | The manual checklist for a Windows build |
 
 ## Layout
 
@@ -187,6 +197,7 @@ fixtures.
 ## Parity commands
 
 Each command runs the TypeScript client and `opencode-native` on the same input and compares the results.
+[`docs/testing.md`](docs/testing.md) describes every suite and how to write a scenario.
 Run them from this directory with `bun run <command>`. Each one builds the debug binary first, unless
 `OPENCODE_RS_BIN` names a binary. The TypeScript side runs from source, so run `bun install` at the repository root
 once first; without it a run fails with `Cannot find module '@opentui/solid/preload'`. Scenario paths are relative to

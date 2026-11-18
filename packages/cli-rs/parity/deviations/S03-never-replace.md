@@ -7,7 +7,7 @@ and `mini` ask for a match (`mismatch: "replace"`, `commands/handlers/default.ts
 commands use any version.
 
 **Rust.** The TUI and `mini` restart a service of another version as TS's do (O-167,
-`connect::Options::replace`, `docs/F.9.md`): same trigger, same message (`Restarting background server
+`connect::Options::replace`, `docs/architecture.md`): same trigger, same message (`Restarting background server
 (version mismatch)...` in the TUI, nothing in `mini`), same failure (the start's error). Three
 differences remain:
 
