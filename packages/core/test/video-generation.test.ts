@@ -1,6 +1,6 @@
 import path from "node:path"
 import { expect } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { VideoStatus } from "@opencode/ai/effect"
 import { Database } from "@opencode/core/database/database"
@@ -11,7 +11,7 @@ import { BlobStore } from "@opencode/core/blob-store"
 import { KV } from "@opencode/core/kv"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import type { VideoID, VideoJob } from "@opencode/schema/generate"
+import { VideoID, type VideoJob } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -32,6 +32,7 @@ const provider = () => ({
   submitted: 0,
   hang: false,
   status: new Map<string, VideoStatus>(),
+  cancelled: [] as string[],
 })
 type State = ReturnType<typeof provider>
 
@@ -60,6 +61,7 @@ const app = (dir: string, state: State) =>
                     { mime: "video/mp4", stream: Stream.make(mp4) },
                     { mime: "video/mp4", stream: Stream.make(mp4, mp4) },
                   ]),
+                cancel: (_, remote) => Effect.sync(() => void state.cancelled.push(remote)),
               },
             }),
           ),
@@ -118,6 +120,29 @@ it.effect("keeps video jobs across restarts and forgets them a day after they fi
       yield* TestClock.adjust("25 hours")
       yield* eventually(records, (page) => page.entries.length === 0)
       expect(yield* generations.get(first.job.id).pipe(Effect.flip)).toMatchObject({
+        _tag: "VideoGeneration.NotFoundError",
+      })
+    }).pipe(Effect.provide(app(dir, state)))
+  }),
+)
+
+it.effect("waits for a job to finish and cancels a running one", () =>
+  Effect.gen(function* () {
+    const dir = (yield* tmpdirScoped("opencode-generation-")).path
+    const state = provider()
+    yield* Effect.gen(function* () {
+      const generations = yield* VideoGeneration.Service
+      const done = yield* generations.start({ model, prompt: "a cat" })
+      const slow = yield* generations.start({ model, prompt: "a snail" })
+      const waiting = yield* generations.wait(done.id).pipe(Effect.forkChild({ startImmediately: true }))
+      state.status.set("remote_1", { status: "completed" })
+      yield* settled(done.id)
+      expect(yield* Fiber.join(waiting)).toMatchObject({ id: done.id, status: "completed", blobs: [{}, {}] })
+
+      yield* generations.cancel(slow.id)
+      expect(yield* generations.wait(slow.id)).toMatchObject({ status: "error", reason: "cancelled" })
+      expect(state.cancelled).toEqual(["remote_2"])
+      expect(yield* generations.wait(VideoID.create()).pipe(Effect.flip)).toMatchObject({
         _tag: "VideoGeneration.NotFoundError",
       })
     }).pipe(Effect.provide(app(dir, state)))

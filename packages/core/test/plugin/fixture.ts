@@ -74,6 +74,7 @@ const generateLayer = Layer.succeed(
       result: () => Effect.die("unused"),
     },
   }),
+      cancel: () => Effect.die("unused"),
 )
 
 const configLayer = Config.testLayer()

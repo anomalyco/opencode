@@ -106,13 +106,15 @@ export interface Interface {
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
   /**
-   * A video is a job: `start` submits it and returns the provider's job ID, which `status` and `result` read. `result`
-   * returns every video the job made, at least one.
+   * A video is a job: `start` submits it and returns the provider's job ID, which `status`, `result` and `cancel` read.
+   * `result` returns every video the job made, at least one.
    */
   readonly video: {
     readonly start: (input: VideoInput) => Effect.Effect<{ readonly id: string }, Error>
     readonly status: (model: Model.Ref, id: string) => Effect.Effect<VideoStatus, Error>
     readonly result: (model: Model.Ref, id: string) => Effect.Effect<readonly VideoFile[], Error>
+    /** Fails with `InvalidRequestError` when the provider has no way to cancel a job. */
+    readonly cancel: (model: Model.Ref, id: string) => Effect.Effect<void, Error>
   }
 }
 
@@ -322,6 +324,7 @@ export const layer = Layer.effect(
           ),
         status: (model, id) => credentials(video(model, (resolved) => ai.video.status(resolved, id))),
         result: (model, id) => credentials(videoResult(model, id)),
+        cancel: (model, id) => credentials(video(model, (resolved) => ai.video.cancel(resolved, id))),
       },
     })
   }),
