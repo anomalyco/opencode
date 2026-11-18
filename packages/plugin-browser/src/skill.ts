@@ -41,7 +41,7 @@ export const info = Skill.Info.make({
     "- `tools.browser.tabs.open({ path })` shows a workspace file to the user. An HTML file opens in a browser tab, even off screen: pass the returned `id` straight to `snapshot`. Opening the same file again reloads its tab, and `navigate({ tabID, path })` moves a tab you already have to another HTML file. Other files open in the file panel, queued until the user returns to this session, and return `{ path, shown: \"file\" }` with no tab.",
     "- Put HTML assets in the document's folder or below it; parent folders, hidden paths and secret filenames are not available to the page.",
     "- `tabs.open` and `navigate` take a web address in `url` or a workspace file in `path`, never both. The `file:` or `workspace:` address that `tabs.list` shows for a file's tab names that file too. The page's isolated `oc-preview:` origin opens nothing. You can also click a relative link in the page.",
-    "- New tabs open in front by default so the user can watch. Pass `focus: false` only when the user asked you to work in the background.",
+    "- A web page you open with `tabs.open({ url })` does not show itself. Pass `focus: true` only when the user asked to see or be shown the page: it opens the browser if it is closed, and never switches the tab the user is on.",
     "- `screenshot` works on a hidden tab, including `fullPage: true`. On macOS restore the OpenCode window if it is minimized or hidden. The result includes the image and a server-local file path.",
     "",
     "## Recipes",
