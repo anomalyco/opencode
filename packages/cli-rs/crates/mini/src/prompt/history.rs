@@ -77,26 +77,16 @@ impl History {
 mod tests {
     use super::*;
 
-    fn texts(history: &History) -> Vec<&str> {
-        history.items.iter().map(|item| item.text.as_str()).collect()
-    }
-
     #[test]
-    fn entries_drop_empties_and_adjacent_repeats() {
-        let history = History::new(&[
-            RunPrompt::text("a"),
-            RunPrompt::text("  "),
-            RunPrompt::text("a"),
-            RunPrompt::text("b"),
-            RunPrompt::text("a"),
-        ]);
-        assert_eq!(texts(&history), ["a", "b", "a"]);
-        assert_eq!(texts(&history.push(&RunPrompt::text("a"))), ["a", "b", "a"]);
-        assert_eq!(texts(&history.push(&RunPrompt::text("c"))), ["a", "b", "a", "c"]);
-        let many: Vec<RunPrompt> = (0..205).map(|i| RunPrompt::text(i.to_string())).collect();
-        let history = History::new(&many);
-        assert_eq!(history.items.len(), 200);
-        assert_eq!(history.items[0].text, "5");
+    fn appended_and_loaded_histories_keep_the_same_recent_prompts() {
+        for n in [0usize, 1, 2, 3, 199, 200, 201, 205] {
+            let distinct: Vec<_> = (0..n).map(|i| RunPrompt::text((i % 3).to_string())).collect();
+            let noisy: Vec<_> = distinct.iter().flat_map(|p| [p.clone(), RunPrompt::text(" "), p.clone()]).collect();
+            let appended = noisy.iter().fold(History::default(), |history, prompt| history.push(prompt));
+            let expected = &distinct[n.saturating_sub(200)..];
+            assert_eq!(History::new(&noisy).items, expected, "load {n}");
+            assert_eq!(appended.items, expected, "append {n}");
+        }
     }
 
     #[test]
