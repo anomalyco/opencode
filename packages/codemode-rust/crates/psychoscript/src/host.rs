@@ -173,6 +173,8 @@ pub struct ResultRoot {
 /// The host state of one run.
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
+    /// The runtime's extensions this run gets, in the runtime's order.
+    pub extensions: std::rc::Rc<[&'rt crate::Extension]>,
     /// Names the run's host calls; made on first use when the host gave none.
     pub(crate) run_id: crate::tool::RunId,
     pub(crate) next_call: u64,
@@ -226,9 +228,14 @@ impl<'rt> RunHost<'rt> {
         self.epoch.store(self.epoch.load(Relaxed) + 1, Relaxed);
     }
 
-    pub fn new(setup: &'rt Setup, run_id: Option<String>) -> Self {
+    pub fn new(
+        setup: &'rt Setup,
+        extensions: std::rc::Rc<[&'rt crate::Extension]>,
+        run_id: Option<String>,
+    ) -> Self {
         Self {
             setup,
+            extensions,
             ctx: None,
             run_id: Arc::new(run_id.map(std::sync::OnceLock::from).unwrap_or_default()),
             next_call: 0,
@@ -348,8 +355,8 @@ fn define_host_global(vm: &mut Vm, name: &str) -> bool {
         "require" => native(vm, "require", 1, require_native, Value::Undef),
         IMPORT_GLOBAL => native(vm, "import", 2, import_native, Value::Undef),
         _ => {
-            let setup = vm.host.setup;
-            let found = setup.extensions.iter().find_map(|extension| {
+            let extensions = vm.host.extensions.clone();
+            let found = extensions.iter().find_map(|extension| {
                 extension
                     .globals()
                     .iter()
@@ -1398,7 +1405,6 @@ fn result_from_host(
     let end = vm.host.functions.len();
     let hooked = vm
         .host
-        .setup
         .extensions
         .iter()
         .any(|e| e.name() == extension && e.snapshot_hooks().is_some());

@@ -6,13 +6,14 @@ use std::rc::Rc;
 
 use crate::compiler;
 use crate::convert;
+use crate::extension::Extension;
 use crate::host::{self, RunHost};
 use crate::object::{Closure, Kind, Obj};
 use crate::program::Running;
 use crate::strings::Strings;
 use crate::value::Value;
 use crate::vm::Vm;
-use crate::{Diagnostic, DiagnosticKind, Json, Outcome, Runtime};
+use crate::{Diagnostic, DiagnosticKind, Json, Outcome, RunOptions, Runtime};
 
 /// Small programs run on the caller's thread with a modest native-stack budget. Larger ones, whose parse can
 /// recurse deeper, run on their own thread with a large stack; the reservation is virtual, only touched pages are
@@ -23,22 +24,30 @@ pub const INLINE_STACK_BUDGET: usize = 512 << 10;
 const STACK_SIZE: usize = 256 << 20;
 const THREAD_STACK_BUDGET: usize = 64 << 20;
 
-pub fn execute(rt: &Runtime, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
+pub fn execute(
+    rt: &Runtime,
+    code: &str,
+    bindings: &serde_json::Map<String, Json>,
+    options: &RunOptions,
+) -> Outcome {
+    // A pick the runtime can't honour is the host's mistake, raised before the run, not an interpreter defect.
+    rt.setup().check(options);
     if code.len() <= INLINE_SOURCE_BYTES && bracket_depth(code) <= INLINE_BRACKET_DEPTH {
-        let run = AssertUnwindSafe(|| settled(rt.program(code, bindings, None).run()));
+        let run =
+            AssertUnwindSafe(|| settled(rt.program_with(code, bindings, None, options).run()));
         return std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error());
     }
     std::thread::scope(|s| {
         let spawned = std::thread::Builder::new()
             .stack_size(STACK_SIZE)
             .spawn_scoped(s, || {
-                let mut program = rt.program(code, bindings, None);
+                let mut program = rt.program_with(code, bindings, None, options);
                 program.stack_budget = THREAD_STACK_BUDGET;
                 settled(program.run())
             });
         match spawned {
             Ok(handle) => handle.join().unwrap_or_else(|_| internal_error()),
-            Err(_) => settled(rt.program(code, bindings, None).run()),
+            Err(_) => settled(rt.program_with(code, bindings, None, options).run()),
         }
     })
 }
@@ -115,6 +124,7 @@ pub fn start<'a>(
     code: Cow<'a, str>,
     bindings: &serde_json::Map<String, Json>,
     run_id: Option<String>,
+    extensions: Rc<[&'a Extension]>,
 ) -> Result<Box<Running<'a>>, Box<Outcome>> {
     let mut atoms = Strings::new();
     let program = match compiler::compile(&code, &mut atoms) {
@@ -131,7 +141,7 @@ pub fn start<'a>(
         }
     };
     let setup = rt.setup();
-    let mut vm = Vm::new(RunHost::new(setup, run_id), setup.limits, atoms);
+    let mut vm = Vm::new(RunHost::new(setup, extensions, run_id), setup.limits, atoms);
     vm.setup();
     host::install(&mut vm, &program.globals);
     crate::builtins::ensure_globals(&mut vm, &program.globals);
@@ -156,6 +166,7 @@ pub fn start_for_resume<'a>(
     code: String,
     run_id: Option<String>,
     limits: crate::Limits,
+    extensions: Rc<[&'a Extension]>,
 ) -> Result<Resumed<'a>, crate::snapshot::SnapshotError> {
     let mut atoms = Strings::new();
     let program = compiler::compile(&code, &mut atoms).map_err(|_| {
@@ -165,7 +176,7 @@ pub fn start_for_resume<'a>(
     })?;
     let bytecode = crate::snapshot::bytecode_hash(&program);
     let setup = rt.setup();
-    let mut vm = Vm::new(RunHost::new(setup, run_id), limits, atoms);
+    let mut vm = Vm::new(RunHost::new(setup, extensions, run_id), limits, atoms);
     vm.setup();
     host::install(&mut vm, &program.globals);
     crate::builtins::ensure_globals(&mut vm, &program.globals);

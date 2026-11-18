@@ -3,16 +3,18 @@
 
 use std::borrow::Cow;
 use std::fmt;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use crate::exec;
+use crate::extension::Extension;
 use crate::run;
 use crate::snapshot::{self, Refusal, Snapshot};
 use crate::vm::Vm;
-use crate::{Interrupted, Json, Outcome, Runtime};
+use crate::{Interrupted, Json, Outcome, RunOptions, Runtime};
 
 enum State<'a> {
     Running(Box<Running<'a>>),
@@ -232,8 +234,17 @@ impl<'a> Program<'a> {
         code: &'a str,
         bindings: &serde_json::Map<String, Json>,
         run_id: Option<&str>,
+        options: &RunOptions,
     ) -> Self {
-        let state = match run::start(rt, Cow::Borrowed(code), bindings, run_id.map(str::to_owned)) {
+        let extensions = rt.setup().pick(options);
+        let started = run::start(
+            rt,
+            Cow::Borrowed(code),
+            bindings,
+            run_id.map(str::to_owned),
+            extensions,
+        );
+        let state = match started {
             Ok(r) => State::Running(r),
             Err(outcome) => State::Failed(outcome),
         };
@@ -257,8 +268,9 @@ impl<'a> Program<'a> {
     pub(crate) fn resume(
         rt: &'a Runtime,
         state: &Snapshot,
+        options: &RunOptions,
     ) -> Result<Self, snapshot::SnapshotError> {
-        let running = restore(rt, state)?;
+        let running = restore(rt, state, rt.setup().pick(options))?;
         Ok(Self::with(rt, State::Running(running)))
     }
 
@@ -463,7 +475,7 @@ impl<'a> Program<'a> {
                 };
                 let bytes = snapshot::to_bytes(&state);
                 let state = snapshot::from_bytes(&bytes).ok()?;
-                match restore(self.rt, &state) {
+                match restore(self.rt, &state, r.vm.host.extensions.clone()) {
                     Ok(mut fresh) => {
                         fresh.vm.host.shared = self.shared.clone();
                         // A round trip is not a pause: the run's clock keeps its start, which the header would
@@ -516,9 +528,16 @@ fn done_or_suspended(o: RunOutcome) -> Outcome {
 fn restore<'a>(
     rt: &'a Runtime,
     state: &Snapshot,
+    extensions: Rc<[&'a Extension]>,
 ) -> Result<Box<Running<'a>>, snapshot::SnapshotError> {
-    let restored = snapshot::header(rt.setup(), state)?;
-    let mut started = run::start_for_resume(rt, restored.code, restored.run_id, restored.limits)?;
+    let restored = snapshot::header(&extensions, state)?;
+    let mut started = run::start_for_resume(
+        rt,
+        restored.code,
+        restored.run_id,
+        restored.limits,
+        extensions,
+    )?;
     snapshot::restore(&mut started.running.vm, state, &started.bytecode)?;
     let mut r = started.running;
     r.active_before = Duration::from_millis(restored.active_ms);

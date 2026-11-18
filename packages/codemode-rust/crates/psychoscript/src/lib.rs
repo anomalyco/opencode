@@ -123,12 +123,64 @@ pub struct Outcome {
     pub tool_calls: Vec<ToolCall>,
 }
 
+/// Options for one run of a runtime's program: [`Runtime::execute_with`], [`Runtime::program_with`] and
+/// [`Runtime::resume_with`], the reference's `RunOptions`.
+#[derive(Clone, Debug, Default)]
+pub struct RunOptions {
+    extensions: Option<Vec<String>>,
+}
+
+impl RunOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Which of the runtime's extensions this run gets as globals, by name; all of them by default. Each must be one
+    /// the runtime was made with. They apply in the order the runtime has them, so the same extensions picked in any
+    /// order give the same globals, and resume alike. A resumed run needs the ones it started with.
+    pub fn extensions<S: Into<String>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.extensions = Some(names.into_iter().map(Into::into).collect());
+        self
+    }
+}
+
 /// What a runtime shares with every run it starts.
 pub(crate) struct Setup {
     pub registry: tool::Registry,
     pub hooks: Hooks,
     pub extensions: Vec<Extension>,
     pub limits: Limits,
+}
+
+impl Setup {
+    /// The extensions a run gets: those `options` picks, in the runtime's order, or all of them.
+    ///
+    /// # Panics
+    ///
+    /// When `options` picks an extension the runtime wasn't made with, as the reference throws a `TypeError`.
+    pub(crate) fn pick(&self, options: &RunOptions) -> std::rc::Rc<[&Extension]> {
+        self.check(options);
+        match &options.extensions {
+            None => self.extensions.iter().collect(),
+            Some(names) => self
+                .extensions
+                .iter()
+                .filter(|e| names.iter().any(|n| n == e.name()))
+                .collect(),
+        }
+    }
+
+    /// Panics, as [`Setup::pick`] does, when `options` picks an extension the runtime wasn't made with.
+    pub(crate) fn check(&self, options: &RunOptions) {
+        let unknown = options
+            .extensions
+            .iter()
+            .flatten()
+            .find(|n| !self.extensions.iter().any(|e| e.name() == n.as_str()));
+        if let Some(name) = unknown {
+            panic!("Extension \"{name}\" isn't one this runtime was made with.");
+        }
+    }
 }
 
 /// Reusable runtime: tools, extensions, hooks and limits are fixed, each `execute` is an independent run.
@@ -256,7 +308,21 @@ impl Runtime {
     /// top-level constants. An interrupted run ends with an `ExecutionFailure` saying so; [`Program::run`] tells the
     /// two apart.
     pub fn execute(&self, code: &str, bindings: &serde_json::Map<String, Json>) -> Outcome {
-        run::execute(self, code, bindings)
+        run::execute(self, code, bindings, &RunOptions::default())
+    }
+
+    /// [`Runtime::execute`] with [`RunOptions`], such as only some of the runtime's extensions.
+    ///
+    /// # Panics
+    ///
+    /// When `options` picks an extension this runtime wasn't made with.
+    pub fn execute_with(
+        &self,
+        code: &str,
+        bindings: &serde_json::Map<String, Json>,
+        options: &RunOptions,
+    ) -> Outcome {
+        run::execute(self, code, bindings, options)
     }
 
     /// Runs `code` as a future on any executor. Dropping it interrupts the run and every host call in flight; a tool
@@ -276,20 +342,49 @@ impl Runtime {
         bindings: &serde_json::Map<String, Json>,
         run_id: Option<&str>,
     ) -> Program<'a> {
-        Program::new(self, code, bindings, run_id)
+        Program::new(self, code, bindings, run_id, &RunOptions::default())
+    }
+
+    /// [`Runtime::program`] with [`RunOptions`], such as only some of the runtime's extensions.
+    ///
+    /// # Panics
+    ///
+    /// When `options` picks an extension this runtime wasn't made with.
+    pub fn program_with<'a>(
+        &'a self,
+        code: &'a str,
+        bindings: &serde_json::Map<String, Json>,
+        run_id: Option<&str>,
+        options: &RunOptions,
+    ) -> Program<'a> {
+        Program::new(self, code, bindings, run_id, options)
     }
 
     /// A program continuing a suspended run, from its state or from [`to_bytes`]. It keeps the limits it was saved
     /// with. Fails with a [`SnapshotError`] when the state was saved by another build, with other extensions, from a
     /// source that no longer compiles the same, or is malformed.
     pub fn resume(&self, state: &Snapshot) -> Result<Program<'_>, SnapshotError> {
-        Program::resume(self, state)
+        Program::resume(self, state, &RunOptions::default())
+    }
+
+    /// [`Runtime::resume`] with [`RunOptions`]. A run started with only some of the runtime's extensions resumes only
+    /// with the same ones, picked in any order.
+    ///
+    /// # Panics
+    ///
+    /// When `options` picks an extension this runtime wasn't made with.
+    pub fn resume_with(
+        &self,
+        state: &Snapshot,
+        options: &RunOptions,
+    ) -> Result<Program<'_>, SnapshotError> {
+        Program::resume(self, state, options)
     }
 
     /// [`Runtime::resume`] from bytes.
     pub fn resume_bytes(&self, bytes: &[u8]) -> Result<Program<'_>, SnapshotError> {
         let state = from_bytes(bytes)?;
-        Program::resume(self, &state)
+        Program::resume(self, &state, &RunOptions::default())
     }
 
     pub(crate) fn setup(&self) -> &Setup {

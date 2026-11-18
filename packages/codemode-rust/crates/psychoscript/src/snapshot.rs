@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 use rustc_hash::FxHashMap;
 use serde_json::{Value as J, json};
 
-use crate::extension::{HostError, HostFunction, HostValue};
+use crate::extension::{Extension, HostError, HostFunction, HostValue};
 use crate::host::{self, CallKind, FnEntry, ResultRoot, Settlement};
 use crate::object::*;
 use crate::value::{Id, Slot, Value};
@@ -121,7 +121,7 @@ fn natives() -> &'static Natives {
             limits: Limits::default(),
         }));
         let mut vm = Vm::new(
-            host::RunHost::new(setup, None),
+            host::RunHost::new(setup, Rc::from([]), None),
             Limits::default(),
             crate::strings::Strings::new(),
         );
@@ -182,10 +182,10 @@ fn hex(h: u64) -> String {
     format!("{h:016x}")
 }
 
-/// The host globals a runtime has: each extension's name, its globals, and whether it has `snapshot` hooks.
-fn hosts_id(setup: &Setup) -> String {
+/// The host globals a run has: each extension's name, its globals, and whether it has `snapshot` hooks.
+fn hosts_id(extensions: &[&Extension]) -> String {
     let mut text = String::new();
-    for e in &setup.extensions {
+    for e in extensions {
         text.push_str(e.name());
         text.push(if e.snapshot_hooks().is_some() {
             '+'
@@ -368,7 +368,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
     let limits = vm.limits;
     let header = json!({
         "build": build_id(),
-        "hosts": hosts_id(vm.host.setup),
+        "hosts": hosts_id(&vm.host.extensions),
         "runId": vm.host.run_id.get().cloned(),
         "source": {
             "code": c.code,
@@ -452,11 +452,10 @@ impl Enc<'_, '_> {
     fn host(&mut self, _c: &Capture) -> R<J> {
         let h = &self.vm.host;
         let base = self.vm.snapshot_base;
-        let setup = h.setup;
         // Each result an extension's hooks can bring back, as the data its `encode` made.
         let mut results = Vec::new();
         for root in &h.results {
-            let Some(hooks) = setup
+            let Some(hooks) = h
                 .extensions
                 .iter()
                 .find(|e| e.name() == root.extension)
@@ -790,7 +789,6 @@ impl Enc<'_, '_> {
                 let hooks = self
                     .vm
                     .host
-                    .setup
                     .extensions
                     .iter()
                     .find(|e| e.name() == extension)
@@ -900,7 +898,8 @@ fn baseline(vm: &Vm, code: &str) -> R<Vec<J>> {
     let mut atoms = crate::strings::Strings::new();
     let program =
         crate::compiler::compile(code, &mut atoms).map_err(|e| SnapshotError::new(e.message))?;
-    let mut fresh = Vm::new(host::RunHost::new(vm.host.setup, None), vm.limits, atoms);
+    let host = host::RunHost::new(vm.host.setup, vm.host.extensions.clone(), None);
+    let mut fresh = Vm::new(host, vm.limits, atoms);
     fresh.setup();
     host::install(&mut fresh, &program.globals);
     crate::builtins::ensure_globals(&mut fresh, &program.globals);
@@ -1818,7 +1817,7 @@ pub struct Restored {
 
 /// Checks a state belongs to this build and these host globals and that its source still compiles to the same
 /// bytecode; then rebuilds the run in `make`'s fresh VM.
-pub fn header(setup: &Setup, snapshot: &Snapshot) -> R<Restored> {
+pub fn header(extensions: &[&Extension], snapshot: &Snapshot) -> R<Restored> {
     let s = &snapshot.0;
     if s.get("format").and_then(J::as_u64) != Some(FORMAT) {
         return Err(invalid("its format is unknown."));
@@ -1831,7 +1830,7 @@ pub fn header(setup: &Setup, snapshot: &Snapshot) -> R<Restored> {
             "This state was saved by another PsychoScript build ({build}); this runtime is {expected}, so it can't resume it."
         )));
     }
-    if field(header, "hosts")?.as_str() != Some(hosts_id(setup).as_str()) {
+    if field(header, "hosts")?.as_str() != Some(hosts_id(extensions).as_str()) {
         return Err(SnapshotError::new(
             "This state was saved by a runtime with other host globals (extensions); resume it with the same ones.",
         ));
@@ -2046,7 +2045,7 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
             let hooked = boolean(at(j, 5)?)?;
             let mut v = host_value_from(at(j, 6)?)?;
             if hooked {
-                let hooks = hooks_of(vm.host.setup, &extension)?;
+                let hooks = hooks_of(&vm.host.extensions, &extension)?;
                 v = (hooks.decode)(v);
             }
             let carrier = j.get(7).and_then(J::as_bool).unwrap_or(false);
@@ -2063,9 +2062,11 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
     Ok((p, s))
 }
 
-fn hooks_of<'s>(setup: &'s Setup, extension: &str) -> R<&'s crate::extension::SnapshotHooks> {
-    setup
-        .extensions
+fn hooks_of<'s>(
+    extensions: &[&'s Extension],
+    extension: &str,
+) -> R<&'s crate::extension::SnapshotHooks> {
+    extensions
         .iter()
         .find(|e| e.name() == extension)
         .and_then(|e| e.snapshot_hooks())
@@ -2078,12 +2079,13 @@ fn hooks_of<'s>(setup: &'s Setup, extension: &str) -> R<&'s crate::extension::Sn
 
 fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
     let setup = vm.host.setup;
+    let extensions = vm.host.extensions.clone();
     vm.host.next_call = uint(field(j, "nextCall")?)?;
     // Results an extension's hooks saved: decoded once each, their functions taken in order.
     let mut restored: Vec<(usize, Vec<HostFunction>)> = Vec::new();
     for r in field_list(j, "results")? {
         let extension = string(at(r, 0)?)?;
-        let hooks = hooks_of(setup, &extension)?;
+        let hooks = hooks_of(&extensions, &extension)?;
         let value = (hooks.decode)(host_value_from(at(r, 1)?)?);
         let mut fns = Vec::new();
         collect_functions(&value, &mut fns);
@@ -2112,8 +2114,7 @@ fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
             .iter()
             .find_map(|(start, fns)| index.checked_sub(*start).and_then(|k| fns.get(k)).cloned());
         let found = if entry {
-            setup
-                .extensions
+            extensions
                 .iter()
                 .find(|e| e.name() == extension)
                 .and_then(|e| {
