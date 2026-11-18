@@ -1,7 +1,8 @@
 //! Luau values into the contract's types, read straight off the VM's stack: no `serde_json::Value` between them.
 //!
 //! - **The rules are JSON's, as before:** a table is an array when its keys are `1..n` (`n` its border, holes `null`),
-//!   an object otherwise, and an empty table an empty array, which serde also takes as a struct of defaults. A whole
+//!   an object otherwise, and an empty table an empty array, which serde also takes as a struct of defaults. A table
+//!   with the object marker ([`super::json::OBJECT`], `plugin.json.object`) is an object whatever its keys. A whole
 //!   number is an integer, any other a float; `nil` and mlua's `null` are `null`. A function, a thread or userdata
 //!   cannot cross.
 //! - **Two decoders:**
@@ -26,7 +27,7 @@ use opencode_plugin_abi::{self as abi, v2};
 use serde::de::{self, DeserializeOwned, DeserializeSeed, Deserializer, IntoDeserializer, Visitor};
 
 /// The parts (keys, values) a value may hold for each node a tree may hold ([`crate::limits::Limits::nodes`]).
-const VALUES_A_NODE: u64 = 16;
+pub(crate) const VALUES_A_NODE: u64 = 16;
 
 /// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
 /// children are a table in a table.
@@ -624,6 +625,9 @@ impl Decode {
         unsafe {
             table(state, index)?;
             self.enter(state, depth)?;
+            if marked_object(state, index) {
+                return Err(Slow::Serde);
+            }
             let (mut iter, mut next) = (0, 1.0);
             loop {
                 iter = ffi::lua_rawiter(state, index, iter);
@@ -898,7 +902,8 @@ impl Slot<'_> {
         unsafe {
             self.decode.enter(self.state, self.depth)?;
             let length = usize::try_from(ffi::lua_objlen_(self.state, self.index)).unwrap_or(0);
-            if is_array(self.state, self.index, length) {
+            // A table with the object marker (`plugin.json.object`) is an object whatever its keys, an empty one too.
+            if !marked_object(self.state, self.index) && is_array(self.state, self.index, length) {
                 let Slot { decode, state, index, depth } = self;
                 return visitor.visit_seq(Seq { decode, state, index, depth, at: 1, length });
             }
@@ -1187,6 +1192,23 @@ unsafe fn is_array(state: *mut ffi::lua_State, index: c_int, length: usize) -> b
                 return false;
             }
         }
+    }
+}
+
+/// Whether the table at `index` carries the object marker ([`super::json::OBJECT`]).
+///
+/// # Safety
+/// `index` is a valid absolute slot of `state` that holds a table, with room for two more slots.
+unsafe fn marked_object(state: *mut ffi::lua_State, index: c_int) -> bool {
+    // SAFETY: as documented; what is pushed is popped.
+    unsafe {
+        if ffi::lua_getmetatable(state, index) == 0 {
+            return false;
+        }
+        let object = ffi::lua_rawgetfield(state, -1, super::json::MARK.as_ptr()) == ffi::LUA_TSTRING
+            && raw_bytes(state, -1) == b"object";
+        ffi::lua_pop(state, 2);
+        object
     }
 }
 
