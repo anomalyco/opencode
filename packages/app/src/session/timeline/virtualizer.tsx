@@ -81,6 +81,9 @@ const pointerDownEvent = { type: "pointer.down" } as const
 
 const pointerUpEvent = { type: "pointer.up" } as const
 
+const sameKeys = (previous: string[], next: string[]) =>
+  previous.length === next.length && previous.every((key, index) => key === next[index])
+
 const cache = new Map<
   string,
   {
@@ -190,9 +193,7 @@ export function createTimelineVirtualizer(input: Input) {
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
 
-  const rowKeys = createMemo(() => rows().map(TimelineRow.key), undefined, {
-    equals: (previous, next) => previous.length === next.length && previous.every((key, index) => key === next[index]),
-  })
+  const rowKeys = createMemo(() => rows().map(TimelineRow.key), undefined, { equals: sameKeys })
 
   const knownKeys = new Set(rowKeys())
   const addedKeys = new Set<string>()
@@ -617,7 +618,13 @@ export function createTimelineVirtualizer(input: Input) {
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
 
-  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
+  // TanStack lists the rows of the options it last read. One flush can replace the projection's rows after that read
+  // and mount rows before TanStack reads them again, so a listed row the projection no longer has does not mount.
+  const virtualRowKeys = createMemo(
+    () => virtualizer.getVirtualItems().flatMap((item) => (rowByKey().has(String(item.key)) ? [String(item.key)] : [])),
+    undefined,
+    { equals: sameKeys },
+  )
 
   createEffect(() => {
     if (!active()) return
@@ -1060,8 +1067,16 @@ export function createTimelineVirtualizer(input: Input) {
       let element: HTMLDivElement
       const initialItem = virtualItemByKey().get(rowProps.rowKey)!
       const initialRow = rowByKey().get(rowProps.rowKey)!
+
       const item = createMemo(() => virtualItemByKey().get(rowProps.rowKey) ?? initialItem)
-      const row = createMemo(() => rowByKey().get(rowProps.rowKey) ?? rows()[item().index] ?? initialRow)
+
+      // A row on its way out keeps drawing its own last row until the list drops it. The row now at its index belongs
+      // to another key, and a renderer drawing the wrong kind of row throws.
+      const row = createMemo(
+        (previous: TimelineRow.TimelineRow) => rowByKey().get(rowProps.rowKey) ?? previous,
+        initialRow,
+      )
+
       const [ready, setReady] = createSignal(initialItem.size <= fallbackItemSize || !props.deferred(initialRow))
       let contentMeasureFrame: number | undefined
 

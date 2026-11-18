@@ -2,6 +2,8 @@ import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url))
 
+const replay = sourceURL(new URL("../../session-ui/src/timeline-next/stories/session-replay.ts", import.meta.url))
+
 story.beforeEach(async ({ mount }) => {
   const component = await mount("opencode-composer-flow--mixed-attachments")
   await expect(component.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
@@ -220,3 +222,125 @@ for (const input of [
     }
   })
 }
+
+story("keeps streaming when a thought ends without text", async ({ page }) => {
+  // An empty thought shows while it streams and hides once it ends. The New timeline's projection ran with the old
+  // visibility first, TanStack listed that row list's thought, and the projection dropped the thought in the same
+  // flush. The row mounted for the thought found no row: "effect/match/Match/exhaustive: absurd" (#63944).
+  const errors = await page.evaluate(async (fixture) => {
+    const { mountNextTimelineVirtualizer } = await import(fixture)
+    const timeline = mountNextTimelineVirtualizer("compact")
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+    for (const event of ["history.loaded", "prompt", "step.started", "reasoning.started", "reasoning.ended"]) {
+      timeline[event]()
+      await frame()
+    }
+
+    return timeline.errors
+  }, fixture)
+
+  expect(errors).toEqual([])
+  await expect(page.getByTestId("next-timeline-virtualizer-fixture").getByText("Now test it")).toBeVisible()
+})
+
+story("draws each row as its own while history pages through live sessions", async ({ page }) => {
+  // A row whose key left still re-read its row before the list dropped it, and fell back to whichever row had moved to
+  // its index: a user message's memos then threw "Expected a user-message timeline row". The playground's scripted
+  // sessions play, rewind and page here in one seeded order that reached that interleaving.
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  errors.push(
+    ...(await page.evaluate(
+      async ({ fixture, replay }) => {
+        const { mountNextTimelineVirtualizer } = await import(fixture)
+        const { replayScript, scenarios } = await import(replay)
+        const timeline = mountNextTimelineVirtualizer("everything")
+        const names = Object.keys(scenarios)
+        let seed = 2
+        const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+        const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)]!
+
+        const sessions: { scenario: string; tick: number; prefix: string }[] = [
+          { scenario: pick(names), tick: 1, prefix: "s0_" },
+        ]
+
+        let dropped = 0
+        let pending: string[] = []
+        let steers = 0
+
+        const transcript = () => {
+          const replays = sessions.map((session, index) => {
+            const document = replayScript(scenarios[session.scenario], session.tick, 1_000_000 * (index + 1)).document
+
+            return {
+              status: document.status,
+              messages: document.messages.map((message: { id: string }) => ({
+                ...message,
+                id: `${session.prefix}${message.id}`,
+              })),
+            }
+          })
+
+          const steered = pending.map((id, index) => ({
+            id,
+            type: "user",
+            text: "Also check this",
+            time: { created: 1_000_000 * (sessions.length + 1) + index },
+          }))
+
+          const messages = [...replays.flatMap((item) => item.messages), ...steered].slice(dropped)
+
+          return { messages, status: replays.at(-1)!.status, pending }
+        }
+
+        const last = () => sessions.at(-1)!
+
+        const changes = new Map<string, () => void>([
+          ["start", () => sessions.push({ scenario: pick(names), tick: 1, prefix: `s${sessions.length}_` })],
+          ["play", () => (last().tick += 1 + Math.floor(random() * 2))],
+          ["settle", () => (last().tick = 10_000)],
+          ["rewind", () => (last().tick = Math.max(1, last().tick - 1 - Math.floor(random() * 3)))],
+          ["page", () => (dropped = Math.floor(random() * transcript().messages.length))],
+          ["unpage", () => (dropped = 0)],
+          ["steer", () => pending.push(`msg_steer_${++steers}`)],
+          ["deliver", () => (pending = pending.slice(1))],
+        ])
+
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+        timeline.sync(transcript())
+
+        for (let step = 0; step < 400 && timeline.errors.length === 0; step++) {
+          const roll = random()
+
+          if (roll < 0.08) {
+            const viewport = timeline.viewport()
+
+            viewport.scrollTop = pick([0, viewport.scrollHeight, random() * viewport.scrollHeight])
+          } else if (roll < 0.1) timeline.resize(pick([160, 320, 700]))
+          else if (roll < 0.12)
+            timeline.viewport().dispatchEvent(new WheelEvent("wheel", { deltaY: -40, bubbles: true }))
+          else {
+            Array.from({ length: 1 + Math.floor(random() * 2) }, () =>
+              pick(random() < 0.6 ? ["play"] : [...changes.keys()]),
+            ).forEach((change) => changes.get(change)!())
+
+            if (sessions.length > 12) sessions.splice(0, 1)
+            timeline.sync(transcript())
+          }
+
+          const wait = random()
+
+          if (wait < 0.35) await frame()
+          else if (wait < 0.7) await Promise.resolve()
+        }
+
+        return timeline.errors
+      },
+      { fixture, replay },
+    )),
+  )
+
+  expect(errors).toEqual([])
+})
