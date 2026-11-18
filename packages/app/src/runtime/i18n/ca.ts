@@ -1268,7 +1268,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Trieu com es llisten les sessions a la barra lateral. Només s'aplica a les pestanyes laterals.",
   "settings.experimental.sidebarOrganize.recent": "Recents",
-  "settings.experimental.sidebarOrganize.projects": "Projectes",
   "settings.experimental.sidebarOrganize.list": "Una sola llista",
   "settings.experimental.sidebarOrganize.customize": "Personalitza",
   "sidebar.organize.projects": "Projectes",

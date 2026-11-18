@@ -1272,7 +1272,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Wählen Sie, wie Sitzungen in der Seitenleiste aufgelistet werden. Gilt nur für seitliche Tabs.",
   "settings.experimental.sidebarOrganize.recent": "Zuletzt",
-  "settings.experimental.sidebarOrganize.projects": "Projekte",
   "settings.experimental.sidebarOrganize.list": "Eine Liste",
   "settings.experimental.sidebarOrganize.customize": "Anpassen",
   "sidebar.organize.projects": "Projekte",

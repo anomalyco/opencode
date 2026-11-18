@@ -1233,7 +1233,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Ընտրեք, թե ինչպես են նիստերը ցուցադրվում կողագոտում։ Կիրառվում է միայն կողային ներդիրների դեպքում։",
   "settings.experimental.sidebarOrganize.recent": "Վերջինները",
-  "settings.experimental.sidebarOrganize.projects": "Նախագծեր",
   "settings.experimental.sidebarOrganize.list": "Մեկ ցուցակ",
   "settings.experimental.sidebarOrganize.customize": "Անհատականացնել",
   "sidebar.organize.projects": "Նախագծեր",

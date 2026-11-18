@@ -1269,7 +1269,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "เลือกวิธีแสดงรายการเซสชันในแถบด้านข้าง ใช้กับแท็บด้านข้างเท่านั้น",
   "settings.experimental.sidebarOrganize.recent": "ล่าสุด",
-  "settings.experimental.sidebarOrganize.projects": "โปรเจกต์",
   "settings.experimental.sidebarOrganize.list": "รายการเดียว",
   "settings.experimental.sidebarOrganize.customize": "ปรับแต่ง",
   "sidebar.organize.projects": "โปรเจกต์",

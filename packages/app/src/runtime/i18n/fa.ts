@@ -1229,7 +1229,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "نحوه فهرست شدن جلسه‌ها در نوار کناری را انتخاب کنید. فقط برای برگه‌های کناری اعمال می‌شود.",
   "settings.experimental.sidebarOrganize.recent": "اخیر",
-  "settings.experimental.sidebarOrganize.projects": "پروژه‌ها",
   "settings.experimental.sidebarOrganize.list": "یک فهرست",
   "settings.experimental.sidebarOrganize.customize": "سفارشی‌سازی",
   "sidebar.organize.projects": "پروژه‌ها",

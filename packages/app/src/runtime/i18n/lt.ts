@@ -1281,7 +1281,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Pasirinkite, kaip seansai išdėstomi šoninėje juostoje. Taikoma tik šoniniams skirtukams.",
   "settings.experimental.sidebarOrganize.recent": "Naujausi",
-  "settings.experimental.sidebarOrganize.projects": "Projektai",
   "settings.experimental.sidebarOrganize.list": "Vienas sąrašas",
   "settings.experimental.sidebarOrganize.customize": "Tinkinti",
   "sidebar.organize.projects": "Projektai",

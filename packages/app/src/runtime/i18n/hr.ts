@@ -1261,7 +1261,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Odaberite kako se sesije prikazuju na bočnoj traci. Primjenjuje se samo na bočne kartice.",
   "settings.experimental.sidebarOrganize.recent": "Nedavno",
-  "settings.experimental.sidebarOrganize.projects": "Projekti",
   "settings.experimental.sidebarOrganize.list": "Jedan popis",
   "settings.experimental.sidebarOrganize.customize": "Prilagodi",
   "sidebar.organize.projects": "Projekti",

@@ -1238,7 +1238,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Pilih cara sesi disenaraikan dalam bar sisi. Hanya terpakai pada tab sisi.",
   "settings.experimental.sidebarOrganize.recent": "Terkini",
-  "settings.experimental.sidebarOrganize.projects": "Projek",
   "settings.experimental.sidebarOrganize.list": "Satu senarai",
   "settings.experimental.sidebarOrganize.customize": "Sesuaikan",
   "sidebar.organize.projects": "Projek",

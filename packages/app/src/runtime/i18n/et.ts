@@ -1222,7 +1222,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Vali, kuidas seansse külgribal loetletakse. Kehtib ainult külgvahekaartidele.",
   "settings.experimental.sidebarOrganize.recent": "Viimased",
-  "settings.experimental.sidebarOrganize.projects": "Projektid",
   "settings.experimental.sidebarOrganize.list": "Üks loend",
   "settings.experimental.sidebarOrganize.customize": "Kohanda",
   "sidebar.organize.projects": "Projektid",

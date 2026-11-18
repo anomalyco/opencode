@@ -890,9 +890,8 @@ export const dict = {
     "Group session tabs in side tabs with inline session search",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
-    "Choose how to organize sessions in side tabs. On desktop, Projects and Customize replace Home with Settings in the sidebar.",
+    "Choose how to organize sessions in side tabs. On desktop, Customize replaces Home with Settings in the sidebar.",
   "settings.experimental.sidebarOrganize.recent": "Recent",
-  "settings.experimental.sidebarOrganize.projects": "Projects",
   "settings.experimental.sidebarOrganize.list": "One list",
   "settings.experimental.sidebarOrganize.customize": "Customize",
   "settings.experimental.sidebarOrganize.consolidated": "Consolidated",

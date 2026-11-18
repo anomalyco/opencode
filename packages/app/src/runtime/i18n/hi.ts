@@ -1238,7 +1238,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "चुनें कि साइडबार में सेशन कैसे सूचीबद्ध हों। केवल साइड टैब पर लागू होता है।",
   "settings.experimental.sidebarOrganize.recent": "हाल के",
-  "settings.experimental.sidebarOrganize.projects": "प्रोजेक्ट",
   "settings.experimental.sidebarOrganize.list": "एक सूची",
   "settings.experimental.sidebarOrganize.customize": "कस्टमाइज़ करें",
   "sidebar.organize.projects": "प्रोजेक्ट",

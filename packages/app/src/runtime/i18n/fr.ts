@@ -1292,7 +1292,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Choisissez comment les sessions sont listées dans la barre latérale. S’applique uniquement aux onglets latéraux.",
   "settings.experimental.sidebarOrganize.recent": "Récentes",
-  "settings.experimental.sidebarOrganize.projects": "Projets",
   "settings.experimental.sidebarOrganize.list": "Liste unique",
   "settings.experimental.sidebarOrganize.customize": "Personnaliser",
   "sidebar.organize.projects": "Projets",

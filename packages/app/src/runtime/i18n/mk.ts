@@ -1244,7 +1244,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Изберете како се прикажуваат сесиите во страничната лента. Важи само за страничните картички.",
   "settings.experimental.sidebarOrganize.recent": "Неодамнешни",
-  "settings.experimental.sidebarOrganize.projects": "Проекти",
   "settings.experimental.sidebarOrganize.list": "Една листа",
   "settings.experimental.sidebarOrganize.customize": "Прилагоди",
   "sidebar.organize.projects": "Проекти",

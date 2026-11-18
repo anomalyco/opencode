@@ -1180,7 +1180,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.title": "ቁመታዊ የጎን አሞሌን አደራጅ",
   "settings.experimental.row.sidebarOrganize.description": "ክፍለ ጊዜዎች በጎን አሞሌው ውስጥ እንዴት እንደሚዘረዘሩ ይምረጡ። ለጎን ትሮች ብቻ ይሠራል።",
   "settings.experimental.sidebarOrganize.recent": "የቅርብ ጊዜ",
-  "settings.experimental.sidebarOrganize.projects": "ፕሮጀክቶች",
   "settings.experimental.sidebarOrganize.list": "አንድ ዝርዝር",
   "settings.experimental.sidebarOrganize.customize": "አብጅ",
   "sidebar.organize.projects": "ፕሮጀክቶች",

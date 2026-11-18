@@ -1248,7 +1248,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "منتخب کریں کہ سائیڈ بار میں سیشنز کیسے دکھائے جائیں۔ صرف سائیڈ ٹیبز پر لاگو ہوتا ہے۔",
   "settings.experimental.sidebarOrganize.recent": "حالیہ",
-  "settings.experimental.sidebarOrganize.projects": "پروجیکٹس",
   "settings.experimental.sidebarOrganize.list": "ایک فہرست",
   "settings.experimental.sidebarOrganize.customize": "حسب ضرورت بنائیں",
   "sidebar.organize.projects": "پروجیکٹس",

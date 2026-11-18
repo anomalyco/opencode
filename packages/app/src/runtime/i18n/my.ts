@@ -1245,7 +1245,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ဘေးဘားတွင် စက်ရှင်များ စာရင်းပြပုံကို ရွေးပါ။ ဘေးတက်ဘ်များတွင်သာ သက်ရောက်သည်။",
   "settings.experimental.sidebarOrganize.recent": "လတ်တလော",
-  "settings.experimental.sidebarOrganize.projects": "ပရောဂျက်များ",
   "settings.experimental.sidebarOrganize.list": "စာရင်းတစ်ခုတည်း",
   "settings.experimental.sidebarOrganize.customize": "စိတ်ကြိုက်ပြင်ရန်",
   "sidebar.organize.projects": "ပရောဂျက်များ",

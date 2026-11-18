@@ -1265,7 +1265,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Επιλέξτε πώς εμφανίζονται οι συνεδρίες στην πλευρική γραμμή. Ισχύει μόνο για τις πλευρικές καρτέλες.",
   "settings.experimental.sidebarOrganize.recent": "Πρόσφατες",
-  "settings.experimental.sidebarOrganize.projects": "Έργα",
   "settings.experimental.sidebarOrganize.list": "Μία λίστα",
   "settings.experimental.sidebarOrganize.customize": "Προσαρμογή",
   "sidebar.organize.projects": "Έργα",

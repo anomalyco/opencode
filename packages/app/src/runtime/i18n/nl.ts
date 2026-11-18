@@ -1250,7 +1250,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Kies hoe sessies in de zijbalk worden weergegeven. Geldt alleen voor zijtabbladen.",
   "settings.experimental.sidebarOrganize.recent": "Recent",
-  "settings.experimental.sidebarOrganize.projects": "Projecten",
   "settings.experimental.sidebarOrganize.list": "Eén lijst",
   "settings.experimental.sidebarOrganize.customize": "Aanpassen",
   "sidebar.organize.projects": "Projecten",

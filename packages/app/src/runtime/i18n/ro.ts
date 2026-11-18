@@ -1265,7 +1265,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Alege cum sunt listate sesiunile în bara laterală. Se aplică doar filelor laterale.",
   "settings.experimental.sidebarOrganize.recent": "Recente",
-  "settings.experimental.sidebarOrganize.projects": "Proiecte",
   "settings.experimental.sidebarOrganize.list": "O singură listă",
   "settings.experimental.sidebarOrganize.customize": "Personalizează",
   "sidebar.organize.projects": "Proiecte",

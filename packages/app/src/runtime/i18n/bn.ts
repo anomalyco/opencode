@@ -1237,7 +1237,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "সাইডবারে সেশনগুলো কীভাবে তালিকাভুক্ত হবে তা বেছে নিন। শুধুমাত্র পাশের ট্যাবে প্রযোজ্য।",
   "settings.experimental.sidebarOrganize.recent": "সাম্প্রতিক",
-  "settings.experimental.sidebarOrganize.projects": "প্রকল্প",
   "settings.experimental.sidebarOrganize.list": "একটি তালিকা",
   "settings.experimental.sidebarOrganize.customize": "কাস্টমাইজ করুন",
   "sidebar.organize.projects": "প্রকল্প",

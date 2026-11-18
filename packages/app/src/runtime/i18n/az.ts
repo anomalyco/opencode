@@ -1240,7 +1240,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyaların yan paneldə necə siyahılanacağını seçin. Yalnız yan tablara aiddir.",
   "settings.experimental.sidebarOrganize.recent": "Son",
-  "settings.experimental.sidebarOrganize.projects": "Layihələr",
   "settings.experimental.sidebarOrganize.list": "Tək siyahı",
   "settings.experimental.sidebarOrganize.customize": "Fərdiləşdir",
   "sidebar.organize.projects": "Layihələr",

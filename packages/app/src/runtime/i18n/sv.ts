@@ -1238,7 +1238,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Välj hur sessioner listas i sidofältet. Gäller endast sidoflikar.",
   "settings.experimental.sidebarOrganize.recent": "Senaste",
-  "settings.experimental.sidebarOrganize.projects": "Projekt",
   "settings.experimental.sidebarOrganize.list": "En lista",
   "settings.experimental.sidebarOrganize.customize": "Anpassa",
   "sidebar.organize.projects": "Projekt",

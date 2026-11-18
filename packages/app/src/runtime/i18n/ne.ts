@@ -1236,7 +1236,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "साइडबारमा सत्रहरू कसरी सूचीबद्ध हुने छान्नुहोस्। साइड ट्याबहरूमा मात्र लागू हुन्छ।",
   "settings.experimental.sidebarOrganize.recent": "हालैका",
-  "settings.experimental.sidebarOrganize.projects": "परियोजनाहरू",
   "settings.experimental.sidebarOrganize.list": "एउटै सूची",
   "settings.experimental.sidebarOrganize.customize": "अनुकूलन गर्नुहोस्",
   "sidebar.organize.projects": "परियोजनाहरू",

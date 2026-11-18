@@ -1229,7 +1229,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Veldu hvernig setur eru listaðar í hliðarstikunni. Á aðeins við um hliðarflipa.",
   "settings.experimental.sidebarOrganize.recent": "Nýlegt",
-  "settings.experimental.sidebarOrganize.projects": "Verkefni",
   "settings.experimental.sidebarOrganize.list": "Einn listi",
   "settings.experimental.sidebarOrganize.customize": "Sérsníða",
   "sidebar.organize.projects": "Verkefni",
