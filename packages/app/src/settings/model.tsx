@@ -4,6 +4,13 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
+import {
+  defaultWorkSteps,
+  workStepCollapseTimings,
+  workStepFoldedReplies,
+  workStepViews,
+  type WorkSteps,
+} from "@opencode/session-ui/timeline/work-steps"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -20,6 +27,8 @@ export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
+
+export type { WorkSteps }
 
 export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
 
@@ -106,6 +115,12 @@ const activitySchema = Persistence.struct({ placement: placementSchema, details:
 
 const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
+const workStepsSchema = Persistence.struct({
+  view: Schema.Literals(workStepViews),
+  collapseTiming: Schema.Literals(workStepCollapseTimings),
+  foldedReplies: Schema.Literals(workStepFoldedReplies),
+})
+
 const generalSchema = Persistence.struct({
   // Retired preferences without readers; kept so stored values still decode and round-trip.
   autoSave: Persistence.optional(Schema.Boolean),
@@ -125,6 +140,7 @@ const generalSchema = Persistence.struct({
     tools: placementOnlySchema,
     commentary: placementOnlySchema,
   }),
+  workSteps: workStepsSchema,
   showCustomAgents: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
@@ -137,6 +153,8 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
+  // Fold agent activity into work steps, off until it ships.
+  workStepsEnabled: Persistence.optional(Schema.Boolean),
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -304,6 +322,7 @@ export const settingsPersistence = Persistence.migrate(
 export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
+    workSteps: { ...defaultWorkSteps },
     showCustomAgents: true,
     showTurnDiffs: false,
     backgroundActivity: "left",
@@ -314,6 +333,7 @@ export const defaultSettings: Settings = {
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
+    workStepsEnabled: false,
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
@@ -408,6 +428,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTimelineDetail(value: TimelineDetail) {
           setStore("general", "timelineDetail", structuredClone(unwrap(value)))
         },
+        workSteps: withFallback(() => store.general?.workSteps, defaultSettings.general.workSteps),
+        setWorkSteps(value: WorkSteps) {
+          setStore("general", "workSteps", structuredClone(unwrap(value)))
+        },
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
@@ -445,6 +469,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
+        },
+        workStepsEnabled: withFallback(() => store.general?.workStepsEnabled, false),
+        setWorkStepsEnabled(value: boolean) {
+          setStore("general", "workStepsEnabled", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
