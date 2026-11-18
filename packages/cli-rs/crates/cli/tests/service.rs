@@ -1,10 +1,4 @@
-//! `service` and `pair` (C.8, C.9) against a fake TypeScript binary, run as the real `opencode-native` in a temporary
-//! `HOME` and XDG roots with `OPENCODE_CHANNEL=local`.
-//!
-//! The fake binary (`OPENCODE_TS_BIN`) answers the two commands the Rust client runs: `serve --service` starts a
-//! small Bun service that registers itself like the TS one and logs its requests, and `service set remote true`
-//! writes a route and an OpenTunnel identity as the TS command and the SDK would, without any network. Every process
-//! started here is killed at the end. Needs `bun`; without it the tests pass with a note.
+//! Runs service and pairing commands with an isolated home, channel and fake server binary.
 #![cfg(unix)]
 
 use std::path::PathBuf;

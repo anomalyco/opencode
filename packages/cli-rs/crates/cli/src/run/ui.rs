@@ -1,5 +1,3 @@
-//! `run`'s text output on stderr (`packages/cli/src/run/ui.ts`).
-
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 

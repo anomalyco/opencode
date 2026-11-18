@@ -1,28 +1,4 @@
-//! `plugin dev <dir>` and `plugin test <path>` (P4, `rich-plugins/synthesis.md` 4.7): the native plugin author's
-//! commands. The TypeScript CLI has neither, so they are not in the command table that mirrors it: `main` takes them
-//! before it parses the line (deviation `D01-plugin-dev-test`).
-//!
-//! - `plugin dev <dir> [tui arguments]` builds the plugin crate in `<dir>` with cargo, copies its library to
-//!   `<dir>/target/opencode-dev/`, and runs the TUI with that library as one more plugin, which a settings change
-//!   keeps and never saves. `main` starts it once the line parsed as the TUI's, after the process environment is set.
-//!   Every directory of the crate is watched (but `target` and hidden ones, and `Cargo.lock`, which a build writes),
-//!   from before the first build; one thread builds again after each burst of changes, also those that came during
-//!   the last build. A build that passes replaces the library in one rename of a file of its own, which the TUI's
-//!   plugin watcher reloads (a reload leaks one library, as every reload does). A build that fails leaves the running
-//!   version, and its output goes to `build.log` beside the library.
-//! - `plugin test <library, crate or plugin dir> [--route NAME] [--size WxH] [--command NAME[=INPUT]] [--wait TEXT]...`
-//!   loads the plugin into the TUI on the client's own headless renderer, with no server, and prints a text frame of
-//!   Home, or of its route `NAME`, then one after each step. A crate (a directory with `Cargo.toml`) is built first; a
-//!   directory without one is a plugin directory, its library `plugin.<ext>`. It fails, after printing the frame it
-//!   got to, when the plugin does not load or fails, the route is not the plugin's, or a command does not run. The
-//!   clock is the test's own, and advances a few frames after each step; the plugin's threads run in real time, so a
-//!   frame shows what they sent by then. `--wait TEXT` advances the clock until the frame shows `TEXT`, for at most
-//!   ten seconds of real time, and fails after.
-//! - `plugin test <library, crate or plugin dir> --conformance` replays the golden transcripts of the C ABI (Pc,
-//!   `opencode_plugin::conformance`) against the library, each also as a host of a later minor, and prints a line a
-//!   transcript. It is for whoever binds the C ABI in another language: their port of the conformance plugin
-//!   (`crates/plugin/examples/conformance`, in Rust and in C) passes when their binding speaks the C ABI as the host
-//!   does. It takes no other flag.
+//! Native plugin development commands are handled separately from commands delegated to `opencode`.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -455,9 +431,6 @@ mod tests {
         take(&args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>())
     }
 
-    // Expected: `plugin dev` and `plugin test` are taken with their arguments; the delegated `plugin` commands and
-    // every other line are left to the parser; a line with a bad argument is an error. `-h` and `--help` show the
-    // command's usage, and another flag where a path goes is an error, not a path (review carbon-5).
     #[test]
     fn the_native_plugin_commands_are_taken_before_the_parser() {
         assert!(line(&["plugin", "list"]).is_none());
@@ -513,8 +486,6 @@ mod tests {
         }
     }
 
-    // Expected (reviews bigboi-9, carbon-5): `plugin dev` runs only the TUI; a line that names another command is
-    // refused before anything is built or watched.
     #[test]
     fn plugin_dev_runs_only_the_tui() {
         let crate::parse::Outcome::Run(invocation) = crate::parse::parse(&["run".to_owned(), "hi".to_owned()], "x")
@@ -525,8 +496,6 @@ mod tests {
         assert!(error.to_string().contains("runs the TUI"), "{error}");
     }
 
-    // Expected (reviews bigboi-8, carbon-5): a crate's sources are all but the build's output, the lock file a build
-    // writes, and hidden files.
     #[test]
     fn the_sources_are_not_what_a_build_writes() {
         for name in ["src", "lib.rs", "Cargo.toml", "build.rs"] {
@@ -537,8 +506,6 @@ mod tests {
         }
     }
 
-    // Expected (review bigboi-8): one thread runs the builds. A change made after the watches started and before the
-    // thread did builds; so does one in a directory made since, and one made during a build builds once more after it.
     #[test]
     fn one_thread_builds_after_every_change() {
         if opencode_local::watch::disabled(|name| std::env::var(name).ok()) {
@@ -580,8 +547,6 @@ mod tests {
         stop.send(Signal::Stop).unwrap();
     }
 
-    // Expected (reviews bigboi-8, carbon-5): publishers that race each stage a file of their own and rename it, so
-    // every install succeeds, a reader always finds one whole build, and no staged file is left.
     #[test]
     fn racing_publishers_never_mix_their_libraries() {
         let dir = opencode_util::temp::tempdir().unwrap();
@@ -623,8 +588,6 @@ mod tests {
         assert_eq!(left, [OsStr::new(&entry())]);
     }
 
-    // Expected: a rebuild that fails leaves the installed library as it was, and its output is in `build.log`; with
-    // nothing installed yet, `build.log` is written too (review carbon-5).
     #[test]
     fn a_failed_rebuild_keeps_the_running_library() {
         for installed in [true, false] {
@@ -642,8 +605,6 @@ mod tests {
         }
     }
 
-    // Expected: the library is the `cdylib` of the package built, among cargo's messages: not an `rlib`, a build
-    // script, or another package's `cdylib` (review carbon-5).
     #[test]
     fn the_artifact_is_the_cdylib_cargo_built() {
         let ext = std::env::consts::DLL_EXTENSION;
@@ -680,9 +641,6 @@ mod tests {
         artifact(&String::from_utf8_lossy(&output.stdout), &manifest).unwrap()
     }
 
-    // Expected (reviews bigboi-10, carbon-5): `plugin test` prints the frames of a plugin that does what it was asked,
-    // from a library or a plugin directory, waits for what its threads send, and fails, after the last frame it got
-    // to, for a route the plugin does not have, a command that does not run, and a plugin that fails.
     #[test]
     fn plugin_test_fails_for_what_it_cannot_show() {
         let dir = opencode_util::temp::tempdir().unwrap();

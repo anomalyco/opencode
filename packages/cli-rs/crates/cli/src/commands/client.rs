@@ -1,5 +1,4 @@
-//! What the commands that talk to a server share (C.1): the connection, a runtime,
-//! and `localeCompare` ordering.
+//! Connection, runtime and sorting helpers for server commands.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -42,9 +41,8 @@ pub async fn connect(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), false, false, Arc::new(Reqwest::default())).await
 }
 
-/// [`connect`] for a long-lived command (`mini`): a managed service's client follows the service when it
-/// restarts on a new port or password (`service.reconnect`), and a service of another version is restarted first
-/// (`mismatch: "replace"`, as TS's `mini` asks, O-167), silently as in TS.
+/// Follows a managed service across port and password changes. Mini also requests replacement of a mismatched
+/// service.
 pub async fn connect_following(context: &Context) -> error::Result<Connected> {
     connect_in(context, &Paths::from_env()?, &Env::from_env(), false, true, Arc::new(Reqwest::default())).await
 }

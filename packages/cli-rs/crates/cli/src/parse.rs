@@ -1,6 +1,4 @@
-//! Effect CLI's command-line parser (`effect/src/cli/internal/{lexer,parser}.ts`, `Command.runWith`, `Param.ts`)
-//! over the table in `args.rs`, with its error messages. `parse` decides what the binary does with a command line:
-//! print help, the version, or a completion script, start the wizard, report a usage error, or run a command.
+//! Parses the command table and selects a handler, built-in action or usage error.
 
 use std::collections::HashMap;
 
@@ -172,7 +170,7 @@ impl Token {
     }
 }
 
-/// `lexer.ts`: everything after the first `--` is an operand; `-` alone and negative numbers are values.
+/// After `--`, all tokens are operands. A bare `-` and negative numbers are values.
 fn lex(args: &[String]) -> (Vec<Token>, Vec<String>) {
     let end = args.iter().position(|arg| arg == "--").unwrap_or(args.len());
     let trailing = args.get(end + 1..).unwrap_or_default().to_vec();
@@ -747,7 +745,7 @@ fn parse_int(text: &str) -> Result<i64, &'static str> {
     }
 }
 
-// commands.ts: an HTTP(S) URL without credentials, query, or fragment, without trailing slashes.
+// HTTP(S) URL without credentials, query, fragment or trailing slash.
 fn pairing_url(value: &str) -> Result<String, &'static str> {
     let error = "Expected an HTTP(S) server URL without credentials, query parameters, or a fragment";
     let url = opencode_api::js::parse_url(value).map_err(|parse| match parse {
@@ -822,7 +820,7 @@ fn did_you_mean(suggestions: &[String]) -> String {
     }
 }
 
-/// `auto-suggest.ts`: the candidates at the smallest edit distance, at most 2.
+/// Suggest all candidates at the smallest edit distance, up to distance two.
 fn suggest<'a>(input: &str, candidates: &[&'a str]) -> Vec<&'a str> {
     let mut scored: Vec<(usize, &str)> = candidates
         .iter()

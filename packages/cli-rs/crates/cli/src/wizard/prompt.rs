@@ -1,6 +1,4 @@
-//! The prompts of Effect CLI (`effect/src/cli/Prompt.ts`) that the wizard uses: select, confirm, toggle,
-//! integer, and text. They look different from the Clack prompts in `crate::prompt`, whose raw mode and key
-//! decoding they share.
+//! The wizard's prompts use distinct key handling and display from the regular CLI prompts.
 
 use std::io::Write;
 use std::sync::OnceLock;

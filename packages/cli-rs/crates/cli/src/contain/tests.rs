@@ -1,7 +1,3 @@
-//! The parent's rules (synthesis 4.5), apart from real clients: which arguments the next client gets, what it is told,
-//! when the parent stops restarting, and the second-crash rule. The loop runs over a fake system; one row runs a real
-//! parent in a process of its own, as signals need. `restart` with real clients is in the P-PTY scenarios.
-
 use std::ffi::OsString;
 use std::time::{Duration, Instant};
 
@@ -34,9 +30,6 @@ fn restart_of(args: &[OsString]) -> Restart {
     tui(args).unwrap()
 }
 
-// Expected (bigboi, carbon 7): the next client's command line parses to the first one's, without `--prompt` and
-// `--continue`, with the record's session, whatever spelling the first used: grouped shorts, a boolean literal after
-// `--continue`, `=` forms, a directory that looks like a flag.
 #[test]
 fn the_next_client_parses_to_the_first_without_its_prompt() {
     for line in [
@@ -91,10 +84,6 @@ fn two_restarts_a_minute_then_the_parent_stops() {
     }
 }
 
-// Expected (4.5, the second-crash rule; bigboi, carbon 5): only the crash at hand is handed over, never earlier ones,
-// which the crash list keeps until the user's enable or a rebuild ends them. A crash that names no plugin restarts
-// normally; a second one within 10 minutes starts that one client in safe mode. One 10 minutes later is a first one
-// again, and a named crash between them does not count.
 #[test]
 fn the_handoff_is_this_crash_and_safe_mode_follows_two_unnamed() {
     let start = Instant::now();
@@ -192,10 +181,6 @@ fn snapshot(session: Option<&str>, draft: &str) -> Snapshot {
     Snapshot { session: session.map(str::to_owned), draft: draft.to_owned(), dropped: false }
 }
 
-// Expected (bigboi 7, 8): a crash restores the terminal and starts the next client with a new record that holds the
-// crash and the dead client's snapshot; the next client opens that session and sends no prompt again. A client that
-// crashes before it publishes anything hands on the snapshot it was given. An ordinary exit ends the parent with the
-// client's code.
 #[test]
 fn the_parent_restarts_after_a_crash_and_ends_with_the_client() {
     let raw = os(&["opencode-native", "--prompt", "hi"]);
@@ -240,8 +225,6 @@ fn the_parent_stops_with_the_crash_code() {
     assert!(fake.started[2].1.safe);
 }
 
-// Expected (bigboi 9): a client that crashes after the parent was asked to end is not restarted, and the terminal it
-// left is still put back.
 #[test]
 fn a_parent_asked_to_end_restores_and_restarts_nothing() {
     let raw = os(&["opencode-native"]);
@@ -271,8 +254,6 @@ fn a_client_that_cannot_start() {
     assert_eq!(supervise_with(&raw, &restart, &mut fake), Err(139));
 }
 
-// Expected (carbon 7): only a command line that runs the TUI gets a parent; `wanted` asks this before
-// `OPENCODE_PLUGIN_PARENT`.
 #[test]
 fn only_the_tui_gets_a_parent() {
     let runs = |line: &[&str]| tui(&os(line)).is_some();
@@ -286,9 +267,6 @@ fn only_the_tui_gets_a_parent() {
     assert_eq!(verdicts, [true, true, false, false, false]);
 }
 
-// Expected (PL-1, review carbon-1): `plugin dev <dir>` runs the TUI, so it gets a parent whatever the plugin targets
-// are (it always runs the native build it makes), and a restart goes back into `plugin dev <dir>` with the TUI's
-// arguments. `plugin dev` with a command, or its help, gets none.
 #[test]
 fn plugin_dev_runs_under_a_parent_and_restarts_into_itself() {
     let runs = |line: &[&str]| tui(&os(line)).is_some();
@@ -407,8 +385,6 @@ fn ends(pid: libc::pid_t, limit: Duration) -> bool {
     false
 }
 
-// Expected (bigboi, O6): a client whose parent is killed outright ends too, by the death signal on Linux, and by the
-// parent's lease where a system has none (the client clears the death signal here to stand for one).
 #[cfg(unix)]
 #[test]
 fn a_client_ends_with_its_parent() {
@@ -420,9 +396,6 @@ fn a_client_ends_with_its_parent() {
     }
 }
 
-// Expected (bigboi 9, carbon 3, 8): a real parent passes a SIGTERM sent to it alone on to its client, which ends with
-// it, and the parent then ends with the client's code. Its caller ignored SIGCHLD, as an embedding program may: the
-// parent still waits for its client.
 #[cfg(unix)]
 #[test]
 #[allow(unsafe_code)]
@@ -448,9 +421,6 @@ fn a_real_parent_passes_a_term_on() {
     assert_eq!(unsafe { libc::kill(client, 0) }, -1, "the client outlived its parent");
 }
 
-// Expected (bigboi, carbon 4): on Windows an exception status, abort's 3, the watchdog's 75 and a panic's 101 are
-// crashes; the end of a console event (Ctrl+C or Ctrl+Break before the client's handler, the console closing) is the
-// user's; every code reaches the parent's exit whole.
 #[cfg(windows)]
 #[test]
 fn a_console_end_is_the_users_and_codes_stay_whole() {

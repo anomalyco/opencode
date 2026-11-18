@@ -1,26 +1,4 @@
-//! Interactive prompts for the non-TUI commands, drawn and driven as `@clack/prompts` 1.0.0-alpha.1
-//! does for `packages/cli`. Step C.p.
-//!
-//! Every prompt is a builder that ends in a blocking `prompt()`, which returns `Err(Cancelled)` on
-//! Ctrl+C or Escape. The TS commands then print `cancel("Cancelled")` and exit with 130
-//! (`packages/cli/src/ui/prompt.ts`):
-//!
-//! ```ignore
-//! let name = prompt::text("Name").placeholder("Ada").prompt();
-//! let Ok(name) = name else {
-//!     prompt::cancel("Cancelled");
-//!     return Err(output::Exit(130).into());
-//! };
-//! ```
-//!
-//! As in Clack, prompts also run when stdin or stdout is not a terminal: keys come from the input as
-//! it is, and the frames are written without colors. Commands that need a person check
-//! [`is_interactive`] first, as `requireInteractive` does. Unlike Clack, which waits forever, a
-//! prompt whose input ends is cancelled.
-
-// A few options only `opencode-prompt-demo` uses (P-CLI compares them with Clack) carry their own
-// `dead_code` allowance. The wizard (C.15) draws Effect CLI's prompts and uses only `with_keys`, `Keys`,
-// `Press`, and `stdout_size`.
+//! Blocking interactive prompts for commands outside the TUI.
 
 mod autocomplete;
 mod confirm;

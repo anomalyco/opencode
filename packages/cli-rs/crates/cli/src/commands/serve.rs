@@ -1,5 +1,3 @@
-//! `serve`, delegated to the TypeScript CLI (D.1).
-
 use opencode_service::delegate;
 use opencode_util::error;
 

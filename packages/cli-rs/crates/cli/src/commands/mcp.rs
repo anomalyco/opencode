@@ -1,5 +1,3 @@
-//! `mcp`: MCP servers (`packages/cli/src/commands/handlers/mcp/*.ts`).
-
 use std::path::{Path, PathBuf};
 
 use opencode_api::generated::{
@@ -31,7 +29,7 @@ pub fn run(context: &Context, args: &McpArgs) -> error::Result<()> {
     }
 }
 
-// `list`, `add`, and `logout` let failures escape, so they print as `Error: ...` (C40-handler-errors).
+// Command failures propagate with the `Error:` prefix.
 
 fn servers(server: &Server) -> error::Result<Vec<McpServer>> {
     let input = McpListInput { location: location()? };

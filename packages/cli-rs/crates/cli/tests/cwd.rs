@@ -1,5 +1,4 @@
-//! The root command starts in the working directory the process inherits, as TS's `process.cwd()`, and ignores
-//! an inherited `PWD` that names another directory (`handlers/default.ts:21-24`).
+//! The root command uses the inherited working directory even if `PWD` names another one.
 #![cfg(unix)]
 
 use std::process::Command;

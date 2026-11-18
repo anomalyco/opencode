@@ -1,5 +1,4 @@
-//! `--completions`: Effect CLI's static completion scripts (`effect/src/cli/internal/completions/*.ts`) for the
-//! command table. The scripts never run the binary again.
+//! Static shell completion scripts. Completion never needs to start the CLI again.
 
 use crate::args::{Arg, Flag, Kind, ROOT, Shell, Spec};
 

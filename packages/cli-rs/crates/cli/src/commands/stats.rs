@@ -1,6 +1,3 @@
-//! `stats`: shareable usage statistics (`packages/cli/src/commands/handlers/stats.ts`), with the
-//! activity calendar of `packages/util/src/activity-calendar.ts`.
-
 use std::future::Future;
 use std::io::IsTerminal;
 use std::time::Duration;
@@ -652,7 +649,6 @@ mod tests {
 
     #[tokio::test]
     async fn requests_name_an_unreachable_server_and_keep_other_errors() {
-        // The cases of "stats requests" in `packages/cli/test/stats.test.ts`.
         let url = "http://localhost:4096";
         let failed = |error: ApiError| request::<()>(url, async { Err(error.into()) });
         let transport = failed(ApiError::Transport("refused".to_owned())).await;

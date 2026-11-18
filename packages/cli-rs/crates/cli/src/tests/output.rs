@@ -1,5 +1,4 @@
-//! Help and usage errors against what the TypeScript CLI prints, recorded with colors by
-//! `script/gen/cli-output.ts` in `tests/fixtures/cli`. Without a terminal both print the same text without colors.
+//! Compares output with color recordings and their plain-text equivalents.
 
 use std::path::Path;
 

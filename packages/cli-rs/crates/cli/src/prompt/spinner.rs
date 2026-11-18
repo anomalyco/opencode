@@ -1,5 +1,3 @@
-//! `spinner` (`@clack/prompts` `spinner.ts`, with `@clack/core`'s `block`).
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};

@@ -1,6 +1,4 @@
-//! `auth`: integrations and credentials (`packages/cli/src/commands/handlers/auth/*.ts`), and the
-//! integration picker of `packages/cli/src/ui/integration-picker.ts`. `mcp auth` (C.6) shares the
-//! connection, the OAuth login, and the form.
+//! Credential management and interactive login. MCP authentication shares the login form.
 
 use std::collections::HashSet;
 use std::future::Future;
@@ -567,7 +565,7 @@ pub(super) fn resolve_integration<'a>(
 // login
 // ---------------------------------------------------------------------------------------------------------------
 
-// `login.ts`: these come first in the picker, in this order, under "Popular".
+// Picker order under “Popular”.
 const PRIORITY: [&str; 6] = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"];
 
 fn login(context: &Context, args: &AuthLoginArgs) -> error::Result<()> {
@@ -1075,10 +1073,6 @@ fn required(value: &str) -> Option<String> {
     value.is_empty().then(|| "Required".to_owned())
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// The form (`auth/form.ts`)
-// ---------------------------------------------------------------------------------------------------------------
-
 /// `answerForm`: answers from `--answer key=value`, the defaults of hidden fields, and prompts for the rest.
 /// `None` when the method has no form.
 pub(super) fn answer_form(fields: Option<&[FormField]>, input: &[String]) -> error::Result<Option<FormAnswer>> {
@@ -1153,14 +1147,7 @@ fn form_value(value: Value) -> Option<FormValue> {
     }
 }
 
-/// The answer to a field of a type this client does not know (a newer server's). TS has no such variant and
-/// answers it as any field (`auth/form.ts:28-47`), reading its members from the JSON: it is skipped when its
-/// `when` does not hold, takes its `default` when hidden, and is otherwise prompted for as text
-/// (`form.ts:139-149`). `formValidateValue` then checks it with its last, multiselect branch
-/// (`tui/util/form.ts:73-75,105-109`), so only a selection passes. TS's text prompt returns a number, which never
-/// passes, and the branch throws for a non-empty selection on a field without `options`. Here the prompt takes a
-/// JSON value as `--answer` does, and a selection must be custom
-/// (`parity/deviations/V26-login-unfamiliar-field-answer.md`).
+/// Preserve the answer fields when a newer server supplies an unknown field type.
 fn unknown_answer(
     field: &FormField,
     raw: &Value,
@@ -1425,8 +1412,7 @@ fn default(field: &FormField) -> Option<FormValue> {
     }
 }
 
-/// `active` in `auth/form.ts`: every `when` condition holds on the answers so far. An array answer matches
-/// when it includes the condition's value as a string.
+/// All `when` conditions must hold. An array answer matches if it contains the condition's string value.
 fn active(conditions: &[FormWhen], answer: &FormAnswer) -> bool {
     conditions.iter().all(|condition| {
         let Some(value) = answer.get(&condition.key) else { return false };
@@ -1448,10 +1434,6 @@ fn active(conditions: &[FormWhen], answer: &FormAnswer) -> bool {
         if condition.op == FormWhenOp::Eq { matches } else { !matches }
     })
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// The integration picker (`ui/integration-picker.ts`)
-// ---------------------------------------------------------------------------------------------------------------
 
 /// One row of the integration picker, under its category heading.
 #[derive(Clone, Debug, PartialEq)]

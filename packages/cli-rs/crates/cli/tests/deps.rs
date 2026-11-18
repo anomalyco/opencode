@@ -1,10 +1,4 @@
-//! Keeps `deps-allow.txt` equal to the third-party crates the workspace builds for `TARGET` (O-58), in three sections:
-//! what `opencode-cli` ships with; `[tests]`, what the rest of the workspace adds with default features (tests,
-//! examples, and members `opencode-cli` does not ship); and `[optional]`, what non-default features add. A crate that
-//! is in an earlier section with other marks (another version with a build script, say) is listed again.
-//!
-//! Every crate is third-party except the workspace members and OpenTUI's packages, whatever its source: a vendored
-//! crate by `path` is listed like any other.
+//! Checks the target-specific dependency allowlist for binaries, tests and build tools.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

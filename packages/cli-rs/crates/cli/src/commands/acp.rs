@@ -1,5 +1,3 @@
-//! `acp`: the Agent Client Protocol server (`packages/cli/src/commands/handlers/acp.ts`).
-
 use opencode_service::ts_command::TsCommand;
 use opencode_util::error;
 

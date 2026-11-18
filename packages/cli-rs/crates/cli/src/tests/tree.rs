@@ -1,6 +1,3 @@
-//! The command table against `tests/fixtures/commands.json`, the TypeScript tree dumped by `script/gen/commands.ts`:
-//! names, aliases, descriptions, global flags, arguments, and flags with their types, counts, and defaults.
-
 use serde_json::{Value, json};
 
 use crate::args::{Arg, BUILTINS, Count, Default, Flag, Kind, ROOT, Spec};
@@ -35,7 +32,7 @@ fn compare_command(path: &str, ts: &Value, spec: &Spec, diffs: &mut Vec<String>)
         "name": spec.name,
         "aliases": spec.alias.into_iter().collect::<Vec<_>>(),
         "description": spec.description,
-        // The TypeScript runtime adds the root's `--print-logs` outside commands.ts; the dump lists it as a built-in.
+        // The root adds `--print-logs` separately; the recording includes it with the built-ins.
         "globalFlags": spec.globals.iter().map(|flag| flag.name).filter(|_| path != "opencode").collect::<Vec<_>>(),
         "arguments": spec.arguments().map(argument).collect::<Vec<_>>(),
         "flags": spec.flags().map(flag).collect::<Vec<_>>(),
@@ -72,8 +69,7 @@ fn choices(kind: Kind) -> Vec<&'static str> {
     }
 }
 
-// The dump's shape (`script/gen/commands.ts`): a repeatable flag is optional when it parses to `[]` without input,
-// and absent bounds and defaults are left out.
+// A repeatable flag is optional if omitting it yields an empty list.
 fn flag(flag: &Flag) -> Value {
     let mut value = json!({
         "name": flag.name,

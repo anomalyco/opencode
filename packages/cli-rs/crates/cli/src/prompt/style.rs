@@ -1,5 +1,3 @@
-//! Colors as picocolors 1.1 writes them, and the symbols of `@clack/prompts` (`common.ts`).
-
 use std::io::IsTerminal;
 use std::sync::OnceLock;
 
@@ -121,7 +119,6 @@ symbols! {
     S_ERROR: "■", "x";
 }
 
-/// The step symbol for a prompt state (`symbol` in `common.ts`).
 pub fn symbol(state: State) -> String {
     match state {
         State::Initial | State::Active => cyan(S_STEP_ACTIVE()),

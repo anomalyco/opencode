@@ -1,20 +1,4 @@
-//! W10: `opencode-native` and `opencode-prompt-demo` on a Windows pseudoconsole, driven as OpenTUI's lifecycle test
-//! drives its fixture (`opentui/tests/lifecycle.rs`). A headless app runs the program on a `Pty` and feeds its output
-//! to a `TerminalView`, which shows the screen and answers the program's terminal queries, as P-PTY's emulator does.
-//!
-//! The TUI runs against a fake service with the replies of P-PTY's `fallback: "tui"` (`parity/lib/fake-server.ts`,
-//! `packages/tui/test/fixture/tui-client.ts`), written again here because the preview workflow's Windows job checks
-//! out `packages/cli-rs` only and has no Bun workspace.
-//!
-//! The prompt cases are the C.p scenarios (`parity/scenarios/C.p/*.pty.ts`) step for step. With `OPENCODE_SMOKE_OUT`
-//! set, each writes `<dir>/C.p/<name>.json` with the `exit` and `checkpoints` of a P-PTY record, to compare with the
-//! Linux transcript of `parity/oracle/C.p-prompts.ts`; the mode bytes differ and are not recorded:
-//!
-//!   bun run parity/pty/run.ts --sides ts,rs parity/scenarios/C.p/text.pty.ts
-//!   diff <(jq -S '{exit, checkpoints}' $TMPDIR/opencode-parity/pty/C.p/text.0-ts.json) <(jq -S . <dir>/C.p/text.json)
-//!
-//! On Linux (with the `cfg` below widened and `opentui` added to the dev-dependencies) every case's record equals
-//! the TS one.
+//! Drives the CLI and prompt demo on a Windows pseudoconsole.
 #![cfg(windows)]
 
 use std::cell::{Cell, RefCell};
@@ -42,7 +26,6 @@ fn the_tui_reaches_home_and_ctrl_c_restores_the_terminal() {
     command.args(["--server", &server]);
     let run = Run::start(command, 100, 30);
     run.wait(Some("Ask anything"), 500, 30_000).unwrap();
-    // As H.3/title: a second Ctrl+C, if the first left the program running.
     run.press("\x03");
     run.wait(None, 300, 5_000).unwrap();
     if run.exit.get().is_none() {
@@ -52,7 +35,6 @@ fn the_tui_reaches_home_and_ctrl_c_restores_the_terminal() {
     run.after_leaving();
 }
 
-/// One C.p scenario: the demo case, the terminal size, the steps, and the exit code.
 struct Case {
     name: &'static str,
     demo: &'static str,
@@ -76,7 +58,6 @@ const fn first(until: &'static str, checkpoint: Option<&'static str>) -> Step {
     Step { keys: "", until: Some(until), settle: 250, checkpoint }
 }
 
-/// `press` of `parity/scenarios/C.p/demo.ts`.
 const fn press(keys: &'static str, checkpoint: &'static str, until: Option<&'static str>) -> Step {
     Step { keys, until, settle: 250, checkpoint: Some(checkpoint) }
 }

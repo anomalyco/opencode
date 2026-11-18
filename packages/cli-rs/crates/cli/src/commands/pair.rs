@@ -1,8 +1,4 @@
-//! `pair`: one-time links for a browser or app (C.9).
-//!
-//! Ports `packages/cli/src/commands/handlers/pair.ts`. `--remote` turns remote access on through the
-//! TS `service set remote true` (D.1) after the user's consent, then waits for the tunnel URL to appear
-//! in `/api/info`.
+//! One-time pairing links. Remote pairing enables the tunnel before requesting its URL.
 
 use std::time::Duration;
 
@@ -165,9 +161,8 @@ fn consent(local: &Local, config: &Info, yes: bool) -> error::Result<bool> {
     Ok(true)
 }
 
-/// The tunnel URL of the service, once the tunnel is attached: the service attaches it in the
-/// background, so poll `/api/info` every second for up to 3 minutes. The route is read from this
-/// client's channel (parity/deviations/C41-pair-remote-channel.md).
+/// Tunnel attachment runs in the background. Poll `/api/info` until it is ready; get the route from this channel's
+/// service config.
 async fn remote_url(local: &Local, client: &Client) -> error::Result<String> {
     let attempt = async || -> Option<String> {
         let route = local.config().read().ok()?.remote?.route;

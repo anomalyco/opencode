@@ -1,5 +1,3 @@
-//! `confirm` (`@clack/prompts` `confirm.ts` on `@clack/core`'s `ConfirmPrompt`).
-
 use super::core::{self, Base, Prompt, move_cursor};
 use super::style::{S_BAR, S_BAR_END, S_RADIO_ACTIVE, S_RADIO_INACTIVE, cyan, dim, gray, green, strikethrough, symbol};
 use super::{Cancelled, Output, State};

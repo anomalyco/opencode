@@ -1,6 +1,3 @@
-//! `session`: list, delete, export, and import sessions
-//! (`packages/cli/src/commands/handlers/session/*.ts`).
-
 use opencode_util::path::Flavor;
 use opencode_util::{bail, err, error, json_object, time::Zone};
 use std::io::{IsTerminal, Write};
@@ -33,8 +30,7 @@ pub fn run(context: &Context, args: &SessionArgs) -> error::Result<()> {
     }
 }
 
-// `list`, `delete`, and `export` catch every failure and print its bare message with exit 1, as their
-// `Effect.catch` does with `errorMessage`. `import` lets failures escape (C40-handler-errors).
+// List, delete and export print the bare failure message; import propagates the handler error.
 fn caught(result: error::Result<()>) -> error::Result<()> {
     let Err(error) = result else { return Ok(()) };
     if error.is::<Exit>() {
@@ -86,8 +82,7 @@ fn page(output: &str) -> error::Result<()> {
     Ok(())
 }
 
-// TS runs `cmd /c more`, and `cmd` looks for `more` in the current directory before `PATH`, so a project could supply
-// its own (deviation W5-windows-session-pager). The absolute path names the system pager.
+// Use the system pager's absolute path: `cmd /c more` also searches the project directory.
 fn pager(os: &str, system_root: Option<&str>) -> (String, &'static [&'static str]) {
     match os {
         "windows" => (format!(r"{}\System32\more.com", system_root.unwrap_or(r"C:\Windows")), &[]),

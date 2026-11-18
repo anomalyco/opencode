@@ -1,6 +1,4 @@
-//! `plugin`, delegated to the TypeScript CLI (D.1): the subcommands install with npm and resolve
-//! entrypoints with `Host.resolve`. `plugin add` waits for it, and then says when what it added to `cli.json` is a TUI
-//! plugin `opencode-native` will not load (FT-11).
+//! Delegates npm installation and plugin entrypoint resolution to `opencode`.
 
 use opencode_local::cli_config::{self, CliConfig, Plugin};
 use opencode_local::paths::Paths;
@@ -27,9 +25,7 @@ pub fn run(_context: &Context, args: &PluginArgs) -> error::Result<()> {
     }
 }
 
-/// Runs `plugin add` on the TypeScript binary, then names each entry it added to `cli.json` while `opencode-native` will
-/// not load it ([`not_loaded`]): TS adds a package there only when it has a TUI part and no server part, and `opencode-native`
-/// loads such a package from the cache the install filled only on its JS host, which is on by default (js-npm, O-166).
+/// Reports newly installed TUI plugins that this client cannot load.
 fn add() -> error::Result<()> {
     let config = CliConfig::new(&Paths::from_env()?);
     let before = targets(&config);

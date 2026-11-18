@@ -1,6 +1,4 @@
-//! `--wizard`, Effect CLI's command wizard (`effect/src/cli/internal/wizard.ts` and `Command.ts`): asks for the
-//! selected command's flags and arguments, or for a subcommand, prints the command line, and runs it after a
-//! confirmation. Step C.15.
+//! Interactive command builder for `--wizard`.
 
 mod prompt;
 

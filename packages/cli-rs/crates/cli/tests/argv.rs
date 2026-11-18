@@ -1,5 +1,3 @@
-//! Arguments that are not UTF-8: Bun decodes them with U+FFFD, and the Rust client does the same once, so no
-//! command reads the raw arguments again and panics on them.
 #![cfg(unix)]
 
 use std::ffi::OsStr;

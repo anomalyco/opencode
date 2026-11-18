@@ -1,5 +1,3 @@
-//! `models`: list the available models (`packages/cli/src/commands/handlers/models.ts`).
-
 use opencode_api::client::Client;
 use opencode_api::generated::ModelListInput;
 use opencode_util::error;

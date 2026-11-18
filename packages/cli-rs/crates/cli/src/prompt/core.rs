@@ -1,5 +1,4 @@
-//! The prompt loop of `@clack/core` (`prompts/prompt.ts`): key handling, validation, and the frame
-//! diffing that redraws only the lines that changed.
+//! Handles editing and validation, redrawing only the changed lines.
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};

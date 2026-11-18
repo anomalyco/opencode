@@ -1,5 +1,4 @@
-//! D.1: the delegated commands run `OPENCODE_TS_BIN` with the same arguments, stdio, and exit code. A fake
-//! TypeScript binary records what it got, so nothing real is installed, removed, or served.
+//! The fake delegated CLI records arguments, stdio and exit status without installing or removing anything.
 #![cfg(unix)]
 
 use std::io::Write;
@@ -86,11 +85,6 @@ fn the_child_keeps_the_process_stdio_and_exit_code() {
     assert_eq!(fake.read("env"), "print-logs=1\n");
 }
 
-// Expected (FT-11, js-npm, O-166): after the TypeScript binary added a TUI package to `cli.json`, `plugin add` says, while
-// `OPENCODE_PLUGIN_JS` turns the JS host off, that `opencode-native` loads it on the JS host and how to turn that back
-// on; with the JS host on, the default, it says nothing more, as TS, since the package loads from the cache the add
-// filled. An add that changes nothing, or fails,
-// says nothing more and keeps the exit code.
 #[test]
 fn adding_a_tui_package_says_how_opencode_native_loads_it() {
     let dir = opencode_util::temp::tempdir().unwrap();
@@ -155,7 +149,6 @@ echo "TUI plugin \"$3\" installed and added to $OPENCODE_CONFIG_DIR/cli.json"
         );
         assert_eq!(lines.next(), None);
     }
-    // On by default (O-166), and with any other value: nothing more, as TS.
     #[cfg(feature = "ts")]
     for on in [None, Some("1")] {
         let output = run("opencode-pulse-ticker@0.2.1", on);

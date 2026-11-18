@@ -1,5 +1,4 @@
-//! The line editing of Node's `readline` (`kTtyWrite`), which Clack reads `line` and `cursor` from
-//! for the text prompts. History is left out: a prompt's line only enters it on Enter.
+//! Prompt line editing. Each prompt owns its buffer, so history ends at submission.
 
 use std::time::{Duration, Instant};
 

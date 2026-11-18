@@ -25,8 +25,7 @@ fn output_mode(output: Output) -> Option<u32> {
     }
 }
 
-/// Both ends are consoles, as `requireInteractive` in `packages/cli/src/ui/prompt.ts` checks. Node calls a handle a
-/// TTY when it has a console mode, so a mintty pipe is not one, though std's `is_terminal` says it is.
+/// A mintty pipe is not a console handle even if it connects to a terminal.
 pub fn interactive() -> bool {
     win::console_mode(stdin()).is_some() && Output::Stdout.is_terminal()
 }

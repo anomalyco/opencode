@@ -1,15 +1,4 @@
-//! `upgrade` (alias `update`): it never delegates and upgrades nothing (deviation D01-upgrade). It says on stderr how
-//! this binary is updated, and exits 1:
-//!
-//! - a preview build (`0.0.0-native-<run>`): re-run the preview's install script;
-//! - an `opencode` bundled beside it: it is updated with that `opencode`, so run `opencode upgrade`. Running that from
-//!   here would be the client asking the server binary to replace the client, which Windows cannot do to a running
-//!   `opencode-native.exe`;
-//! - a source build (`local`): rebuild it;
-//! - any other build: it has no updater, and is updated the way it was installed.
-//!
-//! An `opencode` on `PATH` or named by `OPENCODE_TS_BIN` is a separate TypeScript install; those lookups only start a
-//! server.
+//! `upgrade` prints installation-specific update instructions and exits with status 1.
 
 use std::path::Path;
 
