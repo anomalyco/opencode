@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  classifyRequest,
   createRequestQueueState,
   selectInflightCount,
   selectQueuedCount,
@@ -123,5 +124,28 @@ describe("transitionRequestQueue", () => {
     expect(transitionRequestQueue(running, { type: "disposed" }, config).effects).toEqual([
       { type: "request.cancel", ids: [1] },
     ])
+  })
+})
+
+describe("classifyRequest", () => {
+  test("classifies API paths under a server path prefix like those at the root", () => {
+    const paths = [
+      ["GET", "/api/event"],
+      ["GET", "/api/session"],
+      ["GET", "/api/session/ses_1/message"],
+      ["GET", "/api/vcs/diff"],
+      ["POST", "/api/worktree"],
+      ["GET", "/api/project"],
+    ] as const
+
+    for (const [method, path] of paths)
+      expect(classifyRequest(method, new URL(`http://server/opencode${path}`), "/opencode")).toEqual(
+        classifyRequest(method, new URL(`http://server${path}`)),
+      )
+  })
+
+  test("leaves paths outside the prefix alone", () => {
+    expect(classifyRequest("GET", new URL("http://server/api/event"), "/opencode").bypass).toBe(true)
+    expect(classifyRequest("GET", new URL("http://server/opencode-other/api/event"), "/opencode").bypass).toBe(false)
   })
 })
