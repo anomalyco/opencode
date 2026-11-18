@@ -1054,11 +1054,16 @@ fn the_server_rows_follow_typescript() {
 }
 
 fn the_server_rows_follow_typescript_on() {
-    let failed = serde_json::json!({ "state": { "status": "failed", "error": "boom" } });
+    let hash = "0123456789abcdef".repeat(4);
+    let failed = serde_json::json!({
+        "source": { "type": "package", "target": "pkg", "version": hash, "outdated": true },
+        "state": { "status": "failed", "error": "boom" },
+    });
     let opened: Gate = Arc::new((std::sync::Mutex::new(true), std::sync::Condvar::new()));
     let (harness, _) = open_on(package_server(failed, 500, opened.clone()));
     harness.dispatch("plugins.list");
     let shown = harness.wait_for("update ctrl+u");
+    assert!(shown.contains("0123456") && !shown.contains("01234567"), "{shown}");
     let footer = shown.lines().find(|line| line.contains("update ctrl+u")).unwrap();
     assert!(footer.find("update ctrl+u") < footer.find("view error enter"), "{footer}");
     let updating = serde_json::json!({
@@ -1076,7 +1081,8 @@ fn the_server_rows_follow_typescript_on() {
         open_on(package_server(serde_json::json!({ "state": { "status": "active" } }), 500, gate.clone()));
     harness.dispatch("plugins.list");
     harness.wait_for("check for updates");
-    harness.wait_for("update available");
+    let shown = harness.wait_for("update available");
+    assert!(shown.contains("1.0.0"), "{shown}");
     let checks = || log.lock().unwrap().iter().filter(|seen| seen.path == "/api/plugin/check").count();
     harness.app.press("ctrl+r");
     harness.wait_for("checking for updates");
