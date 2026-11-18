@@ -5563,8 +5563,6 @@ pub struct BlobInfo {
     pub mime: String,
     #[serde(serialize_with = "crate::ser::number")]
     pub bytes: f64,
-    #[serde(rename = "expiresAt", serialize_with = "crate::ser::number")]
-    pub expires_at: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
