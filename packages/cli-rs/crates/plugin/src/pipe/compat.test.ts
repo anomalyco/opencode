@@ -1673,8 +1673,12 @@ test("each dialog settles once, and clear closes it", async () => {
   ctx.ui.dialog.show(() => h("text", { children: "small" }))
   await turn()
   const dialogs = fake.effects.filter((effect) => effect.dialog?.type === "surface").map((effect) => effect.dialog)
-  // The first opened large and centered, with the `set` right after it; the next is the host's own size.
-  expect(dialogs.map((dialog) => [dialog.size, dialog.centered])).toEqual([["large", true], [undefined, undefined]])
+  // The first opened, then the `set` right after it sized it under its key; the next is the host's own size.
+  expect(dialogs.map((dialog) => [dialog.key, dialog.size, dialog.centered])).toEqual([
+    ["compat.dialog.1", undefined, undefined],
+    ["compat.dialog.1", "large", true],
+    ["compat.dialog.2", undefined, undefined],
+  ])
 })
 
 // A select's footer actions are the contract's (session-time's "Close ctrl+a"): each with its key, side and selection,

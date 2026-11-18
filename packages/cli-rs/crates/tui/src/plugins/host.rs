@@ -201,6 +201,9 @@ impl Host for Tui {
 
     fn revoked(&self, id: &str) {
         super::panel::close(self, id);
+        // A dialog surface on screen mounts again from the registration that replaced the one that ended.
+        let reloaded = id.to_owned();
+        self.app.defer(bind!(self, |tui, _| super::panel::remount(&tui, &reloaded)));
         // A reload of the plugin's registrations replaced the one that ended, which has the panel too: the panel stays
         // open and mounts again from the new one, as TS takes a registration without closing it (CT-29). A plugin that
         // failed or ended loses it.
