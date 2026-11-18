@@ -700,8 +700,9 @@ It is the second timing tier. No frame waits for the JS host:
   process.
 - **Input** (P2): a key, a paste or a press cannot wait a round trip, so the host answers from what the plugin declared:
   a bind's key, a paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed, and
-  those handlers' answers are advisory. A key of a listener of every key is held, as a key command's is, until the
-  handler answers: `consume` takes it, anything else lets it go on, past that listener (contract gaps 2). A key that
+  those handlers' answers are advisory. A key of a listener of every key that can take one now (the JS host says so,
+  `taking`) is held, as a key command's is, until the handler answers: `consume` takes it, anything else lets it go
+  on, below the listeners that heard it (contract gaps 2, cg2-1, cg2-5). One that cannot only hears it. A key that
   changes how the next ones route (a mode switch) declares `hold`: the keys after it wait until its `release-keys`
   effect applied, or 50 ms. A handler's effects are its mount's: the overlay it opens, the focus, its mode.
 - **Trees** are revisions of a mount, one in flight: the host adopts it in its next frame, or refuses it and gets a
@@ -710,9 +711,13 @@ It is the second timing tier. No frame waits for the JS host:
 - **Reads** are snapshots the host pushes for what the plugin watches, before each event, after each call's effects
   and at each change. A read over 256 KiB of JSON is not pushed: the plugin reads nothing (`carrier.readError(key)`
   says why), and goes on. The host still builds the read whole on its thread before it measures it. There is no `layout` call and no canvas draw.
-- **Hold**: a command that declares `hold` holds the keys typed after it until its handler's effects applied, or 50
-  ms; the hold is the JS host's, one at a time, of at most 64 keys, the oldest dropped. The reserved chord is never
-  held: it ends the hold, drops what it kept, and reaches the host.
+- **Hold**: a command that declares `hold`, and a key a JS command or listener may decline, holds the input typed
+  after it (keys and pastes, in order) until its handler's effects applied, or 50 ms. Each call that holds owns its
+  entry until the first of its answer, its deadline, its refusal, the JS host's end and the reserved chord, which
+  alone decides its key; anything after finds no owner (ce-3). A declined chord goes back whole (`<leader>n`, ce-4).
+  Past 64 held, the hold stops waiting and lets everything go on in order; none is dropped. Input typed into a mount
+  that closed meanwhile goes with it. The reserved chord is never held: its press ends the hold, drops what it kept,
+  and reaches the host, also when it closes a plugin's surface.
 - **Supervision**: the queues are bounded. To the JS host, 1 MiB is queued and what does not fit waits in an overflow
   of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
   ends for it. From it, 512 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write. A JS host

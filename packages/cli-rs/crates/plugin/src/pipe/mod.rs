@@ -38,6 +38,7 @@ use opencode_plugin_abi::{HostRequest, Request};
 use opentui::keymap::Disposer;
 use opentui::prelude::*;
 
+use crate::interact::{Heard, InputHold};
 use crate::{Definition, ErrorFn, Host};
 use child::Child;
 pub use child::Limits;
@@ -561,6 +562,7 @@ fn sender(up: &Up) -> Option<(String, u64)> {
         | Up::Watch { id, activation, .. }
         | Up::Unwatch { id, activation, .. }
         | Up::Fail { id, activation, .. }
+        | Up::Taking { id, activation, .. }
         | Up::Manifest { id, activation, .. } => Some((id.clone(), *activation)),
         _ => None,
     }
@@ -681,10 +683,13 @@ pub struct Scripts {
     /// The ping last answered, and whether a tree waited then.
     pong: Cell<Option<(u64, bool)>>,
     hold: RefCell<Hold>,
-    /// The commands the key put back now goes past ([`Keyed`]).
-    aside: RefCell<Vec<String>>,
-    /// The key commands whose hold ran out, whose key went on as declined then: their answer puts nothing back.
-    late: RefCell<HashSet<u64>>,
+    /// What the input put back now goes past ([`Keyed`]).
+    replayed: RefCell<Past>,
+    /// The last key presses, newest last, from which a chord's strokes are put back whole ([`Keyed::chord`]).
+    recent: RefCell<VecDeque<KeyEvent>>,
+    /// Each plugin's listeners of every key that can take a key now (cg2-1), as its JS activation said; the others
+    /// only hear a key, which goes on at once. Its JS state's, so it goes with the activation or the JS host.
+    taking: RefCell<HashMap<String, HashSet<proto::Listener>>>,
     /// A key command's hold ran out and the JS host has sent nothing since: a key that runs a JS command goes on at once
     /// as declined, and the command runs late, so typing never waits on a JS host that is stalled.
     stalled: Cell<bool>,
@@ -700,38 +705,123 @@ pub struct Scripts {
     _intercepts: RefCell<Vec<Disposer>>,
 }
 
-/// Keys held for a command that holds them.
+/// The input held for the calls of JS plugins that hold it, one small state machine (ce-3). Each call that holds owns
+/// one entry of `owners` with its own deadline, from just before it is sent until exactly one of: its answer, its
+/// deadline, its refusal, the JS host's end, or the reserved chord. Only that first end decides its key: an answer that
+/// declines, a deadline, a refusal and an end put the key back once; the reserved chord drops it. Whatever ends it
+/// later finds no owner and does nothing. An answered owner's effects apply after the turn, so the input waits for
+/// those too (`settling`), and then goes on, in the order it came.
 #[derive(Default)]
 struct Hold {
-    /// The command's sequence, while it holds.
-    seq: Option<u64>,
-    /// Each with the commands it goes past as it is put back: those that declined it ([`Keyed`]).
-    keys: VecDeque<(KeyEvent, Vec<String>)>,
-    /// The key that ran the command that holds, and that command's sequence: it goes on as declined if the hold runs
-    /// out or the JS host ends first.
-    bound: Option<(u64, Keyed)>,
-    timer: Option<TimerId>,
-    /// Keys put back now, which the intercept lets through.
+    owners: Vec<Owner>,
+    /// Answered or refused owners whose effects (or put-back key) go after the turn.
+    settling: usize,
+    /// The input it keeps, in the order it came, each with what it goes past as it is put back.
+    input: VecDeque<(Held, Past)>,
+    /// Input put back now, which the intercepts let through.
     replaying: bool,
 }
 
-/// The most keys a hold keeps; past it the oldest goes, and the log says so.
+/// A call input waits for: its sequence, the key that ran it if a key did (it goes back if the call declines it), and
+/// its deadline.
+struct Owner {
+    seq: u64,
+    bound: Option<Keyed>,
+    timer: Option<TimerId>,
+}
+
+/// Input a hold keeps, in the order it came (ce-6: a paste waits behind the keys before it).
+enum Held {
+    Key(KeyEvent),
+    Paste(String),
+}
+
+/// What input put back goes past, and where it was typed.
+#[derive(Clone, Default)]
+struct Past {
+    /// The JS commands that declined it, `<plugin>\0<name>`: each passes it on (ce-4).
+    commands: Vec<String>,
+    /// The listeners of every key that heard it, which the router skips (cg2-5).
+    heard: Heard,
+    /// The plugin mount whose field listener took the input, which the input after it was typed into too: once that
+    /// mount closed (its route left), the input goes with it rather than reach whatever has the focus now (cg2-2).
+    target: Option<Weak<()>>,
+}
+
+impl Past {
+    /// Whether the input was typed into a mount that closed since.
+    fn orphaned(&self) -> bool {
+        self.target.as_ref().is_some_and(|target| target.upgrade().is_none())
+    }
+}
+
+impl Hold {
+    fn holding(&self) -> bool {
+        !self.owners.is_empty() || self.settling > 0
+    }
+
+    /// Ends owner `seq`, if it still owns its entry, and puts its key back if `put_back`: its deadline, to cancel.
+    fn end(&mut self, seq: u64, put_back: bool) -> Option<Option<TimerId>> {
+        let at = self.owners.iter().position(|owner| owner.seq == seq)?;
+        let owner = self.owners.remove(at);
+        if put_back && let Some(keyed) = owner.bound {
+            self.put_back(keyed);
+        }
+        Some(owner.timer)
+    }
+
+    /// Puts `keyed` back first: a chord's strokes in order. The strokes before the last passed every listener.
+    fn put_back(&mut self, keyed: Keyed) {
+        let last = keyed.strokes.len().saturating_sub(1);
+        for (at, key) in keyed.strokes.into_iter().enumerate().rev() {
+            let mut past = keyed.past.clone();
+            if at < last {
+                past.heard = Heard::All;
+            }
+            self.input.push_front((Held::Key(key), past));
+        }
+    }
+}
+
+/// The input a hold keeps before it ends its owners rather than drop any (cg2-1): what comes in the same turn still
+/// waits behind it.
 const HELD: usize = 64;
 
-/// The key that ran a JS plugin's command, or that its listener took, and the commands and listeners it goes past if
-/// that declines: this one and those that declined it before (CT-8, CT-19, contract gaps 2). A command is named
-/// `<plugin>\0<name>`, a listener `<plugin>\0\0<surface or layer>`.
+/// The most key presses kept for a chord's strokes ([`Keyed::chord`]).
+const RECENT: usize = 16;
+
+/// The key that ran a JS plugin's command, or that its listener took, and what it goes past if that declines (CT-8,
+/// CT-19, contract gaps 2). A command's key is the whole chord that ran it (`<leader>n`), as taking its last stroke
+/// ended the keymap's pending sequence (ce-4).
 #[derive(Clone)]
 pub(crate) struct Keyed {
-    key: KeyEvent,
-    aside: Vec<String>,
+    strokes: Vec<KeyEvent>,
+    past: Past,
 }
 
 impl Keyed {
-    pub(crate) fn new(key: KeyEvent, scripts: &Scripts, command: &str) -> Self {
-        let mut aside = scripts.aside.borrow().clone();
-        aside.push(command.to_owned());
-        Self { key, aside }
+    /// The key a listener took, which `heard` heard, the listener last; `mount` is the listener's, if a mount's.
+    pub(crate) fn new(key: KeyEvent, scripts: &Scripts, heard: Vec<usize>, mount: Option<Weak<()>>) -> Self {
+        let mut past = scripts.past();
+        past.heard = Heard::Some(heard);
+        past.target = past.target.or(mount);
+        Self { strokes: vec![key], past }
+    }
+
+    /// The chord that ran command `command`, ending in `key`, which every listener heard: the keymap's pending strokes
+    /// before it, read while they are still pending, are the presses before `key`.
+    pub(crate) fn chord(key: KeyEvent, scripts: &Scripts, command: &str) -> Self {
+        let mut past = scripts.past();
+        past.commands.push(command.to_owned());
+        past.heard = Heard::All;
+        let pending = scripts.host.upgrade().map_or(0, |host| host.keymap().keymap().pending_sequence().len());
+        let recent = scripts.recent.borrow();
+        // The newest press is `key` itself; before it, as many as the keymap holds pending.
+        let strokes = match pending > 0 && recent.len() > pending && recent.back() == Some(&key) {
+            true => recent.iter().skip(recent.len() - pending - 1).copied().collect(),
+            false => vec![key],
+        };
+        Self { strokes, past }
     }
 }
 
@@ -773,8 +863,9 @@ impl Scripts {
             stopped: RefCell::default(),
             pong: Cell::new(None),
             hold: RefCell::default(),
-            aside: RefCell::default(),
-            late: RefCell::default(),
+            replayed: RefCell::default(),
+            recent: RefCell::default(),
+            taking: RefCell::default(),
             stalled: Cell::new(false),
             held: RefCell::default(),
             fault: Cell::new(None),
@@ -811,6 +902,11 @@ impl Scripts {
             })
         });
         scripts._intercepts.borrow_mut().extend(intercepts);
+        // A paste waits behind the keys it holds, and the reserved chord ends it before anything may stop the chord.
+        if let Some(router) = host.router() {
+            let hold: Weak<dyn InputHold> = Rc::downgrade(&scripts) as Weak<Scripts>;
+            router.add_hold(hold);
+        }
         scripts
     }
 
@@ -1215,10 +1311,7 @@ impl Scripts {
         let why = || format!("the JS host has no room for a load of {size} bytes");
         match waiting {
             // A key's command the JS host never runs declines its key.
-            Some(Waiting::Call(call)) => {
-                self.declined(&call);
-                self.release_hold(seq)
-            }
+            Some(Waiting::Call(_)) => self.refused(seq),
             Some(Waiting::Load(_)) => self.answered_load(seq, Loading::Failed(why())),
             // After the turn: the activation that asks for the setup is still at work.
             Some(Waiting::Activate(guest)) => {
@@ -1629,6 +1722,8 @@ impl Scripts {
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
             Up::Done { seq, effects, mounts, error, declined } => {
+                // A call that threw has no answer for its key: it goes on, as for an end of the JS host (cg2-6).
+                let error_seen = error.is_some();
                 self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
                 match waiting {
@@ -1648,20 +1743,9 @@ impl Scripts {
                         if let Some(guest) = call.guest.upgrade().filter(|guest| !guest.ended()).or_else(replaced) {
                             guest.done(seq, &call, effects, mounts, error);
                         }
-                        // A key whose hold ran out went on as declined then: a late answer does not put it back.
-                        if !self.late.borrow_mut().remove(&seq) && declined {
-                            self.declined(&call);
-                        }
-                        // The keys it held go on once its effects applied: they are deferred, and so is this, after
-                        // them (review bigboi-5).
-                        let this = self.this.clone();
-                        if let Some(host) = self.host.upgrade() {
-                            host.app().defer(move |_| {
-                                if let Some(scripts) = this.upgrade() {
-                                    scripts.release_hold(seq);
-                                }
-                            });
-                        }
+                        // Its hold ends here, once: a declined key comes back, and what it held goes on after the
+                        // effects, which are deferred (review bigboi-5). A key whose deadline passed went on then.
+                        self.answered(seq, declined || error_seen);
                     }
                     Some(Waiting::View(_) | Waiting::Ping) | None => {}
                 }
@@ -1670,6 +1754,7 @@ impl Scripts {
             | Up::Watch { .. }
             | Up::Unwatch { .. }
             | Up::Fail { .. }
+            | Up::Taking { .. }
             | Up::Manifest { .. }) => self.from_plugin(up),
             Up::Pong { seq, waiting } => {
                 self.take_waiting(seq);
@@ -1720,6 +1805,7 @@ impl Scripts {
             Up::Watch { key, request, .. } => guest.watch(key, request),
             Up::Unwatch { key, .. } => guest.unwatch(&key),
             Up::Fail { error, .. } => guest.fail(error),
+            Up::Taking { listener, on, .. } => guest.taking(listener, on),
             Up::Manifest { manifest, holds, .. } => guest.activated(manifest, holds, Vec::new()),
             _ => {}
         }
@@ -1910,6 +1996,7 @@ impl Scripts {
             Blame::Nobody => {}
         }
         self.entered.take();
+        self.taking.borrow_mut().clear();
         // A described load's module is gone with the JS host: it loads again.
         for load in self.loads.borrow_mut().values_mut() {
             if matches!(load.state, Loading::Described(..)) {
@@ -1940,8 +2027,7 @@ impl Scripts {
         let over = ends.len() >= self.config.ends;
         drop(ends);
         // What the JS host held goes on at once, and the key that ran the command it held for, as declined.
-        self.decline_bound();
-        self.release_all_holds();
+        self.end_holds();
         if over {
             let stopped =
                 format!("the JS host ended {} times in {} s: {why}", self.config.ends, self.config.window.as_secs());
@@ -1962,9 +2048,8 @@ impl Scripts {
         for guest in guests {
             guest.restart();
         }
-        self.late.borrow_mut().clear();
         for call in calls {
-            // A key's command went on as declined as the JS host ended (`release_all_holds` above): it is not run again,
+            // A key's command went on as declined as the JS host ended (`end_holds` above): it is not run again,
             // as its key reached the host already.
             if call.key.is_some() {
                 continue;
@@ -2017,143 +2102,247 @@ impl Scripts {
         let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
         let (guest, bound) = (Rc::downgrade(guest), key.clone());
         let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
+        // The owner is in place before the send: a send refused at once ends it as a refusal, once (ce-3).
+        let stalled = self.stalled.get();
+        if (hold || bound.is_some()) && !(stalled && bound.is_some()) {
+            self.hold_for(seq, bound.clone());
+        }
         self.send(message, Some(Waiting::Call(Box::new(call))));
-        match bound {
-            // The JS host has not answered since a hold ran out: the key goes on at once, as declined, after the turn,
-            // and the keys after it wait for it alone. The command still runs, late, in its order on the JS host.
-            Some(keyed) if self.stalled.get() => {
-                self.late.borrow_mut().insert(seq);
-                self.hold.borrow_mut().keys.push_front((keyed.key, keyed.aside));
-                self.start_hold(seq, None, Duration::ZERO);
-            }
-            bound if hold => self.start_hold(seq, bound, self.config.hold),
-            _ => {}
+        // A JS host that cannot start runs nothing: the call is refused now, not at its deadline.
+        if self.stopped.borrow().is_some() && self.waiting.borrow_mut().remove(&seq).is_some() {
+            self.refused(seq);
+        }
+        // The JS host has not answered since a hold ran out: the key goes on at once, as declined, after the turn, and
+        // the input after it waits for it. The command still runs, late, in its order on the JS host; nothing owns its
+        // answer.
+        if stalled && let Some(keyed) = bound {
+            let mut held = self.hold.borrow_mut();
+            held.put_back(keyed);
+            held.settling += 1;
+            drop(held);
+            self.settle_later();
         }
     }
 
     // Hold.
 
-    fn intercept(&self, key: KeyEvent, consume: impl FnOnce()) {
-        let mut hold = self.hold.borrow_mut();
-        if hold.seq.is_none() || hold.replaying {
-            return;
-        }
-        // The reserved chord is never held: it ends the hold and drops what it kept, as a terminal's interrupt drops
-        // typed-ahead input, and goes on to the host (synthesis 3.8, review carbon-4).
-        if let Some(host) = self.host.upgrade()
-            && crate::interact::reserved(&*host, &crate::interact::key_of(&key).0)
-        {
-            hold.keys.clear();
-            hold.seq = None;
-            if let Some(timer) = hold.timer.take() {
-                host.app().cancel_timer(timer);
-            }
-            return;
-        }
-        consume();
-        if hold.keys.len() == HELD {
-            hold.keys.pop_front();
-            log::warn!("a held key was dropped: over {HELD} keys held");
-        }
-        hold.keys.push_back((key, Vec::new()));
-    }
-
-    /// Whether the key put back now goes past `command` (`<plugin>\0<name>`), which declined it.
-    pub(crate) fn stepped_aside(&self, command: &str) -> bool {
-        self.aside.borrow().iter().any(|aside| aside == command)
-    }
-
-    /// Command `call` declined the key that ran it: the key goes on first of what its hold keeps, past the commands that
-    /// declined it.
-    fn declined(&self, call: &Call) {
-        if let Some(keyed) = &call.key {
-            self.hold.borrow_mut().keys.push_front((keyed.key, keyed.aside.clone()));
-        }
-    }
-
-    /// Holds the keys after command `seq` for at most `limit`; `bound` is the key that ran it.
-    fn start_hold(self: &Rc<Self>, seq: u64, bound: Option<Keyed>, limit: Duration) {
+    /// Starts the hold owner `seq` keeps until its first end ([`Hold`]); `bound` is the key that ran it.
+    fn hold_for(self: &Rc<Self>, seq: u64, bound: Option<Keyed>) {
         let Some(host) = self.host.upgrade() else { return };
         let weak = Rc::downgrade(self);
-        let timer = host.app().set_timeout(limit, move |_| {
+        let timer = host.app().set_timeout(self.config.hold, move |_| {
             if let Some(scripts) = weak.upgrade() {
                 scripts.ran_out(seq);
             }
         });
-        let mut hold = self.hold.borrow_mut();
-        if let Some(old) = hold.timer.replace(timer) {
-            host.app().cancel_timer(old);
+        self.hold.borrow_mut().owners.push(Owner { seq, bound, timer: Some(timer) });
+    }
+
+    /// Takes `key` into the hold while one holds; remembers each press for a chord's strokes.
+    fn intercept(&self, key: KeyEvent, consume: impl FnOnce()) {
+        if key.kind != opentui::input::KeyEventKind::Release && !matches!(key.code, opentui::input::KeyCode::Other(_)) {
+            let mut recent = self.recent.borrow_mut();
+            if recent.len() == RECENT {
+                recent.pop_front();
+            }
+            recent.push_back(key);
         }
-        hold.seq = Some(seq);
-        if let Some(keyed) = bound {
-            hold.bound = Some((seq, keyed));
+        // The reserved chord is never held: its press ends the hold and drops what it kept, as a terminal's interrupt
+        // drops typed-ahead input, and goes on to the host (synthesis 3.8, review carbon-4). Its release is not held
+        // either, and ends nothing (ce-3). The host's own escape ends the hold before this runs ([`Scripts::escape`]).
+        if let Some(host) = self.host.upgrade()
+            && crate::interact::reserved(&*host, &crate::interact::key_of(&key).0)
+        {
+            if key.kind != opentui::input::KeyEventKind::Release {
+                self.escape();
+            }
+            return;
+        }
+        if self.take(Held::Key(key)) {
+            consume();
         }
     }
 
-    /// The hold of `seq` ran out before the JS host answered: the key that ran its command goes on as declined, first,
-    /// then the keys it held, and the log says so once until the JS host answers again. Declined, not handled: the
-    /// user's key reaches the host in its place and none is lost, where a key taken as handled would be lost if the
-    /// command declines, and put back late it would land after the keys typed since (an Enter after more text). A
-    /// command that answers later still has its effects; only its key went on already.
-    fn ran_out(&self, seq: u64) {
-        if self.hold.borrow().seq != Some(seq) {
-            return;
+    /// Keeps `input` behind what the hold keeps, while one holds and nothing is put back now: whether it did. Past
+    /// [`HELD`] the owners end as at their deadline, and the input goes on after the turn, none of it dropped (cg2-1).
+    fn take(&self, input: Held) -> bool {
+        let mut past = self.past();
+        let mut hold = self.hold.borrow_mut();
+        if !hold.holding() || hold.replaying {
+            return false;
         }
-        if self.hold.borrow().bound.is_some() && !self.stalled.replace(true) {
+        // Typed where the key that holds was.
+        past.target = hold.owners.iter().rev().find_map(|owner| owner.bound.as_ref()?.past.target.clone());
+        hold.input.push_back((input, past));
+        if hold.input.len() < HELD || hold.owners.is_empty() {
+            return true;
+        }
+        log::warn!("over {HELD} keys and pastes held: the JS host's answers are not waited for");
+        let owners = std::mem::take(&mut hold.owners);
+        let mut timers = Vec::new();
+        for owner in owners.into_iter().rev() {
+            timers.extend(owner.timer);
+            if let Some(keyed) = owner.bound {
+                hold.put_back(keyed);
+            }
+        }
+        hold.settling += 1;
+        drop(hold);
+        self.cancel(timers);
+        self.settle_later();
+        true
+    }
+
+    /// What input taken now goes past if it is put back: the commands the input put back now went past, and where it
+    /// was typed.
+    fn past(&self) -> Past {
+        let replayed = self.replayed.borrow();
+        Past { commands: replayed.commands.clone(), heard: Heard::Nobody, target: replayed.target.clone() }
+    }
+
+    /// The reserved chord: every owner ends and what was held goes, so an answer after it puts nothing back (ce-3,
+    /// cg2-4).
+    pub(crate) fn escape(&self) {
+        let timers: Vec<TimerId> = {
+            let mut hold = self.hold.borrow_mut();
+            hold.input.clear();
+            hold.owners.drain(..).filter_map(|owner| owner.timer).collect()
+        };
+        self.cancel(timers);
+    }
+
+    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before: the
+    /// command passes it on as it runs, rather than leave the keymap's lists (ce-4).
+    pub(crate) fn stepped_aside(&self, entry: &str) -> bool {
+        self.replayed.borrow().commands.iter().any(|command| command == entry)
+    }
+
+    /// Owner `seq` was answered: a declined key comes back, and the input goes on once the call's effects applied,
+    /// after the turn (review bigboi-5). An answer to no owner (its deadline passed, or the chord dropped it) does
+    /// nothing.
+    fn answered(&self, seq: u64, declined: bool) {
+        let timer = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(timer) = hold.end(seq, declined) else { return };
+            hold.settling += 1;
+            timer
+        };
+        self.cancel(timer);
+        self.settle_later();
+    }
+
+    /// Owner `seq`'s call never reaches the JS host: it declines its key, which goes on after the turn.
+    fn refused(&self, seq: u64) {
+        let timer = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(timer) = hold.end(seq, true) else { return };
+            hold.settling += 1;
+            timer
+        };
+        self.cancel(timer);
+        self.settle_later();
+    }
+
+    /// One settling end applies after the turn, then the input goes on.
+    fn settle_later(&self) {
+        let (Some(host), this) = (self.host.upgrade(), self.this.clone()) else { return };
+        host.app().defer(move |_| {
+            if let Some(scripts) = this.upgrade() {
+                scripts.hold.borrow_mut().settling -= 1;
+                scripts.release();
+            }
+        });
+    }
+
+    /// Owner `seq`'s deadline passed before its answer: its key goes on as declined, first, then what it held, and the
+    /// log says so once until the JS host answers again. Declined, not handled: the user's key reaches the host in its
+    /// place and none is lost, where a key taken as handled would be lost if the command declines, and put back late
+    /// it would land after the keys typed since (an Enter after more text). A command that answers later still has its
+    /// effects; only its key went on already.
+    fn ran_out(&self, seq: u64) {
+        let bound = {
+            let mut hold = self.hold.borrow_mut();
+            let Some(owner) = hold.owners.iter().find(|owner| owner.seq == seq) else { return };
+            let bound = owner.bound.is_some();
+            hold.end(seq, true);
+            bound
+        };
+        if bound && !self.stalled.replace(true) {
             log::warn!(
                 "the JS host did not answer a key's command within {} ms: its key went on, and keys are not held \
                  until it answers",
                 self.config.hold.as_millis()
             );
         }
-        self.decline_bound();
-        self.release_all_holds();
+        self.release();
     }
 
-    /// The key that ran the command that holds goes on first, as declined; that command's answer puts nothing back.
-    fn decline_bound(&self) {
-        let mut hold = self.hold.borrow_mut();
-        let Some((seq, keyed)) = hold.bound.take() else { return };
-        hold.keys.push_front((keyed.key, keyed.aside));
-        drop(hold);
-        self.late.borrow_mut().insert(seq);
+    /// The JS host ended: every owner ends, its key back as declined, and the input goes on (after what settles).
+    fn end_holds(&self) {
+        let timers: Vec<TimerId> = {
+            let mut hold = self.hold.borrow_mut();
+            let owners = std::mem::take(&mut hold.owners);
+            let mut timers = Vec::new();
+            for owner in owners.into_iter().rev() {
+                timers.extend(owner.timer);
+                if let Some(keyed) = owner.bound {
+                    hold.put_back(keyed);
+                }
+            }
+            timers
+        };
+        self.cancel(timers);
+        self.release();
     }
 
-    /// The command `seq` returned, or its time ran out: the keys it held go on, in order. One that holds again keeps
-    /// the rest held. A key a command declined after its hold ran out goes on now.
-    fn release_hold(&self, seq: u64) {
-        let hold = self.hold.borrow();
-        let declined_late = hold.seq.is_none() && !hold.replaying && !hold.keys.is_empty();
-        if hold.seq != Some(seq) && !declined_late {
-            return;
-        }
-        drop(hold);
-        self.release_all_holds();
-    }
-
-    fn release_all_holds(&self) {
+    fn cancel(&self, timers: impl IntoIterator<Item = TimerId>) {
         let Some(host) = self.host.upgrade() else { return };
-        let mut hold = self.hold.borrow_mut();
-        hold.seq = None;
-        hold.bound = None;
-        if let Some(timer) = hold.timer.take() {
+        for timer in timers {
             host.app().cancel_timer(timer);
         }
-        drop(hold);
+    }
+
+    /// Puts the held input back in order once nothing holds it. A put-back key that starts a hold keeps the rest held.
+    fn release(&self) {
+        let Some(host) = self.host.upgrade() else { return };
         loop {
-            let key = {
+            let input = {
                 let mut hold = self.hold.borrow_mut();
-                if hold.seq.is_some() {
+                if hold.holding() || hold.replaying {
                     break;
                 }
-                let Some((key, aside)) = hold.keys.pop_front() else { break };
+                let Some((input, past)) = hold.input.pop_front() else { break };
+                // Typed where nothing is now: it goes, rather than reach another widget (cg2-2).
+                if past.orphaned() {
+                    continue;
+                }
                 hold.replaying = true;
-                *self.aside.borrow_mut() = aside;
-                key
+                *self.replayed.borrow_mut() = past;
+                input
             };
-            host.app().dispatch(opentui::prelude::Event::Key(key));
-            self.aside.borrow_mut().clear();
+            host.app().dispatch(match input {
+                Held::Key(key) => opentui::prelude::Event::Key(key),
+                Held::Paste(text) => opentui::prelude::Event::Paste(text),
+            });
+            *self.replayed.borrow_mut() = Past::default();
             self.hold.borrow_mut().replaying = false;
+        }
+    }
+}
+
+impl InputHold for Scripts {
+    fn paste(&self, text: &str) -> bool {
+        self.take(Held::Paste(text.to_owned()))
+    }
+
+    fn escape(&self) {
+        Scripts::escape(self);
+    }
+
+    fn heard(&self) -> Heard {
+        match self.hold.borrow().replaying {
+            true => self.replayed.borrow().heard.clone(),
+            false => Heard::Nobody,
         }
     }
 }
@@ -3017,5 +3206,224 @@ mod tests {
             chosen(&server.join("opencode"), true, "1.4.4")
         );
         assert_eq!(with(Server::Local(None), &all, Some("/opt/bun/bin/bun"), bundled()), named);
+    }
+
+    // The hold (ce-3, ce-4, ce-6, cg2-1, cg2-2, cg2-4, cg2-6): rows of the hold's state machine on a host that routes
+    // its keys to its keymap as the TUI does (`route_keys`), and types what nothing took.
+
+    /// A hold, its host, and what reached the end: each key's stroke and each paste, as typed.
+    fn holding() -> (Rc<crate::tests::TestHost>, Rc<Scripts>, Rc<RefCell<Vec<String>>>) {
+        let host = crate::tests::host();
+        let dynamic: Rc<dyn Host> = host.clone();
+        let scripts = Scripts::new(Config::new("sh".into()), &dynamic);
+        let weak = Rc::downgrade(&host);
+        host.app.app().on_key_capture(move |cx, key| {
+            let Some(host) = weak.upgrade() else { return };
+            let result = host.keymap().handle_key(key);
+            if result.handled || result.stop_propagation {
+                cx.stop_propagation();
+            }
+        });
+        let typed = Rc::new(RefCell::new(Vec::new()));
+        let seen = typed.clone();
+        host.app.app().on_key(move |_, key| {
+            if key.kind == opentui::input::KeyEventKind::Press {
+                seen.borrow_mut().push(opentui::keymap::Stroke::from_event(key).to_string());
+            }
+        });
+        let seen = typed.clone();
+        host.app.app().on_paste(move |_, text| seen.borrow_mut().push(format!("paste {text}")));
+        (host, scripts, typed)
+    }
+
+    fn stroke(key: &str) -> KeyEvent {
+        KeyEvent::from_shortcut(key).unwrap()
+    }
+
+    /// The key `key` a command took, with nothing it goes past.
+    fn bound(key: &str) -> Keyed {
+        Keyed { strokes: vec![stroke(key)], past: Past::default() }
+    }
+
+    /// A paste as the router gives it: behind the hold, or on.
+    fn paste(host: &crate::tests::TestHost, scripts: &Scripts, text: &str) {
+        if !InputHold::paste(scripts, text) {
+            host.app.paste(text);
+        }
+    }
+
+    fn typed(typed: &Rc<RefCell<Vec<String>>>) -> Vec<String> {
+        std::mem::take(&mut *typed.borrow_mut())
+    }
+
+    // Expected (ce-3, 1): a call refused as it is sent declines its key once; its deadline, after, puts back nothing.
+    #[test]
+    fn a_refused_call_puts_its_key_back_once() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        host.app.press("a");
+        scripts.refused(1);
+        host.app.advance(Duration::from_millis(200));
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["%", "a"]);
+    }
+
+    // Expected (ce-3, 2): an answer, then the deadline and the JS host's end in the same turn, before the answer's
+    // effects applied: the hold ends once, by the answer. A declined key goes on once, a consumed one never, and the
+    // input waits for the answer's effects.
+    #[test]
+    fn an_answer_ends_the_hold_whatever_comes_in_its_turn() {
+        for declined in [true, false] {
+            let (host, scripts, seen) = holding();
+            scripts.hold_for(1, Some(bound("%")));
+            host.app.press("a");
+            scripts.answered(1, declined);
+            scripts.ran_out(1);
+            scripts.end_holds();
+            assert!(typed(&seen).is_empty(), "the input went before the answer's effects");
+            host.app.advance(Duration::from_millis(200));
+            let expected: &[&str] = if declined { &["%", "a"] } else { &["a"] };
+            assert_eq!(typed(&seen), expected, "declined: {declined}");
+        }
+    }
+
+    // Expected (ce-3, 3): a hold without a key, started while a key's command holds, owns nothing of that key: the
+    // command consumed it, and the second's deadline puts back only what was typed.
+    #[test]
+    fn a_second_hold_never_puts_back_the_first_ones_key() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        scripts.hold_for(2, None);
+        host.app.press("a");
+        scripts.answered(1, false);
+        host.app.advance(Duration::from_millis(1));
+        assert!(typed(&seen).is_empty(), "the second hold still holds");
+        host.app.advance(Duration::from_millis(200));
+        assert_eq!(typed(&seen), ["a"]);
+    }
+
+    // Expected (ce-3, 4; cg2-4): the reserved chord drops what is held and the key that holds: its answer after puts
+    // back nothing. The chord's release ends no hold that began after it, and is not held.
+    #[test]
+    fn the_reserved_chord_drops_the_held_input_and_its_answer() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("x")));
+        host.app.press("y");
+        InputHold::escape(&*scripts);
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(200));
+        assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
+        scripts.hold_for(2, Some(bound("z")));
+        let mut release = stroke("ctrl+c");
+        release.kind = opentui::input::KeyEventKind::Release;
+        host.app.key(release);
+        assert_eq!(scripts.hold.borrow().owners.len(), 1, "the chord's release ended a hold");
+        scripts.answered(2, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["z"]);
+    }
+
+    // Expected (ce-6, cg2-3): a paste while a key's command holds waits behind the keys before it.
+    #[test]
+    fn a_paste_waits_behind_the_held_keys() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("%")));
+        host.app.press("a");
+        paste(&host, &scripts, "bc");
+        host.app.press("d");
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["%", "a", "paste bc", "d"]);
+    }
+
+    // Expected (cg2-1): past the bound of held input none is dropped: the hold stops waiting for its answer, and the
+    // input goes on in order.
+    #[test]
+    fn held_input_past_its_bound_goes_on_whole() {
+        let (host, scripts, seen) = holding();
+        scripts.hold_for(1, Some(bound("shift+a")));
+        host.app.press("shift+b");
+        (0..HELD).for_each(|_| host.app.press("c"));
+        host.app.advance(Duration::from_millis(1));
+        let seen = typed(&seen);
+        assert_eq!(seen.len(), HELD + 2, "{seen:?}");
+        assert_eq!(seen[..3], ["shift+a", "shift+b", "c"]);
+    }
+
+    // Expected (cg2-2): what was typed into a mount's field goes with that mount: it never reaches what has the focus
+    // after it closed.
+    #[test]
+    fn held_input_goes_with_the_mount_it_was_typed_into() {
+        let (host, scripts, seen) = holding();
+        let mount = Rc::new(());
+        let mut key = bound("x");
+        key.past.target = Some(Rc::downgrade(&mount));
+        scripts.hold_for(1, Some(key));
+        host.app.press("y");
+        paste(&host, &scripts, "z");
+        drop(mount);
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
+    }
+
+    // Expected (cg2-6): a call that threw has no answer for its key: it goes on, with the input after it.
+    #[test]
+    fn a_call_that_threw_puts_its_key_back() {
+        let (host, scripts, seen) = holding();
+        let call = Call {
+            guest: Weak::new(),
+            plugin: "p".into(),
+            activation: 1,
+            export: "handle",
+            user: true,
+            request: Request::Command { name: "c".into(), input: None },
+            owner: None,
+            mount: None,
+            key: Some(bound("q")),
+        };
+        scripts.waiting.borrow_mut().insert(1, Waiting::Call(Box::new(call)));
+        scripts.hold_for(1, Some(bound("q")));
+        host.app.press("r");
+        let done =
+            Up::Done { seq: 1, effects: Vec::new(), mounts: Vec::new(), error: Some("threw".into()), declined: false };
+        scripts.up(done);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(typed(&seen), ["q", "r"]);
+    }
+
+    // Expected (ce-4): a chord's command that declines puts the whole chord back, and passes it on as it comes again:
+    // the binding below it of the same chord runs, and none of its strokes is typed.
+    #[test]
+    fn a_declined_chord_reaches_the_binding_below_it() {
+        let (host, scripts, seen) = holding();
+        let below = Rc::new(Cell::new(0));
+        let (ran, weak) = (below.clone(), Rc::downgrade(&scripts));
+        fn command(id: &str, run: impl Fn(Option<&KeyEvent>) -> bool + 'static) -> opencode_ui::keymap::TuiCommand {
+            opencode_ui::keymap::TuiCommand::new(id, move |_, key| run(key))
+                .bind(opencode_ui::keymap::Bind::Key("<leader>n".into()))
+        }
+        let taking = command("js.chord", move |key| {
+            let Some(scripts) = weak.upgrade() else { return false };
+            if scripts.stepped_aside("p\0c") {
+                return false;
+            }
+            scripts.hold_for(1, key.map(|key| Keyed::chord(*key, &scripts, "p\0c")));
+            true
+        });
+        let lower = command("host.chord", move |_| {
+            ran.set(ran.get() + 1);
+            true
+        });
+        let keymap = host.keymap();
+        let _lower = keymap.layer(opencode_ui::keymap::KeymapLayer::global(vec![lower])).unwrap();
+        let _taking = keymap.layer(opencode_ui::keymap::KeymapLayer::global(vec![taking]).priority(10)).unwrap();
+        host.app.press("ctrl+x");
+        host.app.press("n");
+        assert_eq!(below.get(), 0, "the chord's command did not take it first");
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((below.get(), typed(&seen)), (1, Vec::<String>::new()));
     }
 }

@@ -319,6 +319,8 @@ interface Plugin {
   // P2: the key layers of setup, each with its handler.
   layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
   surfaces: Surface[]
+  // cg2-1: its listeners of every key that can take a key now, as `{"layer": i}` or `{"surface": i}`, told the host.
+  taking: Set<string>
   claims: Claim[]
   // A claim's view runs: what it asks of the host is dropped (contract 2.x, step D), which the log says once.
   claiming?: boolean
@@ -647,6 +649,7 @@ function context(plugin: Plugin) {
         unmount: options?.unmount,
       })
       changed(plugin)
+      return plugin.surfaces.length - 1
     },
     // A renderer claim (contract 2.x, step D), as contract 2.0's `Setup::claim`: `view` draws a part of `target`. It
     // goes as the returned function runs.
@@ -661,10 +664,20 @@ function context(plugin: Plugin) {
         changed(plugin)
       }
     },
-    // A key layer of the activation, as contract 2.0's `Setup::layer`. What the handler returns is advisory: the host
-    // answers a key from the layer's declaration, as it cannot wait.
+    // A key layer of the activation, as contract 2.0's `Setup::layer`, by its index. A bind's key is consumed as
+    // declared; a listener of every key that can take one (`taking`) takes it with "consume", and else hears it.
     layer(layer: Json, handler: (event: Json) => unknown) {
       plugin.layers.push({ layer, handler })
+      return plugin.layers.length - 1
+    },
+    // cg2-1: the listener of every key `listener` (`{ layer: i }` or `{ surface: i }`) can take a key now (`on`): the
+    // host holds a key for its answer only then, and otherwise it only hears it.
+    taking(listener: Json, on: boolean) {
+      const key = JSON.stringify(listener)
+      if (plugin.taking.has(key) === on) return
+      if (on) plugin.taking.add(key)
+      else plugin.taking.delete(key)
+      send({ type: "taking", id: plugin.id, activation: plugin.activation, listener, on })
     },
     command(command: Json, run: (input?: string) => unknown) {
       const slash = command.slash ? { name: command.slash, arguments: command.arguments, aliases: command.aliases } : undefined
@@ -954,6 +967,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     events: [],
     layers: [],
     surfaces: [],
+    taking: new Set(),
     claims: [],
     cleanups: [],
     mounts: new Map(),
@@ -1104,7 +1118,8 @@ function call(seq: number, plugin: Plugin, request: Json) {
   if (error) {
     plugin.failed = true
     plugin.active = false
-    return send({ type: "done", seq, error })
+    // A key it was asked about goes on, as for an end of the JS host (cg2-6).
+    return send({ type: "done", seq, error, ...(keyed ? { declined: true } : {}) })
   }
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
   // The answer comes once the views the call made due were sent: it is the call's completion, which the host times. A

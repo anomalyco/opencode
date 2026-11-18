@@ -219,6 +219,14 @@ pub struct Palette {
     pub colors: std::collections::BTreeMap<String, String>,
 }
 
+/// A listener of every key on the JS host, by its index in the manifest: a layer of setup's, or a surface's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Listener {
+    Layer(usize),
+    Surface(usize),
+}
+
 /// From the JS host to the host.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -325,6 +333,17 @@ pub enum Up {
         manifest: Manifest,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         holds: Vec<String>,
+    },
+    /// Plugin `id`'s listener of every key can take a key now (`on`), or only hears it (cg2-1): a `keypress` listener
+    /// of the compat layer, or a field with `onKeyDown` in a surface. The host holds a key for its answer only while it
+    /// can take one.
+    Taking {
+        id: String,
+        /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
+        #[serde(default)]
+        activation: u64,
+        listener: Listener,
+        on: bool,
     },
     /// Everything before ping `seq` was handled; `waiting` when a tree waits for the host to adopt the last one.
     Pong { seq: u64, waiting: bool },

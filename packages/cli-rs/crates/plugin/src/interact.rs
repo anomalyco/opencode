@@ -157,8 +157,42 @@ pub struct Router {
     holds: Cell<u64>,
     /// After the reserved chord, the focus where the plugins' layers stop holding until it moves.
     suspended: Cell<Option<Option<u32>>>,
-    /// The key the listeners hear now ([`Router::listened`]).
-    listened: Cell<Option<KeyEvent>>,
+    /// The key the listeners hear now, and the listeners that heard it so far ([`Router::listened`]).
+    listened: RefCell<Option<(KeyEvent, Vec<usize>)>>,
+    /// Other holds of the input, the JS host's (`pipe::Scripts`): a paste waits behind what they keep, the reserved
+    /// chord ends them, and a key they put back skips the listeners that heard it.
+    others: RefCell<Vec<Weak<dyn InputHold>>>,
+}
+
+/// A hold of the input beside the router's own ([`Router::add_hold`]).
+pub(crate) trait InputHold {
+    /// Takes `text` behind the input it holds: whether it did.
+    fn paste(&self, text: &str) -> bool;
+    /// The reserved chord: what it holds goes, and an answer after it puts nothing back.
+    fn escape(&self);
+    /// Which listeners heard the key it puts back now, which it skips (cg2-5).
+    fn heard(&self) -> Heard;
+}
+
+/// The listeners of every key that heard a key already, by the address of their handler.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(feature = "ts"), allow(dead_code))]
+pub(crate) enum Heard {
+    #[default]
+    Nobody,
+    /// Every one: the key passed them all before (a key a command declined).
+    All,
+    Some(Vec<usize>),
+}
+
+impl Heard {
+    fn has(&self, listener: usize) -> bool {
+        match self {
+            Heard::Nobody => false,
+            Heard::All => true,
+            Heard::Some(heard) => heard.contains(&listener),
+        }
+    }
 }
 
 /// What the input registrations hold now, read from the registries the host routes by (`ledger`, 4.14).
@@ -763,21 +797,53 @@ impl Router {
             })
             .collect();
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+        // A key put back resumes below the listeners that heard it, so none acts on one key twice (cg2-5).
+        let heard = self
+            .others
+            .borrow()
+            .iter()
+            .filter_map(Weak::upgrade)
+            .map(|other| other.heard())
+            .find(|heard| *heard != Heard::Nobody);
+        let heard = heard.unwrap_or_default();
         let (key, text) = key_of(event);
         let key = Event::Key(input::Key { bind: None, key, text });
-        let previous = self.listened.replace(Some(*event));
-        let taken = listeners
-            .into_iter()
-            .any(|(_, _, owner, deliver)| delivered(&deliver, host, &owner, &key) == Handled::Consume);
-        self.listened.set(previous);
+        let mut visited = match &heard {
+            Heard::Some(heard) => heard.clone(),
+            _ => Vec::new(),
+        };
+        let previous = self.listened.take();
+        let mut taken = false;
+        for (_, _, owner, deliver) in listeners {
+            let address = Rc::as_ptr(&deliver).cast::<()>() as usize;
+            if heard.has(address) {
+                continue;
+            }
+            visited.push(address);
+            *self.listened.borrow_mut() = Some((*event, visited.clone()));
+            if delivered(&deliver, host, &owner, &key) == Handled::Consume {
+                taken = true;
+                break;
+            }
+        }
+        *self.listened.borrow_mut() = previous;
         taken
     }
 
-    /// The key a listener of every key hears, while it hears it: a carrier whose handler answers later takes it and
-    /// puts it back if the handler did not (the JS host, contract gaps 2).
+    /// The key a listener of every key hears, while it hears it, and the listeners that heard it, this one last: a
+    /// carrier whose handler answers later takes it and puts it back if the handler did not, below them (the JS host,
+    /// contract gaps 2, cg2-5).
     #[cfg(feature = "ts")]
-    pub(crate) fn listened(&self) -> Option<KeyEvent> {
-        self.listened.get()
+    pub(crate) fn listened(&self) -> Option<(KeyEvent, Vec<usize>)> {
+        self.listened.borrow().clone()
+    }
+
+    /// Adds `hold`, which a paste waits behind, the reserved chord ends, and whose put-back keys skip what heard them.
+    #[cfg(feature = "ts")]
+    pub(crate) fn add_hold(&self, hold: Weak<dyn InputHold>) {
+        let mut others = self.others.borrow_mut();
+        others.retain(|other| other.strong_count() > 0);
+        others.push(hold);
     }
 
     /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt
@@ -797,6 +863,8 @@ impl Router {
         if let Some(timer) = timer {
             host.app().cancel_timer(timer);
         }
+        let others: Vec<_> = self.others.borrow().iter().filter_map(Weak::upgrade).collect();
+        others.iter().for_each(|other| other.escape());
         self.suspended.set(Some(focused(host.app())));
     }
 
@@ -911,8 +979,12 @@ impl Router {
     /// and in the plugins' surfaces before the host, as in TS, and elsewhere only once no host widget took it
     /// (`Pasted::Elsewhere`), since OpenTUI routes a paste to the focused widget before anything else.
     pub fn paste(&self, host: &dyn Host, text: &str, at: Pasted) -> bool {
-        // Behind a hold, it waits for the keys before it.
+        // Behind a hold, it waits for the keys before it; behind the JS host's too (ce-6, cg2-3).
         if !self.replaying.get() && self.held(Input::Paste(text.to_owned())) {
+            return true;
+        }
+        let others: Vec<_> = self.others.borrow().iter().filter_map(Weak::upgrade).collect();
+        if others.iter().any(|other| other.paste(text)) {
             return true;
         }
         if at == Pasted::Elsewhere && self.offered(host) {
