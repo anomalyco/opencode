@@ -59,6 +59,7 @@
 #![allow(unsafe_code)]
 
 mod build;
+pub mod call;
 pub mod canvas;
 pub mod claim;
 pub mod interact;
@@ -76,6 +77,12 @@ use std::rc::Rc;
 use std::sync::{Arc, PoisonError, RwLock};
 
 pub use opencode_api_types as types;
+/// The API's requests, one builder per endpoint, typed by what each answers: [`task::Cx::call`] sends them.
+pub use opencode_api_types::call::Call;
+pub use opencode_api_types::client;
+/// The serde the typed helpers decode with ([`Setup::options_as`], [`Stored`]), for a plugin's own types.
+pub use serde;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use types::{
     IntegrationInfo, McpServer, ModelInfo, ModelRef, ProviderInfo, SessionInfo, SessionMessageInfo, UsageLimitsInfo,
@@ -3247,6 +3254,28 @@ pub trait Host: Read {
     fn rollback(&self, _mark: u64) {}
 }
 
+/// The plugin's storage as its own types, over serde: on every [`Read`], so on every [`Host`] too.
+pub trait Stored: Read {
+    /// The value stored under `key` decoded as `T`, or `None` when there is none or it is not a `T`.
+    fn stored<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.storage_get(key).and_then(|value| serde_json::from_value(value).ok())
+    }
+}
+
+impl<R: Read + ?Sized> Stored for R {}
+
+/// Stores the plugin's own types, over serde.
+pub trait Store: Host {
+    /// Stores `value` under `key` ([`Host::storage_set`]). A value that does not serialize to JSON stores nothing.
+    fn store<T: Serialize + ?Sized>(&self, key: &str, value: &T) {
+        if let Ok(value) = serde_json::to_value(value) {
+            self.storage_set(key, value);
+        }
+    }
+}
+
+impl<H: Host + ?Sized> Store for H {}
+
 /// [`Host::storage_merge`] by reading the stored object and setting it whole.
 fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json::Map<String, serde_json::Value>) {
     let mut object = match host.storage_get(key) {
@@ -3887,6 +3916,11 @@ impl Setup<'_> {
     /// The `options` of the plugin's `plugins` entry, as JSON text.
     pub fn options(&self) -> Option<&str> {
         self.registered.options.as_deref()
+    }
+
+    /// The `options` decoded as `T`: `None` without options, the error when they are not a `T`.
+    pub fn options_as<T: DeserializeOwned>(&self) -> Result<Option<T>, String> {
+        self.options().map(|text| serde_json::from_str(text).map_err(|error| format!("options: {error}"))).transpose()
     }
 
     /// The host while setup runs: its reads, and effects that wait until setup has returned, on the host's one effect

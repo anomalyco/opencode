@@ -674,6 +674,7 @@ mod tests {
     struct Fake {
         dialogs: RefCell<Vec<Dialog>>,
         fetches: Cell<u64>,
+        sent: RefCell<Vec<Fetch>>,
         toasts: RefCell<Vec<String>>,
     }
 
@@ -695,7 +696,8 @@ mod tests {
         fn attention(&self, _: Attention) {}
         fn open_route(&self, _: &str) {}
         fn navigate(&self, _: Route) {}
-        fn try_fetch(&self, _: Fetch) -> Result<RequestId, String> {
+        fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
+            self.sent.borrow_mut().push(fetch);
             self.fetches.set(self.fetches.get() + 1);
             Ok(RequestId(self.fetches.get()))
         }
@@ -1182,5 +1184,87 @@ mod tests {
         assert_eq!(*log.borrow(), [format!("{:?}", (0..MAX_THREADS + 3).collect::<Vec<_>>())]);
         let most = most.load(Ordering::SeqCst);
         assert!(most <= MAX_THREADS, "{most} blocking jobs ran at once");
+    }
+
+    // Expected (typed-client): a typed call sends the fetch its builder describes, and its reply decodes as the
+    // operation's output, out of `data` where the operation answers in `data`; a reply of another shape is the error.
+    #[test]
+    fn a_call_sends_its_request_and_decodes_its_output() {
+        use crate::types::{SessionID, SessionInboxListInput, SessionListInput};
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let log = Log::default();
+        let into = log.clone();
+        tasks.spawn(&host, move |cx| async move {
+            let input = SessionInboxListInput { session_id: SessionID("ses 1".into()) };
+            let items = cx.call(crate::client::session_inbox_list(&input)).await.map(|items| items.len());
+            let list = SessionListInput {
+                limit: Some(5),
+                parent_id: Some(Some(SessionID("ses_p".into()))),
+                ..Default::default()
+            };
+            let page = cx.call(crate::client::session_list(&list)).await.map(|page| page.data.len());
+            into.borrow_mut().push(format!("{items:?} {page:?}"));
+        });
+        let sent = host.sent.borrow().clone();
+        assert_eq!((sent[0].method.as_str(), sent[0].path.as_str()), ("GET", "/api/session/ses%201/inbox"));
+        reply(&registered, &host, 1, Ok(serde_json::json!({ "data": [] })));
+        let sent = host.sent.borrow().clone();
+        assert_eq!(sent[1].query, [("limit".to_owned(), "5".to_owned()), ("parentID".to_owned(), "ses_p".to_owned())]);
+        reply(&registered, &host, 2, Ok(serde_json::json!({ "data": 3, "cursor": {} })));
+        let logged = log.borrow().join("");
+        assert!(logged.starts_with("Ok(0) Err(\"MalformedResponse: invalid type"), "{logged}");
+    }
+
+    // Expected (typed-client): a call the host's fetch cannot carry fails at once and sends nothing: a header, or a
+    // stream of events.
+    #[test]
+    fn a_call_the_fetch_cannot_carry_fails_at_once() {
+        use crate::types::{EventSubscribeInput, SessionID};
+        let ticket =
+            crate::client::session_get(&crate::types::SessionGetInput { session_id: SessionID("ses_1".into()) });
+        assert!(crate::call::fetch_of(&ticket).is_ok());
+        let stream = crate::client::event_subscribe(&EventSubscribeInput::default());
+        assert!(crate::call::fetch_of(&stream).unwrap_err().contains("streams events"));
+        let mut headed =
+            crate::client::session_get(&crate::types::SessionGetInput { session_id: SessionID("ses_1".into()) });
+        headed.header("x-opencode-ticket", "t");
+        assert!(crate::call::fetch_of(&headed).unwrap_err().contains("no headers"));
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let log = Log::default();
+        let into = log.clone();
+        tasks.spawn(&host, move |cx| async move {
+            let failed = cx.call(headed.cast::<serde_json::Value>()).await;
+            into.borrow_mut().push(format!("{}", failed.is_err()));
+        });
+        assert_eq!(*log.borrow(), ["true"]);
+        assert_eq!(host.fetches.get(), 0);
+        drop(registered);
+    }
+
+    // Expected (typed-client): `call_on_thread` asks for the reply's bytes and decodes them off the UI thread, `data` too.
+    #[test]
+    fn a_call_on_a_thread_decodes_the_bytes_there() {
+        use crate::types::{SessionID, SessionInboxListInput};
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let log = Log::default();
+        let into = log.clone();
+        tasks.spawn(&host, move |cx| async move {
+            let input = SessionInboxListInput { session_id: SessionID("ses_1".into()) };
+            let items = cx.call_on_thread(crate::client::session_inbox_list(&input)).await.map(|items| items.len());
+            into.borrow_mut().push(format!("{items:?}"));
+        });
+        assert!(host.sent.borrow()[0].bytes, "the call did not ask for bytes");
+        let body = crate::base64::encode(br#"{"data":[]}"#);
+        reply(&registered, &host, 1, Ok(Value::String(body)));
+        let begun = Instant::now();
+        while log.borrow().is_empty() {
+            assert!(begun.elapsed() < Duration::from_secs(10), "the decode never finished");
+            std::thread::sleep(Duration::from_millis(1));
+            registered.wakes().iter().for_each(|wake| wake(&host));
+        }
+        assert_eq!(*log.borrow(), ["Ok(0)"]);
     }
 }
