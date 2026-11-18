@@ -155,9 +155,7 @@ impl Client {\n${methods.map((method) => method.method).join("\n")}\n}\n`,
 )
 await Bun.write(
   clientFile,
-  `${header}//! The API's requests, one builder per endpoint, typed by what each answers and with no transport
-//! (\`design/contract-ergonomics.md\` 2.2 B): \`opencode-api\`'s \`Client\` sends them with its credentials, and a plugin
-//! sends them through its host with \`cx.call\`.
+  `${header}//! Typed request builders. The API client sends requests with its credentials; plugins send them through their host.
 #![allow(clippy::all, clippy::pedantic)]
 
 use crate::call::{Call, Reply, Sse, path_wildcard};
@@ -165,8 +163,7 @@ use crate::types::*;
 
 ${methods.map((method) => method.builder).join("\n\n")}
 
-/// The request of operation \`name\` (\`session.inbox.list\`) built from \`input\`, whose fields are the operation's JSON
-/// names, or \`None\` for an operation the client does not have: the Rust column of the operations' table test.
+/// Builds a request from its operation name and JSON input, or returns \`None\` for an unknown operation.
 #[cfg(feature = "probe")]
 pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_json::Value>, String>> {
     fn field<T: serde::de::DeserializeOwned>(input: &serde_json::Value, name: &str) -> Result<T, String> {
@@ -189,7 +186,7 @@ await Bun.write(operationsFile, lines(Object.entries(operations)))
 await Bun.write(samplesFile, lines(methods.map((method) => [method.name, method.sample])))
 await Bun.write(
   `${directory}/mod.rs`,
-  `${header}//! Types and methods generated from \`ClientApi\` by \`script/gen/api.ts\` (F.2).\n\nmod methods;\n\npub use opencode_api_types::types;\npub use types::*;\n\n/// Endpoints in the generated client.\npub const ENDPOINTS: usize = ${plans.length};\n`,
+  `${header}//! HTTP API types and endpoint methods.\n\nmod methods;\n\npub use opencode_api_types::types;\npub use types::*;\n\n/// Endpoints in the generated client.\npub const ENDPOINTS: usize = ${plans.length};\n`,
 )
 const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`, typesFile, clientFile], {
   stdout: "inherit",
