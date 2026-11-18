@@ -1,8 +1,4 @@
-//! Tool dispatch (E.7a): `ToolPart` (`routes/session/index.tsx:2570-2649`) picks a view by the tool's
-//! canonical name, and the shared rows the views are built from: `InlineTool` with `InlineToolRow`
-//! (`index.tsx:2802-2871`, `message-parts.tsx:202-317`) and `BlockTool` (`index.tsx:2896-2978`).
-//!
-//! E.7b adds webfetch, websearch, subagent, execute, patch, todowrite, question, and skill.
+//! Dispatch tool calls by canonical name to their inline or block views.
 
 use opencode_api::generated::{
     SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent,
@@ -29,7 +25,7 @@ pub struct Tool {
     root: View,
     body: View,
     view: RefCell<Option<(&'static str, Box<dyn ToolView>)>>,
-    /// The plugin claim of the call's tool (Pr), and whether its tree shows in the body instead of the view.
+    /// Claim mount and whether its tree replaces the normal tool view.
     claim: Rc<RefCell<Option<(claim::Mount, bool)>>>,
     /// `ToolImages`: the call's image results under its row.
     images: Images,

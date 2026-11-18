@@ -1,5 +1,4 @@
-//! A file's LSP errors under the write and edit tools (E.7a): `Diagnostics` and `parseDiagnostics`
-//! (`routes/session/index.tsx:3707-3731`, `:3815-3829`).
+//! LSP error rows for file writes and edits.
 
 use opencode_ui::theme::Paints;
 use opentui::prelude::*;

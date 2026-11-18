@@ -1,8 +1,4 @@
-//! The shell tool (E.7a): `Shell` and `ShellDisplay` (`routes/session/index.tsx:2980-3154`), with
-//! `collapseShellOutput`, which `messages::shell` ports for shell messages.
-//!
-//! A V2 shell names its shell in the metadata, and its output comes from `GET /api/shell/{id}/output`:
-//! every second while the store lists the shell as running, once more when it exits, and on expand.
+//! Shell tool view with paged output for named shells.
 
 use opencode_api::generated::ShellID;
 use opencode_ui::motion::Spinner;

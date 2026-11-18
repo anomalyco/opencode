@@ -1,6 +1,4 @@
-//! Session actions (E.10a, row V21): rename, timeline, fork, compact, undo, redo, copy, export, and the parent
-//! session (`routes/session/index.tsx:1053-1433`). The commands sit in TS's layers: every one in the global
-//! mode's command list, so the palette and slash completion see them, and their keys in the base mode.
+//! Session commands are global for palette and slash completion; their keyboard bindings are base-mode only.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
@@ -343,7 +341,6 @@ impl Inner {
         }
     }
 
-    /// TS returns before anything when the session is not loaded (`if (!sessionData) return`).
     fn known(&self, tui: &Tui) -> bool {
         tui.data.read(|state| state.session(&self.session).is_some())
     }
@@ -384,8 +381,7 @@ fn last_reply(messages: &[SessionMessageInfo]) -> Option<String> {
     })
 }
 
-/// `appendToSessionPrompt` (`draft-stash.ts:37-47`): the restored prompt after what the session's composer holds,
-/// in normal mode, or after its draft when the composer is not mounted.
+/// Append the restored input to the composer or, when unmounted, to its saved draft.
 pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
     let mounted = tui.prompt.current.borrow().upgrade().filter(|inner| inner.session.as_ref() == Some(session));
     if let Some(inner) = mounted {
@@ -405,9 +401,8 @@ pub(crate) fn append_prompt(tui: &Tui, session: &SessionID, prompt: Value) {
     tui.prompt.drafts.save(Some(session), Draft { prompt, cursor: u32::MAX });
 }
 
-/// `appendPrompt` (`prompt/history.tsx:37-62`): `following` after `prompt` with a blank line between, its parts'
-/// ranges shifted by the cursor offset of what precedes it, `end` (the offset at the end of `prompt`'s text) plus the
-/// two line breaks. The result has no mode, so it shows in normal mode.
+/// Join prompts with a blank line and shift mention ranges by the preceding cursor offset. The result opens in normal
+/// mode.
 fn append(prompt: &Value, following: Value, end: u32) -> Value {
     let text =
         prompt["text"].as_str().filter(|text| !text.is_empty()).map_or_else(String::new, |text| format!("{text}\n\n"));
@@ -428,9 +423,7 @@ fn append(prompt: &Value, following: Value, end: u32) -> Value {
     merged
 }
 
-/// `projectedPromptInput` (`prompt/codec.ts:14-37`) with no pastes (`prompt/restore.ts`): a sent prompt as the
-/// composer holds it, with its files, agents, skills and their mentions. A user message carries its files' bytes,
-/// so none is read back.
+/// Reconstruct the sent prompt with its files and mentions; the message already holds the file bytes.
 pub(crate) fn projected(
     text: &str,
     files: Option<&[PromptFileAttachment]>,

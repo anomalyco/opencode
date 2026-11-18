@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:2734-2789`.
+//! Fallback view for unrecognized tools.
 
 use opencode_ui::tool_info::primitive_input_summary;
 

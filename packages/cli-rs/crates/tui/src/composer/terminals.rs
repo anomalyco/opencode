@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/composer/terminals-tab.tsx`.
+//! Terminal picker for the current session.
 
 use opencode_api::generated::PersistentPtyInfo;
 use opentui::prelude::Container;

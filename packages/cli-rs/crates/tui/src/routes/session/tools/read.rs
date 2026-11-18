@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:3205-3241`.
+//! File-read status and loaded paths.
 
 use super::dispatch::{Inline, InlineTool, Props, Status, finite, format_path, number, truthy};
 use crate::prelude::*;

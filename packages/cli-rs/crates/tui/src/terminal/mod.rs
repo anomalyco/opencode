@@ -1,4 +1,4 @@
-//! TypeScript: `context/session-terminals.tsx`, `component/session-frame.tsx`.
+//! Session terminal selection and persistence.
 
 pub mod palette;
 pub mod pane;
@@ -88,7 +88,7 @@ impl Terminals {
         *self.picker.borrow_mut() = picker;
     }
 
-    /// Sets what runs after a session's terminal list or selection changed (E.13b's composer list).
+    /// Set the listener for terminal list or selection changes.
     pub fn set_listener(&self, listener: Option<Picker>) {
         *self.listener.borrow_mut() = listener;
     }
@@ -124,7 +124,7 @@ impl Terminals {
         true
     }
 
-    /// Writes to a terminal's input, or keeps it until its pane mounts (the client MCP, E.13b).
+    /// Write to the terminal, buffering input until its pane mounts.
     pub fn write(&self, pty: &str, data: &[u8]) {
         let writer = self.writers.borrow().get(pty).cloned();
         match writer {
@@ -223,8 +223,7 @@ fn check(tui: &Tui) {
     );
 }
 
-/// Lists a session's terminals, and clears its selection when the selected one is gone. `then` runs after. A failure
-/// is logged; for a command (`toast`) it also shows "Unable to load terminal", as the TS commands do.
+/// Refresh the session's terminals and clear a vanished selection. Commands also toast load errors.
 pub(crate) fn refresh(tui: &Tui, session: &SessionID, toast: bool, then: impl FnOnce(&Tui) + 'static) {
     tui.terminals.lists.borrow_mut().entry(session.0.clone()).or_default();
     let client = tui.data.client().clone();
@@ -271,7 +270,7 @@ pub fn select(tui: &Tui, session: &str, pty: Option<&str>, focus: bool) {
     if let Some(storage) = tui.storage() {
         let session = session.to_owned();
         let pty = pty.map(str::to_owned);
-        // One worker thread, so the selections land in the order they were made.
+        // Serialize selection writes so a slower save cannot replace a newer one.
         static WRITER: OnceLock<Serial> = OnceLock::new();
         WRITER.get_or_init(|| Serial::new("terminal-selection")).run(move || {
             let result = storage.update(SELECTION, &json!({ "sessions": {} }), |value| {
@@ -381,7 +380,6 @@ fn update_layer(tui: &Tui) {
     tui.app.defer(bind!(tui, |tui, _| apply_layer(&tui)));
 }
 
-/// The command layer, which exists while the server offers terminals, as the TS commands do.
 fn apply_layer(tui: &Tui) {
     let available = tui.terminals.available();
     let shown = crate::frame::terminal_shown(tui);

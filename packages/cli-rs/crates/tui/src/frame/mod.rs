@@ -1,4 +1,4 @@
-//! TypeScript: `app.tsx:1425-1472`, `component/session-frame.tsx`.
+//! Layout and focus for the main route and its adjacent panes.
 
 pub mod layout;
 pub mod resize;
@@ -138,8 +138,7 @@ pub fn install(tui: &Rc<Tui>, shell: &View) {
     refresh(tui);
 }
 
-/// Mounts the `app` slot under the routes once, and again on a `remount` of the route (a theme change, a plugin
-/// toggled), so its claims follow the theme and the plugins as the route's slots do. TS passes no input.
+/// Remount the app slot with its route so its claims follow theme and plugin changes.
 pub fn mount_app(tui: &Tui, remount: bool) {
     if !remount && tui.frame.app.borrow().is_some() {
         return;
@@ -254,7 +253,7 @@ pub(crate) fn observe_markers(tui: &Tui) {
     rail::observe(&tui.frame.rail, tui);
 }
 
-/// Repaints the tabs on every frame while an unread marker fades out (`createAnimatable`, on TS's 60 fps clock).
+/// Request frames until the unread marker stops fading.
 pub(crate) fn wake_markers(tui: &Tui) {
     if tui.frame.markers.replace(true) {
         return;
@@ -280,7 +279,7 @@ struct SessionState {
     right: View,
     handle: Custom<resize::Handle>,
     host: RefCell<Option<Host>>,
-    /// The selected terminal's pane (E.13a) while no panel shows.
+    /// Selected terminal pane when no panel is open.
     terminal: RefCell<Option<Rc<crate::terminal::pane::Pane>>>,
     /// The panel and terminal of the last layout, to tell which of them just opened.
     shown: RefCell<(Option<crate::panel::Target>, Option<String>)>,
@@ -318,7 +317,7 @@ impl SessionFrame {
             active: Cell::new(Pane::Session),
         });
         *tui.frame.session.borrow_mut() = Some(Rc::downgrade(&state));
-        // `session-frame.tsx:300-322`: while the right pane has the input, a click on the session pane gives it back.
+        // A click in the session pane takes input back from the right pane.
         let weak = Rc::downgrade(&state);
         let owner = tui.weak();
         state.pane.on_mouse(move |_, event| {
@@ -499,8 +498,7 @@ pub(crate) fn terminal_shown(tui: &Tui) -> bool {
     terminal(tui).is_some()
 }
 
-/// The focus moved, by a plugin: the pane that holds it has the input, so a panel the focus went into is told it has
-/// it, and the session pane gets it back from a panel the focus left for it (review carbon-1).
+/// Notify the panel when plugin-controlled focus crosses the pane boundary.
 pub(crate) fn follow_focus(tui: &Tui) {
     let Some(session) = tui.frame.session() else { return };
     let Some(focused) = tui.app.focused() else { return };

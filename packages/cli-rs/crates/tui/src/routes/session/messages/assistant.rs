@@ -1,4 +1,4 @@
-//! TypeScript: `message-parts.tsx:173-200`.
+//! Assistant text and streaming Markdown.
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::widget::Markdown;

@@ -1,4 +1,4 @@
-//! TypeScript: `component/session-tabs.tsx:1275-1790`.
+//! Horizontal session tab strip.
 
 use std::time::{Duration, Instant};
 
@@ -690,7 +690,6 @@ mod tests {
         let mut marker = MarkerFade::new(&unread(), UNREAD);
         marker.set(&Status { busy: true, ..unread() }, UNREAD, true, start);
         assert_eq!(marker.color(&Status::default(), BG, FLASH, start), None);
-        // A tab that was never unread has nothing to fade.
         let mut marker = MarkerFade::new(&Status::default(), UNREAD);
         marker.set(&Status::default(), UNREAD, true, start);
         assert!(!marker.moving(start) && marker.color(&Status::default(), BG, FLASH, start).is_none());

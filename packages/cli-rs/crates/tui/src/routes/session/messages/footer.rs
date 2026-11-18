@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:1737-1895,2013-2071`, `packages/util/src/session-turn.ts`.
+//! Assistant footer, token usage, and throughput.
 
 use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
@@ -201,8 +201,7 @@ impl UsageInner {
         let theme = &self.theme.get();
         let latest = steps.last();
         let drops = steps.iter().filter(|step| step.reuse_drop.is_some()).count();
-        // TS asks for a bold "Tokens" and bold new-token counts through a span `attributes` style, which
-        // its spans ignore; the cells are plain, so these are too.
+        // Keep the token label and counts plain to match the rendered spans.
         let mut spans = vec![
             Span::raw(if self.expanded.get() { "- " } else { "+ " }),
             Span::raw("Tokens"),

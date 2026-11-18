@@ -1,5 +1,4 @@
-//! The pure tab model (`context/session-tabs-model.ts`). Functions that change nothing return `None` where TS
-//! returns the same array, so callers can skip a write.
+//! Tab model operations return `None` for unchanged lists so callers can skip a write.
 
 use serde::{Deserialize, Serialize};
 
@@ -144,7 +143,7 @@ pub fn cycle<'a>(
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct History {
     pub entries: Vec<String>,
-    /// `-1` before the first entry, as in TS.
+    /// `-1` before the first history entry.
     pub index: isize,
 }
 
@@ -257,7 +256,7 @@ pub fn layout(tabs: &[&str], active: Option<&str>, available: i64, previous_star
     let active_width = if visible == 1 {
         total
     } else {
-        // TS subtracts in floats, so an overfull strip can go below zero; widths then clamp to one cell when drawn.
+        // An overfull strip can exhaust the active width; drawing still reserves one cell.
         total.saturating_sub(inactive * (visible - 1))
     };
     Layout {

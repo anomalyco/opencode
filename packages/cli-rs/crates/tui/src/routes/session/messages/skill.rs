@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:2073-2169`.
+//! Inline transcript notices for skills and session changes.
 
 use opencode_api::generated::{ModelInfo, ModelRef};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};

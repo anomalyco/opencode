@@ -1,6 +1,4 @@
-//! Scrolling and the scrollbar (E.8): the scroll commands, "Jump to latest", `session.first` and
-//! `session.last`, the scrollbar, and the wheel speed (`routes/session/index.tsx:896-1051,1181-1223,
-//! 1524-1592`, `util/scroll.ts`). Message navigation is in `navigation.rs`.
+//! Scroll commands, history loading, and the jump-to-latest hint.
 
 use std::time::Instant;
 
@@ -32,7 +30,7 @@ pub(super) struct Inner {
     first_jump: Cell<bool>,
     away: Cell<bool>,
     scrollbar: Cell<bool>,
-    /// The tab's saved position was restored; until then nothing overwrites it (`restored`).
+    /// Do not overwrite the saved position until restoration finishes.
     restored: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
     /// The settings listener, until the controls drop.
@@ -75,8 +73,7 @@ impl Controls {
         self.0.paint();
     }
 
-    /// The prompt's `onSubmit` (`index.tsx:1650-1652`): back to the newest rows after a send, unless
-    /// `session.submit_scroll` is `keep`.
+    /// Follow a submission to the newest rows unless `session.submit_scroll` is `keep`.
     pub fn follow_submits(&self, prompt: &crate::prompt::editor::Prompt) {
         let weak = Rc::downgrade(&self.0);
         prompt.on_submit(move |tui| {
@@ -229,9 +226,7 @@ impl Inner {
         }
     }
 
-    /// The session's scroll and navigation commands, in TS's three layers (`index.tsx:1446-1459`):
-    /// the scroll keys in every mode, `session.first` and `session.last` also while no editor has
-    /// focus, and the rest in the base mode.
+    /// Register scroll commands with their focus and mode restrictions.
     pub(super) fn register(&self, tui: &Tui) {
         dispose(tui, std::mem::take(&mut *self.layers.borrow_mut()));
         let command = |id: &str, title: &str, run: fn(&Inner, &Tui)| {

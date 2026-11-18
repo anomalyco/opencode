@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:3289-3348`.
+//! Subagent tool status and navigation.
 
 use opencode_api::generated::ModelInfo;
 use opencode_store::SessionStatus;
