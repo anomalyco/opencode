@@ -125,6 +125,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     let scoping = semantic.semantic.scoping();
     let mut c = Compiler::new(scoping, semantic.semantic.nodes(), atoms);
     c.await_alias = await_alias;
+    c.find_unbound(program);
     c.compute_captured();
     c.compile_program(program)?;
     Ok(Program {
@@ -542,6 +543,8 @@ struct Compiler<'a, 's> {
     param_tdz: FxHashSet<SymbolId>,
     /// Function scopes whose `arguments` is read, and whether an arrow inside reads it.
     args_owner: FxHashMap<ScopeId, bool>,
+    /// `var`s declared only inside a `with` body, which never runs, so the reference never binds them.
+    unbound: FxHashSet<SymbolId>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -575,6 +578,7 @@ impl<'a, 's> Compiler<'a, 's> {
             await_alias: None,
             param_tdz: FxHashSet::default(),
             args_owner: FxHashMap::default(),
+            unbound: FxHashSet::default(),
         }
     }
 
@@ -781,7 +785,7 @@ impl<'a, 's> Compiler<'a, 's> {
     /// the reference, it fails only when it runs.
     fn throw_syntax(&mut self, kind: &str, span: oxc_span::Span) -> R<()> {
         let k = self.str_const(kind);
-        self.emit_at(span.start, Op::ThrowSyntax(k));
+        self.emit_at(span.start, Op::ThrowUnsupported(k));
         Ok(())
     }
 
@@ -841,7 +845,7 @@ impl<'a, 's> Compiler<'a, 's> {
         let mut syms: Vec<SymbolId> = self.scoping.get_bindings(scope).values().copied().collect();
         syms.sort();
         let switch_scoped = self.switch_scopes.contains(&scope);
-        syms.retain(|s| !self.scoping.symbol_flags(*s).is_class());
+        syms.retain(|s| self.is_bound(*s));
         for s in &syms {
             if self.syms.contains_key(s) {
                 continue;
@@ -1120,10 +1124,56 @@ impl<'a, 's> Compiler<'a, 's> {
         id.reference_id
             .get()
             .and_then(|r| self.scoping.get_reference(r).symbol_id())
-            .filter(|s| !self.scoping.symbol_flags(*s).is_class())
+            .filter(|s| self.is_bound(*s))
     }
 
+    /// Whether the reference binds a declared name: not a class's name, nor a `var` that only syntax that never runs
+    /// declares.
+    fn is_bound(&self, s: SymbolId) -> bool {
+        !self.scoping.symbol_flags(s).is_class() && !self.unbound.contains(&s)
+    }
+
+    fn find_unbound(&mut self, program: &oxc_ast::ast::Program) {
+        struct Withs(Vec<oxc_span::Span>);
+        impl<'a> Visit<'a> for Withs {
+            fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+                self.0.push(it.body.span());
+            }
+        }
+        let mut withs = Withs(Vec::new());
+        withs.visit_program(program);
+        if withs.0.is_empty() {
+            return;
+        }
+        let inside = |span: oxc_span::Span| {
+            withs
+                .0
+                .iter()
+                .any(|w| w.start <= span.start && span.end <= w.end)
+        };
+        for sym in self.scoping.symbol_ids() {
+            if inside(self.scoping.symbol_span(sym))
+                && self
+                    .scoping
+                    .symbol_redeclarations(sym)
+                    .iter()
+                    .all(|r| inside(r.span))
+            {
+                self.unbound.insert(sym);
+            }
+        }
+    }
+
+    /// Reads a name, failing (unknown, or in its TDZ) at the name itself, as the reference locates it even when it is
+    /// parenthesized or the target of an assignment.
     fn load_ident(&mut self, id: &IdentifierReference) -> R<()> {
+        let saved = std::mem::replace(&mut self.pos, id.span.start);
+        let r = self.load_ident_here(id);
+        self.pos = saved;
+        r
+    }
+
+    fn load_ident_here(&mut self, id: &IdentifierReference) -> R<()> {
         if let Some(s) = self.ident_symbol(id) {
             return self.load_symbol(s, id.span.start);
         }
@@ -1187,7 +1237,15 @@ impl<'a, 's> Compiler<'a, 's> {
         Ok(i)
     }
 
+    /// Pops the top of the stack into a name, failing at the name itself (see `load_ident`).
     fn store_ident(&mut self, id: &IdentifierReference) -> R<()> {
+        let saved = std::mem::replace(&mut self.pos, id.span.start);
+        let r = self.store_ident_here(id);
+        self.pos = saved;
+        r
+    }
+
+    fn store_ident_here(&mut self, id: &IdentifierReference) -> R<()> {
         match self.ident_symbol(id) {
             Some(s) => self.store_symbol(s, BindMode::Assign, id.span.start),
             // `arguments` is a mutable binding of its function.
@@ -1560,8 +1618,17 @@ impl<'a, 's> Compiler<'a, 's> {
             Statement::TryStatement(t) => self.try_stmt(t),
             Statement::ClassDeclaration(c) => self.throw_syntax("ClassDeclaration", c.span),
             Statement::WithStatement(w) => self.throw_syntax("WithStatement", w.span),
-            // Bound before the body runs; see `imports`.
-            Statement::ImportDeclaration(_) => Ok(()),
+            // Bound before the body runs (see `imports`); one below the top level of the program does nothing there,
+            // and in a function throws when it runs.
+            Statement::ImportDeclaration(d) => {
+                if self.depth() > 0 {
+                    let msg = self.str_const(
+                        "An import declaration may only appear at the top level of the program.",
+                    );
+                    self.emit_at(d.span.start, Op::ThrowSyntax(msg));
+                }
+                Ok(())
+            }
             // Only reached below the top level: `compile` refuses an export at the top.
             Statement::ExportAllDeclaration(d) => self.throw_syntax("ExportAllDeclaration", d.span),
             Statement::ExportDefaultDeclaration(d) => {
@@ -1716,10 +1783,12 @@ impl<'a, 's> Compiler<'a, 's> {
 
     fn var_decl(&mut self, d: &'a VariableDeclaration<'a>) -> R<()> {
         match d.kind {
+            // A `using` binding is a `const` that nothing disposes, as in the reference.
             VariableDeclarationKind::Var
             | VariableDeclarationKind::Let
-            | VariableDeclarationKind::Const => {}
-            _ => return Err(unsupported("`using` declarations", d.span)),
+            | VariableDeclarationKind::Const
+            | VariableDeclarationKind::Using
+            | VariableDeclarationKind::AwaitUsing => {}
         }
         for decl in &d.declarations {
             self.pos = decl.span.start;

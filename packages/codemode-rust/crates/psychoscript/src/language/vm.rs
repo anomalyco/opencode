@@ -2809,12 +2809,19 @@ impl<'rt> Vm<'rt> {
                         };
                         throw!(self.type_error(&m));
                     }
-                    Op::ThrowSyntax(kind) => {
+                    Op::ThrowUnsupported(kind) => {
                         let kind = match self.consts[kind as usize] {
                             Value::Str(s) => self.text(s).to_owned(),
                             _ => String::new(),
                         };
                         throw!(self.unsupported_syntax(&kind));
+                    }
+                    Op::ThrowSyntax(msg) => {
+                        let m = match self.consts[msg as usize] {
+                            Value::Str(s) => self.text(s).to_owned(),
+                            _ => String::new(),
+                        };
+                        throw!(self.syntax_error(&m));
                     }
                     Op::This => {
                         let v = self.stack[base - 1].get();

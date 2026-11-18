@@ -48,6 +48,8 @@ pub enum Op {
     ThrowType(u32),
     /// Throws the `UnsupportedSyntax` `SyntaxError` for the syntax whose ESTree node type is the string constant: the
     /// reference compiles unsupported syntax to a throw where it stands, so code that never reaches it still runs.
+    ThrowUnsupported(u32),
+    /// Throws a `SyntaxError` with a constant message, for syntax that is only rejected when it runs.
     ThrowSyntax(u32),
     This,
     Callee,
