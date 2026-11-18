@@ -2017,7 +2017,7 @@ fn a_stored_value_is_answered_watched_and_unwatched() {
     tui.keymap.dispatch("lab.store", Some("x"));
     let stored = toasted(&pipe, "stored");
     assert!(stored.contains(r#"\"text\":\"x\""#), "{stored}");
-    shows(&pipe, r#"note="{\"text\":\"x\"}""#);
+    shows(&pipe, r#"note={"text":"x"}"#);
     tui.keymap.dispatch("lab.unwatch", None);
     pipe.settle();
     toasts(&pipe.harness);
@@ -2479,15 +2479,16 @@ fn a_client_killed_outright_leaves_nothing_its_plugins_started() {
     assert!(left.is_empty(), "{left:?} outlived the client (JS host {host})");
 }
 
-// Expected (review: bound each read): a watched read over 256 KiB of JSON (here a stored value the host wrote) is not
-// pushed: the plugin reads nothing, can
-// ask why, and goes on; the same read under the bound is pushed again.
+// Expected (review: bound each read): a watched read more than the JS host takes now (here a stored value the host
+// wrote, past an overflow of 256 KiB) is not pushed: the plugin reads nothing, can ask why, and goes on; a small read
+// after it is pushed again.
 #[test]
 fn a_read_over_its_bound_fails_alone() {
-    let Some(config) = config() else { return };
+    let Some(mut config) = config() else { return };
+    config.limits.inbox = 256 << 10;
     let pipe = lab(config);
     let tui = &pipe.harness.tui;
-    // Written by the host: the plugin's own write of it would be over the frame it crosses in.
+    // Written by the host: the plugin's own write of it would be over the stored value's bound.
     let host = opencode_tui::plugins::host::host(tui);
     let big = serde_json::json!({ "text": "x".repeat(300 << 10) }).to_string();
     opencode_plugin::Host::storage_write(&*host, "plugin.example.lab.note", &big).unwrap();
@@ -2495,42 +2496,95 @@ fn a_read_over_its_bound_fails_alone() {
     pipe.settle();
     shows(&pipe, "note=null");
     tui.keymap.dispatch("lab.readerror", None);
-    assert!(toasted(&pipe, "read error").contains("over 262144"), "{:?}", toasts(&pipe.harness));
+    assert!(toasted(&pipe, "read error").contains("more than the JS host takes"), "{:?}", toasts(&pipe.harness));
     toasts(&pipe.harness);
     assert_eq!(pipe.status(LAB), Some(Status::Active));
     tui.keymap.dispatch("lab.store", Some("y"));
-    shows(&pipe, r#"note="{\"text\":\"y\"}""#);
+    shows(&pipe, r#"note={"text":"y"}"#);
     tui.keymap.dispatch("lab.readerror", None);
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
 
-// Expected (bigboi's pipe sign-off): a watched read under its bound whose snapshot, with its envelope, is past the
-// frame's cap is pushed as a failed read: the plugin reads nothing and can ask why, never the value before with no
-// error; a small value after it is pushed as usual.
+// Expected (CT-36): a watched read whose snapshot is past a frame's cap comes in parts: the plugin reads the value, with
+// no error. Before, it failed (bigboi's pipe sign-off made it a failed read rather than the value before).
 #[test]
-fn a_read_past_the_frame_with_its_snapshot_fails_alone() {
+fn a_read_past_the_frame_comes_in_parts() {
     let Some(config) = config() else { return };
     let pipe = lab(config);
     let tui = &pipe.harness.tui;
     tui.keymap.dispatch("lab.store", Some("previous"));
-    shows(&pipe, r#"note="{\"text\":\"previous\"}""#);
-    // The read is the stored text, a JSON string: 262,131 bytes of it, under the read's bound of 262,144.
+    shows(&pipe, r#"note={"text":"previous"}"#);
     let host = opencode_tui::plugins::host::host(tui);
-    let near = serde_json::json!({ "text": "x".repeat(262_131 - 17) }).to_string();
-    assert_eq!(serde_json::to_vec(&serde_json::json!(near)).unwrap().len(), 262_131);
+    let near = serde_json::json!({ "text": "x".repeat(300 << 10) }).to_string();
     opencode_plugin::Host::storage_write(&*host, "plugin.example.lab.note", &near).unwrap();
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
-    shows(&pipe, "note=null");
-    tui.keymap.dispatch("lab.readerror", None);
-    let error = toasted(&pipe, "read error");
-    assert!(error.contains("more than the JS host takes"), "{error}");
-    toasts(&pipe.harness);
-    assert_eq!(pipe.status(LAB), Some(Status::Active));
-    tui.keymap.dispatch("lab.store", Some("after"));
-    shows(&pipe, r#"note="{\"text\":\"after\"}""#);
+    tui.keymap.dispatch("lab.notelength", None);
+    assert_eq!(toasted(&pipe, "note length"), format!("note length {}", near.len()));
     tui.keymap.dispatch("lab.readerror", None);
     assert_eq!(toasted(&pipe, "read error"), "read error none");
+    assert_eq!(pipe.status(LAB), Some(Status::Active));
+}
+
+// Expected (big-boi's `cg4-7`): a read the plugin watches and at once lets go reads as nothing once its snapshot came:
+// the snapshot, here of 300 KiB in parts, was on its way, and it set the value again, uncharged, after the unwatch.
+#[test]
+fn a_snapshot_after_its_unwatch_sets_nothing() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("report");
+    let plugin = root.path().join("config").join("plugins").join("late");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let module = format!(
+        r#"import {{ writeFileSync }} from "node:fs"
+export default {{ id: "example.late", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const command = (name, run) => carrier.command({{ name, title: name }}, run)
+  carrier.storage(["a"])
+  command("late.go", () => {{
+    carrier.watch("a", {{ type: "storage-get", key: "a" }})
+    carrier.unwatch("a")
+  }})
+  command("late.report", () => writeFileSync({log}, String(carrier.read("a") === undefined)))
+}} }}
+"#,
+        log = serde_json::json!(log),
+    );
+    std::fs::write(plugin.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let value = serde_json::json!({ "t": "x".repeat(300 << 10) }).to_string();
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.late.a", &value).unwrap();
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.late");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("late.go", None);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("late.report", None);
+    pipe.settle();
+    assert_eq!(std::fs::read_to_string(&log).unwrap(), "true", "the late snapshot set the read");
+}
+
+// Expected (big-boi's `cg4-2`): a stored value's snapshot carries its JSON, not its text quoted again: a value of 200
+// KiB of backslashes goes in about that many bytes, where quoting its text again doubled them, and a value of the
+// stored bound could pass what the JS host takes.
+#[test]
+fn a_stored_values_snapshot_is_not_escaped_twice() {
+    let Some(config) = config() else { return };
+    let pipe = lab(config);
+    let host = opencode_tui::plugins::host::host(&pipe.harness.tui);
+    let slashes = serde_json::json!({ "text": "\\".repeat(100 << 10) }).to_string();
+    assert!(slashes.len() > 200 << 10);
+    let before = opencode_plugin::pipe::crossed().sent_bytes;
+    opencode_plugin::Host::storage_write(&*host, "plugin.example.lab.note", &slashes).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    let sent = opencode_plugin::pipe::crossed().sent_bytes - before;
+    pipe.harness.tui.keymap.dispatch("lab.notelength", None);
+    assert_eq!(toasted(&pipe, "note length"), format!("note length {}", slashes.len()));
+    assert!(sent < (slashes.len() as u64) * 5 / 4, "{sent} bytes sent for a value of {}", slashes.len());
 }
 
 // Expected (big-boi's catalog review, last): a plugin disabled while the JS host reads nothing and the overflow is full
@@ -2635,8 +2689,9 @@ export default {{ id: "example.ending", setup(api) {{
 }
 
 // Expected (bigboi's pipe sign-off, recheck): a watched read whose snapshot fits a frame but not what is left of the
-// overflow goes as a failed read, and charges the plugin's content nothing: once the queue drained, the ledger holds
-// what it held before, and a neighbouring read that needs that room is pushed.
+// overflow goes as a failed read, and charges the plugin's content nothing as it is refused. Once the queue drained it
+// is pushed again, though it did not change (big-boi's `cg4-8`: it stayed failed), and holds the room, so a
+// neighbouring read that needs it fails on the content bound.
 #[test]
 fn a_read_the_overflow_refuses_holds_no_content() {
     use opencode_plugin::limits::{self, Limits};
@@ -2662,7 +2717,7 @@ export default {{ id: "example.quota", setup(api) {{
     while (!existsSync(GATE)) {{}}
   }}, 0))
   command("quota.noop", () => {{}})
-  const read = (key) => key + " " + (carrier.read(key) ?? "").length + " " + (carrier.readError(key) ?? "none")
+  const read = (key) => key + " " + (carrier.read(key) == null ? 0 : JSON.stringify(carrier.read(key)).length) + " " + (carrier.readError(key) ?? "none")
   command("quota.report", () => appendFileSync(LOG, read("a") + " | " + read("b") + "\n"))
 }} }}
 "#,
@@ -2680,11 +2735,11 @@ export default {{ id: "example.quota", setup(api) {{
     let null = "null".len() as u64;
     let before = limits::held(id).content;
     assert_eq!(before, 2 * null);
-    // Room for one read of 32,785 bytes beside what it holds, not two.
+    // Room for one read of 32,779 bytes beside what it holds, not two. Its snapshot carries the stored JSON as it is.
     let _limits = limits::set(Limits { plugin_content: before + (40 << 10), ..limits::get() });
-    let value = serde_json::json!({ "t": "x".repeat(32_785 - 14) }).to_string();
-    let bytes = serde_json::to_vec(&serde_json::json!(value)).unwrap().len();
-    assert_eq!(bytes, 32_785);
+    let value = serde_json::json!({ "t": "x".repeat(32_779 - 8) }).to_string();
+    let bytes = value.len();
+    assert_eq!(bytes, 32_779);
     h.tui.keymap.dispatch("quota.stall", None);
     h.wait("the JS host stalled", || {
         h.app.advance(Duration::from_millis(1));
@@ -2706,11 +2761,15 @@ export default {{ id: "example.quota", setup(api) {{
         h.app.advance(Duration::from_millis(1));
         pipe::crossed().refused_sends > refused
     });
-    std::fs::write(&gate, "").unwrap();
-    pipe.settle();
     // A failed read holds nothing, as one past the frame: what is left is the neighbour's.
     assert_eq!(limits::held(id).content, null, "the refused read is still charged");
-    // The neighbour needs the room the refused read would have held.
+    std::fs::write(&gate, "").unwrap();
+    pipe.settle();
+    // The queue drained: the read goes again, and holds its room.
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    assert_eq!(limits::held(id).content, null + bytes as u64, "the refused read was not pushed again");
+    // The neighbour needs the room the read holds now.
     opencode_plugin::Host::storage_write(&*host, "plugin.example.quota.b", &value).unwrap();
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
@@ -2721,8 +2780,8 @@ export default {{ id: "example.quota", setup(api) {{
     });
     let report = std::fs::read_to_string(&log).unwrap();
     let (a, b) = report.trim_end().split_once(" | ").unwrap();
-    assert!(a.starts_with("a 0 the read's snapshot of ") && a.ends_with("does not fit the JS host's queue"), "{a}");
-    assert_eq!(b, format!("b {} none", value.len()));
+    assert_eq!(a, format!("a {} none", value.len()));
+    assert!(b.starts_with("b 0 the read is ") && b.ends_with("past what the plugin may hold"), "{b}");
 }
 
 // Expected (bigboi's pipe sign-off): a load the JS host's queue refuses (here its options are past the frame's cap)

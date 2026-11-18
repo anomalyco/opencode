@@ -198,6 +198,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 over_cap: Cell::new(false),
                 watches: RefCell::default(),
                 pushed: RefCell::default(),
+                failures: RefCell::default(),
                 watcher: RefCell::default(),
                 disposed: Cell::new(false),
                 rects: Cell::new((u64::MAX, 0)),
@@ -258,6 +259,9 @@ pub(crate) struct Guest {
     watches: RefCell<BTreeMap<String, (HostRequest, Option<u64>)>>,
     /// The bytes of each read last pushed, charged to the plugin's content while it is watched (4.2, phase Pl).
     pushed: RefCell<BTreeMap<String, u64>>,
+    /// Why each read that failed last failed, as the JS host was told: a retry that fails the same way tells it nothing
+    /// again (big-boi's `cg4-8` retries a failed read at each refresh).
+    failures: RefCell<BTreeMap<String, String>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
     /// The frame its watched rects were last compared in, and how many frames in a row they changed with no other
@@ -682,12 +686,17 @@ impl Guest {
                     );
                     return serde_json::Value::Null;
                 }
-                behave::as_user(user, || behave::calling(export, || handle(&mut ctx, request))).unwrap_or_else(
-                    |error| {
+                // A store's write answers whether it was kept: refused, it says why, and the layer's update rejects
+                // and shows what is stored, where a null left the plugin showing a value the host refused.
+                let write = matches!(request, HostRequest::StorageSet { .. } | HostRequest::StorageMerge { .. });
+                match behave::as_user(user, || behave::calling(export, || handle(&mut ctx, request))) {
+                    Ok(_) if write => serde_json::Value::Bool(true),
+                    Ok(value) => value,
+                    Err(error) => {
                         log::warn!("plugin {}: {error}", self.id());
-                        serde_json::Value::Null
-                    },
-                )
+                        if write { serde_json::json!({ "error": error }) } else { serde_json::Value::Null }
+                    }
+                }
             })
             .collect();
         *self.keys.borrow_mut() = ctx.keys.clone();
@@ -725,7 +734,8 @@ impl Guest {
     /// Tells the JS host what the effects it sent under `key` answered.
     fn answered(&self, key: &str, results: Vec<serde_json::Value>) {
         let activation = self.js.get();
-        self.send(Down::Answered { id: self.id().to_owned(), activation, key: key.to_owned(), results }, None);
+        let (id, key) = (self.id().to_owned(), key.to_owned());
+        self.send(Down::Answered { id, activation, key, results, parted: false, dropped: Vec::new() }, None);
     }
 
     /// Fails the plugin with `error`: it is not called again, and the host says so once.
@@ -852,14 +862,24 @@ impl Guest {
         let (value, hash) = self.evaluate(&request);
         watches.insert(key.clone(), (request, Some(hash)));
         drop(watches);
-        self.push(key, value);
+        if !self.push(key.clone(), value) {
+            self.undelivered(&key);
+        }
+    }
+
+    /// The last value of `key` did not reach the JS host: its next refresh pushes it again, though it did not change
+    /// (big-boi's `cg4-8`: a read refused while the plugin's content room was full stayed failed once room came back).
+    fn undelivered(&self, key: &str) {
+        if let Some((_, last)) = self.watches.borrow_mut().get_mut(key) {
+            *last = None;
+        }
     }
 
     /// Pushes the value of the read `key` watches: as a failed read when it is past the content its plugin may hold
     /// beside what it holds (4.2, phase Pl), or when its snapshot is more than the JS host takes now, in one frame or in
     /// parts (CT-36), which the plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
-    /// What it pushes is charged to its content while it watches it.
-    fn push(&self, key: String, value: serde_json::Value) {
+    /// What it pushes is charged to its content while it watches it. Whether it went.
+    fn push(&self, key: String, value: serde_json::Value) -> bool {
         let bytes = Measure::of(&value).bytes;
         let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
         let activation = self.js.get();
@@ -882,9 +902,14 @@ impl Guest {
         let charged = if error.is_some() { 0 } else { bytes as u64 };
         limits::recharge(self.id(), limits::Kind::Content, held, charged);
         self.pushed.borrow_mut().insert(key.clone(), charged);
+        if error.is_none() {
+            self.failures.borrow_mut().remove(&key);
+        }
         let snapshot = match error {
+            Some(error) if self.failures.borrow().get(&key) == Some(&error) => return false,
             Some(error) => {
                 log::warn!("plugin {}: the read it watches as {key}: {error}", self.id());
+                self.failures.borrow_mut().insert(key.clone(), error.clone());
                 let id = self.id().to_owned();
                 Down::Snapshot {
                     id,
@@ -897,7 +922,9 @@ impl Guest {
             }
             None => snapshot,
         };
+        let pushed = matches!(snapshot, Down::Snapshot { error: None, .. });
         self.send(snapshot, None);
+        pushed
     }
 
     /// Gives back what the reads it watched charged.
@@ -928,10 +955,12 @@ impl Guest {
         if let Some(charged) = charged {
             limits::release(self.id(), limits::Kind::Content, charged);
         }
+        self.undelivered(key);
     }
 
     pub(crate) fn unwatch(&self, key: &str) {
         self.watches.borrow_mut().remove(key);
+        self.failures.borrow_mut().remove(key);
         if let Some(charged) = self.pushed.borrow_mut().remove(key) {
             limits::release(self.id(), limits::Kind::Content, charged);
         }
@@ -963,7 +992,9 @@ impl Guest {
         };
         let any = !changed.is_empty();
         for (key, value) in changed {
-            self.push(key, value);
+            if !self.push(key.clone(), value) {
+                self.undelivered(&key);
+            }
         }
         any
     }

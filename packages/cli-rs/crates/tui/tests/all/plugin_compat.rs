@@ -1858,12 +1858,13 @@ fn a_plugin_with_eighty_stores_reads_each() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("160"));
 }
 
-// Expected (CT-36): a V2 plugin stores a value of about 1 MB, as opencodebar keeps its price list and prompt-search its
-// index of every prompt, and follows a value of that size another client stores. Its write goes to the host in pieces,
-// past a frame's 256 KiB, and is kept within the stored value's bound; the read comes back in parts. Before, the write's
-// frame over the cap ended the JS host, and a read over 256 KiB read as nothing.
+// Expected (CT-36): a V2 plugin that stores a value of about 1 MB, as opencodebar keeps its price list and prompt-search
+// its index of every prompt, has its write refused past the stored value's bound of 256 KiB (big-boi's `cg4-3`,
+// `cg4-4`): its update rejects, what it stored before stays, and the plugin goes on. It follows a value of that size
+// another client stores. The write goes to the host in pieces and the read comes back in parts: before, the write's frame
+// over the cap ended the JS host, and a read over 256 KiB read as nothing.
 #[test]
-fn a_plugin_stores_and_follows_a_value_of_a_megabyte() {
+fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     let Some(config) = config() else { return };
     let root = opencode_util::temp::tempdir().unwrap();
     let dir = root.path().join("config/plugins/big");
@@ -1874,9 +1875,12 @@ fn a_plugin_stores_and_follows_a_value_of_a_megabyte() {
          [`provider/model-${{from + index}}`, {{ input: index, output: index * 2, note: \"x\".repeat(80) }}]))\n\
          export default {{ id: \"example.big\", setup(context) {{\n\
          const [store, update] = context.storage.store(\"prices\", {{ initial: {{ entries: {{}} }} }})\n\
-         const count = () => require(\"node:fs\").writeFileSync({marker:?}, String(Object.keys(store.entries).length))\n\
+         const write = (text) => require(\"node:fs\").writeFileSync({marker:?}, text)\n\
+         const count = () => write(String(Object.keys(store.entries).length))\n\
+         const save = (size) => update((draft) => {{ draft.entries = prices(0, size) }}).then(count, (error) => write(`refused ${{error.message}}`))\n\
          context.keymap.layer(() => ({{ mode: \"global\", commands: [\n\
-         {{ id: \"big.save\", title: \"Save\", run: () => update((draft) => {{ draft.entries = prices(0, 10000) }}).then(count) }},\n\
+         {{ id: \"big.small\", title: \"Small\", run: () => save(5) }},\n\
+         {{ id: \"big.save\", title: \"Save\", run: () => save(10000) }},\n\
          {{ id: \"big.count\", title: \"Count\", run: count }},\n\
          ] }}))\n\
          }} }}\n"
@@ -1889,28 +1893,81 @@ fn a_plugin_stores_and_follows_a_value_of_a_megabyte() {
     let pipe = Pipe { harness, root };
     pipe.active("example.big");
     pipe.settle();
+    let marked = |what: &str, done: &dyn Fn(&str) -> bool| {
+        pipe.harness.wait(what, || {
+            pipe.harness.app.advance(Duration::from_millis(1));
+            std::fs::read_to_string(&marker).is_ok_and(|text| done(&text))
+        })
+    };
+    pipe.harness.tui.keymap.dispatch("big.small", None);
+    marked("the small value was stored", &|text| text == "5");
     pipe.harness.tui.keymap.dispatch("big.save", None);
+    marked("the large value was refused", &|text| text.starts_with("refused"));
     let key = "plugin.example.big.prices";
-    pipe.harness.wait("the value was stored", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&marker).ok().as_deref() == Some("10000")
-    });
     opencode_tui::plugins::host::flush_storage(&pipe.harness.tui);
     let stored = opencode_plugin::Host::storage_read(&*host, key).unwrap_or_default();
-    assert!(stored.len() > 1_000_000, "the host keeps {} bytes", stored.len());
+    let entries = |json: &str| {
+        serde_json::from_str::<Value>(json).ok().map(|value| value["entries"].as_object().map_or(0, |map| map.len()))
+    };
+    assert_eq!(entries(&stored), Some(5), "the host keeps {} bytes", stored.len());
+    pipe.harness.tui.keymap.dispatch("big.count", None);
+    marked("the store shows what is stored", &|text| text == "5");
     assert_eq!(pipe.status("example.big"), Some(Status::Active));
-    // Another client stores a list as large again: the plugin's store follows it.
-    let entries: serde_json::Map<String, Value> = (0..12_000)
+    // Another client stores a list of 1.1 MB: the plugin's store follows it.
+    let others: serde_json::Map<String, Value> = (0..12_000)
         .map(|index| (format!("other/model-{index}"), serde_json::json!({ "input": index, "note": "y".repeat(80) })))
         .collect();
-    let theirs = serde_json::json!({ "entries": entries }).to_string();
+    let theirs = serde_json::json!({ "entries": others }).to_string();
     opencode_plugin::Host::storage_write(&*host, key, &theirs).unwrap();
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("big.count", None);
-    pipe.settle();
-    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("12000"));
+    marked("the store follows the other client's value", &|text| text == "12000");
     assert_eq!(pipe.status("example.big"), Some(Status::Active));
+}
+
+// Expected (big-boi's `cg4-1`): a store's update appends to a stored list whose text, quoted in its answer, is past a
+// frame (a value of 220 KB, within the stored bound): the answer comes in parts and both items are kept. Its answer
+// was reduced to null, read as an empty key, and the update stored the new item alone.
+#[test]
+fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/notes");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = root.path().join("notes.lengths");
+    let module = format!(
+        "export default {{ id: \"example.notes\", setup(context) {{\n\
+         const [store, update] = context.storage.store(\"notes\", {{ initial: {{ items: [] }} }})\n\
+         const write = (text) => require(\"node:fs\").writeFileSync({marker:?}, text)\n\
+         context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"notes.append\", title: \"Append\", run: () =>\n\
+         update((draft) => {{ draft.items.push(\"tail\") }}).then(() => write(JSON.stringify(store.items.map((item) => item.length))),\n\
+         (error) => write(`refused ${{error.message}}`)) }}] }}))\n\
+         }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let key = "plugin.example.notes.notes";
+    let quotes = serde_json::json!({ "items": ["\"".repeat(110_000)] }).to_string();
+    assert!(quotes.len() < opencode_plugin::storage::VALUE_BYTES);
+    opencode_plugin::Host::storage_write(&*host, key, &quotes).unwrap();
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.notes");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("notes.append", None);
+    pipe.harness.wait("the update ended", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        marker.exists()
+    });
+    assert_eq!(std::fs::read_to_string(&marker).unwrap(), "[110000,4]");
+    opencode_tui::plugins::host::flush_storage(&pipe.harness.tui);
+    let stored: Value = serde_json::from_str(&opencode_plugin::Host::storage_read(&*host, key).unwrap()).unwrap();
+    let lengths: Vec<usize> =
+        stored["items"].as_array().unwrap().iter().map(|item| item.as_str().unwrap().len()).collect();
+    assert_eq!(lengths, [110_000, 4]);
 }
 
 /// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
