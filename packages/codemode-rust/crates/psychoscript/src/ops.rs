@@ -1473,11 +1473,22 @@ impl<'rt> Vm<'rt> {
                     REQ_RETURN => 1,
                     _ => 2,
                 };
+                // The reference's `throw` or `return` here is the generator's native method, which costs fifty
+                // unless it throws before the body runs (a running generator, or a finished one asked to throw).
+                // `next` was charged by the caller.
+                let charged = kind != REQ_NEXT;
                 if matches!(state, GenState::Suspended(_)) {
+                    if charged {
+                        self.fuel(NATIVE_FUEL);
+                    }
                     self.resume_delegate_by_frame(id, mode, received)?;
                     return Ok(Some(Some((Value::Undef, false))));
                 }
-                Ok(Some(Some(self.resume_generator(id, mode, received)?)))
+                let step = self.resume_generator(id, mode, received)?;
+                if charged {
+                    self.fuel(NATIVE_FUEL);
+                }
+                Ok(Some(Some(step)))
             }
             Kind::ArrayIter { .. }
             | Kind::MapIter { .. }
@@ -1510,6 +1521,10 @@ impl<'rt> Vm<'rt> {
         if let Value::Obj(id) = it
             && let Kind::AsyncFromSync { sync, next } = self.heap[id as usize].kind
         {
+            // The adapter's `throw` and `return` are natives, each called for fifty (`next` was charged by the caller).
+            if kind != REQ_NEXT {
+                self.fuel(NATIVE_FUEL);
+            }
             return self.async_from_sync_call(sync, next, kind, arg).map(Some);
         }
         let m = if kind == REQ_NEXT && !cached_next.is_nullish() {
@@ -1530,11 +1545,30 @@ impl<'rt> Vm<'rt> {
             self.delegate_by_call(m, it, arg)?;
             return Ok(Some(Value::Undef));
         }
+        // A native `throw` or `return` costs fifty, before an async generator's body it resumes runs.
+        if kind != REQ_NEXT {
+            self.fuel(NATIVE_FUEL);
+        }
         let args: &[Value] = match &arg {
             Some(a) => std::slice::from_ref(a),
             None => &[],
         };
         self.call(&m, it, args).map(Some)
+    }
+
+    /// Whether a call of `f` as bytecode makes it runs a closure (through any bound functions), which costs one
+    /// unit rather than a native's fifty.
+    #[inline]
+    pub(crate) fn calls_closure(&self, f: &Value) -> bool {
+        let mut f = *f;
+        while let Value::Obj(id) = f {
+            match &self.heap[id as usize].kind {
+                Kind::Closure(_) => return true,
+                Kind::Bound(b) => f = b.0,
+                _ => return false,
+            }
+        }
+        false
     }
 
     fn request_name(&mut self, kind: u8) -> Atom {
@@ -1653,7 +1687,8 @@ impl<'rt> Vm<'rt> {
                         Some(a) => std::slice::from_ref(a),
                         None => &[],
                     };
-                    self.call(&m, sv, args)
+                    // `$vmAsyncFromSync` calls it as bytecode calls it.
+                    self.call_counted(&m, sv, args)
                         .and_then(|r| self.iter_result_parts(&r, kind))
                         .map(Some)
                 }
@@ -1744,7 +1779,8 @@ impl<'rt> Vm<'rt> {
                     self.delegate_by_call(m, it, None)?;
                     return Ok(Some(Value::Undef));
                 }
-                self.call(&m, it, &[]).map(Some)
+                // The reference calls it as bytecode calls it.
+                self.call_counted(&m, it, &[]).map(Some)
             }
             _ => self.delegate_call(it, REQ_RETURN, None, Value::Undef),
         }

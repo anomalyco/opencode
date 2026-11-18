@@ -693,7 +693,7 @@ fn resume_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
     let f = &mut vm.frames[c];
     f.pc = match f.func.code.get(f.pc) {
         Some(crate::bytecode::Op::DelegateResult(exit, _)) if done => *exit as usize,
-        _ => f.pc + 1,
+        _ => crate::vm::delegate_continue(&f.func.code, f.pc + 1),
     };
     Ok(Step::Done(v))
 }

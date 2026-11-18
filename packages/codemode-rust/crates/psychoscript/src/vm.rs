@@ -2252,6 +2252,19 @@ impl<'rt> Vm<'rt> {
                 Err(v)
             };
         }
+        // A generator method called as bytecode calls it costs the reference its fifty once the generator is to run,
+        // before its body does, even when the body then throws: not when the method's frame finishes.
+        if let Some(f) = self.frames.last_mut()
+            && f.argc & 1 != 0
+            && f.kind
+                == FrameKind::Native(
+                    crate::native::NativeOp::Collections,
+                    crate::builtins::sets::GEN_RESUME,
+                )
+        {
+            f.argc &= !1;
+            self.spend(NATIVE_FUEL);
+        }
         let wants = self.enter_generator(g, Resume::Native, false);
         if mode == 0 {
             if wants {
@@ -3640,8 +3653,12 @@ impl<'rt> Vm<'rt> {
                         let kind = flags & 3;
                         let received = self.stack.pop().unwrap_or_default();
                         let it = self.stack[base + slot as usize];
-                        // The reference calls the delegated iterator's method each step, a native one for fifty.
-                        if !self.is_closure(&self.stack[base + slot as usize + 1].get()) {
+                        // The reference calls the delegated iterator's method each step, a native one for fifty: the
+                        // record's `next` here, a `throw` or `return` where it is found (`sync_delegate_step`,
+                        // `delegate_call`), and nothing when it is missing.
+                        if kind == REQ_NEXT
+                            && !self.calls_closure(&self.stack[base + slot as usize + 1].get())
+                        {
                             self.spend(NATIVE_FUEL);
                         }
                         if flags & DELEGATE_ASYNC == 0 {
@@ -3664,12 +3681,12 @@ impl<'rt> Vm<'rt> {
                                 match step {
                                     Some((v, done)) => {
                                         self.push(v);
-                                        match code.get(pc) {
+                                        pc = match code.get(pc) {
                                             Some(Op::DelegateResult(exit, _)) if done => {
-                                                pc = *exit as usize
+                                                *exit as usize
                                             }
-                                            _ => pc += 1,
-                                        }
+                                            _ => delegate_continue(code, pc + 1),
+                                        };
                                     }
                                     None => {
                                         self.stack.push(received);
@@ -3698,9 +3715,11 @@ impl<'rt> Vm<'rt> {
                         let r = self.pop();
                         let (v, done) = tri!(self.iter_result_parts(&r, kind));
                         self.push(v);
-                        if done {
-                            pc = exit as usize;
-                        }
+                        pc = if done {
+                            exit as usize
+                        } else {
+                            delegate_continue(code, pc)
+                        };
                     }
                     Op::GetAsyncIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
@@ -3967,4 +3986,15 @@ pub fn js_pow(x: f64, y: f64) -> f64 {
         return result;
     }
     x.powf(y)
+}
+
+/// Where a `yield*` goes on once its iterator answered a `throw` or `return` request without finishing: the jump at
+/// `at` back to the `YieldStar`, taken here without the back-edge a backward jump costs, as the reference's `yield*`
+/// yields the answer straight away. Any other instruction is where it goes on.
+#[inline]
+pub(crate) fn delegate_continue(code: &[Op], at: usize) -> usize {
+    match code.get(at) {
+        Some(Op::Jump(t)) if matches!(code.get(*t as usize), Some(Op::YieldStar(_))) => *t as usize,
+        _ => at,
+    }
 }
