@@ -10,7 +10,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { workspaceTarget } from "./workspace.js"
 import { previewPath } from "./preview-path.js"
-import { realpath, stat } from "node:fs/promises"
+import { lstat, realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join, parse, relative, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
@@ -74,21 +74,64 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], na
   }),
 )
 
-/** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */
-export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
+/**
+ * The workspace entry a path or `file:` address names, decided from its text alone, with no look at the disk: the
+ * address and its percent-encoding decoded, a line suffix dropped, `.` and `..` resolved. `entry` is the result
+ * relative to the workspace, with forward slashes. Undefined for an address that is no file. `unresolved` for text
+ * that is no path, `outside` for one that leaves the workspace, `invalid` for a name the desktop cannot open.
+ */
+export function entry(path: string, directory: string) {
   const value = path.trim()
   if (address(value) && !/^file:/i.test(value)) return undefined
-  const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "This path does not resolve to a file inside the workspace." })
-  const url = yield* Effect.try({ try: () => /^file:/i.test(value) ? new URL(value) : undefined, catch: invalid })
-  if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }
-  const local = yield* Effect.try({ try: () => (url ? fileURLToPath(url) : value).replaceAll("\\", "/"), catch: invalid })
+  const local = localPath(value)
+  if (local === undefined) return { unresolved: true as const }
+  if (local === "") return { absolute: value, outside: true as const }
   const plain = local.replace(/(?:#L\d+(?:C\d+)?(?:-L?\d+(?:C\d+)?)?|:\d+(?::\d+)?(?:-\d+(?::\d+)?)?:?)$/i, "")
   const absolute = resolve(directory, plain)
+  if (!FSUtil.contains(directory, absolute)) return { absolute, outside: true as const }
+  const name = relative(directory, absolute).replaceAll("\\", "/")
+  if (name && !previewPath(name, process.platform === "win32")) return { absolute, invalid: true as const }
+  return { absolute, entry: name }
+}
+
+// A `file:` address as a local path, with forward slashes. Empty for one that names another host; undefined for text
+// that is no address or path at all.
+function localPath(value: string) {
+  try {
+    const url = /^file:/i.test(value) ? new URL(value) : undefined
+    if (url?.hostname) return ""
+    return (url ? fileURLToPath(url) : value).replaceAll("\\", "/")
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The file on disk that the workspace entry `absolute` is, named under the workspace, and whether a link was followed
+ * to reach it. For what an approval names and remembers, so one file has one name however it was asked for. It
+ * reports nothing by failing: undefined for a missing file, and for one whose target is outside the workspace.
+ */
+export const onDisk = (absolute: string, directory: string) =>
+  Effect.tryPromise(async () => {
+    const [root, target] = await Promise.all([realpath(directory), realpath(absolute)])
+    if (!FSUtil.contains(root, target)) return undefined
+    // Each name on the way from the workspace to the entry, as asked.
+    const names = relative(directory, absolute).split(/[\\/]/).filter(Boolean)
+    const steps = await Promise.all(names.map((_, index) => lstat(join(directory, ...names.slice(0, index + 1)))))
+    return { entry: relative(root, target).replaceAll("\\", "/"), linked: steps.some((step) => step.isSymbolicLink()) }
+  }).pipe(Effect.orElseSucceed(() => undefined))
+
+/** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */
+export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
+  const resolved = entry(path, directory)
+  if (!resolved) return undefined
+  const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "This path does not resolve to a file inside the workspace." })
+  if ("unresolved" in resolved) return yield* invalid()
+  const absolute = resolved.absolute
   const missing = { absolute, found: false, directory: false }
   // Outside and invalid names can be refused lexically, without querying the filesystem or prompting to read them.
-  if (!FSUtil.contains(directory, absolute)) return { ...missing, outside: true }
-  const entry = relative(directory, absolute).replaceAll("\\", "/")
-  if (entry && !previewPath(entry, process.platform === "win32")) return { ...missing, invalid: true }
+  if ("outside" in resolved) return { ...missing, outside: true }
+  if ("invalid" in resolved) return { ...missing, invalid: true }
   yield* approve(absolute)
   const target = yield* Effect.tryPromise({ try: () => workspaceTarget(absolute, [directory]), catch: cause => cause instanceof Error && "code" in cause && (cause.code === "ENOENT" || cause.code === "ENOTDIR") ? "missing" as const : invalid() }).pipe(
     Effect.catchIf(error => error === "missing", () => Effect.succeed(null)),

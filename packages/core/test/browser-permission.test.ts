@@ -1,6 +1,8 @@
 import { expect } from "bun:test"
 import { hostname } from "os"
 import path from "path"
+import { symlink } from "node:fs/promises"
+import { pathToFileURL } from "node:url"
 import { Context, Deferred, Effect, Exit, Fiber, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -585,6 +587,63 @@ const answer = Effect.fnUntraced(function* (
   // A plain rejection ends the step, so it surfaces as a defect.
   return { request, exit: yield* Fiber.await(call) }
 })
+
+// The approval for showing a file names the file that opens, under the workspace, whatever spelling asked for it, and
+// "always" remembers that file: no other spelling of it asks again, and none stands for another file.
+it.live("a file approval names and remembers the resolved file, whatever spelling asked for it", () =>
+  Effect.gen(function* () {
+    const browser = yield* setup(
+      { permissions: [rule("*", "ask")] },
+      { "secret.html": "<p>secret</p>", "page.html": "<p>page</p>", "real/inner.html": "<p>inner</p>" },
+    )
+    const permissions = Context.get(browser.context, Permission.Service)
+    const directory = browser.ref.directory
+    const address = pathToFileURL(directory).href
+    // A folder that is a link to another folder of the workspace.
+    yield* Effect.promise(() => symlink(path.join(directory, "real"), path.join(directory, "linked"), "junction"))
+
+    const spellings: object[] = [
+      { path: "secret.html" },
+      { path: "./secret.html" },
+      { path: "docs/../a/b/../../secret.html" },
+      { path: path.join(directory, "secret.html") },
+      { path: `${address}/%73%65%63%72%65%74.html?x=1#y` },
+      { url: `${address}/%73%65%63%72%65%74.html` },
+      { url: `workspace://${browser.session.id.toLowerCase()}/%73ecret.html` },
+      { url: `WORKSPACE://${browser.session.id}/secret.html` },
+    ]
+
+    for (const input of spellings) {
+      const { request } = yield* answer(browser, "tabs.open", input, "reject")
+      expect([JSON.stringify(input), request.metadata?.input, request.save]).toEqual([
+        JSON.stringify(input),
+        { paths: ["secret.html"] },
+        ["preview secret.html"],
+      ])
+    }
+
+    // A file reached through a link is named as the file it is, and the prompt says which link led to it.
+    const linked = yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")
+    expect(linked.request.metadata?.input).toEqual({ paths: ["real/inner.html"], link: "linked/inner.html" })
+    expect(linked.request.save).toEqual(["preview real/inner.html"])
+    expect(browser.commands.count).toBe(0)
+
+    // "Always" for one spelling: every spelling of the file runs with no prompt, and one approval is kept.
+    yield* answer(browser, "tabs.open", spellings[0]!, "always")
+    for (const input of spellings) {
+      yield* browser.run("tabs.open", input).pipe(Effect.exit, Effect.timeout("5 seconds"))
+      expect(yield* permissions.list()).toEqual([])
+    }
+    expect(browser.commands.count).toBe(spellings.length + 1)
+    const saved = yield* PermissionSaved.Service
+    const projectID = Context.get(browser.context, Location.Service).project.id
+    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([["browser", "preview secret.html"]])
+
+    // It covers that file alone: another file, and the same file moved to with navigate, still ask.
+    expect((yield* answer(browser, "tabs.open", { path: "page.html" }, "reject")).request.save).toEqual(["preview page.html"])
+    expect((yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")).request.save).toEqual(["preview real/inner.html"])
+  }),
+)
 
 it.live("always for one browser operation stops its prompts, while other operations still prompt", () =>
   Effect.gen(function* () {

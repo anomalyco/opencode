@@ -103,6 +103,18 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     )
   })
 
+  // What an approval for showing a file names and remembers: the file that opens, under the workspace, whatever
+  // spelling asked for it (an encoded `file:` or `workspace:` address, `..` segments, a link). It never fails: an
+  // input that names no workspace file keeps its own text, and is refused after the permission check, where a caller
+  // a policy blocks hears only that. The disk is asked only which file a link is, and nothing of that is reported.
+  const named = Effect.fn("BrowserTools.named")(function* (input: string, tool: Tool.Context) {
+    const path = /^workspace:/i.test(input.trim()) ? remotePath(input.trim(), workspacePrefix(tool.sessionID)) : input
+    const resolved = path === undefined ? undefined : BrowserFiles.entry(path, ctx.location.directory)
+    if (resolved?.entry === undefined) return { path: input.trim() }
+    const file = yield* BrowserFiles.onDisk(resolved.absolute, ctx.location.directory)
+    return { path: file?.entry ?? resolved.entry, ...(file?.linked && { link: resolved.entry }) }
+  })
+
   // Send the exact workspace entry we checked, not the unverified input (which might be a line link).
   const previewable = Effect.fn("BrowserTools.previewable")(function* (input: string, call: string, tool: Tool.Context) {
     // tabs.list shows a remote server's file as workspace://<session>/<path>. Another session's address names nothing here.
@@ -125,10 +137,12 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   })
 
   // The path forms of tabs.open and navigate. The server checks the file; the desktop shows it.
-  const show = Effect.fn("BrowserTools.show")(function* (action: FileAction, entry: "tabs.open" | "navigate", tool: Tool.Context, approved: Extract<Effect.Success<ReturnType<typeof connection.authorize>>, { connectionID: string }>) {
+  const show = Effect.fn("BrowserTools.show")(function* (action: FileAction, entry: "tabs.open" | "navigate", tool: Tool.Context, approved: Extract<Effect.Success<ReturnType<typeof connection.authorize>>, { connectionID: string }>, expected: string) {
     const call = `browser.${entry}`
     if (ctx.location.workspaceID) return yield* new Tool.Error({ message: `${call} shows a workspace file only when the workspace is on the server itself.` })
     const path = yield* previewable(action.path, call, tool)
+    // The approval named one file. A link that points elsewhere by now would show another under it.
+    if (path !== expected) return yield* new Tool.Error({ message: `The file ${call} was asked to show changed while the request waited. Call ${call} again.` })
     // As the desktop decides it: a file named only `.html` is not a page.
     const html = artifactKind(path) === "html"
     if (action.type === "navigate.path" && !html)
@@ -173,13 +187,14 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     // and the permission check below names both operations.
     if (file) yield* connection.refuse(tool, ["preview"])
     const paths = "paths" in action ? action.paths.map((path) => BrowserFiles.uploadPath(ctx.location.directory, path)) : undefined
-    const approved = yield* connection.authorize(tool, action, paths ?? (file ? [file.action.path] : undefined), file ? [file.entry, "preview"] : undefined)
+    const shown = file ? yield* named(file.action.path, tool) : undefined
+    const approved = yield* connection.authorize(tool, action, paths, file ? [file.entry, "preview"] : undefined, shown)
     if (approved.connected === false) {
       if (action.type === "tabs.list") return { output: { ...approved, tabs: [], focusedTabID: null }, content: [{ type: "text" as const, text: approved.message }] }
       return yield* new Tool.Error({ metadata: { code: "not_attached" }, message: `[browser.not_attached] ${approved.message}` })
     }
     if (action.type === "wait") return yield* wait(action.tabID, action.plan, tool, approved)
-    if (file) return yield* show(file.action, file.entry, tool, approved)
+    if (file && shown) return yield* show(file.action, file.entry, tool, approved, shown.path)
     const target = yield* connection.target(tool.sessionID, action, approved)
     const uploads = paths ? yield* Effect.gen(function* () {
       yield* BrowserFiles.authorize(ctx, tool, "read", paths)

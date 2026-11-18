@@ -434,7 +434,12 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[]) {
+    /**
+     * `shown` is the workspace file a path form shows, as the server resolved it: the prompt names it, with the link
+     * it was reached through if any, and "always" remembers it, so no other spelling of the same file asks again and
+     * none stands for another file.
+     */
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[], shown?: { readonly path: string; readonly link?: string }) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
       if (!connection.ok) return { connected: false as const, message: connection.error.message }
       const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
@@ -443,7 +448,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       const script = action.type === "evaluate" ? action.script : undefined
       const scope = action.type === "tabs.open" ? site(destination) : origin
       const detail = script ?? destination
-      const save = action.type === "tabs.list" ? [action.type] : scope && !paths && !/[*?]/.test(scope)
+      const save = action.type === "tabs.list" ? [action.type] : shown ? (/[*?]/.test(shown.path) ? [] : [`${action.type} ${shown.path}`]) : scope && !paths && !/[*?]/.test(scope)
         ? [`${action.type} ${scope}${detail ? ` ${createHash("sha256").update(detail).digest("hex")}` : ""}`] : []
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,
@@ -456,6 +461,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         metadata: { input: {
           ...(action.type === "tabs.list" && { scope: "Tab inventories for attached sessions in this project" }),
           ...(tab && { site: origin ?? tab.url }), ...(destination && { destination }), ...(paths && { paths }),
+          ...(shown && { paths: [shown.path], ...(shown.link && { link: shown.link }) }),
           ...(script && { script: script.length > 320 ? `${script.slice(0, 320)}…` : script }),
         } },
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
