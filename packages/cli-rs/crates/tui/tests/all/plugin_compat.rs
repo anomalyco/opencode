@@ -1044,35 +1044,6 @@ fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
     assert_eq!(harness.text(), "%ab%c%x");
 }
 
-// Measures how long a key a JS command binds and declines takes to reach the composer: the whole hold, a round trip to
-// the real JS host and the key routed on. Real time only, as the manual clock stands still, so the hold's limit never
-// cuts it short. `KEY_HOLD_PRESSES` sets the count (300).
-#[test]
-#[ignore = "a measurement: run with --ignored --nocapture"]
-fn measure_the_key_hold() {
-    let Some(config) = config() else { return };
-    let (pipe, _log) = probe(config);
-    let harness = &pipe.harness;
-    let presses: usize = std::env::var("KEY_HOLD_PRESSES").ok().and_then(|count| count.parse().ok()).unwrap_or(300);
-    let mut took = Vec::with_capacity(presses);
-    for press in 0..presses {
-        let before = harness.text().len();
-        let begun = std::time::Instant::now();
-        harness.app.type_text("%");
-        assert!(harness.app.wait_until(Duration::from_secs(5), || harness.text().len() > before), "press {press} held");
-        took.push(begun.elapsed());
-    }
-    took.sort();
-    let at = |share: f64| took[((took.len() - 1) as f64 * share) as usize];
-    println!(
-        "key hold over {presses} presses: median {:?}, p95 {:?}, p99 {:?}, worst {:?}",
-        at(0.5),
-        at(0.95),
-        at(0.99),
-        took[took.len() - 1]
-    );
-}
-
 // Expected (contract ergonomics 2.5; CT-8, the key hold): a key whose JS command is disabled is bound by nothing on the
 // host, so it reaches the composer in the frame it is typed, with no round trip to the JS host held for it. Enabled,
 // the command takes it; disabled again, the key goes on at once. Neither change reloads the plugin: its activation

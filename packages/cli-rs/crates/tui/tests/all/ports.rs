@@ -172,19 +172,6 @@ pub(crate) fn open_with(
     first: Option<Route>,
     options: Option<&Value>,
 ) -> Option<Port> {
-    open_timed(carriers, width, handler, stored, first, options, false)
-}
-
-/// [`open_with`]; the budget's monitor keeps the real clock when `timed`, so it times each call, as the measures read.
-pub(crate) fn open_timed(
-    carriers: &[Carrier<'_>],
-    width: u16,
-    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
-    stored: bool,
-    first: Option<Route>,
-    options: Option<&Value>,
-    timed: bool,
-) -> Option<Port> {
     let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
         true => Some(crate::plugin_pipe::config()?),
         false => None,
@@ -244,9 +231,7 @@ pub(crate) fn open_timed(
     // swap), which is no wait on a run queue, is charged: one over the overrun fails the port. A call here takes no
     // time.
     let now = std::time::Instant::now();
-    if !timed {
-        harness.tui.plugins.monitor().set_clock(move || now);
-    }
+    harness.tui.plugins.monitor().set_clock(move || now);
     let external = External { config_dir: config, cwd: root.path().to_path_buf(), dev: Vec::new() };
     match scripts {
         Some(scripts) => external_with(&harness.tui, external, Some(scripts)),
@@ -1072,78 +1057,4 @@ fn a_select_dialog_picks_the_same_through_the_c_abi_loopback() {
     let direct = picked(false);
     assert!(direct.1.contains("picked c"), "{}", direct.1);
     assert!(picked(true) == direct, "the loopback draws or picks otherwise");
-}
-
-// --- P8's measure
-
-/// Frame cost and the JS host's memory with the three published packages loaded unmodified (P8), against the same
-/// screen without them, over [`usage`]'s session: the median UI-thread time of a frame that draws (each after a 16 ms
-/// tick), the carrier's own time in them, and the cost of a revision a `session.usage.updated` event brings to every
-/// mount. Not a gate: run it with `--ignored --nocapture`, in release.
-#[test]
-#[ignore]
-fn measure_the_three_npm_plugins() {
-    let packages = [
-        Carrier::Npm("opencode-subagents-sidebar"),
-        Carrier::Npm("@mynameistito/opencode-force-input"),
-        Carrier::Npm("opencode-session-usage"),
-    ];
-    let frame = |h: &Port| {
-        let mut times: Vec<Duration> = (0..200)
-            .map(|_| {
-                h.app.advance(Duration::from_millis(16));
-                let begun = std::time::Instant::now();
-                h.app.render();
-                begun.elapsed()
-            })
-            .collect();
-        times.sort();
-        (times[times.len() / 2], times[times.len() * 99 / 100])
-    };
-    let bare = open_as(&[], 170, usage(Arc::new(Mutex::new(false)), false), false, None).unwrap();
-    bare.wait_for("Tree");
-    let without = frame(&bare);
-    let grown = Arc::new(Mutex::new(false));
-    let Some(h) = open_as(&packages, 170, usage(grown.clone(), false), false, None) else { return };
-    h.wait_for("≈ $2.50 session total");
-    h.wait_for("• Child");
-    let scripts = h.tui.plugins.scripts.borrow().clone().unwrap();
-    crate::plugin_pipe::settle(&h, &scripts);
-    let resident = scripts.resident().unwrap_or_default();
-    let before = opencode_plugin::pipe::crossed();
-    let with = frame(&h);
-    let idle = opencode_plugin::pipe::crossed();
-    let updates = 20;
-    let begun = std::time::Instant::now();
-    // Each event changes the child's history, so the total the panel shows changes with it: a revision of its mount.
-    for index in 0..updates {
-        let total = if index % 2 == 0 { "≈ $3.50" } else { "≈ $2.50" };
-        *grown.lock().unwrap() = index % 2 == 0;
-        h.events.emit(&json!({
-            "id": format!("evt_usage_{index}"), "created": 3 + index, "type": "session.usage.updated",
-            "location": { "directory": DIRECTORY },
-            "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
-        }));
-        h.wait_for(total);
-        crate::plugin_pipe::settle(&h, &scripts);
-    }
-    let updated = opencode_plugin::pipe::crossed();
-    eprintln!(
-        "P8 measure: JS host resident {} KiB with the three packages\n\
-         frame (median, p99) without them {:?} / {:?}, with them {:?} / {:?}; carrier time in 200 idle frames {:?}, \
-         trees {}\n\
-         {updates} usage events: {:?} wall each to settle, carrier time {:?} each, {} trees, {} bytes down, {} up",
-        resident >> 10,
-        without.0,
-        without.1,
-        with.0,
-        with.1,
-        idle.host - before.host,
-        idle.trees - before.trees,
-        begun.elapsed() / updates,
-        (updated.host - idle.host) / updates,
-        updated.trees - idle.trees,
-        updated.sent_bytes - idle.sent_bytes,
-        updated.received_bytes - idle.received_bytes,
-    );
 }
