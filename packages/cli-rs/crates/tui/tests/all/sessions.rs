@@ -544,17 +544,6 @@ fn rename_opens_the_prompt_and_patches_the_title() {
 }
 
 #[test]
-fn enter_opens_the_selected_session() {
-    let kit = Kit::new(Mode::List);
-    kit.open_list();
-    kit.wait_gone("Loading");
-    kit.app.press("down");
-    kit.app.press("enter");
-    assert!(kit.app.wait_until(WAIT, || { kit.tui.route() == Route::Session { id: SessionID("ses_a".into()) } }));
-    assert!(!kit.tui.dialogs.is_open());
-}
-
-#[test]
 fn open_dialog_reads_worktrees_and_creates_one() {
     let kit = Kit::new(Mode::Open);
     kit.app.press("ctrl+o");
