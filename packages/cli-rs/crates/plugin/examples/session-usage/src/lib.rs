@@ -8,7 +8,7 @@
 //! seconds, which moves the countdowns and lets the throttled read run, and notices a change of the config file.
 //!
 //! TS reads every page again after each turn in the tree, and so does the panel. A page holds a hundred messages with
-//! their content, so a thread of the plugin's reads each page from the fetch's bytes ([`Cx::blocking`]) and prices
+//! their content, so a thread of the plugin's reads each page from the reply's bytes (`call_on_thread`) and prices
 //! them at the end. Read on the UI thread, a family's pages after a subagent's turn went over the frame budget, and
 //! the panel was reported slow (PL-4).
 
@@ -26,10 +26,14 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime};
 
 use config::{Config, Position};
+use opencode_plugin_abi::serde::{Deserialize, Deserializer, de::Error as _};
 use opencode_plugin_abi::task::{Cx, Tasks, join_all};
-use opencode_plugin_abi::types::{ModelInfo, SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event};
+use opencode_plugin_abi::types::{
+    ExperimentalUsageLimitsInput, LocationQueryInput, MessageListInput, ModelInfo, SessionID, SessionListInput,
+    SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event,
+};
 use opencode_plugin_abi::{
-    Changed, Fetch, Host, LocationRef, Node, Placement, Read, Render, Setup, Span, Waker, Wrap, base64, plugin,
+    Changed, Host, LocationRef, Node, Placement, Read, Render, Setup, Span, Waker, Wrap, client, plugin,
 };
 use serde_json::Value;
 use usage::js_round;
@@ -322,9 +326,10 @@ impl Panel {
         };
         let state = self.state.clone();
         self.tasks.spawn(host, move |cx| async move {
-            let fetch = Fetch::new("GET", "/api/experimental/usage/limits")
-                .query([("location[directory]", location.directory)]);
-            let reply = cx.fetch(fetch).await;
+            let location = Some(LocationQueryInput { directory: Some(location.directory) });
+            // Only the meters are read, as TS reads them, whatever else the reply lacks.
+            let limits = client::experimental_usage_limits(&ExperimentalUsageLimitsInput { location }).cast::<Value>();
+            let reply = cx.call(limits).await;
             let mut state = state.borrow_mut();
             state.loading = false;
             // A failed read hides the meters.
@@ -451,40 +456,37 @@ async fn discover(cx: &Cx, session: &str) -> Result<Vec<String>, String> {
 
 /// TS `childIDs`: `parent`'s children, page by page.
 async fn child_ids(cx: &Cx, parent: &str) -> Result<Vec<String>, String> {
-    let (mut ids, mut cursor) = (Vec::new(), None);
+    let mut ids = Vec::new();
+    let parent_id = Some(Some(SessionID(parent.to_owned())));
+    let mut input = SessionListInput { limit: Some(PAGE_SIZE as i64), parent_id, ..Default::default() };
     for _ in 0..MAX_PAGES {
         if ids.len() >= MAX_SESSIONS {
             break;
         }
-        let query = [("limit", PAGE_SIZE.to_string()), ("parentID", parent.to_owned())];
-        let query = query.into_iter().chain(cursor.take().map(|cursor| ("cursor", cursor)));
-        let body = cx.fetch(Fetch::new("GET", "/api/session").query(query)).await?;
-        let page = body.get("data").and_then(Value::as_array).into_iter().flatten();
-        ids.extend(page.filter_map(|session| Some(session.get("id")?.as_str()?.to_owned())));
-        let Some(next) = page_cursor(&body) else { break };
-        cursor = Some(next.to_owned());
+        let page = cx.call(client::session_list(&input)).await?;
+        ids.extend(page.data.into_iter().map(|session| session.id.0));
+        let Some(next) = page.cursor.next.flatten().filter(|next| !next.0.is_empty()) else { break };
+        input.cursor = Some(next);
     }
     Ok(ids)
 }
 
 /// TS `fetchMessages`: `session`'s messages, page by page, each read on a thread of the plugin's from its bytes.
 async fn fetch_messages(cx: &Cx, state: &Rc<RefCell<State>>, session: &str) -> Result<Vec<SessionMessageInfo>, String> {
-    let (mut messages, mut cursor) = (Vec::new(), None);
+    let mut messages = Vec::new();
+    let session_id = SessionID(session.to_owned());
+    let mut input = MessageListInput { session_id, limit: Some(PAGE_SIZE as i64), ..Default::default() };
     for _ in 0..MAX_PAGES {
-        let query =
-            [("limit", PAGE_SIZE.to_string())].into_iter().chain(cursor.take().map(|cursor| ("cursor", cursor)));
-        let fetch = Fetch::new("GET", format!("/api/session/{session}/message")).query(query).bytes();
-        let Value::String(body) = cx.fetch(fetch).await? else { return Err("the page is not bytes".to_owned()) };
-        let page = cx.blocking(move || Page::read(&body)).await.ok_or("the page does not read")?;
+        let page = cx.call_on_thread(client::message_list(&input).cast::<Page>()).await?;
         state.borrow_mut().skipped += page.skipped;
         messages.extend(page.messages);
         let Some(next) = page.cursor else { break };
-        cursor = Some(next);
+        input.cursor = Some(next);
     }
     Ok(messages)
 }
 
-/// A page of messages, read from its bytes.
+/// A page of messages, read on the plugin's thread.
 struct Page {
     messages: Vec<SessionMessageInfo>,
     /// The messages the Rust types rejected.
@@ -492,24 +494,20 @@ struct Page {
     cursor: Option<String>,
 }
 
-impl Page {
-    /// The page in `body`, the reply's bytes in base64; `None` when it does not read as a page.
-    fn read(body: &str) -> Option<Self> {
-        let mut body = serde_json::from_slice::<Value>(&base64::decode(body)?).ok()?;
-        let cursor = page_cursor(&body).map(str::to_owned);
-        let Value::Array(data) = body.get_mut("data")?.take() else { return None };
+impl<'de> Deserialize<'de> for Page {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut body = Value::deserialize(deserializer)?;
+        let cursor = body.pointer("/cursor/next").and_then(Value::as_str).filter(|next| !next.is_empty());
+        let cursor = cursor.map(str::to_owned);
+        let Some(Value::Array(data)) = body.get_mut("data").map(Value::take) else {
+            return Err(D::Error::custom("the page has no data"));
+        };
         // TS prices whatever a page holds; the API has no log for a plugin, so the panel counts what it skips.
         let count = data.len();
         let messages: Vec<SessionMessageInfo> =
             data.into_iter().filter_map(|message| serde_json::from_value(message).ok()).collect();
-        Some(Self { skipped: count - messages.len(), messages, cursor })
+        Ok(Self { skipped: count - messages.len(), messages, cursor })
     }
-}
-
-/// The cursor of the page after `body`, if any.
-fn page_cursor(body: &Value) -> Option<&str> {
-    let cursor = body.get("cursor").and_then(|cursor| cursor.get("next")).and_then(Value::as_str);
-    cursor.filter(|cursor| !cursor.is_empty())
 }
 
 /// TS `familyIDs`: every session the host knows in the tree of `session`, the root first.
@@ -627,8 +625,8 @@ mod tests {
         })
     }
 
-    fn bytes(body: Value) -> String {
-        base64::encode(body.to_string().as_bytes())
+    fn read_page(body: Value) -> Option<Page> {
+        serde_json::from_value(body).ok()
     }
 
     // Expected: a message the Rust types reject is skipped and counted, and the others are priced, as TS prices
@@ -637,12 +635,12 @@ mod tests {
     fn a_malformed_message_is_skipped_and_the_rest_priced() {
         let broken = json!({ "id": "msg_2", "type": "assistant", "model": 5, "cost": 9 });
         let messages = [assistant("msg_1", 0.25), broken, assistant("msg_3", 0.5)];
-        let page = Page::read(&bytes(json!({ "data": messages, "cursor": { "next": "c2" } }))).unwrap();
+        let page = read_page(json!({ "data": messages, "cursor": { "next": "c2" } })).unwrap();
         assert_eq!((page.skipped, page.cursor.as_deref()), (1, Some("c2")));
         assert_eq!(usage::session_cost(&page.messages, &[]), 0.75);
-        let last = Page::read(&bytes(json!({ "data": [], "cursor": { "next": "" } }))).unwrap();
+        let last = read_page(json!({ "data": [], "cursor": { "next": "" } })).unwrap();
         assert_eq!(last.cursor, None);
-        assert!(Page::read(&bytes(json!({ "cursor": {} }))).is_none(), "a page without data does not read");
+        assert!(read_page(json!({ "cursor": {} })).is_none(), "a page without data does not read");
     }
 
     // Expected: as TS's `setInterval` in a component, the first tick comes a period after the mount, then every
