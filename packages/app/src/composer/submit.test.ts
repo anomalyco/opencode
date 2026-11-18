@@ -132,7 +132,7 @@ function session(input: {
   // The requests made so far, settled or not: the next one starts once they all have.
   const chain: Promise<unknown>[] = []
 
-  const sequence = <Value,>(_sessionID: string, send: () => Promise<Value>, prepare?: () => Promise<unknown>) => {
+  const sequence: ComposerSession["data"]["session"]["sequence"] = (_sessionID, send, prepare) => {
     const run = async () => {
       await prepare?.()
 
@@ -460,6 +460,7 @@ describe("Composer submission", () => {
       : active(draft, target)
 
     const notify = { missingSelection() {}, unqueueable() {}, failed: (kind: string) => void failures.push(kind) }
+
     const compose = (adapter: ActiveComposerAdapter | NewSessionComposerAdapter) =>
       submitInput(adapter, notify, undefined, undefined, undefined, undefined, undefined, () => gate.promise)
 

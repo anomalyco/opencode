@@ -1880,6 +1880,7 @@ story("an agent's show request leaves the keyboard where the person types, and i
 
     return buttons.length
   })
+
   expect(held).toBeGreaterThan(1)
   const bar = root.getByRole("alertdialog", { name: "Site permission request" })
   await expect(bar).toContainText("second.example wants to use your camera.")
