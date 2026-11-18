@@ -133,6 +133,16 @@ export function commandFailure(code: string, action: Browser.Action["type"] | un
   // The tab carries these as its `loadError`, which the page area explains.
   if (code === "page_crashed" || CHROMIUM_CODE.test(code)) return { surface: "none", known: true } as const
 
+  // How a binding ends in the normal course. The machine takes each as a step of the attachment (suspended, registered
+  // again, blocked), and none is a failure to tell the person about.
+  if (
+    code === "browser.pane.suspended" ||
+    code === "browser.pane.registration.closed" ||
+    code === "browser.pane.unsupported" ||
+    code === "browser.pane.missing"
+  )
+    return { surface: "none", known: true } as const
+
   if (code === "browser.pane.unavailable") return notice(attempted(action), { retry: retriable(action) })
 
   return notice(attempted(action), { retry: retriable(action), known: false })

@@ -106,6 +106,14 @@ describe("a command that failed", () => {
     expect(commandFailure("a code nobody has seen yet", undefined)).toMatchObject({ text: "failed.command.other", known: false })
   })
 
+  // The model warns about a code this table does not know. These end a binding in the normal course.
+  test.each(["browser.pane.suspended", "browser.pane.registration.closed", "browser.pane.unsupported", "browser.pane.missing"])(
+    "%s is a step of the attachment, not a failure nobody wrote a sentence for",
+    (code) => {
+      expect(commandFailure(code, undefined)).toEqual({ surface: "none", known: true })
+    },
+  )
+
   test("a refusal stays to be read; a load the page area explains raises no notice beside it", () => {
     expect(commandFailure("browser.address.web", "navigate")).toMatchObject({ text: "refused.web", lasting: true, retry: false })
     expect(commandFailure("ERR_NAME_NOT_RESOLVED (-105) loading 'https://nowhere.example/'", "navigate").surface).toBe("none")
