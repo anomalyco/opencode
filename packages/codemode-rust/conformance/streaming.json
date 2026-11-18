@@ -16613,6 +16613,62 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = JSON.parse('[1,[2,{}],3]', (k, v) => (typeof v === 'number' ? S(v) + v : v)); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            [
+              3,
+              {}
+            ],
+            4
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (function (x) { return S(x) + x + this.y }).call({ y: 10 }, 1); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          12,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = ((x, y) => S(x) + x + y).apply(null, [1, 2]); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          4,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' }); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
@@ -19605,151 +19661,151 @@
           }
         ],
         [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
           "pull",
           2
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
         ],
         [
           "echo",

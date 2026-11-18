@@ -9,7 +9,7 @@ pub mod exotic;
 pub(crate) mod fuel;
 pub mod iterator;
 mod numfmt;
-mod object;
+pub(crate) mod object;
 pub mod regexp;
 mod regexp_syntax;
 pub(crate) mod sets;

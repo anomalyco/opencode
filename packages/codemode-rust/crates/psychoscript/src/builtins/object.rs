@@ -512,29 +512,60 @@ fn function_receiver(vm: &mut Vm, this: &Value, method: &str) -> Result<(), Valu
     )))
 }
 
-fn function_call(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn function_call(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     function_receiver(vm, &this, "call")?;
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
-    invoke(vm, this, arg(args, 0), rest)
+    invoke(vm, callee, this, arg(args, 0), rest)
 }
 
 /// Calls `f` as the reference's `call` and `apply` do: they cost a native call before they hand on to `f`, which
-/// costs what a call of it from bytecode costs (see `fuel.rs`).
-fn invoke(vm: &mut Vm, f: Value, this: Value, args: &[Value]) -> Res {
+/// costs what a call of it from bytecode costs (see `fuel.rs`). The call is made from a native frame.
+fn invoke(vm: &mut Vm, callee: Id, f: Value, this: Value, args: &[Value]) -> Res {
     super::fuel::native(vm);
-    let r = vm.call_counted(&f, this, args)?;
-    vm.bytecode_builtin();
-    Ok(r)
+    let mut slots = vec![f, this, Value::Num(args.len() as f64)];
+    slots.extend_from_slice(args);
+    vm.enter_native(
+        crate::native::NativeOp::Invoke,
+        callee,
+        Value::Undef,
+        &slots,
+    )
 }
 
-fn function_apply(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// The step of `call` and `apply`'s frame: its slots are the function, the receiver, the argument count and the
+/// arguments.
+pub(crate) fn invoke_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    match input {
+        Input::Start => {
+            let (f, this, argc) = (fr.slot(vm, 0), fr.slot(vm, 1), fr.index(vm, 2));
+            let at = fr.base() + 3;
+            let args: Vec<_> = vm.stack[at..at + argc].to_vec();
+            vm.stack.extend_from_slice(&[f, this]);
+            vm.stack.extend_from_slice(&args);
+            vm.native_call(argc)
+        }
+        Input::Returned(r) => {
+            vm.bytecode_builtin();
+            Ok(Step::Done(r.get()))
+        }
+        Input::Threw(e) => Err(e),
+        Input::Finished => Ok(Step::Done(Value::Undef)),
+    }
+}
+
+fn function_apply(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     function_receiver(vm, &this, "apply")?;
     let list = match arg(args, 1) {
         Value::Undef | Value::Null => Vec::new(),
         v @ Value::Obj(_) => array_like(vm, &v)?,
         _ => return Err(vm.type_error("CreateListFromArrayLike called on non-object")),
     };
-    invoke(vm, this, arg(args, 0), &list)
+    invoke(vm, callee, this, arg(args, 0), &list)
 }
 
 pub fn array_like(vm: &mut Vm, v: &Value) -> Result<Vec<Value>, Value> {
@@ -704,14 +735,14 @@ fn symbol_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 // ---------- JSON ----------
 
-fn json_parse(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn json_parse(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let mut c = fuel::Conversions::default();
-    let r = parse(vm, &mut c, args);
+    let r = parse(vm, &mut c, args, callee);
     c.finish(vm, r)
 }
 
 /// `JSON.parse` after its text, a list of conversions of its own.
-fn parse(vm: &mut Vm, c: &mut fuel::Conversions, args: &[Value]) -> Res {
+fn parse(vm: &mut Vm, c: &mut fuel::Conversions, args: &[Value], callee: Id) -> Res {
     let mut text = [arg(args, 0)];
     c.convert(vm, &[Hint::String], &mut text, false)?;
     let text = vm.string_of(&text[0])?;
@@ -726,32 +757,121 @@ fn parse(vm: &mut Vm, c: &mut fuel::Conversions, args: &[Value]) -> Res {
     vm.define(holder, empty, v);
     // The reference revives in its prelude (`revive`), after `JSON.parse`'s own call.
     c.call(vm);
-    let r = revive(vm, &reviver, Value::Obj(holder), empty)?;
-    vm.bytecode_builtin();
-    Ok(r)
+    let key = vm.static_str("");
+    let op = crate::native::NativeOp::Revive;
+    vm.enter_native(op, callee, Value::Undef, &[reviver, Value::Num(0.0)])?;
+    push_level(vm, Value::Obj(holder), key);
+    Ok(Value::Undef)
 }
 
-/// The prelude's `revive`: entered once per value; an object's `$IsObject` and `$Keys`, a back-edge per key, then
-/// the reviver.
-fn revive(vm: &mut Vm, reviver: &Value, holder: Value, key: Atom) -> Res {
-    fuel::method(vm);
-    let val = vm.get(&holder, key)?;
-    fuel::native(vm);
-    if let Value::Obj(id) = val {
-        let keys: Vec<Atom> = vm.own_keys(id);
-        fuel::native(vm);
-        for k in keys {
-            let nv = revive(vm, reviver, val, k)?;
+// The slots of a reviving frame: the reviver and how many levels deep it is; then, per level, the holder, the key, the
+// value, the value's keys (an internal array, or undefined for a primitive) and the next of them to revive.
+const REV_F: usize = 0;
+const REV_DEPTH: usize = 1;
+const REV_LEVELS: usize = 2;
+const LEVEL: usize = 5;
+const L_HOLDER: usize = 0;
+const L_KEY: usize = 1;
+const L_VAL: usize = 2;
+const L_KEYS: usize = 3;
+const L_I: usize = 4;
+
+/// Pushes a level to revive `key` of `holder`, on top of the frame's slots.
+fn push_level(vm: &mut Vm, holder: Value, key: Value) {
+    vm.stack.extend(
+        [holder, key, Value::Undef, Value::Undef, Value::Num(0.0)].map(crate::value::Slot::pack),
+    );
+}
+
+/// The step of a reviving frame: the prelude's `revive`, entered once per value; an object's `$IsObject` and
+/// `$Keys`, a back-edge per key, then the reviver, children first.
+pub(crate) fn revive_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    let mut depth = fr.index(vm, REV_DEPTH);
+    let at = |depth: usize, k: usize| REV_LEVELS + depth * LEVEL + k;
+    // Whether the level on top is visited already, its keys walked from `L_I`.
+    let mut visited = false;
+    match input {
+        Input::Start => {}
+        Input::Returned(nv) => {
+            let nv = nv.get();
+            if depth == 0 {
+                vm.bytecode_builtin();
+                return Ok(Step::Done(nv));
+            }
+            vm.stack.truncate(fr.base() + at(depth, 0));
+            depth -= 1;
+            fr.set_index(vm, REV_DEPTH, depth);
+            let val = fr.get(vm, at(depth, L_VAL));
+            let keys = fr.get(vm, at(depth, L_KEYS)).as_obj().unwrap_or(0);
+            let i = fr.index(vm, at(depth, L_I));
+            let k = match &vm.heap[keys as usize].kind {
+                Kind::Array(items) => items.get(i).copied().unwrap_or_default(),
+                _ => Value::Undef,
+            };
+            let k = vm.key_of(&k)?;
             if let Value::Undef = nv {
                 vm.delete(&val, k)?;
-            } else {
+            } else if let Value::Obj(id) = val {
                 vm.set_obj(id, k, nv)?;
             }
             fuel::step(vm);
+            fr.set_index(vm, at(depth, L_I), i + 1);
+            visited = true;
         }
+        Input::Threw(e) => return Err(e),
+        Input::Finished => {}
     }
-    let kv = Value::Str(vm.atoms.atom_str(key));
-    vm.call_counted(reviver, holder, &[kv, val])
+    loop {
+        let (holder, key) = (
+            fr.get(vm, at(depth, L_HOLDER)),
+            fr.get(vm, at(depth, L_KEY)),
+        );
+        if !visited {
+            fuel::method(vm);
+            let k = vm.key_of(&key)?;
+            let val = vm.get(&holder, k)?;
+            fuel::native(vm);
+            fr.set(vm, at(depth, L_VAL), val);
+            if let Value::Obj(id) = val {
+                let keys: Vec<Value> = vm
+                    .own_keys(id)
+                    .into_iter()
+                    .map(|a| vm.atom_val(a))
+                    .collect();
+                fuel::native(vm);
+                let keys = vm.new_array(keys);
+                fr.set(vm, at(depth, L_KEYS), keys);
+            }
+        }
+        let val = fr.get(vm, at(depth, L_VAL));
+        let next_key = match fr
+            .get(vm, at(depth, L_KEYS))
+            .as_obj()
+            .map(|k| &vm.heap[k as usize].kind)
+        {
+            Some(Kind::Array(items)) => items.get(fr.index(vm, at(depth, L_I))).copied(),
+            _ => None,
+        };
+        if let Some(k) = next_key {
+            push_level(vm, val, k);
+            depth += 1;
+            fr.set_index(vm, REV_DEPTH, depth);
+            visited = false;
+            continue;
+        }
+        let f = fr.slot(vm, REV_F);
+        let (holder, key, val) = (
+            crate::value::Slot::pack(holder),
+            crate::value::Slot::pack(key),
+            crate::value::Slot::pack(val),
+        );
+        return fr.call_slots(vm, f, holder, [key, val]);
+    }
 }
 
 fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

@@ -593,6 +593,9 @@ programs.push(
     "[1, 2].values().some((x) => S(x) + x > 2)",
     "Iterator.from({ next() { return { done: false, value: 3 } } }).find((x) => S(x) > 0)",
     "[1, 2, 3].values().reduce((a, x) => a + S(x) + x)",
+    "JSON.parse('[1,[2,{}],3]', (k, v) => (typeof v === 'number' ? S(v) + v : v))",
+    "(function (x) { return S(x) + x + this.y }).call({ y: 10 }, 1)",
+    "((x, y) => S(x) + x + y).apply(null, [1, 2])",
   ].map(
     (expr) => `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
      Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`,

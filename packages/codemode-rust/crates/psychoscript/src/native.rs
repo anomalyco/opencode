@@ -56,9 +56,13 @@ pub enum NativeOp {
     ReplaceWith,
     /// `forEach`, `some`, `every`, `find`, `toArray` and `reduce` of `Iterator.prototype`.
     IterConsume,
+    /// `JSON.parse` with a reviver.
+    Revive,
+    /// `Function.prototype.call` and `apply`.
+    Invoke,
 }
 
-const OPS: [NativeOp; 14] = [
+const OPS: [NativeOp; 16] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
@@ -73,6 +77,8 @@ const OPS: [NativeOp; 14] = [
     NativeOp::GroupBy,
     NativeOp::ReplaceWith,
     NativeOp::IterConsume,
+    NativeOp::Revive,
+    NativeOp::Invoke,
 ];
 
 impl NativeOp {
@@ -154,6 +160,8 @@ pub fn step(vm: &mut Vm, op: NativeOp, base: usize, input: Input) -> Result<Step
         NativeOp::IterConsume => {
             for_of_step::<crate::builtins::iterator::Consume>(vm, frame, input)
         }
+        NativeOp::Revive => crate::builtins::object::revive_step(vm, frame, input),
+        NativeOp::Invoke => crate::builtins::object::invoke_step(vm, frame, input),
     }
 }
 

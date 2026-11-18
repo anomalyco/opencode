@@ -1228,10 +1228,13 @@ impl<'rt> Vm<'rt> {
         self.call_site().unwrap_or("The called value").to_owned()
     }
 
-    /// The name of the callee of the call or `new` the running code is in, natives included, when it has one.
+    /// The name of the callee of the call or `new` the running code is in, natives included, when it has one. A
+    /// native frame makes its calls for the bytecode below it, as a built-in that called from Rust did.
     pub(crate) fn call_site(&self) -> Option<&str> {
         self.frames
-            .last()
+            .iter()
+            .rev()
+            .find(|f| !matches!(f.kind, FrameKind::Native(_)))
             .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)))
     }
 
