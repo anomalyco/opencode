@@ -1,12 +1,5 @@
-//! The keyed reconcile of P1 (synthesis 3.4, 4.14): `reconcile-fresh`, `keep-full`, `no-effects` for a refused tree,
-//! and `work` for a revision, for `Keep` and for a theme change.
-//!
-//! The model adopts a list of trees, theme switches, wheel steps and bad trees into one [`Tree`]. After each command
-//! it compares the frame, the hit grid and the click under each region with a twin that mounts the last accepted tree
-//! fresh, with every keep written out and each scroll scrolled where the reconciled one is. The twin shares no code
-//! with the reconcile: nodes of ABI 1.x kinds go through `node::add`, the host's own mount path, a scroll is OpenTUI's
-//! scroll box set up here, and a diff is `opencode_ui::diff::view`. The model holds the last accepted tree itself, so
-//! it decides on its own which tree the contract refuses.
+//! Compare reconciled trees against fresh mounts. The reference expands keeps and compares cells, hit regions, and
+//! click actions after each edit.
 
 use crate::support::model::{self, Failure, Model, Rng};
 

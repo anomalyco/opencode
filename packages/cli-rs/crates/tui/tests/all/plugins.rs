@@ -1,7 +1,4 @@
-//! External native plugins (P.4) in the real TUI: the sample plugin found in a `plugins` directory renders its
-//! fence in a transcript and its slot on the home screen, reloads when it is rebuilt, a panic shows as failed in
-//! the plugin manager while the TUI keeps running, and a major ABI mismatch is refused there with its reason.
-//! Config and state live in temp directories. The real TUI calls `external` from `opencode-native` (`commands/default.rs`).
+//! Load external libraries into a real TUI and exercise rendering, reload, faults, and storage.
 
 use crate::support::{self, Fake, Harness, deref_harness};
 
@@ -143,7 +140,6 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
         .lines()
         .find(|line| line.contains("sample") && line.contains("local"))
         .unwrap_or_else(|| panic!("no sample row:\n{screen}"));
-    // An active plugin shows only its origin, as in TS.
     assert!(row.trim_end().ends_with("local") && !row.contains("failed"), "{screen}");
     print_excerpt("plugin manager with the sample active", &screen);
 }
@@ -199,7 +195,7 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     let screen = h.wait_for("run-command panicked: sample command panicked");
     print_excerpt("error details after a panic", &screen);
     h.app.press("escape");
-    // A plugin that failed while active is still active, as in TS: enter disables it, then enables it afresh.
+    // A failed active entry still toggles off before enabling starts a fresh activation.
     h.wait_for("disable enter");
     h.app.press("enter");
     h.app.wait_until(support::WAIT, || h.status() == opencode_plugin::Status::Inactive);
@@ -464,8 +460,7 @@ fn print_excerpt(title: &str, screen: &str) {
     }
 }
 
-/// Commands that act in one order, and a home claim that records `step` on each render with `local` after `seen` was
-/// stored: `probe.act` dispatches `probe.first`, which stores `step`, then stores `seen` itself.
+/// Probe the order of command dispatch, storage updates, and claim renders.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("seen");
     setup.storage_key("step");
@@ -573,7 +568,7 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
         h.app.advance(Duration::ZERO);
         let second = CHAINED.get().1;
         assert!(second > first && second - first <= budget, "loopback {loopback}: {first} then {second}");
-        // Each run adds two to the queue for the one it takes, but the queue stops growing at its bound (carbon new-1).
+        // One processed item enqueues two; the queue must stop growing at its bound.
         for _ in 0..80 {
             h.app.render();
             h.app.advance(Duration::ZERO);
@@ -1373,9 +1368,6 @@ fn big(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (final re-review big-boi, the storage medium): a merge is bounded by the value it makes, not by the old value
-// and the new fields together: replacing a field of just over half the bound with another keeps the value at that size
-// and is kept; a second such field would pass the bound, and is refused, leaving the value as it was. On both carriers.
 #[test]
 fn a_merge_is_bounded_by_the_value_it_makes() {
     for carrier in crate::plugin_surface::CARRIERS {
@@ -1420,10 +1412,6 @@ fn two(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (re-review final pass, the storage bound): two clients each add a field of [`FIELD`] bytes to a key that was
-// empty when each read it. The other client's write lands first; this client's merge fits what it read, but the value it
-// makes under the lock would pass the bound: it is refused there, the file keeps the other client's value
-// alone, and this client's plugin reads that value after, not its own merge. On both carriers.
 #[test]
 fn two_clients_merging_a_key_stay_within_its_bound_together() {
     for carrier in crate::plugin_surface::CARRIERS {

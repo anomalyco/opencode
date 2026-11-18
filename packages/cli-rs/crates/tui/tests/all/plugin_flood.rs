@@ -1,20 +1,4 @@
-//! `backlog` under a flood (synthesis 4.2 "Wakes are scheduled", 4.14; phase Pl), in the real TUI, linked and through
-//! the C ABI's byte shims.
-//!
-//! Two test plugins, `test.flood.a` and `test.flood.b`, each take messages from a thread and log each update; `a` also
-//! has a key on its route, whose handler logs it. Every update costs [`COST`] and the key's handler [`KEY_COST`] on the
-//! monitor's clock, which nothing else moves, so the frame budget is exact. The oracles are the plugins' own log, a list
-//! of what each send was accepted, and the 4.2 rule written here over that log, frame by frame:
-//!
-//! - what got `Ok` arrives once, in its thread's order; nothing else arrives;
-//! - a plugin with mail when a frame starts gets at least one update in it; each update after its first in the frame
-//!   starts while its own calls in the frame (its handler's too) are under the per-plugin budget and all plugins'
-//!   under the total;
-//! - a plugin with mail left after a frame stopped for the budget: its own, or all plugins';
-//! - a key's handler runs before the updates of its turn, also when the poll that read it handed a wake first, as
-//!   OpenTUI's poll does when both are ready (review bigboi 1);
-//! - an app runs one drain a frame at most, however many wakes reached it before the paint (review bigboi 7);
-//! - while the total budget is not reached, everything `b` sees equals a twin run in which `a` sent nothing.
+//! Check mailbox fairness and per-frame work under repeated wakes on both native carriers.
 
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
@@ -202,8 +186,7 @@ impl Flood {
                                 format!("plugin {plugin} got {number}, expected {:?}", waiting[plugin].front());
                             return fail("backlog", step, detail);
                         }
-                        // The update was allowed when it started: the plugin's first in the frame, or with its own
-                        // and all plugins' calls in the frame under their budgets.
+                        // Admission uses the budget at call start.
                         let (own, all) = (spent[plugin], spent[0] + spent[1]);
                         if updates[plugin] > 0 && (own >= FRAME || all >= self.all) {
                             let detail = format!(
@@ -434,9 +417,6 @@ fn sends_between_paints_wake_the_ui_thread_once() {
     }
 }
 
-// Expected (fixed row; review carbon 4.1, the mutant `c41-no-rearm`): a frame over the budget that a paint could not
-// end, because its calls ran between paints, ends at a later paint with no call after it. Plugin a's key costs 1.2 ms
-// between each of 13 paints, then nothing more: two paints later, a is slow. On both carriers.
 #[test]
 fn the_last_frame_over_the_budget_ends_without_a_call() {
     for carrier in CARRIERS {

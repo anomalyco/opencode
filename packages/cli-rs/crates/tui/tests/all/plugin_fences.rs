@@ -1,7 +1,4 @@
-//! Contract 2.x, step D: code-block renderers of TypeScript plugins on the pipe. A V2 plugin's
-//! `markdown.registerCodeBlockRenderer` is a fence claim of the host's, whose view runs on the JS host and answers after
-//! the frame: a fence shows the host's own code view at once, and the plugin's tree once it comes. The plugin is
-//! `crates/plugin/examples/pipe/fences/tui.ts`. Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+//! Exercise JavaScript Markdown renderers across the pipe: placeholder, adoption, fallback, quotas, and teardown.
 
 use std::cell::Cell;
 use std::path::Path;

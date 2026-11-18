@@ -1,7 +1,4 @@
-//! P6a: the built-ins on contract 2.0 (synthesis 4.14), with the properties of what they use. `work`: a streamed
-//! delta and a theme switch build nothing in them. `ledger`: a built-in disabled at run time holds no mount and draws
-//! as one disabled from the start. `lifecycle` and `delivery`: a surface hears its mounts begin and end in order, and
-//! each view hears what changed since the last. Their frames are E.14's, on both carriers (`app::scenarios`).
+//! Check built-in surfaces through real mounts, revisions, and theme and size changes.
 
 use crate::support::{self, DIRECTORY, Fake, Harness};
 
@@ -214,9 +211,6 @@ fn the_stats_poster_takes_a_new_theme() {
     }
 }
 
-// Expected (`settled-first`, a resize of `/stats`): the first frame at the new height is the poster opened at it,
-// compact or tall, centered in the new room, both ways across the compact threshold (review carbon-1: the view saw the
-// last frame's height, so the page centered in rows the terminal no longer has).
 #[test]
 fn a_resized_stats_page_draws_its_first_frame_at_the_new_size() {
     let harness = stats_route(44);
@@ -454,9 +448,7 @@ fn generation(line: &str) -> u64 {
     line.split(' ').nth(1).and_then(|number| number.parse().ok()).unwrap_or_default()
 }
 
-/// The lines of the log that are mount notices and each mount's first view, without replies. The first view hears
-/// `all` and no `local`: everything is new to it (review carbon-6). The host may send a batch of `all` again as it
-/// starts or mounts a route, which the next change of its own state may be in.
+/// Include the initial full view in each mount's trace.
 fn mounts_and_first_views() -> Vec<String> {
     let mut viewed = std::collections::HashSet::new();
     heard()

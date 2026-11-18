@@ -1,17 +1,5 @@
-//! The host behaviors of P3 (synthesis 3.5, 4.2, 4.4, 4.14): `settled-first`, `scroll-step`, `scroll-keep`, and
-//! `work` for a wheel step.
-//!
-//! A board plugin shows cards in a scroll: each a sticky header and a patch of two hunks, an anchor of group `file`,
-//! its hunks anchors of group `hunk`; above the scroll an edge row that `layout` paints from the top card. Its
-//! commands step between hunks, bring a card to the top, and mark a card reviewed (which folds it) keeping the
-//! reading position.
-//!
-//! The oracles share no code with the host. Every content row of the board has a unique token, and the model knows
-//! where each card and each hunk starts from its own arithmetic, so the offset a frame shows is read off its text:
-//! the first body row below the sticky header names its content row. `scroll-step` replays the step rule (from the
-//! last landed anchor while the offset stays, else from the first anchor past the inset) on those rows;
-//! `scroll-keep` computes where the card at the top must stay; `settled-first` compares the first frame after each
-//! event with the frame once the app wants no more.
+//! Compare plugin scroll commands, sticky headers, and windowed lists with an independently laid-out board. Each
+//! input's first frame must already be settled.
 
 use crate::support::{
     self,
@@ -40,7 +28,7 @@ struct Board {
     user_scrolls: usize,
     views: usize,
     layouts: usize,
-    /// What each `layout` call was told: the top card and whether only offsets moved.
+    /// Top card and movement-only flag for each layout callback.
     tops: Vec<(Option<String>, bool)>,
     /// When set, the cards are a windowed list instead of a scroll's children.
     list: bool,
@@ -52,7 +40,6 @@ struct Board {
     again: bool,
     /// Each view gives the edge another height, so each changes what `layout` is told.
     churn: bool,
-    /// The edge's rect each `layout` call was told.
     edges: Vec<Option<v2::Rect>>,
     /// A list's items estimate rows that have nothing to do with their heights.
     vary: bool,
@@ -245,7 +232,7 @@ fn view_as(cx: &mut v2::View<'_>, list: bool) -> v2::Node {
 
 struct Mounted {
     harness: support::Harness,
-    /// The open's first frame, when it was not the settled one.
+    /// First frame when it differs from the settled one.
     unsettled: Option<String>,
 }
 
@@ -420,7 +407,7 @@ impl Eager {
         Self { harness }
     }
 
-    /// The reference's frame at `size` and offset `top`, with the board as it is now.
+    /// Render the eager reference at the same viewport and scroll offset.
     fn at(&self, size: (u16, u16), top: i32) -> opentui::testing::Capture {
         self.harness.app.resize(size.0, size.1);
         for (name, input) in [("eager.view", None), ("eager.at", Some(top.to_string()))] {
@@ -805,14 +792,11 @@ fn a_step_lands_below_the_sticky_header_in_its_own_frame() {
     board_view.dispatch("board.step", Some("1".into()));
     let first = board_view.harness.app.render();
     let screen = first.text();
-    // From the top, the first hunk past the inset is card 0's second hunk, at row 4: offset 3.
     assert_eq!(offset_shown(&screen, &rows, 1), Some(3), "{screen}");
     assert_eq!(board(|board| board.landed.clone()), ["diff-0#1"]);
     assert_eq!(first, board_view.settle(), "the step's first frame was not settled");
 }
 
-// Expected (synthesis 4.2, 4.4 step 5): `layout` hears the scroll's top card when it changes and not otherwise; a
-// frame that only scrolls says `moved_only`, a fold does not; its paint shows in the frame of the event.
 #[test]
 fn layout_hears_the_top_card_and_paints_the_edge_in_the_same_frame() {
     let board_view = mount(6, 60, 16, false);
@@ -830,7 +814,6 @@ fn layout_hears_the_top_card_and_paints_the_edge_in_the_same_frame() {
     }
     assert!(steps > 1, "the first wheel step left card 0");
     assert_eq!(board(|board| board.tops.last().cloned()), Some((Some("card-1".to_owned()), true)));
-    // Folding the top card keeps it on top, now reviewed: the edge takes the reviewed color in that frame.
     board_view.dispatch("board.review", Some("1".into()));
     let first = app.render();
     assert_eq!(board(|board| board.tops.last().cloned()), Some((Some("card-1".to_owned()), false)));
@@ -842,7 +825,7 @@ fn layout_hears_the_top_card_and_paints_the_edge_in_the_same_frame() {
 
 /// What each of six wheel steps down cost: views, `layout` calls, widgets touched, scroll events, behavior rounds.
 fn wheel_work(cards: usize, list: bool, quiet: bool) -> Vec<(usize, usize, u64, usize, u64)> {
-    // A scroll of 410 cards is past the rows the host builds at once (Pl); this row counts behaviors, not limits.
+    // Lift the row budget here to measure scrolling work independently of admission limits.
     let _limits = crate::support::unlimited();
     board(|board| board.quiet = quiet);
     let board_view = mount(cards, 60, 16, list);
@@ -1045,7 +1028,6 @@ fn an_input_tells_its_handler_and_keeps_what_the_user_typed() {
     harness.app.press("enter");
     harness.app.advance(Duration::ZERO);
     assert_eq!(kinds(|kinds| kinds.submits.clone()), ["abc"]);
-    // A revision that leaves the value as it was keeps the typed text.
     dispatch(&harness, "kinds.code", "fn other() {}");
     assert!(harness.app.render().text().contains("abc"), "the typed text went");
     dispatch(&harness, "kinds.value", "xyz");
@@ -1079,8 +1061,7 @@ fn a_split_follows_the_drag_and_keeps_its_width() {
     let (left, row) = support::at(&screen, "LEFT").expect("the split shows");
     let (right, _) = support::at(&screen, "RIGHT").unwrap();
     assert_eq!(right - left, 20, "{screen}");
-    // The press lands on the handle over the boundary, not on the text beside it: the drag selects nothing (TS's
-    // `PaneResizeHandle`).
+    // Press the handle rather than its neighboring text so selection does not intercept the drag.
     harness.app.drag((left + 20, row), (left + 32, row));
     let screen = harness.app.render().text();
     assert_eq!(support::at(&screen, "RIGHT").map(|(x, _)| x - left), Some(32), "{screen}");
@@ -1134,8 +1115,7 @@ fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     });
     // A wake is not the user's input: a verb from it would fight the wheel.
     setup.on_wake(|host| host.scroll(v2::Target::Transcript, v2::Scroll::By { rows: 9 }));
-    // A key a layer of the plugin takes is (P2's handler, folded with P3's). With a modifier: a printable global key is
-    // the composer's while it has the focus (FT-14).
+    // Use a modifier because the composer owns unmodified printable keys.
     let layer = abi::interact::Layer::default()
         .scope(abi::interact::LayerScope::Global)
         .keys(vec![abi::interact::Bind::new("alt+z", "up")]);
@@ -1984,8 +1964,7 @@ fn a_list_in_a_row_scrolls_sideways() {
     assert!(top_line(&harness).starts_with("r0010.0"), "{}", harness.app.render().text());
 }
 
-// Expected (review carbon-4): OpenTUI lays out in `f32`, exact for whole rows up to 2^24: a list whose estimates add
-// up to more is refused, rather than a window that never settles failing the frame.
+// Whole rows above 2^24 cannot be represented exactly by the layout engine's `f32` coordinates.
 #[test]
 fn a_list_past_two_to_the_twenty_four_rows_is_refused() {
     use reconcile::Refused;

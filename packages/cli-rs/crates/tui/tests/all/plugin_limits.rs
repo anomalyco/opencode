@@ -1,13 +1,5 @@
-//! Limits on host work (synthesis 4.2, 4.14 `limits`; phase Pl), in the real TUI, linked and through the C ABI's byte
-//! shims.
-//!
-//! The test plugin `test.limits` has a route whose view returns the row's tree; `test.sibling` shows a few rows in the
-//! `app` slot below every route, a surface beside it. Each row shows a tree at a limit and one past it. The oracle is
-//! a twin: the same TUI with every limit lifted ([`support::unlimited`]) showing the tree the contract says, written
-//! here: at a limit the tree itself, past it the tree with the one node that crosses replaced by its placeholder, a
-//! muted row that says why. The frames are compared cell by cell, with their styles, the whole screen, so the
-//! sibling's rows are in it. Beside the frames: the placeholders, parses and decodes the host's counters saw, and what
-//! the host holds for the plugin, against counts the test makes from the tree.
+//! Check plugin resource admission and release on linked and ABI carriers. Compare the frame at the limit with the
+//! over-limit placeholder.
 
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::{self, Harness};
@@ -463,7 +455,7 @@ fn rows() -> Vec<Row> {
 }
 
 thread_local! {
-    /// The content the route's mount was given, by its generation: a plugin keeps its handle.
+    /// Content handle for the current route generation.
     static GIVEN: RefCell<Option<(u64, v2::ContentRef)>> = const { RefCell::new(None) };
 }
 
@@ -485,7 +477,7 @@ fn markdown(lines: usize) -> v2::Node {
 }
 
 thread_local! {
-    /// The handles the route's mount was given, by its generation and their index.
+    /// Content handles indexed within a route generation.
     static GIVEN_AT: RefCell<std::collections::HashMap<(u64, usize), v2::ContentRef>> = RefCell::default();
 }
 
@@ -705,8 +697,7 @@ fn images_decode_on_a_worker_within_their_limits() {
             let other = cx.content((*second).clone());
             v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
         });
-        // One pixel row past the side of an image, a row of 17 pixels (review bigboi 9), and one byte past an
-        // image's encoded bytes, each with room in the plugin's share; two images past its share.
+        // Exercise decoded dimensions and encoded byte limits independently.
         let roomy = Limits { plugin_images: 1 << 20, ..base };
         let encoded = png(16, 16, gradient);
         let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
@@ -731,7 +722,6 @@ fn images_decode_on_a_worker_within_their_limits() {
             assert!(lines.contains(&"⋯ image too large"), "{carrier:?}, {name}: no placeholder\n{text}");
             assert!(lines.contains(&"foot"), "{carrier:?}, {name}: the rest of the tree is gone\n{text}");
             assert_eq!(reconcile::work().since(before).parses, decodes, "{carrier:?}, {name}: decodes");
-            // One image over a limit draws as the twin's placeholder does (review carbon 6).
             if decodes == 0 {
                 let twin = {
                     let _limits = support::unlimited();
@@ -765,7 +755,6 @@ fn rust_lines(lines: usize) -> String {
     (0..lines).map(|line| format!("    let value_{line} = compute({line}, \"text\") + {line};\n")).collect()
 }
 
-/// Opens P2's surface `command` afresh on `subject`, on Home: a new mount, whose first view returns it.
 fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::native::Capture {
     SUBJECT.with(|slot| *slot.borrow_mut() = subject);
     harness.tui.keymap.dispatch("limits.close", None);
@@ -1063,9 +1052,6 @@ fn a_mount_keeps_no_text_a_limit_refused() {
     }
 }
 
-// Expected (fixed row; review bigboi 5): a node that was a placeholder past the tree's nodes, kept by a later revision
-// in which it would fit, is asked for again and shows; the twin draws the tree the plugin then gives. On both
-// carriers.
 #[test]
 fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
     let open_file = || text("Open file").with_id("open");
@@ -1095,8 +1081,6 @@ fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
     }
 }
 
-/// Shows `phases` in the route, the first now and each next by a wake, under `limits`, and returns the last frame and
-/// the views and placeholders the revisions after the first took.
 fn revisions(harness: &Harness, limits: Limits, phases: Subject) -> (opentui::native::Capture, u64, u64) {
     let _limits = limits::set(limits);
     PHASE.with(|phase| phase.set(0));
@@ -1220,8 +1204,6 @@ fn two_plugins_share_the_rows_of_a_frame() {
             harness.app.advance(Duration::ZERO);
             harness.app.resize(81, 30);
             let second = caught_up(&harness);
-            // The revision left for the next frame hears what changed for it, as the other does (P6a's input), each
-            // cause that asked for it while it waited.
             let heard = HEARD.with(|heard| heard.borrow().clone());
             for surface in ["route", "beside"] {
                 let woke = heard.iter().any(|(name, woke, _)| *name == surface && *woke);
@@ -1274,9 +1256,6 @@ fn a_lists_items_share_the_rows_of_a_frame() {
     }
 }
 
-// Expected (fixed row; review carbon 2.2): a list's items that are not mounted give the hunks of their patches as
-// anchors only within one node's limits: twenty patches of 3 hunks give 60, and of 5 hunks, past the 3 of a patch,
-// none, as they are placeholders once mounted. On both carriers.
 #[test]
 fn a_lists_anchors_respect_the_limits_of_a_patch() {
     let list = |count: usize| {
@@ -1364,9 +1343,6 @@ fn inline(background: u8) -> v2::Node {
     v2::Node::column(vec![image(source(gif)), text("foot")])
 }
 
-// Expected (fixed rows; review carbon 3): bytes past one image's bytes are over, image or not; a refused revision gives
-// back the images it admitted; an image given inline that the tree no longer shows goes; and the plugin's decodes wait
-// for the host's two workers. On both carriers.
 #[test]
 fn images_are_given_back_and_decode_two_at_a_time() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];

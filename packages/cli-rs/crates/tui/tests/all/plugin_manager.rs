@@ -1,7 +1,4 @@
-//! The plugin manager as a plugin of contract 2.0 (P6b, synthesis 4.10 and 4.14): what it holds once it is disabled
-//! (`ledger`), when it hears of the plugins and what it shows then (`lifecycle`), what a plugin that reads the plugin
-//! list hears (`delivery`), and the host's own `/plugins` while the manager has failed. Its frames against TS and the
-//! requests it sends are `system`'s named tests; its keys are the shared fixture's (`plugin_machines`).
+//! Exercise plugin-manager actions, subscriptions, and resources held while disabled.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
@@ -20,7 +17,7 @@ use opencode_tui::{Deps, Route};
 use crate::support::{self, Fake, Harness, Log};
 
 thread_local! {
-    /// The built-ins, the manager among them, run across the C ABI's byte shims (review carbon-6).
+    /// Run the manager and other built-ins through the C ABI.
     static ABI: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -139,7 +136,6 @@ fn the_manager_shows_the_plugins_only_while_its_list_shows_on() {
     harness.dispatch("plugins.list");
     harness.wait_for("skipped, local");
     harness.wait("the manager's read", || reads(&log) == read + 1);
-    // No package: no check (review carbon-5: hidden, so the list's reply changes it in place).
     assert!(!harness.app.text().contains("check for updates"), "{}", harness.app.text());
     opencode_tui::plugins::host::add(&harness.tui, watcher().into());
     harness.wait_for("test.watch");
@@ -908,8 +904,6 @@ fn the_managers_own_commands_open_nothing_on() {
     assert_eq!(reads(&log), read);
 }
 
-// Expected (review carbon-3): the slow toast of the manager offers no Disable, which would leave no `/plugins`; another
-// plugin's does.
 #[test]
 fn the_slow_manager_cannot_be_disabled_from_its_toast() {
     carriers(the_slow_manager_cannot_be_disabled_from_its_toast_on);
@@ -953,10 +947,6 @@ fn a_skipped_entry_added_to_the_config_is_heard_on() {
     assert!(heard.last().is_some_and(|list| list.iter().any(|row| row.starts_with("./added.ts Skipped"))), "{heard:?}");
 }
 
-// Expected (FT-10, FT-15): the TypeScript plugins `opencode-native` does not load, a plugin directory while the JS host
-// is off, a `plugins` entry by npm name and the TUI part of a server plugin, are told once in one notice, each with why
-// and, for the directory, how to turn the JS host on. `/plugins` lists each as skipped, the directory by its package's
-// name, and the server part beside its server row. A reconcile tells nothing again.
 #[test]
 fn typescript_plugins_not_loaded_are_told_once_and_listed() {
     let fake = Fake::new(|seen| match seen.path.as_str() {
@@ -988,7 +978,6 @@ fn typescript_plugins_not_loaded_are_told_once_and_listed() {
         dev: Vec::new(),
     };
     opencode_tui::plugins::host::external_with(&harness.tui, external, None);
-    // Told once the server's plugins were heard, whichever came first.
     harness.wait("the notice", || {
         settle(&harness);
         harness.tui.toasts.current().is_some()
