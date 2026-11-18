@@ -71,6 +71,8 @@ export {
 
 export { Schema }
 
+export { Icon } from "@opencode/ui/icon"
+
 type PluginHost = ReturnType<typeof usePluginHost>
 
 /** What the app interface hands the real host APIs when it mounts. */
