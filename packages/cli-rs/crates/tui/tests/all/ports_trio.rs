@@ -16,9 +16,9 @@ use serde_json::{Value, json};
 
 /// The columns of a row: the published package `npm`, and the ports named `port`.
 fn columns<'a>(npm: &'a str, port: &'a str) -> Vec<Carrier<'a>> {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut columns = vec![Carrier::Npm(npm), Carrier::Port(port)];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     columns.push(Carrier::Luau(port));
     columns
 }
@@ -751,9 +751,9 @@ fn queue_manager_stages_sorts_clears_and_imports_alike_in_ts_rust_and_luau() {
         );
         step("cleared drafts", &["return"], None, "0 drafts");
         // A Luau plugin reads no files.
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         let reads_files = !matches!(carrier, Carrier::Luau(_));
-        #[cfg(not(feature = "luau"))]
+        #[cfg(not(luau))]
         let reads_files = true;
         if reads_files {
             step("import", &["down", "down", "return"], Some(("messages.txt", &path)), "Stage 2 messages");

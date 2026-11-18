@@ -66,7 +66,7 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
     // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
     let path = opencode_util::path::strip_verbatim(&artifact.path.to_string_lossy()).into_owned();
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     if opencode_plugin::luau::approves(artifact) {
         return format!(
             "This project wants to run a Luau plugin inside opencode:\n\n{target}\nPlugin directory: {path}\
@@ -141,7 +141,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     #[test]
     fn a_luau_plugin_is_asked_about_as_one() {
         let tree = Artifact { target: "/p".into(), path: "/p".into(), sha256: "ab".repeat(32), script: true };

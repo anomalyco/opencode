@@ -33,7 +33,7 @@ fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// [`ticking`] in Luau.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 const TICKING: &str = r#"local plugin = require("@opencode/plugin")
 return plugin.define(function(setup)
     plugin.every(1000, function() end)
@@ -50,7 +50,7 @@ end)
 enum Carrier {
     InProcess,
     CAbi,
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau,
 }
 
@@ -59,9 +59,9 @@ enum Carrier {
 // no more. In process, through the C ABI and in Luau.
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
         ticks_without_frames(carrier);
@@ -77,7 +77,7 @@ fn ticks_without_frames(carrier: Carrier) {
             let entries = abi::export_plugin!(@loopback "test.tick", ticking);
             opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
                 ("plugin.toml", "id = \"test.tick\""),
@@ -185,7 +185,7 @@ fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// [`every_of_a_mount`] in Luau: it counts its ticks in its storage.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 const EVERY_OF_A_MOUNT: &str = r#"local plugin = require("@opencode/plugin")
 return plugin.define(function(setup)
     setup:storageKey("ticks")
@@ -212,9 +212,9 @@ end)
 // activation; so the loop ends when the mount closes. In process, through the C ABI and in Luau.
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
         MOUNT_TICKS.set(0);
@@ -225,7 +225,7 @@ fn an_every_a_mount_started_ends_with_that_mount() {
                 let entries = abi::export_plugin!(@loopback "test.tick", every_of_a_mount);
                 opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
             }
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Carrier::Luau => {
                 let files = [("plugin.toml", "id = \"test.tick\""), ("init.luau", EVERY_OF_A_MOUNT)];
                 opencode_plugin::luau::define(&opencode_plugin::luau::Sources::from_files(files), None).unwrap().0
@@ -234,7 +234,7 @@ fn an_every_a_mount_started_ends_with_that_mount() {
         };
         opencode_tui::plugins::host::add(&h.tui, definition);
         let ticks = || match carrier {
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Carrier::Luau => opencode_plugin::Host::storage_read(&*h.tui, "plugin.test.tick.ticks")
                 .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
                 .and_then(|ticks| ticks["n"].as_u64())

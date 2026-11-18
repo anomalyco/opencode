@@ -26,8 +26,6 @@ url.workspace = true
 # The hash an approval of a project plugin names (rich-plugins 3.9).
 ring.workspace = true
 
-# Luau plugins (O-178): a fourth carrier of contract 2.0, behind the default feature `luau`.
-mlua = { workspace = true, optional = true }
 
 [features]
 # TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
@@ -36,6 +34,11 @@ default = ["ts", "luau"]
 ts = []
 # Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
 luau = ["dep:mlua"]
+
+# Luau plugins (O-178): a fourth carrier of contract 2.0, behind the default feature `luau`. Not on x86_64 Windows MSVC
+# until OpenTUI's library links beside it (build.rs).
+[target.'cfg(not(all(target_arch = "x86_64", target_os = "windows", target_env = "msvc")))'.dependencies]
+mlua = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.

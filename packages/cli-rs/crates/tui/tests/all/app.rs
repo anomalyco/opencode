@@ -95,7 +95,7 @@ const PORTS: [(&str, &str); 10] = [
 #[derive(Clone, Copy, Debug)]
 enum Swap {
     Native(&'static str),
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau(&'static str),
 }
 
@@ -111,9 +111,9 @@ fn ports_replay_the_ts_recordings() {
     for (scenario, port) in PORTS {
         let recordings = Recording::all(Some(scenario)).unwrap_or_else(|error| panic!("{error}"));
         let recording = recordings.iter().find(|recording| recording.scenario == scenario).expect(scenario);
-        #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+        #[cfg_attr(not(luau), allow(unused_mut))]
         let mut swaps = vec![Swap::Native(port)];
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         swaps.push(Swap::Luau(port));
         for swap in swaps {
             let (passed, report) = run(recording, false, Some(swapped(swap)));
@@ -274,9 +274,9 @@ fn run(
     let starting = || {
         tui.plugins.entries().iter().any(|entry| match &entry.status {
             opencode_plugin::Status::Skipped(reason) => {
-                #[cfg(feature = "luau")]
+                #[cfg(luau)]
                 let luau = reason == opencode_plugin::luau::STARTING;
-                #[cfg(not(feature = "luau"))]
+                #[cfg(not(luau))]
                 let luau = false;
                 luau || reason == opencode_plugin::loader::STARTING
             }
@@ -674,7 +674,7 @@ fn swapped(swap: Swap) -> (opencode_util::temp::TempDir, std::path::PathBuf) {
                 .expect("library");
             dir
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Swap::Luau(name) => {
             let dir = root.path().join(format!("{name}.luau"));
             let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau");
