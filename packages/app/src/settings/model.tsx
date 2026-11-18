@@ -135,6 +135,8 @@ const generalSchema = Persistence.struct({
   newQuestionUI: Schema.Boolean,
   // The redesigned session timeline, off until it ships.
   newTimeline: Persistence.optional(Schema.Boolean),
+  // Browser-style session tab grouping across vertical and horizontal tabs.
+  tabGroups: Persistence.optional(Schema.Boolean),
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -436,6 +438,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newTimeline: withFallback(() => store.general?.newTimeline, false),
         setNewTimeline(value: boolean) {
           setStore("general", "newTimeline", value)
+        },
+        tabGroups: withFallback(
+          () => store.general?.tabGroups,
+          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setTabGroups(value: boolean) {
+          setStore("general", "tabGroups", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
