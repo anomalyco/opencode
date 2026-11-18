@@ -5,6 +5,7 @@ import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
+import { nodeHttpFetch } from "@/acp/node-http-fetch"
 
 export const AcpCommand = effectCmd({
   command: "acp",
@@ -27,6 +28,9 @@ export const AcpCommand = effectCmd({
     const sdk = createOpencodeClient({
       baseUrl: `http://${server.hostname}:${server.port}`,
       headers: ServerAuth.headers(),
+      // Bun's fetch on Windows starves every request once the /global/event SSE
+      // stream is open (see node-http-fetch.ts), so swap the SDK transport.
+      ...(process.platform === "win32" ? { fetch: nodeHttpFetch } : {}),
     })
 
     const input = new WritableStream<Uint8Array>({
