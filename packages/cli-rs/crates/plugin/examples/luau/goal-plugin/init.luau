@@ -304,7 +304,7 @@ return plugin.define(function(setup)
         })
     end)
 
-    local PROMPTS = {
+    local PROMPTS: { [string]: string } = {
         refresh = t.refreshPrompt,
         history = t.historyPrompt,
         pause = t.pausePrompt,
@@ -316,7 +316,7 @@ return plugin.define(function(setup)
         if not prompt then
             return
         end
-        local _, failure = host:fetch({ method = "POST", path = `/api/session/{asked}/prompt`, body = { text = prompt } })
+        local _, failure = plugin.client.session.prompt({ sessionID = asked, text = prompt })
         if failure then
             toast(host, failure, "error")
         end

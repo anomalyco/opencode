@@ -73,16 +73,12 @@ local function report(host: plugin.Host, message: string?)
 end
 
 -- The session's pending inbox items, or `nil` and why.
-local function inbox(host: plugin.Host): ({ plugin.SessionInboxInfo }?, string?)
-    local body, err = host:fetch({ method = "GET", path = `/api/session/{session}/inbox` })
-    if err then
-        return nil, err
-    end
-    return if type(body) == "table" then (body.data or body) else {}, nil
+local function inbox(): ({ plugin.SessionInboxInfo }?, string?)
+    return plugin.client.session.inbox.list({ sessionID = session })
 end
 
-local function cancel(host: plugin.Host, id: string): string?
-    local _, err = host:fetch({ method = "DELETE", path = `/api/session/{session}/inbox/{id}` })
+local function cancel(id: string): string?
+    local _, err = plugin.client.session.inbox.cancel({ sessionID = session, inboxID = id })
     return err
 end
 
@@ -242,8 +238,7 @@ local function publishDrafts(host: plugin.Host, drafts: number)
         if not first then
             break
         end
-        local path = `/api/session/{session}/prompt`
-        local _, err = host:fetch({ method = "POST", path = path, body = { text = first, delivery = "queue" } })
+        local _, err = plugin.client.session.prompt({ sessionID = session, text = first, delivery = "queue" })
         local list = entries(host)
         if not err and list[1] ~= first then
             err = "Concurrent draft change detected; inspect drafts before retrying."
@@ -264,7 +259,7 @@ end
 -- ends the manager.
 local function nativeInbox(host: plugin.Host): boolean
     while true do
-        local items, err = inbox(host)
+        local items, err = inbox()
         if not items then
             report(host, err)
             return false
@@ -298,7 +293,7 @@ local function nativeInbox(host: plugin.Host): boolean
             })
         local message = "This cannot stop a message already being executed; only still-pending items can be cancelled."
         if action == "cancel" and confirm(host, "Cancel pending item?", message, "Cancel item", "Keep") then
-            local failed = cancel(host, picked.id)
+            local failed = cancel(picked.id)
             if failed then
                 report(host, failed)
             end
@@ -308,7 +303,7 @@ end
 
 -- TS's clear of the native queue: every queued user prompt cancelled in turn. `false` once the list failed.
 local function clearNative(host: plugin.Host): boolean
-    local items, err = inbox(host)
+    local items, err = inbox()
     if not items then
         report(host, err)
         return false
@@ -328,7 +323,7 @@ local function clearNative(host: plugin.Host): boolean
         return true
     end
     for done, id in ids do
-        local failed = cancel(host, id)
+        local failed = cancel(id)
         if failed then
             toast(host, "Partial clear", `{done - 1} cancellations completed before the error.`)
             report(host, failed)
@@ -342,7 +337,7 @@ end
 -- TS's menu loop: the pending count, then the menu, until Close or escape.
 local function manager(host: plugin.Host)
     while true do
-        local items, err = inbox(host)
+        local items, err = inbox()
         if not items then
             return report(host, err)
         end

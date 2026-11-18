@@ -24,28 +24,9 @@ local function now(): number
     return os.time() * 1000
 end
 
--- The cursor of the page after `body`, if any.
-local function cursorOf(body: any): string?
-    local cursor = body and body.cursor and body.cursor.next
-    return if type(cursor) == "string" and cursor ~= "" then cursor else nil
-end
-
--- A page of `parent`'s children (TS `client.session.list`).
-local function children(parent: string, cursor: string?): plugin.Fetch
-    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) }, { "parentID", parent } }
-    if cursor then
-        table.insert(query, { "cursor", cursor })
-    end
-    return { method = "GET", path = "/api/session", query = query }
-end
-
--- A page of `session`'s messages (TS `client.message.list`).
-local function messages(session: string, cursor: string?): plugin.Fetch
-    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) } }
-    if cursor then
-        table.insert(query, { "cursor", cursor })
-    end
-    return { method = "GET", path = `/api/session/{session}/message`, query = query }
+-- The cursor of the page after `next`, if any.
+local function cursorOf(next: string?): string?
+    return if next ~= "" then next else nil
 end
 
 -- TS `familyIDs`: every session the host knows in the tree of `session`, the root first.
@@ -59,17 +40,15 @@ local function family(read: plugin.Read, session: string): { string }
 end
 
 -- TS `fetchMessages`: every message of `session`, page by page; `nil` once a request failed, or once `run` failed.
-local function fetchMessages(host: plugin.Host, session: string, run: { failed: boolean }): { plugin.SessionMessageInfo }?
-    local list, cursor = {}, nil
+local function fetchMessages(session: string, run: { failed: boolean }): { plugin.SessionMessageInfo }?
+    local list: { plugin.SessionMessageInfo }, cursor: string? = {}, nil
     for _ = 1, MAX_PAGES do
-        local body, err = host:fetch(messages(session, cursor))
-        if err or not body or run.failed then
+        local page = plugin.client.message.list({ sessionID = session, limit = PAGE_SIZE, cursor = cursor })
+        if not page or run.failed then
             return nil
         end
-        for _, message in body.data or {} do
-            table.insert(list, message)
-        end
-        cursor = cursorOf(body)
+        table.move(page.data, 1, #page.data, #list + 1, list)
+        cursor = cursorOf(page.cursor.next)
         if not cursor then
             break
         end
@@ -79,13 +58,13 @@ end
 
 -- TS `costOfSessions`' reads: the messages of each of `ids`, `COST_CONCURRENCY` sessions at a time; `nil` once a
 -- request failed, which stops the other sessions of its batch at their next page.
-local function fetchAll(host: plugin.Host, ids: { string }): { { plugin.SessionMessageInfo } }?
+local function fetchAll(ids: { string }): { { plugin.SessionMessageInfo } }?
     local sets, run = {}, { failed = false }
     for first = 1, #ids, COST_CONCURRENCY do
         local batch = {}
         for index = first, math.min(first + COST_CONCURRENCY - 1, #ids) do
             table.insert(batch, function(): (any, any)
-                local list = fetchMessages(host, ids[index], run)
+                local list = fetchMessages(ids[index], run)
                 run.failed = run.failed or list == nil
                 return list, if list then nil else "failed"
             end)
@@ -101,21 +80,21 @@ end
 
 -- TS `familyIDs`' walk down: the children of each session of `ids`, level by level, added to `ids`; `false` once a
 -- request failed.
-local function discover(host: plugin.Host, ids: { string }): boolean
+local function discover(ids: { string }): boolean
     local frontier, depth = table.clone(ids), 0
     while depth < MAX_DEPTH and #frontier > 0 and #ids < MAX_SESSIONS do
         local found = {}
         for _, parent in frontier do
-            local listed, cursor = {}, nil
+            local listed: { string }, cursor: string? = {}, nil
             for page = 1, MAX_PAGES do
-                local body, err = host:fetch(children(parent, cursor))
-                if err or not body then
+                local sessions = plugin.client.session.list({ limit = PAGE_SIZE, parentID = parent, cursor = cursor })
+                if not sessions then
                     return false
                 end
-                for _, child in body.data or {} do
+                for _, child in sessions.data do
                     table.insert(listed, child.id)
                 end
-                cursor = cursorOf(body)
+                cursor = cursorOf(sessions.cursor.next)
                 if not cursor or page >= MAX_PAGES or #listed >= MAX_SESSIONS then
                     break
                 end
@@ -170,10 +149,9 @@ return plugin.define(function(setup)
         end
         limits = true
         plugin.spawn(function()
-            local query = { { "location[directory]", location(host).directory } }
-            local body, err = host:fetch({ method = "GET", path = "/api/experimental/usage/limits", query = query })
+            local read = plugin.client.experimental.usage.limits({ location = { directory = location(host).directory } })
             limits = false
-            go = if err then nil else body and body.data and body.data.go
+            go = read and read.data and read.data.go
         end)
     end
 
@@ -186,12 +164,12 @@ return plugin.define(function(setup)
         if reload or #tree == 0 then
             ids = family(host, current)
             -- TS drops a tree found for a session no longer in view.
-            if not discover(host, ids) or session ~= current then
+            if not discover(ids) or session ~= current then
                 return
             end
             tree = ids
         end
-        local sets = fetchAll(host, ids)
+        local sets = fetchAll(ids)
         if sets and session == current then
             priced = { location = where, sessions = sets }
         end
