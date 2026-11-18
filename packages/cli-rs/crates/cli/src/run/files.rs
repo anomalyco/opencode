@@ -22,7 +22,12 @@ pub enum Prepared {
 /// Reads `input`, relative to `root`. The errors are the TS messages.
 pub fn prepare(input: &str, root: &Path) -> Result<Prepared, String> {
     let file = resolve(Flavor::NATIVE, root, input);
-    let mut handle = std::fs::File::open(&file).map_err(|_| format!("File not found: {input}"))?;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    // A FIFO must reach the regular-file check without waiting for a writer.
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+    let mut handle = options.open(&file).map_err(|_| format!("File not found: {input}"))?;
     let metadata = handle.metadata().map_err(|_| format!("File not found: {input}"))?;
     if !metadata.is_file() || metadata.len() > ATTACH_FILE_MAX_BYTES {
         return Err(format!("Cannot attach a directory, special file, or file larger than 10 MiB: {input}"));
@@ -157,6 +162,26 @@ mod tests {
         }
         let expected = Prepared::Text("<file name=\"notes.txt\">\nselected\n</file>".into());
         assert_eq!(prepare("notes.txt", &selected), Ok(expected));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_fails_without_a_writer_and_a_symlink_attaches() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let root = dir.path().to_owned();
+        assert!(std::process::Command::new("mkfifo").arg(root.join("attachment.txt")).status().unwrap().success());
+        std::fs::write(root.join("context.txt"), "attached context").unwrap();
+        std::os::unix::fs::symlink(root.join("context.txt"), root.join("linked.txt")).unwrap();
+        // A blocking open would wait for a writer forever; the thread lets the test fail instead of hang.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || sender.send(prepare("attachment.txt", &root)).unwrap());
+        let fifo = receiver.recv_timeout(std::time::Duration::from_secs(10)).expect("the FIFO open blocked");
+        assert_eq!(
+            fifo,
+            Err("Cannot attach a directory, special file, or file larger than 10 MiB: attachment.txt".into())
+        );
+        let expected = Prepared::Text("<file name=\"linked.txt\">\nattached context\n</file>".into());
+        assert_eq!(prepare("linked.txt", dir.path()), Ok(expected));
     }
 
     #[test]
