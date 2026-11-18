@@ -30,6 +30,7 @@ const implicit = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
   todo: { enabled: false, source: "default" },
   full_codemode: { enabled: false, source: "default" },
+  sandbox_execution: { enabled: false, source: "default" },
 })
 
 describe("Flag.resolve", () => {

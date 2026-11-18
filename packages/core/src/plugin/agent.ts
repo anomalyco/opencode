@@ -9,6 +9,8 @@ const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughl
 Guidelines:
 - Your role is EXCLUSIVELY to search and analyze
 - Parallelize independent tool calls for searches and reads whenever possible
+- Read each file or range at most once; use one larger read rather than many small slices, and use grep to locate content before reading
+- Never repeat a search or read whose result is already in your context; build on the result instead
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
 - You MUST NOT create, modify, delete, move, or copy files, including temporary files and reports
@@ -63,7 +65,7 @@ export const Plugin = define({
       editor.update(Agent.ID.make("general"), (item) => {
         item.name = Agent.Name.make("General")
         item.description =
-          "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
+          "General-purpose agent for researching complex questions and executing multi-step tasks. Use for genuinely independent units of work that benefit from parallel execution, not for a single scoped task."
         item.mode = "subagent"
         item.permissions.push(
           { action: "question", resource: "*", effect: "deny" },

@@ -80,7 +80,7 @@ NEVER commit changes unless the user explicitly asks you to. It is VERY IMPORTAN
 - Tool results and user messages may include <system-reminder> tags. <system-reminder> tags contain useful information and reminders. They are NOT part of the user's provided input or the tool result.
 
 # Tool usage policy
-- When doing file search, prefer to use the subagent tool in order to reduce context usage.
+- Search and read directly when the scope is clear. Use a subagent only for genuinely independent, large explorations; do not spawn one to repeat work already in context.
 - Run independent tool calls in parallel and dependent tool calls sequentially.
 - When the user's request is vague, use the question tool to clarify before reading files or making changes.
 - Avoid repeating the same tool with the same parameters once you have useful results. Use the result to take the next step (e.g. pick one match, read that file, then act); do not search again in a loop.

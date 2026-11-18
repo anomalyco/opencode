@@ -26,7 +26,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { TextBoundary } from "@opencode/util/text-boundary"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
+import { sanitizeEnv } from "./environment/sandbox.js"
 import { FileRetention } from "./file-retention.js"
+import { Flag } from "./flag.js"
 import { Location } from "./location.js"
 import { Global } from "@opencode/util/global"
 import { PersistentPty } from "./persistent-pty.js"
@@ -603,6 +605,7 @@ const layer = () =>
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
+      const sandboxed = yield* Flag.enabled("sandbox_execution")
       const daemon = yield* Daemon
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
@@ -890,13 +893,16 @@ const layer = () =>
           location.workspaceID !== undefined
             ? undefined
             : ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
+        // The persistent daemon replaces the environment itself, so scrubbing has to
+        // happen here too or sandbox mode would only cover spawned shell processes.
+        const safeEnv = sandboxed && baseEnv !== undefined ? sanitizeEnv(baseEnv) : baseEnv
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,
           shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
-            ...baseEnv,
+            ...safeEnv,
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
@@ -1178,6 +1184,7 @@ export const node = makeLocationNode({
     PluginHooks.node,
     SessionEnvironment.node,
     Config.node,
+    Flag.node,
     daemonNode,
     cleanupNode,
   ],

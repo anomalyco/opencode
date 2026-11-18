@@ -6,7 +6,9 @@ import type { Files } from "./files.js"
 import { makeFiles } from "./exec-defaults.js"
 import { makeLocalDriver } from "./local.js"
 import { Location } from "../location.js"
+import { Flag } from "../flag.js"
 import { Workspace } from "../workspace.js"
+import { makeSandboxDriver } from "./sandbox.js"
 
 export interface Interface {
   readonly files: Files
@@ -21,6 +23,7 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner
     const location = yield* Location.Service
     const workspace = yield* Workspace.Service
+    const sandboxed = yield* Flag.enabled("sandbox_execution")
     const driver = location.workspaceID
       ? yield* workspace.connect(location.workspaceID).pipe(
           // Environment has no error channel; an unknown or destroyed placement is a configuration defect by design.
@@ -29,7 +32,9 @@ const layer = Layer.effect(
           ),
           Effect.orDie,
         )
-      : makeLocalDriver(spawner)
+      : sandboxed
+        ? makeSandboxDriver(spawner, location.directory)
+        : makeLocalDriver(spawner)
     return Service.of({ files: makeFiles(driver), spawner: driver.spawner })
   }),
 )
@@ -37,7 +42,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
+  deps: [CrossSpawnSpawner.node, Flag.node, Location.node, Workspace.node],
 })
 
 export * as EnvironmentService from "./environment.js"

@@ -5,7 +5,9 @@ import { Event } from "@opencode/schema/event"
 import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
-export const SubscriberCapacity = 4_096
+// Each queued item is a fully encoded event string. A deep queue multiplied
+// by every connected client was the largest server-side heap amplification.
+export const SubscriberCapacity = 1_024
 
 export class SubscriberOverflowError extends Schema.TaggedError<SubscriberOverflowError>()(
   "EventFeed.SubscriberOverflow",

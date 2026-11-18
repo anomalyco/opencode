@@ -20,10 +20,12 @@ export const registry = {
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:
     "Enable the full Code Mode work in progress. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=full_codemode or experimental.full_codemode: true.",
+  sandbox_execution:
+    "Run tool processes with credential-like environment variables removed and their working directory pinned to the project. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=sandbox_execution or experimental.sandbox_execution: true.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "full_codemode"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "full_codemode", "sandbox_execution"])
 
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {

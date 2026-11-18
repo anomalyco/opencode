@@ -25,6 +25,11 @@ export const experiments: Experiment[] = [
     title: "TUI tools",
     description: "Let the agent open terminals in this TUI (requires server support)",
   },
+  {
+    id: "sandbox_execution",
+    title: "Sandbox execution",
+    description: "Run tool processes without credential environment variables and pinned to the project directory",
+  },
 ]
 
 export function DialogExperiments() {

@@ -22,6 +22,10 @@ export interface Options {
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
+// Every prepared path retains two strings in the location index. An unbounded
+// VCS scan can keep a large monorepo's entire path tree resident for the whole
+// session, so all locations share the same finite ceiling.
+const MAX_INDEXED_PATHS = 100_000
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
 function emptyIndex() {
@@ -69,7 +73,7 @@ const ripgrepLayer = Layer.effect(
         cwd: location.directory,
         pattern: "*",
         hidden: true,
-        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        limit: MAX_INDEXED_PATHS,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
