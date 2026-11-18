@@ -1183,7 +1183,7 @@ fn a_luau_build_the_crash_list_names_is_held() {
 
 // Expected (review luau-1, O-174): a table used in two places is read in both. A small DAG of shared tables, which the
 // decoder would expand on the Rust heap with no safepoint of the budget's, is charged for each place it is read, and the
-// parts bound refuses it at once and fails the plugin with why; so is any value past the limits it is charged against,
+// work bound (decode-budget) refuses it at once, before the parts bound would, and fails the plugin with why; so is any value past the limits it is charged against,
 // and a refusal the plugin catches still fails the call.
 #[test]
 fn a_value_past_the_conversion_bounds_is_refused_at_once() {
@@ -1217,7 +1217,7 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     let (used, text) = cpu(|| footer(&host, &registry));
     assert!(used < Duration::from_millis(500), "{used:?}");
     let error = failure(&registry, "test.luau").expect("refused");
-    assert!(error.contains("the plugin's value is refused: it holds more than 320000 parts"), "{error}");
+    assert!(error.contains("the plugin's value is refused: its tables take more than 5120000 slots"), "{error}");
     assert!(!text.contains("leaf"));
 
     let caught = r#"
@@ -1803,6 +1803,105 @@ fn an_empty_object_and_an_empty_array_cross_as_themselves() {
         serde_json::from_str::<serde_json::Value>(written).unwrap(),
         serde_json::json!({ "tags": {}, "list": [] })
     );
+}
+
+/// Builds `node` in Luau with `build` (which sets the local `node`), and renders it in the footer: the plugin's
+/// failure, if any, and the CPU time the render took.
+fn render_built(build: &str) -> (Option<String>, Duration) {
+    let host = host();
+    let init = format!(
+        r#"
+        local plugin = require("@opencode/plugin")
+        local node
+        {build}
+        return plugin.define(function(setup)
+            setup:slot({{ path = "home.footer" }}, function()
+                return plugin.show(node)
+            end)
+        end)
+    "#
+    );
+    let registry = running(&host, define(&sources(&init), None).unwrap().0);
+    let (used, _) = cpu(|| footer(&host, &registry));
+    (failure(&registry, "test.luau"), used)
+}
+
+/// The trees of the work bound's rows: a DAG of 20 levels, a 1M-slot sparse table shared 1,000 times, and a binary tree
+/// of 16 levels whose every box the hand decoder gives up after its children, for a key serde ignores.
+const DAG: &str = r#"
+    node = { type = "text", spans = { { text = "leaf" } } }
+    for _ = 1, 20 do node = { type = "box", children = { node, node } } end
+"#;
+const SPARSE: &str = r#"
+    -- One child in a 1M-slot array part: a walk of it scans every slot. 16 MiB, under the VM's cap.
+    local sparse = table.create(1048576)
+    sparse[1] = { type = "text", spans = {} }
+    node = { type = "box", children = table.create(1000, { type = "box", children = sparse }) }
+"#;
+const LATE: &str = r#"
+    -- A key the hand decoder does not know, which Luau walks after `children`: it gives up only once the children are
+    -- read, and serde reads them again.
+    local late
+    for _, name in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s" } do
+        local probe, seen = { type = "box", children = {}, [name] = true }, false
+        for key in probe do
+            if key == "children" then seen = true elseif key == name and seen then late = name end
+        end
+        if late then break end
+    end
+    assert(late, "no key walked after children")
+    node = { type = "text", spans = { { text = "leaf" } } }
+    for _ = 1, 16 do node = { type = "box", children = { node, node }, [late] = true } end
+"#;
+
+// Expected (decode-budget): the decode is host work with no interrupt, so a tree whose tables are walked again and again
+// is refused by the work bound, not run to the end: a DAG of 20 levels (each place a table appears is walked, and the
+// walks cost before the parts do), a sparse table of a million slots shared a thousand times (each walk counts every
+// slot, empty ones too), and a tree whose every box the hand decoder gives up late (serde's walk after it is counted,
+// never undone). The output-heavy render still decodes, far under the work bound.
+#[test]
+fn a_decode_that_walks_its_tables_again_and_again_is_refused() {
+    for (name, build) in [("dag", DAG), ("sparse", SPARSE), ("late", LATE)] {
+        let (failed, _) = render_built(build);
+        let bound = "the plugin's value is refused: its tables take more than 5120000 slots to read";
+        assert!(failed.as_ref().is_some_and(|error| error.contains(bound)), "{name}: {failed:?}");
+    }
+    // The same sparse table, as a value of any type: serde's walks count too.
+    let (_, failed) = checked(
+        r#"
+        local sparse = table.create(1048576)
+        sparse[1] = 1
+        host:storageSet("k", table.create(1000, sparse))
+    "#,
+    );
+    assert!(failed.is_some_and(|error| error.contains("slots to read")));
+    let lua = mlua::Lua::new();
+    let heavy = lua.load(
+        r#"
+        local rows = {}
+        for i = 1, 200 do
+            rows[i] = { type = "text", spans = { { text = "row ", fg = "text.muted" }, { text = tostring(i), bold = true } } }
+        end
+        return { type = "show", node = { type = "box", row = false, children = rows } }
+    "#,
+    );
+    let heavy: mlua::Value = heavy.call(()).unwrap();
+    let mut decode = decode::Decode::new();
+    assert!(decode.decode::<abi::Render>(&lua, &heavy).is_ok());
+    assert!(decode.walked() * 100 < 5_120_000, "the output-heavy render walked {} slots", decode.walked());
+}
+
+// Expected (decode-budget): the slots of a table are read from its header as `lua_rawiter` scans them: its array part,
+// and its hash part (one empty node where it has none).
+#[test]
+fn a_tables_slots_are_read_from_its_header() {
+    let lua = mlua::Lua::new();
+    let tables: Vec<mlua::Table> = lua
+        .load("return { table.create(1000), { a = 1, b = 2, c = 3 }, {}, { 1, 2, 3, x = 1 }, table.create(7, 0) }")
+        .call(())
+        .unwrap();
+    let slots: Vec<u64> = tables.iter().map(|table| decode::slots(&lua, table)).collect();
+    assert_eq!(slots, [1001, 4, 1, 4, 8]);
 }
 
 // Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the

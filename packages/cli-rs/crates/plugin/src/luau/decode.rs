@@ -13,7 +13,9 @@
 //!     again by serde, so its result and its error are serde's. Keys are matched as bytes: a field name is ASCII, so a
 //!     key that names one needs no UTF-8 check, and any other key is serde's.
 //! - **The bounds are charged as the value is read,** before anything is made from it ([`Decode`]). A table that
-//!   appears twice is read twice and charged twice, so the parts bound also stops a DAG of shared tables (O-174).
+//!   appears twice is read twice and charged twice, so the parts bound also stops a DAG of shared tables (O-174). The
+//!   work bound counts each walk of a table by all its slots, empty ones too, and serde's walk again after a hand
+//!   decode gave up: a sparse table shared many times holds few parts, but each walk scans all of it.
 
 #![allow(unsafe_code)]
 
@@ -28,6 +30,21 @@ use serde::de::{self, DeserializeOwned, DeserializeSeed, Deserializer, IntoDeser
 
 /// The parts (keys, values) a value may hold for each node a tree may hold ([`crate::limits::Limits::nodes`]).
 pub(crate) const VALUES_A_NODE: u64 = 16;
+
+/// The table slots a decode may walk for each node a tree may hold ([`crate::limits::Limits::nodes`]): the work bound,
+/// which a table walked again and again (a DAG of shared tables, a sparse table of a million slots shared a thousand
+/// times) meets though its parts are few. A row of text is four tables and charges about 140, so a tree as large as
+/// the node limit lets through decodes; the 20,000 nodes of the default limits allow 5.12 M.
+const SLOTS_A_NODE: u64 = 256;
+
+/// The work bound however small the node limit: a few milliseconds of host work, which a test's small limits leave to
+/// the parts bound.
+const LEAST_SLOTS: u64 = 1 << 20;
+
+/// What a walk of a table costs beyond its slots, in slots: a lookup of its `type`, a check of its marker, and
+/// serde's buffering where serde reads it. A tree of many small tables walked again and again meets the bound by
+/// these, where its slots alone would let it run a few hundred milliseconds.
+const SLOTS_A_WALK: u64 = 32;
 
 /// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
 /// children are a table in a table.
@@ -63,12 +80,23 @@ pub(crate) struct Decode {
     bytes: u64,
     most_values: u64,
     most_bytes: u64,
+    /// The slots of tables walked: each walk of a table counts all of its slots, as `lua_rawiter` scans the empty ones
+    /// too. Unlike the parts, a walk the hand decoder gives up and serde does again is counted twice, never undone.
+    slots: u64,
+    most_slots: u64,
 }
 
 impl Decode {
     pub(crate) fn new() -> Self {
         let limits = crate::limits::get();
-        Self { values: 0, bytes: 0, most_values: VALUES_A_NODE * limits.nodes, most_bytes: limits.plugin_content }
+        Self {
+            values: 0,
+            bytes: 0,
+            most_values: VALUES_A_NODE * limits.nodes,
+            most_bytes: limits.plugin_content,
+            slots: 0,
+            most_slots: (SLOTS_A_NODE * limits.nodes).max(LEAST_SLOTS),
+        }
     }
 
     /// `value` of the VM `lua` as a `T`, read on the VM's stack, where reading a key, a value or a string makes no
@@ -115,11 +143,27 @@ impl Decode {
         (self.values, self.bytes)
     }
 
+    /// The table slots walked so far.
+    #[cfg(test)]
+    pub(crate) fn walked(&self) -> u64 {
+        self.slots
+    }
+
     /// Counts `parts` more parts.
     fn charge(&mut self, parts: u64) -> Result<(), Refused> {
         self.values += parts;
         if self.values > self.most_values {
             return Err(Refused::Bound(format!("it holds more than {} parts", self.most_values)));
+        }
+        Ok(())
+    }
+
+    /// Counts a walk of a table of `slots` slots: `lua_rawiter` scans each, empty or not, and the walk costs
+    /// [`SLOTS_A_WALK`] more.
+    fn walk(&mut self, slots: u64) -> Result<(), Refused> {
+        self.slots += slots + SLOTS_A_WALK;
+        if self.slots > self.most_slots {
+            return Err(Refused::Bound(format!("its tables take more than {} slots to read", self.most_slots)));
         }
         Ok(())
     }
@@ -145,12 +189,15 @@ impl Decode {
         std::str::from_utf8(bytes).map_err(|_| Refused::Value("a key that is not UTF-8".to_owned()))
     }
 
-    /// Enters the table at `depth`: a part, within the depth, with room on the VM's stack for a pair and one more.
+    /// Enters the table at `index`, `depth` deep: a part, within the depth, with room on the VM's stack for a pair and
+    /// one more, and one walk of its slots charged to the work bound.
     ///
     /// # Safety
-    /// As for [`Decode::top`].
-    unsafe fn enter(&mut self, state: *mut ffi::lua_State, depth: usize) -> Result<(), Refused> {
+    /// As for [`Decode::top`], with a table at `index`.
+    unsafe fn enter(&mut self, state: *mut ffi::lua_State, index: c_int, depth: usize) -> Result<(), Refused> {
         self.charge(1)?;
+        // SAFETY: as the caller's.
+        self.walk(unsafe { capacity(state, index) })?;
         if depth >= DEPTH {
             return Err(Refused::Bound(format!("its tables nest more than {DEPTH} deep")));
         }
@@ -176,7 +223,7 @@ impl Decode {
         // SAFETY: as the caller's; each pair is popped before the next.
         unsafe {
             table(state, index)?;
-            self.enter(state, 0)?;
+            self.enter(state, index, 0)?;
             let (mut kind, mut node) = (None, None);
             let mut iter = 0;
             loop {
@@ -360,7 +407,7 @@ impl Decode {
     ) -> Result<(), Slow> {
         // SAFETY: as the caller's; each pair is popped before the next.
         unsafe {
-            self.enter(state, depth)?;
+            self.enter(state, index, depth)?;
             let mut iter = 0;
             loop {
                 iter = ffi::lua_rawiter(state, index, iter);
@@ -624,7 +671,7 @@ impl Decode {
         // SAFETY: as the caller's; each pair is popped before the next.
         unsafe {
             table(state, index)?;
-            self.enter(state, depth)?;
+            self.enter(state, index, depth)?;
             if marked_object(state, index) {
                 return Err(Slow::Serde);
             }
@@ -900,10 +947,14 @@ impl Slot<'_> {
     fn table<'de, V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Refused> {
         // SAFETY: as for `null`.
         unsafe {
-            self.decode.enter(self.state, self.depth)?;
+            self.decode.enter(self.state, self.index, self.depth)?;
             let length = usize::try_from(ffi::lua_objlen_(self.state, self.index)).unwrap_or(0);
             // A table with the object marker (`plugin.json.object`) is an object whatever its keys, an empty one too.
-            if !marked_object(self.state, self.index) && is_array(self.state, self.index, length) {
+            if !marked_object(self.state, self.index) && {
+                // Telling a sequence from a map is a walk of its own.
+                self.decode.walk(capacity(self.state, self.index))?;
+                is_array(self.state, self.index, length)
+            } {
                 let Slot { decode, state, index, depth } = self;
                 return visitor.visit_seq(Seq { decode, state, index, depth, at: 1, length });
             }
@@ -969,7 +1020,7 @@ impl<'de> Deserializer<'de> for Slot<'_> {
                     visitor.visit_enum(<&str as IntoDeserializer<'de, Refused>>::into_deserializer(name))
                 }
                 ffi::LUA_TTABLE => {
-                    self.decode.enter(self.state, self.depth)?;
+                    self.decode.enter(self.state, self.index, self.depth)?;
                     let refused = || de::Error::invalid_value(de::Unexpected::Map, &"a table of one key");
                     let iter = ffi::lua_rawiter(self.state, self.index, 0);
                     if iter < 0 {
@@ -1193,6 +1244,32 @@ unsafe fn is_array(state: *mut ffi::lua_State, index: c_int, length: usize) -> b
             }
         }
     }
+}
+
+/// How many slots the table at `index` has, empty ones too: its array part and its hash part, which `lua_rawiter`
+/// scans in full. Luau's API gives no count of them, so they are read from the table's header (`LuaTable` of
+/// `VM/src/lobject.h`, Luau 747): `lsizenode` at byte 6, `sizearray` at byte 8. A test holds the read to tables of
+/// known sizes (`luau::tests::a_tables_slots_are_read_from_its_header`).
+///
+/// # Safety
+/// `index` is a valid slot of `state` that holds a table.
+pub(crate) unsafe fn capacity(state: *mut ffi::lua_State, index: c_int) -> u64 {
+    // SAFETY: as documented: a table's pointer is its `LuaTable`, whose header holds these fields.
+    unsafe {
+        let table = ffi::lua_topointer(state, index).cast::<u8>();
+        let lsizenode = table.add(6).read();
+        let sizearray = table.add(8).cast::<i32>().read_unaligned();
+        u64::try_from(sizearray).unwrap_or(0) + (1u64 << lsizenode.min(31))
+    }
+}
+
+/// The slots of table `table` of VM `lua` ([`capacity`]).
+#[cfg(test)]
+pub(crate) fn slots(lua: &Lua, table: &mlua::Table) -> u64 {
+    let mut slots = 0;
+    // SAFETY: `exec_raw` pushes the table and runs the closure in protected mode with it at the top.
+    let read = unsafe { lua.exec_raw::<()>(table, |state| slots = capacity(state, ffi::lua_gettop(state))) };
+    read.map(|()| slots).unwrap_or(0)
 }
 
 /// Whether the table at `index` carries the object marker ([`super::json::OBJECT`]).
