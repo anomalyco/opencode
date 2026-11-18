@@ -1,8 +1,5 @@
-//! Stderr while the split footer is up. A `--print-logs` record or any other write to stderr would draw over the
-//! footer, so each line becomes a row of the scrollback above it instead. TS mini captures only stdout
-//! (`externalOutputMode: "capture-stdout"`); see `parity/deviations/O89-mini-stderr.md`.
-//!
-//! Only this process's writes are captured: a standalone server started before mini keeps the real stderr.
+//! Routes stderr to scrollback while the split footer owns the terminal. A server started before mini keeps its own
+//! stderr.
 
 /// One line written to stderr, without its line ending. The app's message handlers receive it.
 pub struct Line(pub String);

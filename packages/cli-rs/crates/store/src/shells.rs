@@ -122,8 +122,7 @@ impl Data {
         self.catalog_sync(Catalog::Shell, location)
     }
 
-    /// The `Catalog::Shell` read. A shell created or exited while it is in flight overrides the list it returns
-    /// (deviation O92-shell-list), so the list never loses a new shell or brings back an exited one.
+    /// Shell creation and exit events received during a list read take precedence over the snapshot.
     pub(crate) fn shell_read(&self, location: Location) -> Task<()> {
         let begin = location.clone();
         self.sync_start(

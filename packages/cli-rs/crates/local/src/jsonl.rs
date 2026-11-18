@@ -166,14 +166,9 @@ fn with_lock<T>(state: &Path, file: &Path, f: impl FnOnce() -> io::Result<T>) ->
 // How often [`rewrite`] reads again after another client changed the file under it.
 const REWRITE_ATTEMPTS: usize = 5;
 
-// Rewrites `file` atomically with `change(text)` when that gives a new text. The TypeScript TUI writes
-// without the lock (deviation O89-jsonl-writes), so the replace happens only while the file still holds
-// what was read. Otherwise the change is made again against a new read. Contents, not metadata: a
-// TypeScript rewrite truncates in place and may keep the length, and on Windows the modification time
-// can stay within one clock tick. The new text is synced before the rename, so a crash leaves the old
-// file or the new one.
-// A client that appends to the old file between the check and the rename writes to the open old file;
-// the lines it gained are carried over to the end of the new one.
+// Rewrites atomically from the current bytes, retrying if they changed during the edit. An unlocked writer can
+// preserve both size and timestamp. Sync before renaming; a concurrent append through the old inode can still be
+// lost between the final check and rename.
 fn rewrite(file: &Path, mut change: impl FnMut(&str) -> Option<String>) -> io::Result<()> {
     for _ in 0..REWRITE_ATTEMPTS {
         let mut old = match fs::File::open(file) {

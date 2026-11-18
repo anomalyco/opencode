@@ -77,8 +77,6 @@ mod tests {
     use opentui::prelude::*;
     use opentui::testing::TestApp;
 
-    // Expected (bigboi notes): the kind each diagram showed goes once the host frees its block, so N diagrams drawn
-    // and removed leave nothing.
     #[test]
     fn removed_diagrams_leave_no_kinds() {
         let app = TestApp::new(80, 200);

@@ -54,8 +54,7 @@ pub enum Output {
 
 type Validate<'a, V> = Box<dyn Fn(&V) -> Option<String> + 'a>;
 
-/// A caller's text (session titles, provider names, server messages, URLs) without escape sequences or control
-/// characters, before the prompt styles it. Clack writes it raw (`parity/deviations/O89-terminal-text.md`).
+/// Strips terminal escape sequences and controls from untrusted text before styling it.
 fn clean(text: impl Into<String>) -> String {
     let text: String = text.into();
     opencode_ui::terminal_text(&text).into_owned()

@@ -1372,8 +1372,7 @@ fn the_checker_catches_wrong_clients() {
     assert!(missed.is_empty(), "the checker misses {missed:?}");
 }
 
-/// The shrinker keeps the class of the failure it started from: a sequence that first fails on transcript order (O10)
-/// and also on permissions (the `Reversed` mutant) must not shrink to the shorter permission failure.
+/// Shrinking a transcript-order failure must not select a shorter sequence that fails only on permissions.
 #[test]
 fn the_shrinker_keeps_the_failure_class() {
     let ops = [
@@ -1526,9 +1525,7 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
 ];
 
 const OPEN: &[(&str, &str, &[Op])] = &[
-    // O10: the stream lags behind a head page that already holds newer rows. A `step.started` delivered after the
-    // read published has no page row with a known `durable.seq` to compare with, so it is appended after newer rows.
-    // TS and the old `message_live` do the same (models-6 report).
+    // A delayed `step.started` can arrive after a newer head page that contains no comparable `durable.seq`.
     (
         "late step after the newest page",
         "order ses_0",
