@@ -271,7 +271,8 @@ impl Vm {
             f()
         };
         if let Some(stopped) = self.budget.stopped.take() {
-            return Err(format!("{}: {}", self.id, plain(&stopped, crate::mailbox::REPORT)));
+            // A failed task's error with its frames comes this way too ([`super::bind`]'s `fail`).
+            return Err(report(&self.id, &stopped));
         }
         let result = result.map_err(|error| report(&self.id, &error.to_string()))?;
         if self.lua.used_memory() + ROOM >= self.cap {

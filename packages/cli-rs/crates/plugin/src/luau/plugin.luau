@@ -7,9 +7,9 @@
 -- `props` starts from a table that already has room for the common fields, and copying `props` into it does not grow
 -- it. A helper given no `props` builds the smallest table and runs no loop.
 
--- What the host hands this chunk: `fail(message)` fails the running call with `message` though nothing more can be
--- allocated to raise it; `native`, what `plugin.json` is built on (its `decode`, `encode`, `null` and markers).
-local fail: (string) -> never, native: any = ...
+-- What the host hands this chunk: `fail(message, frames)` fails the running call with `message` and the `frames` of
+-- a traceback, if any, though nothing more can be allocated to raise it; `native`, what `plugin.json` is built on (its `decode`, `encode`, `null` and markers).
+local fail: (string, string?) -> never, native: any = ...
 
 local plugin = {}
 
@@ -110,6 +110,9 @@ local function release(co: thread)
     end
 end
 
+-- The length past which a task's error fails its call by the latch (`fail`), not raised: 16 times what the host keeps.
+local HUGE_ERROR = 64 * 1024
+
 -- What resuming task `co` gave: whether its function ended, and its first result. An error in the task, or a yield of
 -- the plugin's own, is raised again with the task's traceback, so the host call fails and the plugin with it.
 local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean, any)
@@ -126,6 +129,13 @@ local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean
     tasks[co] = nil
     if ok then
         mark = "coroutine.yield in a task: only a waiting call (host:fetch, a dialog, plugin.all) may pause it"
+    end
+    -- An error far longer than the host keeps of it (4 KiB) fails the call by the latch, with the task's frames apart.
+    -- Copied into one string with them, and raised to be copied again into the host's traceback, it can run the heap
+    -- out, and lose its frames or all of it ("error in error handling").
+    if type(mark) == "string" and #mark > HUGE_ERROR then
+        local built, frames = pcall(traceback, co, "")
+        fail(mark, if built then frames else nil)
     end
     local built, text = false, nil
     if mark ~= "not enough memory" then

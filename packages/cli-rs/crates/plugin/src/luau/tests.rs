@@ -906,7 +906,8 @@ fn a_plugin_holding_most_of_its_cap_runs() {
 }
 
 // Expected (luau-safety-2 4, carbon ls-4): a plugin's error is kept and logged cut to 4 KiB, with its control
-// characters escaped: a 6 MiB `error(...)` with an escape sequence used to stay whole in `/plugins`.
+// characters escaped: a 6 MiB `error(...)` with an escape sequence used to stay whole in `/plugins`. It keeps its frames
+// (luau-lean): raised, it lost them, or all of it as "error in error handling", by the heap it took.
 #[test]
 fn a_long_error_is_cut_and_escaped() {
     let host = host();
@@ -923,9 +924,12 @@ fn a_long_error_is_cut_and_escaped() {
     host.app.advance(Duration::from_millis(1));
     let error = failure(&registry, "test.luau").expect("failed");
     assert!(error.len() < 4096 + 100, "{} bytes: {:?}", error.len(), error.get(..200));
-    assert!(error.starts_with(r"test.luau: \u{1b}]0;title\u{7}EEE"), "{}", &error[..40]);
+    assert!(error.starts_with(r"test.luau: \u{1b}]0;title\u{7}EEE"), "{:?}", error.get(..200));
     assert!(!error.contains('\u{1b}'));
-    assert!(error.ends_with(&format!("... ({} bytes)", 6 * 1024 * 1024 + 10)), "{}", &error[error.len() - 60..]);
+    let (message, frames) = error.split_once("\nstack traceback:\n").unwrap_or((&error, ""));
+    let end = message.get(message.len().saturating_sub(60)..);
+    assert!(message.ends_with(&format!("... ({} bytes)", 6 * 1024 * 1024 + 10)), "{end:?}");
+    assert_eq!(frames, "\tinit.luau:5: in function <init.luau:4>");
 }
 
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
