@@ -1000,13 +1000,17 @@ pub fn tool_args(
 #[derive(Clone, Copy)]
 pub enum Callee<'a> {
     Named(&'a str),
+    /// Named by what this makes, only when a message needs it: a tool's path as the program writes it.
+    Lazy(&'a dyn Fn() -> String),
 }
 
 impl Callee<'_> {
     /// How the reference names an argument in a failure: `Argument 1 to tools.ns.tool`.
     pub fn label(self, arg: usize) -> String {
-        let Callee::Named(name) = self;
-        format!("Argument {} to {name}", arg + 1)
+        match self {
+            Callee::Named(name) => format!("Argument {} to {name}", arg + 1),
+            Callee::Lazy(name) => format!("Argument {} to {}", arg + 1, name()),
+        }
     }
 }
 

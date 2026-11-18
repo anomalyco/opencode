@@ -170,8 +170,8 @@ fn thrown_text(v: &HostValue) -> String {
 pub fn call_tool(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
     use crate::cross::Args;
     let p = vm.new_promise();
-    let label = tool_expression(path);
-    match crate::cross::tool_args(vm, args, crate::cross::Callee::Named(&label)) {
+    let label = || tool_expression(path);
+    match crate::cross::tool_args(vm, args, crate::cross::Callee::Lazy(&label)) {
         Err(e) if vm.fatal.is_some() => return Err(e),
         Err(e) => vm.reject(p, e),
         Ok(Args::Ready(json)) => start_tool(vm, p, path, json),

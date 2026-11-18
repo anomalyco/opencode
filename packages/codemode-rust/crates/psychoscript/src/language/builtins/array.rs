@@ -72,15 +72,17 @@ fn arr_id(vm: &mut Vm, this: &Value, callee: Id) -> Result<Id, Value> {
     {
         return Ok(*id);
     }
+    Err(not_an_array(vm, this, callee))
+}
+
+#[cold]
+#[inline(never)]
+fn not_an_array(vm: &mut Vm, this: &Value, callee: Id) -> Value {
     let name = match vm.heap[callee as usize].kind {
         Kind::Native { name, .. } => vm.atoms.text(name).to_owned(),
         _ => String::new(),
     };
-    Err(super::incompatible(
-        vm,
-        &format!("Array.prototype.{name}"),
-        this,
-    ))
+    super::incompatible(vm, &format!("Array.prototype.{name}"), this)
 }
 
 fn items<'a>(vm: &'a Vm, id: Id) -> &'a [Value] {
