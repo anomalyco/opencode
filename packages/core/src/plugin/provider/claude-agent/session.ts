@@ -54,6 +54,9 @@ export const register = Effect.fn("ClaudeSessionHooks.register")(function* (ctx:
     "retry",
     (event) =>
       Effect.sync(() => {
+        // opencode never retries a subscription limit by itself. A retry asked for here comes from another plugin's
+        // hook, for example after it switched accounts, and hooks run in load order, so this one must not undo it.
+        if (event.error.type === "provider.quota") return
         event.decision = { retry: false }
       }),
     { providerID: ClaudeProvider.ID },

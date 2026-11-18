@@ -22,7 +22,7 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
   return (message: SDKMessage): LanguageModelV3StreamPart[] => {
     const parts: LanguageModelV3StreamPart[] = []
     const error = failure(message)
-    if (error) return [{ type: "error", error }]
+    if (error) return [{ type: "error", error: error.limited ? ClaudeAgentError.quota(error, Date.now()) : error }]
     if (message.type === "rate_limit_event") rateLimit = message.rate_limit_info
     if (message.type === "stream_event" && message.parent_tool_use_id === null) {
       const event = message.event
