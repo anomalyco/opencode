@@ -1,8 +1,9 @@
 //! The LaTeX math parser, a port of `packages/latex/src/parser.ts` and `limits.ts` in strict mode, the mode the
 //! TypeScript plugin uses, with the fixes of opentui-tex's `math-parser.ts`: literals are whole graphemes, combining
 //! marks after a command or delimiter stay on it, style directives and `\limits` make no atom, `\limits` reaches an
-//! operator through styles, `\color` stops at a cell, and comments end at any line break. User macros are not
-//! ported: the plugin never passes any.
+//! operator through styles, `\color` stops at a cell, comments end at any line break, operators place limits in
+//! three ways, and the permissive and incomplete modes of `parseMath` and `parseMathIncomplete` ([`Mode`]). User
+//! macros are not ported: the plugin never passes any.
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -72,6 +73,31 @@ pub enum Align {
     Right,
 }
 
+/// Where an operator puts its scripts (opentui-tex's `limits: boolean | "display"`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Limits {
+    /// Beside it: `\int`, `\sin`, `\nolimits`.
+    Never,
+    /// Above and below in display math, beside it inline: `\sum`, `\lim`.
+    Display,
+    /// Above and below: `\limits`, `\operatorname*`.
+    Always,
+}
+
+/// How [`parse_with`] reads a source.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mode {
+    /// An unsupported command is its name as text and an unsupported delimiter its name or character, instead of an
+    /// error (opentui-tex's default; the plugin parses strictly and shows the source).
+    pub permissive: bool,
+    /// The source is a prefix of a formula, as one streams: a construct the end cuts off takes `□` for what is
+    /// missing (`parseMathIncomplete`). Malformed syntax before the end still fails.
+    pub incomplete: bool,
+}
+
+/// What an incomplete formula shows for a missing part.
+pub const PLACEHOLDER: &str = "\u{25a1}";
+
 /// A parsed formula (TS `MathNode`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
@@ -87,7 +113,7 @@ pub enum Node {
     Brace { body: Box<Node>, over: bool },
     Accent { accent: Accent, body: Box<Node> },
     Variant { variant: Variant, body: Box<Node> },
-    Operator { value: String, limits: bool },
+    Operator { value: String, limits: Limits },
     OverUnder { base: Box<Node>, over: Option<Box<Node>>, under: Option<Box<Node>> },
     Color { color: String, body: Box<Node> },
 }
@@ -110,7 +136,12 @@ impl std::error::Error for ParseError {}
 
 type Result<T> = std::result::Result<T, ParseError>;
 
+/// Parses a whole formula strictly, the plugin's mode.
 pub fn parse(source: &str) -> Result<Node> {
+    parse_with(source, Mode::default())
+}
+
+pub fn parse_with(source: &str, mode: Mode) -> Result<Node> {
     let source: Vec<char> = source.chars().collect();
     if source.len() > MAX_SOURCE_LENGTH {
         return Err(ParseError {
@@ -119,9 +150,12 @@ pub fn parse(source: &str) -> Result<Node> {
         });
     }
     check_nesting(&source)?;
-    let mut parser = Parser { boundaries: boundaries(&source), source, position: 0, depth: 0 };
+    let mut parser = Parser { boundaries: boundaries(&source), source, position: 0, depth: 0, mode };
     let body = parser.row(&|_| false)?;
     parser.skip_whitespace();
+    if parser.peek() == Some('}') {
+        return parser.fail("Unexpected closing group".into());
+    }
     if !parser.done() {
         return parser.fail(format!("Unexpected \"{}\"", parser.peek_str()));
     }
@@ -172,6 +206,7 @@ struct Parser {
     boundaries: Vec<bool>,
     position: usize,
     depth: usize,
+    mode: Mode,
 }
 
 type Stop<'a> = &'a dyn Fn(&Parser) -> bool;
@@ -270,14 +305,17 @@ impl Parser {
                 self.skip_whitespace();
                 let mut align = None;
                 if command == "cfrac" && self.peek() == Some('[') {
-                    let option = ["[]", "[l]", "[r]"].into_iter().find(|option| self.starts_with(option));
-                    let Some(option) = option else {
+                    // `[`, `l` or `r` or nothing, then `]`; an incomplete source may end before the `]`.
+                    let side = self.source.get(self.position + 1).copied().filter(|c| *c == 'l' || *c == 'r');
+                    let close = self.position + 1 + usize::from(side.is_some());
+                    let closed = self.source.get(close) == Some(&']');
+                    if !closed && !(self.mode.incomplete && close == self.source.len()) {
                         return self.fail("Unsupported \\cfrac alignment; expected [l], [r], or []".into());
-                    };
-                    self.position += option.chars().count();
-                    align = match option {
-                        "[l]" => Some(Align::Left),
-                        "[r]" => Some(Align::Right),
+                    }
+                    self.position = close + usize::from(closed);
+                    align = match side {
+                        Some('l') => Some(Align::Left),
+                        Some('r') => Some(Align::Right),
                         _ => None,
                     };
                 }
@@ -305,9 +343,9 @@ impl Parser {
             "middle" => {
                 return Ok(Node::Symbol { value: self.read_delimiter()?, role: None });
             }
-            "right" => {
+            "right" | "end" => {
                 self.position = start;
-                return self.fail("Unexpected \\right".into());
+                return self.fail(format!("Unexpected \\{command}"));
             }
             _ => {}
         }
@@ -324,10 +362,11 @@ impl Parser {
         match command {
             "text" | "mbox" => return Ok(Node::Text(self.read_text_group()?)),
             "operatorname" => {
-                let limits = self.peek() == Some('*');
-                if limits {
+                let star = self.peek() == Some('*');
+                if star {
                     self.position += 1;
                 }
+                let limits = if star { Limits::Always } else { Limits::Never };
                 return Ok(Node::Operator { value: self.read_text_group()?, limits });
             }
             "overset" | "stackrel" => {
@@ -373,10 +412,14 @@ impl Parser {
                 ]));
             }
             "mod" | "bmod" => {
-                return Ok(Node::Operator { value: "mod".into(), limits: false });
+                return Ok(Node::Operator { value: "mod".into(), limits: Limits::Never });
             }
             "displaylines" => {
                 self.skip_whitespace();
+                if self.mode.incomplete && self.done() {
+                    let rows = vec![vec![placeholder()]];
+                    return Ok(Node::Matrix { rows, environment: Environment::Gathered, columns: None });
+                }
                 self.expect("{")?;
                 return self.matrix(Environment::Gathered, "}", None);
             }
@@ -392,10 +435,12 @@ impl Parser {
             return Ok(Node::Symbol { value: value.into(), role: Some(role) });
         }
         if let Some(value) = symbols::large_operator(command) {
-            return Ok(Node::Operator { value: value.into(), limits: !command.contains("int") });
+            let limits = if command.contains("int") { Limits::Never } else { Limits::Display };
+            return Ok(Node::Operator { value: value.into(), limits });
         }
         if symbols::is_named_operator(command) {
-            let limits = command.starts_with("lim") || command == "min" || command == "max";
+            let display = command.starts_with("lim") || command == "min" || command == "max";
+            let limits = if display { Limits::Display } else { Limits::Never };
             return Ok(Node::Operator { value: command.into(), limits });
         }
         if command == "backslash" {
@@ -407,6 +452,9 @@ impl Parser {
         if matches!(command, "{" | "}" | "%" | "#" | "$" | "&" | "_") {
             return Ok(Node::Symbol { value: command.into(), role: None });
         }
+        if self.mode.permissive {
+            return Ok(Node::Text(format!("\\{command}")));
+        }
         self.fail_at(format!("Unsupported command \\{command}"), start)
     }
 
@@ -416,10 +464,11 @@ impl Parser {
         let Some(environment) = environment(name) else { return self.fail(format!("Unsupported environment {name}")) };
         let columns = match environment {
             Environment::Array => {
-                let columns: String = self.read_raw_group()?.chars().filter(|c| !c.is_whitespace()).collect();
-                let valid = !columns.is_empty()
-                    && columns.chars().all(|c| "lcr|".contains(c))
-                    && columns.chars().any(|c| "lcr".contains(c));
+                let (columns, closed) = self.read_raw(false)?;
+                let columns: String = columns.chars().filter(|c| !c.is_whitespace()).collect();
+                // An incomplete source may end in the columns before their first alignment.
+                let valid = columns.chars().all(|c| "lcr|".contains(c))
+                    && (columns.chars().any(|c| "lcr".contains(c)) || !closed);
                 if !valid {
                     return self.fail("Unsupported array columns; expected l, c, r, and |".into());
                 }
@@ -435,16 +484,24 @@ impl Parser {
         let mut cells = Vec::new();
         while !self.done() {
             self.skip_whitespace();
-            if self.starts_with(end) && cells.is_empty() {
+            if self.done() || (self.starts_with(end) && cells.is_empty()) {
                 break;
             }
             let cell_start = self.position;
-            let cell = self
-                .row(&|parser| parser.peek() == Some('&') || parser.starts_with("\\\\") || parser.starts_with(end))?;
+            let cell = self.row(&|parser| {
+                parser.peek() == Some('&')
+                    || parser.starts_with("\\\\")
+                    || parser.starts_with(end)
+                    || parser.is_command("end")
+            })?;
             cells.push(row(cell));
             self.skip_whitespace();
             if self.peek() == Some('&') {
                 self.position += 1;
+                self.skip_whitespace();
+                if self.mode.incomplete && self.done() {
+                    cells.push(placeholder());
+                }
                 continue;
             }
             if self.starts_with("\\\\") {
@@ -462,10 +519,15 @@ impl Parser {
                 return self.fail(format!("Unexpected \"{}\" in {name}", self.peek_str()));
             }
         }
-        if !self.starts_with(end) {
+        let closed = self.starts_with(end);
+        if !closed && !(self.mode.incomplete && self.done()) {
             return self.fail(format!("Missing {end}"));
         }
-        self.expect(end)?;
+        if closed {
+            self.position += end.chars().count();
+        } else if rows.is_empty() && cells.is_empty() {
+            cells.push(placeholder());
+        }
         if !cells.is_empty() || rows.is_empty() {
             rows.push(cells);
         }
@@ -474,14 +536,16 @@ impl Parser {
 
     fn left_right(&mut self) -> Result<Node> {
         let left = self.read_delimiter()?;
-        let at_right = |parser: &Parser| {
-            parser.starts_with("\\right")
-                && !parser.source.get(parser.position + 6).is_some_and(|&c| is_command_letter(c))
-        };
-        let body = row(self.row(&at_right)?);
+        let at_right = |parser: &Parser| parser.is_command("right");
+        let nodes = self.row(&at_right)?;
         if !at_right(self) {
+            if self.mode.incomplete && self.done() {
+                let body = if nodes.is_empty() { placeholder() } else { row(nodes) };
+                return Ok(Node::Delimited { left, body: Box::new(body), right: String::new() });
+            }
             return self.fail("Missing \\right".into());
         }
+        let body = row(nodes);
         self.read_command()?;
         let right = self.read_delimiter()?;
         Ok(Node::Delimited { left, body: Box::new(body), right })
@@ -494,6 +558,9 @@ impl Parser {
                 return self.group();
             }
             if self.done() {
+                if self.mode.incomplete {
+                    return Ok(placeholder());
+                }
                 return self.fail("Expected an argument".into());
             }
             if self.peek() == Some('}') {
@@ -507,9 +574,8 @@ impl Parser {
 
     fn group(&mut self) -> Result<Node> {
         self.expect("{")?;
-        let body = row(self.row(&|_| false)?);
-        self.expect("}")?;
-        Ok(body)
+        let body = self.row(&|_| false)?;
+        self.close("}", body)
     }
 
     fn optional_argument(&mut self) -> Result<Option<Node>> {
@@ -518,9 +584,17 @@ impl Parser {
             return Ok(None);
         }
         self.position += 1;
-        let body = row(self.row(&|parser| parser.peek() == Some(']'))?);
-        self.expect("]")?;
-        Ok(Some(body))
+        let body = self.row(&|parser| parser.peek() == Some(']'))?;
+        self.close("]", body).map(Some)
+    }
+
+    /// `body` once `close` ends it; an incomplete source may end first, an empty body then being a placeholder.
+    fn close(&mut self, close: &str, body: Vec<Node>) -> Result<Node> {
+        if self.mode.incomplete && self.done() {
+            return Ok(if body.is_empty() { placeholder() } else { row(body) });
+        }
+        self.expect(close)?;
+        Ok(row(body))
     }
 
     fn skip_optional_bracket(&mut self) {
@@ -545,6 +619,9 @@ impl Parser {
     fn read_delimiter(&mut self) -> Result<String> {
         self.skip_whitespace();
         if self.done() {
+            if self.mode.incomplete {
+                return Ok(String::new());
+            }
             return self.fail("Expected a delimiter".into());
         }
         if self.peek() == Some('}') {
@@ -553,14 +630,29 @@ impl Parser {
         let start = self.position;
         if self.peek() == Some('\\') {
             let command = self.read_command()?;
-            return match symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(&command)) {
-                Some(delimiter) => Ok(self.with_marks(delimiter.to_owned())),
-                None => self.fail_at(format!("Unsupported delimiter \\{command}"), start),
-            };
+            if let Some(delimiter) =
+                symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(&command))
+            {
+                return Ok(self.with_marks(delimiter.to_owned()));
+            }
+            // A lone `\` that ends an incomplete source may still become one.
+            if self.mode.incomplete && self.done() && self.position == start + 1 {
+                return Ok(String::new());
+            }
+            if !self.mode.permissive {
+                return self.fail_at(format!("Unsupported delimiter \\{command}"), start);
+            }
+            return Ok(self.with_marks(command));
         }
-        let token = self.next().map(String::from).unwrap_or_default();
-        let delimiter = symbols::delimiter(&token).map_or(token, str::to_owned);
-        Ok(self.with_marks(delimiter))
+        let token = self.peek_str();
+        if let Some(delimiter) = symbols::delimiter(&token) {
+            self.position += 1;
+            return Ok(self.with_marks(delimiter.to_owned()));
+        }
+        if !self.mode.permissive {
+            return self.fail(format!("Unsupported delimiter {token}"));
+        }
+        Ok(self.read_literal())
     }
 
     /// `delimiter` with the marks after it; an invisible one (`.`) takes them away too.
@@ -610,13 +702,18 @@ impl Parser {
         Ok(command)
     }
 
-    /// The source of a `{…}` group, without its comments unless `comments`.
+    /// The source of a `{…}` group without its comments.
     fn read_raw_group(&mut self) -> Result<String> {
-        self.read_raw(false)
+        self.read_raw(false).map(|(value, _)| value)
     }
 
-    fn read_raw(&mut self, comments: bool) -> Result<String> {
+    /// The source of a `{…}` group, without its comments unless `comments`, and whether it closed: an incomplete
+    /// source may end inside it.
+    fn read_raw(&mut self, comments: bool) -> Result<(String, bool)> {
         self.skip_whitespace();
+        if self.mode.incomplete && self.done() {
+            return Ok((String::new(), false));
+        }
         self.expect("{")?;
         let start = self.position;
         let mut value = String::new();
@@ -641,10 +738,13 @@ impl Parser {
             if char == '}' && !escaped {
                 depth -= 1;
                 if depth == 0 {
-                    return Ok(value);
+                    return Ok((value, true));
                 }
             }
             value.push(char);
+        }
+        if self.mode.incomplete {
+            return Ok((value, false));
         }
         self.fail_at("Unterminated group".into(), start)
     }
@@ -658,9 +758,15 @@ impl Parser {
         };
         self.position += 1 + name.len();
         if let Some(Node::Operator { limits, .. }) = body.last_mut().map(limits_target) {
-            *limits = name == "limits";
+            *limits = if name == "limits" { Limits::Always } else { Limits::Never };
         }
         true
+    }
+
+    /// Whether `\name` starts here, not a longer command.
+    fn is_command(&self, name: &str) -> bool {
+        self.starts_with(&format!("\\{name}"))
+            && !self.source.get(self.position + 1 + name.len()).is_some_and(|&c| is_command_letter(c))
     }
 
     fn is_escaped(&self, index: usize) -> bool {
@@ -669,7 +775,9 @@ impl Parser {
 
     /// A raw group with TeX's text escapes resolved (`readTextGroup`).
     fn read_text_group(&mut self) -> Result<String> {
-        let raw: Vec<char> = self.read_raw(true)?.chars().collect();
+        let (raw, closed) = self.read_raw(true)?;
+        let raw: Vec<char> =
+            if raw.is_empty() && !closed { PLACEHOLDER.chars().collect() } else { raw.chars().collect() };
         let mut text = String::new();
         let mut index = 0;
         while index < raw.len() {
@@ -761,6 +869,10 @@ impl Parser {
     fn fail_at<T>(&self, message: String, position: usize) -> Result<T> {
         Err(ParseError { message, position })
     }
+}
+
+fn placeholder() -> Node {
+    Node::Symbol { value: PLACEHOLDER.into(), role: None }
 }
 
 fn row(mut body: Vec<Node>) -> Node {

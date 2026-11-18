@@ -11,10 +11,11 @@
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::layout::{self, Layout, Options};
-use crate::parse::{self, Accent, Environment, Node, ParseError, Role};
+use crate::parse::{self, Accent, Environment, Limits, Node, ParseError, Role};
 
 /// Lays out `source` as inline math on one row.
 pub fn render(source: &str) -> Result<Layout, ParseError> {
+    crate::check_source(source)?;
     let node = linear(parse::parse(source)?);
     let options = Options { display: false, inline: true, ..Options::default() };
     let layout = layout::layout(&node, &options)
@@ -53,7 +54,9 @@ pub fn linear(node: Node) -> Node {
             .unwrap_or_else(|| Node::Row(vec![group(linear(*body)), symbol(spacing(accent))])),
         Node::Variant { variant, body } => Node::Variant { variant, body: Box::new(linear(*body)) },
         Node::Color { color, body } => Node::Color { color, body: Box::new(linear(*body)) },
-        node @ (Node::Symbol { .. } | Node::Text(_) | Node::Space(_) | Node::Operator { .. }) => node,
+        // Limits above and below would take rows: they are scripts.
+        Node::Operator { value, .. } => Node::Operator { value, limits: Limits::Never },
+        node @ (Node::Symbol { .. } | Node::Text(_) | Node::Space(_)) => node,
     }
 }
 

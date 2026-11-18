@@ -16,7 +16,7 @@
   {"path":"/api/session/ses_m/inbox","json":{"data":[]}}
  ],
  "steps": [
-  {"checkpoint":"open","until":"render","fixture":"P.2/fence-margin/open"}
+  {"checkpoint":"open","until":"render","deviation":[{"file":"P2-latex-opentui-tex","cells":2}],"fixture":"P.2/fence-margin/open"}
  ],
  "requests": {
   "writes": [],

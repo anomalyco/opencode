@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 opencode-plugin-abi.workspace = true
 unicode-segmentation = "1"
+unicode-width.workspace = true
 
 [dev-dependencies]
 opencode-plugin.workspace = true

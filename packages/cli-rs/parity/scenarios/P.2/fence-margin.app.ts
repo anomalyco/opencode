@@ -25,5 +25,12 @@ export default defineApp({
     },
     { path: "/api/session/ses_m/inbox", json: { data: [] } },
   ],
-  steps: [{ checkpoint: "open", until: "render" }],
+  steps: [
+    {
+      checkpoint: "open",
+      until: "render",
+      // opentui-tex's radical: `√ x` where TS draws `╰╯x`.
+      deviation: [{ file: "P2-latex-opentui-tex", cells: 2 }],
+    },
+  ],
 })
