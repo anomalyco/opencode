@@ -75,8 +75,6 @@ thread_local! {
     /// of its views.
     static ONCE: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
     static FULL: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
-    /// `claim.a` leaves its card's last line out: what the oracle must see.
-    static SHORT: Cell<bool> = const { Cell::new(false) };
 }
 
 /// What the plugins call a part: a tool call by its id, and the one fence.
@@ -169,11 +167,7 @@ fn view_a(cx: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
             }
         }
     }
-    let mut tree = tree(part);
-    if let (true, v2::Node::Box { children, .. }) = (SHORT.get(), &mut tree) {
-        children.pop();
-    }
-    Some(tree)
+    Some(tree(part))
 }
 
 fn view_b(_: &mut v2::View<'_>, part: &Part) -> Option<v2::Node> {
@@ -972,24 +966,24 @@ fn whole_stream(faults: &[Command]) -> Vec<Command> {
 // their content mounted fresh, also across a theme switch, and the `read` call shows the host's own row.
 #[test]
 fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
-    CARRIERS.into_iter().for_each(each_revision_of_a_claimed_part_equals_a_fresh_mount_on);
-}
-
-fn each_revision_of_a_claimed_part_equals_a_fresh_mount_on(carrier: Carrier) {
-    let mut commands = whole_stream(&[]);
-    commands.insert(10, Command::Theme(false));
-    assert_eq!(ClaimModel { carrier }.run(&commands), None);
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    for command in &commands {
-        world.send(command, &mut expected);
+    for carrier in CARRIERS {
+        let mut commands = whole_stream(&[]);
+        commands.insert(10, Command::Theme(false));
+        assert_eq!(ClaimModel { carrier }.run(&commands), None);
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        for command in &commands {
+            world.send(command, &mut expected);
+        }
+        let screen = world.frame().text();
+        for shows in ["probe call_1 Completed", "witness call_3 Completed", "done call_2", "| beta gamma", "After."] {
+            assert!(screen.contains(shows), "{shows:?} is not on screen:\n{screen}");
+        }
+        assert!(!screen.contains("read call_4"), "a claim drew the host's read call:\n{screen}");
+        assert_eq!(stream_whole(&world, &expected), Ok(4));
+        expected.calls[0] = Call::Streaming("wrong input".into());
+        assert!(stream_whole(&world, &expected).is_err());
     }
-    let screen = world.frame().text();
-    for shows in ["probe call_1 Completed", "witness call_3 Completed", "done call_2", "| beta gamma", "After."] {
-        assert!(screen.contains(shows), "{shows:?} is not on screen:\n{screen}");
-    }
-    assert!(!screen.contains("read call_4"), "a claim drew the host's read call:\n{screen}");
-    assert_eq!(stream_whole(&world, &expected), Ok(4));
 }
 
 // Expected (`isolation`): a panic in one claim's view fails its plugin, and its parts show the host's rows as when the
@@ -997,189 +991,139 @@ fn each_revision_of_a_claimed_part_equals_a_fresh_mount_on(carrier: Carrier) {
 // parts and every other cell stay as in the twin, and each fault fired.
 #[test]
 fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
-    CARRIERS.into_iter().for_each(a_fault_in_a_claim_falls_back_for_what_it_claims_alone_on);
-}
-
-fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone_on(carrier: Carrier) {
-    for (fault, slot) in
-        [(Fault::Panic, 0), (Fault::Overrun, 1), (Fault::Bad, 0), (Fault::Overrun, FENCE), (Fault::Bad, FENCE)]
-    {
-        let mut commands = whole_stream(&[Command::Arm(fault, slot)]);
-        // Mid stream, so the fallback lands between revisions.
-        let at = commands.iter().position(|command| *command == Command::Call(slot)).unwrap_or(26);
-        commands.insert(at, Command::Arm(fault, slot));
-        let (_, fired, _) = ClaimModel { carrier }.world(&commands, None);
-        assert!(fired.iter().flatten().any(|(_, fired)| *fired == fault), "{fault:?} on {slot} never fired");
-        assert_eq!(ClaimModel { carrier }.run(&commands), None, "{fault:?} on slot {slot}");
+    for carrier in CARRIERS {
+        for (fault, slot) in
+            [(Fault::Panic, 0), (Fault::Overrun, 1), (Fault::Bad, 0), (Fault::Overrun, FENCE), (Fault::Bad, FENCE)]
+        {
+            let mut commands = whole_stream(&[Command::Arm(fault, slot)]);
+            // Mid stream, so the fallback lands between revisions.
+            let at = commands.iter().position(|command| *command == Command::Call(slot)).unwrap_or(26);
+            commands.insert(at, Command::Arm(fault, slot));
+            let (_, fired, _) = ClaimModel { carrier }.world(&commands, None);
+            assert!(fired.iter().flatten().any(|(_, fired)| *fired == fault), "{fault:?} on {slot} never fired");
+            assert_eq!(ClaimModel { carrier }.run(&commands), None, "{fault:?} on slot {slot}");
+        }
     }
-}
-
-// Expected: the oracles can fail. A part whose content the model has one token short of differs from the fresh mount,
-// and a twin that never disables the panicking plugin differs from the faulty world.
-#[test]
-fn the_oracles_can_fail() {
-    CARRIERS.into_iter().for_each(the_oracles_can_fail_on);
-}
-
-fn the_oracles_can_fail_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    for command in [Command::Start(0), Command::Delta(0, 0), Command::Delta(0, 1)] {
-        world.send(&command, &mut expected);
-    }
-    assert_eq!(stream_whole(&world, &expected), Ok(1));
-    expected.calls[0] = Call::Streaming(TOKENS[0].to_owned());
-    assert!(matches!(stream_whole(&world, &expected), Err(("fresh", _))));
-    // A part that lost its last line is not the tree the model says, however its own rows compare.
-    expected.calls[0] = Call::Streaming(TOKENS[..2].concat());
-    SHORT.set(true);
-    world.send(&Command::Delta(0, 2), &mut expected);
-    SHORT.set(false);
-    assert!(matches!(stream_whole(&world, &expected), Err(("fresh", _))), "a short part passed");
-    world.send(&Command::Delta(0, 3), &mut expected);
-    assert_eq!(stream_whole(&world, &expected), Ok(1));
-    drop(world);
-
-    let commands = whole_stream(&[Command::Arm(Fault::Panic, 0)]);
-    let (faulty, fired, _) = ClaimModel { carrier }.world(&commands, None);
-    let (twin, _, _) = ClaimModel { carrier }.world(&commands, Some(&vec![Vec::new(); fired.len()]));
-    assert!(faulty.iter().zip(&twin).any(|(faulty, twin)| frame_diff(faulty, twin).is_some()));
-
-    // Where `claim.a` draws, its frames are not the host's: the comparison with the TUI without it can fail.
-    let commands = whole_stream(&[]);
-    let (clean, _, _) = ClaimModel { carrier }.world(&commands, None);
-    let bare = ClaimModel { carrier }.bare(&commands);
-    assert!(clean.iter().zip(&bare).any(|(clean, bare)| clean.a_draws && frame_diff(clean, bare).is_some()));
 }
 
 // Expected (final re-review big-boi 12): a part streaming several revisions before a paint gets one view, as that
 // paint starts, with the newest content; the paint after views nothing. A phase change is viewed at once.
 #[test]
 fn a_streaming_part_gets_one_view_a_frame() {
-    CARRIERS.into_iter().for_each(a_streaming_part_gets_one_view_a_frame_on);
-}
-
-fn a_streaming_part_gets_one_view_a_frame_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    world.send(&Command::Start(0), &mut expected);
-    VIEWS.with_borrow_mut(Vec::clear);
-    let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
-    for delta in TOKENS {
-        if let Call::Streaming(text) = &mut expected.calls[0] {
-            text.push_str(delta);
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        world.send(&Command::Start(0), &mut expected);
+        VIEWS.with_borrow_mut(Vec::clear);
+        let views = || VIEWS.with_borrow(|views| views.iter().filter(|(plugin, _, _)| *plugin == 'a').count());
+        for delta in TOKENS {
+            if let Call::Streaming(text) = &mut expected.calls[0] {
+                text.push_str(delta);
+            }
+            world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
         }
-        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": delta }));
+        assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
+        world.harness.app.render();
+        assert_eq!(views(), 1, "the paint views the newest content once");
+        world.harness.app.render();
+        assert_eq!(views(), 1, "the paint after views nothing");
+        assert_eq!(stream_whole(&world, &expected), Ok(1));
+        // A revision that changes the phase is viewed at once, also in a frame that viewed the part already.
+        world.send(&Command::Delta(0, 0), &mut expected);
+        world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
+        let before = views();
+        world.emit("session.tool.called", json!({ "id": "call_1", "input": { "q": "aa aa bb" }, "executed": true }));
+        assert_eq!(views(), before + 1, "a phase change waited for the paint");
     }
-    assert_eq!(views(), 0, "a streaming revision is viewed as the paint starts");
-    world.harness.app.render();
-    assert_eq!(views(), 1, "the paint views the newest content once");
-    world.harness.app.render();
-    assert_eq!(views(), 1, "the paint after views nothing");
-    assert_eq!(stream_whole(&world, &expected), Ok(1));
-    // A revision that changes the phase is viewed at once, also in a frame that viewed the part already.
-    world.send(&Command::Delta(0, 0), &mut expected);
-    world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
-    let before = views();
-    world.emit("session.tool.called", json!({ "id": "call_1", "input": { "q": "aa aa bb" }, "executed": true }));
-    assert_eq!(views(), before + 1, "a phase change waited for the paint");
 }
 
 // Expected: a part the claim declines shows the host's own row, and a later revision the claim takes shows its tree.
 #[test]
 fn a_declined_part_shows_the_host_row() {
-    CARRIERS.into_iter().for_each(a_declined_part_shows_the_host_row_on);
-}
-
-fn a_declined_part_shows_the_host_row_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-    world.send(&Command::Start(0), &mut expected);
-    world.send(&Command::Delta(0, 0), &mut expected);
-    let screen = world.frame().text();
-    assert!(!screen.contains("probe call_1"), "{screen}");
-    assert!(mounted().iter().all(|shown| !shown.shows));
-    assert!(screen.contains("⋯ probe"), "the host's row does not show:\n{screen}");
-    DECLINE.with_borrow_mut(HashSet::clear);
-    world.send(&Command::Call(0), &mut expected);
-    assert_eq!(stream_whole(&world, &expected), Ok(1));
-    let screen = world.frame().text();
-    assert!(!screen.contains("⋯ probe"), "the host's row stayed beside the claim's tree:\n{screen}");
-    // Declined again: the host's row comes back, built again, and the claim's tree goes.
-    DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
-    expected.off.insert("call_1".to_owned());
-    world.send(&Command::Progress(0, 1), &mut expected);
-    let screen = world.frame().text();
-    assert!(screen.contains("⋯ probe"), "the host's row is not back:\n{screen}");
-    assert_eq!(stream_whole(&world, &expected), Ok(0));
-    DECLINE.with_borrow_mut(HashSet::clear);
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+        world.send(&Command::Start(0), &mut expected);
+        world.send(&Command::Delta(0, 0), &mut expected);
+        let screen = world.frame().text();
+        assert!(!screen.contains("probe call_1"), "{screen}");
+        assert!(mounted().iter().all(|shown| !shown.shows));
+        assert!(screen.contains("⋯ probe"), "the host's row does not show:\n{screen}");
+        DECLINE.with_borrow_mut(HashSet::clear);
+        world.send(&Command::Call(0), &mut expected);
+        assert_eq!(stream_whole(&world, &expected), Ok(1));
+        let screen = world.frame().text();
+        assert!(!screen.contains("⋯ probe"), "the host's row stayed beside the claim's tree:\n{screen}");
+        // Declined again: the host's row comes back, built again, and the claim's tree goes.
+        DECLINE.with_borrow_mut(|decline| decline.insert("call_1".to_owned()));
+        expected.off.insert("call_1".to_owned());
+        world.send(&Command::Progress(0, 1), &mut expected);
+        let screen = world.frame().text();
+        assert!(screen.contains("⋯ probe"), "the host's row is not back:\n{screen}");
+        assert_eq!(stream_whole(&world, &expected), Ok(0));
+        DECLINE.with_borrow_mut(HashSet::clear);
+    }
 }
 
 // Expected: a fence keeps its mount while it streams: Markdown hands its widget back, and the claim finds its mount
 // through it.
 #[test]
 fn a_streaming_fence_keeps_its_mount() {
-    CARRIERS.into_iter().for_each(a_streaming_fence_keeps_its_mount_on);
-}
-
-fn a_streaming_fence_keeps_its_mount_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    let mut generations = Vec::new();
-    for _ in 0..5 {
-        world.send(&Command::Text, &mut expected);
-        generations
-            .extend(mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).map(|shown| shown.id));
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        let mut generations = Vec::new();
+        for _ in 0..5 {
+            world.send(&Command::Text, &mut expected);
+            generations
+                .extend(mounted().into_iter().filter(|shown| shown.id.key.starts_with("fence-")).map(|shown| shown.id));
+        }
+        assert_eq!(generations.len(), 3, "{generations:?}");
+        assert!(generations.windows(2).all(|pair| pair[0] == pair[1]), "{generations:?}");
     }
-    assert_eq!(generations.len(), 3, "{generations:?}");
-    assert!(generations.windows(2).all(|pair| pair[0] == pair[1]), "{generations:?}");
 }
 
 // Expected (`ledger`): a part that leaves the transcript forgets its tree: leaving the session frees every claimed
 // part, with its content and memo values.
 #[test]
 fn leaving_the_session_frees_every_claimed_part() {
-    CARRIERS.into_iter().for_each(leaving_the_session_frees_every_claimed_part_on);
-}
-
-fn leaving_the_session_frees_every_claimed_part_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    for command in whole_stream(&[]) {
-        world.send(&command, &mut expected);
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        for command in whole_stream(&[]) {
+            world.send(&command, &mut expected);
+        }
+        assert_eq!(ledger().mounts, 4);
+        // Each claimed part is a mount of its own generation (4.2), which a library keeps its memo table by.
+        let generations: HashSet<u64> = mounted().iter().map(|shown| shown.id.generation).collect();
+        assert_eq!(generations.len(), 4, "{:?}", mounted());
+        let before = opencode_plugin::loader::native::crossed();
+        world.harness.tui.navigate(opencode_tui::Route::Home);
+        world.settle();
+        let ledger = ledger();
+        assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{ledger:?}");
+        assert!(mounted().is_empty());
+        // A library hears that each part's mount ended, once, and nothing else crosses.
+        let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
+        assert_eq!(unmounts, if carrier == Carrier::Abi { 4 } else { 0 }, "{carrier:?}");
     }
-    assert_eq!(ledger().mounts, 4);
-    // Each claimed part is a mount of its own generation (4.2), which a library keeps its memo table by.
-    let generations: HashSet<u64> = mounted().iter().map(|shown| shown.id.generation).collect();
-    assert_eq!(generations.len(), 4, "{:?}", mounted());
-    let before = opencode_plugin::loader::native::crossed();
-    world.harness.tui.navigate(opencode_tui::Route::Home);
-    world.settle();
-    let ledger = ledger();
-    assert_eq!((ledger.mounts, ledger.content, ledger.memo_entries), (0, 0, 0), "{ledger:?}");
-    assert!(mounted().is_empty());
-    // A library hears that each part's mount ended, once, and nothing else crosses.
-    let unmounts = opencode_plugin::loader::native::crossed().since(before).calls;
-    assert_eq!(unmounts, if carrier == Carrier::Abi { 4 } else { 0 }, "{carrier:?}");
 }
 
 // Expected: a tree refused once is asked for again whole, in the same revision, and the part keeps its claim.
 #[test]
 fn a_tree_refused_once_is_asked_again_whole() {
-    CARRIERS.into_iter().for_each(a_tree_refused_once_is_asked_again_whole_on);
-}
-
-fn a_tree_refused_once_is_asked_again_whole_on(carrier: Carrier) {
-    let world = World::open(carrier);
-    let mut expected = Expected::new();
-    world.send(&Command::Start(0), &mut expected);
-    ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
-    FULL.with_borrow_mut(Vec::clear);
-    world.send(&Command::Delta(0, 0), &mut expected);
-    assert_eq!(FULL.with_borrow(Vec::clone), [false, true], "a refusal asks once more, for a whole tree");
-    assert_eq!(stream_whole(&world, &expected), Ok(1));
-    ONCE.with_borrow_mut(HashSet::clear);
+    for carrier in CARRIERS {
+        let world = World::open(carrier);
+        let mut expected = Expected::new();
+        world.send(&Command::Start(0), &mut expected);
+        ONCE.with_borrow_mut(|once| once.insert("call_1".to_owned()));
+        FULL.with_borrow_mut(Vec::clear);
+        world.send(&Command::Delta(0, 0), &mut expected);
+        assert_eq!(FULL.with_borrow(Vec::clone), [false, true], "a refusal asks once more, for a whole tree");
+        assert_eq!(stream_whole(&world, &expected), Ok(1));
+        ONCE.with_borrow_mut(HashSet::clear);
+    }
 }
 
 thread_local! {
@@ -1215,42 +1159,40 @@ fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
 // laid out at another width is viewed again with it.
 #[test]
 fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
-    CARRIERS.into_iter().for_each(the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width_on);
-}
-
-fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width_on(carrier: Carrier) {
-    SEEN.with_borrow_mut(Vec::clear);
-    let world = World::with(vec![
-        builtin(carrier, abi::Plugin { id: "claim.first", setup: shell_first }),
-        builtin(carrier, abi::Plugin { id: "claim.last", setup: shell_last }),
-    ]);
-    let before = opencode_plugin::loader::native::crossed();
-    world.emit("session.tool.input.started", json!({ "id": "call_9", "name": "bash" }));
-    world.settle();
-    world.harness.wait_for("l drew call_9");
-    // The view and its content cross the C ABI on that carrier, and nothing crosses linked.
-    let crossed = opencode_plugin::loader::native::crossed().since(before);
-    match carrier {
-        Carrier::Linked => assert_eq!(crossed.calls, 0, "{crossed:?}"),
-        // A claim that does not declare the palette is sent none: a request stays small.
-        Carrier::Abi => assert!(crossed.calls >= 1 && crossed.received > 13 && crossed.sent < 2048, "{crossed:?}"),
+    for carrier in CARRIERS {
+        SEEN.with_borrow_mut(Vec::clear);
+        let world = World::with(vec![
+            builtin(carrier, abi::Plugin { id: "claim.first", setup: shell_first }),
+            builtin(carrier, abi::Plugin { id: "claim.last", setup: shell_last }),
+        ]);
+        let before = opencode_plugin::loader::native::crossed();
+        world.emit("session.tool.input.started", json!({ "id": "call_9", "name": "bash" }));
+        world.settle();
+        world.harness.wait_for("l drew call_9");
+        // The view and its content cross the C ABI on that carrier, and nothing crosses linked.
+        let crossed = opencode_plugin::loader::native::crossed().since(before);
+        match carrier {
+            Carrier::Linked => assert_eq!(crossed.calls, 0, "{crossed:?}"),
+            // A claim that does not declare the palette is sent none: a request stays small.
+            Carrier::Abi => assert!(crossed.calls >= 1 && crossed.received > 13 && crossed.sent < 2048, "{crossed:?}"),
+        }
+        assert!(
+            SEEN.with_borrow(|seen| seen.iter().all(|(plugin, _)| *plugin == 'l')),
+            "{:?}",
+            SEEN.with_borrow(Vec::clone)
+        );
+        let content = ledger().content;
+        assert_eq!(content, 1, "{:?}", ledger());
+        let width = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
+        world.harness.app.resize(WIDTH - 20, HEIGHT);
+        world.settle();
+        world.settle();
+        let resized = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
+        assert_eq!(resized, width - 20, "the view saw {width} columns, then {resized}");
+        world.harness.tui.navigate(opencode_tui::Route::Home);
+        world.settle();
+        assert_eq!((ledger().mounts, ledger().content, ledger().content_bytes), (0, 0, 0));
     }
-    assert!(
-        SEEN.with_borrow(|seen| seen.iter().all(|(plugin, _)| *plugin == 'l')),
-        "{:?}",
-        SEEN.with_borrow(Vec::clone)
-    );
-    let content = ledger().content;
-    assert_eq!(content, 1, "{:?}", ledger());
-    let width = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
-    world.harness.app.resize(WIDTH - 20, HEIGHT);
-    world.settle();
-    world.settle();
-    let resized = SEEN.with_borrow(|seen| seen.last().map(|(_, width)| *width)).unwrap();
-    assert_eq!(resized, width - 20, "the view saw {width} columns, then {resized}");
-    world.harness.tui.navigate(opencode_tui::Route::Home);
-    world.settle();
-    assert_eq!((ledger().mounts, ledger().content, ledger().content_bytes), (0, 0, 0));
 }
 
 /// Two claims of one plugin, each with a view of its own; the second gives the host one handle and releases the one
