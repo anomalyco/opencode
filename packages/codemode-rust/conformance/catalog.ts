@@ -9,8 +9,8 @@
 // Effect Schema tools are written out as the JSON Schema document the reference renders them from (with
 // `validated: true`); the Rust side declares them with `Schema::validated`.
 
-import { writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { writeRecording } from "./recording.ts"
 
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
@@ -532,7 +532,7 @@ const expected = {
   openapi,
   boundary,
 }
-writeFileSync(join(import.meta.dir, "catalog.json"), JSON.stringify(expected, null, 2) + "\n")
+writeRecording(join(import.meta.dir, "catalog.json"), expected)
 console.log(
   `${expected.catalog.length} tools, ${expected.programs.length} programs, ${openapi.length} OpenAPI documents`,
 )

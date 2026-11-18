@@ -10,8 +10,8 @@
 // `fail` (the read at that index errors with `new Error("boom")`), `status`, `statusText`, `headers`, `redirected`,
 // `delay` (each read waits that many milliseconds first). `echo(v)` hands back what it is given.
 
-import { writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { writeRecording } from "./recording.ts"
 
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
@@ -753,5 +753,5 @@ if (unstable.length > 0) {
   console.error(`recordings that differ between two runs (timing-dependent):\n${unstable.join("\n\n")}`)
   process.exit(1)
 }
-writeFileSync(join(import.meta.dir, "streaming.json"), JSON.stringify(expected, null, 2) + "\n")
+writeRecording(join(import.meta.dir, "streaming.json"), expected)
 console.log(`${expected.programs.length} programs, ${expected.suspensions.length} suspensions`)

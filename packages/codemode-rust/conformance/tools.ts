@@ -6,8 +6,8 @@
 // Usage: bun conformance/tools.ts [reference] — the reference CodeMode package directory, from the argument,
 // CODEMODE_REF, or by default ../codemode relative to this workspace.
 
-import { writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
+import { writeRecording } from "./recording.ts"
 
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
@@ -104,5 +104,5 @@ const record = async (c: { code: string; maxToolCalls?: number }) => {
 
 const recorded = []
 for (const c of cases) recorded.push(await record(c))
-writeFileSync(join(import.meta.dir, "tools.json"), JSON.stringify({ cases: recorded }, null, 2) + "\n")
+writeRecording(join(import.meta.dir, "tools.json"), { cases: recorded })
 console.log(`${recorded.length} cases`)
