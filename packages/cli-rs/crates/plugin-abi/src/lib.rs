@@ -4903,10 +4903,6 @@ pub fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 mod tests {
     use super::*;
 
-    // Expected (carbon's review of P6c, 6 and CM10): the header reader names the size of each format, past a JPEG's fill
-    // bytes and standalone markers, and nothing for a header of no pixels or a segment length under 2.
-    // Expected (big-boi tm-4): a timer's delay crosses the C ABI in whole milliseconds rounded up, so a sleep of 20.9 ms
-    // never fires at 20 ms, as one in process does not.
     #[test]
     fn a_timers_delay_rounds_up_to_whole_milliseconds() {
         let ms = |micros: u64| timer_ms(std::time::Duration::from_micros(micros));
@@ -4958,26 +4954,9 @@ mod tests {
         THEME_LIGHT
     }
 
-    // Expected: a plugin reads the theme mode from the host, and gets `None` from a host that leaves the entry null or
-    // whose table is shorter than 2.0's, without reading past it.
     #[test]
     fn the_theme_mode_is_read_only_when_the_host_offers_it() {
-        let ctx = std::ptr::null_mut();
-        let (call, free) = (Some(call as _), Some(free as _));
-        let current = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: 0,
-            ctx,
-            call,
-            free,
-            theme_mode: Some(light),
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(&[]),
-        };
+        let current = HostApi { theme_mode: Some(light), features: Bytes::new(&[]), ..host_table() };
         assert_eq!(HostHandle::new(&current).mode(), Some(ThemeMode::Light));
         let null = HostApi { theme_mode: None, ..current };
         assert_eq!(HostHandle::new(&null).mode(), None);
@@ -4992,25 +4971,18 @@ mod tests {
         OK
     }
 
-    // Expected (carbon-p0a-9): a table of another major version, 1 as a later one, is no host: nothing is called, and
-    // its version reads 0.0.
     #[test]
     fn a_host_of_another_major_is_no_host() {
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
         let api = HostApi {
-            size: size_of::<HostApi>(),
             major: ABI_MAJOR + 1,
-            minor: 0,
             ctx,
             call: Some(answer),
-            free: Some(free),
             theme_mode: Some(light),
             wake: Some(wake),
-            send: None,
-            report: None,
-            stopped: None,
             features: Bytes::new(&[]),
+            ..host_table()
         };
         for major in [1, ABI_MAJOR + 1] {
             let host = HostHandle::new(&HostApi { major, minor: 6, ..api });
@@ -5022,25 +4994,18 @@ mod tests {
         assert_eq!((current.abi().major, current.abi().minor), (ABI_MAJOR, 0));
     }
 
-    // Expected: a table whose `size` does not cover every entry of 2.0, or a misaligned table, is no host: its `call`
-    // is not read past `size`, let alone called.
     #[test]
     fn a_table_shorter_than_its_core_is_not_read() {
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
         let api = HostApi {
             size: std::mem::offset_of!(HostApi, ctx),
-            major: ABI_MAJOR,
-            minor: 0,
             ctx,
             call: Some(answer),
-            free: Some(free),
             theme_mode: Some(light),
             wake: Some(wake),
-            send: None,
-            report: None,
-            stopped: None,
             features: Bytes::new(&[]),
+            ..host_table()
         };
         for size in [std::mem::offset_of!(HostApi, ctx), std::mem::offset_of!(HostApi, features)] {
             let host = HostHandle::new(&HostApi { size, ..api });
@@ -5073,9 +5038,6 @@ mod tests {
         FREED.with(|freed| freed.borrow_mut().push((owned.ptr as usize, owned.len, owned.cap)));
     }
 
-    // Expected (big-boi 5, carbon-8): the SDK checks what the host returns as the host checks what a plugin returns: a
-    // null pointer with a length, a length past the capacity and a buffer over the bound are refused unread, whatever
-    // the status, and every descriptor, refused or not, goes back to the host's `free` once, exactly as it came.
     #[test]
     fn the_sdk_refuses_a_host_buffer_the_host_cannot_have_written() {
         let mut json = *b"null      ";
@@ -5092,18 +5054,11 @@ mod tests {
         ];
         for (index, (row, expected)) in rows.into_iter().enumerate() {
             let api = HostApi {
-                size: size_of::<HostApi>(),
-                major: ABI_MAJOR,
-                minor: ABI_MINOR,
                 ctx: std::ptr::from_ref(&row).cast_mut().cast(),
                 call: Some(answer_as),
                 free: Some(counted_free),
-                theme_mode: None,
-                wake: None,
-                send: None,
-                report: None,
-                stopped: None,
                 features: Bytes::new(&[]),
+                ..host_table()
             };
             FREED.with(|freed| freed.borrow_mut().clear());
             let got = HostHandle::new(&api).request(&HostRequest::Route);
@@ -5126,10 +5081,6 @@ mod tests {
         OK
     }
 
-    // Expected (big-boi 13, synthesis 4.6): a node kind of a later 2.x minor with its author's fallback is lowered for
-    // an older host before the SDK encodes the tree: the reply equals that of a plugin that wrote the fallback, and no
-    // tag of the newer kind crosses. A newer host gets the kind. A view that gives no fallback is refused by the SDK
-    // before anything crosses. The SDK reads the negotiated major, minor and features the host stated.
     #[test]
     fn a_later_node_lowers_to_its_fallback_on_an_older_host() {
         fn text() -> v2::Node {
@@ -5153,18 +5104,11 @@ mod tests {
         let features = br#"["f"]"#;
         let viewed = |setup: fn(&mut Setup) -> Result<(), String>, minor: u32| {
             let api = HostApi {
-                size: size_of::<HostApi>(),
-                major: ABI_MAJOR,
                 minor,
-                ctx: std::ptr::null_mut(),
                 call: Some(null_call),
                 free: Some(runtime::free),
-                theme_mode: None,
-                wake: None,
-                send: None,
-                report: None,
-                stopped: None,
                 features: Bytes::new(features),
+                ..host_table()
             };
             let mut registered = Registered::with_host("t", None, &api);
             setup(&mut registered.setup()).unwrap();
@@ -5195,24 +5139,9 @@ mod tests {
         OK
     }
 
-    // Expected (bigboi's last pass): a host that answers a fetch or a program OK with the ID 0, which names no
-    // request, gave a malformed answer: the calls are an error.
     #[test]
     fn a_request_id_of_zero_is_a_malformed_answer() {
-        let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            ctx: std::ptr::null_mut(),
-            call: Some(zero_call),
-            free: Some(runtime::free),
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(b"[]"),
-        };
+        let api = HostApi { call: Some(zero_call), free: Some(runtime::free), ..host_table() };
         let host = HostHandle::new(&api);
         let fetch = || Fetch::new("GET", "/api/session");
         let program = || Foreground::new("true");
@@ -5235,9 +5164,6 @@ mod tests {
         OK
     }
 
-    // Expected (PL-9, bigboi's re-review): a host with `image-bounds` states them once, and the SDK answers the size of
-    // bytes past them, by length or by the size their header names, without sending them; bytes within them are asked
-    // for. A host without the feature is asked for every image, as before.
     #[test]
     fn image_size_past_the_host_s_bounds_answers_without_the_host() {
         let png = |side: u32| {
@@ -5252,18 +5178,10 @@ mod tests {
         ] {
             ASKED.with_borrow_mut(Vec::clear);
             let api = HostApi {
-                size: size_of::<HostApi>(),
-                major: ABI_MAJOR,
-                minor: ABI_MINOR,
-                ctx: std::ptr::null_mut(),
                 call: Some(bounded_call),
                 free: Some(runtime::free),
-                theme_mode: None,
-                wake: None,
-                send: None,
-                report: None,
-                stopped: None,
                 features: Bytes::new(features),
+                ..host_table()
             };
             let host = HostHandle::new(&api);
             let sizes = [host.image_size(&[0; 200]), host.image_size(&png(11)), host.image_size(&png(9))];
@@ -5275,24 +5193,13 @@ mod tests {
         assert!(FEATURES.contains(&IMAGE_BOUNDS));
     }
 
-    // Expected (bigboi's final pass): image bounds belong to the instance that asked for them. An instance whose host
-    // states bounds answers 200 bytes with `None`; once it is gone, an instance on a table at the same address whose
-    // host states no bounds asks its host, which decodes them.
     #[test]
     fn image_bounds_end_with_their_instance() {
         let mut api = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            ctx: std::ptr::null_mut(),
             call: Some(bounded_call),
             free: Some(runtime::free),
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
             features: Bytes::new(br#"["image-bounds"]"#),
+            ..host_table()
         };
         ASKED.with_borrow_mut(Vec::clear);
         let first = Registered::with_host("a", None, &api);
@@ -5304,8 +5211,6 @@ mod tests {
         assert_eq!(ASKED.with_borrow(Vec::clone), ["image-bounds", "image-size"]);
     }
 
-    // Expected (carbon-8): borrowed bytes are refused unread when null with a length or over the bound, and `free`
-    // reads only the pointer and the capacity, so a broken length frees what was allocated.
     #[test]
     fn borrowed_bytes_and_free_check_what_they_can() {
         let bytes = b"abc";
@@ -5331,27 +5236,11 @@ mod tests {
         unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
-    // Expected: a plugin wakes the host from another thread, and gets no waker from a host that leaves the entry null,
-    // or whose table is shorter than 2.0's, without reading past it.
     #[test]
     fn a_waker_wakes_the_host_from_another_thread_when_the_host_offers_it() {
         let wakes = std::sync::atomic::AtomicUsize::new(0);
         let ctx = std::ptr::from_ref(&wakes).cast_mut().cast();
-        let (call, free) = (Some(call as _), Some(free as _));
-        let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: 0,
-            ctx,
-            call,
-            free,
-            theme_mode: None,
-            wake: Some(wake),
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(&[]),
-        };
+        let api = HostApi { ctx, wake: Some(wake), features: Bytes::new(&[]), ..host_table() };
         let waker = HostHandle::new(&api).waker().unwrap();
         std::thread::spawn(move || waker.wake()).join().unwrap();
         assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -5360,7 +5249,6 @@ mod tests {
         assert!(HostHandle::new(&short).waker().is_none());
     }
 
-    // Expected: a C host that passes no table, or leaves `call` or `free` null, gets errors, not a jump to address 0.
     #[test]
     fn a_null_host_or_host_callback_is_an_error() {
         let set = HostRequest::StorageSet { key: "count".into(), value: "{}".into() };
@@ -5369,37 +5257,14 @@ mod tests {
         assert_eq!(host.request(&set), Err("no host".to_owned()));
         assert_eq!(host.mode(), None);
         assert!(host.waker().is_none());
-        let ctx = std::ptr::null_mut();
-        let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: 0,
-            ctx,
-            call: None,
-            free: None,
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(&[]),
-        };
+        let api = HostApi { call: None, free: None, features: Bytes::new(&[]), ..host_table() };
         assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
         let api = HostApi { call: Some(call), ..api };
         assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
     }
 
-    // Expected: rows keep their JSON byte for byte, a manifest leaves out what is unset, and a fence renders through the
-    // registration of its language, or the one the host names by index.
     #[test]
-    fn rows_and_fence_renders_round_trip() {
-        let line = vec![Span::new("a").fg("text.muted").bold(), Span { bg: Some("#102030".into()), ..Span::new("b") }];
-        let json = r##"[{"text":"a","fg":"text.muted","bold":true},{"text":"b","bg":"#102030"}]"##;
-        assert_eq!(serde_json::to_string(&line).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Line>(json).unwrap(), line);
-        let json = r#"{"id":"old","commands":[],"fences":["x"],"slots":[],"routes":[],"storage":[]}"#;
-        assert_eq!(serde_json::to_string(&serde_json::from_str::<Manifest>(json).unwrap()).unwrap(), json);
-
+    fn fences_dispatch_by_language_or_index() {
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
         setup.code_block("x", |_, fence| match fence.key {
@@ -5429,8 +5294,6 @@ mod tests {
         assert_eq!(setup.handle(request(&fence, Some(1))).unwrap(), serde_json::json!({ "type": "code" }));
     }
 
-    // Expected: what Mermaid's fences use is optional on the wire: an `Rgba` is `#rrggbbaa` and reads back as one,
-    // `#rrggbb` stays a token, `fg` and `drag` are left out when unset, and a fence without `width` reads as 0.
     #[test]
     fn colors_and_rows_round_trip() {
         let line = vec![Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new("a").fg("#102030") }];
@@ -5444,36 +5307,12 @@ mod tests {
             serde_json::from_str(r#"{"language":"x","info":"x","code":"a","streaming":false,"closed":true,"key":1}"#)
                 .unwrap();
         assert_eq!(fence.width, 0);
-        let request = HostRequest::Color { token: "categorical.3.300".into() };
-        assert_eq!(serde_json::to_string(&request).unwrap(), r#"{"type":"color","token":"categorical.3.300"}"#);
         assert_eq!(Rgba::parse("#0a0b0c"), Some(Rgba::new(10, 11, 12, 255)));
         assert_eq!(Rgba::parse("#0a0b0"), None);
     }
 
-    // Expected: a slot render's request and answer leave out what is unset and read back as written, and a claim the
-    // plugin did not register is refused.
     #[test]
-    fn slot_renders_round_trip() {
-        let changed = Changed { lists: vec!["ses_1".into()], local: true, ..Changed::default() };
-        let request = Request::Render {
-            claim: 1,
-            input: SlotInput { session_id: Some("ses_1".into()), ..SlotInput::default() },
-            changed,
-        };
-        let json =
-            r#"{"type":"render","claim":1,"input":{"session_id":"ses_1"},"changed":{"lists":["ses_1"],"local":true}}"#;
-        assert_eq!(serde_json::to_string(&request).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Request>(json).unwrap(), request);
-        let node = Node::column(vec![Node::text([Span::new("a").bold()]), Node::row(Vec::new())]);
-        let render = Render::Show(node);
-        let json = r#"{"type":"show","node":{"type":"box","children":[{"type":"text","spans":[{"text":"a","bold":true}]},{"type":"box","row":true,"children":[]}]}}"#;
-        assert_eq!(serde_json::to_string(&render).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Render>(json).unwrap(), render);
-        assert_eq!(serde_json::to_string(&Render::Keep).unwrap(), r#"{"type":"keep"}"#);
-        let claim = SlotClaim { kind: SlotKind::Append, path: "home.footer".into(), mount: false, size: false };
-        assert_eq!(serde_json::to_string(&claim).unwrap(), r#"{"kind":"append","path":"home.footer"}"#);
-        assert_eq!(serde_json::to_string(&HostRequest::Model).unwrap(), r#"{"type":"model"}"#);
-
+    fn an_unknown_slot_index_is_refused() {
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
         setup.slot(Placement::append("sidebar.content"), |_, input, _| match &input.session_id {
@@ -5486,34 +5325,6 @@ mod tests {
         assert!(setup.handle(render(1)).is_err());
     }
 
-    // Expected: a click, a hover color and a struck-through span cross the wire and read back as written, a
-    // dispatch leaves out a missing input, and a command answers through the host it gets, with its input.
-    #[test]
-    fn clicks_hovers_and_dispatches_round_trip() {
-        let text = Node::text([Span { strikethrough: true, ..Span::new("a") }])
-            .hover_fg("text.base")
-            .on_click(Click::command("x.open").input("b").on_down());
-        let node = Node::row(vec![text]).justify(Justify::SpaceBetween);
-        let json = r#"{"type":"box","row":true,"justify":"space-between","children":[{"type":"text","spans":[{"text":"a","strikethrough":true}],"hover_fg":"text.base","on_click":{"action":{"type":"command","name":"x.open","input":"b"},"on":"down"}}]}"#;
-        assert_eq!(serde_json::to_string(&node).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
-        let dispatch = HostRequest::Dispatch { name: "x.open".into(), input: None };
-        assert_eq!(serde_json::to_string(&dispatch).unwrap(), r#"{"type":"dispatch","name":"x.open"}"#);
-
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        let into = seen.clone();
-        setup.command(Command { name: "x.hidden".into(), ..Command::default() }, move |host, input| {
-            into.borrow_mut().push((input.map(str::to_owned), host.storage_get("view")));
-        });
-        let request = Request::Command { name: "x.hidden".into(), input: Some("b".into()) };
-        assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
-        assert_eq!(*seen.borrow(), [(Some("b".to_owned()), None)]);
-    }
-
-    // Expected (contract ergonomics 2.5): a command that answers `Handled::Pass` answers "pass" across the C ABI, one
-    // that returns nothing or `Consume` answers null; `set-enabled` crosses as written.
     #[test]
     fn a_command_that_declines_answers_pass() {
         let mut registered = Registered::new("new", None);
@@ -5532,39 +5343,8 @@ mod tests {
         assert_eq!(serde_json::from_str::<HostRequest>(text).unwrap(), set);
     }
 
-    // Expected: a 1.3 toast keeps its JSON, and a 1.4 one adds its title and session; attention, the route and a nested
-    // slot leave out what is unset; an event handler is named by index, gets its event back as written, and its
-    // manifest entry is left out when there is none.
     #[test]
-    fn events_toasts_attention_and_slots_round_trip() {
-        let toast = HostRequest::Toast { variant: Variant::Info, message: "a".into(), title: None, session: None };
-        assert_eq!(serde_json::to_string(&toast).unwrap(), r#"{"type":"toast","variant":"info","message":"a"}"#);
-        let toast = Toast::new(Variant::Error, "boom").title("Session failed").session("ses_1");
-        let request = HostRequest::Toast {
-            variant: toast.variant,
-            message: toast.message.clone(),
-            title: toast.title.clone(),
-            session: toast.session.clone(),
-        };
-        let json = r#"{"type":"toast","variant":"error","message":"boom","title":"Session failed","session":"ses_1"}"#;
-        assert_eq!(serde_json::to_string(&request).unwrap(), json);
-        assert_eq!(serde_json::from_str::<HostRequest>(json).unwrap(), request);
-        let attention = HostRequest::Attention(Attention {
-            title: None,
-            message: "done".into(),
-            notify: Some(When::Blurred),
-            sound: Some(Sound { name: SoundName::SubagentDone, when: When::Always, volume: None }),
-        });
-        let json = r#"{"type":"attention","message":"done","notify":"blurred","sound":{"name":"subagent_done","when":"always"}}"#;
-        assert_eq!(serde_json::to_string(&attention).unwrap(), json);
-        assert_eq!(serde_json::from_str::<HostRequest>(json).unwrap(), attention);
-        let route = Route::Session { id: "ses_1".into() };
-        assert_eq!(serde_json::to_string(&route).unwrap(), r#"{"type":"session","id":"ses_1"}"#);
-        let node = Node::row(vec![Node::slot("home.footer.status")]);
-        let json = r#"{"type":"box","row":true,"children":[{"type":"slot","path":"home.footer.status"}]}"#;
-        assert_eq!(serde_json::to_string(&node).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
-
+    fn events_reach_the_registered_handler_only() {
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
         assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("events"));
@@ -5584,86 +5364,8 @@ mod tests {
         assert!(setup.handle(Request::Event { handler: 1, event: Box::new(event) }).is_err());
     }
 
-    // Expected: what 1.4 adds for fetches, routes and dialogs reads back as written; a 1.3 command keeps its JSON;
-    // a route renders and replies reach every handler through `handle`, by the IDs the host chose.
     #[test]
-    fn fetches_routes_and_dialogs_round_trip() {
-        let old = Command { name: "x.a".into(), title: "A".into(), ..Command::default() };
-        let json = r#"{"name":"x.a","title":"A","group":null,"slash":null,"keybind":null,"palette":false}"#;
-        assert_eq!(serde_json::to_string(&old).unwrap(), json);
-        let scoped = Command { scope: Scope::Route("stats".into()), arguments: true, ..old };
-        let json = serde_json::to_string(&scoped).unwrap();
-        assert!(json.ends_with(r#""arguments":true,"scope":{"route":"stats"}}"#), "{json}");
-        let fetch = Fetch {
-            method: "POST".into(),
-            path: "/api/x".into(),
-            query: vec![("a".into(), "b".into())],
-            body: Some(serde_json::json!({ "c": 1 })),
-            bytes: false,
-        };
-        let action = Action::command("x.ask");
-        let panel = Panel {
-            key: "k".into(),
-            size: PanelSize::Large,
-            title: vec![Span::new("t").bold()],
-            subtitle: Some("s".into()),
-            body: Node::Markdown { text: "**m**".into() },
-            actions: vec![PanelAction {
-                title: "a".into(),
-                key: Some("c".into()),
-                color: None,
-                close: true,
-                action: action.clone(),
-            }],
-            binds: vec![PanelBind { key: "c".into(), title: "C".into(), action: action.clone() }],
-            bleed: true,
-            centered: true,
-            bare: false,
-            close: None,
-            height: None,
-        };
-        let requests = [
-            HostRequest::Fetch(fetch),
-            HostRequest::Navigate { route: Route::Session { id: "ses_1".into() } },
-            HostRequest::Dialog { dialog: Box::new(Dialog::Panel(panel)) },
-            HostRequest::Dialog { dialog: Box::new(Dialog::Prompt(Prompt::new("p", action))) },
-            HostRequest::Copy { text: "x".into(), then: None },
-            HostRequest::Dialog { dialog: Box::new(Dialog::Close { key: "k".into() }) },
-            HostRequest::Interactive,
-            HostRequest::Shortcut { name: "agent.cycle".into() },
-            HostRequest::DialogOpen { key: "k".into() },
-            HostRequest::Dialog {
-                dialog: Box::new(Dialog::Select(Select {
-                    title: "s".into(),
-                    placeholder: None,
-                    options: vec![SelectOption::new("A", "a").description("d"), SelectOption::new("B", "b")],
-                    current: Some("b".into()),
-                    action: Action::command("x.pick"),
-                    key: None,
-                    actions: Vec::new(),
-                    binds: Vec::new(),
-                    search: None,
-                    size: Some(PanelSize::Large),
-                    focus: Some("a".into()),
-                    query: None,
-                    query_delay: 0,
-                    filterless: false,
-                    empty: None,
-                    note: None,
-                    centered: false,
-                })),
-            },
-        ];
-        for request in requests {
-            let json = serde_json::to_string(&request).unwrap();
-            assert_eq!(serde_json::from_str::<HostRequest>(&json).unwrap(), request, "{json}");
-        }
-        let node =
-            Node::row(vec![Node::Spinner { label: "/btw".into() }]).align(Align::Center).justify(Justify::SpaceAround);
-        let json = r#"{"type":"box","row":true,"justify":"space-around","align":"center","children":[{"type":"spinner","label":"/btw"}]}"#;
-        assert_eq!(serde_json::to_string(&node).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Node>(json).unwrap(), node);
-
+    fn replies_reach_all_handlers_but_zero_reaches_none() {
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
         setup.route("page", |_, changed| match changed.woken {
@@ -5689,8 +5391,6 @@ mod tests {
         assert_eq!(seen.borrow().len(), 2, "a handler heard a reply to ID 0");
     }
 
-    // Expected: the shims answer a null instance with an error, ignore a null `out` or a null `destroy`, and never
-    // dereference either.
     #[test]
     fn the_shims_check_null_pointers() {
         let request = serde_json::to_vec(&Request::Wake).unwrap();
@@ -5767,10 +5467,6 @@ mod tests {
         Ok(())
     }
 
-    // Expected (big-boi's check of drop-abi1): `create` through the C ABI refuses, before setup runs and with an error,
-    // a host table it cannot talk to: none, one of ABI 1.6, and one of 2.0 whose `size` covers only its header. Only
-    // `size` is read before it is checked; each table here is allocated whole, so a read past what it states reads
-    // nothing out of bounds. A whole 2.0 table sets the plugin up.
     #[test]
     fn create_refuses_a_host_table_it_cannot_read_before_setup() {
         /// The host table of ABI 1.6, which ends before `send`.
@@ -5823,8 +5519,6 @@ mod tests {
         }
     }
 
-    // Expected: a setup that fails or panics runs the dispose callbacks it registered before `create` returns, last
-    // first, and one that panics keeps none of the others from running; `destroy` runs them the same.
     #[test]
     fn a_failed_setup_disposes_what_it_registered() {
         let hook = std::panic::take_hook();
@@ -5854,8 +5548,6 @@ mod tests {
         std::panic::set_hook(hook);
     }
 
-    // Expected: a route mount handler is listed in the manifest once per route, and `RouteMount` runs the handlers of
-    // its route with whether it mounted; a manifest without one leaves the field out.
     #[test]
     fn route_mounts_round_trip() {
         let mut registered = Registered::new("new", None);
@@ -5896,26 +5588,12 @@ mod tests {
         drop(unsafe { owned.into_vec() });
     }
 
-    // Expected: `storage_merge` over the C ABI sends only the fields, for the host to set under its storage lock; a
-    // refusal is logged, and nothing is set in its place.
     #[test]
     fn storage_merge_sends_the_fields() {
         let fields = serde_json::json!({ "open": false }).as_object().cloned().unwrap();
         for ctx in [std::ptr::null_mut(), std::ptr::dangling_mut::<u8>().cast()] {
-            let api = HostApi {
-                size: size_of::<HostApi>(),
-                major: ABI_MAJOR,
-                minor: 0,
-                ctx,
-                call: Some(record),
-                free: Some(release),
-                theme_mode: None,
-                wake: None,
-                send: None,
-                report: None,
-                stopped: None,
-                features: Bytes::new(&[]),
-            };
+            let api =
+                HostApi { ctx, call: Some(record), free: Some(release), features: Bytes::new(&[]), ..host_table() };
             HostHandle::new(&api).storage_merge("view", fields.clone());
         }
         let merge = HostRequest::StorageMerge { key: "view".into(), fields };
@@ -5929,7 +5607,6 @@ mod tests {
         );
     }
 
-    // Expected: revoking a waker waits for the wake in progress, and every clone's later wake does nothing.
     #[test]
     fn a_revoked_waker_waits_for_the_wake_in_progress_and_does_nothing_after() {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -5965,9 +5642,6 @@ mod tests {
         assert_eq!(wakes.load(Ordering::SeqCst), 1);
     }
 
-    // Expected: a mount handler attaches to the claim registered last at its placement, which the manifest marks, and
-    // a `Mount` request runs it with the input and whether the claim mounted; without such a claim it registers a
-    // hidden one. The prompt input and the requests of step 7 keep their JSON optional.
     #[test]
     fn mounts_and_the_prompt_input_round_trip() {
         let mut registered = Registered::new("new", None);
@@ -5998,34 +5672,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&Family::default()).unwrap(), r#"{"members":[],"cost":0.0}"#);
     }
 
-    // Expected: a select keeps its JSON small; a wake handler marks the manifest, and `wake` runs every handler, while a
-    // plugin without one keeps the 1.4 manifest it had.
     #[test]
-    fn selects_and_wakes_round_trip() {
-        let select = Dialog::Select(Select {
-            title: "Subagents".into(),
-            placeholder: None,
-            options: vec![SelectOption::new("Child", "ses_1").description("running")],
-            current: None,
-            action: Action::command("x.open"),
-            key: None,
-            actions: Vec::new(),
-            binds: Vec::new(),
-            search: None,
-            size: None,
-            focus: None,
-            query: None,
-            query_delay: 0,
-            filterless: false,
-            empty: None,
-            note: None,
-            centered: false,
-        });
-        let json = r#"{"type":"select","title":"Subagents","options":[{"title":"Child","value":"ses_1","description":"running"}],"action":{"type":"command","name":"x.open"}}"#;
-        assert_eq!(serde_json::to_string(&select).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Dialog>(json).unwrap(), select);
-        assert_eq!(serde_json::to_string(&Request::Wake).unwrap(), r#"{"type":"wake"}"#);
-
+    fn wake_and_plugin_changes_notify_their_own_handlers() {
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
         assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("wake"));
@@ -6047,108 +5695,6 @@ mod tests {
         assert_eq!(runs.get(), 12);
     }
 
-    // Expected: a box's styling, a layout's heights and margins, and the dialogs read back as written and leave out
-    // what is unset, so a plain box, layout and dialog keep their short JSON, and it reads as the defaults.
-    #[test]
-    fn box_styling_and_dialogs_round_trip() {
-        let rows: [(&str, serde_json::Value); 9] = [
-            (r#"{"type":"box","children":[]}"#, serde_json::to_value(Node::column(Vec::new())).unwrap()),
-            (
-                r#"{"type":"box","children":[],"border":{}}"#,
-                serde_json::to_value(Node::column(Vec::new()).border(Border::new())).unwrap(),
-            ),
-            (
-                r#"{"type":"box","children":[],"border":{"sides":{"top":false,"right":false,"bottom":false,"left":true},"style":"heavy","color":"text.muted","title":"t","title_align":"center"}}"#,
-                serde_json::to_value(
-                    Node::column(Vec::new()).border(
-                        Border::new()
-                            .sides(Sides { left: true, ..Sides::NONE })
-                            .style(BorderStyle::Heavy)
-                            .color("text.muted")
-                            .title("t")
-                            .title_align(TitleAlign::Center),
-                    ),
-                )
-                .unwrap(),
-            ),
-            (
-                r#"{"type":"box","children":[],"padding_sides":{"right":1,"left":2},"wrap":true,"overflow":"hidden"}"#,
-                serde_json::to_value(
-                    Node::column(Vec::new())
-                        .padding_sides(Edges::new(0, 1, 0, 2))
-                        .flex_wrap()
-                        .overflow(Overflow::Hidden),
-                )
-                .unwrap(),
-            ),
-            (
-                r#"{"height":{"cells":5},"min_height":{"percent":10.0},"max_height":{"cells":8},"margin":{"top":-1}}"#,
-                serde_json::to_value(
-                    Layout::default()
-                        .height(Width::Cells(5))
-                        .min_height(Width::Percent(10.0))
-                        .max_height(Width::Cells(8))
-                        .margin(Edges::new(-1, 0, 0, 0)),
-                )
-                .unwrap(),
-            ),
-            (
-                r#"{"type":"confirm","title":"T","message":"M","action":{"type":"command","name":"x.a"}}"#,
-                serde_json::to_value(Dialog::Confirm(Confirm {
-                    title: "T".into(),
-                    message: "M".into(),
-                    label: ConfirmLabel::default(),
-                    action: Action::command("x.a"),
-                    size: None,
-                    centered: false,
-                }))
-                .unwrap(),
-            ),
-            (
-                r#"{"type":"alert","title":"T","message":"M","action":{"type":"command","name":"x.a"}}"#,
-                serde_json::to_value(Dialog::Alert(Alert {
-                    title: "T".into(),
-                    message: "M".into(),
-                    action: Some(Action::command("x.a")),
-                    size: None,
-                    centered: false,
-                }))
-                .unwrap(),
-            ),
-            (r#"{"type":"composer"}"#, serde_json::to_value(HostRequest::Composer).unwrap()),
-            (
-                r#"{"type":"composer-edit","edit":{"type":"insert","text":"a"}}"#,
-                serde_json::to_value(HostRequest::ComposerEdit { edit: ComposerEdit::Insert { text: "a".into() } })
-                    .unwrap(),
-            ),
-        ];
-        for (json, value) in &rows {
-            assert_eq!(value.to_string(), *json);
-        }
-        let node: Node = serde_json::from_str(rows[3].0).unwrap();
-        assert_eq!(serde_json::to_string(&node).unwrap(), rows[3].0);
-        let layout: Layout = serde_json::from_str(rows[4].0).unwrap();
-        assert_eq!(serde_json::to_string(&layout).unwrap(), rows[4].0);
-        for json in [rows[5].0, rows[6].0] {
-            assert_eq!(serde_json::to_string(&serde_json::from_str::<Dialog>(json).unwrap()).unwrap(), json);
-        }
-        let label = r#"{"type":"confirm","title":"T","message":"M","label":{"confirm":"yes"},"action":{"type":"command","name":"x.a"}}"#;
-        let Dialog::Confirm(confirm) = serde_json::from_str(label).unwrap() else { panic!("not a confirm") };
-        assert_eq!(confirm.label, ConfirmLabel { confirm: Some("yes".into()), cancel: None });
-        let edits = [ComposerEdit::Set { text: "s".into() }, ComposerEdit::Submit];
-        assert_eq!(serde_json::to_string(&edits).unwrap(), r#"[{"type":"set","text":"s"},{"type":"submit"}]"#);
-        let composer = Composer { text: "é".into(), cursor: 2, focused: true };
-        let json = r#"{"text":"é","cursor":2,"focused":true}"#;
-        assert_eq!(serde_json::to_string(&composer).unwrap(), json);
-        assert_eq!(serde_json::from_str::<Composer>(json).unwrap(), composer);
-        // A 1.4 box's JSON reads as a box with none of the 1.5 properties.
-        let old = r#"{"type":"box","row":true,"padding":[1,0],"layout":{"grow":true},"children":[]}"#;
-        assert_eq!(
-            serde_json::from_str::<Node>(old).unwrap(),
-            Node::row(Vec::new()).padding(1, 0).layout(Layout::default().grow())
-        );
-    }
-
     /// A text delta of message `msg_1` in `ses_1`.
     fn text_delta(delta: &str) -> V2Event {
         serde_json::from_value(serde_json::json!({
@@ -6160,78 +5706,8 @@ mod tests {
         .unwrap()
     }
 
-    // Expected: the small reads and verbs read back as written and leave out what is unset, so a plain span, slot
-    // input, panel and manifest keep their short JSON.
     #[test]
-    fn the_small_reads_and_verbs_round_trip() {
-        let rows: [(&str, serde_json::Value); 12] = [
-            (r#"{"text":"a"}"#, serde_json::to_value(Span::new("a")).unwrap()),
-            (
-                r#"{"text":"a","link":"https://x.dev"}"#,
-                serde_json::to_value(Span::new("a").link("https://x.dev")).unwrap(),
-            ),
-            (r#"{}"#, serde_json::to_value(SlotInput::default()).unwrap()),
-            (
-                r#"{"session_id":"s","width":40,"height":3}"#,
-                serde_json::to_value(SlotInput { session_id: Some("s".into()), width: 40, height: 3, prompt: None })
-                    .unwrap(),
-            ),
-            (r#""xlarge""#, serde_json::to_value(PanelSize::XLarge).unwrap()),
-            (r#"{"type":"set-variant"}"#, serde_json::to_value(HostRequest::SetVariant { variant: None }).unwrap()),
-            (
-                r#"{"type":"tab","edit":{"type":"move","session":"ses_1","index":2}}"#,
-                serde_json::to_value(HostRequest::Tab { edit: TabEdit::Move { session: "ses_1".into(), index: 2 } })
-                    .unwrap(),
-            ),
-            (
-                r#"{"type":"tab","edit":{"type":"close"}}"#,
-                serde_json::to_value(HostRequest::Tab { edit: TabEdit::Close { session: None } }).unwrap(),
-            ),
-            (
-                r#"{"type":"foreground","command":"less","args":["a.txt"]}"#,
-                serde_json::to_value(HostRequest::Foreground(Foreground {
-                    command: "less".into(),
-                    args: vec!["a.txt".into()],
-                    cwd: None,
-                }))
-                .unwrap(),
-            ),
-            (
-                r#"{"session_id":"ses_1","active":true,"unread":"error"}"#,
-                serde_json::to_value(Tab {
-                    session_id: "ses_1".into(),
-                    active: true,
-                    unread: Some(Unread::Error),
-                    ..Tab::default()
-                })
-                .unwrap(),
-            ),
-            (
-                r#"{"id":"x.a","enabled":true,"slash":{"name":"a"}}"#,
-                serde_json::to_value(KeymapCommand {
-                    id: "x.a".into(),
-                    enabled: true,
-                    slash: Some(KeymapSlash { name: "a".into(), ..KeymapSlash::default() }),
-                    ..KeymapCommand::default()
-                })
-                .unwrap(),
-            ),
-            (
-                r#"{"key":"ctrl+x","continues":true}"#,
-                serde_json::to_value(KeymapActive { key: "ctrl+x".into(), continues: true, ..KeymapActive::default() })
-                    .unwrap(),
-            ),
-        ];
-        for (json, value) in &rows {
-            assert_eq!(value.to_string(), *json);
-        }
-        assert_eq!(serde_json::from_str::<Span>(rows[1].0).unwrap(), Span::new("a").link("https://x.dev"));
-        let input: SlotInput = serde_json::from_str(rows[3].0).unwrap();
-        assert_eq!((input.width, input.height), (40, 3));
-        let edit: HostRequest = serde_json::from_str(rows[6].0).unwrap();
-        assert_eq!(edit, HostRequest::Tab { edit: TabEdit::Move { session: "ses_1".into(), index: 2 } });
-        assert_eq!(serde_json::from_str::<PanelSize>(r#""xlarge""#).unwrap(), PanelSize::XLarge);
-
+    fn deltas_arrive_in_one_batch() {
         // Deltas: the manifest says so only with a handler, and the request runs each handler with the events.
         let mut registered = Registered::new("new", None);
         let mut setup = registered.setup();
@@ -6268,24 +5744,15 @@ mod tests {
         drop(unsafe { owned.into_vec() });
     }
 
-    // Expected: a host that refuses a read or a verb, as a host refuses a request of a later minor, gives the read its
-    // default and the verb `false` or nothing, each asked once, while the requests it takes still go through.
     #[test]
     fn refused_reads_and_verbs_answer_their_defaults() {
         let log = std::sync::Mutex::new(Vec::<String>::new());
         let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: 0,
             ctx: std::ptr::from_ref(&log).cast_mut().cast(),
             call: Some(toasts_only),
             free: Some(free_buffer),
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
             features: Bytes::new(&[]),
+            ..host_table()
         };
         let host = HostHandle::new(&api);
         assert_eq!((host.variants(), host.tabs_enabled(), host.tabs()), (Vec::new(), false, Vec::new()));
@@ -6322,24 +5789,15 @@ mod tests {
         0
     }
 
-    // Expected (reviews carbon-2, carbon-7): a plugin reads the threads' entries and the features from a host of major 2
-    // only; a table of major 1, though as long, offers no link and no features.
     #[test]
     fn only_a_2_0_host_offers_threads_and_features() {
         let features = br#"["terminal"]"#;
         let api = HostApi {
-            size: size_of::<HostApi>(),
-            major: 2,
-            minor: 0,
-            ctx: std::ptr::null_mut(),
-            call: Some(call),
-            free: Some(free),
-            theme_mode: None,
-            wake: None,
             send: Some(sent),
             report: Some(reported),
             stopped: Some(running),
             features: Bytes::new(features),
+            ..host_table()
         };
         let host = HostHandle::new(&api);
         assert!(host.link().is_some());
@@ -6351,7 +5809,6 @@ mod tests {
         assert!(host.link().is_none() && host.features().is_empty());
     }
 
-    // Expected (reviews bigboi-5, carbon-7): a plugin has one message type; a second registration is an error.
     #[test]
     fn a_plugin_registers_one_message_type() {
         let mut registered = Registered::new("x", None);
@@ -6361,10 +5818,6 @@ mod tests {
         assert!(setup.manifest().messages);
     }
 
-    // Expected (reviews bigboi-5, carbon-4): a message that does not cross as JSON and come back as itself is handed back
-    // as `Unencodable` before any carrier sees it: a NaN, a map whose keys are not strings, a serializer that fails.
-    // One that does crosses (here to a closed plugin, so `Closed`), an integer past 64 bits too: the host keeps the
-    // sender's JSON text and never reads it as a number of its own.
     #[test]
     fn a_message_json_cannot_carry_is_handed_back() {
         struct Failing;
@@ -6390,8 +5843,6 @@ mod tests {
         assert!(matches!(Sender::<Failing>::new(closed).send(Failing), Err(SendError::Unencodable(_))));
     }
 
-    // Expected (review carbon-4): content crosses whole: UTF-8 as a string, other bytes as base64, both back as they
-    // were; a view's content in a reply is the bytes it gave.
     #[test]
     fn content_crosses_whole() {
         for (bytes, base64) in
@@ -6434,9 +5885,6 @@ mod tests {
         assert_eq!(reply.content, [(v2::ContentRef(5), binary)]);
     }
 
-    // Expected (P5 over the C ABI): a surface with a draw says so in the manifest; a draw request carries its frame as
-    // the header documents it, and the shim answers with the list's bytes as they are, none to keep the list, and an
-    // error for a surface without a draw or a draw asked through JSON.
     #[test]
     fn a_draw_answers_with_the_lists_bytes() {
         let mut registered = Registered::new("x", None);
@@ -6484,7 +5932,6 @@ mod tests {
         assert_eq!(json, Err("a draw answers with the list's bytes, not JSON".to_owned()));
     }
 
-    // Expected (review carbon-7): a thread the spawner starts is named `<plugin id>:<name>`.
     #[test]
     fn a_plugin_thread_carries_the_plugin_name() {
         let (named, name) = std::sync::mpsc::channel();
@@ -6499,7 +5946,6 @@ mod tests {
 
     plugin!(named);
 
-    // Expected (review carbon-7): `plugin!(setup)` takes the crate's package name as the plugin's ID.
     #[test]
     fn plugin_without_an_id_takes_the_package_name() {
         let api = opencode_plugin_v2();
