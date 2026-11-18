@@ -115,6 +115,8 @@ pub struct Tui {
     pub client_mcp: crate::client_mcp::ClientMcp,
     /// What the composer keeps across session views (E.13b).
     pub composer: crate::composer::Memory,
+    /// Inbox items with a pending action in flight ([`crate::routes::session::queued::mutate`]).
+    pub(crate) pending_actions: RefCell<std::collections::HashSet<String>>,
     files: Option<Files>,
     route: RefCell<Route>,
     /// The routes shown before the plugin routes on screen, the latest last: where the reserved chord goes back to.
@@ -582,6 +584,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         terminals: Default::default(),
         client_mcp: Default::default(),
         composer: Default::default(),
+        pending_actions: RefCell::default(),
         files,
         route: RefCell::new(Route::Home),
         before_plugin: RefCell::default(),
