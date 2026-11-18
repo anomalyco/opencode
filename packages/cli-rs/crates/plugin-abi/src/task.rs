@@ -99,8 +99,9 @@ impl Tasks {
 
     /// Starts a task that runs `tick` every `period` ([`Cx::sleep`] between two), until `tick` breaks or a sleep
     /// fails: its mount closed ([`CANCELLED`]), or the host took no more timers. A tick that runs long delays the next:
-    /// a late period is one tick, not one for each it missed. `tick` runs with `host` lent from its second period on
-    /// as from the timer's call, so its requests are the activation's.
+    /// a late period is one tick, not one for each it missed. Started from a mount's call, it is that mount's: each
+    /// tick runs as a call of the mount (a mount's timer's reply is), so each next sleep is the mount's, and the loop
+    /// ends when the mount closes. Started from the activation's call, it is the activation's.
     pub fn every<F: Future<Output = ControlFlow<()>> + 'static>(
         &self,
         host: &dyn Host,

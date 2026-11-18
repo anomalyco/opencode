@@ -3214,7 +3214,10 @@ pub trait Host: Read {
     /// Starts a timer: [`Setup::on_reply`] gets `null` with the ID this returns once `delay` passed on the host's
     /// clock, on the UI thread, with no thread of the plugin's. A delay under [`MIN_TIMER`] waits [`MIN_TIMER`]. It is
     /// owned as a fetch is ([`Host::try_fetch`]): a mount's timer ends with its mount, which [`Setup::on_cancelled`]
-    /// hears, and every timer ends with the activation. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply
+    /// hears, and every timer ends with the activation. Unlike a fetch's, a mount's timer's reply is a call of that
+    /// mount, so what it asks for next, a sleep loop's next timer, is the mount's too, and ends with it. The delay
+    /// crosses the C ABI in whole milliseconds, a part of one counted as one. A JS plugin on the pipe keeps its own
+    /// timers: the pipe refuses this request. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply
     /// is that refusal, at once. An error is a timer the host did not take, as for [`Host::try_fetch`]: no reply comes
     /// for it. A host without timers, by default, takes none.
     #[must_use = "a timer the host did not take gets no reply"]

@@ -284,7 +284,8 @@ function plugin.sleep(ms: number): (boolean?, string?)
 end
 
 -- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails. A tick that
--- runs long delays the next: a late period is one tick, not one for each it missed.
+-- runs long delays the next: a late period is one tick, not one for each it missed. Started from a mount's handler, it
+-- is that mount's (a mount's timer's reply is a call of the mount) and ends when the mount closes.
 function plugin.every(ms: number, f: (any) -> boolean?)
     plugin.spawn(function()
         while plugin.sleep(ms) do

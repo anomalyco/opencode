@@ -154,3 +154,109 @@ export default {{ id: "example.timer", setup(api) {{
     });
     assert_eq!(read(), "result null\n", "the pipe gave a timer an ID");
 }
+
+thread_local! {
+    /// The ticks of [`every_of_a_mount`]'s `every`.
+    static MOUNT_TICKS: Cell<u32> = const { Cell::new(0) };
+}
+
+/// A route whose key starts a 50 ms `every`: the mount's, as its handler started it.
+fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
+    let tasks = setup.tasks();
+    let layer = abi::interact::Layer::default()
+        .scope(abi::interact::LayerScope::Global)
+        .keys(vec![abi::interact::Bind::new("x", "tick")]);
+    let surface =
+        v2::Surface::new("tick", v2::Place::Route("tick".into()), |_| v2::Node::text(vec![abi::Span::new("ticking")]))
+            .layers(vec![layer])
+            .on(move |host, event| match event {
+                abi::interact::Event::Key(key) if key.bind.as_deref() == Some("tick") => {
+                    tasks.every(host, Duration::from_millis(50), |_| async {
+                        MOUNT_TICKS.set(MOUNT_TICKS.get() + 1);
+                        ControlFlow::Continue(())
+                    });
+                    abi::interact::Handled::Consume
+                }
+                _ => abi::interact::Handled::Pass,
+            });
+    setup.surface(surface);
+    Ok(())
+}
+
+/// [`every_of_a_mount`] in Luau: it counts its ticks in its storage.
+#[cfg(feature = "luau")]
+const EVERY_OF_A_MOUNT: &str = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:storageKey("ticks")
+    local layer = { scope = "global", keys = { { key = "x", name = "tick" } } }
+    setup:surface({ name = "tick", place = { type = "route", name = "tick" }, layers = { layer } },
+        function() return { type = "text", spans = { { text = "ticking" } } } end,
+        function(host, event)
+            if event.type == "key" and event.bind == "tick" then
+                plugin.every(50, function(host)
+                    local ticks = host:storageGet("ticks") or { n = 0 }
+                    host:storageSet("ticks", { n = ticks.n + 1 })
+                    return true
+                end)
+                return "consume"
+            end
+            return "pass"
+        end)
+end)
+"#;
+
+// Expected (timers, big-boi's note on `every`): an `every` a mount's handler started is that mount's: each tick's call is
+// the mount's, so each next sleep is too, and the loop ends when the mount closes, also after its first tick. In
+// process, through the C ABI and in Luau.
+#[test]
+fn an_every_a_mount_started_ends_with_that_mount() {
+    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
+    #[cfg(feature = "luau")]
+    carriers.push(Carrier::Luau);
+    for carrier in carriers {
+        MOUNT_TICKS.set(0);
+        let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        let definition = match carrier {
+            Carrier::CAbi => {
+                let entries = abi::export_plugin!(@loopback "test.tick", every_of_a_mount);
+                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            }
+            #[cfg(feature = "luau")]
+            Carrier::Luau => {
+                let files = [("plugin.toml", "id = \"test.tick\""), ("init.luau", EVERY_OF_A_MOUNT)];
+                opencode_plugin::luau::define(&opencode_plugin::luau::Sources::from_files(files), None).unwrap().0
+            }
+            Carrier::InProcess => abi::Plugin { id: "test.tick", setup: every_of_a_mount }.into(),
+        };
+        opencode_tui::plugins::host::add(&h.tui, definition);
+        let ticks = || match carrier {
+            #[cfg(feature = "luau")]
+            Carrier::Luau => opencode_plugin::Host::storage_read(&*h.tui, "plugin.test.tick.ticks")
+                .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+                .and_then(|ticks| ticks["n"].as_u64())
+                .map_or(0, |ticks| ticks as u32),
+            _ => MOUNT_TICKS.get(),
+        };
+        h.tui.navigate(Route::Plugin { id: "test.tick".into(), name: "tick".into() });
+        h.wait_for("ticking");
+        for _ in 0..3 {
+            h.app.advance(Duration::from_millis(1));
+            h.app.render();
+        }
+        h.app.press("x");
+        for _ in 0..4 {
+            h.app.advance(Duration::from_millis(50));
+        }
+        let open = ticks();
+        assert!(open >= 3, "{carrier:?}: it did not tick while the route showed: {open}");
+        h.tui.navigate(Route::Home);
+        h.app.advance(Duration::from_millis(10));
+        let closed = ticks();
+        for _ in 0..10 {
+            h.app.advance(Duration::from_millis(50));
+        }
+        assert_eq!(ticks(), closed, "{carrier:?}: the mount's every ticked on after the mount closed");
+    }
+}

@@ -3607,7 +3607,8 @@ fn a_mount_request_past_the_cap_is_refused_with_its_reply() {
     let ask = |id: u64| {
         let sent = sent.clone();
         let owned = Some(Rc::downgrade(&mount));
-        reply_to(&guest, &*dynamic(&host), abi::RequestId(id), owned, move |_, _| sent.set(sent.get() + 1));
+        let keep = Keep::Activation;
+        reply_to(&guest, &*dynamic(&host), abi::RequestId(id), owned, keep, move |_, _| sent.set(sent.get() + 1));
     };
     (1..=MOUNT_REQUESTS as u64 + 1).for_each(ask);
     assert_eq!(sent.get(), MOUNT_REQUESTS);

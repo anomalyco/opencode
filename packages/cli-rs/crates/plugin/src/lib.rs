@@ -764,6 +764,12 @@ impl loader::native::Answers for Scope {
         self.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
     }
 
+    fn answer_as(self: Rc<Self>, request: abi::Request, mount: &Weak<()>) {
+        let abi::Request::Reply { id, result } = request else { return };
+        let replies = self.replies.borrow().clone();
+        self.run_owned(mount, "on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
+    }
+
     fn release(&self, request: abi::RequestId) {
         self.activation.cancel_timer(request);
     }
@@ -1407,12 +1413,12 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn try_fetch(&self, fetch: abi::Fetch) -> Result<abi::RequestId, String> {
-        self.request(move |host, _, reply| host.fetch(fetch, reply))
+        self.request(loader::native::Keep::Activation, move |host, _, reply| host.fetch(fetch, reply))
     }
 
     fn try_timer(&self, delay: std::time::Duration) -> Result<abi::RequestId, String> {
         let activation = Rc::downgrade(&self.scope.activation);
-        self.request(move |host, id, reply| {
+        self.request(loader::native::Keep::Owner, move |host, id, reply| {
             if let Some(activation) = activation.upgrade() {
                 activation.start_timer(host.app(), id, delay, reply);
             }
@@ -1515,7 +1521,7 @@ impl abi::Host for Scoped<'_> {
                 owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none());
             active && mount.as_ref().is_none_or(|mount| mount.upgrade().is_some())
         });
-        self.request(move |host, _, reply| host.foreground(program, alive, reply))
+        self.request(loader::native::Keep::Activation, move |host, _, reply| host.foreground(program, alive, reply))
     }
 
     fn set_title(&self, title: &str) {
@@ -1638,7 +1644,11 @@ impl Scoped<'_> {
     /// Queues `send` like an effect, unless the plugin is disposed by then, and returns the ID its reply comes back to
     /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first;
     /// [`REFUSED`] without room for it.
-    fn request(&self, send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static) -> Result<abi::RequestId, String> {
+    fn request(
+        &self,
+        keep: loader::native::Keep,
+        send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static,
+    ) -> Result<abi::RequestId, String> {
         // An ID is a promise of a reply: none is given unless the request's effect has room (bigboi's final pass).
         let staged = self.scope.call.borrow().as_ref().map_or(0, |call| call.effects.len());
         if !has_room(staged) {
@@ -1651,7 +1661,7 @@ impl Scoped<'_> {
         // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
         let mount = self.scope.mount.borrow().clone();
         self.defer_reserved(move |host| {
-            loader::native::reply_to(&scope, host, id, mount, move |host, reply| send(host, id, reply));
+            loader::native::reply_to(&scope, host, id, mount, keep, move |host, reply| send(host, id, reply));
         });
         Ok(id)
     }
