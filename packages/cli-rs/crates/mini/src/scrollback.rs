@@ -1,9 +1,5 @@
-//! The scrollback writer (`scrollback.writer.tsx`, `scrollback.surface.ts`, `entry.body.ts`,
-//! `scrollback.shared.ts`): turns stream commits into rows above the split footer.
-//!
-//! Finished entries are painted once into a snapshot. Entries that stream (assistant text, reasoning, running
-//! tools) live on a surface whose settled rows are committed as they arrive, so the terminal's scrollback grows
-//! with the text and nothing written is ever rewritten.
+//! Finished entries are painted once; streaming entries commit only their settled rows. Text written to terminal
+//! scrollback cannot be rewritten.
 
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState};
 use opentui::prelude::*;
@@ -397,7 +393,7 @@ impl Active {
     ///
     /// A Markdown part before the end ends its last row, so the next part starts below it and a blank row at the
     /// boundary stays: the committed rows equal the reply rendered whole. TS leaves the row open, and the next part
-    /// continues it, so the blank row there is lost (`parity/deviations/M06-mini-dropped-blank-row.md`).
+    /// continues it, so the blank row there is lost.
     fn commit(&mut self, done: bool, trailing_newline: bool) -> Result<Option<(u32, Option<SplitSnapshot>)>> {
         let (target, whole_rows) = match &self.widget {
             Stream::Text(text) => {
@@ -776,7 +772,7 @@ pub fn entry_content(app: &App, theme: &RunTheme, mono: bool, commit: &Commit, b
 }
 
 /// Markdown for assistant text, and for code bodies in Markdown such as reasoning. Code in other languages (an
-/// unknown tool's metadata as JSON) renders as Markdown text too (`parity/deviations/M06-mini-output.md`).
+/// unknown tool's metadata as JSON) renders as Markdown text too.
 fn entry_markdown(app: &App, theme: &RunTheme, commit: &Commit, body: &Body, streaming: bool) -> Markdown {
     let color = entry_color(commit, theme);
     let code = matches!(body, Body::Code { .. });
@@ -1082,7 +1078,7 @@ mod tests {
 
     /// Streamed equals whole: a Markdown reply committed in parts, at any split of its text, leaves the terminal with the
     /// rows of the reply rendered whole, blank rows between blocks included. TS loses the blank row at each boundary
-    /// (`parity/deviations/M06-mini-dropped-blank-row.md`).
+    ///.
     #[test]
     fn a_streamed_reply_commits_the_rows_of_the_whole_reply() {
         let theme = crate::theme::resolve(&crate::theme::ThemeInput {

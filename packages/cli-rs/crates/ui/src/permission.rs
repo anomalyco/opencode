@@ -1,6 +1,3 @@
-//! What a permission request shows (`util/permission.ts`), shared by the TUI's permission prompt and mini's
-//! permission footer.
-
 use serde_json::{Map, Value};
 
 use crate::tool_info::{canonical_tool_name, finite_number, web_search_provider_label};

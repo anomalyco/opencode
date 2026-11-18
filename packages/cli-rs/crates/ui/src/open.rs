@@ -1,5 +1,4 @@
-//! The system opener for URLs and paths, shared by the TUI and mini: what the `open` package runs for `openUrl` and
-//! `openPath` (`packages/util/src/open.ts`).
+//! Platform launcher for URLs and paths.
 
 use base64::Engine;
 use std::process::Command;

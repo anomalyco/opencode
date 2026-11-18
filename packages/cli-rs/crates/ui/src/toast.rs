@@ -1,8 +1,4 @@
-//! Toasts (U.3): `packages/tui/src/ui/toast.tsx`, plus the theme error toast of
-//! `component/theme-error-toast.tsx`.
-//!
-//! [`Toasts`] is the `ToastProvider` and the `<Toast />` view together: one toast at a time in the top right
-//! corner, a queue behind it, a timer that dismisses it, pause while hovered, and an optional action.
+//! Shows one toast at a time. Hover pauses its timer.
 
 use crate::bind;
 use crate::theme::{Theme, ThemeError};
@@ -40,8 +36,7 @@ pub struct ToastOptions {
     pub variant: Variant,
     pub duration: Option<Duration>,
     pub action: Option<ToastAction>,
-    /// Shown for its whole time to [`Toasts::show_behind_kept`], whose toast waits behind it instead of replacing it:
-    /// the host's own plugin notices, which a plugin's toast must not hide (PL-2).
+    /// Keep the host notice visible for its full duration; a plugin toast waits behind it.
     pub keep: bool,
 }
 
@@ -85,8 +80,7 @@ struct Inner {
     current: RefCell<Option<ToastOptions>>,
     /// TS's queue: the toasts shown while one is paused.
     queue: RefCell<VecDeque<ToastOptions>>,
-    /// The plugins' toasts that wait ([`Toasts::show_behind_kept`]), at most [`PLUGIN_WAITING`]: they come after the
-    /// queue, so a toast of the host never waits behind one of a plugin (review carbon new-2).
+    /// Host notices have priority over queued plugin toasts.
     waiting: RefCell<VecDeque<ToastOptions>>,
     timer: Cell<Option<TimerId>>,
     started: Cell<Instant>,

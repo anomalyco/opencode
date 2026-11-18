@@ -1,4 +1,4 @@
-//! Form field rules shared by the TUI's form prompt and mini's form footer (`util/form.ts`).
+//! Shared form validation and answer rules.
 
 use std::collections::HashMap;
 
@@ -173,7 +173,7 @@ pub fn validate(field: &FormField, value: Option<&FormValue>) -> Option<String> 
             if let Some(max) = field.max_length.filter(|max| length > *max) {
                 return Some(format!("Must be at most {max} characters"));
             }
-            // Rust regex syntax, not ECMAScript (parity/deviations/V18-form-pattern-regex.md).
+            // Patterns use Rust regex syntax.
             if let Some(pattern) = &field.pattern {
                 match regex::Regex::new(pattern) {
                     Ok(regex) if !regex.is_match(text) => {

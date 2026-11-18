@@ -1,7 +1,4 @@
-//! V1 themes (`{ defs, theme }` with flat color keys) and their migration to V2 documents (`v1-migrate.ts` in
-//! `packages/theme/src/tui`), with the parts the new-designs migration ([`super::v1_new`]) shares. The TUI takes the
-//! new-designs migration; mini takes `migrateV1` ([`migrate`]), as TS mini parses themes without the experiment.
-//! Custom V1 themes and the generated `system` theme take this path at runtime.
+//! Reads legacy `{ defs, theme }` color documents.
 
 use std::collections::HashMap;
 

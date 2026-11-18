@@ -1,11 +1,4 @@
-//! Tool summaries, ported from `toolInlineInfo` (U.5).
-//!
-//! [`tool_inline_info`] is the one-line summary of a tool call that `run`, `mini`, and the TUI share
-//! (`packages/tui/src/mini/tool.ts`). The other public functions are the tool display helpers of
-//! `packages/tui/src/util/tool-display.ts` and `util/todo.ts`, which the TUI's tool views use too.
-//!
-//! The TypeScript works on untyped JSON and falls back to a generic summary when a rule throws. This
-//! port reads the part as JSON the same way, and a rule that would throw returns `None`.
+//! One-line tool summaries shared by `run`, mini and the full TUI.
 
 use opencode_api_types::js::js_string;
 use opencode_api_types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
@@ -220,8 +213,7 @@ pub fn read_display_text(text: &str) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-/// `toolPath` (`mini/tool.ts:324-330`): `input` relative to `directory` (else the current directory) when it is
-/// inside it. Outside, the absolute path, with the home directory as `~` when `home` is given.
+/// Show paths inside the working directory as relative paths; leave outside paths absolute.
 pub fn tool_path(input: &str, directory: Option<&str>, home: Option<&str>) -> String {
     let cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
     crate::path::format_path(input, directory.unwrap_or(&cwd), home, true)

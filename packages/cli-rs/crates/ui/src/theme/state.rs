@@ -1,8 +1,4 @@
-//! The TUI's theme state (`packages/tui/src/context/theme.tsx`): the active theme, the dark or light mode and its
-//! lock, the terminal palette behind `system`, and fallback to `opencode` when a theme fails to load.
-//!
-//! The state does no I/O. Methods queue [`Effect`]s (config writes, palette probes, the palette cache) and failed
-//! loads queue a [`ThemeError`]; the owner drains both after each call and carries them out.
+//! Tracks the active theme, mode lock and terminal palette.
 
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -312,8 +308,7 @@ impl ThemeState {
             Err(message) => {
                 self.error = Some(ThemeError { name, message });
                 self.active = "opencode".to_owned();
-                // A custom `opencode` replaces the built-in one; when it is the one that fails, the built-in one is
-                // the fallback (TS throws, deviation U01).
+                // If a custom `opencode` theme fails to load, fall back to the bundled one.
                 self.current = self.catalog.load("opencode", self.mode).unwrap_or_else(|message| {
                     log::warn!("custom theme opencode: {message}; using the built-in opencode theme");
                     Catalog::default().load("opencode", self.mode).expect("the built-in opencode theme loads")
@@ -458,9 +453,6 @@ mod tests {
         assert!(state.take_error().is_none());
     }
 
-    // Expected (O-89, deviation U01): a custom theme named `opencode` replaces the built-in one, and a broken one is
-    // the fallback that fails. TS throws there (`context/theme.tsx:298-308`); this falls back to the built-in
-    // `opencode` and logs why, for the broken theme itself and for another broken theme that falls back to it.
     #[test]
     fn a_broken_custom_opencode_falls_back_to_the_built_in_opencode() {
         let builtin = ThemeState::new(options());

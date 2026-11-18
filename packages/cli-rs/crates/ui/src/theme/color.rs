@@ -1,5 +1,4 @@
-//! Color math shared by the resolver and the V1 migrations: hex parsing like Core's `RGBA.fromHex`, the ANSI
-//! palette, and OKLCH conversion (`packages/theme/src/tui/color.ts`).
+//! Color conversion shared by the theme resolver and V1 readers.
 
 use opentui::style::Color;
 

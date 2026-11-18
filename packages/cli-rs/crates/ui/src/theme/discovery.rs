@@ -1,4 +1,4 @@
-//! Custom themes: `themes/*.json` in the config directories (`packages/tui/src/theme/discovery.ts`).
+//! Finds `themes/*.json` in configuration directories.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-/// The config directory, then `.opencode` in every directory from the root down to `cwd`, without repeats
-/// (`configDirectories` in `packages/tui/src/util/config-directories.ts`). `cwd` must be absolute.
+/// Searches the config directory, then `.opencode` directories from root to working directory, once per directory.
 pub fn config_directories(config: &Path, cwd: &Path) -> Vec<PathBuf> {
     let mut ancestors: Vec<&Path> = cwd.ancestors().collect();
     ancestors.reverse();

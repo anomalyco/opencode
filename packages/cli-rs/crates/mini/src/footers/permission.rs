@@ -1,5 +1,4 @@
-//! The permission footer (`footer.permission.tsx`, `permission.shared.ts`): the request with Allow once, Always
-//! allow, and Reject; a confirmation before Always allow; a message field for Reject.
+//! Always-allow needs confirmation; rejection offers a reason field.
 
 use opencode_api::generated::{PermissionReply, PermissionRequest};
 use opencode_ui::permission::{Presentation, always_lines, presentation};

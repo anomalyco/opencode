@@ -1,5 +1,4 @@
-//! The footer menu of the panels (`footer.menu.tsx`): grouped rows with category headers, right-aligned footers in
-//! a tone, and a shaded background. The autocomplete's flat menu is [`crate::prompt::menu`].
+//! Grouped footer menus. Autocomplete uses a separate flat menu.
 
 use crate::prelude::*;
 use crate::prompt::menu::{COMPACT_WIDTH, Selection, fit};

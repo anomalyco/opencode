@@ -1,6 +1,4 @@
-//! Which themes exist and how one loads (`allThemes`, `parseTheme`, and `loadTheme` in `packages/tui/src/theme` and
-//! `context/theme.tsx`), as the TUI does under the `new-designs` experiment: `opencode2` is listed first and V1
-//! themes take the new-designs migration. [`Catalog::mini`] loads them as mini does, which ignores the experiment.
+//! Discovers, migrates and resolves themes for the TUI and mini.
 
 use std::borrow::Cow;
 use std::sync::{LazyLock, OnceLock};
@@ -75,8 +73,7 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// The themes as mini loads them (`parseTheme` without `newDesigns`, `allThemes` without `opencode2`): V1
-    /// themes, built-in or custom, take `migrateV1`.
+    /// Mini resolves V1 themes with the legacy color mapping.
     pub fn mini() -> Self {
         Self { mini: true, ..Self::default() }
     }

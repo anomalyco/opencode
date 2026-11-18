@@ -1,6 +1,4 @@
-//! QR codes for `pair` and the TUI's `/pair` dialog: a port of `packages/util/src/qr.ts` (Nayuki's reference
-//! encoder), byte mode at level L in the smallest version. Not the `qrcode` crate, which picks other masks, so its
-//! codes differ from the TS client's.
+//! Encodes pairing URLs in QR byte mode at error correction level L.
 
 // Error correction codewords per block and block count at level L, for versions 1 to 40.
 const ECC_PER_BLOCK: [usize; 40] = [
@@ -368,7 +366,7 @@ fn data_capacity(version: usize) -> usize {
 mod tests {
     use super::*;
 
-    // The golden codes of `packages/util/test/qr.test.ts`: each row is hex with a leading 1 bit.
+    // Each hex row has a leading sentinel bit.
     #[test]
     fn matches_the_reference_encoder() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../util/test/fixtures/qr.json");

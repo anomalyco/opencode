@@ -1,9 +1,4 @@
-//! Text rules of the prompt autocomplete, shared by the TUI and mini: where a trigger starts
-//! (`prompt/display.ts`), line ranges and slash heads (`prompt/parse.ts`), and directory completion
-//! (`prompt/directory-completion.ts`).
-//!
-//! Text a textarea shows is indexed in bytes here; [`super::offset_at`] and [`super::index_at`] convert to and from
-//! the cursor's offsets through the live buffer.
+//! Parses mention triggers, line ranges and slash commands.
 
 use unicode_width::UnicodeWidthStr;
 

@@ -1,5 +1,4 @@
-//! The V1 migration of the `new-designs` experiment (`v1-migrate-new-designs.ts` in `packages/theme/src/tui`). It
-//! lays V1 colors out on the steps of the `opencode2` theme.
+//! Maps V1 colors onto the `opencode2` hue steps for the TUI.
 
 use opentui::style::Color;
 use opentui::theme::ThemeMode;
@@ -210,7 +209,7 @@ impl Neutral {
         }
         neutral.lightness[index(900)] = page_lightness;
         neutral.scale[index(900)] = hex(background);
-        // Transparent V1 surfaces stay transparent so the terminal shows through, as they did before.
+        // Keep transparent V1 surfaces transparent so the terminal background shows through.
         for (step, color) in [(800, panel), (700, panel), (600, theme.get("backgroundElement"))] {
             if !opaque(color) {
                 neutral.scale[index(step)] = hex(color);

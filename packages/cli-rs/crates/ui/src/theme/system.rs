@@ -1,4 +1,4 @@
-//! The `system` theme, generated from the terminal's palette (`packages/tui/src/theme/system.ts`).
+//! Builds the system theme from the terminal palette.
 
 use opentui::style::Color;
 use opentui::theme::ThemeMode;

@@ -1,5 +1,4 @@
-//! Resolves an expanded V2 definition into hue scales and the tokens of each surface (`resolve.ts` in
-//! `packages/theme/src/tui`). Error messages match the TypeScript resolver's.
+//! Resolves hue scales and per-surface tokens from an expanded definition.
 
 use std::collections::HashMap;
 

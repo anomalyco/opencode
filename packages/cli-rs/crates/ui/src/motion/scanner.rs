@@ -1,13 +1,4 @@
-//! The Knight Rider scanner the prompt shows while a reply streams: `createFrames` and `createColors` of
-//! `packages/tui/src/ui/spinner.ts`, bidirectional with holds at both ends. Pair them on a [`Spinner`]:
-//!
-//! ```ignore
-//! let options = ScannerOptions { inactive_factor: 0.6, min_alpha: 0.3, ..ScannerOptions::new(agent_color) };
-//! let frames = scanner_frames(&options);
-//! Spinner::new(&app).frames(&frames).color(scanner_colors(&options)).interval(Duration::from_millis(40))
-//! ```
-//!
-//! [`Spinner`]: super::Spinner
+//! Bidirectional scanner for a streaming reply.
 
 use super::spinner::SpinnerColor;
 use super::{channels, int_pow, rgba};

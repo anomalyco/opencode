@@ -1,5 +1,3 @@
-//! Proves the static native library links and runs: a headless app renders through OpenTUI.
-
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 

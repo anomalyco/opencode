@@ -3,8 +3,7 @@ use opentui::input::{Event, Input, Parser};
 use serde_json::{Map, Value};
 use std::time::Instant;
 
-/// P-ORACLE: replays `parity/fixtures/U.2/keymap.json`, written by `parity/oracle/U.2-keymap.ts` from the
-/// TypeScript TUI's keymap, and expects the same commands for every case.
+/// Replays recorded input sequences and checks which commands actually run.
 #[test]
 fn oracle_key_sequences_run_the_commands_typescript_runs() {
     let fixture: Value = serde_json::from_str(include_str!("../../../../parity/fixtures/U.2/keymap.json")).unwrap();
@@ -159,8 +158,6 @@ fn modes_gate_layers_and_dispatch_passes_input() {
     assert!(tui.commands().iter().any(|command| command.id == "session.new"));
 }
 
-// Expected (review carbon-8): the active keys follow a mode whose condition changed, without a key or another query
-// publishing it first, as `commands` does.
 #[test]
 fn active_keys_follow_a_mode_condition() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
@@ -199,10 +196,6 @@ fn layer_rejects_the_command_shapes_typescript_rejects() {
     );
 }
 
-// Expected (review carbon new-3): `parse_binding` gives the key sequences the engine registers for a binding, over
-// every alias form: an alias between the engine's boundaries (`+`, `,`, `<`, `>`, whitespace) is its key, also before a
-// token (`esc<leader>`) and after one (`<leader>esc`), and only there (`escx`); commas separate bindings, and a key the
-// layer binds nothing for, as one with an empty entry, `parse_binding` refuses or parses to nothing.
 #[test]
 fn a_binding_parses_as_its_layer_registers_it() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
@@ -257,9 +250,6 @@ fn a_binding_parses_as_its_layer_registers_it() {
     }
 }
 
-// Expected (D131): the commands list in the order of TS's layers. The newest layer comes first; a held layer counts
-// as registered when its hold drops; the first layer's commands come last, in its order, wherever they were declared;
-// a command leaves the palette while its `palette` condition fails.
 #[test]
 fn commands_list_in_the_order_of_typescript_layers() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
@@ -296,9 +286,6 @@ fn commands_list_in_the_order_of_typescript_layers() {
     assert!(palette());
 }
 
-// Expected (cf-1): a plugin's slash name or alias never takes another command's: the host's whatever registered first,
-// and another plugin's when that plugin registered first. What is left keeps its order; a plugin whose every name is
-// taken has no slash command.
 #[test]
 fn a_plugin_slash_name_never_takes_another_commands() {
     let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());

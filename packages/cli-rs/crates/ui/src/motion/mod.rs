@@ -1,18 +1,3 @@
-//! Spinners, shimmer, and fade (U.6): ports of the TUI's motion components (`packages/tui/src/component/spinner*`,
-//! `shimmer-text.tsx`, `fade-in-text.tsx`, `ui/spinner.ts`, `ui/one-cell-motion.ts`).
-//!
-//! Each widget keeps the time it has animated for and derives its frame from it, so a frame is a function of an
-//! instant: [`spinner_frame`], [`shimmer_strength`], and [`fade_strength`] give the same values the widgets paint.
-//! A widget's [`Motion`] moves that time on the app's shared animation clock, in the frames the clock shares among
-//! every animation: a stepped spinner by one interval per tick, so its glyph is its summed ticks; shimmer and fade by
-//! the time between frames. A widget that is not drawn waits until a frame draws it again, and keeps no time
-//! meanwhile, as Core's `animationFps` does.
-//!
-//! The `animations` config switch is one per UI thread, as the TypeScript components all read
-//! `config.animations ?? true`: the app sets it with [`set_running`] at start and on every config change, and every
-//! widget here follows it at once. With it off a widget shows its still form and its motion stops; turning it back
-//! on resumes the motion of each widget as it paints. [`enabled`] applies the config default.
-
 mod curve;
 mod one_cell;
 mod scanner;
@@ -41,7 +26,6 @@ pub fn enabled(animations: Option<bool>) -> bool {
     animations.unwrap_or(true)
 }
 
-/// The palette title of `app.toggle.animations` for the current switch (TS `app.tsx`).
 pub fn toggle_title(animations: Option<bool>) -> &'static str {
     if enabled(animations) { "Disable animations" } else { "Enable animations" }
 }

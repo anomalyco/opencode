@@ -1,5 +1,3 @@
-//! Help dialog (U.3): `packages/tui/src/ui/dialog-help.tsx`.
-
 use crate::dialog::{DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout};
 use crate::keymap::{COMMAND_PALETTE_COMMAND, KeymapLayer, TuiCommand};
 use opentui::prelude::*;

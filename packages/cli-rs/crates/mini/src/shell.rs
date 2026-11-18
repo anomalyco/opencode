@@ -1,8 +1,5 @@
-//! The split-footer lifecycle (`runtime.lifecycle.ts`, `runtime.ts`, the state half of `footer.ts`).
-//!
-//! The renderer starts in a footer at the bottom of the main screen and paints at once; the session is resolved
-//! behind it. A resumed session clears the terminal and replays its transcript. Closing writes what is queued,
-//! leaves split mode, and ends with a newline so the shell continues below the transcript.
+//! Paints the footer before resolving the session. On exit, flush queued rows, leave split mode and place the shell
+//! below the transcript.
 
 use std::time::Instant;
 
@@ -212,7 +209,6 @@ struct State {
     status: String,
     notice: String,
     notice_timer: Option<TimerId>,
-    /// The model's ID, provider, and variant; M.4 names them from the provider catalog.
     model: Option<(String, Option<String>, Option<String>)>,
     usage: Option<replay::Usage>,
     agent: String,
@@ -1602,7 +1598,6 @@ impl Mini {
         self.stop();
         let _ = self.writer.borrow_mut().complete(false);
         let session = self.session.borrow().clone();
-        // `showExit`: the session has prompts, earlier or sent now.
         if let Some(session) = session
             && self.settings.get().splash == Visibility::Show
             && self.prompt.shown()
@@ -2004,8 +1999,7 @@ impl Mini {
     }
 }
 
-/// The variant a session opens with: the one its model names, else, when resuming with the session's own model,
-/// the session's variant (`pickVariant` in `runtime.boot.ts`, `session.shared.ts:108-113`).
+/// Prefer the variant named by the model. A resumed session can supply its saved variant only for that same model.
 fn opened_variant(target: &SessionTarget) -> Option<String> {
     let model = target.model.as_ref()?;
     if model.variant.is_some() || !target.resume {
@@ -2015,8 +2009,7 @@ fn opened_variant(target: &SessionTarget) -> Option<String> {
     (session.provider_id == model.provider_id && session.id == model.id).then(|| session.variant.clone())?
 }
 
-/// The Kitty keyboard flags of `runtime.lifecycle.ts`: none in mono, else `buildKittyKeyboardFlags({ events:
-/// platform === "win32" })`, the host's default flags plus event types on Windows.
+/// Mono mode disables Kitty keyboard flags. Color mode requests event types on Windows.
 fn keyboard_flags(mono: bool, windows: bool) -> KittyKeyboard {
     if mono {
         return KittyKeyboard::OFF;
@@ -2025,7 +2018,6 @@ fn keyboard_flags(mono: bool, windows: bool) -> KittyKeyboard {
     if windows { flags | KittyKeyboard::EVENT_TYPES } else { flags }
 }
 
-/// Whether an event's `sessionID(event)` names `session` (`stream-v2.transport.ts:180-183,1048-1053`).
 fn own_event(event: &Value, session: &str) -> bool {
     let data = &event["data"];
     let source = if event["type"] == "form.created" { &data["form"]["sessionID"] } else { &data["sessionID"] };

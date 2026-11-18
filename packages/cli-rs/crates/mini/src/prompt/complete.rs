@@ -1,6 +1,5 @@
-//! The prompt's autocomplete options (`footer.prompt.tsx:410-570`): `/` lists mini's built-ins and the server's
-//! commands; `@` lists subagents, then the file search's results, then references. A typed query filters them
-//! with fuzzysort, except the files, which the server ranks.
+//! Slash completion combines built-ins and server commands. Mentions list agents, files and references; files keep
+//! the server's ranking.
 
 use opencode_api::js::locale_compare;
 use opencode_ui::fuzzy;
@@ -259,7 +258,6 @@ mod tests {
 
     #[test]
     fn slash_lists_builtins_and_commands_as_typescript_does() {
-        // The order TS mini shows (`parity/scenarios/M.2/slash.pty.ts`).
         assert_eq!(
             shown(&filter(true, "", &catalog(), Vec::new())),
             ["/compact", "/editor", "/exit", "/init", "/new", "/q", "/quit", "/review", "/settings"]

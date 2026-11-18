@@ -1,12 +1,5 @@
-//! Tool rendering in the scrollback (`tool.ts`, the tool half of `stream-v2.subagent.ts` and
-//! `stream-v2.image.ts`).
-//!
-//! A tool part becomes commits ([`commit`]): a start line, output that streams as progress, and a final line or a
-//! structured snapshot (code, a diff, a task card, todos, questions). [`entry_body`] decides what each commit
-//! draws, by the per-tool rules of `TOOL_RULES`. The one-line summaries `run` prints are [`tool_inline_info`];
-//! the frame here adds what the scrollback needs on top of the same helpers.
-//!
-//! [`tool_inline_info`]: opencode_ui::tool_info::tool_inline_info
+//! Renders tool progress and final results into scrollback. Mini adds structured bodies to the one-line summaries
+//! shared with `run`.
 
 use opencode_api::generated::{SessionMessageAssistantToolState as State, ToolContent};
 use opencode_ui::prompt_input::paste::strip_ansi;
@@ -970,7 +963,6 @@ mod tests {
         assert_eq!(body(&commit(&task, "m", Phase::Final, None, None, 0)), Some(Body::Markdown("Found.".into())));
         let frame = tool_frame(&commit(&task, "m", Phase::Final, None, None, 0), "");
         assert_eq!(task_final(&frame), "# Explore Subagent\nFind it");
-        // `renders a task card for a completed background subagent launch` (`entry.body.test.ts`).
         let launch = part(
             "subagent",
             json!({ "status": "completed", "input": { "agent": "explore", "description": "Inspect reducer" },

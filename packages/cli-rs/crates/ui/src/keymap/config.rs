@@ -1,6 +1,4 @@
-//! The `keybinds` config: overrides on the generated defaults, resolved into bindings per name, as
-//! `TuiKeybind.parse` and `TuiConfig.resolve` do (`packages/tui/src/config/keybind.ts:341-361`,
-//! `packages/tui/src/config/index.tsx:295-319`).
+//! Applies keybind overrides to the generated defaults.
 
 use super::generated::DEFINITIONS;
 use opentui::keymap::extras::{BindingItem, BindingLookup, BindingValue};

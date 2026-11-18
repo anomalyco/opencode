@@ -1,6 +1,3 @@
-//! Entry and exit splash (`splash.ts`): the one-row entry header a transcript starts under (`entrySplash`), and
-//! the exit banner with the logo and the command that resumes the session (`exitSplash`).
-
 use crate::prelude::*;
 use crate::theme::SplashTheme;
 

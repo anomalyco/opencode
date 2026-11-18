@@ -1,8 +1,4 @@
-//! Path formatting (U.3): `packages/tui/src/util/path-format.ts` and `context/path-format.tsx`.
-//!
-//! Paths show relative to the working directory when they are inside it, else with `~` for the home directory, as
-//! the TUI shows them. POSIX and Windows paths follow Node's `path.posix` and `path.win32` rules, whichever the base
-//! looks like, so a Windows server's paths format the same on any client.
+//! Shows paths relative to the working directory where possible.
 
 use std::path::Path;
 

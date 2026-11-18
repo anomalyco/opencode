@@ -1,13 +1,4 @@
-//! Dialog stack and layout (U.3): `packages/tui/src/ui/dialog.tsx`.
-//!
-//! [`Dialogs`] is the `DialogProvider`: one host over the whole screen that shows the top entry inside the dimmed
-//! backdrop and panel, pushes the `modal` input mode while a dialog is open, and binds Escape and Ctrl+C to close
-//! it. A dialog's content is built by a closure that receives a [`DialogCx`]: the app, the keymap, the dialog
-//! surface of the theme, and layer registration tied to the entry's lifetime. [`header`], [`layout`], and
-//! [`footer`] are `DialogHeader`, `DialogLayout`, and `DialogFooter`.
-//!
-//! The kit draws the dialogs as the TUI does with the `new-designs` experiment on (`config/index.tsx:394-397`),
-//! the only design the Rust client implements.
+//! A single dialog host owns backdrop, focus and input for the stack.
 
 use crate::bind;
 use crate::keymap::{KeymapLayer, TuiKeymap};

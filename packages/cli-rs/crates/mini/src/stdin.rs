@@ -1,5 +1,4 @@
-//! Piped stdin (`packages/cli/src/mini.ts:38`, `mini-host.ts:88-113`): `cat file | opencode mini` reads the pipe
-//! into the first prompt, then reads keys from the controlling terminal instead.
+//! Piped stdin supplies the initial prompt; subsequent keystrokes come from the terminal.
 
 use std::io::{IsTerminal, Read};
 
@@ -48,7 +47,6 @@ mod tests {
 
     #[test]
     fn merge_input_matches_mini_ts() {
-        // The first two are the cases of `packages/cli/test/mini.test.ts`.
         assert_eq!(merge_input(Some("from stdin"), None).as_deref(), Some("from stdin"));
         assert_eq!(merge_input(Some("from stdin"), Some("from flag")).as_deref(), Some("from stdin\nfrom flag"));
         assert_eq!(merge_input(None, None), None);

@@ -1,13 +1,5 @@
-//! Child sessions of the open session (`stream-v2.subagent.ts`).
-//!
-//! The tracker finds child sessions from four sources: the subagent tool calls of the listed messages
-//! (`metadata.sessionID`), the session list filtered by parent, the running sessions, and live events of unknown
-//! sessions whose parent is in the family. It keeps one tab per child, the permissions and forms each child waits
-//! on, and a transcript of the selected child, rebuilt from its messages and then kept from live events.
-//!
-//! [`Tracker`] is a plain state machine. Reads it needs come back as [`Fetch`]es; the owner runs them and hands
-//! the results to the matching method ([`Tracker::family`], [`Tracker::discovered`], [`Tracker::child_loaded`],
-//! [`Tracker::blockers_loaded`]).
+//! Tracks children discovered through tools, session lists, activity or live events. The selected transcript starts
+//! from history and follows subsequent events.
 
 use std::collections::VecDeque;
 
@@ -359,8 +351,7 @@ impl Tracker {
         &self.parent
     }
 
-    /// Shows or hides the reasoning that arrives from now on, as `/settings` does for the main transcript. TS
-    /// fixes it when the tracker starts (`parity/deviations/O89-mini-subagent-thinking.md`).
+    /// Applies to incoming reasoning; existing scrollback cannot be repainted.
     pub fn set_thinking(&mut self, thinking: bool) {
         self.thinking = thinking;
     }

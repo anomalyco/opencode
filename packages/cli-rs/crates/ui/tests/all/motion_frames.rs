@@ -1,8 +1,3 @@
-//! U.6 P-ORACLE on frame sequences. `parity/component/U.6-motion.tsx` renders the TUI's motion renderables under
-//! OpenTUI's manual clock and stacks row 0 of the frame at each instant of `parity/fixtures/U.6/instants.json`
-//! into a filmstrip. Each test builds the Rust widget in a `TestApp`, advances its clock to the same instants,
-//! and compares the stacked rows cell by cell.
-
 use opencode_parity::{Fixture, compare, fixtures_dir};
 use opencode_ui::motion::{
     FadeInText, ScannerOptions, ScannerStyle, ShimmerText, Spinner, one_cell_frame, scanner_colors, scanner_frames,

@@ -1,17 +1,5 @@
-//! The footer prompt (`footer.prompt.tsx`, M.2; rows M04, M09, M13): a composer that grows with its text up to
-//! six rows, its autocomplete menu, and the keys that drive it.
-//!
-//! - `/` at a word start lists mini's built-ins (`/editor`, `/settings`, `/new`, `/compact`, the exit words) and
-//!   the server's commands; `@` lists subagents, the file search's results (with `#12-20` line ranges), and
-//!   references. A pick becomes an atomic mention part.
-//! - `!` at the start enters shell mode; Escape, or Backspace at the start, leaves it.
-//! - Up at the start and Down at the end step through the session's prompts ([`history`]).
-//! - `prompt.editor` and `/editor` compose in `$VISUAL` or `$EDITOR`; pastes and `prompt.paste` attach images,
-//!   PDFs, and SVGs.
-//! - Enter sends with `steer`, `prompt.queue` with `queue`; an empty Enter steers the first queued prompt. The
-//!   shell runs the turns through [`queue`].
-//!
-//! The prompt owns the footer's keymap, so M.3's views add their layers to [`Prompt::keymap`].
+//! The composer grows to six rows. Completed mentions remain atomic edits. History navigation starts only at a text
+//! boundary.
 
 pub mod api;
 pub mod complete;
@@ -107,7 +95,6 @@ pub struct Hooks {
     pub layout: Option<Box<dyn Fn()>>,
     /// `app.clear` (Ctrl+L).
     pub clear_screen: Option<Box<dyn Fn()>>,
-    /// `/settings` (M.4's view).
     pub settings: Option<Box<dyn Fn()>>,
 }
 
@@ -239,7 +226,6 @@ impl Prompt {
         self.0.menu.root()
     }
 
-    /// The footer's keymap, for M.3's views.
     pub fn keymap(&self) -> &Rc<DialogKeymap> {
         &self.0.keymap
     }
@@ -326,7 +312,6 @@ impl Prompt {
         self.0.agent_color()
     }
 
-    /// `state.phase === "running"`.
     pub fn set_running(&self, running: bool) {
         let was = std::mem::replace(&mut self.0.state.borrow_mut().running, running);
         if was && !running {
@@ -429,8 +414,8 @@ impl Prompt {
         self.0.state.borrow().queued.clone()
     }
 
-    /// `queuedPromptAction` for M.3's pending-prompts panel: moves the prompt to `delivery`, or cancels it with
-    /// `None` (`queued_prompt.delete`). Calls `done` with whether it worked; a failure shows in the status row.
+    /// Changes a pending prompt's delivery or cancels it when `delivery` is absent. Reports failure in the status
+    /// row.
     pub fn queued_action(&self, id: &str, delivery: Option<Delivery>, done: impl FnOnce(bool) + 'static) {
         self.0.queued_action(id, delivery, None, Box::new(done));
     }
@@ -1429,8 +1414,7 @@ fn keymap(app: &App, config: &Info, textarea: &Textarea) -> DialogKeymap {
     )
 }
 
-/// The prompt's layers (`footer.prompt.tsx:1162-1344`, `footer.view.tsx:549-558`). The newest layer runs first,
-/// as in TS, where the later `createLayer` wins.
+/// The most recently installed key layer handles input first.
 fn install_layers(inner: &Rc<Inner>) {
     // `input.prompt()`: the composer shows.
     let when = |check: fn(&Inner) -> bool| {

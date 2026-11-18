@@ -1,6 +1,3 @@
-//! Clipboard and paste text rules shared by the TUI and mini (`clipboard.ts:24-52`, `decodePasteBytes`,
-//! `stripAnsiSequences`).
-
 use std::sync::LazyLock;
 
 use base64::Engine;

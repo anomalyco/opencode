@@ -1,8 +1,4 @@
-//! Command palette (U.3): `packages/tui/src/component/command-palette.tsx`.
-//!
-//! The palette lists every reachable palette command from [`DialogKeymap::commands`] with its shortcuts. Without a
-//! filter, suggested commands come first again under `Suggested`; with one, the list is flat and the settings rows
-//! join it. Choosing a command closes the palette and dispatches it.
+//! Lists commands reachable from the active keymap.
 
 use crate::dialog::{DialogCx, DialogKeymap, DialogOptions, Dialogs};
 use crate::keymap::COMMAND_PALETTE_COMMAND;
@@ -59,8 +55,7 @@ pub fn command_options(keymap: &Rc<DialogKeymap>, run: Option<&Run>) -> Vec<(Sel
         .collect()
 }
 
-/// `CommandPaletteDialog`. `settings` are the settings rows (TS `settingOptions` of `dialog-config.tsx`), shown
-/// only while filtering.
+/// Settings rows appear only while filtering.
 pub fn palette(cx: &Rc<DialogCx>, settings: Vec<SelectOption<String>>, run: Option<&Run>) -> View {
     let commands = command_options(&cx.keymap, run);
     let options = Rc::new(move |filter: &str| {

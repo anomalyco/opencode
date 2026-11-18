@@ -1,12 +1,4 @@
-//! Tree-sitter grammars (U.4b): the TypeScript TUI's grammars, linked statically, with the highlight queries it uses
-//! (`assets/queries`, written by `script/gen/grammars.ts`). Each is registered with
-//! [`Grammar::core_captures`], so captures and their styles combine as in Core, and
-//! [`crate::code::syntax_theme`] colors the same tokens the same way.
-//!
-//! opentui-rust bundles JavaScript, TypeScript, TSX, Markdown, Zig, and Rust with each grammar crate's own query.
-//! [`register`] replaces those with Core's queries, and the `grammars` feature (on by default) adds the rest of
-//! `packages/tui/src/parsers-config.ts`. Kotlin, OCaml, F#, and Swift are not linked
-//! (`parity/deviations/H06-highlight-queries.md`).
+//! Statically linked tree-sitter languages and their highlight queries.
 
 use opentui::syntax::tree_sitter::Language;
 use opentui::syntax::{self, CompiledGrammar, Grammar, GrammarError};
@@ -14,8 +6,7 @@ use std::collections::BTreeSet;
 use std::sync::{Mutex, Once, PoisonError};
 use std::thread;
 
-/// One grammar: its filetype, language, query file under `assets/queries`, and the aliases `parsers-config.ts` gives
-/// it.
+/// Filetype, parser, highlight query and accepted aliases.
 #[derive(Clone, Copy)]
 struct Entry {
     filetype: &'static str,

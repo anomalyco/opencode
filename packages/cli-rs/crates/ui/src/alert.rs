@@ -1,5 +1,3 @@
-//! Alert dialog (U.3): `packages/tui/src/ui/dialog-alert.tsx`.
-
 use crate::dialog::{DialogCx, DialogOptions, Dialogs, FooterAction, FooterProps, HeaderProps, header, layout};
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;

@@ -1,5 +1,4 @@
-//! Callbacks that hold a weak reference. opentui-rust callbacks are `'static`, so one that reaches shared state
-//! captures a `Weak` and upgrades it on each call. [`bind!`](crate::bind!) writes that plumbing once.
+//! Weak captures prevent callbacks from keeping their owner alive.
 
 use std::rc::{Rc, Weak};
 

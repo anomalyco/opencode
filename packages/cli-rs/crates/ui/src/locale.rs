@@ -1,5 +1,3 @@
-//! `Locale` (`packages/tui/src/util/locale.ts`): the formatting the TUI and mini share.
-
 pub use crate::tool_info::titlecase;
 
 /// `Locale.duration`: `850ms`, `12.4s`, `3m 5s`, `2h 10m`, `1d 4h`.

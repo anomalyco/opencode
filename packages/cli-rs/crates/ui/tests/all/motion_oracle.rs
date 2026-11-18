@@ -1,6 +1,3 @@
-//! U.6 P-ORACLE for the pure motion functions: `parity/oracle/U.6-motion.ts` evaluates the TypeScript
-//! `oneCellFrame`, `octantGlyph`, and `createFrames`, and this test compares the Rust ports on the same inputs.
-
 use opencode_parity::fixtures_dir;
 use opencode_ui::motion::{
     OneCellMotion, ScannerOptions, ScannerStyle, WORK_SPINNER_NAMES, octant_glyph, one_cell_frame, scanner_frames,

@@ -1,6 +1,4 @@
-//! A port of `fuzzysort` 3.1's `go` with `keys`, `scoreFn`, and `threshold`, as `DialogSelect` calls it: the same
-//! scores and the same order, ties included. Strings are compared in UTF-16 code units, as JavaScript does, after
-//! Latin letters lose their accents (`remove_accents`).
+//! Fuzzy matching and ranking for the select dialog. Preserve tie order as well as scores.
 
 mod accents;
 

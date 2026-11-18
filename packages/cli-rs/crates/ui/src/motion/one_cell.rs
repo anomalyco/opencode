@@ -1,5 +1,4 @@
-//! One-cell spinners: `packages/tui/src/ui/one-cell-motion.ts` and the octant glyphs of `ui/subcell.ts`. Mini's
-//! footer and the storybook use them; the work spinner is chosen by the `work_spinner` setting.
+//! One-cell motion indicators for narrow surfaces.
 
 use super::int_pow;
 use std::f64::consts::PI;
