@@ -39,6 +39,10 @@ export default (_: Helpers) => ({
     "(() => { function* g() { try { yield 1 } catch (e) { yield e + 1 } } const it = g(); it.next(); return [1].map((x) => [it.throw(S(x)), it.next()]) })()",
     "(() => { function* g() { try { yield 1 } catch (e) { return e } } const it = g(); it.next(); return [1].map((x) => it.throw.call(it, S(x) + x)) })()",
     "Array.from({ [Symbol.iterator]() { const it = (function* () { yield 1; yield 2 })(); return { next: it.next.bind(it), [Symbol.iterator]() { return this } } } }, (x) => S(x) + x)",
+    // Object.groupBy's keys converted by the program's toString or valueOf, each right after its callback.
+    "Object.groupBy([1, 2], (x) => ({ toString: () => 'g' + S(x) }))",
+    "Object.groupBy([1, 2, 3], (x) => ({ toString: () => ({}), valueOf: () => S(x % 2) }))",
+    "Object.groupBy({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }) } } }, (x) => ({ toString: () => 'k' + S(x) }))",
   ] as Array<string>,
   programs: [
     // Iteration failures and early closes.
@@ -57,11 +61,17 @@ export default (_: Helpers) => ({
     "function* g() { try { yield 1 } finally { throw new Error('f') } } const it = g(); it.next(); const r = []; try { [1].map(() => it.return(2)) } catch (e) { r.push(e.message) } function* h() { yield 1 } const j = h(); j.next(); try { [1].forEach(() => j.throw(new Error('t'))) } catch (e) { r.push(e.message) } return [r, j.next()]",
     "function* g() { yield 42; throw new Error('x') } async function* a() { yield* g() } const it = a(); await it.next(); try { await it.throw(new Error('c')) } catch (e) { return [e.message, await it.next()] }",
     "function* k() { try { yield 1 } finally { throw new Error('fin') } } try { new Set([5]).isSupersetOf({ size: 1, has: () => true, keys: k }) } catch (e) { return e.message }",
+    // Object.groupBy converts each key right after its callback, and a throwing conversion closes the iterator.
+    `const log = []; const r = Object.groupBy(['a', 'b'], (x) => { log.push('cb ' + x); return { toString() { log.push('ts ' + x); return x } } }); return [r, log]`,
+    `const log = []; const it = { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return: () => (log.push('closed'), {}) } } }
+     try { Object.groupBy(it, () => ({ toString() { throw new Error('ts') } })) } catch (e) { log.push(e.message) } return log`,
+    `return [Object.groupBy([1, 2], (x) => ({ x })), Map.groupBy([1, 2], (x) => ({ toString: () => 'never' })).size]`,
   ] as Array<string>,
   suspensions: [
     // Suspended while a search parks in a callback these built-ins call.
     `const m = new Map(); const v = m.getOrInsertComputed('k', () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1); return [v, m.get('k')]`,
     `return [...new Set([1, 2]).intersection({ size: 3, has: (x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x > 2, keys: () => [].values() })]`,
     `return await Promise.all({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + n++ }) } } })`,
+    `return Object.groupBy([1, 2], (x) => ({ toString: () => 'g' + (search({ query: tools.wait({}).then(() => 'echo') }).items.length + x) }))`,
   ] as Array<string>,
 })

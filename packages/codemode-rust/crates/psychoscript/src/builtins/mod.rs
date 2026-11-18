@@ -327,6 +327,22 @@ pub fn this_obj(vm: &mut Vm, this: &Value, what: &str) -> Result<Id, Value> {
     }
 }
 
+/// `Frame::convert` with what the conversion throws coming back to the frame as `Input::Threw`, as `Frame::catching`
+/// calls: a `ForOf` body that converts waits on it with `Flow::Call`, so a throw closes the iterator.
+pub(crate) fn convert_catching(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    v: Value,
+    hint: crate::ops::Hint,
+) -> Result<crate::native::Step, Value> {
+    let sp = (vm.stack.len() - fr.base()) as u32;
+    vm.handlers_mut().push(crate::vm::Handler {
+        pc: crate::native::THREW as u32,
+        sp,
+    });
+    fr.convert(vm, v, hint)
+}
+
 pub fn to_index(vm: &mut Vm, v: &Value, len: usize, default: usize) -> Result<usize, Value> {
     if let Value::Undef = v {
         return Ok(default);

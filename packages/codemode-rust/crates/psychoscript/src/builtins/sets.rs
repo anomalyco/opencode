@@ -7,6 +7,7 @@ use crate::native::{
     for_of_step,
 };
 use crate::object::*;
+use crate::ops::Hint;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Res, Vm};
 
@@ -146,12 +147,14 @@ fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], callee: 
 }
 
 // The slots of a `groupBy` frame, after the loop's: the callback, the next index, the item being grouped, the
-// `[key, item]` pairs so far (an internal array), and whether it groups into an object.
+// `[key, item]` pairs so far (an internal array), whether it groups into an object, and whether a key is being
+// converted by a call.
 const GROUP_F: usize = FOR_OF_SLOTS;
 const GROUP_INDEX: usize = FOR_OF_SLOTS + 1;
 const GROUP_ITEM: usize = FOR_OF_SLOTS + 2;
 const GROUP_PAIRS: usize = FOR_OF_SLOTS + 3;
 const GROUP_OBJECT: usize = FOR_OF_SLOTS + 4;
+const GROUP_CONV: usize = FOR_OF_SLOTS + 5;
 
 /// Walks an iterable one step at a time, calling the grouping callback between steps, with the fuel of the
 /// reference's `groupBy`: its `$Callback` and `$Table("groups")`, then for each item the callback, an object key's
@@ -171,20 +174,31 @@ impl ForOf for GroupBy {
     }
 
     fn returned(vm: &mut Vm, fr: Frame, r: Slot) -> Result<Flow, Value> {
+        if fr.index(vm, GROUP_CONV) == 1 {
+            fr.set_index(vm, GROUP_CONV, 0);
+            return add_to_group(vm, fr, r.get());
+        }
         let index = fr.index(vm, GROUP_INDEX);
         fr.set_index(vm, GROUP_INDEX, index + 1);
+        let mut key = r.get();
         if fr.index(vm, GROUP_OBJECT) != 0 {
             fuel::native(vm);
             fuel::native(vm);
+            // `String` of an object key: ToPrimitive now, as a call when it calls the program.
+            if matches!(key, Value::Obj(_)) {
+                if vm.converts_by_call(&key, Hint::String) {
+                    fr.set_index(vm, GROUP_CONV, 1);
+                    return Ok(Flow::Call(super::convert_catching(
+                        vm,
+                        fr,
+                        key,
+                        Hint::String,
+                    )?));
+                }
+                key = vm.primitive_of(&key, Hint::String)?;
+            }
         }
-        fuel::native(vm);
-        let item = fr.get(vm, GROUP_ITEM);
-        if let Some(pairs) = fr.slot(vm, GROUP_PAIRS).obj()
-            && let Kind::Array(items) = &mut vm.heap[pairs as usize].kind
-        {
-            items.extend([r.get(), item]);
-        }
-        Ok(Flow::Next)
+        add_to_group(vm, fr, key)
     }
 
     fn finish(vm: &mut Vm, fr: Frame) -> Res {
@@ -205,6 +219,18 @@ impl ForOf for GroupBy {
     }
 }
 
+/// `$Table("group")`: the item goes with its key.
+fn add_to_group(vm: &mut Vm, fr: Frame, key: Value) -> Result<Flow, Value> {
+    fuel::native(vm);
+    let item = fr.get(vm, GROUP_ITEM);
+    if let Some(pairs) = fr.slot(vm, GROUP_PAIRS).obj()
+        && let Kind::Array(items) = &mut vm.heap[pairs as usize].kind
+    {
+        items.extend([key, item]);
+    }
+    Ok(Flow::Next)
+}
+
 fn group_by(vm: &mut Vm, args: &[Value], kind: &str, callee: Id) -> Res {
     fuel::method(vm);
     fuel::method(vm);
@@ -217,7 +243,14 @@ fn group_by(vm: &mut Vm, args: &[Value], kind: &str, callee: Id) -> Res {
     fuel::native(vm);
     let object = Value::Num((kind == "Object") as u8 as f64);
     let pairs = vm.new_array(Vec::new());
-    let own = [f, Value::Num(0.0), Value::Undef, pairs, object];
+    let own = [
+        f,
+        Value::Num(0.0),
+        Value::Undef,
+        pairs,
+        object,
+        Value::Num(0.0),
+    ];
     enter_for_of(
         vm,
         crate::native::NativeOp::GroupBy,
