@@ -50,6 +50,7 @@ function meta(
     projectID: tab.server === SERVER_A ? "proj_a" : tab.server === SERVER_B ? "proj_b" : "proj_c",
     projectName: tab.server === SERVER_A ? "opencode" : tab.server === SERVER_B ? "blade-repo" : "vps-repo",
     directory: "/work/app",
+    status: "idle",
     active: false,
     ...overrides,
   }
@@ -57,6 +58,7 @@ function meta(
 
 const labels = {
   other: "Other",
+  status: { input: "Needs you", running: "Working", unread: "Unread", failed: "Failed", idle: "Idle" },
 }
 
 /** Synthesizes realistic vertical sidebar geometry (26px headers, 28px tab rows, 3px outer gaps, 2px inner gaps). */
@@ -259,6 +261,34 @@ describe("tab-groups", () => {
       expect(byKey[`server:${SERVER_A}`]).toBe(colorMapForward[`server:${SERVER_A}`])
       expect(byKey[`server:${SERVER_C}`]).toBe(colorMapForward[`server:${SERVER_C}`])
     }
+  })
+
+  test("groups by status in urgency order, skipping empty statuses, and moves tabs as their status changes", () => {
+    const a = sessionTab(SERVER_A, "a")
+    const b = sessionTab(SERVER_A, "b")
+    const c = sessionTab(SERVER_B, "c")
+    const build = (statuses: Record<string, ResolvedTabMeta["status"]>) =>
+      buildComputedTabGroups({
+        items: [a, b, c].map((tab) => meta(tab, { status: statuses[tabKey(tab)] })),
+        state: { ...DEFAULT_TAB_GROUPS_STATE, groupOrder: ["status:idle", "status:input"] },
+        mode: "status",
+        serverCount: 2,
+        query: "",
+        labels,
+      })!
+
+    const before = build({ [tabKey(a)]: "idle", [tabKey(b)]: "input", [tabKey(c)]: "idle" })
+    expect(before.map((group) => [group.key, group.allTabs.map(tabKey)])).toEqual([
+      ["status:input", [tabKey(b)]],
+      ["status:idle", [tabKey(a), tabKey(c)]],
+    ])
+
+    const after = build({ [tabKey(a)]: "running", [tabKey(b)]: "unread", [tabKey(c)]: "idle" })
+    expect(after.map((group) => [group.name, group.allTabs.map(tabKey)])).toEqual([
+      ["Working", [tabKey(a)]],
+      ["Unread", [tabKey(b)]],
+      ["Idle", [tabKey(c)]],
+    ])
   })
 
   test("renders manual groups inline alongside ungrouped tabs when automatic grouping is none", () => {

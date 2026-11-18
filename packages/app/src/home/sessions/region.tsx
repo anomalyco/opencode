@@ -2,12 +2,13 @@ import type { HomeScrollController } from "../scroll"
 import type { HomeSessionSearchController } from "./search"
 import type { HomeSessionsController } from "./controller"
 import { HomeSessionsView } from "./view"
-import { Show } from "solid-js"
+import { Show, type JSX } from "solid-js"
 
 export function HomeSessions(props: {
   sessions: HomeSessionsController
   search: HomeSessionSearchController
   scroll: HomeScrollController
+  filter?: JSX.Element
 }) {
   return (
     <Show when={props.sessions.session.server()}>
@@ -55,6 +56,7 @@ export function HomeSessions(props: {
           onSearchSelectActive={props.search.result.selectActive}
           onSearchHighlight={props.search.result.highlight}
           onSearchSelect={props.search.result.select}
+          filter={props.filter}
         />
       )}
     </Show>

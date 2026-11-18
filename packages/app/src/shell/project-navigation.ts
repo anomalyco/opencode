@@ -15,6 +15,6 @@ export function useProjectNavigation() {
     if (mobile() || settings.appearance.tabLayout() !== "vertical") return false
     const mode = settings.general.sidebarOrganize()
 
-    return mode === "projects" || mode === "customize"
+    return mode === "projects" || mode === "customize" || mode === "consolidated"
   }
 }

@@ -1,9 +1,10 @@
 import { Effect, Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { ServerConnection } from "@/runtime/server/registry"
+import type { SessionSidebarStatus } from "@/shell/layout/project-avatar-state"
 import type { Tab } from "@/shell/tabs/tabs"
 
-export const TAB_GROUP_MODES = ["none", "server", "project"] as const
+export const TAB_GROUP_MODES = ["none", "server", "project", "status"] as const
 
 export type TabGroupMode = (typeof TAB_GROUP_MODES)[number]
 
@@ -59,12 +60,13 @@ export type ResolvedTabMeta = {
   projectID: string | undefined
   projectName: string | undefined
   directory: string | undefined
+  status: SessionSidebarStatus
   active: boolean
 }
 
 export type ComputedTabGroup = {
   key: string
-  kind: "ungrouped" | "manual" | "server" | "project"
+  kind: "ungrouped" | "manual" | "server" | "project" | "status"
   manualId?: string
   server?: ServerConnection.Key
   directory?: string
@@ -283,6 +285,7 @@ export function buildComputedTabGroups(input: {
   query: string
   labels: {
     other: string
+    status: Record<SessionSidebarStatus, string>
   }
 }): ComputedTabGroup[] | undefined {
   const searching = input.query.trim().length > 0
@@ -348,6 +351,8 @@ export function buildComputedTabGroups(input: {
     return applySavedGroupOrder(groups, input.state.groupOrder)
   }
 
+  if (effectiveMode === "status") return buildStatusGroups(filtered, input.state, searching, input.labels.status)
+
   const projectSeedOf = (item: ResolvedTabMeta) => item.projectID ?? item.directory ?? "other"
 
   const colorMap = assignStableGroupColors(input.items.map(projectSeedOf), "project:", input.state.overrides)
@@ -379,6 +384,52 @@ export function buildComputedTabGroups(input: {
   })
 
   return applySavedGroupOrder(groups, input.state.groupOrder)
+}
+
+const STATUS_ORDER: readonly SessionSidebarStatus[] = ["input", "running", "unread", "failed", "idle"]
+
+const STATUS_COLORS: Record<SessionSidebarStatus, TabGroupColor> = {
+  input: "orange",
+  running: "blue",
+  unread: "green",
+  failed: "pink",
+  idle: "gray",
+}
+
+// Status groups keep a fixed order (most urgent first) and skip empty statuses, so sessions move between groups as
+// their status changes instead of the groups moving.
+function buildStatusGroups(
+  items: readonly ResolvedTabMeta[],
+  state: TabGroupsState,
+  searching: boolean,
+  labels: Record<SessionSidebarStatus, string>,
+): ComputedTabGroup[] {
+  const buckets = Map.groupBy(items, (item) => item.status)
+
+  return STATUS_ORDER.flatMap((status): ComputedTabGroup[] => {
+    const rows = buckets.get(status)
+
+    if (!rows) return []
+    const key = `status:${status}`
+    const override = state.overrides[key]
+    const collapsed = searching ? false : !!state.collapsed[key]
+    const allTabs = rows.map((row) => row.tab)
+
+    return [
+      {
+        key,
+        kind: "status",
+        defaultName: labels[status],
+        name: override?.name?.trim() || labels[status],
+        hasCustomOverride: !!(override?.name?.trim() || override?.color),
+        color: override?.color ?? STATUS_COLORS[status],
+        collapsed,
+        allTabs,
+        visibleTabs: collapsed ? [] : allTabs,
+        containsActive: rows.some((row) => row.active),
+      },
+    ]
+  })
 }
 
 function buildManualGroups(

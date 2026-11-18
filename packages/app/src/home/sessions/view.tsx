@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Loader } from "@opencode/ui/loader"
@@ -116,6 +116,8 @@ export type HomeSessionsViewProps = {
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
+  /** Shown before New session, such as the project the list is filtered to. */
+  filter?: JSX.Element
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
@@ -230,7 +232,8 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex items-center gap-1 md:top-[84px] lg:top-[108px]">
+            {props.filter}
             <Button
               data-action="home-new-session"
               variant="ghost-muted"
@@ -631,9 +634,15 @@ function HomeSessionGroupHeader(props: {
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
 }) {
+  let element!: HTMLDivElement
+
+  // Reports the element again whenever its group changes: Index reuses the header in place for whichever group lands
+  // at its position, and a one-time ref would leave it registered under the group it was created for.
+  createEffect(() => props.onSetRef(element))
+
   return (
     <div
-      ref={props.onSetRef}
+      ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
         bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]

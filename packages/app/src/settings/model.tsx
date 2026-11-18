@@ -137,7 +137,7 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
-  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -352,8 +352,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       usePlatform().platform,
       import.meta.env.VITE_OPENCODE_CHANNEL,
     )
-      ? ["list", "projects", "customize", "recent"]
-      : ["list", "projects", "customize"]
+      ? ["list", "projects", "customize", "recent", "consolidated"]
+      : ["list", "projects", "customize", "consolidated"]
 
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,

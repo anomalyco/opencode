@@ -482,21 +482,45 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               )
             }
 
+            const consolidated = () =>
+              settings.appearance.tabLayout() === "vertical" && settings.general.sidebarOrganize() === "consolidated"
+
+            // Consolidated's Home: every session on the focused server, without Home's own project sidebar.
+            const sessionsButton = () => (
+              <SidebarAction
+                action="vertical-tabs-sessions"
+                icon="sessions-stack"
+                label={language.t("sidebar.sessions")}
+                keybind={command.keybindParts("home.toggle")}
+                pressed={layout.route().type === "home" && !layout.home.selection().directory}
+                onClick={showSessions}
+              />
+            )
+
+            const showSessions = () => {
+              const selection = layout.home.selection()
+
+              if (selection.directory) layout.home.setSelection({ server: selection.server })
+
+              if (layout.route().type !== "home") toggleHome()
+            }
+
             const firstSidebarAction = () => (
-              <Show when={projectNavigation()} fallback={homeButton(true)}>
-                {newSessionButton()}
-              </Show>
+              <Switch fallback={homeButton(true)}>
+                <Match when={consolidated()}>{sessionsButton()}</Match>
+                <Match when={projectNavigation()}>{newSessionButton()}</Match>
+              </Switch>
             )
 
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
-                title: language.t(projectNavigation() ? "project.browse.title" : "home.title"),
+                title: language.t(projectNavigation() && !consolidated() ? "project.browse.title" : "home.title"),
                 category: language.t("command.category.view"),
                 keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
                 onSelect: () => {
-                  if (projectNavigation()) return browseProjects()
+                  if (projectNavigation() && !consolidated()) return browseProjects()
 
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
@@ -635,7 +659,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             )
             onCleanup(() => dispatchMobileTabs({ type: "disposed" }))
 
-            const tabGroupsEnabled = () => settings.general.tabGroups()
+            // Consolidated always groups its list; the other layouts follow the tab groups experiment.
+            const tabGroupsEnabled = () =>
+              settings.general.tabGroups() ||
+              (settings.appearance.tabLayout() === "vertical" &&
+                settings.general.sidebarOrganize() === "consolidated")
 
             const isGroupedSidebarList = () =>
               tabGroupsEnabled() &&
@@ -904,10 +932,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   </Show>
                                   <div class="flex w-full shrink-0 flex-col gap-[3px]">
                                     <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
-                                    {searchButton(true)}
-                                    <Show when={projectNavigation()} fallback={newSessionButton()}>
-                                      {settingsButton()}
-                                    </Show>
+                                    <Switch>
+                                      <Match when={consolidated()}>
+                                        {newSessionButton()}
+                                        {settingsButton()}
+                                      </Match>
+                                      <Match when={projectNavigation()}>
+                                        {searchButton(true)}
+                                        {settingsButton()}
+                                      </Match>
+                                      <Match when>
+                                        {searchButton(true)}
+                                        {newSessionButton()}
+                                      </Match>
+                                    </Switch>
                                   </div>
                                   <Show
                                     when={isGroupedSidebarList()}
@@ -922,6 +960,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       </Match>
                                       <Match when={settings.general.sidebarOrganize() === "projects"}>
                                         <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
+                                      </Match>
+                                      <Match when={settings.general.sidebarOrganize() === "consolidated"}>
+                                        <SidebarOrganized currentTab={currentTab()} consolidated>
+                                          {() => defaultVerticalTabStrip()}
+                                        </SidebarOrganized>
                                       </Match>
                                       <Match when={settings.general.sidebarOrganize() === "customize"}>
                                         <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>

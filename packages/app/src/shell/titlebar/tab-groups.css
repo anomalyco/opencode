@@ -267,3 +267,68 @@
     transition: none;
   }
 }
+
+/* Consolidated: an automatic group is text with a disclosure triangle, with no chip, indent or rail. Manual groups keep
+   the chip design. */
+[data-tab-group-header][data-plain="true"] {
+  height: 28px;
+  padding-inline: 0 4px;
+}
+
+[data-tab-group-header][data-plain="true"]:hover {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-tab-group-header][data-plain="true"] [data-tab-group-label] {
+  color: var(--tab-group-swatch);
+}
+
+[data-tab-group-header][data-plain="true"] [data-tab-group-label][data-tone="project"] {
+  color: var(--v2-text-text-base);
+}
+
+/* Status and server groups use the Projects trigger's muted text. */
+[data-tab-group-header][data-plain="true"] [data-tab-group-label][data-tone="muted"] {
+  color: var(--v2-text-text-muted);
+}
+
+[data-tab-group-header][data-plain="true"]:hover [data-tab-group-label][data-tone="muted"] {
+  color: var(--v2-text-text-base);
+}
+
+/* Rows are 4px apart, like the project rows above. */
+[data-consolidated-groups] [data-tab-group][data-orientation="vertical"]:not([data-group-key^="manual:"]) {
+  gap: 4px;
+  margin-block: 0;
+}
+
+[data-consolidated-groups] [data-tab-group][data-orientation="vertical"]:not([data-group-key^="manual:"]) > [data-tab-group-items] {
+  gap: 4px;
+  padding-inline-start: 0;
+}
+
+/* Groups sit 4px apart like every other row: the list's 3px gap plus 1px. */
+[data-consolidated-groups] [data-tab-group][data-orientation="vertical"]:not([data-group-key^="manual:"]):not(:first-child) {
+  margin-block-start: 1px;
+}
+
+[data-consolidated-groups] [data-tab-group][data-orientation="vertical"]:not([data-group-key^="manual:"]) > [data-tab-group-items]::before {
+  display: none;
+}
+
+/* The divider spans its slot like the one under Projects. While the pointer is over the sidebar, or the grouping button
+   has focus or its menu is open, the button appears at the end and the line shortens to make room. */
+[data-consolidated-divider] {
+  padding-inline: 8px;
+}
+
+[data-slot="vertical-tabs-sidebar"]:hover [data-consolidated-divider],
+[data-consolidated-divider]:is(:focus-within, :has([data-expanded])) {
+  padding-inline-end: 0;
+}
+
+[data-slot="vertical-tabs-sidebar"]:not(:hover)
+  [data-consolidated-divider]:not(:focus-within, :has([data-expanded]))
+  [data-consolidated-filter] {
+  display: none;
+}

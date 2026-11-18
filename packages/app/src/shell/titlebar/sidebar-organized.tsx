@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { createEffect, createMemo, Show, onCleanup, untrack, type Accessor, type JSX } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
@@ -36,6 +37,7 @@ import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { addProjects } from "@/home/projects/add"
 import { homeProjectDirectories } from "@/shell/layout/helpers"
 import "./tab-nav.css"
+import { TabGroupingMenu } from "./tab-groups-ui"
 import { ProjectSessionRow } from "./project-session-row"
 import type { SidebarStripGrouping } from "./sidebar-customized"
 import {
@@ -85,8 +87,38 @@ export function createSidebarActivityListener() {
   })
 }
 
+/** Opens a tab for every root session created on a visible server, so sessions started elsewhere join the list. */
+function createSessionTabListener() {
+  const tabs = useTabs()
+
+  const global = useGlobal()
+
+  const servers = useServers()
+
+  createEffect(() => {
+    servers.visible.forEach((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+
+      if (!ctx) return
+      onCleanup(
+        ctx.data.listen(({ details }) => {
+          if (details.type !== "session.created" || details.data.parentID) return
+          const sessionId = details.data.sessionID
+
+          // A session this window starts already holds its tab: the draft becomes it before the create request.
+          if (tabs.pendingSession(server, sessionId)) return
+          tabs.addSessionTab({ server, sessionId })
+        }),
+      )
+    })
+  })
+}
+
 export function SidebarOrganized(props: {
   currentTab: Tab | undefined
+  /** The Consolidated layout: projects, a divider, then every open session grouped by the shared tab groups. */
+  consolidated?: boolean
   children: (highlightActive: Accessor<boolean>, onNavigate: () => void, grouping: SidebarStripGrouping) => JSX.Element
 }) {
   const language = useLanguage()
@@ -135,6 +167,8 @@ export function SidebarOrganized(props: {
     })
 
   createSidebarActivityListener()
+
+  if (props.consolidated) createSessionTabListener()
 
   const [local, setLocal] = createStore<{
     projectSession: { server: ServerConnection.Key; sessionId: string } | undefined
@@ -209,7 +243,14 @@ export function SidebarOrganized(props: {
           "inset-inline-end": "calc(-1 * (var(--sidebar-inset-end, 3px) + var(--shell-inline-inset, 8px)))",
         }}
       />
-      <ScrollView class="min-h-0 flex-1" thumbContainer={local.thumbTrack} thumbHoverTarget={local.hoverTarget}>
+      {/* Consolidated scrolls like the plain side tab list, without a scrollbar. */}
+      <Dynamic
+        component={props.consolidated ? "div" : ScrollView}
+        class={props.consolidated ? "min-h-0 flex-1 overflow-y-auto no-scrollbar" : "min-h-0 flex-1"}
+        data-scrollable={props.consolidated ? "" : undefined}
+        thumbContainer={props.consolidated ? undefined : local.thumbTrack}
+        thumbHoverTarget={props.consolidated ? undefined : local.hoverTarget}
+      >
         <div class="flex flex-col gap-2">
           <section class="flex shrink-0 flex-col gap-1">
             <div class="group/projects flex h-7 min-w-0 shrink-0 items-center rounded-[6px] pe-1 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover">
@@ -277,7 +318,10 @@ export function SidebarOrganized(props: {
                             currentTab={props.currentTab}
                             isOpenTab={isOpenTab}
                             highlightActive={projectSelected()}
-                            onSelect={(session) => setLocal("projectSession", session)}
+                            consolidated={!!props.consolidated}
+                            onSelect={(session) => {
+                              if (!props.consolidated) setLocal("projectSession", session)
+                            }}
                             state={state}
                             pins={pins}
                             ready={ready()}
@@ -292,12 +336,26 @@ export function SidebarOrganized(props: {
               </Key>
             </Show>
           </section>
-          <div class="flex shrink-0 flex-col" classList={{ hidden: tabs.store.length === 0 && pinned.count() === 0 }}>
+          <Show when={props.consolidated && tabs.store.length > 0}>
+            {/* 13px tall with the line centered: 6px plus the column's 8px gap leaves 14px on each side. The grouping
+                button overflows the row; it appears while the sidebar is hovered and the line shortens to make room. */}
+            <div data-consolidated-divider class="flex h-[13px] shrink-0 items-center gap-1">
+              <div role="separator" class="h-px flex-1 bg-v2-border-border-muted" />
+              <span data-consolidated-filter class="flex shrink-0">
+                <TabGroupingMenu consolidated />
+              </span>
+            </div>
+          </Show>
+          <div
+            class="flex shrink-0 flex-col"
+            classList={{ hidden: tabs.store.length === 0 && (props.consolidated || pinned.count() === 0) }}
+            data-consolidated-groups={props.consolidated ? "" : undefined}
+          >
             {/* The empty strip still owns tab shortcuts; only its visual section is hidden. */}
             {props.children(() => !projectSelected(), selectTabs, grouping)}
           </div>
         </div>
-      </ScrollView>
+      </Dynamic>
     </div>
   )
 }
@@ -310,6 +368,8 @@ function ProjectList(props: {
   isOpenTab: (server: ServerConnection.Key, sessionId: string) => boolean
   highlightActive: boolean
   onSelect: (session: { server: ServerConnection.Key; sessionId: string }) => void
+  /** Project rows start a new session instead of expanding into their sessions. */
+  consolidated: boolean
   state: typeof SidebarState.Type
   pins: SessionPins
   ready: boolean
@@ -323,6 +383,10 @@ function ProjectList(props: {
   const actions = createProjectSessionActions()
 
   const projectActions = createProjectActions()
+
+  const tabs = useTabs()
+
+  const layout = useLayout()
 
   const [local, setLocal] = createStore<{ showAll: boolean; sessionLimits: Record<string, number> }>({
     showAll: false,
@@ -363,6 +427,7 @@ function ProjectList(props: {
     ...homeSessionsQuery(props.connection, ctx()),
     enabled:
       ctx()?.sdk.connection.status() === "connected" &&
+      !props.consolidated &&
       (!props.grouped || visible().some((project) => props.state.expanded[`${server}:${project.id}`])),
   }))
 
@@ -383,6 +448,24 @@ function ProjectList(props: {
   })
 
   const grouped = createMemo(() => Map.groupBy(records(), (record) => pathKey(record.project.worktree)))
+
+  const homeShows = (project: Project) => {
+    const selection = layout.home.selection()
+
+    return (
+      layout.route().type === "home" &&
+      selection.server === server &&
+      !!selection.directory &&
+      pathKey(selection.directory) === pathKey(project.worktree)
+    )
+  }
+
+  // Sessions (the sidebar-less Home) filtered to the project.
+  const showProject = (project: Project) => {
+    layout.home.setSelection({ server, directory: project.worktree })
+
+    if (layout.route().type !== "home") tabs.toggleHome({ home: false, current: props.currentTab })
+  }
 
   return (
     <>
@@ -428,8 +511,10 @@ function ProjectList(props: {
                 onViewHistory={props.onViewHistory}
                 actions={projectActions}
                 index={index()}
-                expanded={!!props.state.expanded[key()]}
+                expanded={props.consolidated ? undefined : !!props.state.expanded[key()]}
+                active={props.consolidated && homeShows(project())}
                 onToggle={() => {
+                  if (props.consolidated) return showProject(project())
                   if (props.state.expanded[key()]) setLocal("sessionLimits", key(), 5)
                   props.onExpand(key())
                 }}
@@ -508,7 +593,9 @@ function ProjectRow(props: {
   server: ServerConnection.Any
   actions: ReturnType<typeof createProjectActions>
   index: number
-  expanded: boolean
+  /** Undefined for a row that doesn't expand. */
+  expanded: boolean | undefined
+  active?: boolean
   onToggle: () => void
   children: JSX.Element
 }) {
@@ -529,6 +616,7 @@ function ProjectRow(props: {
     <div ref={sortable.ref} class="relative shrink-0">
       <div
         class="group/project relative flex h-7 min-w-0 shrink-0 items-center rounded-[6px] pe-1 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover"
+        classList={{ "bg-v2-overlay-simple-overlay-pressed": props.active }}
         onContextMenu={(event) => {
           event.preventDefault()
           setMenu("open", true)
@@ -542,7 +630,9 @@ function ProjectRow(props: {
         <button
           type="button"
           class="flex h-full min-w-0 flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-2 text-start text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-muted [font-weight:440] transition-colors duration-[120ms] ease-in-out group-hover/project:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+          classList={{ "text-v2-text-text-base": props.active }}
           aria-expanded={props.expanded}
+          aria-current={props.active ? "page" : undefined}
           onClick={props.onToggle}
         >
           <span class="flex size-4 shrink-0 items-center justify-center">

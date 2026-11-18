@@ -11,7 +11,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
-import { useSettings } from "@/settings/model"
+import { projectSettingsKey, useSettings } from "@/settings/model"
+import { sessionStatus } from "@/shell/layout/project-avatar-state"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import {
   applyVerticalDragCommit,
@@ -46,7 +48,6 @@ import {
   nextManualGroupNumber,
   pruneEmptyManualGroups,
   reconcileManualAssignments,
-  TAB_GROUP_MODES,
   TabGroupsStateSchema,
   type ComputedTabGroup,
   type ResolvedTabMeta,
@@ -106,8 +107,11 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     const [local, setLocal] = createStore({ query: "" })
     const [drag, setDrag] = createSignal(INITIAL_VERTICAL_DRAG_STATE)
 
+    const consolidated = () =>
+      settings.appearance.tabLayout() === "vertical" && settings.general.sidebarOrganize() === "consolidated"
     const mode = () => state.mode
-    const serverCount = () => global.servers.list().length
+    // Consolidated groups by server even with one server; elsewhere a single server falls back to no grouping.
+    const serverCount = () => (consolidated() ? Math.max(2, global.servers.list().length) : global.servers.list().length)
     const effectiveMode = () => (mode() === "server" && serverCount() <= 1 ? "none" : mode())
 
     const connOf = (server: string) => global.servers.list().find((conn) => ServerConnection.key(conn) === server)
@@ -163,6 +167,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             projectID: project?.id,
             projectName: project ? displayName(project) : displayName({ worktree: tab.directory }),
             directory: tab.directory,
+            status: "idle",
             active: false,
           }
         }
@@ -190,6 +195,13 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
               ? displayName({ worktree: directory })
               : undefined,
           directory,
+          status:
+            ctx && mode() === "status"
+              ? sessionStatus(ctx, tab.sessionId, {
+                  root: true,
+                  autoApprove: settings.permissions.autoApproves(projectSettingsKey(ctx.sdk.scope, session?.projectID)),
+                })
+              : "idle",
           active: false,
         }
       }),
@@ -207,6 +219,13 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         query: local.query,
         labels: {
           other: language.t("sidebar.view.other"),
+          status: {
+            input: language.t("tabs.groups.status.input"),
+            running: language.t("tabs.groups.status.running"),
+            unread: language.t("tabs.groups.status.unread"),
+            failed: language.t("tabs.groups.status.failed"),
+            idle: language.t("tabs.groups.status.idle"),
+          },
         },
       }),
     )
@@ -216,7 +235,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       on(
         () => props.currentTab(),
         (active) => {
-          if (!active || !settings.general.tabGroups()) return
+          if (!active || (!settings.general.tabGroups() && !consolidated())) return
           const activeKey = tabKey(active)
 
           untrack(() => {
@@ -865,6 +884,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
 
     return {
       state,
+      consolidated,
       mode,
       effectiveMode,
       plans,
@@ -898,6 +918,8 @@ export function createVerticalTabGroupSections() {
         key: plan.key,
         tabs: plan.tabs,
         header: plan.ungrouped ? undefined : <TabGroupHeaderLookup groupKey={plan.key} />,
+        // Consolidated's project groups name the project in the header, so their rows drop the repeated avatar.
+        hideAvatars: tabGroups.consolidated() && plan.key.startsWith("project:"),
         groupMeta: {
           color: plan.color,
           collapsed: plan.collapsed,
@@ -987,6 +1009,20 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
   const [menu, setMenu] = createStore({ open: false })
   const count = () => props.group.allTabs.length
   const shiftY = () => tabGroups.headerShiftY(props.group.key)
+  // Consolidated draws automatic groups as text with a disclosure triangle, like the Projects section trigger; manual
+  // groups keep their chip, indent and rail.
+  const plain = () => tabGroups.consolidated() && props.group.kind !== "manual"
+  // A project group shows the project's icon and its name in the normal text color instead.
+  const project = () => (plain() && props.group.kind === "project" ? props.group : undefined)
+  // Project, status and server groups come from the sessions themselves, so only manual groups can be edited.
+  const editable = () => !plain() || props.group.kind === "manual"
+  const global = useGlobal()
+  const projectInfo = () => {
+    const group = project()
+
+    if (!group?.server || !group.directory) return
+    return global.serverCtx(group.server)?.projects.forDirectory(group.directory)
+  }
 
   return (
     <div
@@ -994,12 +1030,14 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
       data-orientation="vertical"
       data-group-key={props.group.key}
       data-group-color={props.group.color}
+      data-plain={plain() ? "true" : undefined}
       data-drop-over={tabGroups.isJoinTarget(props.group.key) ? "true" : undefined}
       style={shiftY() ? { transform: `translate3d(0, ${shiftY()}px, 0)` } : undefined}
       class="group/group-row relative flex w-full min-w-0 shrink-0 select-none items-center gap-1.5 rounded-[6px]"
       onContextMenu={(event) => {
         event.preventDefault()
-        setMenu("open", true)
+
+        if (editable()) setMenu("open", true)
       }}
     >
       <button
@@ -1007,45 +1045,76 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
         aria-expanded={!props.group.collapsed}
         onClick={() => tabGroups.toggleCollapsed(props.group.key)}
         class="flex h-full min-w-0 flex-1 items-center gap-1.5 text-start focus-visible:outline-none"
+        classList={{ "px-2": plain(), "gap-2": !!project() }}
       >
-        <span data-tab-group-chip data-group-color={props.group.color} class="max-w-full min-w-0">
-          <span class="min-w-0 truncate" dir="auto">
+        <Show
+          when={plain()}
+          fallback={
+            <span data-tab-group-chip data-group-color={props.group.color} class="max-w-full min-w-0">
+              <span class="min-w-0 truncate" dir="auto">
+                {props.group.name}
+              </span>
+            </span>
+          }
+        >
+          <Show when={project()}>
+            {(group) => (
+              <span class="flex size-4 shrink-0 items-center justify-center">
+                <SessionTabAvatarView project={projectInfo()} directory={group().directory ?? ""} unread={false} />
+              </span>
+            )}
+          </Show>
+          <span
+            data-tab-group-label
+            data-tone={project() ? "project" : props.group.kind === "manual" ? undefined : "muted"}
+            dir="auto"
+            class="min-w-0 truncate text-[13px] leading-[var(--line-height-compact)] font-medium"
+          >
             {props.group.name}
           </span>
-        </span>
+          <Icon
+            name="fill-triangle-down"
+            class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+            classList={{ "-rotate-90 rtl:rotate-90": props.group.collapsed }}
+          />
+        </Show>
         <Show when={props.group.collapsed && count() > 0}>
           <span class="shrink-0 text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint">
             {count()}
           </span>
         </Show>
-        <Icon
-          name="chevron-down"
-          class="ms-auto shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] duration-[120ms] ease-out motion-reduce:transition-none group-hover/group-row:opacity-100"
-          classList={{ "-rotate-90 rtl:rotate-90 opacity-100": props.group.collapsed }}
-        />
+        <Show when={!plain()}>
+          <Icon
+            name="chevron-down"
+            class="ms-auto shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] duration-[120ms] ease-out motion-reduce:transition-none group-hover/group-row:opacity-100"
+            classList={{ "-rotate-90 rtl:rotate-90 opacity-100": props.group.collapsed }}
+          />
+        </Show>
       </button>
-      <Menu
-        modal={false}
-        gutter={4}
-        placement="bottom-end"
-        open={menu.open}
-        onOpenChange={(open) => setMenu("open", open)}
-      >
-        <Menu.Trigger
-          as={IconButton}
-          variant="ghost-muted"
-          size="small"
-          data-group-menu-trigger
-          aria-label={language.t("common.moreOptions")}
-          icon={<Icon name="outline-dots" />}
-          class="shrink-0 opacity-0 group-hover/group-row:opacity-100 data-[expanded]:opacity-100"
-        />
-        <Menu.Portal>
-          <Menu.Content class="w-48">
-            <GroupEditorMenuItems group={props.group} />
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
+      <Show when={editable()}>
+        <Menu
+          modal={false}
+          gutter={4}
+          placement="bottom-end"
+          open={menu.open}
+          onOpenChange={(open) => setMenu("open", open)}
+        >
+          <Menu.Trigger
+            as={IconButton}
+            variant="ghost-muted"
+            size="small"
+            data-group-menu-trigger
+            aria-label={language.t("common.moreOptions")}
+            icon={<Icon name="outline-dots" />}
+            class="shrink-0 opacity-0 group-hover/group-row:opacity-100 data-[expanded]:opacity-100"
+          />
+          <Menu.Portal>
+            <Menu.Content class="w-48">
+              <GroupEditorMenuItems group={props.group} />
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </Show>
     </div>
   )
 }
@@ -1102,39 +1171,70 @@ export function TabAddToGroupMenuItems(props: { tab: Tab }) {
   )
 }
 
-export function TabGroupingMenu() {
+export function TabGroupingMenu(props: { consolidated?: boolean }) {
   const tabGroups = useTabGroups()
   const language = useLanguage()
+  const modes = () => (props.consolidated ? CONSOLIDATED_MODES : TAB_GROUPS_MODES)
+  const [menu, setMenu] = createStore({ open: false })
 
   return (
-    <Menu gutter={4} modal={false} placement="bottom-end">
-      <Menu.Trigger
-        as="button"
-        type="button"
-        aria-label={language.t("tabs.groups.menu")}
-        title={language.t("tabs.groups.menu")}
-        data-action="tab-groups-menu"
-        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
+    <Menu
+      gutter={4}
+      modal={false}
+      placement="bottom-end"
+      open={menu.open}
+      onOpenChange={(open) => setMenu("open", open)}
+    >
+      <Show
+        when={props.consolidated}
+        fallback={
+          <Menu.Trigger
+            as="button"
+            type="button"
+            aria-label={language.t("tabs.groups.menu")}
+            title={language.t("tabs.groups.menu")}
+            data-action="tab-groups-menu"
+            class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
+          >
+            <Icon name="sliders" />
+          </Menu.Trigger>
+        }
       >
-        <Icon name="sliders" />
-      </Menu.Trigger>
+        <Menu.Trigger
+          as={IconButton}
+          variant="ghost-muted"
+          size="normal"
+          state={menu.open ? "pressed" : undefined}
+          icon={<Icon name="sliders" />}
+          aria-label={language.t("tabs.groups.menu")}
+          title={language.t("tabs.groups.menu")}
+          data-action="tab-groups-menu"
+          class="shrink-0 [app-region:no-drag]"
+        />
+      </Show>
 
       <Menu.Portal>
         <Menu.Content class="min-w-[168px]">
           <Menu.Group>
-            <Menu.GroupLabel>{language.t("tabs.groups.groupBy")}</Menu.GroupLabel>
+            <Menu.GroupLabel>
+              {language.t(props.consolidated ? "tabs.groups.grouping" : "tabs.groups.groupBy")}
+            </Menu.GroupLabel>
             <Menu.RadioGroup
               value={tabGroups.mode()}
               onChange={(value) => {
-                const next = TAB_GROUP_MODES.find((item) => item === value)
+                const next = modes().find((item) => item === value)
 
                 if (next) tabGroups.setMode(next)
               }}
             >
-              <For each={TAB_GROUP_MODES}>
+              <For each={modes()}>
                 {(modeOption) => (
                   <Menu.RadioItem closeOnSelect value={modeOption}>
-                    {language.t(`tabs.groups.mode.${modeOption}`)}
+                    {language.t(
+                      props.consolidated && modeOption === "none"
+                        ? "tabs.groups.mode.manual"
+                        : `tabs.groups.mode.${modeOption}`,
+                    )}
                   </Menu.RadioItem>
                 )}
               </For>
@@ -1152,6 +1252,10 @@ export function TabGroupingMenu() {
     </Menu>
   )
 }
+
+const TAB_GROUPS_MODES: readonly TabGroupMode[] = ["none", "server", "project"]
+
+const CONSOLIDATED_MODES: readonly TabGroupMode[] = ["none", "project", "status", "server"]
 
 export function TabFilterInput(props: { trailing?: JSX.Element }) {
   const tabGroups = useTabGroups()
