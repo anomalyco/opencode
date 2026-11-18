@@ -3,14 +3,13 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 
 use crate::Json;
 use crate::schema::{self, Schema};
 
-/// A boxed future a host hands the runtime. `Send`, so a run can move between threads.
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub use crate::exec::BoxFuture;
+use crate::host::RunId;
 
 /// What a tool call knows about itself: its stable idempotency key, `<runId>:<callId>`.
 #[derive(Clone, Debug)]
@@ -19,9 +18,6 @@ pub struct ToolContext {
     pub(crate) call: u64,
 }
 
-/// A run's id, shared by its calls and made the first time a key is read, when the host gave none.
-pub(crate) type RunId = Arc<OnceLock<String>>;
-
 impl ToolContext {
     pub(crate) fn new(run_id: RunId, call: u64) -> Self {
         Self { run_id, call }
@@ -29,11 +25,7 @@ impl ToolContext {
 
     /// `<runId>:<callId>`, the same at every hook.
     pub fn key(&self) -> String {
-        format!(
-            "{}:{}",
-            self.run_id.get_or_init(crate::run::random_run_id),
-            self.call
-        )
+        crate::host::call_key(&self.run_id, self.call)
     }
 }
 

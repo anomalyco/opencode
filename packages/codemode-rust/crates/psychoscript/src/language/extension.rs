@@ -8,7 +8,7 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::tool::BoxFuture;
+use crate::exec::BoxFuture;
 
 /// A value on the host's side of the boundary.
 #[derive(Clone, Debug, Default)]

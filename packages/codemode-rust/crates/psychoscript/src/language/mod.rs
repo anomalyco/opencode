@@ -8,6 +8,7 @@ pub(crate) mod compiler;
 pub(crate) mod conversion;
 pub(crate) mod convert;
 pub(crate) mod cross;
+pub(crate) mod diagnostic;
 pub(crate) mod exec;
 pub(crate) mod extension;
 pub(crate) mod host;
@@ -20,7 +21,5 @@ pub(crate) mod reach;
 pub(crate) mod snapshot;
 pub(crate) mod streaming;
 pub(crate) mod strings;
-#[cfg(feature = "test262")]
-pub mod test262;
 pub(crate) mod value;
 pub(crate) mod vm;

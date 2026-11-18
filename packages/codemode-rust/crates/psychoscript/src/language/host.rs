@@ -174,13 +174,46 @@ pub struct ResultRoot {
     pub functions: std::ops::Range<usize>,
 }
 
+/// A run's id, shared by its calls and made the first time a key is read, when the host gave none.
+pub(crate) type RunId = Arc<std::sync::OnceLock<String>>;
+
+/// The key of a run's host call, `<runId>:<callId>`, the same at every hook.
+pub(crate) fn call_key(run_id: &RunId, call: u64) -> String {
+    format!("{}:{}", run_id.get_or_init(random_run_id), call)
+}
+
+/// A random run id, as the reference uses a random UUID.
+pub fn random_run_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+        ^ COUNTER.fetch_add(0x9e37_79b9_7f4a_7c15, Ordering::Relaxed);
+    let mix = |mut z: u64| {
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let (a, b) = (mix(seed), mix(seed.wrapping_add(0x9e37_79b9_7f4a_7c15)));
+    format!(
+        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+        a >> 32,
+        (a >> 16) & 0xffff,
+        a & 0x0fff,
+        ((b >> 48) & 0x3fff) | 0x8000,
+        b & 0xffff_ffff_ffff
+    )
+}
+
 /// The host state of one run.
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
     /// The runtime's extensions this run gets, in the runtime's order.
     pub extensions: std::rc::Rc<[&'rt crate::Extension]>,
     /// Names the run's host calls; made on first use when the host gave none.
-    pub(crate) run_id: crate::tool::RunId,
+    pub(crate) run_id: RunId,
     pub(crate) next_call: u64,
     /// The context handed to synchronous tools, its call id set for each call.
     ctx: Option<ToolContext>,
@@ -278,7 +311,7 @@ impl<'rt> RunHost<'rt> {
         id
     }
 
-    pub fn run_id(&mut self) -> crate::tool::RunId {
+    pub fn run_id(&mut self) -> RunId {
         self.run_id.clone()
     }
 

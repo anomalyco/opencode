@@ -93,31 +93,6 @@ fn failed(error: Diagnostic) -> Outcome {
     }
 }
 
-/// A random run id, as the reference uses a random UUID.
-pub fn random_run_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0)
-        ^ COUNTER.fetch_add(0x9e37_79b9_7f4a_7c15, Ordering::Relaxed);
-    let mix = |mut z: u64| {
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    };
-    let (a, b) = (mix(seed), mix(seed.wrapping_add(0x9e37_79b9_7f4a_7c15)));
-    format!(
-        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-        a >> 32,
-        (a >> 16) & 0xffff,
-        a & 0x0fff,
-        ((b >> 48) & 0x3fff) | 0x8000,
-        b & 0xffff_ffff_ffff
-    )
-}
-
 /// Compiles a program and sets up its run, or the outcome when it does not compile.
 pub fn start<'a>(
     rt: &'a Runtime,

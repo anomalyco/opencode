@@ -8,7 +8,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::task::{Context, Poll, Wake, Waker};
 use std::time::Instant;
 
-use crate::tool::BoxFuture;
+/// A boxed future a host hands the runtime. `Send`, so a run can move between threads.
+pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
 // ---------- block_on ----------
 

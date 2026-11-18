@@ -5,6 +5,9 @@ pub(crate) mod hooks;
 pub mod openapi;
 pub(crate) mod program;
 pub(crate) mod run;
+pub(crate) mod runtime;
 pub(crate) mod schema;
 pub(crate) mod search;
+#[cfg(feature = "test262")]
+pub mod test262;
 pub(crate) mod tool;
