@@ -50,7 +50,7 @@ local FIELDS = { id = true, key = true, title = true, action = true, command = t
 
 -- TS `parseBindings`: the whole configuration, or `nil` for any fault in it.
 local function parse(options: any): { Binding }?
-    if type(options) ~= "table" then
+    if type(options) ~= "table" or plugin.json.isArray(options) then
         return nil
     end
     for name in options do
@@ -62,8 +62,7 @@ local function parse(options: any): { Binding }?
     if list == nil then
         return {}
     end
-    -- An empty table reads as an empty list here: Luau cannot tell `{}` from `[]`.
-    if type(list) ~= "table" or (next(list) ~= nil and #list == 0) then
+    if type(list) ~= "table" or not plugin.json.isArray(list) then
         return nil
     end
     local bindings, ids, keys = {}, {}, {}
@@ -120,7 +119,7 @@ local function command(session: string, name: string, text: string): plugin.Fetc
 end
 
 return plugin.define(function(setup)
-    local bindings = parse(if setup.options == nil then {} else setup.options)
+    local bindings = parse(if setup.options == nil then plugin.json.object({}) else setup.options)
     if not bindings then
         setup.host:toast({ variant = "error", title = TITLE, message = INVALID })
         return

@@ -10,7 +10,6 @@
 -- `dialog.set` that comes before it.
 local plugin = require("@opencode/plugin")
 local i18n = require("@self/i18n")
-local json = require("@self/json")
 
 local GOAL_TOOLS = {
     "get_goal",
@@ -27,7 +26,7 @@ local GOAL_TOOLS = {
 local PICKED = "goal.picked"
 local STATUSES = { "active", "paused", "budgetLimited", "usageLimited", "complete", "unmet", "cancelled" }
 
-local null = json.null
+local null = plugin.json.null
 
 local function isNumber(value: any): boolean
     return type(value) == "number"
@@ -57,7 +56,7 @@ local function every(list: any, test: (any) -> boolean): boolean
     return true
 end
 
--- TS `isGoalSnapshot`. A field that is `null` reads as `json.null`; `nullable` needs it present, `nullish` not.
+-- TS `isGoalSnapshot`. A field that is `null` reads as `plugin.json.null`; `nullable` needs it present, `nullish` not.
 local function isGoal(goal: any): boolean
     if type(goal) ~= "table" then
         return false
@@ -127,8 +126,8 @@ local function goalFromMessages(read: plugin.Read, id: string): any
                         break
                     end
                 end
-                local parsed = text and json.decode(text)
-                if type(parsed) == "table" and parsed ~= null then
+                local parsed = text and plugin.json.decode(text, { null = true })
+                if type(parsed) == "table" then
                     if parsed.goal == null then
                         return null
                     elseif isGoal(parsed.goal) then
