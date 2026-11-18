@@ -450,16 +450,6 @@ export type SessionMessageSystem = {
   description?: string
 }
 
-export type SessionMessageCompactionRunning = {
-  type: "compaction"
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "running"
-  reason: "auto" | "manual"
-  summary: string
-}
-
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
@@ -1186,6 +1176,17 @@ export type SessionMessageToolStateError = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type SessionMessageCompactionRunning = {
+  type: "compaction"
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "running"
+  reason: "auto" | "manual"
+  summary: string
+  retry?: SessionMessageAssistantRetry
+}
+
 export type FormField =
   | FormStringField
   | FormNumberField
@@ -1622,6 +1623,16 @@ export type SessionCompactionStarted = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: { sessionID: SessionID; reason: "auto" | "manual"; inputID?: SessionMessageID }
+}
+
+export type SessionCompactionRetryScheduled = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.retry.scheduled"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; attempt: number; at: number; error: SessionStructuredError }
 }
 
 export type SessionCompactionEnded = {
@@ -2322,11 +2333,6 @@ export type ReferenceInfo = {
   source: ReferenceSource
 }
 
-export type SessionMessageCompaction =
-  | SessionMessageCompactionRunning
-  | SessionMessageCompactionCompleted
-  | SessionMessageCompactionFailed
-
 export type SessionStatsInfo = {
   range: { from: number; to: number }
   sessions: number
@@ -2687,6 +2693,11 @@ export type SessionMessageAssistantTool = {
   time: { created: number; ran?: number; completed?: number }
 }
 
+export type SessionMessageCompaction =
+  | SessionMessageCompactionRunning
+  | SessionMessageCompactionCompleted
+  | SessionMessageCompactionFailed
+
 export type FormFields = [FormField, ...Array<FormField>]
 
 export type SessionInboxItem =
@@ -2921,6 +2932,7 @@ export type SessionEventDurable =
   | SessionToolFailed
   | SessionRetryScheduled
   | SessionCompactionStarted
+  | SessionCompactionRetryScheduled
   | SessionCompactionEnded
   | SessionCompactionFailed
   | SessionRevertStaged
@@ -2985,6 +2997,7 @@ export type V2Event =
   | SessionRetryScheduled
   | SessionCompactionStarted
   | SessionCompactionDelta
+  | SessionCompactionRetryScheduled
   | SessionCompactionEnded
   | SessionCompactionFailed
   | SessionRevertStaged
@@ -4520,6 +4533,7 @@ export type EventSubscribeInput = {
         | "session.retry.scheduled"
         | "session.compaction.started"
         | "session.compaction.delta"
+        | "session.compaction.retry.scheduled"
         | "session.compaction.ended"
         | "session.compaction.failed"
         | "session.revert.staged"

@@ -691,7 +691,14 @@ export const layer = Layer.effect(
           retry: SessionRunnerRetry.isRetryable(cause),
         })
         if (!decision.retry) return yield* Effect.fail<Failure>({ error })
-        yield* Effect.sleep(decision.delay)
+        const scheduled = yield* Clock.currentTimeMillis
+        yield* bus.publish(SessionEvent.Compaction.RetryScheduled, {
+          sessionID: context.session.id,
+          attempt: decision.attempt,
+          at: scheduled + decision.delay,
+          error,
+        })
+        yield* Effect.sleep(Math.max(0, scheduled + decision.delay - (yield* Clock.currentTimeMillis)))
       }
     })
 

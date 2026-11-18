@@ -3157,6 +3157,45 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.session.get(sessionID))?.tokens.input).toBe(50)
   })
 
+  scenario("publishes scheduled retries while compaction is waiting", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    const scheduled = yield* Queue.unbounded<number>()
+    yield* s.bus.subscribe(SessionEvent.Compaction.RetryScheduled).pipe(
+      Stream.runForEach((event) => Queue.offer(scheduled, event.data.attempt)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        event.decision = { retry: true, delay: RETRY_GAPS_MAX[0] }
+      }),
+    )
+    yield* s.llm.push(Stream.fail(providerUnavailable()), TestLLM.text("## Objective\n- Accepted summary", "accepted"))
+    const compaction = yield* s.session.compact({ sessionID })
+    const run = yield* s.resume.pipe(Effect.forkChild)
+
+    expect(yield* Queue.take(scheduled)).toBe(2)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "running",
+      retry: { attempt: 2, error: { type: "provider.transport", message: "Provider unavailable" } },
+    })
+    yield* TestClock.adjust(RETRY_GAPS_MAX[0])
+    yield* Fiber.join(run)
+
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type.startsWith("session.compaction"))).toEqual([
+      "session.compaction.started.1",
+      "session.compaction.retry.scheduled.1",
+      "session.compaction.ended.1",
+    ])
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "completed",
+      summary: "## Objective\n- Accepted summary",
+    })
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).not.toHaveProperty("retry")
+  })
+
   scenario("bounds compaction network retries across a template correction", function* (s) {
     yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
     yield* s.runPrompt("Earlier question")

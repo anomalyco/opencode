@@ -1312,6 +1312,28 @@ export type ExperimentalSessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.compaction.retry.scheduled"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly attempt: number
+            readonly at: number
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+              readonly retryAfterMs?: number | undefined
+            }
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -2149,6 +2171,7 @@ export type EventSubscribeInput = {
         | "session.retry.scheduled"
         | "session.compaction.started"
         | "session.compaction.delta"
+        | "session.compaction.retry.scheduled"
         | "session.compaction.ended"
         | "session.compaction.failed"
         | "session.revert.staged"

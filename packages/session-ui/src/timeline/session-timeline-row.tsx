@@ -6,6 +6,7 @@ import type {
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { SessionTurn } from "@opencode/util/session-turn"
+import { SessionRetry } from "../components/session-retry"
 import { Option, Predicate, Schema } from "effect"
 import {
   For,
@@ -730,6 +731,17 @@ export function createSessionTimelineRowRenderer(input: {
       return unwrapErrorMessage(value.error.message)
     })
 
+    const compactionRetry = createMemo(() => {
+      const value = compaction()
+      if (value?.status !== "running" || !value.retry) return
+      return {
+        type: "retry" as const,
+        attempt: value.retry.attempt,
+        message: value.retry.error.message,
+        next: value.retry.at,
+      }
+    })
+
     const moved = createMemo(() => {
       const value = message()
 
@@ -823,6 +835,7 @@ export function createSessionTimelineRowRenderer(input: {
               <div data-slot="session-turn-compaction">
                 <SessionCompactionMessage message={message()} error={compactionError()} />
               </div>
+              <Show when={compactionRetry()}>{(status) => <SessionRetry status={status()} />}</Show>
             </div>
           )}
         </Show>
