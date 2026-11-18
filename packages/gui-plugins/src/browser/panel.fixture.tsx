@@ -1700,7 +1700,9 @@ export function mountBrowserRegion(input: RegionHost) {
 
                   if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: "pane" } }))
                 }}>Agent show request</button>
-                <button onClick={() => {
+                {/* Off screen, so the strip below keeps its place: a test dispatches its click, as the agent's request
+                    arrives with no input from the person. */}
+                <button style={{ position: "absolute", left: "-9999px" }} onClick={() => {
                   const binding = latest()?.binding
                   const shown = Browser.TabID.make("tab_55555555-5555-5555-5555-555555555555")
 
