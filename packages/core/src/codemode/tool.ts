@@ -16,8 +16,13 @@ import { CallID } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
@@ -70,6 +75,15 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
+/** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
+export type Services = Location.Service | CodeModeBun.Services
+
+/** Those services alone, so a run they are given to keeps its own scope and the rest of its context. */
+export const services = Effect.map(
+  Effect.context<Services>(),
+  Context.pick(Location.Service, Environment.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
+)
+
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
@@ -90,8 +104,8 @@ export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
   permission: Permission.Interface,
-  /** With `full_codemode`, the session's Location, which turns on the experimental `path` global. */
-  location?: Location.Interface,
+  /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
+  services?: Context.Context<Services>,
 ) => {
   return {
     name: "execute",
@@ -128,7 +142,9 @@ export const create = (
           )
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: location ? [CodeModeFetch.extension, CodeModePath.extension] : [CodeModeFetch.extension],
+            extensions: services
+              ? [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension]
+              : [CodeModeFetch.extension],
           })
           .pipe(
             Effect.provideService(Run, {
@@ -165,7 +181,7 @@ export const create = (
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
             Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
-            (program) => (location ? Effect.provideService(program, Location.Service, location) : program),
+            (program) => (services ? Effect.provideContext(program, services) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -229,6 +245,8 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
         default:
+          if (call.extension === "bun")
+            return start(call, { tool: "Bun", status: "running", input: CodeModeBun.display(call.name, call.args) })
           return Effect.void
       }
     },
@@ -291,9 +309,12 @@ function runtime(inventory: Inventory) {
   if (cached) return cached
   const tools = inventoryTools(inventory)
   // Every extension a run may get; `create` picks each run's.
-  const created = CodeMode.make<typeof tools, [typeof CodeModeFetch.extension, typeof CodeModePath.extension]>({
+  const created = CodeMode.make<
+    typeof tools,
+    [typeof CodeModeFetch.extension, typeof CodeModePath.extension, typeof CodeModeBun.extension]
+  >({
     tools,
-    extensions: [CodeModeFetch.extension, CodeModePath.extension],
+    extensions: [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension],
     hooks: runHooks,
   })
   runtimes.set(inventory, created)
