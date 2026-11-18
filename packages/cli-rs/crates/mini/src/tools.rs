@@ -46,7 +46,6 @@ struct Frame {
     end: Option<f64>,
 }
 
-/// `frame`.
 fn frame(part: &SessionMessageAssistantTool, directory: Option<&str>) -> Frame {
     let name = canonical_tool_name(&part.name).to_owned();
     let directory = directory.map(str::to_owned);
@@ -162,7 +161,6 @@ const KNOWN: [&str; 17] = [
     "skill",
 ];
 
-/// `toolView`.
 fn tool_view(name: &str) -> ToolView {
     let view = |output, final_, snap| ToolView { output, final_, snap };
     match canonical_tool_name(name) {
@@ -432,7 +430,6 @@ fn lsp_title(frame: &Frame) -> String {
     format!("LSP {operation} {}{position}", frame.path(file, false))
 }
 
-/// `toolSnapshot`.
 fn snapshot(frame: &Frame) -> Option<Snapshot> {
     match frame.name.as_str() {
         "write" => {
@@ -714,7 +711,6 @@ pub fn image_commits(part: &SessionMessageAssistantTool, message_id: &str) -> Ve
         .collect()
 }
 
-/// `toolFiletype`.
 pub fn filetype(path: &str) -> Option<&'static str> {
     match opentui::syntax::filetype_for_path(path)? {
         "typescriptreact" | "javascriptreact" | "javascript" | "tsx" | "jsx" => Some("typescript"),

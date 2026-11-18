@@ -6,7 +6,6 @@ use opencode_api::generated::{
 use opencode_ui::prompt_input::editor::Mention;
 use serde_json::{Map, Value, json};
 
-/// `RunDelivery`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Delivery {
     #[default]
@@ -73,7 +72,6 @@ pub struct Command {
     pub source: Option<String>,
 }
 
-/// `RunPrompt`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RunPrompt {
     pub message_id: Option<String>,
@@ -151,7 +149,6 @@ impl RunPrompt {
         }
     }
 
-    /// `promptSame`.
     pub fn same(&self, other: &RunPrompt) -> bool {
         self.shell == other.shell
             && self.text == other.text
@@ -183,7 +180,6 @@ impl RunPrompt {
             .collect()
     }
 
-    /// `promptAgents`.
     pub fn agents(&self) -> Vec<Value> {
         self.parts
             .iter()
@@ -194,7 +190,6 @@ impl RunPrompt {
             .collect()
     }
 
-    /// `promptSkills`.
     pub fn skills(&self) -> Vec<Value> {
         self.parts
             .iter()
@@ -264,7 +259,6 @@ fn mention(value: &Value) -> Option<Mention> {
     })
 }
 
-/// `EXIT_COMMANDS`.
 pub const EXIT_COMMANDS: [&str; 3] = ["exit", "quit", "q"];
 
 /// `isExitCommand`: `:q`, `/exit`, `/quit`, `/q`.
@@ -273,12 +267,10 @@ pub fn is_exit(text: &str) -> bool {
     text == ":q" || EXIT_COMMANDS.iter().any(|name| text == format!("/{name}"))
 }
 
-/// `isNewCommand`.
 pub fn is_new(text: &str) -> bool {
     text.trim().to_lowercase() == "/new"
 }
 
-/// `isCompactCommand`.
 pub fn is_compact(text: &str) -> bool {
     text.trim().to_lowercase() == "/compact"
 }

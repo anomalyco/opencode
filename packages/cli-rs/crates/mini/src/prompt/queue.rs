@@ -54,7 +54,6 @@ impl Queue {
         self.active.is_some()
     }
 
-    /// `submit`.
     pub fn submit(&mut self, prompt: RunPrompt) -> Submitted {
         if self.closed || (prompt.text.trim().is_empty() && (prompt.shell || !prompt.has_file())) {
             return Submitted::Ignored;

@@ -9,7 +9,6 @@ use super::scroll::Scroller;
 
 use crate::prelude::*;
 
-/// `FormBodyState`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub form: String,
@@ -24,7 +23,6 @@ pub struct State {
 }
 
 impl State {
-    /// `createFormBodyState`.
     pub fn new(form: &FormInfo) -> Self {
         let (answers, custom) = initial_values(&form.fields);
         let first = form.fields.first();
@@ -57,7 +55,6 @@ impl State {
         self.answer(field) == Some(&FormValue::Bool(true))
     }
 
-    /// `formMove`.
     pub fn step(&mut self, form: &FormInfo, down: bool) {
         let field = current(form, self);
         let total = rows(field).len() + usize::from(custom(field));
@@ -68,13 +65,11 @@ impl State {
         self.error.clear();
     }
 
-    /// `formSetSelected`.
     pub fn select(&mut self, selected: usize) {
         self.selected = selected;
         self.error.clear();
     }
 
-    /// `formSetError`.
     pub fn fail(&mut self, error: impl Into<String>) {
         self.error = error.into();
         self.submitting = false;
@@ -90,13 +85,11 @@ impl State {
         }
     }
 
-    /// `formSetDraft`.
     pub fn set_draft(&mut self, field: Option<&FormField>, value: &str) {
         let Some(field) = field.filter(|field| !matches!(field, FormField::External(_))) else { return };
         self.custom.insert(key(field).to_owned(), value.to_owned());
     }
 
-    /// `formSetField`.
     pub fn set_field(&mut self, form: &FormInfo, index: usize) {
         let bounded = index.min(form.fields.len());
         let field = form.fields.get(bounded);
@@ -175,7 +168,6 @@ impl State {
         self.error.clear();
     }
 
-    /// `formAcknowledge`.
     pub fn acknowledge(&mut self, form: &FormInfo) {
         let Some(field) = current(form, self).cloned() else { return };
         if !matches!(field, FormField::External(_)) || !self.external_ready.contains(key(&field)) {
@@ -188,7 +180,6 @@ impl State {
     }
 }
 
-/// `formCurrent`.
 pub fn current<'a>(form: &'a FormInfo, state: &State) -> Option<&'a FormField> {
     form.fields.get(state.field)
 }
@@ -211,7 +202,6 @@ pub fn single(form: &FormInfo) -> bool {
         )
 }
 
-/// `formPlaceholder`.
 pub fn placeholder(field: Option<&FormField>) -> String {
     match field {
         Some(FormField::String(field)) => field.placeholder.clone().unwrap_or_else(|| "Type your answer".to_owned()),
@@ -245,7 +235,6 @@ pub fn unsupported(form: &FormInfo) -> Option<String> {
     None
 }
 
-/// `formValidate`.
 pub fn invalid(form: &FormInfo, state: &State) -> Option<String> {
     if let Some(unsupported) = unsupported(form) {
         return Some(unsupported);
@@ -264,7 +253,6 @@ pub fn invalid(form: &FormInfo, state: &State) -> Option<String> {
     None
 }
 
-/// `formAnswer`.
 pub fn answer(form: &FormInfo, state: &State) -> Option<FormAnswer> {
     if invalid(form, state).is_some() {
         return None;
@@ -306,7 +294,6 @@ pub struct Painted {
     pub field: Option<Textarea>,
 }
 
-/// `RunFormBody`.
 pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     let theme = body.theme;
     let form = body.form;

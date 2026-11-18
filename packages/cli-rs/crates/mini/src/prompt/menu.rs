@@ -2,9 +2,7 @@
 
 use crate::prelude::*;
 
-/// `FOOTER_MENU_ROWS`.
 pub const MENU_ROWS: u16 = 8;
-/// `FOOTER_COMPACT_WIDTH`.
 pub const COMPACT_WIDTH: u16 = 40;
 
 /// One row (`RunFooterMenuItem` without icons and footers).
@@ -76,7 +74,6 @@ pub fn fit(text: &str, width: usize, mono: bool) -> String {
     take_width(text, width - suffix.width()) + &suffix
 }
 
-/// `Locale.takeWidth`.
 pub fn take_width(text: &str, width: usize) -> String {
     let mut out = String::new();
     for character in text.chars() {

@@ -66,7 +66,6 @@ pub fn entry(app: &App, width: u32, version: &str, detail: &str, theme: &SplashT
         .child(&Text::new(app, vec![label.fg(theme.right), metadata.fg(theme.left)]).wrap(WrapMode::None))
 }
 
-/// `SPLASH_TITLE_LIMIT`.
 const TITLE_LIMIT: usize = 50;
 
 /// `title`: whitespace runs as one space, truncated, else `Untitled session`.

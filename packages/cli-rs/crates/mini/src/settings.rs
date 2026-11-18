@@ -45,7 +45,6 @@ pub enum Key {
     WorkSpinner,
 }
 
-/// `MiniVerbosity`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verbosity {
     Quiet,
@@ -55,7 +54,6 @@ pub enum Verbosity {
 
 const LEVELS: [Verbosity; 3] = [Verbosity::Quiet, Verbosity::Default, Verbosity::Everything];
 
-/// `MiniSettingChange`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Change {
     Verbosity(Verbosity),
@@ -114,7 +112,6 @@ impl MiniSettings {
         LEVELS.into_iter().find(|level| level.preset() == self.knobs())
     }
 
-    /// `verbosityLabel(matchMiniVerbosity(settings))`.
     pub fn verbosity_label(&self) -> &'static str {
         self.verbosity().map_or("Custom", Verbosity::label)
     }
@@ -149,7 +146,6 @@ impl MiniSettings {
         }
     }
 
-    /// `applyMiniSettingChange`.
     pub fn apply(mut self, change: Change) -> Self {
         match change {
             Change::Verbosity(level) => {

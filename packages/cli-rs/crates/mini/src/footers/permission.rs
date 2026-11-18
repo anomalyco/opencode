@@ -7,7 +7,6 @@ use super::scroll::Scroller;
 use crate::prelude::*;
 use crate::theme::mono_prefix;
 
-/// `PermissionStage`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Permission,
@@ -15,7 +14,6 @@ pub enum Stage {
     Reject,
 }
 
-/// `PermissionOption`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Choice {
     Once,
@@ -26,7 +24,6 @@ pub enum Choice {
 }
 
 impl Choice {
-    /// `permissionOptionLabel`.
     pub fn label(self) -> &'static str {
         match self {
             Self::Once => "Allow once",
@@ -38,7 +35,6 @@ impl Choice {
     }
 }
 
-/// `PermissionBodyState`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub request: String,
@@ -56,7 +52,6 @@ pub struct Reply {
 }
 
 impl State {
-    /// `createPermissionBodyState`.
     pub fn new(request: &str) -> Self {
         Self {
             request: request.to_owned(),
@@ -77,7 +72,6 @@ impl State {
         }
     }
 
-    /// `permissionShift`.
     pub fn shift(&mut self, forward: bool, choices: &[Choice]) {
         if choices.is_empty() {
             return;
@@ -114,18 +108,15 @@ impl State {
         }
     }
 
-    /// `permissionReject`.
     pub fn reject(&self) -> Option<Reply> {
         (!self.submitting).then(|| reply(PermissionReply::Reject, &self.message))
     }
 
-    /// `permissionCancel`.
     pub fn cancel(&mut self) {
         self.stage = Stage::Permission;
         self.selected = Choice::Reject;
     }
 
-    /// `permissionEscape`.
     pub fn escape(&mut self) {
         if self.stage == Stage::Always {
             self.stage = Stage::Permission;
@@ -216,7 +207,6 @@ pub struct Painted {
     pub field: Option<Textarea>,
 }
 
-/// `RunPermissionBody`.
 pub fn paint(app: &App, root: &View, body: &Body<'_>) -> Painted {
     let theme = body.theme;
     let width = body.width;

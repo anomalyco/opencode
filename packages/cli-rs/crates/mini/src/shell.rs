@@ -30,7 +30,6 @@ use crate::{Input, InputError};
 const FOOTER_HEIGHT: u16 = 4;
 /// How long the second Ctrl+C or Esc of a two-press gesture may wait.
 const TWO_PRESS: Duration = Duration::from_secs(5);
-/// `NOTICE_DURATION`.
 const NOTICE: Duration = Duration::from_secs(3);
 /// `SHELL_OUTPUT_GRACE_MS`: how long a shell turn waits after `session.shell` answers for its
 /// `session.shell.ended` event.
@@ -536,7 +535,6 @@ impl Mini {
         self.set_notice(&format!("model {id}"));
     }
 
-    /// `onVariantSelect`.
     fn select_variant(self: &Rc<Self>, variant: Option<String>) {
         let Some(model) = self.selection().filter(|_| !self.variants.borrow().is_empty()) else {
             self.set_notice("no variants available");
@@ -1078,7 +1076,6 @@ impl Mini {
         );
     }
 
-    /// `turn.send`.
     fn sending(&self, status: &str) {
         self.patch(|state| {
             state.running = true;
@@ -1092,7 +1089,6 @@ impl Mini {
         self.footers.set_running(true);
     }
 
-    /// `renderPromptError`.
     fn prompt_error(self: &Rc<Self>, cx: &mut Cx<'_>, id: &str, error: String) {
         self.append(cx, Commit { text: error, ..Commit::error("").message(id) });
     }

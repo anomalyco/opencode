@@ -11,7 +11,6 @@ use super::v1::{
     reference_hues, scale_value, selected_foreground, splice_palette, with_alpha,
 };
 
-/// `migrateV1NewDesigns`.
 pub(crate) fn migrate(theme: &Value) -> Result<Value, String> {
     migrate_with(theme, migrate_mode, light_overrides)
 }

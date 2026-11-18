@@ -29,9 +29,7 @@ pub use self::parts::{Command, Delivery, File, Part, RunPrompt, is_exit};
 
 use crate::prelude::*;
 
-/// `TEXTAREA_MIN_ROWS`.
 pub const MIN_ROWS: u16 = 1;
-/// `TEXTAREA_MAX_ROWS`.
 const MAX_ROWS: u16 = 6;
 /// `PROMPT_MAX_ROWS`: a terminal at least this plus four rows tall pads the prompt.
 pub const PROMPT_MAX_ROWS: u16 = MAX_ROWS + MENU_ROWS;
@@ -58,7 +56,6 @@ pub fn layout(height: u16, lines: u16, options: u16, status_rows: u16, images: b
     Layout { padding, textarea, menu, images, rows: rows + menu + images }
 }
 
-/// `MenuMode`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
     Mention,
@@ -879,7 +876,6 @@ impl Inner {
         );
     }
 
-    /// `onContentChange`.
     fn changed(self: &Rc<Self>) {
         if self.quiet.get() {
             return;
@@ -1020,7 +1016,6 @@ impl Inner {
         self.submit_prompt(prompt, delivery);
     }
 
-    /// `submitPrompt`.
     fn submit_prompt(self: &Rc<Self>, next: RunPrompt, delivery: Delivery) {
         if self.state.borrow().mode.is_some() {
             let slash = self.state.borrow().mode == Some(Mode::Slash);

@@ -106,7 +106,6 @@ pub struct ThemeInput {
     pub mono: bool,
 }
 
-/// `resolveRunTheme`.
 pub fn resolve(input: &ThemeInput) -> RunTheme {
     let colors = input.palette.as_ref().map(TerminalColors::from_palette).filter(TerminalColors::usable);
     let mode = colors.as_ref().and_then(terminal_mode).or(input.mode).unwrap_or(ThemeMode::Dark);
@@ -424,7 +423,6 @@ pub fn mono_tool_text(value: &str, mono: bool) -> String {
     format!("{head} - {}", &result[index + separator.len()..])
 }
 
-/// `monoTruncate`.
 pub fn mono_truncate(value: &str, width: usize, mono: bool) -> String {
     let count = value.chars().count();
     if !mono || count <= width {

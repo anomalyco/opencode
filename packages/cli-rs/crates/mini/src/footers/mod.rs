@@ -29,9 +29,7 @@ use crate::settings::{Change, Key, MiniSettings};
 use crate::subagents::{Discovery, FAMILY_LIMIT, Fetch, Status, Tab, Tracker};
 use crate::variants::{ModelSelection, Provider};
 
-/// `PERMISSION_ROWS`.
 const PERMISSION_ROWS: u16 = 12;
-/// `FORM_ROWS`.
 const FORM_ROWS: u16 = 14;
 /// `base`: the footer's rows above the composer's one-row textarea at startup (`FOOTER_HEIGHT - 1`).
 const BASE: u16 = 3;
@@ -56,15 +54,11 @@ pub struct Hooks {
     pub agent: TextAction,
     /// `app.clear` from the command menu.
     pub clear_screen: Action,
-    /// `onExit`.
     pub exit: Action,
     /// What the model and variant panels list.
     pub models: Option<Box<dyn Fn() -> Models>>,
-    /// `onModelSelect`.
     pub model: Option<Box<dyn Fn(ModelSelection)>>,
-    /// `onVariantSelect`.
     pub variant: Option<Box<dyn Fn(Option<String>)>>,
-    /// `onCycleVariant`.
     pub cycle_variant: Action,
     /// The current settings, for the settings panel.
     pub settings: Option<Box<dyn Fn() -> MiniSettings>>,
@@ -711,7 +705,6 @@ impl Inner {
         matches!(self.state.borrow().shown, None | Some(Shown::Prompt))
     }
 
-    /// `openSubagentMenu`.
     fn open_subagents(self: &Rc<Self>) {
         if self.state.borrow().tabs.is_empty() {
             return;
@@ -797,7 +790,6 @@ impl Inner {
         true
     }
 
-    /// `onSubagentInterrupt`.
     fn interrupt_subagent(self: &Rc<Self>) {
         let (Some(tab), Some(target)) = (self.selected_tab(), self.target.borrow().clone()) else { return };
         if tab.status != Status::Running {
@@ -1158,7 +1150,6 @@ impl Inner {
         }
     }
 
-    /// `closePanel`.
     fn close_route(self: &Rc<Self>) {
         {
             let mut state = self.state.borrow_mut();
@@ -1409,7 +1400,6 @@ impl Inner {
         }
     }
 
-    /// `handleCycle`.
     fn cycle_variant(&self) {
         if let Some(cycle) = &self.hooks().cycle_variant {
             cycle();
@@ -1453,7 +1443,6 @@ impl Inner {
         true
     }
 
-    /// `openQueuedMenu`.
     fn open_queued(self: &Rc<Self>) {
         if self.prompt.queued().is_empty() {
             return;

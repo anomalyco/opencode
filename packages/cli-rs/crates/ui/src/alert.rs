@@ -3,7 +3,6 @@ use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::prelude::*;
 use std::rc::Rc;
 
-/// `DialogAlertProps`.
 #[derive(Clone, Default)]
 pub struct AlertProps {
     pub title: String,
