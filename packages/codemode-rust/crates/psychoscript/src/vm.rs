@@ -285,7 +285,7 @@ pub struct Vm<'rt> {
     pub(crate) native_proto: Rc<FuncProto>,
     no_upvals: Rc<[u32]>,
     /// Set by a built-in that pushed a native frame instead of returning its result (`enter_native`).
-    entered: bool,
+    pub(crate) entered: bool,
 }
 
 impl<'rt> Vm<'rt> {
@@ -969,7 +969,11 @@ impl<'rt> Vm<'rt> {
             }
             Kind::ToolRef(path) => {
                 let path = path.clone();
-                self.call_tool(&path, args)
+                let r = self.call_tool(&path, args);
+                if self.entered {
+                    return self.drive_entered(false);
+                }
+                r
             }
             _ => Err(self.type_error("The called value is not a function.")),
         }
@@ -1226,6 +1230,11 @@ impl<'rt> Vm<'rt> {
                 let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
                 self.stack.truncate(fpos);
                 let r = self.call_tool(&path, &args)?;
+                // A crossing that calls the program (a `toJSON`) runs in a native frame (see `cross.rs`).
+                if std::mem::take(&mut self.entered) {
+                    self.host.meter.bytecode = false;
+                    return Ok(true);
+                }
                 self.push(r);
                 Ok(false)
             }
@@ -1705,6 +1714,10 @@ impl<'rt> Vm<'rt> {
         self.stack.truncate(fpos);
         self.spend(NATIVE_FUEL);
         let r = crate::cross::search_call(self, &args, true)?;
+        if std::mem::take(&mut self.entered) {
+            self.host.meter.bytecode = false;
+            return Ok(true);
+        }
         if self.park {
             return Ok(true);
         }
@@ -3060,6 +3073,17 @@ impl<'rt> Vm<'rt> {
                                 }
                                 None => {
                                     crate::cross::program_result(self, v)?;
+                                    if std::mem::take(&mut self.entered) {
+                                        // The result's crossing runs in a native frame, as the run's base in
+                                        // place of the program's frame.
+                                        self.host.meter.bytecode = false;
+                                        let is_base = frame.is_base;
+                                        self.spare_frames.push(frame);
+                                        if let Some(f) = self.frames.last_mut() {
+                                            f.is_base = is_base;
+                                        }
+                                        continue 'outer;
+                                    }
                                     Value::Undef
                                 }
                             },

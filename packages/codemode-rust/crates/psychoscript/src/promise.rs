@@ -413,7 +413,13 @@ impl<'rt> Vm<'rt> {
                 }
                 Ok(())
             }
-            Reaction::Cross(id) => crate::cross::advance(self, id, Some(outcome)),
+            Reaction::Cross(id) => {
+                crate::cross::advance(self, id, Some(outcome))?;
+                if self.entered {
+                    return self.run_job_frame();
+                }
+                Ok(())
+            }
             Reaction::Program => {
                 if self.outcome.is_none() {
                     self.outcome = Some(outcome);
