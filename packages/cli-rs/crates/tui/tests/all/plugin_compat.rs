@@ -448,10 +448,16 @@ fn a_reload_gives_the_focus_back_only_to_a_field_that_held_it() {
     let focused = || {
         opencode_plugin::behave::mounts(app.app(), "example.refocus", "slot#0").pop().and_then(|mount| mount.focused)
     };
+    // Each run adds a layer of a command `rf.more-<n>`: the registrations change, and the run is taken once the keymap
+    // lists the new command.
+    let more = || tui.keymap.commands().iter().filter(|command| command.id.starts_with("rf.more-")).count();
     let reload = || {
+        let before = more();
         tui.keymap.dispatch("rf.reload", None);
-        pipe.settle();
-        std::thread::sleep(Duration::from_millis(100));
+        pipe.harness.wait("the registrations changed", || {
+            pipe.harness.app.advance(Duration::from_millis(1));
+            more() > before
+        });
         pipe.settle();
     };
     pipe.harness.wait_for("refocus slot");
@@ -1147,7 +1153,12 @@ fn a_js_listener_takes_its_key_with_prevent_default() {
     let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
     let mut seen = Vec::new();
     for step in ["pass", "take"] {
+        // The first run registers the listener's layer: a reload, which the key must come after (compat-flakes).
+        let before = generation(&pipe);
         tui.keymap.dispatch("v2probe.listen", Some(step));
+        if step == "pass" {
+            reloaded(&pipe, before);
+        }
         pipe.settle();
         harness.app.press("ctrl+p");
         pipe.settle();
@@ -1194,8 +1205,9 @@ fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
     let pipe = crate::plugin_pipe::open_with(&[("v2probe", Some(options))], config, (80, 30), vec![builtin]);
     pipe.active(PROBE);
     pipe.settle();
+    let before = generation(&pipe);
     pipe.harness.tui.keymap.dispatch("v2probe.listen", Some("pass"));
-    pipe.settle();
+    reloaded(&pipe, before);
     HEARD.with(|heard| heard.borrow_mut().clear());
     pipe.harness.app.press("ctrl+o");
     pipe.settle();
@@ -1279,10 +1291,9 @@ fn a_fresh_activation_owns_only_its_own_dialogs() {
     let live = || (1..512).find(|generation| tui.plugins.live(PROBE, *generation));
     // A store made after setup declares its key, a registration: a reload, which hands the activation on. A command
     // alone (the page's layer) changes in place.
+    let before = generation(&pipe);
     tui.keymap.dispatch("v2probe.late", None);
-    pipe.settle();
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    reloaded(&pipe, before);
     let chain = owned();
     assert!(chain.len() >= 2, "the reload handed nothing on: {chain:?}");
     let host = opencode_tui::plugins::host::host(tui);
@@ -1309,11 +1320,11 @@ fn a_late_rejection_of_a_reloaded_plugin_fails_nothing() {
     pipe.settle();
     let file = pipe.root.path().join("config/plugins/v2probe/tui.tsx");
     let source = std::fs::read_to_string(&file).unwrap();
+    let before = generation(&pipe);
     std::fs::write(&file, format!("{source}\n// reloaded\n")).unwrap();
     opencode_tui::plugins::host::reconcile(tui);
-    pipe.settle();
-    std::thread::sleep(Duration::from_millis(600));
-    pipe.settle();
+    // The new build loads and takes over; the old activation's late rejection comes as it ends.
+    reloaded(&pipe, before);
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
@@ -1338,8 +1349,12 @@ fn two_quick_reloads_leave_the_plugin_working() {
     let (pipe, log) = probe(config);
     let tui = &pipe.harness.tui;
     tui.keymap.dispatch("v2probe.twice", None);
-    // Both reloads wait for the UI thread, which takes them in one go.
-    std::thread::sleep(Duration::from_millis(300));
+    // Both reloads wait for the UI thread, which takes them in one go; then both commands are the keymap's.
+    let registered = |name: &str| tui.keymap.commands().iter().any(|command| command.id == name);
+    pipe.harness.wait("both reloads were taken", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        registered("v2probe.first") && registered("v2probe.second")
+    });
     pipe.settle();
     for name in ["v2probe.first", "v2probe.second"] {
         tui.keymap.dispatch(name, None);
