@@ -442,6 +442,9 @@ fn parse_error(d: &oxc_diagnostics::OxcDiagnostic) -> CompileError {
     }
 }
 
+/// The reference's orientation to the supported subset, which unsupported syntax reports and suggests.
+pub const SUPPORTED_SYNTAX: &str = "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead.";
+
 fn unsupported(what: &str, span: oxc_span::Span) -> CompileError {
     CompileError {
         kind: DiagnosticKind::UnsupportedSyntax,
@@ -774,6 +777,14 @@ impl<'a, 's> Compiler<'a, 's> {
         }
     }
 
+    /// Compiles syntax the language does not support, named by its ESTree node type, to a throw at the node: as in
+    /// the reference, it fails only when it runs.
+    fn throw_syntax(&mut self, kind: &str, span: oxc_span::Span) -> R<()> {
+        let k = self.str_const(kind);
+        self.emit_at(span.start, Op::ThrowSyntax(k));
+        Ok(())
+    }
+
     fn str_const(&mut self, s: &str) -> u32 {
         if let Some(i) = self.str_consts.get(s) {
             return *i;
@@ -830,6 +841,7 @@ impl<'a, 's> Compiler<'a, 's> {
         let mut syms: Vec<SymbolId> = self.scoping.get_bindings(scope).values().copied().collect();
         syms.sort();
         let switch_scoped = self.switch_scopes.contains(&scope);
+        syms.retain(|s| !self.scoping.symbol_flags(*s).is_class());
         for s in &syms {
             if self.syms.contains_key(s) {
                 continue;
@@ -1102,10 +1114,13 @@ impl<'a, 's> Compiler<'a, 's> {
         Ok(())
     }
 
+    /// The binding a name refers to; `None` for a global. A class's name is not a binding: classes do not run, so as
+    /// in the reference, the name reads the global of that name.
     fn ident_symbol(&self, id: &IdentifierReference) -> Option<SymbolId> {
         id.reference_id
             .get()
             .and_then(|r| self.scoping.get_reference(r).symbol_id())
+            .filter(|s| !self.scoping.symbol_flags(*s).is_class())
     }
 
     fn load_ident(&mut self, id: &IdentifierReference) -> R<()> {
@@ -1490,7 +1505,8 @@ impl<'a, 's> Compiler<'a, 's> {
         self.pos = st.span().start;
         match st {
             Statement::BlockStatement(b) => self.block(b),
-            Statement::EmptyStatement(_) | Statement::DebuggerStatement(_) => Ok(()),
+            Statement::EmptyStatement(_) => Ok(()),
+            Statement::DebuggerStatement(d) => self.throw_syntax("DebuggerStatement", d.span),
             Statement::ExpressionStatement(e) => self.expr_stmt(&e.expression),
             Statement::VariableDeclaration(d) => self.var_decl(d),
             Statement::FunctionDeclaration(_) => Ok(()),
@@ -1542,15 +1558,22 @@ impl<'a, 's> Compiler<'a, 's> {
             Statement::LabeledStatement(l) => self.labeled(l),
             Statement::SwitchStatement(s) => self.switch(s, Vec::new()),
             Statement::TryStatement(t) => self.try_stmt(t),
-            Statement::ClassDeclaration(c) => Err(unsupported("Classes", c.span)),
-            Statement::WithStatement(w) => Err(unsupported("`with`", w.span)),
+            Statement::ClassDeclaration(c) => self.throw_syntax("ClassDeclaration", c.span),
+            Statement::WithStatement(w) => self.throw_syntax("WithStatement", w.span),
             // Bound before the body runs; see `imports`.
             Statement::ImportDeclaration(_) => Ok(()),
-            Statement::ExportAllDeclaration(d) => Err(unsupported("`export`", d.span)),
-            Statement::ExportDefaultDeclaration(d) => Err(unsupported("`export`", d.span)),
-            Statement::ExportNamedDeclaration(d) => Err(unsupported("`export`", d.span)),
-            Statement::ExportDeclaration(d) => Err(unsupported("`export`", d.span)),
-            Statement::ExportFromDeclaration(d) => Err(unsupported("`export`", d.span)),
+            // Only reached below the top level: `compile` refuses an export at the top.
+            Statement::ExportAllDeclaration(d) => self.throw_syntax("ExportAllDeclaration", d.span),
+            Statement::ExportDefaultDeclaration(d) => {
+                self.throw_syntax("ExportDefaultDeclaration", d.span)
+            }
+            Statement::ExportNamedDeclaration(d) => {
+                self.throw_syntax("ExportNamedDeclaration", d.span)
+            }
+            Statement::ExportDeclaration(d) => self.throw_syntax("ExportNamedDeclaration", d.span),
+            Statement::ExportFromDeclaration(d) => {
+                self.throw_syntax("ExportNamedDeclaration", d.span)
+            }
             other => Err(unsupported("TypeScript syntax", other.span())),
         }
     }
@@ -2638,7 +2661,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.emit(Op::Await);
             }
             Expression::YieldExpression(y) => self.yield_expr(y, false)?,
-            Expression::ClassExpression(c) => return Err(unsupported("Classes", c.span)),
+            Expression::ClassExpression(c) => self.throw_syntax("ClassExpression", c.span)?,
             Expression::RegExpLiteral(r) => {
                 let pattern = r.regex.pattern.text.as_str();
                 let flags = r.regex.flags.to_string();
@@ -2658,15 +2681,25 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.emit(Op::ThrowType(msg));
             }
             Expression::TaggedTemplateExpression(t) => self.tagged_template(t)?,
-            Expression::Super(s) => return Err(unsupported("`super`", s.span)),
-            Expression::ImportExpression(i) => {
-                if i.options.is_some() {
-                    return Err(unsupported("Import options", i.span));
-                }
-                self.import_call(i.span.start, |c| c.expr(&i.source), 4, None)?;
-            }
-            Expression::ImportMeta(m) => return Err(unsupported("`import.meta`", m.span)),
-            Expression::NewTarget(m) => return Err(unsupported("`new.target`", m.span)),
+            Expression::Super(s) => self.throw_syntax("Super", s.span)?,
+            Expression::ImportExpression(i) => match &i.options {
+                // The options are evaluated, after the specifier's string, and ignored.
+                Some(options) => self.import_call(
+                    i.span.start,
+                    |c| {
+                        c.expr(&i.source)?;
+                        c.emit_at(i.source.span().start, Op::ToStr);
+                        c.expr(options)?;
+                        c.emit(Op::Pop);
+                        Ok(())
+                    },
+                    4,
+                    None,
+                )?,
+                None => self.import_call(i.span.start, |c| c.expr(&i.source), 4, None)?,
+            },
+            Expression::ImportMeta(m) => self.throw_syntax("MetaProperty", m.span)?,
+            Expression::NewTarget(m) => self.throw_syntax("MetaProperty", m.span)?,
             Expression::PrivateFieldExpression(p) => {
                 return Err(unsupported("Private fields", p.span));
             }
@@ -2950,7 +2983,10 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.elem_key(&m.object, &m.expression)?;
                 self.emit(Op::Swap);
             }
-            Expression::Super(s) => return Err(unsupported("`super`", s.span)),
+            Expression::Super(s) => {
+                self.throw_syntax("Super", s.span)?;
+                return Ok(());
+            }
             callee => {
                 self.expr(callee)?;
                 self.emit(Op::Undef);

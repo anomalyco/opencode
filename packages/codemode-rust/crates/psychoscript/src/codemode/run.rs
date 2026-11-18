@@ -318,7 +318,9 @@ fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
         if let Some(f) = failure.clone() {
             let location = f.offset.map(|o| line_col(code, o));
             let message = match f.kind {
-                DiagnosticKind::ExecutionFailure | DiagnosticKind::InvalidDataValue => {
+                DiagnosticKind::ExecutionFailure
+                | DiagnosticKind::InvalidDataValue
+                | DiagnosticKind::UnsupportedSyntax => {
                     let (name, _) = convert::error_parts(vm, id);
                     format!("{name}: {}{}", f.message, suffix(location))
                 }

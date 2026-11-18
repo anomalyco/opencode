@@ -561,6 +561,19 @@ impl<'rt> Vm<'rt> {
         self.failure(p, msg, DiagnosticKind::ExecutionFailure)
     }
 
+    /// The `SyntaxError` that syntax the language does not support throws when it runs, named by its ESTree node type.
+    #[cold]
+    fn unsupported_syntax(&mut self, kind: &str) -> Value {
+        let p = self.realm.syntax_error_proto;
+        let help = crate::compiler::SUPPORTED_SYNTAX;
+        let msg = format!("Syntax '{kind}' is not supported. {help}");
+        let e = self.failure(p, &msg, DiagnosticKind::UnsupportedSyntax);
+        if let Value::Obj(id) = e {
+            self.host.suggestions.insert(id, vec![help.to_owned()]);
+        }
+        e
+    }
+
     // ---------- fuel and limits ----------
 
     /// A back-edge, a function call or a job.
@@ -1445,7 +1458,9 @@ impl<'rt> Vm<'rt> {
             && f.offset.is_none()
             && matches!(
                 f.kind,
-                DiagnosticKind::ExecutionFailure | DiagnosticKind::InvalidDataValue
+                DiagnosticKind::ExecutionFailure
+                    | DiagnosticKind::InvalidDataValue
+                    | DiagnosticKind::UnsupportedSyntax
             )
         {
             let at = pc.saturating_sub(1);
@@ -2793,6 +2808,13 @@ impl<'rt> Vm<'rt> {
                             _ => String::new(),
                         };
                         throw!(self.type_error(&m));
+                    }
+                    Op::ThrowSyntax(kind) => {
+                        let kind = match self.consts[kind as usize] {
+                            Value::Str(s) => self.text(s).to_owned(),
+                            _ => String::new(),
+                        };
+                        throw!(self.unsupported_syntax(&kind));
                     }
                     Op::This => {
                         let v = self.stack[base - 1].get();

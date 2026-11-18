@@ -46,6 +46,9 @@ pub enum Op {
     ThrowRef(Atom),
     /// Throws a `TypeError` with a constant message, for syntax that is only rejected when it runs.
     ThrowType(u32),
+    /// Throws the `UnsupportedSyntax` `SyntaxError` for the syntax whose ESTree node type is the string constant: the
+    /// reference compiles unsupported syntax to a throw where it stands, so code that never reaches it still runs.
+    ThrowSyntax(u32),
     This,
     Callee,
     Arguments,
