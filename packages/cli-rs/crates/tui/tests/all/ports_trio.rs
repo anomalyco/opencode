@@ -345,9 +345,11 @@ fn command_hotkeys_refuse_bad_options_alike_in_ts_rust_and_luau() {
         ("empty alternative", vec![one("ctrl+a,")]),
         ("blank alternative", vec![one("ctrl+a, ,ctrl+b")]),
         ("plus key", vec![one("+")]),
-    ];
-    for (fault, bindings) in faults {
-        let options = json!({ "bindings": bindings });
+    ]
+    .map(|(fault, bindings)| (fault, json!({ "bindings": bindings })));
+    // Bindings that are an object, an empty one, which a Luau plugin tells from an empty list by its JSON marker.
+    let shapes = [("object bindings", json!({ "bindings": {} }))];
+    for (fault, options) in faults.into_iter().chain(shapes) {
         trio("opencode-command-hotkeys", "command-hotkeys", |carrier| {
             let h = open_with(&[carrier], 170, hotkeys_server(204), false, None, Some(&options))?;
             match fault {
