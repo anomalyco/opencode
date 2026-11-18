@@ -337,8 +337,13 @@ impl Guest {
         Rc::new(move |host: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
             let Some(scripts) = guest.scripts.upgrade() else { return Handled::Pass };
+            // A setup layer's listener (TS's `keyInput`) only hears what the user types into the composer or another
+            // text input: their typing never waits on the JS host (cg2-1, as FT-14 keeps a global bind off it).
+            let typed = |key: &opencode_plugin_abi::interact::Key| {
+                matches!(listener, Listener::Layer(_)) && crate::interact::printable(&key.key) && owner.typing()
+            };
             let listened = match event {
-                Event::Key(key) if key.bind.is_none() && guest.takes(&scripts, listener) => {
+                Event::Key(key) if key.bind.is_none() && guest.takes(&scripts, listener) && !typed(key) => {
                     host.router().and_then(|router| router.listened())
                 }
                 _ => None,

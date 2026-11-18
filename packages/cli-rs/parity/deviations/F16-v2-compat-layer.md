@@ -125,17 +125,22 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   field sits in a route or a panel,
   each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
   (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below.
-  A field with no `onKeyDown` holds no key: its typing goes to the host's field at once (cg2-1). TS's `<scrollbox>` draws a scrollbar beside its content
+  Only an `onKeyDown` that can take a key holds one for the JS host's answer (below); a field without one, or with one
+  that only hears keys, holds none, and its typing goes to the host's field at once (cg2-1). TS's `<scrollbox>` draws a scrollbar beside its content
   and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
   through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
   registrations once). `useKeyboard` listens on it while its component lives. A listener takes a key with
-  `preventDefault`, as in TS (contract gaps 2). While a `keypress` listener is subscribed, the host holds each key,
-  and the input after it (pastes too), until the JS host answers, as for a key a command may decline; a key not taken
-  goes on then, below this listener, and no listener hears it twice. So such a key is a round trip later than in TS,
-  held at most the hold's limit; a key typed into a route that closed meanwhile goes with it. With no subscriber left
-  the layer only hears keys, and they go on at once (cg2-1, cg2-2, cg2-5). It hears keys in
+  `preventDefault`, as in TS (contract gaps 2). TS runs listeners synchronously and the host cannot wait, so a
+  handler says up front that it can take a key: its source calls `preventDefault`, or it took one before (through a
+  helper; that first key went on, where TS stops it). While such a handler listens, the host holds each key but what
+  the user types into the composer or another text input, and the input after it (pastes too), until the JS host
+  answers, as for a key a command may decline; a key not taken goes on then, below this listener, and no listener
+  hears it twice. So such a key is a round trip later than in TS, held at most the hold's limit; a key typed into a
+  route that closed meanwhile goes with it. Typing in a text input, and every key while no handler can take one, is
+  only heard, and goes on at once (cg2-1, cg2-2, cg2-5): a listener that would take a typed letter from the composer
+  does not (FT-14 keeps a global bind off typing too). It hears keys in
   the base mode only, and none while another plugin's overlay has the focus, as the contract's global layer holds.
   `keyrelease` and `paste` never come.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
