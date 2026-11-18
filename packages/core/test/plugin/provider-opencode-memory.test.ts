@@ -836,7 +836,7 @@ describe("OpencodePlugin memory", () => {
           )
           const source = (console.state.requests.at(-1)?.body as { source: Record<string, string> }).source
           expect(source).toEqual({
-            repo: "github.com/Acme/App",
+            repo: "https://github.com/Acme/App",
             branch: "trunk",
             commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
             sessionID: session.id,

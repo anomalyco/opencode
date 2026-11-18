@@ -212,7 +212,9 @@ export const make = Effect.fnUntraced(function* (
       ],
       { concurrency: 3 },
     )
-    const repo = remote === undefined ? undefined : repoName(remote)
+    // Console takes the repository as a remote URL; this one carries no credentials.
+    const name = remote === undefined ? undefined : repoName(remote)
+    const repo = name === undefined ? undefined : `https://${name}`
     return {
       ...(repo === undefined ? {} : { repo }),
       ...(branch === undefined ? {} : { branch }),
