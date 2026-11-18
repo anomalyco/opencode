@@ -2,12 +2,15 @@ import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
+import { ISOLATED_SERVER } from "../constants"
 import { DesktopPaths } from "../paths"
+import { stateHome, testRootDirectories } from "../service/registration"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
 import { nativeT } from "../native/translations"
+import { testRoot } from "./configure"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -45,9 +48,19 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
-    if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+    const state = stateHome({
+      isolated: ISOLATED_SERVER,
+      userData: app.getPath("userData"),
+      testRoot,
+      shell: shellEnv?.XDG_STATE_HOME,
+    })
+
+    if (!state) delete process.env.XDG_STATE_HOME
     Object.assign(process.env, {
       ...shellEnv,
+      // A test root keeps its directories whatever the shell's startup files export.
+      ...(testRoot ? testRootDirectories(testRoot) : {}),
+      ...(state ? { XDG_STATE_HOME: state } : {}),
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",

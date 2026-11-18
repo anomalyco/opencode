@@ -2,13 +2,14 @@ import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { SidecarChanged } from "../../shared/ipc-rpc/events"
-import { CHANNEL } from "../constants"
+import { CHANNEL, ISOLATED_SERVER } from "../constants"
 import { emitIpcEvent } from "../ipc-events"
 import { getMainWindows } from "../windows"
 import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { localRegistrationFile } from "./registration"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 
@@ -99,25 +100,18 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
 
 const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   yield* Effect.logInfo("starting v2 background service")
-  const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
-  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
-
-  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const version = serviceVersion({ channel: CHANNEL, isolated: ISOLATED_SERVER, mode, version: cli.version })
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
+  // The state directory was settled with the rest of the environment (`preferApplicationEnvironment`).
   const file =
     process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
-          "service-local.json",
-        )
+      ? localRegistrationFile({ stateHome: process.env.XDG_STATE_HOME, home: app.getPath("home") })
       : undefined
 
-  return { cli, client, file, isolated, version }
+  return { cli, client, file, isolated: ISOLATED_SERVER, version }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (

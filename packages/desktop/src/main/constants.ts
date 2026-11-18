@@ -8,6 +8,9 @@ export const CHANNEL: Channel = raw === "local" || raw === "dev" || raw === "bet
 
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 
+// A source build starts its own service, registered in its data folder, instead of sharing the local channel's.
+export const ISOLATED_SERVER = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+
 const appNames: Record<string, string> = {
   dev: "OpenCode Dev",
   beta: "OpenCode Beta",
