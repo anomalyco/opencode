@@ -678,11 +678,14 @@ impl Owner {
         self.focus(host, &id);
     }
 
-    /// Gives the composer the focus, if the owner's surface has it.
+    /// Gives the composer the focus, if the owner's surface has it; a dialog surface's keeps it in its dialog, on the
+    /// dialog's body, as the composer is under the dialog.
     pub(crate) fn blur(&self, host: &dyn Host) {
         self.pending.borrow_mut().take();
-        if self.scope_view().is_some_and(|view| focus_within(host.app(), view.id())) {
-            host.focus_composer();
+        let Some(view) = self.scope_view().filter(|view| focus_within(host.app(), view.id())) else { return };
+        match self.dialog.get() {
+            true => refocus(host, || host.app().focus(&view)),
+            false => host.focus_composer(),
         }
     }
 
