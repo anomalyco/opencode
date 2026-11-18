@@ -58,3 +58,47 @@ test("plain clicks on any row of a wrapped Markdown link resolve the full URL", 
     app.renderer.destroy()
   }
 })
+
+test("a click that reports motion before the release still opens the link", async () => {
+  const opened: string[] = []
+  function Transcript() {
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return (
+      <box
+        onMouseUp={(event) => {
+          const link = clickedLink(renderer, event)
+          if (link) opened.push(link)
+        }}
+      >
+        <box height={1} />
+        <markdown syntaxStyle={syntaxStyle} content={`See ${url} now.`} />
+      </box>
+    )
+  }
+  const app = await testRender(() => <Transcript />, { width: 40, height: 6, clock: new ManualClock() })
+
+  try {
+    for (let attempt = 0; attempt < 50 && !app.captureCharFrame().replace(/\s/g, "").includes(url); attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(10)
+    }
+    const rows = app.captureCharFrame().split("\n")
+    const row = rows.findIndex((line) => line.includes("https"))
+    const x = rows[row]!.indexOf("https")
+
+    // Real pointing devices report at least one motion event between press and release, even when the pointer
+    // never leaves the cell. That must still count as a click.
+    await app.mockMouse.pressDown(x, row)
+    await app.mockMouse.moveTo(x, row)
+    await app.mockMouse.release(x, row)
+    expect(opened).toEqual([url])
+
+    // A drag that leaves the start cell is still not a click.
+    await app.mockMouse.drag(0, row, x + 4, row)
+    expect(opened).toEqual([url])
+  } finally {
+    app.renderer.destroy()
+  }
+})
