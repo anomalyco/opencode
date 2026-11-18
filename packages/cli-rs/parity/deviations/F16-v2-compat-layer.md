@@ -31,14 +31,14 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   store made late, the scroll keys a dialog with a `<scrollbox>` registers) reloads the plugin's registrations: its
   open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), and so does its session panel, which mounts again from the new registrations (CT-29: opencode-self-improvement's `/memory` panel registers keys as it renders, and the reload closed it; `plugin_compat::a_session_panel_stays_open_across_a_reload`). Each mount the
   reload ends and begins again keeps its components, which do not run again, as TS takes a registration without a
-  remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`); a mount begun 250 ms after
-  its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
+  remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`), and the field the plugin
+  focused in it takes the host's focus again (`P.8/session-manager`'s search, whose layer reloads as the field shows);
+  a mount begun 250 ms after its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`; a
   mode of the plugin's own, such as `modal` or one it pushes, binds its commands everywhere, and they decline unless it
   is the input mode, CT-31: opencode-usage-report's `r`, `P.8/usage-report-keys`) and
-  a command's `enabled` are kept; its `priority`, `bindings` and slash `aliases` are not mapped (the contract's command has one slash name: TS's
-  completion lists the aliases too, `P.8/file-browser` `slash`; the native and Luau ports' command has one as well,
-  `P.8/context-grid` `slash`). Its `target` holds
+  a command's `enabled` and slash `aliases` are kept (`P.8/file-browser` and `P.8/context-grid` `slash`); its
+  `priority` and `bindings` are not mapped. Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
   the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command
@@ -136,9 +136,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   lists its rows for each query as TS's does (flat, in its order, the category as the footer), but the rows change
   once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
   after `dialog.select`, `alert` or `confirm` sizes and centers it as in TS (contract 2.x, addition 4,
-  `P.8/session-time`); one after the dialog showed is reported once. A select's `actions` and a prompt's `value` and
-  `description` are reported, not mapped: TS draws a select's actions under its rows, so its select is taller, and a
-  centered one sits higher (`P.8/session-time`'s timeline). `ui.dialog.show` shows the plugin's JSX
+  `P.8/session-time`); one after the dialog showed is reported once. A prompt's `value` and `description` are the
+  contract's (`P.8/session-manager` `rename`). A select's `actions` are reported, not mapped: TS draws them under its
+  rows, so its select is taller, and a centered one sits higher (`P.8/session-time`'s timeline). `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a render tree (`RenderNode`): a `<scrollbox>` in it is a box that does not
   scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
@@ -154,9 +154,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   TS never shows and a checkpoint saw or not by the machine's speed. Not mapped: `data.project.permission`, the location's `mcp.resource` list, `renderer` members other than
   `requestRender`, `width`, `height` and `keyInput` (a method of OpenTUI's `CliRenderer` does nothing, an emitter's
   returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
-  `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `minWidth` other than 0,
-  `maxWidth`,
-  `alignSelf` and `flexBasis`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
+  `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `alignSelf` and
+  `flexBasis`. `minWidth` and `maxWidth` are the layout's `min_width` and `max_width`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   A `<select>` draws as OpenTUI's renderable draws it, rows of the options that fit with the selected one marked

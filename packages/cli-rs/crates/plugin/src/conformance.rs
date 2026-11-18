@@ -747,6 +747,8 @@ pub const READS: &[&str] = &[
     "focused",
     "input-mode",
     "plugins",
+    "utc-offset",
+    "measure",
 ];
 
 /// The requests of the host, by their `type`.

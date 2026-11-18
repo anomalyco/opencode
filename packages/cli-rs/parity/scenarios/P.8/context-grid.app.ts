@@ -64,8 +64,7 @@ export default defineApp({
     {
       checkpoint: "slash",
       until: "Show context usage as a grid",
-      // TS's list also shows the plugin's slash alias `/ctx`; the contract's command, in each carrier, has one slash name.
-      deviation: [{ file: "F16-v2-compat-layer", cells: 187 }],
+      // The list shows the plugin's slash alias `/ctx` too, on each carrier, as TS's does (contract ergonomics 2.6).
     },
     { keys: ["enter"] },
     { checkpoint: "page", until: "Estimated usage by category" },

@@ -932,6 +932,7 @@ impl abi::Read for Reader<'_> {
             size: self.tui.app.size(),
             location: abi::LocationRef { directory: location.directory, workspace: location.workspace_id },
             failed_plugins: failed + server_failed(&self.tui.reads.server.borrow().1),
+            locale: opencode_plugin::facts::locale(),
         }
     }
 
@@ -1067,6 +1068,14 @@ impl abi::Read for Reader<'_> {
 
     fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
         opencode_plugin::surface::decoded_size(&self.tui.app, bytes)
+    }
+
+    fn utc_offset(&self, at: i64) -> i32 {
+        opencode_plugin::facts::utc_offset(at)
+    }
+
+    fn measure(&self, text: &str) -> abi::Measure {
+        opencode_plugin::facts::measure(&self.tui.app, text)
     }
 }
 

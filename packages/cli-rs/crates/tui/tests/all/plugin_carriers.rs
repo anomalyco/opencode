@@ -154,6 +154,29 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("theme", observe(&board.harness)));
     dispatch("board.toast", None);
     seen.push(("toast", observe(&board.harness)));
+    // Contract ergonomics 2.6 and 2.9: `/bf`, the command's alias, typed in the composer, reads the host's facts and asks
+    // in a prompt filled with its value under its description; the edited name goes to the prompt's action, and the
+    // page shows the facts within its layout's widths. The home screen is not compared: its composer's placeholder is
+    // drawn at random.
+    tui.navigate(Route::Home);
+    settle(&board.harness);
+    app.type_text("/bf");
+    settle(&board.harness);
+    app.press("return");
+    settle(&board.harness);
+    let screen = app.render().text();
+    assert!(screen.contains("Name the board") && screen.contains("/tmp/board"), "{run:?}: no prompt:\n{screen}");
+    app.type_text("s");
+    app.press("return");
+    settle(&board.harness);
+    tui.navigate(route.clone());
+    settle(&board.harness);
+    let screen = app.render().text();
+    // `max_width` wraps the row at 30 cells: `8` ends its first line (a toast may cover the rest of the row).
+    let wrapped =
+        |line: &str| line.starts_with("locale ") && line.chars().take(31).collect::<String>().ends_with(" s, 8 ");
+    assert!(screen.lines().any(wrapped) && screen.contains("cells, 5 graphemes"), "{run:?}: no facts:\n{screen}");
+    seen.push(("facts", observe(&board.harness)));
     // Three bursts, each all in the mailbox before the UI thread runs: one drain, one view each.
     for burst in 1..=3 {
         tui.keymap.dispatch("board.burst", Some("200"));
@@ -236,6 +259,8 @@ fn one_source_is_equal_on_every_carrier() {
     assert!(after.is_empty(), "a failure was reported again: {after:?}");
     let (_, (_, toasts, _)) = linked.iter().find(|(name, _)| *name == "toast").unwrap();
     assert_eq!(toasts.len(), 1, "{toasts:?}");
+    let (_, (_, toasts, _)) = linked.iter().find(|(name, _)| *name == "facts").unwrap();
+    assert!(toasts.iter().any(|toast| toast.contains("named boards")), "the prompt's value was not edited: {toasts:?}");
     for run in [Run::In(CARRIERS[1]), Run::Library] {
         let other = script(run);
         for ((name, linked), (_, other)) in linked.iter().zip(&other) {

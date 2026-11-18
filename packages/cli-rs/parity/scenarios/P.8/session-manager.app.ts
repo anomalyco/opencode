@@ -50,16 +50,23 @@ export default defineApp({
     { checkpoint: "project", until: "[Project]" },
     { keys: ["shift+tab"] },
     { keys: ["/"] },
+    // The user types once the field shows: on the JS host the view that shows it comes after the frame, and keys typed
+    // before it go to the page.
+    { wait: 300 },
     { type: "theme" },
-    // The field the same key shows is not in the host's tree as its focus applies, so the typing goes elsewhere
-    // (F16-plugin-contract-gaps).
-    { checkpoint: "search", until: "1 match", deviation: [{ file: "F16-plugin-contract-gaps", cells: 400 }] },
+    // The field the same key shows takes the focus once its view is adopted, so the typing is its search. Its text is
+    // in the host's field color, TS's in OpenTUI's input's (F16-plugin-contract-gaps).
+    {
+      checkpoint: "search",
+      until: "1 match",
+      deviation: [{ file: "F16-plugin-contract-gaps", cells: 5, styleOnly: true }],
+    },
     { keys: ["escape"] },
     { checkpoint: "cleared", until: "Draft the notes" },
     { keys: ["k"] },
     { keys: ["r"] },
-    // A contract 2.0 prompt has no value or description (F16-plugin-contract-gaps).
-    { checkpoint: "rename", until: "Rename session", deviation: [{ file: "F16-plugin-contract-gaps", cells: 300 }] },
+    // The prompt is filled with the title, under the session's directory (contract ergonomics 2.6).
+    { checkpoint: "rename", until: "Rename session" },
     { keys: ["escape"] },
     { checkpoint: "renamed", until: "Esc back" },
     { keys: ["d"] },

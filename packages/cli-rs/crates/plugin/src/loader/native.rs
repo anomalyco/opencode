@@ -1038,6 +1038,12 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             let bytes = abi::base64::decode(&bytes).ok_or("image bytes that are not base64")?;
             return read(ctx, &mut |read| serde_json::to_value(read.image_size(&bytes)));
         }
+        HostRequest::UtcOffset { at } => return read(ctx, &mut |read| serde_json::to_value(read.utc_offset(at))),
+        // Past one node's text it is not measured (review bigboi 2): a plugin measures what it would draw.
+        HostRequest::Measure { text } if text.len() as u64 > crate::limits::get().text => {
+            return Err(format!("a text of {} bytes to measure, more than a node holds", text.len()));
+        }
+        HostRequest::Measure { text } => return read(ctx, &mut |read| serde_json::to_value(read.measure(&text))),
         HostRequest::ImageBounds => {
             let limits = crate::limits::get();
             return Ok(
@@ -1270,6 +1276,8 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Setting { .. }
         | HostRequest::ImageSize { .. }
         | HostRequest::ImageBounds
+        | HostRequest::UtcOffset { .. }
+        | HostRequest::Measure { .. }
         | HostRequest::McpServers { .. }
         | HostRequest::Integrations { .. }
         | HostRequest::Vcs { .. }

@@ -4,11 +4,10 @@
 -- subsessions as a tree; the keys move a selection through it, fold groups, search in a field, rename a session and
 -- delete one or a whole group, each after asking. The grouping, the subsessions and the language are kept.
 --
--- Where it differs from TS: the rename prompt cannot be filled with the session's title or show its directory (a
--- prompt has a title and a placeholder only); the search field never takes the focus from `/` (the host refuses a
--- field its tree does not hold yet, and a Luau plugin has no wake to ask again once it does), so only a click focuses
--- it; a refresh after a session event runs at once, as Luau has no timer for TS's 300 ms; paths keep the home
--- directory, which a Luau plugin cannot read; and `/sm` is not there.
+-- The rename prompt is filled with the session's title under its directory, `/` focuses the search field the same
+-- call shows (the host's focus waits for the view that shows it), and `/sm` is the command's alias, as in TS. Where it
+-- differs: a refresh after a session event runs at once, as Luau has no timer for TS's 300 ms; and paths keep the home
+-- directory, which a Luau plugin cannot read.
 local plugin = require("@opencode/plugin")
 local grouping = require("@self/grouping")
 local i18n = require("@self/i18n")
@@ -275,7 +274,7 @@ local function setLocale(host: plugin.Host, locale: string)
     persist(host)
 end
 
--- TS `startSearch`. The field shows with this call's view, after the focus is refused: see the header.
+-- TS `startSearch`. The field shows with this call's view, which the focus waits for.
 local function startSearch(host: plugin.Host)
     state.searching = true
     host:focus(SEARCH)
@@ -306,7 +305,11 @@ local function rename(host: plugin.Host, rows: { Row })
     end
     local id, opened = row.session.id, mounts
     state.busy = true
-    local text = host:prompt({ title = t().renameTitle, placeholder = row.session.title or "" })
+    local text = host:prompt({
+        title = t().renameTitle,
+        description = row.session.location.directory,
+        value = row.session.title or "",
+    })
     local title = (text or ""):match("^%s*(.-)%s*$") :: string
     local current
     for _, session in state.sessions do
@@ -593,7 +596,7 @@ local function header(count: number)
     end
     return plugin.row({
         nowrap({ plugin.span(t().title, { bold = true }) }, { fg = "text.base" }),
-        plugin.row(modes, { gap = 1, layout = { shrink = true, min_width_zero = true } }),
+        plugin.row(modes, { gap = 1, layout = { shrink = true, min_width = { cells = 0 } } }),
         plugin.column({}, { layout = { grow = true } }),
         nowrap(`{t().children(state.children)} · {t().total(count)}`, {
             fg = "text.muted",
@@ -627,7 +630,7 @@ local function row(index: number, row: Row, selected: boolean)
                 fg = "text.base",
                 wrap = "none",
                 truncate = true,
-                layout = { grow = true, shrink = true, min_width_zero = true },
+                layout = { grow = true, shrink = true, min_width = { cells = 0 } },
             }),
         }, { gap = 1, bg = bg, on_click = click })
         return plugin.column({ line }, { id = rowId(index), padding_sides = { top = if index == 1 then 0 else 1 } })
@@ -646,7 +649,7 @@ local function row(index: number, row: Row, selected: boolean)
             fg = if row.depth > 0 then "text.muted" else "text.base",
             wrap = "none",
             truncate = true,
-            layout = { grow = true, shrink = true, min_width_zero = true },
+            layout = { grow = true, shrink = true, min_width = { cells = 0 } },
         }),
     }
     if state.mode ~= "directory" and row.depth == 0 then
@@ -719,6 +722,7 @@ return plugin.define(function(setup)
         group = "Session",
         palette = true,
         slash = "session-manager",
+        aliases = { "sm" },
     }, function(host)
         local route = host:route()
         if route.type == "plugin" and route.name == ROUTE then

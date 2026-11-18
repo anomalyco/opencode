@@ -45,9 +45,7 @@ export default defineApp({
     {
       checkpoint: "slash",
       until: "Browse, preview, edit",
-      // TS's list also shows the plugin's slash aliases (`/update-files`), which widen its name column; the contract's
-      // command has one slash name, so the host lists the names alone.
-      deviation: [{ file: "F16-v2-compat-layer", cells: 249 }],
+      // The list shows the plugin's slash aliases (`/update-files`) too, as TS's does (contract ergonomics 2.6).
     },
     { keys: ["enter"] },
     { checkpoint: "browser", until: "tsconfig.json", deviation },

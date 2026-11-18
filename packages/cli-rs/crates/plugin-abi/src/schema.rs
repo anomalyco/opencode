@@ -272,7 +272,8 @@ pub fn schema() -> Value {
             "Layout",
             object!(Layout, "How a node takes space in its parent's row or column.", { } {
                 width: nullable(reference("Width")), grow: boolean(), shrink: nullable(boolean()),
-                min_width_zero: boolean(), height: nullable(reference("Width")),
+                min_width: nullable(reference("Width")), max_width: nullable(reference("Width")),
+                height: nullable(reference("Width")),
                 min_height: nullable(reference("Width")), max_height: nullable(reference("Width")),
                 margin: nullable(reference("Edges")), absolute: nullable(reference("Absolute")),
             }),
@@ -529,6 +530,10 @@ fn int32() -> Value {
 
 fn uint32() -> Value {
     json!({ "type": "integer", "minimum": 0, "maximum": u32::MAX })
+}
+
+fn int64() -> Value {
+    json!({ "type": "integer", "minimum": i64::MIN, "maximum": i64::MAX })
 }
 
 fn uint64() -> Value {
@@ -887,7 +892,8 @@ mod tests {
             width: Some(Width::Percent(50.0)),
             grow: true,
             shrink: Some(false),
-            min_width_zero: true,
+            min_width: Some(Width::Cells(0)),
+            max_width: Some(Width::Percent(40.0)),
             height: Some(Width::Cells(2)),
             min_height: Some(Width::Cells(1)),
             max_height: Some(Width::Cells(9)),

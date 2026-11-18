@@ -502,6 +502,9 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
             serde_json::json!({ "major": abi.major, "minor": abi.minor, "features": abi.features })
         };
         "hasFeature" => |r, _lua, name: String| r.abi().has_feature(&name);
+        // Contract ergonomics 2.9: the facts no data of the server holds.
+        "utcOffset" => |r, _lua, at: f64| r.utc_offset(at as i64);
+        "measure" => |r, _lua, text: String| r.measure(&text);
     }
     verbs! {
         "storageSet" => |h, lua, key: String, value: Value| h.storage_set(&key, input(lua, value)?);

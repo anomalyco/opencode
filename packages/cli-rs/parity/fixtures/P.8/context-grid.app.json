@@ -24,7 +24,7 @@
  "steps": [
   {"checkpoint":"sidebar","until":"tokens (18%)","fixture":"P.8/context-grid/sidebar"},
   {"type":"/contextgrid"},
-  {"checkpoint":"slash","until":"Show context usage as a grid","deviation":[{"file":"F16-v2-compat-layer","cells":187}],"fixture":"P.8/context-grid/slash"},
+  {"checkpoint":"slash","until":"Show context usage as a grid","fixture":"P.8/context-grid/slash"},
   {"keys":["enter"]},
   {"checkpoint":"page","until":"Estimated usage by category","fixture":"P.8/context-grid/page"},
   {"keys":["escape"]},

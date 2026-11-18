@@ -9,6 +9,7 @@ pub mod canvas;
 pub mod claim;
 pub mod conformance;
 pub mod contain;
+pub mod facts;
 pub mod image;
 pub mod interact;
 pub mod limits;
@@ -706,7 +707,8 @@ pub(crate) fn keyed_command(
         entry = entry.description(description.clone());
     }
     if let Some(slash) = &command.slash {
-        entry = entry.slash(Slash { name: slash.clone(), aliases: Vec::new(), arguments: command.arguments });
+        entry =
+            entry.slash(Slash { name: slash.clone(), aliases: command.aliases.clone(), arguments: command.arguments });
     }
     entry
 }
@@ -1289,6 +1291,14 @@ impl abi::Read for Scoped<'_> {
 
     fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
         self.read.image_size(bytes)
+    }
+
+    fn utc_offset(&self, at: i64) -> i32 {
+        self.read.utc_offset(at)
+    }
+
+    fn measure(&self, text: &str) -> abi::Measure {
+        self.read.measure(text)
     }
 
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {

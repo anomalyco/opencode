@@ -904,7 +904,7 @@ fn room(setup: &mut abi::Setup) -> Result<(), String> {
     }));
     setup.surface(v2::Surface::new("tag", v2::Place::Slot(abi::Placement::append("home.footer.status")), |cx| {
         ROOM.with(|room| room.borrow_mut().push(("slot", cx.input.width, cx.input.height)));
-        v2::Node::text(vec![abi::Span::new("room tag")]).layout(abi::Layout::default().grow().min_width_zero())
+        v2::Node::text(vec![abi::Span::new("room tag")]).layout(abi::Layout::default().grow().min_width(0))
     }));
     Ok(())
 }

@@ -896,6 +896,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
+ "unicode-segmentation",
  "unicode-width",
  "url",
 ]

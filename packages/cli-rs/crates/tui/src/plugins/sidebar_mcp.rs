@@ -103,12 +103,12 @@ fn row(item: &McpServer) -> Node {
         Node::text([Span::new(item.name.clone()).fg("text.base").bold()])
             .wrap(Wrap::None)
             .truncate()
-            .layout(Layout::default().grow().shrink(true).min_width_zero()),
+            .layout(Layout::default().grow().shrink(true).min_width(0)),
         Node::text([Span::new(label).fg(if status == "failed" { "text.feedback.error.base" } else { "text.muted" })])
             .wrap(Wrap::None)
             .layout(fixed),
     ])
     .gap(1)
-    .layout(Layout::default().min_width_zero())
+    .layout(Layout::default().min_width(0))
     .on_click(Click::command("mcp.list").input(item.name.clone()))
 }

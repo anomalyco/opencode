@@ -3,8 +3,7 @@
 -- grid of squares colored by an estimate of what filled it (system, user, assistant, tools, other), in the sidebar
 -- and on a page of its own, `/contextgrid`, which escape leaves for the session it was opened from.
 --
--- Options: `sidebar = false` leaves the sidebar's grid out. TS's slash alias `/ctx` has no port: a command has one
--- slash name (the JS host drops it too).
+-- Options: `sidebar = false` leaves the sidebar's grid out. `/ctx` is the command's alias, as in TS.
 local plugin = require("@opencode/plugin")
 local context = require("@self/context")
 
@@ -113,6 +112,7 @@ return plugin.define(function(setup)
         description = "Show context usage as a grid of squares",
         palette = true,
         slash = ROUTE,
+        aliases = { "ctx" },
     }, function(host)
         local route = host:route()
         origin = if route.type == "session" then route.id else nil

@@ -229,6 +229,10 @@ const reads = `    themeMode: (self: Read) -> "dark" | "light",
     abi: (self: Read) -> Abi,
     --- Whether the host has optional feature \`name\` (\`plugin.FOCUS_INPUT\`, \`plugin.FENCE_NODE\`).
     hasFeature: (self: Read, name: string) -> boolean,
+    --- The seconds local time is east of UTC at \`at\`, in milliseconds since the epoch: it depends on the date.
+    utcOffset: (self: Read, at: number) -> number,
+    --- The cells \`text\` takes in a row and its graphemes, as the host draws it: pad and cut columns by it.
+    measure: (self: Read, text: string) -> Measure,
 `
 
 // The module and the objects a plugin's calls are handed, as bind.rs binds them.

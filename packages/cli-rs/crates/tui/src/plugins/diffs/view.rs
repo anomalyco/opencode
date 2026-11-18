@@ -97,7 +97,7 @@ fn root(viewer: &mut Viewer, diffs: &Diffs, cx: &mut v2::View<'_>) -> Node {
         Layout::default()
             .width(Width::Percent(100.0))
             .height(Width::Percent(100.0))
-            .min_width_zero()
+            .min_width(0)
             .min_height(Width::Cells(0)),
     )
 }
@@ -117,14 +117,14 @@ fn header(viewer: &Viewer, docked: bool, compact: bool, help: bool) -> Node {
                 .fg("text.muted")
                 .wrap(Wrap::None)
                 .truncate()
-                .layout(Layout::default().grow().min_width_zero()),
+                .layout(Layout::default().grow().min_width(0)),
         );
     }
     let files = viewer.files();
     let reviewed = files.iter().filter(|file| viewer.reviewed.contains(&file.file)).count();
     let shortcut = !compact && help;
     let mut row = vec![
-        Node::row(switch).layout(Layout::default().grow().min_width_zero()).on_click(Click::command(SOURCE)),
+        Node::row(switch).layout(Layout::default().grow().min_width(0)).on_click(Click::command(SOURCE)),
         Node::text([Span::new(format!("{reviewed}/{}", files.len()))])
             .fg("text.muted")
             .wrap(Wrap::None)
@@ -202,7 +202,7 @@ fn patches(viewer: &mut Viewer, cx: &mut v2::View<'_>, surface: &'static str) ->
         .collect();
     let list =
         Node::list(items).with_id(FILES).watched("file").layout(Layout::default().grow().min_height(Width::Cells(0)));
-    Node::column(vec![edge, list]).layout(Layout::default().grow().min_width_zero().min_height(Width::Cells(0)))
+    Node::column(vec![edge, list]).layout(Layout::default().grow().min_width(0).min_height(Width::Cells(0)))
 }
 
 /// What a card shows, beside its file: a card whose shape did not change is kept.
@@ -300,7 +300,7 @@ fn heading_line(entry: &File, card: &Card) -> Node {
         .fg("text.muted")
         .wrap(Wrap::None)
         .truncate()
-        .layout(Layout::default().grow().min_width_zero()),
+        .layout(Layout::default().grow().min_width(0)),
     ];
     if card.reviewed {
         line.push(Node::text([Span::new("✓")]).fg("text.muted").layout(Layout::default().shrink(false)));
@@ -403,7 +403,7 @@ fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, 
         row.push(half(glyph, surface, inset, fixed(inset)));
     }
     // It shrinks to its room: its run of glyphs may be longer (`Shape::gap`).
-    let grows = Layout::default().height(Width::Cells(1)).grow().min_width_zero();
+    let grows = Layout::default().height(Width::Cells(1)).grow().min_width(0);
     row.push(half(glyph, card, width, grows));
     if inset > 0 {
         row.push(half(glyph, surface, inset, fixed(inset)));
@@ -437,7 +437,7 @@ fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>
         .wrap(Wrap::None)
         .truncate()
         .on_click(Click::command(LEAVE))
-        .layout(Layout::default().grow().min_width_zero());
+        .layout(Layout::default().grow().min_width(0));
     let mut row = vec![leave];
     if let Some(help) = help {
         let muted = !focused;

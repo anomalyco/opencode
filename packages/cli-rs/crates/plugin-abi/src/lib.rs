@@ -529,6 +529,10 @@ pub struct Command {
     /// Where the command runs.
     #[serde(default, skip_serializing_if = "Scope::is_global")]
     pub scope: Scope,
+    /// Other names of its `/slash`, such as `sm` beside `session-manager`, each also completed and run (TS's slash
+    /// `aliases`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
 }
 
 /// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
@@ -1227,9 +1231,12 @@ pub struct Layout {
     /// Whether it gives up room when its parent is too small; the host's default when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shrink: Option<bool>,
-    /// May shrink below its content's width.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub min_width_zero: bool,
+    /// The least width it takes; `Cells(0)` lets it shrink below its content's width.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_width: Option<Width>,
+    /// The most width it takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<Width>,
     /// Its height, in rows or percent of its parent's; its content's by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<Width>,
@@ -1454,6 +1461,19 @@ pub struct Info {
     /// The TUI plugins and the server plugins that failed. Claims render again with [`Changed::local`] when it changes.
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub failed_plugins: usize,
+    /// The user's locale as a BCP 47 tag, such as `en-US`, from `LC_ALL`, `LC_MESSAGES` or `LANG`; `None` when none
+    /// names one (unset, `C` or `POSIX`). The host formats nothing by it: a plugin picks its own strings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+/// A text as the host's text layout counts it, from [`Read::measure`]: the cells it takes in a row, and its graphemes
+/// (what a user sees as one character, such as an emoji joined of several).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
+pub struct Measure {
+    pub cells: u32,
+    pub graphemes: u32,
 }
 
 fn is_zero_usize(value: &usize) -> bool {
@@ -2074,6 +2094,14 @@ pub enum HostRequest {
     },
     /// 2.0, of a host with [`IMAGE_BOUNDS`]: the bounds of the images it decodes, an [`ImageBounds`].
     ImageBounds,
+    /// [`Read::utc_offset`] at `at`, in milliseconds since the epoch.
+    UtcOffset {
+        at: i64,
+    },
+    /// [`Read::measure`] of `text`.
+    Measure {
+        text: String,
+    },
     /// 2.0 (P6c): [`Host::set_setting`], once the current call returns.
     SetSetting {
         name: String,
@@ -2480,6 +2508,12 @@ pub struct Prompt {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+    /// The text the field starts with, which the user edits (TS `value`), such as the title a rename changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// A line above the field (TS `description`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub action: Action,
 }
 
@@ -3044,6 +3078,18 @@ pub trait Read {
     fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
         None
     }
+    /// The seconds the user's local time is east of UTC at `at`, in milliseconds since the epoch: it depends on the
+    /// date, as a zone's daylight time does. The host's zone is the process's (`TZ`, else the system's); 0 is UTC.
+    fn utc_offset(&self, _at: i64) -> i32 {
+        0
+    }
+    /// The cells `text` takes in a row and its graphemes, as the host's text layout counts them, so a plugin that pads
+    /// or cuts a column agrees with what the host draws for a wide or joined character. A line break counts as no
+    /// cell. A host that cannot measure counts a cell and a grapheme a character.
+    fn measure(&self, text: &str) -> Measure {
+        let count = text.chars().filter(|char| *char != '\n').count() as u32;
+        Measure { cells: count, graphemes: count }
+    }
 }
 
 /// 2.0 (P6c): the user's settings a plugin reads ([`Read::setting`]) and writes ([`Host::set_setting`]), by name: the
@@ -3529,6 +3575,14 @@ impl Read for HostHandle {
             return None;
         }
         self.read(&HostRequest::ImageSize { bytes: base64::encode(bytes) }).flatten()
+    }
+
+    fn utc_offset(&self, at: i64) -> i32 {
+        self.read(&HostRequest::UtcOffset { at }).unwrap_or_default()
+    }
+
+    fn measure(&self, text: &str) -> Measure {
+        self.read(&HostRequest::Measure { text: text.to_owned() }).unwrap_or_default()
     }
 }
 

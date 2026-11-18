@@ -16,7 +16,9 @@
 //!   KEY", its length and its first entry's key (P6b); `conf.fence` makes the next view of `conf` hold a fence node,
 //!   which only a fence claim's tree may; `conf.field` gives the field `field` of `rows` the focus, or on a host
 //!   without `focus-input` toasts "field needs a click"; `conf.dialogs` shows a select, an alert and a confirm, each
-//!   centered, the select and the alert extra large (contract 2.x additions).
+//!   centered, the select and the alert extra large (contract 2.x additions); `conf.facts`, also `/cf`, toasts "facts
+//!   LOCALE OFFSET CELLS GRAPHEMES", the host's locale, its UTC offset at 0 and its measure of "ab日", and asks in a
+//!   prompt `name` filled with "conf" under "described", whose text runs `conf.toast` (contract ergonomics 2.6, 2.9).
 //! - It hears that the plugin list changed (P6b), and toasts "plugins changed N KEY" from the list read then.
 //! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
 //!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
@@ -51,8 +53,8 @@ use opencode_plugin_abi::interact::{
     self, Anchor, Bind, Edge, Handled, Interact, LayerScope, OpenPanel, Overlay, PointerKind,
 };
 use opencode_plugin_abi::{
-    Action, Alert, Command, Confirm, Dialog, Host, Layout, PanelSize, Select, SelectOption, Setup, Span, ThemeMode,
-    Toast, Variant, Width, claim, v2,
+    Action, Alert, Command, Confirm, Dialog, Host, Layout, PanelSize, Prompt, Select, SelectOption, Setup, Span,
+    ThemeMode, Toast, Variant, Width, claim, v2,
 };
 
 #[derive(Default)]
@@ -196,6 +198,14 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     }));
     setup.on_wake(|host| host.toast(Toast::new(Variant::Info, "woken")));
     setup.command(command("conf.plugins"), |host, _| plugins(host, "plugins"));
+    setup.command(command("conf.facts").slash("conf-facts").aliases(["cf".to_owned()]), |host, _| {
+        let locale = host.info().locale.unwrap_or_default();
+        let (offset, measure) = (host.utc_offset(0), host.measure("ab日"));
+        let facts = format!("facts {locale} {offset} {} {}", measure.cells, measure.graphemes);
+        host.toast(Toast::new(Variant::Info, facts));
+        let ask = Prompt::new("name", Action::command("conf.toast")).value("conf").description("described");
+        host.dialog(Dialog::Prompt(ask));
+    });
     setup.on_plugins(|host| plugins(host, "plugins changed"));
     let shown = state.clone();
     setup.surface(v2::Surface::new("conf", v2::Place::Route("conf".to_owned()), move |view| {

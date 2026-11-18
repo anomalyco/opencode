@@ -110,6 +110,7 @@ builder!(Command [name] {
     description?: impl String,
     arguments!,
     scope: Scope,
+    aliases: [String],
 });
 
 impl Span {
@@ -161,14 +162,22 @@ impl Click {
 
 builder!(Click [action] { on: Press });
 
+/// A count of cells: `.min_width(0)` for `.min_width(Width::Cells(0))`.
+impl From<u16> for Width {
+    fn from(cells: u16) -> Self {
+        Width::Cells(cells)
+    }
+}
+
 builder!(Layout [] {
-    width?: Width,
+    width?: impl Width,
     grow!,
     shrink?: bool,
-    min_width_zero!,
-    height?: Width,
-    min_height?: Width,
-    max_height?: Width,
+    min_width?: impl Width,
+    max_width?: impl Width,
+    height?: impl Width,
+    min_height?: impl Width,
+    max_height?: impl Width,
     margin?: Edges,
     absolute?: Absolute,
 });
@@ -235,11 +244,11 @@ builder!(Fetch [method, path, query] { body?: serde_json::Value, bytes! });
 impl Prompt {
     /// A text field under `title` whose enter runs `action` with the text.
     pub fn new(title: impl Into<String>, action: Action) -> Self {
-        Self { title: title.into(), placeholder: None, action }
+        Self { title: title.into(), placeholder: None, value: None, description: None, action }
     }
 }
 
-builder!(Prompt [title, action] { placeholder?: impl String });
+builder!(Prompt [title, action] { placeholder?: impl String, value?: impl String, description?: impl String });
 
 impl Images {
     /// A preview of `images`, from the first.
@@ -669,6 +678,15 @@ mod tests {
         );
         assert!(command.palette && command.arguments && !command.description.is_some());
         assert_eq!(command.scope, Scope::Base);
+        let aliased = Command::new("a.b").slash("ab").aliases(["a".to_owned(), "b".to_owned()]);
+        assert_eq!(
+            (aliased.slash.as_deref(), aliased.aliases.as_slice()),
+            (Some("ab"), ["a".to_owned(), "b".to_owned()].as_slice())
+        );
+        assert!(serde_json::to_value(Command::new("a.b")).unwrap().get("aliases").is_none());
+
+        let layout = Layout::default().min_width(0).max_width(Width::Percent(50.0));
+        assert_eq!((layout.min_width, layout.max_width), (Some(Width::Cells(0)), Some(Width::Percent(50.0))));
 
         let fetch = Fetch::new("GET", "/api/x").query([("a", "1".to_owned())]).body(serde_json::json!({})).bytes();
         assert_eq!(fetch.query, vec![("a".to_owned(), "1".to_owned())]);
@@ -695,7 +713,10 @@ mod tests {
         assert_eq!(json, expected);
         assert_eq!(serde_json::from_value::<crate::Dialog>(expected).unwrap(), dialog);
         let bare = serde_json::to_value(crate::Dialog::Prompt(Prompt::new("Name", Action::command("n")))).unwrap();
-        assert!(bare.get("placeholder").is_none());
+        assert!(bare.get("placeholder").is_none() && bare.get("value").is_none() && bare.get("description").is_none());
+        let filled = Prompt::new("Rename", Action::command("n")).value("Old title").description("/tmp/project");
+        let json = serde_json::to_value(crate::Dialog::Prompt(filled)).unwrap();
+        assert_eq!((json["value"].as_str(), json["description"].as_str()), (Some("Old title"), Some("/tmp/project")));
     }
 
     // Expected: the diff setters reach a diff, and leave any other node as it was.

@@ -176,6 +176,7 @@ export type Command = {
     description: string?,
     arguments: boolean?,
     scope: Scope?,
+    aliases: { string }?,
 }
 
 --- The composer on screen.
@@ -220,6 +221,8 @@ export type Dialog = ({
     title: string,
     action: Action,
     placeholder: string?,
+    value: string?,
+    description: string?,
     type: "prompt",
 } | {
     key: string,
@@ -516,6 +519,12 @@ export type HostRequest = ({
 } | {
     type: "image-bounds",
 } | {
+    at: number,
+    type: "utc-offset",
+} | {
+    text: string,
+    type: "measure",
+} | {
     name: string,
     value: any,
     type: "set-setting",
@@ -608,6 +617,7 @@ export type Info = {
     size: { number },
     location: LocationRef,
     failed_plugins: number?,
+    locale: string?,
 }
 
 --- An event the host routes to a handler.
@@ -716,7 +726,8 @@ export type Layout = {
     width: Width?,
     grow: boolean?,
     shrink: boolean?,
-    min_width_zero: boolean?,
+    min_width: Width?,
+    max_width: Width?,
     height: Width?,
     min_height: Width?,
     max_height: Width?,
@@ -767,6 +778,12 @@ export type Manifest = {
     messages: boolean?,
     layers: { Layer }?,
     searches: { string }?,
+}
+
+--- A text as the host's text layout counts it: its cells in a row, and its graphemes.
+export type Measure = {
+    cells: number,
+    graphemes: number,
 }
 
 --- A session of a family.
@@ -4005,6 +4022,10 @@ export type Read = {
     abi: (self: Read) -> Abi,
     --- Whether the host has optional feature `name` (`plugin.FOCUS_INPUT`, `plugin.FENCE_NODE`).
     hasFeature: (self: Read, name: string) -> boolean,
+    --- The seconds local time is east of UTC at `at`, in milliseconds since the epoch: it depends on the date.
+    utcOffset: (self: Read, at: number) -> number,
+    --- The cells `text` takes in a row and its graphemes, as the host draws it: pad and cut columns by it.
+    measure: (self: Read, text: string) -> Measure,
 }
 
 --- The version a host serves the plugin: its major, its minor of that major, and its optional features.
@@ -4052,6 +4073,10 @@ export type Host = {
     abi: (self: Read) -> Abi,
     --- Whether the host has optional feature `name` (`plugin.FOCUS_INPUT`, `plugin.FENCE_NODE`).
     hasFeature: (self: Read, name: string) -> boolean,
+    --- The seconds local time is east of UTC at `at`, in milliseconds since the epoch: it depends on the date.
+    utcOffset: (self: Read, at: number) -> number,
+    --- The cells `text` takes in a row and its graphemes, as the host draws it: pad and cut columns by it.
+    measure: (self: Read, text: string) -> Measure,
     storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
     dispatch: (self: Host, name: string, input: string?) -> (),
@@ -4118,6 +4143,8 @@ export type SelectSpec = {
 export type PromptSpec = {
     title: string,
     placeholder: string?,
+    value: string?,
+    description: string?,
 }
 
 --- A confirm as `host:confirm` shows it: the contract's `Confirm` without its `action`.

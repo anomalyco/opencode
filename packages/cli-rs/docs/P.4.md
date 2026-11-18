@@ -70,7 +70,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 
 | P.1 (TS `api.*`) | ABI (`opencode_plugin_abi::Setup`) |
 | --- | --- |
-| `layer` (commands, palette, slash, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
+| `layer` (commands, palette, slash and its aliases, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` |
 | `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` |
 | a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` for the claim registered last there: `true` before a mount's first render, `false` as it unmounts |
@@ -109,8 +109,8 @@ horizontal wheel, as Mermaid's diagrams do.
 
 A slot render returns `Render::{Keep, Hide, Show(Node)}`. A `Node` is a `Box` (a column or a row, with gap, padding,
 justification, alignment and background, a `Border`, padding per side, wrapping children and overflow)
-or a `Text` of spans (with wrapping, truncation and a hover color), each with a `Layout` (width, grow, shrink, minimum
-width 0, a height with a minimum and a maximum, and margins) and an optional `Click`: on the press or the release of the
+or a `Text` of spans (with wrapping, truncation and a hover color), each with a `Layout` (width, grow, shrink, a
+width and a height each with a minimum and a maximum, and margins) and an optional `Click`: on the press or the release of the
 left button, the host shows the hand and, once the event is handled, runs the click's `Action::Command { name, input
 }`, a command of the plugin's or of the host's (such as `mcp.list` with a server's name, or the hidden
 `workspace.directory` with a directory). `Markdown { text }` draws Markdown with the active fence renderers, and
@@ -145,7 +145,8 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
   load once the outermost plugin callback has returned, and the claim renders again with the location in
   `Changed::locations`. The reads are `session`, `family`, `messages`, `models`, `mcp_servers`, `integrations` and
   `vcs` per location, `model`, `limits`, `providers`, `info` (the version, the terminal size, where the TUI works,
-  how many plugins failed), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
+  how many plugins failed, and the user's locale), `utc_offset(at)` (the host's zone at an instant), `measure(text)`
+  (its cells and graphemes as the host draws them), `route`, `interactive` (whether the session pane owns the input, TS `useInteractivity`),
   `shortcut(name)` (a command's first key), `dialog_open(key)`, `composer`, `storage_get`, `color`,
   `theme_mode`,
   `variants` (of the model the next prompt uses), `tabs_enabled` and `tabs` (each tab's root session, title, and
@@ -203,7 +204,8 @@ dark), and touches nothing of the host; a plugin's own thread calls `wake`.
     leaves unread is dropped. Reasoned from the code, not run: there is no Windows toolchain here.
   - A program that leaves the terminal in a mode the TUI does not know of (a Kitty keyboard flag it pushed, say) is not
     undone; the TUI sets up only its own modes again. The title the TUI or a plugin set is sent again.
-- A `Dialog` is a `Prompt`, whose text goes to its action as the input; a `Select { title, placeholder, options,
+- A `Dialog` is a `Prompt` (its field filled with its `value`, under its `description`), whose text goes to its
+  action as the input; a `Select { title, placeholder, options,
   current, action }` (TS `dialog.select`), whose pick closes it and goes to its action as the input; a `Panel { key,
   size, title, subtitle, body, actions, binds, bleed, centered, bare }`, which changes in place while its key is open and
   keeps where its body is scrolled (`size` is `medium`, `large` or `xlarge`, as TS's dialog

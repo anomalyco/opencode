@@ -9,7 +9,9 @@
 //! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
 //! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
 //! overlay under its pad, gives its field the focus (`focus-input`), and gives the focus back; a centered select lists
-//! the cards a search finds.
+//! the cards a search finds. `board.facts`, also `/bf`, reads the host's locale, UTC offset and measure of a text, shows
+//! them in a row its layout bounds at both widths, and asks for a name in a prompt filled with a value under a
+//! description (contract ergonomics 2.6 and 2.9).
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -30,8 +32,8 @@ use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Laye
 use opencode_plugin_abi::task::Cx;
 use opencode_plugin_abi::types::SessionMessageAssistantToolState;
 use opencode_plugin_abi::{
-    Action, Command, Confirm, Dialog, Fetch, Host, Layout, Rgba, Select, SelectOption, SendError, Setup, Span, Toast,
-    Variant, Width, v2,
+    Action, Command, Confirm, Dialog, Fetch, Host, Layout, Prompt, Rgba, Select, SelectOption, SendError, Setup, Span,
+    Toast, Variant, Width, v2,
 };
 
 pub const CARDS: usize = 6;
@@ -51,6 +53,8 @@ struct Board {
     keys: Vec<String>,
     /// What the panel's input told its handler (P3's `Input` on P2's events).
     said: Vec<String>,
+    /// What `board.facts` read of the host, which a row under the header shows.
+    facts: Option<String>,
 }
 
 /// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
@@ -111,6 +115,23 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     setup.command(command("board.ask"), move |host, _| {
         let board = asked.clone();
         tasks.spawn(host, move |cx| ask(cx, board));
+    });
+    let read = board.clone();
+    setup.command(command("board.facts").slash("board-facts").aliases(["bf".to_owned()]), move |host, _| {
+        // Wide characters, a space and an `e` with a combining accent: 8 cells, 5 graphemes.
+        let text: String = [0x65e5, 0x672c, 0x8a9e, 0x20, 0x65, 0x301].into_iter().filter_map(char::from_u32).collect();
+        let measure = host.measure(&text);
+        let (locale, offset) = (host.info().locale.unwrap_or_else(|| "none".into()), host.utc_offset(0));
+        read.borrow_mut().facts = Some(format!(
+            "locale {locale}, offset {offset} s, {} cells, {} graphemes",
+            measure.cells, measure.graphemes
+        ));
+        let ask =
+            Prompt::new("Name the board", Action::command("board.named")).value("board").description("/tmp/board");
+        host.dialog(Dialog::Prompt(ask));
+    });
+    setup.command(command("board.named"), |host, input| {
+        host.toast(Toast::new(Variant::Info, format!("named {}", input.unwrap_or_default())));
     });
     setup.command(command("board.panic"), |_, _| panic!("the board's command panicked"));
     let animated = board.clone();
@@ -416,7 +437,13 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
         .animate(board.borrow().animate)
         .layout(Layout::default().width(Width::Cells(40)).height(Width::Cells(2)));
     let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
-    v2::Node::column(vec![header, meter, cards]).with_id("board").layout(Layout::default().grow())
+    // The facts wrap within 30 cells, in a box no narrower than 50.
+    let facts = board.borrow().facts.clone().map(|facts| {
+        let text = v2::Node::text(vec![Span::new(facts)]).with_id("facts").layout(Layout::default().max_width(30));
+        v2::Node::column(vec![text]).layout(Layout::default().min_width(50))
+    });
+    let rows = [Some(header), facts, Some(meter), Some(cards)].into_iter().flatten().collect();
+    v2::Node::column(rows).with_id("board").layout(Layout::default().grow())
 }
 
 /// The meter's list for `frame`: a bar of the cards' total, and what it drew for.

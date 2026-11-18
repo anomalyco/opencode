@@ -94,6 +94,20 @@ impl abi::Read for Fixture<'_> {
         self.host.interactive.get()
     }
 
+    // Fixed facts, so a transcript that reads them is the same on any machine: an hour east of UTC, a locale, and the
+    // host's own measure, which reads no environment.
+    fn info(&self) -> abi::Info {
+        abi::Info { locale: Some("nb-NO".to_owned()), ..abi::Info::default() }
+    }
+
+    fn utc_offset(&self, _at: i64) -> i32 {
+        3_600
+    }
+
+    fn measure(&self, text: &str) -> abi::Measure {
+        crate::facts::measure(&self.host.app, text)
+    }
+
     fn shortcut(&self, name: &str) -> Option<String> {
         (name == "command.palette.show").then(|| "ctrl+p".to_owned())
     }

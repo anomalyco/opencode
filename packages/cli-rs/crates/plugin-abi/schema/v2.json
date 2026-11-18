@@ -411,6 +411,14 @@
       "image-bounds": {
         "$ref": "#/$defs/ImageBounds"
       },
+      "utc-offset": {
+        "type": "integer",
+        "minimum": -2147483648,
+        "maximum": 2147483647
+      },
+      "measure": {
+        "$ref": "#/$defs/Measure"
+      },
       "fetch": {
         "$ref": "#/$defs/RequestId"
       },
@@ -1524,8 +1532,25 @@
             }
           ]
         },
-        "min_width_zero": {
-          "type": "boolean"
+        "min_width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Width"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "height": {
           "anyOf": [
@@ -2552,6 +2577,12 @@
         },
         "scope": {
           "$ref": "#/$defs/Scope"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": ["name", "title", "palette"],
@@ -4465,6 +4496,32 @@
         {
           "type": "object",
           "properties": {
+            "at": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            },
+            "type": {
+              "const": "utc-offset"
+            }
+          },
+          "required": ["type", "at"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "measure"
+            }
+          },
+          "required": ["type", "text"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "name": {
               "type": "string"
             },
@@ -4983,6 +5040,26 @@
               "$ref": "#/$defs/Action"
             },
             "placeholder": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
               "anyOf": [
                 {
                   "type": "string"
@@ -6691,10 +6768,37 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 18446744073709551615
+        },
+        "locale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": ["version", "size", "location"],
       "description": "The host's version, size and location."
+    },
+    "Measure": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "graphemes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": ["cells", "graphemes"],
+      "description": "A text as the host's text layout counts it: its cells in a row, and its graphemes."
     },
     "ImageBounds": {
       "type": "object",

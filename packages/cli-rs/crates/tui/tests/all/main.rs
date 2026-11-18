@@ -57,6 +57,7 @@ mod plugin_model;
 #[cfg(feature = "ts")]
 mod plugin_npm;
 // The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
+mod plugin_field_echo;
 #[cfg(feature = "ts")]
 mod plugin_ownership;
 mod plugin_p0a;

@@ -245,6 +245,11 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "image-bounds" answers "image-bounds" with the bounds of the images it decodes (`ImageBounds`): bytes past them
  *   answer null, so a library need not send them. A "fetch" with "bytes" answers
  *   the body's bytes in base64 as a JSON string.
+ * - "utc-offset" takes "at", milliseconds since the epoch, and answers the seconds the user's local time is east of
+ *   UTC then. "measure" takes "text" and answers {"cells": n, "graphemes": n} as the host's text layout counts it, a
+ *   line break no cell; a text over one node's text limit is OPENCODE_ERROR. "info" has the user's "locale", a BCP 47
+ *   tag, when one is set. A "prompt" dialog may carry the "value" its field starts with and a "description" line
+ *   above it; a "command" may carry its slash "aliases"; a layout may carry "min_width" and "max_width".
  *
  * Content (`Blob`) is a JSON string when its bytes are UTF-8, else {"base64": "..."} (RFC 4648, padded).
  */

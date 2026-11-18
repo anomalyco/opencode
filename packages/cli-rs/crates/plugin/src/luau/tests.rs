@@ -1907,6 +1907,32 @@ end)
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
+// Expected (contract ergonomics 2.6 and 2.9 on the Luau carrier): a Luau plugin reads the host's locale, its UTC
+// offset and its measure of a text, and asks in a prompt filled with a value under a description, which reaches the
+// host as the contract's prompt.
+#[test]
+fn a_luau_plugin_reads_the_host_facts_and_fills_its_prompt() {
+    let host = host();
+    let init = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:command({ name = "luau.facts", slash = "luau-facts", aliases = { "lf" } }, function(host)
+        local measure = host:measure("ab日")
+        host:toast({ variant = "info", message = `{host:info().locale} {host:utcOffset(0)} {measure.cells} {measure.graphemes}` })
+        host:dialog({ type = "prompt", title = "name", value = "luau", description = "described",
+            action = plugin.command("luau.facts") })
+    end)
+end)
+"#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("luau.facts", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["nb-NO 3600 4 3"]);
+    let dialogs: Vec<abi::Dialog> = host.dialogs.borrow().iter().map(|(_, dialog)| dialog.clone()).collect();
+    let [abi::Dialog::Prompt(prompt)] = dialogs.as_slice() else { panic!("{dialogs:?}") };
+    assert_eq!((prompt.value.as_deref(), prompt.description.as_deref()), (Some("luau"), Some("described")));
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
 /// The messages of the toasts `host` showed.
 fn said(host: &TestHost) -> Vec<String> {
     host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect()

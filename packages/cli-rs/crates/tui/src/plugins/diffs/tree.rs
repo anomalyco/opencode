@@ -255,11 +255,11 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
                 .fg("text.muted")
                 .wrap(Wrap::None)
                 .truncate()
-                .layout(Layout::default().grow().min_width_zero()),
+                .layout(Layout::default().grow().min_width(0)),
         );
     }
     let header = v2::Node::row(vec![
-        v2::Node::row(switch).layout(Layout::default().grow().min_width_zero()).on_click(Click::command(super::SOURCE)),
+        v2::Node::row(switch).layout(Layout::default().grow().min_width(0)).on_click(Click::command(super::SOURCE)),
         v2::Node::text([Span::new(format!("{reviewed_count}/{}", input.files.len()))])
             .fg("text.muted")
             .wrap(Wrap::None)
@@ -335,7 +335,7 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
     let body = v2::Node::column(body)
         .bg(surface)
         .padding_sides(Edges { bottom: 1, left: 2, right: 2, ..Edges::default() })
-        .layout(Layout::default().grow().min_width_zero().min_height(Width::Cells(0)));
+        .layout(Layout::default().grow().min_width(0).min_height(Width::Cells(0)));
     v2::Node::column(vec![
         v2::Node::column(Vec::new()).bg(surface).layout(Layout::default().height(Width::Cells(1)).shrink(false)),
         body,
@@ -344,7 +344,7 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
         Layout::default()
             .width(Width::Cells(input.width))
             .height(Width::Percent(100.0))
-            .min_width_zero()
+            .min_width(0)
             .min_height(Width::Cells(0))
             .shrink(false),
     )
@@ -363,7 +363,7 @@ fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
             .fg(line.foreground)
             .wrap(Wrap::None)
             .truncate()
-            .layout(Layout::default().grow().min_width_zero().margin(Edges { right: 1, ..Edges::default() })),
+            .layout(Layout::default().grow().min_width(0).margin(Edges { right: 1, ..Edges::default() })),
         v2::Node::text([Span::new(line.status)])
             .fg(line.status_color)
             .wrap(Wrap::None)
