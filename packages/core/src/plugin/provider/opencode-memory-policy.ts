@@ -70,8 +70,6 @@ export interface Policy {
   readonly timeout: Duration.Input
   /** The message that delivers `hits` to the session at `moment`. */
   readonly render: (hits: ReadonlyArray<Hit>, moment: Moment) => string
-  /** The nearest entries close enough to a new one that publishing shows them instead, so the agent updates one. */
-  readonly similar: (nearest: ReadonlyArray<Hit>) => ReadonlyArray<Hit>
   /** The given entry a user's message likely corrects, if any. Runs on every prompt, so it must be cheap. */
   readonly correction: (message: string, given: ReadonlyArray<Given>) => Given | undefined
   /** The reminder the request after that message gets. */
@@ -79,7 +77,6 @@ export interface Policy {
 }
 
 // Placeholders until the retrieval benchmark and the correction study set them.
-const SIMILAR_SCORE = 0.6
 const FAILURE_INJECTIONS = 2
 // Console keeps the first 1,000 characters of a query in its delivery log.
 const MAX_QUERY = 1000
@@ -123,7 +120,6 @@ export const initial: Policy = {
       "</workspace-memory>",
     ].join("\n")
   },
-  similar: (nearest) => nearest.filter((hit) => hit.score >= SIMILAR_SCORE),
   correction: (message, given) => {
     if (!CORRECTION.test(message)) return undefined
     const words = terms(message)

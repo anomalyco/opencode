@@ -60,8 +60,12 @@ const hit = (id: string, score: number, snippet = `About ${id}`) => ({
 function fakeConsole() {
   const state = {
     memory: true,
-    /** What search, publish's `nearest` and injection return. */
+    /** What search and injection return. */
     hits: new Array<ReturnType<typeof hit>>(),
+    /** An entry close enough to refuse a publish without `distinctFrom`. */
+    similar: undefined as ReturnType<typeof entry> | undefined,
+    /** Publishes Console created, by idempotency key: the same key replays the first answer. */
+    published: new Map<string, unknown>(),
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
   }
   const server = Bun.serve({
@@ -86,30 +90,65 @@ function fakeConsole() {
             deliveryID: `mdl_${rank}`,
           })),
         })
-      if (url.pathname === "/api/memory/entries" && request.method === "POST")
-        return Response.json({
-          ...(body?.dryRun ? {} : { entry: entry("mem_new", { title: body?.title, body: body?.body }) }),
-          nearest: state.hits,
-        })
+      if (url.pathname === "/api/memory/entries" && request.method === "POST") {
+        const key = String(body?.idempotencyKey)
+        const replay = state.published.get(key)
+        if (replay) return Response.json(replay)
+        if (state.similar && !(body?.distinctFrom as string[] | undefined)?.includes(state.similar.id))
+          return Response.json(
+            {
+              _tag: "MemorySimilar",
+              message: "Not published: entry mem_close covers the same topic.",
+              candidates: [{ ...state.similar, snippet: "VPN first", similarity: 0.94 }, { odd: "shape" }],
+              next: 'memory_edit {"id":"mem_close","revision":1,...}, or publish again with distinctFrom ["mem_close"]',
+            },
+            { status: 409 },
+          )
+        const created = { entry: { id: `mem_new${state.published.size}`, revision: 1, title: body?.title } }
+        state.published.set(key, created)
+        return Response.json(created)
+      }
       const id = url.pathname.match(/^\/api\/memory\/entries\/(.+)$/)?.[1]
       if (id === "mem_missing") return Response.json({ _tag: "NotFound" }, { status: 404 })
       if (id && request.method === "GET") return Response.json(entry(id))
       if (id && request.method === "PATCH") {
-        if (body?.expectedRevision !== 1)
-          return Response.json({ _tag: "MemoryConflict", revision: 2, message: "stale" }, { status: 409 })
+        const current = entry(id).body
+        if (body?.expectedRevision !== undefined && body.expectedRevision !== 1)
+          return Response.json(
+            {
+              _tag: "MemoryConflict",
+              message: "Entry changed since r0 (now r1); your change overlaps it and was not applied.",
+              revision: 1,
+              currentText: current,
+              next: 'memory_edit {"id":"' + id + '","revision":1,...} against the current body',
+            },
+            { status: 409 },
+          )
         const edits = body?.edits as { oldText: string; newText: string }[] | undefined
-        if (!edits) return Response.json(entry(id, { ...body, revision: 2 }))
-        // Each oldText must occur exactly once in the body, as the edit operation Console is adding requires.
-        const edited = edits.reduce<string | undefined>(
-          (text, edit) =>
-            text !== undefined && text.split(edit.oldText).length === 2
-              ? text.replace(edit.oldText, edit.newText)
-              : undefined,
-          entry(id).body,
-        )
-        if (edited === undefined)
-          return Response.json({ _tag: "MemoryInvalid", message: "oldText must occur exactly once" }, { status: 400 })
-        return Response.json(entry(id, { body: edited, revision: 2 }))
+        // All or nothing: every oldText must occur exactly once.
+        const missed = edits?.findIndex((edit) => current.split(edit.oldText).length !== 2) ?? -1
+        if (edits && missed >= 0)
+          return Response.json(
+            {
+              _tag: "MemoryNoMatch",
+              message: `Edit ${missed + 1} of ${edits.length} not applied (nothing was written): oldText not found once in r1.`,
+              revision: 1,
+              currentText: current,
+              next: 'memory_edit {"id":"' + id + '","revision":1,...} with oldText copied from the current body',
+            },
+            { status: 400 },
+          )
+        const changed =
+          edits?.reduce((text, edit) => text.replace(edit.oldText, edit.newText), current) ??
+          (typeof body?.append === "string" ? `${current}\n\n${body.append}` : (body?.body as string | undefined))
+        return Response.json({
+          id,
+          revision: 2,
+          ...(changed === undefined ? {} : { diff: `-${current}\n+${changed}` }),
+          ...(typeof body?.body === "string" && body.body.length < current.length / 2
+            ? { warnings: ["Removed half of the body"] }
+            : {}),
+        })
       }
       return new Response("Not found", { status: 404 })
     },
@@ -210,7 +249,7 @@ describe("OpencodePlugin memory", () => {
     withConsole((console) =>
       Effect.gen(function* () {
         yield* start(console)
-        expect((yield* memoryTools).toSorted()).toEqual(["edit", "publish", "read", "search", "update"])
+        expect((yield* memoryTools).toSorted()).toEqual(["append", "edit", "publish", "read", "rewrite", "search"])
 
         console.state.memory = false
         yield* TestClock.adjust("1 minute")
@@ -281,97 +320,149 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("shows close entries instead of publishing, and publishes when told none covers it", () =>
+  it.effect("publishes in one call that a retry replays, and passes on Console's refusal of a close entry", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
         const publish = yield* memoryTool("publish")
-        console.state.hits = [hit("mem_close", 0.9, "VPN first"), hit("mem_far", 0.1)]
 
-        const held = yield* publish.execute({ title: "Deploy VPN", body: "Use the VPN" }, context(session.id))
-        expect(held.output).toEqual({
-          nearest: [
-            {
-              id: "mem_close",
-              title: "Entry mem_close",
-              snippet: "VPN first",
-              revision: 1,
-              score: 0.9,
-              repo: "github.com/acme/app",
-            },
-          ],
-        })
-        expect(held.content).toContain("- mem_close r1: Entry mem_close — VPN first")
-        expect(console.state.requests).toEqual([
-          {
-            method: "POST",
-            path: "/api/memory/entries",
-            body: { title: "Deploy VPN", body: "Use the VPN", source: { sessionID: session.id }, dryRun: true },
-            authorization: "Bearer secret",
-          },
-        ])
-
-        const published = yield* publish.execute(
-          { title: "Deploy VPN", body: "Use the VPN", tags: ["gotcha"], distinct: true },
-          context(session.id),
-        )
-        expect(published.output).toMatchObject({ entry: { id: "mem_new", title: "Deploy VPN", revision: 1 } })
-        expect(published.content).toBe("Published mem_new r1.")
+        const input = { title: "Deploy VPN", body: "Use the VPN", tags: ["gotcha"] }
+        const published = yield* publish.execute(input, context(session.id))
+        expect(published.output).toEqual({ entry: { id: "mem_new0", revision: 1, title: "Deploy VPN" }, related: [] })
+        expect(published.content).toBe("Published mem_new0 r1.")
         // The session's directory isn't a Git checkout, so the session is all the source there is.
         expect(console.state.requests.at(-1)?.body).toEqual({
-          title: "Deploy VPN",
-          body: "Use the VPN",
-          tags: ["gotcha"],
+          ...input,
           source: { sessionID: session.id },
+          idempotencyKey: expect.stringMatching(/^[0-9a-f]{32}$/),
         })
-      }),
-    ),
-  )
+        // A retry of the same call, as after a lost answer, sends the same key and gets the same entry.
+        const retried = yield* publish.execute(input, context(session.id))
+        expect(retried.content).toBe("Published mem_new0 r1.")
+        expect(console.state.published.size).toBe(1)
 
-  it.effect("publishes at once when nothing close exists", () =>
-    withConsole((console) =>
-      Effect.gen(function* () {
-        const { host } = yield* start(console)
-        const session = yield* host.session.create({})
-        console.state.hits = [hit("mem_far", 0.1)]
-        const published = yield* (yield* memoryTool("publish")).execute(
-          { title: "New finding", body: "Details" },
+        console.state.similar = entry("mem_close")
+        const refused = yield* publish
+          .execute({ title: "VPN for deploys", body: "Connect first" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(refused.message).toBe(
+          [
+            "Not published: entry mem_close covers the same topic.",
+            "- mem_close r1: Entry mem_close — VPN first",
+            'Next: memory_edit {"id":"mem_close","revision":1,...}, or publish again with distinctFrom ["mem_close"]',
+          ].join("\n"),
+        )
+        const distinct = yield* publish.execute(
+          { title: "VPN for deploys", body: "Connect first", distinctFrom: ["mem_close"] },
           context(session.id),
         )
-        expect(published.content).toBe("Published mem_new r1.")
-        expect(console.state.requests.map((item) => (item.body as { dryRun?: boolean }).dryRun)).toEqual([
-          true,
-          undefined,
-        ])
+        expect(distinct.content).toBe("Published mem_new1 r1.")
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ distinctFrom: ["mem_close"] })
       }),
     ),
   )
 
-  it.effect("updates against the revision read, and says how to recover when it changed since", () =>
+  it.effect("edits several places in one call against the revision read, all or nothing", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
-        const update = yield* memoryTool("update")
+        const edit = yield* memoryTool("edit")
 
-        const updated = yield* update.execute({ id: "mem_1", revision: 1, body: "Corrected" }, context(session.id))
-        expect(updated.output).toEqual({ id: "mem_1", title: "Entry mem_1", revision: 2 })
-        expect(updated.content).toBe("mem_1 is now r2.")
-        expect(console.state.requests.at(-1)).toMatchObject({
+        const edited = yield* edit.execute(
+          {
+            id: "mem_1",
+            revision: 1,
+            oldText: "Body of",
+            newText: "Use bun for",
+            edits: [{ oldText: "More", newText: "not npm" }],
+          },
+          context(session.id),
+        )
+        expect(edited.output).toEqual({
+          id: "mem_1",
+          revision: 2,
+          diff: "-Body of mem_1\nMore\n+Use bun for mem_1\nnot npm",
+        })
+        expect(edited.content).toBe("mem_1 is now r2.\n-Body of mem_1\nMore\n+Use bun for mem_1\nnot npm")
+        expect(console.state.requests.at(-1)).toEqual({
           method: "PATCH",
           path: "/api/memory/entries/mem_1",
-          body: { expectedRevision: 1, body: "Corrected", source: { sessionID: session.id } },
+          body: {
+            expectedRevision: 1,
+            edits: [
+              { oldText: "Body of", newText: "Use bun for" },
+              { oldText: "More", newText: "not npm" },
+            ],
+            source: { sessionID: session.id },
+          },
+          authorization: "Bearer secret",
         })
 
-        const stale = yield* update
-          .execute({ id: "mem_1", revision: 0, body: "Corrected" }, context(session.id))
+        // Console's words, the current body and its one next call reach the agent as they are.
+        const missed = yield* edit
+          .execute(
+            {
+              id: "mem_1",
+              revision: 1,
+              edits: [
+                { oldText: "More", newText: "x" },
+                { oldText: "o", newText: "x" },
+              ],
+            },
+            context(session.id),
+          )
           .pipe(Effect.flip)
-        expect(stale.message).toBe(
-          "The entry changed since you read it; it is at revision 2 now. Read it again and retry your change on that revision.",
+        expect(missed.message).toBe(
+          [
+            "Edit 2 of 2 not applied (nothing was written): oldText not found once in r1.",
+            "Current body (r1):",
+            "Body of mem_1\nMore",
+            'Next: memory_edit {"id":"mem_1","revision":1,...} with oldText copied from the current body',
+          ].join("\n"),
         )
-        const empty = yield* update.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
-        expect(empty.message).toBe("update takes a new title, body, tags or several")
+        const stale = yield* edit
+          .execute({ id: "mem_1", revision: 0, oldText: "More", newText: "x" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(stale.message).toContain('Next: memory_edit {"id":"mem_1","revision":1,...} against the current body')
+
+        const retitled = yield* edit.execute({ id: "mem_1", revision: 1, title: "Bun, not npm" }, context(session.id))
+        expect(retitled.content).toBe("mem_1 is now r2.")
+        expect(console.state.requests.at(-1)?.body).toEqual({
+          expectedRevision: 1,
+          title: "Bun, not npm",
+          source: { sessionID: session.id },
+        })
+        const empty = yield* edit.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
+        expect(empty.message).toBe("edit takes oldText and newText, edits, a title or tags")
+      }),
+    ),
+  )
+
+  it.effect("appends without a revision, and rewrites a whole body with Console's warnings", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* (yield* memoryTool("append")).execute({ id: "mem_1", text: "Also on CI." }, context(session.id))
+        expect(console.state.requests.at(-1)?.body).toEqual({
+          append: "Also on CI.",
+          source: { sessionID: session.id },
+        })
+
+        const rewritten = yield* (yield* memoryTool("rewrite")).execute(
+          { id: "mem_1", revision: 1, body: "Short" },
+          context(session.id),
+        )
+        expect(console.state.requests.at(-1)?.body).toEqual({
+          expectedRevision: 1,
+          body: "Short",
+          source: { sessionID: session.id },
+        })
+        expect(rewritten.content).toBe(
+          "mem_1 is now r2.\nWarning: Removed half of the body\n-Body of mem_1\nMore\n+Short",
+        )
       }),
     ),
   )
@@ -503,38 +594,6 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("edits by sending only the changed text against the revision read", () =>
-    withConsole((console) =>
-      Effect.gen(function* () {
-        const { host } = yield* start(console)
-        const session = yield* host.session.create({})
-        const edit = yield* memoryTool("edit")
-
-        const edited = yield* edit.execute(
-          { id: "mem_1", revision: 1, edits: [{ oldText: "More", newText: "Use bun, not npm" }] },
-          context(session.id),
-        )
-        expect(edited.output).toEqual({ id: "mem_1", title: "Entry mem_1", revision: 2 })
-        expect(edited.content).toBe("mem_1 is now r2.")
-        expect(console.state.requests.at(-1)).toEqual({
-          method: "PATCH",
-          path: "/api/memory/entries/mem_1",
-          body: {
-            expectedRevision: 1,
-            edits: [{ oldText: "More", newText: "Use bun, not npm" }],
-            source: { sessionID: session.id },
-          },
-          authorization: "Bearer secret",
-        })
-
-        const ambiguous = yield* edit
-          .execute({ id: "mem_1", revision: 1, edits: [{ oldText: "o", newText: "x" }] }, context(session.id))
-          .pipe(Effect.flip)
-        expect(ambiguous.message).toBe("oldText must occur exactly once")
-      }),
-    ),
-  )
-
   it.effect("points out a given entry when the user's message corrects it, with the revision to edit", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -618,10 +677,7 @@ describe("OpencodePlugin memory", () => {
           })
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
-          yield* (yield* memoryTool("publish")).execute(
-            { title: "Decision", body: "Why", distinct: true },
-            context(session.id),
-          )
+          yield* (yield* memoryTool("publish")).execute({ title: "Decision", body: "Why" }, context(session.id))
           const source = (console.state.requests.at(-1)?.body as { source: Record<string, string> }).source
           expect(source).toEqual({
             repo: "github.com/Acme/App",

@@ -60,13 +60,34 @@ const Hit = Schema.Struct({
   score: Schema.Number,
   repo: Schema.optional(Schema.String),
 })
-/** What a write returns: enough to write again. */
-const Written = Schema.Struct({ id: Schema.String, title: Schema.String, revision: Schema.Number })
+/** What a write answers: the new revision and a short diff of what changed, enough to write again without a read. */
+const Written = Schema.Struct({
+  id: Schema.String,
+  revision: Schema.Number,
+  title: Schema.optional(Schema.String),
+  diff: Schema.optional(Schema.String),
+  warnings: Schema.optional(Schema.Array(Schema.String)),
+  rebasedFrom: Schema.optional(Schema.Number),
+})
+const Published = Schema.Struct({ entry: Written, related: Schema.optional(Schema.Array(WireHit)) })
+/** A refused write: nothing was written; Console says why, what the entry holds now and the one call to make next. */
 const Problem = Schema.Struct({
   _tag: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
+  next: Schema.optional(Schema.String),
   revision: Schema.optional(Schema.Number),
+  currentText: Schema.optional(Schema.String),
+  // Read one by one, so a candidate in another shape never hides the message and the next call.
+  candidates: Schema.optional(Schema.Array(Schema.Unknown)),
 })
+const decodeCandidate = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    title: Schema.String,
+    revision: Schema.Number,
+    snippet: Schema.optional(Schema.String),
+  }),
+)
 // The tool inputs and results that tell which files a session works on and which commands fail.
 const PathInput = Schema.Struct({ path: Schema.String })
 const PatchInput = Schema.Struct({ patchText: Schema.String })
@@ -122,7 +143,7 @@ export const make = Effect.fnUntraced(function* (
   const wrote = (sessionID: string, written: typeof Written.Type) => {
     const state = sessions.get(sessionID)
     const given = state?.given.get(written.id)
-    if (state && given) give(state, { ...given, title: written.title, revision: written.revision })
+    if (state && given) give(state, { ...given, title: written.title ?? given.title, revision: written.revision })
   }
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
@@ -163,15 +184,7 @@ export const make = Effect.fnUntraced(function* (
         .execute(body === undefined ? request : HttpClientRequest.bodyJsonUnsafe(request, body))
         .pipe(Effect.flatMap(expectOk), Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)))
     }).pipe(Effect.scoped)
-  // Saves nothing; with the session, Console logs the entries it shows as delivered to it.
-  const nearest = (input: { readonly title: string; readonly body: string; readonly sessionID: string }) =>
-    call(Schema.Struct({ nearest: Schema.Array(WireHit) }), "POST", "/api/memory/entries", {
-      title: input.title,
-      body: input.body,
-      source: { sessionID: input.sessionID },
-      dryRun: true,
-    }).pipe(Effect.map((answer) => answer.nearest.map(listed)))
-  // A revision of an entry, answered in one line; the repository, branch and commit are recorded with it.
+  // A revision of an entry, answered with its number and diff; the repository, branch and commit are recorded with it.
   const write = (sessionID: string, id: string, change: Record<string, unknown>) =>
     Effect.gen(function* () {
       const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
@@ -179,7 +192,7 @@ export const make = Effect.fnUntraced(function* (
         source: { ...(yield* checkout), sessionID },
       })
       wrote(sessionID, written)
-      return { output: written, content: `${written.id} is now r${written.revision}.` }
+      return { output: written, content: receipt(written) }
     }).pipe(Effect.mapError(failure))
 
   const start = Effect.fnUntraced(function* () {
@@ -362,88 +375,111 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "publish",
         description:
-          "Publish what a teammate's coding agent would want to know before similar work, once verified: a root cause and fix (with the error as it appears), a repo convention, a build/test/CI/release step, an API gotcha, a decision and why, an approach that failed and why. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols. Repo, branch and commit are recorded. If close entries exist, nothing is published and they're listed: `edit` one, or publish again with `distinct`.",
+          "Publish what a teammate's coding agent would want to know before similar work, once verified: a root cause and fix (with the error as it appears), a repo convention, a build/test/CI/release step, an API gotcha, a decision and why, an approach that failed and why. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols. Repo, branch and commit are recorded. If a close entry exists, nothing is published and the error names it and the call to make instead.",
         input: Schema.Struct({
           title: Schema.String,
           body: Schema.String.annotate({ description: "Markdown" }),
           tags: Schema.optional(Tags),
-          distinct: Schema.optional(
-            Schema.Boolean.annotate({ description: "Publish although close entries exist; none covers this" }),
+          distinctFrom: Schema.optional(
+            Schema.Array(Schema.String).annotate({
+              description: "Ids of close entries you checked that don't cover this; publishes anyway",
+            }),
           ),
         }),
-        output: Schema.Struct({ entry: Schema.optional(Written), nearest: Schema.Array(Hit) }),
+        output: Schema.Struct({ entry: Written, related: Schema.Array(Hit) }),
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
-            const similar = input.distinct
-              ? []
-              : policy.similar(yield* nearest({ ...input, sessionID: context.sessionID }))
-            if (similar.length > 0)
-              return {
-                output: { nearest: similar },
-                content: [
-                  "Not published; close entries exist. `edit` the one that covers this, or publish with distinct: true.",
-                  ...similar.map(OpencodeMemoryPolicy.summary),
-                ].join("\n"),
-              }
-            const published = yield* call(
-              Schema.Struct({ entry: Written, nearest: Schema.Array(WireHit) }),
-              "POST",
-              "/api/memory/entries",
-              {
-                title: input.title,
-                body: input.body,
-                ...(input.tags === undefined ? {} : { tags: input.tags }),
-                source: { ...(yield* checkout), sessionID: context.sessionID },
-              },
-            )
+            const published = yield* call(Published, "POST", "/api/memory/entries", {
+              title: input.title,
+              body: input.body,
+              ...(input.tags === undefined ? {} : { tags: input.tags }),
+              ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
+              source: { ...(yield* checkout), sessionID: context.sessionID },
+              // The same call again, as after a lost answer, replays the first one instead of publishing twice.
+              idempotencyKey: Hash.sha256(
+                JSON.stringify([input.title, input.body, input.tags ?? [], input.distinctFrom ?? []]),
+              ).slice(0, 32),
+            })
+            const related = (published.related ?? []).map(listed)
             return {
-              output: {
-                entry: published.entry,
-                nearest: published.nearest.map(listed),
-              },
-              content: `Published ${published.entry.id} r${published.entry.revision}.`,
+              output: { entry: published.entry, related },
+              content: [
+                `Published ${published.entry.id} r${published.entry.revision}.`,
+                ...(related.length > 0 ? ["Related:", ...related.map(OpencodeMemoryPolicy.summary)] : []),
+              ].join("\n"),
             }
           }).pipe(Effect.mapError(failure)),
       })
       editor.add({
         name: "edit",
         description:
-          "Fix part of an entry by exact replacement, sending only the changed text: each oldText must occur exactly once in the body (add context to make it unique). Use it whenever an entry is wrong or outdated, and right away when the user corrects something an entry you were given says. Takes the revision shown with the entry; refused if someone changed it since: read it and retry.",
+          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it, and give newText; for several changes pass edits, applied all together or not at all. Also changes title or tags alone. Pass the revision you read. Fix an entry right away when the user corrects what it says. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
-          edits: Schema.Array(
-            Schema.Struct({ oldText: Schema.String.check(Schema.isMinLength(1)), newText: Schema.String }),
-          ).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
+          oldText: Schema.optional(Schema.String),
+          newText: Schema.optional(Schema.String),
+          edits: Schema.optional(
+            Schema.Array(Schema.Struct({ oldText: Schema.String, newText: Schema.String })).check(
+              Schema.isMaxLength(20),
+            ),
+          ),
+          title: Schema.optional(Schema.String),
+          tags: Schema.optional(Tags),
+        }),
+        output: Written,
+        options: { namespace, codemode: true, pinned: true },
+        execute: (input, context) => {
+          const pair = input.oldText === undefined ? [] : [{ oldText: input.oldText, newText: input.newText ?? "" }]
+          const edits = [...pair, ...(input.edits ?? [])]
+          if (edits.length === 0 && input.title === undefined && input.tags === undefined)
+            return Effect.fail(new ToolFailure({ message: "edit takes oldText and newText, edits, a title or tags" }))
+          return write(context.sessionID, input.id, {
+            expectedRevision: input.revision,
+            ...(edits.length === 0 ? {} : { edits }),
+            ...(input.title === undefined ? {} : { title: input.title }),
+            ...(input.tags === undefined ? {} : { tags: input.tags }),
+          })
+        },
+      })
+      editor.add({
+        name: "append",
+        description:
+          "Add to the end of an entry: a new example, case, caveat or follow-up. Never conflicts with other writers, so the revision is optional.",
+        input: Schema.Struct({
+          id: Schema.String,
+          text: Schema.String.annotate({ description: "Markdown" }),
+          revision: Schema.optional(Schema.Int),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, { expectedRevision: input.revision, edits: input.edits }),
+          write(context.sessionID, input.id, {
+            append: input.text,
+            ...(input.revision === undefined ? {} : { expectedRevision: input.revision }),
+          }),
       })
       editor.add({
-        name: "update",
+        name: "rewrite",
         description:
-          "Replace an entry's title, tags or whole body. To change part of the body, use `edit`, which sends only the changed text. Takes the revision shown with the entry.",
+          "Replace an entry's whole body, only to restructure it; for a fix use `edit`. Keep everything that should not change exactly as it is. Pass the revision you read; the answer shows what was removed.",
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
+          body: Schema.String.annotate({ description: "The whole new body, in Markdown" }),
           title: Schema.optional(Schema.String),
-          body: Schema.optional(Schema.String),
           tags: Schema.optional(Tags),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          input.title === undefined && input.body === undefined && input.tags === undefined
-            ? Effect.fail(new ToolFailure({ message: "update takes a new title, body, tags or several" }))
-            : write(context.sessionID, input.id, {
-                expectedRevision: input.revision,
-                ...(input.title === undefined ? {} : { title: input.title }),
-                ...(input.body === undefined ? {} : { body: input.body }),
-                ...(input.tags === undefined ? {} : { tags: input.tags }),
-              }),
+          write(context.sessionID, input.id, {
+            expectedRevision: input.revision,
+            body: input.body,
+            ...(input.title === undefined ? {} : { title: input.title }),
+            ...(input.tags === undefined ? {} : { tags: input.tags }),
+          }),
       })
     })
     .pipe(Effect.orDie)
@@ -532,22 +568,46 @@ function failure(cause: unknown) {
     : new ToolFailure({ message: "OpenCode Console didn't answer", error: cause })
 }
 
-/** The response when Console accepted the request, otherwise a tool failure saying why. */
+/**
+ * The response when Console accepted the request, otherwise a tool failure saying why: Console's message, the close
+ * entries or current text it sends, and its one named next call, verbatim.
+ */
 function expectOk(response: HttpClientResponse.HttpClientResponse) {
   if (response.status >= 200 && response.status < 300) return Effect.succeed(response)
   return HttpClientResponse.schemaBodyJson(Problem)(response).pipe(
     Effect.option,
     Effect.flatMap((problem) => {
       const body = Option.getOrUndefined(problem)
-      const message =
-        body?._tag === "MemoryConflict"
-          ? `The entry changed since you read it${body.revision === undefined ? "" : `; it is at revision ${body.revision} now`}. Read it again and retry your change on that revision.`
-          : response.status === 404
+      const message = [
+        body?.message ??
+          (response.status === 404
             ? "No such memory entry, or memory is off for this OpenCode Console workspace"
-            : (body?.message ?? `OpenCode Console answered ${response.status}`)
+            : `OpenCode Console answered ${response.status}`),
+        ...(body?.candidates ?? []).flatMap((item) =>
+          Option.match(decodeCandidate(item), {
+            onNone: () => [],
+            onSome: (candidate) => [
+              OpencodeMemoryPolicy.summary({ ...candidate, snippet: candidate.snippet ?? "", score: 0 }),
+            ],
+          }),
+        ),
+        ...(body?.currentText === undefined
+          ? []
+          : [`Current body${body.revision === undefined ? "" : ` (r${body.revision})`}:`, body.currentText]),
+        ...(body?.next === undefined ? [] : [`Next: ${body.next}`]),
+      ].join("\n")
       return Effect.fail(new ToolFailure({ message, metadata: { status: response.status } }))
     }),
   )
+}
+
+/** A write's answer: the new revision, then what Console changed and warns about. */
+function receipt(written: typeof Written.Type) {
+  return [
+    `${written.id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    ...(written.warnings ?? []).map((warning) => `Warning: ${warning}`),
+    ...(written.diff ? [written.diff] : []),
+  ].join("\n")
 }
 
 /** A message ID that the same session and `key` always give, so admitting it again changes nothing. */
