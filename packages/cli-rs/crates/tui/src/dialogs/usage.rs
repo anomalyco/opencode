@@ -32,7 +32,6 @@ pub struct ModelUsage {
     pub limits: Vec<ModelLimit>,
 }
 
-/// `UsageLevel`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
     Plenty,
@@ -188,7 +187,6 @@ fn list(items: &[String]) -> String {
 }
 
 impl Local {
-    /// `useUsageLimits().usage`.
     pub fn model_usage(&self, model: &ModelInfo) -> Option<ModelUsage> {
         let info = self.usage()??;
         model_usage(&info, model, self.provider(&model.provider_id.0).as_ref())

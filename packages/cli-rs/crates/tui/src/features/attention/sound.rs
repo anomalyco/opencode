@@ -63,7 +63,6 @@ pub fn clamp_volume(volume: f64) -> f32 {
 /// Where the engine's mix goes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Output {
-    /// The default playback device.
     Device,
     /// Nowhere until [`Audio::mix`] reads it.
     #[default]

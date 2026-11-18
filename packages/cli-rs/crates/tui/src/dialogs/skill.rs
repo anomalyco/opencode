@@ -10,7 +10,6 @@ use opencode_ui::dialog::DIALOG_LIST_INSET;
 
 use crate::prelude::*;
 
-/// What choosing a skill does.
 pub type OnSelect = Rc<dyn Fn(&Tui, &SkillID)>;
 
 /// Opens the dialog for `location` (the default one for `None`).

@@ -26,7 +26,6 @@ pub struct Catalog {
     pub providers: Vec<ProviderInfo>,
     /// Server command names, for `/name args` submits.
     pub commands: Vec<String>,
-    /// The current VCS branch, for the footer.
     pub branch: Option<String>,
 }
 
@@ -74,7 +73,6 @@ impl Catalog {
         })
     }
 
-    /// `available(model)`.
     pub fn available(&self, choice: &Choice) -> bool {
         self.info(&choice.provider_id, &choice.model_id).is_some()
     }
@@ -212,7 +210,6 @@ impl Row {
     }
 }
 
-/// `promptMetadataLayout`.
 fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let narrow = terminal_width < 44;
     let agent = if narrow { None } else { display.agent.clone() };

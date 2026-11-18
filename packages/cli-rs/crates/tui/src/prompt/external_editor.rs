@@ -14,7 +14,6 @@ use super::editor::Inner;
 
 use crate::prelude::*;
 
-/// `prompt.editor`.
 pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
     tui.dialogs.clear();
     let Some(command) =
@@ -105,7 +104,6 @@ pub fn realign(content: &str, prompt: &Value, offset: impl Fn(usize) -> u32) -> 
     next
 }
 
-/// A part's mention with text.
 fn mention(part: &Value) -> Option<Mention> {
     let mention = part.get("mention")?;
     let text = mention.get("text")?.as_str().filter(|text| !text.is_empty())?;

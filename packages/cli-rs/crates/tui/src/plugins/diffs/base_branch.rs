@@ -65,7 +65,6 @@ pub fn reported(host: &dyn Host, diffs: &Diffs, key: &str, base: Option<&Base>) 
     }
 }
 
-/// The picker's select, as it stands.
 fn select(picker: &Picker) -> Select {
     let options = match &picker.branches {
         Branches::Ready(names) => names.iter().map(|name| SelectOption::new(name.clone(), name.clone())).collect(),

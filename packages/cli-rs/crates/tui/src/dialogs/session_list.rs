@@ -209,7 +209,6 @@ impl List {
         }
     }
 
-    /// `data.location.info(pickerLocation())`.
     fn location(&self, tui: &Tui) -> Option<LocationPublicInfo> {
         let location = picker_location(tui);
         tui.data.read(|store| store.location(Some(&location)).and_then(|data| data.info.clone()))
@@ -373,7 +372,6 @@ impl List {
         }
     }
 
-    /// `titlePlaceholder`.
     fn placeholder(&self) -> String {
         let name = self.project_name();
         if !self.state.borrow().all_projects && !name.is_empty() {
@@ -382,7 +380,6 @@ impl List {
         "Search sessions".to_owned()
     }
 
-    /// `currentProjectName`.
     fn project_name(&self) -> String {
         let Some(tui) = self.tui.upgrade() else { return String::new() };
         let Some(current) = self.location(&tui) else { return String::new() };
@@ -440,7 +437,6 @@ impl List {
         }]
     }
 
-    /// `options()`.
     fn options(&self) -> Vec<SelectOption<SessionID>> {
         let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let theme = dialog_theme(&tui);
@@ -606,7 +602,6 @@ pub fn title(session: &SessionInfo) -> String {
     format!("{kind} session - {created}")
 }
 
-/// `projectName`.
 pub fn project_name(project: Option<&Project>) -> Option<String> {
     let canonical = project.map_or("", |project| project.canonical.as_str());
     if canonical == "/" {
@@ -627,13 +622,11 @@ pub fn attention(store: &Store, id: &SessionID) -> Option<char> {
     })
 }
 
-/// The session or a family member is running.
 pub fn running(store: &Store, id: &SessionID) -> bool {
     store.status(id) == SessionStatus::Running
         || store.family(id).iter().any(|member| store.status(member) == SessionStatus::Running)
 }
 
-/// `sessionStatusGutter`.
 pub fn status_gutter(
     theme: &Theme,
     attention: Option<char>,
@@ -662,7 +655,6 @@ pub fn now_ms() -> f64 {
     time::now_ms() as f64
 }
 
-/// `path.basename`.
 pub fn basename(path: &str) -> &str {
     Flavor::NATIVE.basename(path)
 }
@@ -719,7 +711,6 @@ pub mod pins {
         })
     }
 
-    /// `togglePin`.
     pub fn toggle(tui: &Tui, id: &SessionID) {
         let pinned = !list(tui).contains(id);
         set(tui, id, pinned);

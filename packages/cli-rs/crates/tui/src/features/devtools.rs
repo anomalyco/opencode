@@ -63,7 +63,6 @@ pub enum Indicator {
     Disconnected,
 }
 
-/// `connectionIndicator`.
 pub fn connection_indicator(status: Status, attempt: u32) -> (Indicator, &'static str) {
     match status {
         Status::Connected => (Indicator::Connected, "✓"),
@@ -89,7 +88,6 @@ pub fn runtime_status(samples: &[Sample]) -> RuntimeStatus {
     RuntimeStatus::Normal
 }
 
-/// `statusIcon`.
 pub fn status_icon(status: RuntimeStatus) -> &'static str {
     match status {
         RuntimeStatus::High => "●",

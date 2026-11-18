@@ -27,7 +27,6 @@ use crate::prelude::*;
 /// The dialog's key, so a rebuild only replaces this dialog.
 pub const KEY: &str = "worktrees";
 
-/// `WorkspaceSelection`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selection {
     Directory { directory: String, subdirectory: bool },
@@ -39,7 +38,6 @@ pub type OnSelect = Rc<dyn Fn(&Tui, Selection)>;
 /// What runs after a list read.
 type Then = Box<dyn FnOnce(&Rc<Workspaces>)>;
 
-/// `DialogWorkspacesProps`.
 pub struct Props {
     pub project_id: ProjectID,
     /// The location whose project and checkout the dialog starts from; the default one for `None`.
@@ -93,10 +91,8 @@ struct Workspaces {
 struct State {
     /// `directoryData()`: the last list read.
     directories: Option<Vec<WorktreeDirectory>>,
-    /// `directories.loading`.
     loading: bool,
     load_error: Option<String>,
-    /// `loadedProject.loading`.
     project_loading: bool,
     /// The project directory the location read found, when the store's location is another project.
     loaded_project: Option<String>,
@@ -274,7 +270,6 @@ impl Workspaces {
         self.props.current.clone()
     }
 
-    /// `options()`.
     fn options(&self) -> Vec<SelectOption<Selection>> {
         let Some(tui) = self.tui() else { return Vec::new() };
         if self.show_error() {

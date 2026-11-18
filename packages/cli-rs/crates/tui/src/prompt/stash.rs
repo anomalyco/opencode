@@ -84,7 +84,6 @@ impl Stash {
         Some(entry)
     }
 
-    /// `remove(index)`.
     pub fn remove(&self, _app: &App, index: usize) {
         if index >= self.entries.borrow().len() {
             return;

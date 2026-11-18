@@ -77,7 +77,6 @@ impl Move {
         self.creating.get() && self.directory().is_none()
     }
 
-    /// The staged directory, if a directory is staged.
     pub fn directory(&self) -> Option<String> {
         match &*self.destination.borrow() {
             Some(Selection::Directory { directory, .. }) => Some(directory.clone()),
@@ -160,7 +159,6 @@ impl Move {
         )));
     }
 
-    /// `finishSubmit`.
     pub fn finish(&self, prompt: &Rc<Inner>) {
         self.stage(None);
         self.set_creating(prompt, false);

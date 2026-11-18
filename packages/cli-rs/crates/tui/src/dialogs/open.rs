@@ -21,9 +21,7 @@ use crate::features::events::Handled;
 use crate::prelude::*;
 use crate::routes::session::form::quiet;
 
-/// `DialogOpenKey`.
 pub const KEY: &str = "open";
-/// `RECENT_LIMIT`.
 const RECENT_LIMIT: usize = 8;
 
 thread_local! {
@@ -60,7 +58,6 @@ enum OpenView {
     Worktrees(ProjectID),
 }
 
-/// `OpenSelection`.
 #[derive(Clone)]
 struct Selection {
     view: OpenView,
@@ -109,7 +106,6 @@ struct Open {
 struct State {
     view: OpenView,
     filter: String,
-    /// `selectionMoved`.
     moved: bool,
     /// `props.sessions`: the recent read.
     sessions: Vec<SessionInfo>,
@@ -603,7 +599,6 @@ impl Open {
         options
     }
 
-    /// `worktreeOptions()`.
     fn worktree_options(&self, id: &ProjectID) -> Vec<SelectOption<Target>> {
         let Some(tui) = self.tui() else { return Vec::new() };
         let theme = dialog_theme(&tui);
@@ -802,7 +797,6 @@ fn home() -> String {
     opencode_local::paths::home()
 }
 
-/// `timeAgo`.
 fn time_ago(now: f64, timestamp: f64) -> String {
     let minutes = ((now - timestamp) / 60_000.0).floor() as i64;
     if minutes < 1 {

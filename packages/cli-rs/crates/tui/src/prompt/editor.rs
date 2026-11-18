@@ -544,7 +544,6 @@ impl Inner {
         }
     }
 
-    /// `resetComposer`.
     pub(crate) fn reset(&self) {
         self.history.reset();
         *self.prompt.borrow_mut() = empty_prompt();
@@ -590,7 +589,6 @@ impl Inner {
         }
     }
 
-    /// The cursor offset at the end of the text.
     pub(crate) fn text_end(&self) -> u32 {
         opencode_ui::prompt_input::end(&self.textarea)
     }
@@ -635,7 +633,6 @@ impl Inner {
         (self.dismissed.borrow().as_deref() != Some(&selection.key())).then_some(selection)
     }
 
-    /// `prompt.editor_context.clear`.
     fn dismiss_editor_context(&self, tui: &Tui) {
         *self.dismissed.borrow_mut() = self.editor_context(tui).map(|selection| selection.key());
         tui.prompt.editor.clear_selection();
@@ -908,7 +905,6 @@ impl Inner {
         self.refresh(tui);
     }
 
-    /// `session.background`.
     fn background(&self, tui: &Tui) {
         let Some(session) = self.session.clone() else { return };
         let client = tui.data.client().clone();

@@ -30,7 +30,6 @@ pub fn release(tui: &Tui, task: impl FnOnce() + 'static) -> bool {
     true
 }
 
-/// Frees the slot as it drops.
 struct Slot(Weak<Tui>);
 
 impl Drop for Slot {

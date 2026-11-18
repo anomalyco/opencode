@@ -301,7 +301,6 @@ fn kind(status: &McpServerStatus) -> &str {
     }
 }
 
-/// `statusError`.
 fn status_error(status: &McpServerStatus) -> Option<&str> {
     match status {
         McpServerStatus::Failed(failed) => Some(&failed.error),
@@ -318,7 +317,6 @@ fn focused_error(server: &McpServer) -> Option<&str> {
     status_error(&server.status)
 }
 
-/// `Status`.
 fn status_label(status: &str, pending: bool) -> &'static str {
     if pending {
         return "Connecting …";
@@ -331,7 +329,6 @@ fn status_label(status: &str, pending: bool) -> &'static str {
     }
 }
 
-/// `statusColor`.
 fn status_color(theme: &Theme, status: &str) -> Color {
     match status {
         "connected" => theme.text.feedback.success.base,
@@ -341,7 +338,6 @@ fn status_color(theme: &Theme, status: &str) -> Color {
     }
 }
 
-/// `toggleTitle`.
 fn toggle_title(server: Option<&McpServer>) -> &'static str {
     match server.map(|server| kind(&server.status)) {
         Some("connected") => "disconnect",

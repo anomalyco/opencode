@@ -60,7 +60,6 @@ pub struct Files {
 
 type Job = Box<dyn FnOnce() + Send>;
 type Listeners = Rc<RefCell<Vec<(u64, Rc<dyn Fn()>)>>>;
-/// Opens a URL in the browser.
 pub type OpenUrl = Rc<dyn Fn(&str) -> Result<(), String>>;
 
 /// The location's catalog and the user's selections (`useLocal().model`, `useLocal().agent`).
@@ -526,7 +525,6 @@ impl Local {
         self.notify();
     }
 
-    /// `agent.move`.
     pub fn move_agent(&self, direction: i64) {
         let agents = self.agents();
         let Some(current) = self.agent() else { return };
@@ -639,7 +637,6 @@ impl Local {
         }
     }
 
-    /// `model.current`.
     pub fn current(&self) -> Option<Model> {
         self.selection().map(|selection| selection.model)
     }
@@ -796,7 +793,6 @@ impl Local {
         self.write(move |file| file.add_recent(&model));
     }
 
-    /// `model.toggleFavorite`.
     pub fn toggle_favorite(&self, model: &Model) {
         if !self.is_valid(model) {
             return;
@@ -876,7 +872,6 @@ impl Local {
             .unwrap_or_default()
     }
 
-    /// `model.variant.current`.
     pub fn variant(&self) -> Option<String> {
         self.selection().and_then(|selection| selection.variant)
     }
@@ -897,7 +892,6 @@ impl Local {
         self.notify();
     }
 
-    /// `model.variant.cycle`.
     pub fn cycle_variant(&self) {
         let variants = self.variants();
         if variants.is_empty() {

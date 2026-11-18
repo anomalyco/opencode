@@ -158,7 +158,6 @@ fn connect_methods(integration: &IntegrationInfo) -> Vec<Method> {
     methods
 }
 
-/// `credentialConnections`.
 fn credentials(integration: &IntegrationInfo) -> Vec<ConnectionCredentialInfo> {
     integration
         .connections

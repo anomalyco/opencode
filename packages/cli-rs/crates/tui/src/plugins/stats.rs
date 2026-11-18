@@ -155,7 +155,6 @@ fn full() -> Layout {
     Layout { width: Some(Width::Percent(100.0)), ..Layout::default() }
 }
 
-/// `StatsPoster`.
 fn poster(read: &dyn Read, stats: &SessionStatsInfo) -> Node {
     let (columns, rows) = read.info().size;
     let width = (i64::from(columns) - 8).clamp(12, 110) as u16;

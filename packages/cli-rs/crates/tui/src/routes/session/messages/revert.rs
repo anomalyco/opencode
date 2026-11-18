@@ -173,7 +173,6 @@ impl Inner {
     }
 }
 
-/// `statusLabel`.
 fn status_label(status: &FileDiffInfoStatus) -> &'static str {
     match status {
         FileDiffInfoStatus::Added => "A",

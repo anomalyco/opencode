@@ -134,10 +134,14 @@ pub struct Memory {
 /// Where a viewer shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Showing {
-    /// In the session's panel.
-    Panel { session: String },
+    Panel {
+        session: String,
+    },
     /// The full-screen route; closing goes back to `back`.
-    Route { session: Option<String>, back: abi::Route },
+    Route {
+        session: Option<String>,
+        back: abi::Route,
+    },
 }
 
 /// The working-tree bytes of an image card (`DiffViewerImage`'s resource).
@@ -716,7 +720,6 @@ fn stored_view(read: &dyn Read) -> Option<DiffView> {
     }
 }
 
-/// `isDiffImageFile`.
 pub fn is_image(file: &str) -> bool {
     let lower = file.to_ascii_lowercase();
     [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|extension| lower.ends_with(extension))

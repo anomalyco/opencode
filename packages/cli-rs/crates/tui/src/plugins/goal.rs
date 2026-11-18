@@ -21,7 +21,6 @@ use crate::prelude::*;
 
 const RPC: &str = "opencode.goal";
 const CHANGED: &str = "rpc.opencode.goal.changed";
-/// The key of the goal panel.
 const PANEL: &str = "goal";
 /// The hidden commands of the status and the panel. Each takes the session as its input.
 const SHOW: &str = "prompt.goal.show";

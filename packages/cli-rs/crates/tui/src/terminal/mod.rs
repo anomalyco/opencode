@@ -380,7 +380,6 @@ fn pick(tui: &Tui) {
     refresh(tui, &id, true, |_| {});
 }
 
-/// `terminal.close`.
 fn close(tui: &Tui) {
     let Some(id) = session(tui) else { return };
     tui.dialogs.clear();
