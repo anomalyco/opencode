@@ -1312,25 +1312,60 @@ mod tests {
     // limit though it was acknowledged; one that waits only for its acknowledgement is not.
     #[test]
     fn an_acknowledged_handler_that_never_answers_is_late() {
-        let limits = Limits { ack: Duration::from_millis(100), ..Limits::default() };
-        for (wait, late) in [(Wait::Ack, false), (Wait::Answer, true)] {
-            // The child acknowledges once it read the event, never before it was sent.
-            let dir = opencode_util::temp::tempdir().unwrap();
-            let (hello_file, ack_file) = (dir.path().join("hello"), dir.path().join("ack"));
-            std::fs::write(&hello_file, hello()).unwrap();
-            std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
-            let script = format!(
-                "cat '{}' >&0; head -c 7 > /dev/null; cat '{}' >&0; cat > /dev/null",
-                hello_file.display(),
-                ack_file.display()
-            );
-            let mut command = Command::new("sh");
-            command.arg("-c").arg(script);
-            let child = Child::spawn(command, limits, || {}).unwrap();
-            child.send(wire::CONTROL, b"{}", Some(1), wait).unwrap();
-            let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Hung { .. })));
-            let hung = events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
-            assert_eq!(hung, late, "{wait:?}: {events:?}");
+        let hung = |events: &[Event]| events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
+        for wait in [Wait::Ack, Wait::Answer] {
+            // A child slower than the limit to acknowledge is late, rightly: an event that waits for its acknowledgement
+            // shows it is not late only when the acknowledgement came within the limit, so the limit doubles until it
+            // did (pipe-flakes: under load a shell's `head` and `cat` took longer than 100 ms).
+            let mut ack = Duration::from_millis(100);
+            loop {
+                // The child acknowledges once it read the event, never before it was sent.
+                let dir = opencode_util::temp::tempdir().unwrap();
+                let (hello_file, ack_file) = (dir.path().join("hello"), dir.path().join("ack"));
+                std::fs::write(&hello_file, hello()).unwrap();
+                std::fs::write(&ack_file, control(&Up::Ack { seq: 1 })).unwrap();
+                let script = format!(
+                    "cat '{}' >&0; head -c 7 > /dev/null; cat '{}' >&0; cat > /dev/null",
+                    hello_file.display(),
+                    ack_file.display()
+                );
+                let mut command = Command::new("sh");
+                command.arg("-c").arg(script);
+                let child = Child::spawn(command, Limits { ack, ..Limits::default() }, || {}).unwrap();
+                // The limit runs from when the event is owed, after this.
+                let sent = Instant::now();
+                child.send(wire::CONTROL, b"{}", Some(1), wait).unwrap();
+                let mut events = Vec::new();
+                while child.acked() < 1 {
+                    assert!(sent.elapsed() < Duration::from_secs(20), "{wait:?}: never acknowledged: {events:?}");
+                    events.extend(child.take());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                let acked = sent.elapsed();
+                let owed = lock(&child.shared.sent).events.iter().any(|(seq, ..)| *seq == 1);
+                assert_eq!(owed, wait == Wait::Answer, "{wait:?}: owed once acknowledged");
+                if wait == Wait::Answer {
+                    while !hung(&events) {
+                        assert!(sent.elapsed() < Duration::from_secs(20), "never late: {events:?}");
+                        events.extend(child.take());
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    break;
+                }
+                if acked >= ack {
+                    ack *= 2;
+                    assert!(ack <= Duration::from_secs(10), "never acknowledged within a limit: {acked:?}");
+                    continue;
+                }
+                // Acknowledged within the limit: past it, and as long again, it is not late.
+                while sent.elapsed() < ack * 2 {
+                    events.extend(child.take());
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                events.extend(child.take());
+                assert!(!hung(&events), "acknowledged after {acked:?}, within {ack:?}: {events:?}");
+                break;
+            }
         }
     }
 

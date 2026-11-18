@@ -2601,7 +2601,11 @@ mod tests {
         command.arg("-c").arg(format!("cat '{}' >&0; sleep 0.3; cat > '{}'", file.display(), recv.display()));
         let proxy = host.app.app().proxy();
         let id = scripts.id;
-        scripts.adopt(Child::spawn(command, scripts.config.limits, move || post(&proxy, id)).unwrap());
+        // It answers nothing by design, so the hang rule is not what its rows test: under load the transfer outlasted
+        // the second of the default limit, and the JS host was ended with part of the stream unread (pipe-flakes).
+        let hour = Duration::from_secs(3600);
+        let limits = Limits { ack: hour, setup: hour, ..scripts.config.limits };
+        scripts.adopt(Child::spawn(command, limits, move || post(&proxy, id)).unwrap());
     }
 
     // Expected (bigboi's pipe pass): a model of the pipe's queue. A stream of every kind of message goes to a JS host
