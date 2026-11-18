@@ -1073,6 +1073,62 @@ fn a_js_listener_takes_its_key_with_prevent_default() {
     assert_eq!(calls(&log), [json!({ "listened": false }), json!({ "listened": true })]);
 }
 
+thread_local! {
+    /// What the native listeners of [`hearing`] heard, `above:<key>` and `below:<key>`.
+    static HEARD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A linked plugin with two global listeners of every key, one above the JS host's listeners and one below, which
+/// hear and pass each key.
+fn hearing(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
+    use opencode_plugin::abi::interact::{Event, Handled, Layer, LayerScope};
+    for (priority, name) in [(10, "above"), (-10, "below")] {
+        let layer = Layer::default().scope(LayerScope::Global).any().priority(priority);
+        setup.layer(layer, move |_, event| {
+            if let Event::Key(key) = event {
+                HEARD.with(|heard| heard.borrow_mut().push(format!("{name}:{}", key.key)));
+            }
+            Handled::Pass
+        });
+    }
+    Ok(())
+}
+
+// Expected (cg2-5): a key a JS listener takes and lets go is heard once by every native listener, above it and below
+// it: the key it puts back resumes below the listeners that heard it.
+#[test]
+fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
+    let Some(config) = config() else { return };
+    let log = log_file();
+    let options = json!({ "log": log.to_string_lossy() });
+    let plugin = opencode_plugin::abi::Plugin { id: "example.hearing", setup: hearing };
+    let builtin = crate::plugin_surface::builtin(crate::plugin_surface::Carrier::Linked, plugin);
+    let pipe = crate::plugin_pipe::open_with(&[("v2probe", Some(options))], config, (80, 30), vec![builtin]);
+    pipe.active(PROBE);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("v2probe.listen", Some("pass"));
+    pipe.settle();
+    HEARD.with(|heard| heard.borrow_mut().clear());
+    pipe.harness.app.press("ctrl+o");
+    pipe.settle();
+    let heard = HEARD.with(|heard| std::mem::take(&mut *heard.borrow_mut()));
+    assert_eq!(heard, ["above:ctrl+o", "below:ctrl+o"]);
+}
+
+// Expected (ce-4): a JS palette command whose key declines is still listed as the palette that key opens shows.
+#[test]
+fn a_declining_palette_command_stays_in_the_palette_its_key_opens() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let harness = &pipe.harness;
+    harness.app.press("ctrl+p");
+    pipe.settle();
+    assert!(harness.tui.dialogs.is_open(), "the declined key did not open the palette");
+    harness.app.type_text("Probe hot");
+    pipe.settle();
+    assert!(harness.app.text().contains("Probe hotkey"), "{}", harness.app.text());
+}
+
 // Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
 // as declined, even under a hold limit far longer than the test; its command is not sent again.
 #[test]

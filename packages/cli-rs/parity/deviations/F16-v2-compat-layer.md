@@ -124,15 +124,18 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   never added) has no focus on the host, which is reported once. While the plugin's focused
   field sits in a route or a panel,
   each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
-  (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below. TS's `<scrollbox>` draws a scrollbar beside its content
+  (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below.
+  A field with no `onKeyDown` holds no key: its typing goes to the host's field at once (cg2-1). TS's `<scrollbox>` draws a scrollbar beside its content
   and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
   through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
   registrations once). `useKeyboard` listens on it while its component lives. A listener takes a key with
-  `preventDefault`, as in TS (contract gaps 2). The host holds the key, and the keys after it, until the JS host
-  answers, as for a key a command may decline; a key not taken goes on then, past this listener. So every key a JS
-  plugin listens to is a round trip later than in TS, held at most the hold's limit. It hears keys in
+  `preventDefault`, as in TS (contract gaps 2). While a `keypress` listener is subscribed, the host holds each key,
+  and the input after it (pastes too), until the JS host answers, as for a key a command may decline; a key not taken
+  goes on then, below this listener, and no listener hears it twice. So such a key is a round trip later than in TS,
+  held at most the hold's limit; a key typed into a route that closed meanwhile goes with it. With no subscriber left
+  the layer only hears keys, and they go on at once (cg2-1, cg2-2, cg2-5). It hears keys in
   the base mode only, and none while another plugin's overlay has the focus, as the contract's global layer holds.
   `keyrelease` and `paste` never come.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;

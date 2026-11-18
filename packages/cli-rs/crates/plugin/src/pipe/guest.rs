@@ -13,7 +13,7 @@ use opencode_plugin_abi::{HostRequest, InputTo, Manifest, Request, Scope, Span};
 use opencode_ui::keymap::TuiCommand;
 use opentui::keymap::Disposer;
 
-use super::proto::{Down, Revision};
+use super::proto::{Down, Listener, Revision};
 use super::{Call, Scripts, Waiting, count};
 use crate::activation::{Activation, Wake};
 use crate::interact::{Deliver, Owner};
@@ -323,25 +323,22 @@ impl Guest {
     /// The handler of P2's input `to` on the JS host. A paste or a press cannot wait for the handler's answer, so the
     /// host answers from what the plugin declared: a [`Bind`](opencode_plugin_abi::interact::Bind)'s key, a paste of a
     /// layer that takes pastes and a pointer event on a node that asks for them are consumed; the others' answer does
-    /// not matter. A key of a listener of every key is taken and held as a key command's is ([`js_command`]): if the
-    /// handler did not take it (TS's `preventDefault`), it goes on once the JS host answers, past this listener
-    /// (contract gaps 2). A `hold` bind holds the keys after it until the plugin's `release_keys` effect, or
+    /// not matter. A key of a listener of every key that can take one now ([`Guest::taking`]) is taken and held as a
+    /// key command's is ([`js_command`]): if the handler did not take it (TS's `preventDefault`), it goes on once the
+    /// JS host answers, below this listener (contract gaps 2). One that cannot only hears it, and it goes on at once
+    /// (cg2-1). A `hold` bind holds the keys after it until the plugin's `release_keys` effect, or
     /// [`opencode_plugin_abi::interact::HOLD`].
     fn deliver(self: &Rc<Self>, to: To) -> Deliver {
         let guest = Rc::downgrade(self);
         let listener = match to {
-            To::Surface(surface) => format!("{}\u{0}\u{0}surface {surface}", self.id()),
-            To::Layer(layer) => format!("{}\u{0}\u{0}layer {layer}", self.id()),
+            To::Surface(surface) => Listener::Surface(surface),
+            To::Layer(layer) => Listener::Layer(layer),
         };
         Rc::new(move |host: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
             let Some(scripts) = guest.scripts.upgrade() else { return Handled::Pass };
-            // A listener's key: taken until the JS host answers, unless this listener declined it already.
             let listened = match event {
-                Event::Key(key) if key.bind.is_none() => {
-                    if scripts.stepped_aside(&listener) {
-                        return Handled::Pass;
-                    }
+                Event::Key(key) if key.bind.is_none() && guest.takes(&scripts, listener) => {
                     host.router().and_then(|router| router.listened())
                 }
                 _ => None,
@@ -352,8 +349,8 @@ impl Guest {
             };
             let request = Request::Input { to, event: event.clone() };
             let owning = (Some(Rc::downgrade(owner)), owner.mounted());
-            if let Some(key) = listened {
-                let keyed = super::Keyed::new(key, &scripts, &listener);
+            if let Some((key, heard)) = listened {
+                let keyed = super::Keyed::new(key, &scripts, heard, owner.mounted());
                 guest.call_keyed("handle", request, true, owning, Some(keyed));
                 return Handled::Consume;
             }
@@ -367,9 +364,26 @@ impl Guest {
         })
     }
 
+    /// Its listener `listener` can take a key now (`on`), or only hears it (cg2-1).
+    pub(crate) fn taking(&self, listener: Listener, on: bool) {
+        let Some(scripts) = self.scripts.upgrade() else { return };
+        let mut taking = scripts.taking.borrow_mut();
+        let listeners = taking.entry(self.id().to_owned()).or_default();
+        match on {
+            true => listeners.insert(listener),
+            false => listeners.remove(&listener),
+        };
+    }
+
+    fn takes(&self, scripts: &Scripts, listener: Listener) -> bool {
+        scripts.taking.borrow().get(self.id()).is_some_and(|listeners| listeners.contains(&listener))
+    }
+
     /// Runs the plugin's setup again on the JS host, for a new activation or after the JS host started again.
     pub(crate) fn setup_again(self: &Rc<Self>) {
         let Some(scripts) = self.scripts.upgrade() else { return };
+        // A new JS activation says again what can take keys.
+        scripts.taking.borrow_mut().remove(self.id());
         let seq = scripts.next();
         self.js.set(seq);
         // A new activation: what the last one asked for answers nobody.
@@ -977,25 +991,25 @@ fn stateless(commands: &[opencode_plugin_abi::Command]) -> Vec<opencode_plugin_a
 
 /// A command of the plugin's, which runs on the JS host; a route's runs for the mount `alive`. A key that runs it holds
 /// the keys after it until the JS host answers, as TS runs a command before the next key. If the command declines (it
-/// returned `false`, or it is disabled), the key goes on to the host with this command stepped aside, as TS binds no
-/// disabled command and lets a declined key fall through (CT-8, CT-19).
+/// returned `false`, or it is disabled), the key goes on to the host, the whole chord that ran it, and this command
+/// passes it on as it comes again, as TS binds no disabled command and lets a declined key fall through (CT-8, CT-19,
+/// ce-4).
 fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: Option<Weak<()>>) -> TuiCommand {
     let (called, name) = (guest.clone(), command.name.clone());
     let hold = guest.commands.borrow().1.contains(&name);
     let entry = format!("{}\u{0}{name}", guest.id());
-    let (scripts, aside) = (guest.scripts.clone(), entry.clone());
-    // Disabled (contract ergonomics 2.5), or stepped aside by a key it declined.
-    let enabled = opentui::keymap::Condition::when({
-        let (scripts, activation, name) = (guest.scripts.clone(), Rc::downgrade(&guest.activation), name.clone());
-        move || {
-            activation.upgrade().is_some_and(|activation| activation.enabled(&name))
-                && !scripts.upgrade().is_some_and(|scripts| scripts.stepped_aside(&aside))
-        }
-    });
+    let scripts = guest.scripts.clone();
+    // Disabled (contract ergonomics 2.5). A key it declined passes it as it runs, not by this condition, which the
+    // palette reads too (ce-4).
+    let enabled = crate::command_enabled(&guest.activation, &name);
     // A key it declines goes on once the JS host answers, as the hold routes it again; the command took it until then.
     keyed_command(command, enabled, move |input, key| {
+        let Some(scripts) = scripts.upgrade() else { return opencode_plugin_abi::interact::Handled::Pass };
+        if key.is_some() && scripts.stepped_aside(&entry) {
+            return opencode_plugin_abi::interact::Handled::Pass;
+        }
         let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-        let key = key.and_then(|key| Some(super::Keyed::new(*key, &*scripts.upgrade()?, &entry)));
+        let key = key.map(|key| super::Keyed::chord(*key, &scripts, &entry));
         called.call_keyed("run-command", request, hold || key.is_some(), (None, alive.clone()), key);
         opencode_plugin_abi::interact::Handled::Consume
     })

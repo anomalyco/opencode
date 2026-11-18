@@ -35,10 +35,17 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     },
     surface(name: string, place: Json, view: Json, options: Json) {
       fake.surfaces.push({ name, place, view, options })
+      return fake.surfaces.length - 1
     },
     layers: [] as Json[],
     layer(layer: Json, handler: (event: Json) => unknown) {
       fake.layers.push({ layer, handler })
+      return fake.layers.length - 1
+    },
+    // cg2-1: what the listeners of every key said they can take, last first, as `host.ts` sends each change.
+    taken: [] as Json[],
+    takes(listener: Json) {
+      return fake.taken.findLast((at: Json) => JSON.stringify(at.listener) === JSON.stringify(listener))?.on ?? false
     },
     command(command: Json, run: (input?: string) => unknown) {
       fake.commands.set(command.name, run)
@@ -59,6 +66,9 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     },
     uncommand() {},
     storage() {},
+    taking(listener: Json, on: boolean) {
+      fake.taken.push({ listener, on })
+    },
     // Contract 2.x, step D: the renderer claims, as `host.ts` keeps them, each ended by its disposer.
     claims: [] as Json[],
     claim(target: Json, view: (part: Json) => Json) {
@@ -718,6 +728,41 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(node).toBe("opentui-input-" + node.split("-").at(-1))
   expect(fake.warnings()).toEqual([])
   expect(fake.toasts()).toEqual([])
+})
+
+// cg2-1: a listener of every key can take a key only where the plugin can: the global layer while a `keypress`
+// listener is subscribed, and a route's while the field the plugin focused there has an `onKeyDown`. Elsewhere it only
+// hears the key, which the host lets go on at once: a field with only `onInput` holds no typing.
+test("a listener takes keys only while the plugin can take one", () => {
+  const fake = host()
+  const ctx = plugin("t.taking", fake)
+  const listener = () => {}
+  ctx.renderer.keyInput.on("keypress", listener)
+  const global = { layer: 0 }
+  expect(fake.takes(global)).toBe(true)
+  ctx.renderer.keyInput.off("keypress", listener)
+  expect(fake.takes(global)).toBe(false)
+  ctx.renderer.keyInput.on("keypress", listener)
+  expect(fake.takes(global)).toBe(true)
+  const fields: Json = {}
+  ctx.ui.router.register({
+    name: "fields",
+    render: () => [
+      h("input", { ref: (el: Json) => (fields.typed = el), onInput: () => {} }),
+      h("input", { ref: (el: Json) => (fields.keyed = el), onKeyDown: () => {} }),
+    ],
+  })
+  const index = fake.surfaces.findIndex((surface: Json) => surface.place.type === "route")
+  const route = fake.surfaces[index]
+  route.view({ mount: { surface: "fields", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  const surface = { surface: index }
+  expect(fake.takes(surface)).toBe(false)
+  fields.typed.focus()
+  expect(fake.takes(surface)).toBe(false)
+  fields.keyed.focus()
+  expect(fake.takes(surface)).toBe(true)
+  fields.keyed.blur()
+  expect(fake.takes(surface)).toBe(false)
 })
 
 // Ports trio (opencode-session-manager): TS renders a route into a column that fills the page, so the root of a

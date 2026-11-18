@@ -79,6 +79,8 @@ export default Plugin.define({
             setTimeout(() => setCaret(true), 0)
           },
         },
+        // A palette command on `ctrl+p` that declines its key (ce-4): the host's palette opens, and lists it.
+        { id: "v2probe.hotkey", title: "Probe hotkey", bind: "ctrl+p", palette: true, run: () => false },
         // A key listener (contract gaps 2), registered with the first run: it takes `ctrl+p` with `preventDefault`
         // while the run's input is "take", and lets it go on otherwise.
         {

@@ -100,9 +100,12 @@ function within(target: unknown, node: VNode | undefined): boolean {
 
 // The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
-  surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): void
-  // A key layer of the activation, contract 2.0's `Setup::layer`, whose handler hears its events.
-  layer?(layer: Json, handler: (event: Json) => unknown): void
+  // Its index in the manifest.
+  surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): number | void
+  // A key layer of the activation, contract 2.0's `Setup::layer`, whose handler hears its events; its index.
+  layer?(layer: Json, handler: (event: Json) => unknown): number | void
+  // cg2-1: whether a listener of every key can take a key now, which the host holds for the answer only then.
+  taking?(listener: Json, on: boolean): void
   command(command: Json, run: (input?: string) => unknown): void
   // Contract ergonomics 2.5: the host holds command `name` enabled or not (`set-enabled`).
   enable?(name: string, enabled: boolean): void
@@ -710,6 +713,17 @@ export function context(base: Base, carrier: Carrier) {
   // `focus` of the node's id); any node emits `focused` and `blurred`, as OpenTUI's renderables do.
   let focusedNode: VNode | undefined
   const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
+  // cg2-1: a route's or panel's listener of every key (by surface name, its index) takes a key only while the field the
+  // plugin focused is in its tree and has an `onKeyDown`; the host holds a key for the answer only then, and otherwise
+  // the key goes on at once.
+  const fieldListeners = new Map<string, number>()
+  const taking = () => {
+    for (const [surface, index] of fieldListeners) {
+      const roots = [...rendered.entries()].filter(([at]) => at.startsWith(`${surface}\u0000`)).map(([, at]) => at.root)
+      const on = !!focusedNode?.props.onKeyDown && roots.some((root) => within(root, focusedNode))
+      carrier.taking?.({ surface: index }, on)
+    }
+  }
   // The mount whose render holds `node`, by its root, as the host names it; none for a node in no mount's tree (one not
   // added yet, or in a dialog of the plugin's own).
   const mountOf = (node: VNode) => {
@@ -726,6 +740,7 @@ export function context(base: Base, carrier: Carrier) {
       if (focusedNode !== node) focusedNode?.focusChanged(false)
       focusedNode = node
       node.focusChanged(true)
+      taking()
       if (!FOCUSABLE.has(node.tag)) return
       // The contract's focus of a field (`focus-input`) or a scroll, as the request of the mount whose tree holds it,
       // whichever call the plugin runs: the host gives it the focus, so what the user types goes into a field, and one
@@ -739,6 +754,7 @@ export function context(base: Base, carrier: Carrier) {
       if (focusedNode !== node) return
       focusedNode = undefined
       node.focusChanged(false)
+      taking()
       const mount = FOCUSABLE.has(node.tag) ? mountOf(node) : undefined
       if (mount) void carrier.effect({ type: "blur" }, mount)
     },
@@ -749,6 +765,7 @@ export function context(base: Base, carrier: Carrier) {
       const was = focusedNode
       focusedNode = undefined
       was.focusChanged(false)
+      taking()
     },
   }
   // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its
@@ -775,6 +792,7 @@ export function context(base: Base, carrier: Carrier) {
       focusedNode?.focusChanged(false)
       focusedNode = node
       node.focusChanged(true)
+      taking()
     }
     node.typed = event.text
     if (event.type === "change") {
@@ -832,13 +850,22 @@ export function context(base: Base, carrier: Carrier) {
   keyInput.on("newListener", (name) => {
     if (name !== "keypress" || listening || !carrier.layer) return
     listening = true
-    carrier.layer({ scope: "global", any: true }, (event: Json) => {
+    const layer = carrier.layer({ scope: "global", any: true }, (event: Json) => {
       if (event.type !== "key") return "pass"
       const key = keyEvent(event)
       keyInput.emit("keypress", key)
       return key.defaultPrevented ? "consume" : "pass"
     })
     carrier.changed()
+    // cg2-1: it takes a key while a `keypress` listener may, and only hears one once the last left.
+    if (typeof layer !== "number") return
+    carrier.taking?.({ layer }, true)
+    keyInput.on("removeListener", (removed) => {
+      if (removed === "keypress" && keyInput.listenerCount("keypress") === 0) carrier.taking?.({ layer }, false)
+    })
+    keyInput.on("newListener", (added) => {
+      if (added === "keypress") carrier.taking?.({ layer }, true)
+    })
   })
   // A surface's scrolls (CT-2): a scroll box's state is the host's read of it, which follows it as it moves, and a move
   // is the contract's verb on the scroll of the surface's live mount, by its id.
@@ -965,6 +992,7 @@ export function context(base: Base, carrier: Carrier) {
         // TS renders a route into a column that fills the page, so a `flexGrow` box in it fills the page's height, and
         // a scrollbox in that its rest (ports trio: opencode-session-manager drew no rows). The root fills it here too.
         if (place.type === "route") tree.layout = { ...tree.layout, grow: true }
+        taking()
         return tree
       } catch (error) {
         crashed(error)
@@ -979,7 +1007,7 @@ export function context(base: Base, carrier: Carrier) {
     // No palette input: the colors carry their tokens, so a theme change restyles the last tree in place, and the
     // context's `theme` follows `Down::Theme`. A surface that read the palette would be viewed again instead, and keep
     // its old colors, as its tree did not change.
-    carrier.surface(name, place, view, {
+    const index = carrier.surface(name, place, view, {
       // A mount a reload of the registrations ends (`handover`) is kept a moment: the reload begins it again in a later
       // message, and the new mount of the same surface and key adopts it, so its components do not run again. TS takes
       // a registration without a remount; a component that registers anew as it mounts (opencode-navigator names each
@@ -991,6 +1019,7 @@ export function context(base: Base, carrier: Carrier) {
         const entry = rendered.get(at)
         rendered.delete(at)
         presses.delete(at)
+        taking()
         if (!entry || entry.crashed !== undefined || !handover) return entry?.dispose()
         const slot = `${mount.surface}\u0000${mount.key}`
         const before = parked.get(slot)
@@ -1010,6 +1039,7 @@ export function context(base: Base, carrier: Carrier) {
       // focused, as its `onKeyDown`, which takes it or lets it go on.
       ...(place.type === "route" || place.type === "panel" ? { layers: [{ scope: "surface", any: true }] } : {}),
     })
+    if ((place.type === "route" || place.type === "panel") && typeof index === "number") fieldListeners.set(name, index)
     return () => {
       removed = true
       carrier.invalidate()
