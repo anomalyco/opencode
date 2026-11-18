@@ -3439,6 +3439,9 @@ impl Registry {
 /// A mounted panel surface of a plugin (P2): it ends when it drops.
 pub struct PanelMount(Box<dyn Claimed>);
 
+/// What tells a dialog surface's handler that its dialog closed ([`PanelMount::close`]).
+pub type Closing = Box<dyn FnOnce(&dyn Host)>;
+
 impl PanelMount {
     /// Takes the host's theme in place, keeping its widgets and their state; false when it must mount again.
     pub fn restyle(&self, host: &dyn Host) -> bool {
@@ -3447,7 +3450,7 @@ impl PanelMount {
 
     /// Ends the mount of a dialog surface whose dialog closed: what it returns tells its handler
     /// ([`abi::interact::Event::Closed`]), as the plugin's call, once the host calls it.
-    pub fn close(self) -> Option<Box<dyn FnOnce(&dyn Host)>> {
+    pub fn close(self) -> Option<Closing> {
         self.0.closing()
     }
 
