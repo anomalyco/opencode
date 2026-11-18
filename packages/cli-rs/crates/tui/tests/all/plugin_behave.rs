@@ -266,7 +266,7 @@ fn mount(cards: usize, width: u16, height: u16, list: bool) -> Mounted {
         builtins: vec![abi::Plugin { id: "test.board", setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(width, height, deps);
+    let harness = support::mount_still(width, height, deps);
     harness.tui.navigate(Route::Plugin { id: "test.board".into(), name: "board".into() });
     harness.app.advance(Duration::ZERO);
     let first = harness.app.render();
@@ -414,7 +414,7 @@ impl Eager {
             builtins: vec![abi::Plugin { id: "test.eager", setup: eager_setup }.into()],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(width, height, deps);
+        let harness = support::mount_still(width, height, deps);
         harness.tui.navigate(Route::Plugin { id: "test.eager".into(), name: "eager".into() });
         harness.app.advance(Duration::ZERO);
         Self { harness }
@@ -1021,7 +1021,7 @@ fn mount_kinds() -> support::Harness {
         builtins: vec![abi::Plugin { id: "test.kinds", setup: kinds_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(60, 14, deps);
+    let harness = support::mount_still(60, 14, deps);
     harness.tui.navigate(Route::Plugin { id: "test.kinds".into(), name: "kinds".into() });
     harness.app.advance(Duration::ZERO);
     harness.app.render();
@@ -1155,7 +1155,7 @@ fn the_transcript_takes_three_verbs_from_a_handler_only() {
         builtins: vec![abi::Plugin { id: "test.transcript", setup: transcript_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(60, 14, deps);
+    let harness = support::mount_still(60, 14, deps);
     let _published = behave::publish_transcript(
         harness.app.app(),
         behave::Published {
@@ -1295,7 +1295,7 @@ fn a_large_added_file_mounts_its_chunks_near_the_view() {
         builtins: vec![abi::Plugin { id: "test.big", setup: big_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(60, 14, deps);
+    let harness = support::mount_still(60, 14, deps);
     harness.tui.navigate(Route::Plugin { id: "test.big".into(), name: "big".into() });
     harness.app.advance(Duration::ZERO);
     assert!(harness.app.render().text().contains("line_0"));
@@ -1613,7 +1613,7 @@ fn probe(new: Shape, width: u16, height: u16) -> support::Harness {
         builtins: vec![abi::Plugin { id: "test.probe", setup: probe_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(width, height, deps);
+    let harness = support::mount_still(width, height, deps);
     harness.tui.navigate(Route::Plugin { id: "test.probe".into(), name: "probe".into() });
     harness.app.advance(Duration::ZERO);
     harness
@@ -2179,7 +2179,7 @@ fn big(kept: bool, bare: bool, height: u16) -> Big {
         builtins: vec![abi::Plugin { id: "test.big", setup: big_more_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(60, height, deps);
+    let harness = support::mount_still(60, height, deps);
     harness.tui.navigate(Route::Plugin { id: "test.big".into(), name: "big".into() });
     harness.app.advance(Duration::ZERO);
     harness.app.render();
@@ -2244,7 +2244,7 @@ fn split(at: u16, width: u16, listed: bool) -> support::Harness {
         builtins: vec![abi::Plugin { id: "test.split", setup: split_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(width, 8, deps);
+    let harness = support::mount_still(width, 8, deps);
     harness.tui.navigate(Route::Plugin { id: "test.split".into(), name: "split".into() });
     harness.app.advance(Duration::ZERO);
     harness
@@ -2314,7 +2314,7 @@ fn an_input_built_again_keeps_the_draft_and_the_focus() {
         builtins: vec![abi::Plugin { id: "test.input", setup: input_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(60, 10, deps);
+    let harness = support::mount_still(60, 10, deps);
     harness.tui.navigate(Route::Plugin { id: "test.input".into(), name: "input".into() });
     harness.app.advance(Duration::ZERO);
     let screen = harness.app.render().text();
@@ -2377,7 +2377,7 @@ fn images_of_one_content_decode_once() {
         builtins: vec![abi::Plugin { id: "test.images", setup: images_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(40, 12, deps);
+    let harness = support::mount_still(40, 12, deps);
     harness.tui.navigate(Route::Plugin { id: "test.images".into(), name: "images".into() });
     harness.app.advance(Duration::ZERO);
     harness.app.render();
@@ -2597,7 +2597,7 @@ fn an_event_acts_on_the_mount_it_came_from() {
             )],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(80, 16, deps);
+        let harness = support::mount_still(80, 16, deps);
         harness.app.advance(Duration::ZERO);
         let host = opencode_tui::plugins::host::host(&harness.tui);
         let app = harness.app.app();
@@ -2689,7 +2689,7 @@ fn a_handler_and_a_layout_name_the_mount_they_are_for() {
             )],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(80, 16, deps);
+        let harness = support::mount_still(80, 16, deps);
         harness.app.advance(Duration::ZERO);
         let host = opencode_tui::plugins::host::host(&harness.tui);
         let app = harness.app.app();

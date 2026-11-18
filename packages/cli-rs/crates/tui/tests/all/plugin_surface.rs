@@ -143,7 +143,7 @@ fn open_tui(carrier: Carrier) -> Harness {
         builtins: vec![builtin(carrier, abi::Plugin { id: ID, setup })],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 40, deps);
+    let harness = support::mount_still(80, 40, deps);
     settle(&harness);
     harness
 }
@@ -606,7 +606,7 @@ fn parts_harness(carrier: Carrier) -> Harness {
         builtins: vec![builtin(carrier, abi::Plugin { id: "test.parts", setup: parts })],
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     harness.wait_for("part one says hello");
     harness.tui.navigate(Route::Plugin { id: "test.parts".into(), name: "parts".into() });
     harness.wait_for("tool said fn parse");
@@ -670,7 +670,7 @@ fn a_route_of_abi_1_takes_a_new_theme_in_place() {
         builtins: vec![abi::Plugin { id: "test.plain", setup: plain }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     harness.tui.navigate(Route::Plugin { id: "test.plain".into(), name: "plain".into() });
     let screen = harness.wait_for("plain words");
     let (y, line) = screen.lines().enumerate().find(|(_, line)| line.contains("plain words")).unwrap();
@@ -708,7 +708,7 @@ fn a_node_the_layout_cannot_take_does_not_end_the_tui() {
         builtins: vec![abi::Plugin { id: "test.unbounded", setup: unbounded }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     for name in ["deep", "wide"] {
         harness.tui.navigate(Route::Plugin { id: "test.unbounded".into(), name: name.into() });
         settle(&harness);
@@ -757,7 +757,7 @@ fn a_content_handle_names_nothing_in_another_mount() {
         builtins: vec![abi::Plugin { id: "test.alias", setup: alias }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     let route = Route::Plugin { id: "test.alias".into(), name: "alias".into() };
     harness.tui.navigate(route.clone());
     harness.wait_for("FIRST BYTES");
@@ -819,7 +819,7 @@ fn a_late_reply_does_not_reach_a_mount_opened_again() {
 fn late_reply(loopback: bool) {
     REPLIES.with(|replies| replies.borrow_mut().clear());
     let (fake, gate, served, _) = held();
-    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let harness = support::mount_still(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
     let host = opencode_tui::plugins::host::host(&harness.tui);
     let definition = match loopback {
         true => {
@@ -892,7 +892,7 @@ fn a_surface_gets_the_room_it_is_given() {
         builtins: vec![abi::Plugin { id: "test.room", setup: room }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     harness.wait_for("room tag");
     settle(&harness);
     let slot = ROOM.with(|room| room.borrow().iter().rev().find(|(name, ..)| *name == "slot").copied()).unwrap();
@@ -958,7 +958,7 @@ fn a_whole_tree_after_a_refusal_takes_nothing_from_before() {
             builtins: vec![abi::Plugin { id: "test.retry", setup: retry }.into()],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(80, 24, deps);
+        let harness = support::mount_still(80, 24, deps);
         harness.tui.navigate(Route::Plugin { id: "test.retry".into(), name: "retry".into() });
         harness.wait_for("kept body");
         let _ = harness.tui.keymap.dispatch("retry.go", Some(&mode.to_string()));
@@ -1049,7 +1049,7 @@ fn a_theme_change_keeps_every_surface_mounted() {
             builtins: vec![abi::Plugin { id: "test.restyle", setup: restyling }.into()],
             ..support::deps(Arc::new(fake()))
         };
-        let harness = support::mount(160, 40, deps);
+        let harness = support::mount_still(160, 40, deps);
         let names: &[&str] = match route {
             Route::Home => &["foot claim", "app claim", "prompt claim", "pal box", "kept claim"],
             _ => &["side claim", "app claim", "prompt claim"],
@@ -1117,7 +1117,7 @@ fn a_failed_surface_gives_its_slot_back() {
         builtins: vec![abi::Plugin { id: "test.replacing", setup: replacing }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(100, 30, deps);
+    let harness = support::mount_still(100, 30, deps);
     let replaced = harness.wait_for("replaced version");
     assert!(!replaced.contains("plugin failed"), "{replaced}");
     let _ = harness.tui.keymap.dispatch("replacing.break", None);
@@ -1157,7 +1157,7 @@ fn a_reload_drops_the_replies_of_the_activation_before() {
         builtins: vec![abi::Plugin { id: "test.owned", setup: owned }.into()],
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(80, 24, deps);
+    let harness = support::mount_still(80, 24, deps);
     let route = Route::Plugin { id: "test.owned".into(), name: "owned".into() };
     harness.tui.navigate(route.clone());
     harness.wait_for("owned route");
@@ -1248,7 +1248,7 @@ fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loa
         builtins: vec![builtin(Carrier::Abi, abi::Plugin { id: "test.cards", setup: cards })],
         ..support::deps(Arc::new(support::empty()))
     };
-    let harness = support::mount(80, 40, deps);
+    let harness = support::mount_still(80, 40, deps);
     harness.tui.navigate(Route::Plugin { id: "test.cards".into(), name: "cards".into() });
     settle(&harness);
     let before = opencode_plugin::loader::native::crossed();
@@ -1317,7 +1317,7 @@ fn a_card_left_out_is_built_again_when_it_comes_back() {
             builtins: vec![builtin(carrier, abi::Plugin { id: "test.hide", setup: hiding })],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(60, 20, deps);
+        let harness = support::mount_still(60, 20, deps);
         harness.tui.navigate(Route::Plugin { id: "test.hide".into(), name: "hide".into() });
         settle(&harness);
         for input in [Some("1"), None, Some("2"), None] {
@@ -1363,7 +1363,7 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
             builtins: vec![builtin(carrier, abi::Plugin { id: "test.dup", setup: duplicating })],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(60, 20, deps);
+        let harness = support::mount_still(60, 20, deps);
         harness.tui.navigate(Route::Plugin { id: "test.dup".into(), name: "dup".into() });
         settle(&harness);
         let before = DUP.with(|dup| dup.borrow().1.len());
@@ -1405,7 +1405,7 @@ fn a_route_opens_with_one_view() {
                 ],
                 ..support::deps(Arc::new(support::empty()))
             };
-            let harness = support::mount(80, 40, deps);
+            let harness = support::mount_still(80, 40, deps);
             harness.tui.navigate(before.clone());
             settle(&harness);
             let views = board(|board| board.calls.len());
@@ -1445,7 +1445,7 @@ fn a_routes_commands_are_in_the_palette() {
             builtins: vec![builtin(carrier, abi::Plugin { id: "test.tally", setup: tally })],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(80, 30, deps);
+        let harness = support::mount_still(80, 30, deps);
         let palette = |harness: &Harness| {
             harness.tui.keymap.dispatch("command.palette.show", None);
             harness.wait_for("Search commands");
@@ -1496,7 +1496,7 @@ fn a_failed_plugins_route_says_it_failed() {
             builtins: vec![builtin(carrier, abi::Plugin { id: "test.doomed", setup: doomed })],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(100, 30, deps);
+        let harness = support::mount_still(100, 30, deps);
         harness.tui.navigate(Route::Plugin { id: "test.doomed".into(), name: "page".into() });
         harness.wait_for("a doomed page");
         harness.tui.keymap.dispatch("doomed.panic", None);
@@ -1565,7 +1565,7 @@ fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
             builtins: vec![builtin(carrier, abi::Plugin { id: "test.nest", setup: nesting })],
             ..support::deps(Arc::new(support::empty()))
         };
-        let harness = support::mount(80, 20, deps);
+        let harness = support::mount_still(80, 20, deps);
         harness.tui.navigate(Route::Plugin { id: "test.nest".into(), name: "nest".into() });
         settle(&harness);
         harness.tui.keymap.dispatch("nest.bump", None);
@@ -1706,7 +1706,8 @@ end)
 /// The TUI on the probe's route, on `carrier`.
 fn dialog_open(carrier: DialogCarrier) -> Harness {
     DIALOG_SEEN.with_borrow_mut(Vec::clear);
-    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let harness =
+        support::mount_still(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let definition = match carrier {
         DialogCarrier::Native(Carrier::Linked) => abi::Plugin { id: "test.dlg", setup: dialog_probe }.into(),
         DialogCarrier::Native(Carrier::Abi) => {
@@ -1973,7 +1974,8 @@ export default {{ id: "example.dlgraw", setup(api) {{
 "#
     );
     std::fs::write(plugin.join("tui.ts"), script).unwrap();
-    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let harness =
+        support::mount_still(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let external = opencode_tui::plugins::host::External {
         config_dir: root.path().join("config"),
         cwd: root.path().to_path_buf(),

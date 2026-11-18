@@ -428,6 +428,17 @@ pub fn mount(width: u16, height: u16, deps: Deps) -> Harness {
     mount_on(TestApp::new(width, height), deps, Args::default())
 }
 
+/// [`mount`] with the plugin monitor's clock stopped, for rows that count views or compare frames: on a slow runner the
+/// real clock can make a built-in slow mid-row, which tells every plugin and draws its claims again, or puts a "Plugin
+/// is slow" toast over one of two frames (previews 44303912167 and 44312154568, Windows). A row that measures time sets
+/// its own clock.
+pub fn mount_still(width: u16, height: u16, deps: Deps) -> Harness {
+    let harness = mount(width, height, deps);
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
+    harness
+}
+
 /// Home over [`empty`], with `info` and `roots`.
 pub fn mount_empty(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
     opencode_tui::mount(app, Deps { config: config(info), roots, route: Route::Home, ..deps(Arc::new(empty())) })

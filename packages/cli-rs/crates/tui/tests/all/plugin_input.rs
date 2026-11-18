@@ -649,7 +649,7 @@ pub fn open_with(prepare: impl FnOnce(&mut Probe)) -> Harness {
         let copy = serde_json::json!({ "terminal": { "copy": "manual" } });
         deps.config = support::config(opencode_local::cli_config::merge(&[Some(copy)]));
     }
-    let harness = support::mount(120, 30, deps);
+    let harness = support::mount_still(120, 30, deps);
     settle(&harness);
     harness
 }
@@ -1892,9 +1892,11 @@ fn a_taken_press_owns_its_gesture() {
 fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     let harness = open();
     run(&harness, "input.panel", None);
-    let panels = probe(|probe| probe.panels.clone());
-    assert_eq!(panels.len(), 1, "{panels:?}");
+    // Its first view already sees how it shows, and no view since saw anything else or another mount. A view drawn
+    // again for the same input is no second opening (preview 44312154568 saw eight on Windows, all alike).
+    let (panels, heard) = probe(|probe| (probe.panels.clone(), probe.log.clone()));
     assert!(panels[0].0.is_some_and(|panel| panel.focused && panel.width > 0), "{panels:?}");
+    assert!(panels.iter().all(|view| *view == panels[0]), "{panels:?}\nthe panel heard: {heard:?}");
     // The splitter, dragged left in steps.
     let (left, top) = support::at(&harness.app.text(), "PANEL").unwrap();
     harness.app.mouse(MouseEventKind::Down(MouseButton::Left), left - 1, top + 5);

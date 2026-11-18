@@ -27,7 +27,7 @@ fn session(plugins: &[&str], extra: Vec<opencode_plugin::Builtin>) -> Harness {
         builtins,
         ..support::deps(Arc::new(Fake::new(|seen| support::base(seen, DIRECTORY))))
     };
-    let harness = support::mount(170, 34, deps);
+    let harness = support::mount_still(170, 34, deps);
     // The card shows once the integrations loaded; without the footer that draws it, the location stands in.
     harness.wait_for(match plugins.contains(&"-opencode.sidebar.footer") {
         true => "Fix the parser",
@@ -116,7 +116,7 @@ fn history(turns: u64, abi: bool) -> Harness {
         abi_builtins: abi,
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(170, 34, deps);
+    let harness = support::mount_still(170, 34, deps);
     harness.wait_for("Getting started");
     if turns > 0 {
         harness.wait_for(&format!("Answer {turns} two."));
@@ -204,7 +204,7 @@ fn stats_route(height: u16) -> Harness {
         route: opencode_tui::Route::Home,
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(100, height, deps);
+    let harness = support::mount_still(100, height, deps);
     harness.tui.navigate(opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() });
     harness.wait_for("TOKENS");
     harness
@@ -268,7 +268,7 @@ fn a_stats_reply_after_the_route_closed_reaches_nothing() {
         route: opencode_tui::Route::Home,
         ..support::deps(Arc::new(fake))
     };
-    let harness = support::mount(100, 30, deps);
+    let harness = support::mount_still(100, 30, deps);
     harness.wait_for("Ask anything");
     let route = opencode_tui::Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
     harness.tui.navigate(route.clone());
