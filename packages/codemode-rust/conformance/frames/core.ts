@@ -65,6 +65,8 @@ export default ({ after, text }: Helpers) => ({
      try { [...{ [Symbol.iterator]: () => 5 }] } catch (e) { r.push(e.message) }
      try { for (const x of { [Symbol.iterator]: () => ({}) }) {} } catch (e) { r.push(e.message) }
      return r`,
+    // A conversion with no primitive to give, inline, restarted, in an operator and in a step.
+    `const o = { valueOf: () => ({}), toString: () => ({}) }; const r = []; for (const f of [() => o + 1, () => 'a'.padStart(o), () => String(o), () => [o].join(), () => Object.groupBy([1], () => o), () => [2, 1].sort(() => o)]) { try { f() } catch (e) { r.push(e.message) } } return r`,
     // Their fuel: the conversions run as calls, a built-in after them again.
     after(
       "const o = { valueOf() { return 1 }, toString() { return 'a' } }",
