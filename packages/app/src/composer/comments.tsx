@@ -1,4 +1,4 @@
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createMemo, createRoot, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useParams } from "@solidjs/router"
@@ -7,14 +7,21 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { useServerSDK } from "@/runtime/server/client"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import type { SelectedLineRange } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import {
+  COMMENT_FOCUS_TIMEOUT_MS,
+  commentActiveTarget,
+  commentFocusTarget,
+  INITIAL_COMMENT_FOCUS_STATE,
+  transitionCommentFocus,
+  type CommentFocusEvent,
+  type CommentTarget,
+} from "./comment-focus-machine"
 import { CommentStore, type LineComment } from "./schema"
 
 export type { LineComment } from "./schema"
-
-type CommentFocus = { file: string; id: string }
 
 const WORKSPACE_KEY = "__workspace__"
 
@@ -80,10 +87,25 @@ function group(comments: LineComment[]) {
 }
 
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
-  const [state, setState] = createStore({
-    focus: null as CommentFocus | null,
-    active: null as CommentFocus | null,
-  })
+  const [focusState, setFocusState] = createSignal(INITIAL_COMMENT_FOCUS_STATE)
+  let focusTimer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatchFocus = (event: CommentFocusEvent) => {
+    const step = transitionCommentFocus(untrack(focusState), event)
+    setFocusState(step.state)
+    step.effects.forEach((effect) => {
+      clearTimeout(focusTimer)
+      focusTimer = undefined
+
+      if (effect.type !== "timer.start") return
+      focusTimer = setTimeout(
+        () => dispatchFocus({ type: "focus.timed-out", attempt: effect.attempt }),
+        COMMENT_FOCUS_TIMEOUT_MS,
+      )
+    })
+  }
+
+  onCleanup(() => dispatchFocus({ type: "disposed" }))
 
   // Reuse the previous array when contents are unchanged so consumers keep a stable
   // identity; a fresh array per call cascaded into diff annotation re-renders.
@@ -98,17 +120,6 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     return next
   }
 
-  const setRef = (
-    key: "focus" | "active",
-    value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null),
-  ) => setState(key, value)
-
-  const setFocus = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
-    setRef("focus", value)
-
-  const setActive = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
-    setRef("active", value)
-
   const list = (file: string) => store.comments[file] ?? []
 
   const add = (input: Omit<LineComment, "id" | "time">) => {
@@ -121,7 +132,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 
     batch(() => {
       setStore("comments", input.file, (items) => [...(items ?? []), next])
-      setFocus({ file: input.file, id: next.id })
+      dispatchFocus({ type: "focus.set", target: { file: input.file, id: next.id } })
     })
 
     return next
@@ -130,7 +141,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
   const remove = (file: string, id: string) => {
     batch(() => {
       setStore("comments", file, (items) => (items ?? []).filter((item) => item.id !== id))
-      setFocus((current) => (current?.file === file && current.id === id ? null : current))
+      dispatchFocus({ type: "comment.removed", target: { file, id } })
     })
   }
 
@@ -147,16 +158,14 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
   const replace = (comments: LineComment[]) => {
     batch(() => {
       setStore("comments", reconcile(group(comments)))
-      setFocus(null)
-      setActive(null)
+      dispatchFocus({ type: "comments.reset" })
     })
   }
 
   const clear = () => {
     batch(() => {
       setStore("comments", reconcile({}))
-      setFocus(null)
-      setActive(null)
+      dispatchFocus({ type: "comments.reset" })
     })
   }
 
@@ -168,12 +177,14 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     update,
     replace,
     clear,
-    focus: () => state.focus,
-    setFocus,
-    clearFocus: () => setRef("focus", null),
-    active: () => state.active,
-    setActive,
-    clearActive: () => setRef("active", null),
+    /** Marks `target` active and asks the view that shows it to reveal it. */
+    open: (target: CommentTarget) => dispatchFocus({ type: "comment.opened", target }),
+    focus: () => commentFocusTarget(focusState()),
+    setFocus: (target: CommentTarget | null) => dispatchFocus({ type: "focus.set", target }),
+    clearFocus: () => dispatchFocus({ type: "focus.set", target: null }),
+    active: () => commentActiveTarget(focusState()),
+    setActive: (target: CommentTarget | null) => dispatchFocus({ type: "active.set", target }),
+    clearActive: () => dispatchFocus({ type: "active.set", target: null }),
   }
 }
 
@@ -199,6 +210,7 @@ function createCommentSession(scope: ServerScope, dir: string, id: string | unde
     update: session.update,
     replace: session.replace,
     clear: session.clear,
+    open: session.open,
     focus: session.focus,
     setFocus: session.setFocus,
     clearFocus: session.clearFocus,
@@ -254,11 +266,13 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       update: (file: string, id: string, comment: string) => session().update(file, id, comment),
       replace: (comments: LineComment[]) => session().replace(comments),
       clear: () => session().clear(),
+      // Resolved at the call, so a request always lands on the session the user opened it in.
+      open: (target: CommentTarget) => session().open(target),
       focus: () => session().focus(),
-      setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
+      setFocus: (focus: CommentTarget | null) => session().setFocus(focus),
       clearFocus: () => session().clearFocus(),
       active: () => session().active(),
-      setActive: (active: CommentFocus | null) => session().setActive(active),
+      setActive: (active: CommentTarget | null) => session().setActive(active),
       clearActive: () => session().clearActive(),
     }
   },

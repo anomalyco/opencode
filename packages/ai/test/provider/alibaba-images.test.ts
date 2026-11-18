@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/effect.js"
+import { ai, ImageClient, Media } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -14,7 +14,7 @@ const result = JSON.stringify({
 describe("Alibaba Images", () => {
   it.effect("generates through the Model Studio multimodal generation API", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: Alibaba.configure({
           region: "cn-beijing",
           workspaceID: "llm-fixture",
@@ -118,7 +118,7 @@ describe("Alibaba Images", () => {
         { region: "us-east-1" },
         { baseURL: "https://token-plan.example/api/v1" },
       ])
-        yield* Image.generate({
+        yield* ai.image.generate({
           model: Alibaba.configure({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
           prompt: "test",
         }).pipe(Effect.provide(layer))
@@ -135,11 +135,11 @@ describe("Alibaba Images", () => {
     Effect.gen(function* () {
       const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const layer = ImageClient.layer.pipe(Layer.provide(fixedResponse(result, json)))
-      const ref = yield* Image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
+      const ref = yield* ai.image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
         Effect.provide(layer),
         Effect.flip,
       )
-      const tooLarge = yield* Image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
+      const tooLarge = yield* ai.image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
         Effect.provide(layer),
         Effect.flip,
       )
@@ -165,7 +165,7 @@ describe("Alibaba Images", () => {
       ]
 
       yield* Effect.forEach(payloads, (payload) =>
-        Image.generate({ model, prompt: "test" }).pipe(
+        ai.image.generate({ model, prompt: "test" }).pipe(
           Effect.provide(ImageClient.layer.pipe(Layer.provide(fixedResponse(JSON.stringify(payload), json)))),
           Effect.flip,
           Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidProviderOutput"))),
@@ -176,7 +176,7 @@ describe("Alibaba Images", () => {
 
   it.effect("surfaces Model Studio error messages", () =>
     Effect.gen(function* () {
-      const error = yield* Image.generate({
+      const error = yield* ai.image.generate({
         model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
         prompt: "test",
       }).pipe(

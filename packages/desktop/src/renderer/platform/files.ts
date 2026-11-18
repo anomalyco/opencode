@@ -54,9 +54,24 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     }
   }
 
+  // Only the paths: the token that would let this window read the files is released at once.
+  const openFilePathPickerDialog: NonNullable<Platform["openFilePathPickerDialog"]> = async (options) => {
+    const result = await api.openFilePicker({
+      multiple: options.multiple ?? false,
+      title: options.title,
+      extensions: options.extensions,
+    })
+
+    if (!result) return null
+    await api.releasePickedFiles(result.token)
+
+    return result.files.map((file) => file.path)
+  }
+
   return {
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
+    openFilePathPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
     saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
       api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),

@@ -40,6 +40,15 @@ describe("settings route", () => {
     })
   })
 
+  test("opens links to the desktop's old Plugins page on the Plugins tab of Extensions", () => {
+    expect(parseSettingsView("?tab=plugins")).toEqual({
+      type: "root",
+      tab: "extensions",
+      server: undefined,
+      subtab: "plugins",
+    })
+  })
+
   test("keeps search reveal state transient", () => {
     expect(
       parseSettingsView("?server=local&project=%2Fwork&tab=extensions&subtab=plugins", {
@@ -59,8 +68,8 @@ describe("settings route", () => {
 
   test("keeps a restored server selection until the server lists load, then drops a removed one", () => {
     const view: SettingsView = { type: "root", tab: "models", server: "wsl:Debian" }
-    const local = { key: "local", connected: true, starting: false }
-    const wsl = { key: "wsl:Debian", connected: false, starting: true }
+    const local = { key: "local", availability: "ready" as const }
+    const wsl = { key: "wsl:Debian", availability: "starting" as const }
 
     expect(settingsViewRedirect({ view, loaded: false, servers: [local] })).toBeUndefined()
     expect(settingsViewRedirect({ view, loaded: true, servers: [local, wsl] })).toBeUndefined()
@@ -71,24 +80,20 @@ describe("settings route", () => {
     })
   })
 
-  test("keeps a project page while its server starts", () => {
+  test("keeps a project page while its server starts and leaves it for a signed-out or unreachable one", () => {
     const view: SettingsView = { type: "project", server: "wsl:Debian", project: "/work", tab: "general" }
-    const local = { key: "local", connected: true, starting: false }
+    const local = { key: "local", availability: "ready" as const }
 
-    expect(
-      settingsViewRedirect({
-        view,
-        loaded: true,
-        servers: [local, { key: "wsl:Debian", connected: false, starting: true }],
-      }),
-    ).toBeUndefined()
-    expect(
-      settingsViewRedirect({
-        view,
-        loaded: true,
-        servers: [local, { key: "wsl:Debian", connected: false, starting: false }],
-      }),
-    ).toEqual({ type: "root", tab: "projects", server: "wsl:Debian" })
+    for (const availability of ["ready", "starting"] as const)
+      expect(
+        settingsViewRedirect({ view, loaded: true, servers: [local, { key: "wsl:Debian", availability }] }),
+      ).toBeUndefined()
+
+    // An HTTP server that answers 401 or not at all used to keep the route and render a blank page.
+    for (const availability of ["unauthorized", "unreachable"] as const)
+      expect(
+        settingsViewRedirect({ view, loaded: true, servers: [local, { key: "wsl:Debian", availability }] }),
+      ).toEqual({ type: "root", tab: "projects", server: "wsl:Debian" })
     expect(settingsViewRedirect({ view, loaded: true, servers: [local] })).toEqual({ type: "root", tab: "projects" })
   })
 

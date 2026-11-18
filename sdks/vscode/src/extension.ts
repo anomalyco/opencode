@@ -86,10 +86,10 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (startLine === endLine) {
         // Single line selection
-        filepathWithAt += `#L${startLine}`
+        filepathWithAt += `#${startLine}`
       } else {
         // Multi-line selection
-        filepathWithAt += `#L${startLine}-${endLine}`
+        filepathWithAt += `#${startLine}-${endLine}`
       }
     }
 

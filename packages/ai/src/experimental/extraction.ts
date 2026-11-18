@@ -2,7 +2,14 @@ import { Effect, Schema } from "effect"
 import { MediaModel, tryRequest } from "../media-model.js"
 import { RequestExecutor } from "../route/executor.js"
 import type { MediaRoute } from "../route/media.js"
-import { AIError, HttpOptions, ProviderMetadata, ProviderOptions, Usage, type OpenString } from "../schema/index.js"
+import {
+  AIError,
+  ProviderMetadata,
+  ProviderOptions,
+  Usage,
+  type BaseRequest,
+  type OpenString,
+} from "../schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Answers
@@ -94,7 +101,7 @@ export type ExtractionFields = Readonly<Record<string, ExtractionField>>
 
 export type ExtractionOptions = MediaModel.Options
 
-export type ExtractionRoute = MediaRoute.InlineRoute<ExtractionRequestFor, ExtractionResponse>
+export type ExtractionRoute = MediaRoute.InlineRoute<ExtractionRequest, ExtractionResponse>
 
 export class ExtractionModel<Options extends ExtractionOptions = ExtractionOptions> extends MediaModel<
   ExtractionRoute,
@@ -109,42 +116,36 @@ export type ExtractionModelOptions<Model> = Model extends ExtractionModel<infer 
 // Request and response
 // ---------------------------------------------------------------------------
 
-export class ExtractionRequest extends Schema.Class<ExtractionRequest>("Extraction.Request")({
+const ExtractionRequestSchema = Schema.Struct({
   model: Schema.declare((value): value is ExtractionModel => value instanceof ExtractionModel, {
     expected: "Extraction.Model",
   }),
-  /** The text to read; text answers carry spans into it. */
   input: Schema.String,
   fields: Schema.Record(Schema.String, ExtractionFieldSchema).pipe(
     Schema.refine((x): x is typeof x => Object.keys(x).length > 0, { message: "Extraction fields must not be empty" }),
   ),
-  /** ISO date that anchors dates written without a year. */
   referenceDate: Schema.optional(Schema.String),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-}) {
-  declare protected readonly _ExtractionRequest: void
-}
+})
 
-export type ExtractionRequestFor<
-  Options extends ExtractionOptions = ExtractionOptions,
+/** A normalized extraction request, the plain object `Extraction.request(...)` returns. */
+export interface ExtractionRequest<
+  Model extends ExtractionModel = ExtractionModel,
   Fields extends ExtractionFields = ExtractionFields,
-> = Omit<ExtractionRequest, "model" | "fields" | "providerOptions"> & {
-  readonly model: ExtractionModel<Options>
+> extends BaseRequest<Model, ExtractionModelOptions<Model>> {
+  /** The text to read; text answers carry spans into it. */
+  readonly input: string
   readonly fields: Fields
-  readonly providerOptions?: Options
+  /** ISO date that anchors dates written without a year. */
+  readonly referenceDate?: string
 }
 
+/** Input accepted by `Extraction.request` and `generate`; an `ExtractionRequest` is also a valid input. */
 export type ExtractionRequestInput<
   Model extends ExtractionModel = ExtractionModel,
   Fields extends ExtractionFields = ExtractionFields,
-> = {
-  readonly model: Model
-  readonly input: string
-  readonly fields: Fields
-  readonly referenceDate?: string
+> = Omit<ExtractionRequest<Model, Fields>, "providerOptions"> & {
   readonly providerOptions?: NoInfer<ExtractionModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 export class ExtractionResponse extends Schema.Class<ExtractionResponse>("Extraction.Response")({
@@ -161,24 +162,24 @@ export type ExtractionResponseFor<Fields extends ExtractionFields> = Omit<Extrac
 // Call API
 // ---------------------------------------------------------------------------
 
-export function request<const Model extends ExtractionModel, const Fields extends ExtractionFields>(
+/** Normalize extraction request input into a plain `ExtractionRequest`. */
+export const request = <const Model extends ExtractionModel, const Fields extends ExtractionFields>(
   input: ExtractionRequestInput<Model, Fields>,
-): ExtractionRequestFor<ExtractionModelOptions<Model>, Fields>
-export function request(input: ExtractionRequest): ExtractionRequest
-export function request(input: ExtractionRequest | ExtractionRequestInput): ExtractionRequest
-export function request(input: ExtractionRequest | ExtractionRequestInput) {
-  if (input instanceof ExtractionRequest) return input
-  return new ExtractionRequest({ ...input, http: HttpOptions.make(input.http) })
-}
+): ExtractionRequest<Model, Fields> => ({ ...input })
+
+const validate = Schema.decodeUnknownSync(ExtractionRequestSchema)
 
 export function generate<const Model extends ExtractionModel, const Fields extends ExtractionFields>(
   input: ExtractionRequestInput<Model, Fields>,
 ): Effect.Effect<ExtractionResponseFor<Fields>, AIError, RequestExecutor.Service>
-export function generate(input: ExtractionRequest): Effect.Effect<ExtractionResponse, AIError, RequestExecutor.Service>
-export function generate(input: ExtractionRequest | ExtractionRequestInput) {
+export function generate(input: ExtractionRequestInput) {
   return Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
-    const built = yield* tryRequest(() => request(input))
+    const built = yield* tryRequest(() => {
+      const normalized = request(input)
+      validate(normalized)
+      return normalized
+    })
     return yield* built.model.route.generate(built, executor.execute)
   })
 }

@@ -40,8 +40,12 @@ export function Link(props: LinkProps) {
  * link resolves the whole link. Modified clicks are left to the terminal's own hyperlink handling.
  */
 export function clickedLink(renderer: CliRenderer, event: MouseEvent) {
-  if (!event.isDragging || event.modifiers.ctrl || event.modifiers.alt || event.modifiers.shift) return
-  const selection = renderer.getSelection()
-  if (!selection?.isStart || selection.behavior !== "cell") return
+  if (!plainClick(renderer, event)) return
   return renderer.getLinkAt(event.x, event.y) ?? undefined
+}
+
+export function plainClick(renderer: CliRenderer, event: MouseEvent) {
+  if (!event.isDragging || event.modifiers.ctrl || event.modifiers.alt || event.modifiers.shift) return false
+  const selection = renderer.getSelection()
+  return selection?.isStart === true && selection.behavior === "cell"
 }

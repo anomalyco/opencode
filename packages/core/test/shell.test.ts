@@ -4,7 +4,10 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { FSUtil } from "@opencode/util/fs-util"
 import { which } from "@opencode/core/util/which"
 import fs from "node:fs/promises"
+import { appExecutionAlias } from "./fixture/app-execution-alias"
 import { tmpdir } from "./fixture/tmpdir"
+
+const alias = appExecutionAlias()
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -51,7 +54,7 @@ describe("shell", () => {
   test("builds command args per shell family", () => {
     expect(ShellSelect.args("/bin/sh", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
-    expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["+o", "nomatch", "-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
       "-NoLogo",
@@ -60,6 +63,14 @@ describe("shell", () => {
       "-Command",
       "Write-Output hi",
     ])
+  })
+
+  const zsh = which("zsh")
+  test.skipIf(!zsh || process.platform === "win32")("passes an unmatched zsh glob through to the command", () => {
+    if (!zsh) return
+    const result = Bun.spawnSync([zsh, ...ShellSelect.args(zsh, "echo opencode-missing-*.nope; echo after")])
+    expect(result.stdout.toString()).toBe("opencode-missing-*.nope\nafter\n")
+    expect(result.exitCode).toBe(0)
   })
 
   if (process.platform !== "win32") {
@@ -118,6 +129,12 @@ describe("shell", () => {
       await withShell(path.win32.basename(shell), async () => {
         expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
       })
+    })
+
+    // Store installs of PowerShell 7 are app execution aliases; stat throws EACCES for them. Skipped where no
+    // Microsoft Store app is installed for the user; see the fixture.
+    test.skipIf(!alias)("resolves a configured app execution alias", () => {
+      expect(ShellSelect.resolve({ priority: "config" }, alias!.file)).toBe(alias!.file)
     })
   }
 })

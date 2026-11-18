@@ -18,6 +18,14 @@ test.each([
   expect(parseSmallMarkdown(markdown)).toBe(expected)
 })
 
+test("keeps fragment links in the page", async () => {
+  const markdown = "See [Host services](#host-services)"
+  const expected = '<p>See <a href="#host-services">Host services</a></p>\n'
+
+  expect(await parser.parse(markdown)).toBe(expected)
+  expect(parseSmallMarkdown(markdown)).toBe(expected)
+})
+
 test("renders inline and block math", async () => {
   expect(await parser.parse("\\(x^2\\)")).toContain('<span class="katex">')
   expect(await parser.parse("$$\nx^2\n$$\n")).toContain('<span class="katex-display">')
@@ -90,6 +98,26 @@ test("highlights fenced code with the app theme variables", async () => {
   expect(html).toStartWith('<pre class="highlights" style="background-color:var(--color-background-stronger)')
   expect(html).toContain('<code class="language-ts">')
   expect(html).toContain('<span style="color:var(--syntax-keyword)">const </span>')
+})
+
+test.each(["latex", "math", "LaTeX", "latex title=\"Score\""])("renders a %s fence as display math", async (lang) => {
+  const html = await parser.parse(
+    `\`\`\`${lang}\nS_{\\text{adj}} = \\min\\!\\left(10,\\; S \\cdot \\left(\\frac{T_0}{T}\\right)^{\\alpha}\\right)\n\`\`\`\n`,
+  )
+
+  expect(html).toStartWith('<span class="katex-display">')
+  expect(html).not.toContain("<pre")
+})
+
+test("renders a math fence inside a list item", async () => {
+  expect(await parser.parse("- Score:\n\n  ```latex\n  x^2\n  ```\n")).toContain('<span class="katex-display">')
+})
+
+test.each(["\\frac{1}{", "\\notacommand{x}", ""])("keeps a math fence KaTeX cannot parse as code: %p", async (source) => {
+  const html = await parser.parse(`\`\`\`latex\n${source}\n\`\`\`\n`)
+
+  expect(html).toContain('<code class="language-latex">')
+  expect(html).not.toContain("katex")
 })
 
 test("keeps the fence language for code without a lexer", async () => {

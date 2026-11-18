@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { MouseButton } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { expect, test } from "bun:test"
 import { batch, createSignal } from "solid-js"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
@@ -11,6 +12,7 @@ import {
   type SessionTabsStatus,
 } from "../../src/component/session-tabs"
 import { SPINNER_FRAMES } from "../../src/component/spinner-frames"
+import { SESSION_SIDEBAR_WIDTH } from "../../src/ui/layout"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
@@ -248,7 +250,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         ])
       }
       app.renderer.resize(60, 20)
-      setClosed(Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })))
+      setClosed(
+        Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })),
+      )
       await app.renderOnce()
       const historyRows = app.captureCharFrame().split("\n")
       const newRow = historyRows.findIndex((line) => line.includes("+ New session"))
@@ -260,3 +264,82 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     }
   })
 }
+
+test.each([SESSION_SIDEBAR_WIDTH, 18])(
+  "vertical running tab pulse spans the full %i-column tab width",
+  async (railWidth) => {
+    const clock = new ManualClock()
+    const [busy, setBusy] = createSignal(false)
+    const controller = {
+      tabs: () => [
+        { sessionID: "first", title: "First session" },
+        { sessionID: "second", title: "Second session" },
+      ],
+      current: () => "second",
+      select() {},
+      close() {},
+      move() {},
+      add() {},
+      detail: () => "opencode",
+      status: (sessionID: string) =>
+        sessionID === "second" ? { ...EMPTY_SESSION_TAB_STATUS, busy: busy() } : EMPTY_SESSION_TAB_STATUS,
+    } satisfies SessionTabsController
+
+    const app = await testRender(
+      () => (
+        <TestTuiContexts>
+          <ConfigProvider config={createTuiResolvedConfig({ tabs: { mode: "on", layout: "vertical" } })}>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs controller={controller} orientation="vertical" animations width={railWidth} />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </ConfigProvider>
+        </TestTuiContexts>
+      ),
+      { width: 80, height: 10, clock },
+    )
+
+    try {
+      app.renderer.pause()
+      await app.renderOnce()
+
+      const cellRow = (row: number) =>
+        app.captureSpans().lines[row]!.spans.flatMap((span) =>
+          Array.from(span.text, (char) => ({
+            char,
+            fg: span.fg.buffer.join(),
+            bg: span.bg.buffer.join(),
+          })),
+        )
+
+      const idleAbove = cellRow(3)
+      const idleTitle = cellRow(4)
+      const idleDetail = cellRow(5)
+      const idleBelow = cellRow(6)
+
+      setBusy(true)
+      await app.renderOnce()
+      clock.setTime(1850)
+      await app.renderOnce()
+
+      const runningAbove = cellRow(3)
+      const runningTitle = cellRow(4)
+      const runningDetail = cellRow(5)
+      const runningBelow = cellRow(6)
+      const rightEdge = railWidth - 1
+
+      expect(runningAbove.slice(0, railWidth).map((cell) => cell.char)).toEqual(Array(railWidth).fill("▄"))
+      expect(runningBelow.slice(0, railWidth).map((cell) => cell.char)).toEqual(Array(railWidth).fill("▀"))
+      expect(runningAbove[rightEdge]!.fg).not.toBe(idleAbove[rightEdge]!.bg)
+      expect(runningBelow[rightEdge]!.fg).not.toBe(idleBelow[rightEdge]!.bg)
+      expect(runningTitle[rightEdge]!.bg).not.toBe(idleTitle[rightEdge]!.bg)
+      expect(runningDetail[rightEdge]!.bg).not.toBe(idleDetail[rightEdge]!.bg)
+      expect(runningTitle[railWidth]!.bg).toBe(idleTitle[railWidth]!.bg)
+      expect(runningBelow[railWidth]!.char).toBe(" ")
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)

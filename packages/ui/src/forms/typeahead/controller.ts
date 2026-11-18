@@ -35,7 +35,9 @@ export function createTypeahead<T>(props: {
     onKeyDown: (event: KeyboardEvent) => {
       if (event.isComposing) return
       const items = props.items()
-      const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0
+      // Modified arrows belong to the input: Shift selects text, Ctrl and the rest are the platform's.
+      const plain = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
+      const delta = !plain ? 0 : event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0
 
       if (delta !== 0 || event.key === "Enter" || (event.key === "Escape" && props.onClose)) {
         event.preventDefault()

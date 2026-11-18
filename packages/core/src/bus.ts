@@ -71,6 +71,12 @@ const envelope = (aggregateID: string, seq: number, version: number) => ({
   version: Event.Version.make(version),
 })
 
+const requireAggregateID = (type: string, aggregate: string, data: unknown) => {
+  const aggregateID = (data as Record<string, unknown>)[aggregate]
+  if (typeof aggregateID === "string") return Effect.succeed(aggregateID)
+  return Effect.die(new InvalidDurableEventError({ type, message: `Expected string aggregate field ${aggregate}` }))
+}
+
 // Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
 const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
   Schema.decodeUnknownSync(definition.data)(SessionLegacy.event(definition.type, data))
@@ -198,7 +204,7 @@ export function configured(options?: Options) {
         const pubsub = {
           live: yield* PubSub.unbounded<Event.Payload>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
-          typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
+          typed: new Map<string, Set<PubSub.PubSub<Event.Payload>>>(),
         }
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
@@ -265,15 +271,6 @@ export function configured(options?: Options) {
           }
         })
 
-        const getOrCreate = (definition: Event.Definition) =>
-          Effect.gen(function* () {
-            const existing = pubsub.typed.get(definition.type)
-            if (existing) return existing
-            const created = yield* PubSub.unbounded<Event.Payload>()
-            pubsub.typed.set(definition.type, created)
-            return created
-          })
-
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             yield* PubSub.shutdown(pubsub.live)
@@ -282,7 +279,11 @@ export function configured(options?: Options) {
               (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
               { discard: true },
             )
-            yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
+            yield* Effect.forEach(
+              pubsub.typed.values(),
+              (subscribers) => Effect.forEach(subscribers, PubSub.shutdown, { discard: true }),
+              { discard: true },
+            )
           }),
         )
 
@@ -300,14 +301,7 @@ export function configured(options?: Options) {
           return Effect.gen(function* () {
             const durable = definition.durable
             if (!durable) return yield* Effect.void
-            const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
-            if (typeof aggregateID !== "string")
-              return yield* Effect.die(
-                new InvalidDurableEventError({
-                  type: event.type,
-                  message: `Expected string aggregate field ${durable.aggregate}`,
-                }),
-              )
+            const aggregateID = yield* requireAggregateID(event.type, durable.aggregate, event.data)
             if (input && input.aggregateID !== aggregateID) {
               yield* Effect.die(
                 new InvalidDurableEventError({
@@ -505,14 +499,16 @@ export function configured(options?: Options) {
               (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
               { discard: true },
             )
-            const typed = pubsub.typed.get(event.type)
-            if (typed) yield* PubSub.publish(typed, event)
+            // Type subscribers resume inline and may publish follow-up events, so live subscribers get this one first.
             yield* PubSub.publish(pubsub.live, event)
+            const typed = pubsub.typed.get(event.type)
+            if (typed)
+              yield* Effect.forEach(typed, (subscriber) => PubSub.publish(subscriber, event), { discard: true })
           })
         }
 
-        function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
-          return Effect.gen(function* () {
+        const makePayload = (definition: Event.Definition, data: unknown, options: PublishOptions | undefined) =>
+          Effect.gen(function* () {
             const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const location = options?.global
               ? undefined
@@ -520,53 +516,33 @@ export function configured(options?: Options) {
                 (serviceLocation
                   ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
                   : undefined))
-            return yield* publishEvent(
-              definition,
-              {
-                id: options?.id ?? Event.ID.create(),
-                created: yield* Clock.currentTimeMillis,
-                ...(options?.metadata ? { metadata: options.metadata } : {}),
-                type: definition.type,
-                ...(location ? { location } : {}),
-                data,
-              } as Event.Payload<D>,
-              options?.commit,
-            )
+            return {
+              id: options?.id ?? Event.ID.create(),
+              created: yield* Clock.currentTimeMillis,
+              ...(options?.metadata ? { metadata: options.metadata } : {}),
+              type: definition.type,
+              ...(location ? { location } : {}),
+              data,
+            } as Event.Payload
+          })
+
+        function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
+          return Effect.gen(function* () {
+            const event = (yield* makePayload(definition, data, options)) as Event.Payload<D>
+            return yield* publishEvent(definition, event, options?.commit)
           })
         }
 
         function publishAll<const I extends readonly [PublishInput, ...PublishInput[]]>(events: I) {
           return Effect.gen(function* () {
-            const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
             const payloads = yield* Effect.forEach(events, ([definition, data, options]) =>
               Effect.gen(function* () {
-                const aggregateID = (data as Record<string, unknown>)[definition.durable.aggregate]
-                if (typeof aggregateID !== "string") {
-                  return yield* Effect.die(
-                    new InvalidDurableEventError({
-                      type: definition.type,
-                      message: `Expected string aggregate field ${definition.durable.aggregate}`,
-                    }),
-                  )
-                }
-                const location = options?.global
-                  ? undefined
-                  : (options?.location ??
-                    (serviceLocation
-                      ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-                      : undefined))
+                const aggregateID = yield* requireAggregateID(definition.type, definition.durable.aggregate, data)
                 return {
                   definition,
                   aggregateID,
                   commit: options?.commit,
-                  event: {
-                    id: options?.id ?? Event.ID.create(),
-                    created: yield* Clock.currentTimeMillis,
-                    ...(options?.metadata ? { metadata: options.metadata } : {}),
-                    type: definition.type,
-                    ...(location ? { location } : {}),
-                    data,
-                  } as Event.Payload,
+                  event: yield* makePayload(definition, data, options),
                 }
               }),
             )
@@ -758,11 +734,30 @@ export function configured(options?: Options) {
         ): Stream.Stream<SubscribePayload<D>>
         function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
           if (input === undefined) return streamLive()
-          if (isDefinition(input)) {
-            return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
-          }
-          const types = new Set(input.map((definition) => definition.type))
-          return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+          const types = new Set((isDefinition(input) ? [input] : input).map((definition) => definition.type))
+          // One PubSub per subscription, registered under each type, keeps publish order across types.
+          return local(
+            Stream.unwrap(
+              Effect.acquireRelease(
+                PubSub.unbounded<Event.Payload>().pipe(
+                  Effect.tap((subscriber) =>
+                    Effect.sync(() => {
+                      for (const type of types)
+                        pubsub.typed.set(type, (pubsub.typed.get(type) ?? new Set()).add(subscriber))
+                    }),
+                  ),
+                ),
+                (subscriber) =>
+                  Effect.sync(() => {
+                    for (const type of types) {
+                      const subscribers = pubsub.typed.get(type)
+                      subscribers?.delete(subscriber)
+                      if (subscribers?.size === 0) pubsub.typed.delete(type)
+                    }
+                  }).pipe(Effect.andThen(PubSub.shutdown(subscriber))),
+              ).pipe(Effect.flatMap(PubSub.subscribe), Effect.map(Stream.fromSubscription)),
+            ),
+          )
         }
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))

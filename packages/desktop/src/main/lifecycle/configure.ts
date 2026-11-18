@@ -4,7 +4,7 @@ import { enableCompileCache } from "node:module"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
-import { debugBuild, memoryLogInterval } from "@opencode/gui-extensions/debug/options"
+import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
 import { APP_ID, APP_NAME, CHANNEL } from "../constants"
 import { remoteDebuggingPort } from "../diagnostics/options"
 
@@ -44,7 +44,15 @@ export function configureApplication() {
     app.commandLine.appendSwitch("enable-precise-memory-info")
 
   const testRoot = createTestRoot()
-  app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID))
+  const customUserData = debugBuild(build) && !testRoot ? process.env.OPENCODE_DESKTOP_USER_DATA : undefined
+  app.setPath(
+    "userData",
+    customUserData ?? (testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID)),
+  )
+
+  if (customUserData) {
+    app.setPath("sessionData", path.join(customUserData, "session"))
+  }
 
   if (testRoot) {
     app.setPath("sessionData", path.join(testRoot, "session"))

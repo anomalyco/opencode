@@ -13,6 +13,7 @@ export interface TransportExecution<Frame> {
   readonly frames: Stream.Stream<Frame, AIError>
   readonly http?: HttpContext
   body?(frame: Frame): string | undefined
+  raw?(frame: Frame): unknown
   /** Optional successful-consumption acknowledgement. HTTP leaves this absent. */
   readonly complete?: Effect.Effect<void>
 }

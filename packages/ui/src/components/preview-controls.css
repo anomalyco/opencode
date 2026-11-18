@@ -1,0 +1,28 @@
+[data-component="preview-controls"] {
+  position: absolute;
+  inset-inline-end: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 4px;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: 8px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+}
+
+[data-slot="preview-controls-divider"] {
+  width: 0.5px;
+  height: 20px;
+  margin-inline: 4px;
+  background: var(--v2-border-border-base);
+}
+
+@media (pointer: coarse) {
+  [data-component="preview-controls"] [data-component="icon-button-v2"] {
+    width: 44px;
+    height: 44px;
+  }
+}

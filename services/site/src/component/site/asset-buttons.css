@@ -1,0 +1,49 @@
+/* Asset buttons: the PNG, SVG, Download and copy buttons under the logos, wordmarks, avatars and
+   badges on /brand and the Anomaly marks on /press. One size on both pages, at the caption's size
+   and weight: 32px tall with 14px icons, so they sit level with the caption instead of outweighing
+   it. On touch each gets a 44px target without growing: a band above and below, and the square copy
+   button (always last in its row) reaches right instead of over its neighbour. The 8px between
+   buttons keeps the targets that far apart. */
+[data-site]:is([data-page="brand"], [data-page="press"]) {
+  --asset-button-height: 2rem;
+  --asset-button-icon: 14px;
+  --asset-button-gap: 0.5rem;
+  --asset-button-reach: calc((2.75rem - var(--asset-button-height)) / 2);
+
+  [data-slot="meta"] :has(> [data-component="site-button"]) {
+    gap: var(--asset-button-gap);
+  }
+
+  [data-slot="meta"] [data-component="site-button"] {
+    gap: 0.375rem;
+    height: var(--asset-button-height);
+    padding: 0 0.625rem;
+    font-weight: 400;
+
+    &:is([data-slot="copy-square"], [data-slot="chevron-button"]) {
+      width: var(--asset-button-height);
+      padding: 0;
+      justify-content: center;
+    }
+
+    svg {
+      width: var(--asset-button-icon);
+      height: var(--asset-button-icon);
+    }
+
+    @media (pointer: coarse) {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: calc(var(--asset-button-reach) * -1) 0;
+      }
+
+      &:is([data-slot="copy-square"], [data-slot="chevron-button"])::after {
+        inset: calc(var(--asset-button-reach) * -1) calc(var(--asset-button-reach) * -2)
+          calc(var(--asset-button-reach) * -1) 0;
+      }
+    }
+  }
+}

@@ -33,7 +33,7 @@ try {
     const pkg = JSON.parse(original) as {
       name: string
       dependencies?: Record<string, string>
-      exports?: Record<string, string | { import: string; types: string }>
+      exports?: Record<string, string | { types: string; import: string }>
       imports?: Record<string, Record<string, string>>
     }
     const archive = join(temporary, `${name}.tgz`)
@@ -55,7 +55,7 @@ try {
       pkg.exports = Object.fromEntries(
         Object.entries(pkg.exports).map(([key, value]) => {
           if (typeof value !== "string") return [key, value]
-          return [key, { import: output(name, value), types: output(name, value, true) }]
+          return [key, { types: output(name, value, true), import: output(name, value) }]
         }),
       )
     }
@@ -219,7 +219,9 @@ for (const module of modules) {
 
   const transpiler = new Bun.Transpiler({ loader: "js" })
   const bundled = await Bun.file(join(consumer, "dist/worker.js")).text()
-  const bunGlobals = Array.from(new Set(bundled.match(/\bBun\.[A-Za-z_$][\w$]*/g) ?? []))
+  // Quoted strings are skipped: an error message naming `Bun.write` isn't a reference to the global.
+  const code = bundled.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""')
+  const bunGlobals = Array.from(new Set(code.match(/\bBun\.[A-Za-z_$][\w$]*/g) ?? []))
   if (bunGlobals.length > 0) throw new Error(`Packed workerd bundle references Bun globals: ${bunGlobals.join(", ")}`)
   const leaked = [
     ...transpiler

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -14,13 +14,25 @@ const model = OpenAI.configure({
 // `CacheHint` is a no-op for the wire body. The stable signal is the
 // `prompt_cache_key` routing hint, which keeps repeated calls on the same shard
 // so cache hits are observable.
-const cacheRequest = LLM.request({
+const cacheRequest = ai.request({
   id: "recorded_openai_responses_cache",
   model,
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
   promptCacheKey: "recorded-cache-test",
+})
+
+// GPT-6.2 never caches top-level `instructions`; a system prompt this size caches only as a developer message.
+const frontierRequest = ai.request({
+  id: "recorded_openai_responses_cache_gpt_6_2",
+  model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-6.2-sol"),
+  system: LARGE_CACHEABLE_SYSTEM,
+  prompt: "Say hi.",
+  maxTokens: 64,
+  promptCacheKey: "recorded-cache-test-gpt-6-2",
+  providerOptions: { reasoningEffort: "low" },
 })
 
 const recorded = recordedTests({
@@ -41,6 +53,16 @@ describe("OpenAI Responses cache recorded", () => {
 
       const second = yield* LLMClient.generate(cacheRequest)
       expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThan(0)
+    }),
+  )
+
+  recorded.effect.with("caches the system prompt on gpt-6.2-sol", { tags: ["cache"] }, () =>
+    Effect.gen(function* () {
+      const first = yield* LLMClient.generate(frontierRequest)
+      expect(first.usage?.cacheWriteInputTokens ?? 0).toBeGreaterThan(1024)
+
+      const second = yield* LLMClient.generate(frontierRequest)
+      expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThan(1024)
     }),
   )
 })

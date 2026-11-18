@@ -153,6 +153,34 @@ it("shows a state at once when synced, also from inside a batch", () => {
   expect(frames.size).toBe(0)
 })
 
+it("animates a later close after a sync that no open change followed", async () => {
+  const panel = setup(true)
+
+  panel.motion.sync(false)
+  await Promise.resolve()
+  panel.setOpen(false)
+  frame()
+  expect(panel.painted.width).toBeGreaterThan(0)
+  expect(panel.present()).toBe(true)
+  settle()
+  expect(panel.painted.width).toBe(0)
+})
+
+it("runs settled work queued in the batch that opens the panel once the flight lands", () => {
+  const panel = setup(false)
+  const widths: number[] = []
+
+  batch(() => {
+    panel.setOpen(true)
+    panel.motion.whenSettled(() => widths.push(panel.painted.width))
+  })
+  expect(widths).toEqual([])
+  frame()
+  expect(widths).toEqual([])
+  settle()
+  expect(widths).toEqual([200])
+})
+
 it("runs settled work once the flight lands, dropping work queued before a turnaround", () => {
   const panel = setup(false)
   const ran: string[] = []
@@ -224,6 +252,28 @@ it("holds content beside the panel at its landing width for the flight, its anch
   settle()
   expect(box.style.getPropertyValue("--panel-hold-width")).toBe("")
   expect(box.style.translate).toBe("")
+})
+
+it("writes a hold to the element whose own width reads it, measured from its box", () => {
+  const box = document.createElement("div")
+  const target = document.createElement("div")
+  box.append(target)
+  document.body.append(box)
+  cleanups.push(() => box.remove())
+  const [open, setOpen] = createSignal(false)
+  const painted = { width: 0 }
+  box.getBoundingClientRect = () => new DOMRect(0, 0, 1000 - painted.width, 10)
+  createRoot((dispose) => {
+    cleanups.push(dispose)
+    holdLandingWidth(() => box, undefined, () => target)
+    createPanelMotion({ open, paint: (shut) => (painted.width = 300 * (1 - shut)) })
+  })
+
+  setOpen(true)
+  expect(target.style.getPropertyValue("--panel-hold-width")).toBe("700px")
+  expect(box.style.getPropertyValue("--panel-hold-width")).toBe("")
+  settle()
+  expect(target.style.getPropertyValue("--panel-hold-width")).toBe("")
 })
 
 it("keeps a held box's end-aligned blocks still and its centred column centred while its start edge moves", () => {

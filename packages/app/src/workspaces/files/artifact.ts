@@ -1,5 +1,5 @@
 import { artifactKind, artifactMime, type ArtifactKind } from "@opencode/util/artifact"
-import type { FileContent } from "@opencode/gui-extensions/sdk"
+import type { FileContent } from "@opencode/plugin/gui"
 
 /** Kinds whose raw bytes are kept so media elements and binary viewers can read them without a text round trip. */
 const binaryKinds = new Set<ArtifactKind>([
@@ -15,6 +15,30 @@ const binaryKinds = new Set<ArtifactKind>([
 
 /** Kinds a media element reads straight from the server, so it shows the first frame before the rest arrives. */
 export const streamedKinds = new Set<ArtifactKind>(["image", "audio", "video"])
+
+// As long as the API's request queue waits for a response (`request-queue.ts`), which the HEAD skips.
+const HEAD_RESPONSE_TIMEOUT_MS = 60_000
+
+/**
+ * A HEAD of a streamed file's URL that gives up when the server sends no response in time, so a dead connection fails
+ * the load instead of leaving it loading. A HEAD has no body, so the deadline ends with the response.
+ */
+export function headStreamedFile(
+  fetch: (url: string, init: RequestInit) => Promise<Response>,
+  url: string,
+  signal: AbortSignal,
+) {
+  const deadline = new AbortController()
+
+  const timer = setTimeout(
+    () => deadline.abort(new DOMException("signal timed out", "TimeoutError")),
+    HEAD_RESPONSE_TIMEOUT_MS,
+  )
+
+  return fetch(url, { method: "HEAD", signal: AbortSignal.any([signal, deadline.signal]) }).finally(() =>
+    clearTimeout(timer),
+  )
+}
 
 /** Content for a streamed file from a HEAD of its URL. A changed file gets a new URL, so its element reloads. */
 export function streamedFileContent(path: string, url: string, response: Response): FileContent {

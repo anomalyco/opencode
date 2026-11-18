@@ -65,14 +65,22 @@ describe("McpInstructions", () => {
     ),
   )
 
-  it.effect("omits instructions when the agent cannot use execute", () =>
+  it.effect("lists Code Mode servers as direct tools when the agent cannot use execute", () =>
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
         .load([{ action: "execute", resource: "*", effect: "deny" }])
         .pipe(Effect.flatMap(readInitial))
 
-      expect(generation.text).toBe("")
+      expect(generation.text).toBe(
+        [
+          "<mcp_instructions>",
+          '  <server name="alpha">',
+          "    Alpha instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
     }).pipe(
       Effect.provide(
         layer(

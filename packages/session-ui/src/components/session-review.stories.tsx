@@ -3,17 +3,22 @@ import { parseDiffFromFile } from "@pierre/diffs"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
 import { editThenTestDocument, reviewDiffs } from "../storybook/current-session-fixtures"
 import { File } from "./file"
-import { SessionReview, type SessionReviewComment } from "./session-review"
+import { Button } from "@opencode/ui/button"
+import { SessionReview, type SessionReviewComment, type SessionReviewFocus } from "./session-review"
 
-function ReviewStory(props: { split?: boolean }) {
+type ReviewArgs = { split: boolean; empty: boolean; disableLineNumbers: boolean; overflow: "wrap" | "scroll" }
+
+function ReviewStory(props: ReviewArgs) {
   return (
     <CurrentSessionProviders document={editThenTestDocument}>
       <div class="mx-auto h-screen min-h-[620px] w-full max-w-[1100px] overflow-hidden bg-background-base">
         <SessionReview
           title="Changes in this Session"
-          diffs={reviewDiffs}
+          diffs={props.empty ? [] : reviewDiffs}
           open={reviewDiffs.map((diff) => diff.file)}
           split={props.split}
+          overflow={props.overflow}
+          disableLineNumbers={props.disableLineNumbers}
         />
       </div>
     </CurrentSessionProviders>
@@ -36,44 +41,64 @@ export default {
 }
 
 export const Unified = {
-  render: () => <ReviewStory />,
+  args: { split: false, empty: false, disableLineNumbers: false, overflow: "wrap" },
+  argTypes: { overflow: { options: ["wrap", "scroll"] } },
+  render: (args: ReviewArgs) => <ReviewStory {...args} />,
 }
 
 export const Split = {
-  render: () => <ReviewStory split />,
+  ...Unified,
+  args: { ...Unified.args, split: true },
 }
 
 export const UnifiedDark = {
+  ...Unified,
   globals: { theme: "dark" },
-  render: () => <ReviewStory />,
 }
 
-function InteractiveCommentsStory() {
-  const [state, setState] = createStore({ comments: [] as SessionReviewComment[] })
-  const file = "src/review.ts"
+const commentFile = "src/review.ts"
 
-  const diffs = [
-    {
-      file,
-      additions: 1,
-      deletions: 1,
-      status: "modified" as const,
-      patch:
-        "diff --git a/src/review.ts b/src/review.ts\n--- a/src/review.ts\n+++ b/src/review.ts\n@@ -1,3 +1,3 @@\n export const first = 1\n-export const value = 'before'\n+export const value = 'after'\n export const last = 3\n",
-    },
-  ]
+const mentionPaths = [commentFile, "src/review.test.ts", "src/server.ts", "README.md"]
+
+const commentDiffs = [
+  {
+    file: commentFile,
+    additions: 1,
+    deletions: 1,
+    status: "modified" as const,
+    patch:
+      "diff --git a/src/review.ts b/src/review.ts\n--- a/src/review.ts\n+++ b/src/review.ts\n@@ -1,3 +1,3 @@\n export const first = 1\n-export const value = 'before'\n+export const value = 'after'\n export const last = 3\n",
+  },
+]
+
+function InteractiveCommentsStory() {
+  const [state, setState] = createStore<{ comments: SessionReviewComment[]; next: number }>({ comments: [], next: 1 })
 
   return (
     <CurrentSessionProviders document={editThenTestDocument}>
       <div class="mx-auto h-screen min-h-[620px] w-full max-w-[900px] overflow-hidden bg-background-base">
         <SessionReview
           title="Changes in this Session"
-          diffs={diffs}
-          open={[file]}
+          diffs={commentDiffs}
+          open={[commentFile]}
           comments={state.comments}
-          onLineComment={(comment) =>
-            setState("comments", (comments) => [...comments, { id: `comment-${comments.length + 1}`, ...comment }])
+          onLineComment={(comment) => {
+            setState("comments", (comments) => [...comments, { id: `comment-${state.next}`, ...comment }])
+            setState("next", (next) => next + 1)
+          }}
+          onLineCommentUpdate={(update) =>
+            setState("comments", (comment) => comment.id === update.id, "comment", update.comment)
           }
+          onLineCommentDelete={(target) =>
+            setState("comments", (comments) => comments.filter((comment) => comment.id !== target.id))
+          }
+          lineCommentActions={{
+            moreLabel: "More options",
+            editLabel: "Edit",
+            deleteLabel: "Delete",
+            saveLabel: "Save",
+          }}
+          lineCommentMention={{ items: (query) => mentionPaths.filter((path) => path.includes(query)) }}
         />
       </div>
     </CurrentSessionProviders>
@@ -81,6 +106,50 @@ function InteractiveCommentsStory() {
 }
 
 export const InteractiveComments = { render: () => <InteractiveCommentsStory /> }
+
+// A parent asks the review to reveal a saved comment, as a composer chip does. "Focus missing comment" names a
+// comment that never renders, so the request settles by timing out.
+function FocusedCommentStory() {
+  const [state, setState] = createStore<{ focus: SessionReviewFocus | null }>({ focus: null })
+
+  const comments: SessionReviewComment[] = [
+    {
+      id: "comment-1",
+      file: commentFile,
+      selection: { start: 2, end: 2, side: "additions" },
+      comment: "Saved comment",
+    },
+  ]
+
+  return (
+    <CurrentSessionProviders document={editThenTestDocument}>
+      <div class="mx-auto flex h-screen min-h-[620px] w-full max-w-[900px] flex-col overflow-hidden bg-background-base">
+        <div class="flex items-center gap-2 p-2">
+          <Button size="small" onClick={() => setState("focus", { file: commentFile, id: "comment-1" })}>
+            Focus comment
+          </Button>
+          <Button size="small" onClick={() => setState("focus", { file: commentFile, id: "missing" })}>
+            Focus missing comment
+          </Button>
+          <span>
+            Focus request: <output>{state.focus?.id ?? "none"}</output>
+          </span>
+        </div>
+        <SessionReview
+          title="Changes in this Session"
+          diffs={commentDiffs}
+          open={[commentFile]}
+          comments={comments}
+          focusedComment={state.focus}
+          onFocusedCommentChange={(focus) => setState("focus", focus)}
+          onLineComment={() => undefined}
+        />
+      </div>
+    </CurrentSessionProviders>
+  )
+}
+
+export const FocusedComment = { render: () => <FocusedCommentStory /> }
 
 const gitDiffs = [
   {
@@ -149,11 +218,14 @@ export const LargeFile = {
     const padding = `// ${"unchanged ".repeat(70)}\n`.repeat(800)
     const before = { name: "large.ts", contents: `export const value = 'before'\n${padding}` }
     const after = { name: "large.ts", contents: `export const value = 'after'\n${padding}` }
-    const input = args.source === "metadata" ? { fileDiff: parseDiffFromFile(before, after) } : { before, after }
 
     return (
       <div class="h-screen overflow-auto bg-background-base">
-        <File mode="diff" {...input} diffStyle={args.split ? "split" : "unified"} />
+        <File
+          mode="diff"
+          {...(args.source === "metadata" ? { fileDiff: parseDiffFromFile(before, after) } : { before, after })}
+          diffStyle={args.split ? "split" : "unified"}
+        />
       </div>
     )
   },

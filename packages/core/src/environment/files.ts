@@ -47,6 +47,8 @@ export interface FilesImpl {
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
   readonly mkdir: (path: string) => Effect.Effect<void, Failed>
+  /** Adds bytes to the end of a file, creating it when missing. */
+  readonly append: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
 }
 
 export interface Files extends FilesImpl {}
@@ -65,6 +67,13 @@ export const typeFollowing = (files: Files, path: string) =>
           )
         : Effect.succeed(info.type),
     ),
+  )
+
+/** Follows a final symlink, so a dangling symlink does not exist. */
+export const exists = (files: Files, path: string) =>
+  typeFollowing(files, path).pipe(
+    Effect.as(true),
+    Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
   )
 
 export * as EnvironmentFiles from "./files.js"

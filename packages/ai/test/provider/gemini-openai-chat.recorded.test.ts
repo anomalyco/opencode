@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolRuntime, toDefinitions } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolRuntime } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
-import { weatherRuntimeTool, weatherToolName } from "../recorded-scenarios.js"
+import { weatherRuntimeTool } from "../recorded-scenarios.js"
 
 const model = OpenAICompatible.configure({
   provider: "google",
@@ -28,12 +28,12 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
     { cassette: "openai-compatible-chat/gemini-parallel-tool-signatures" },
     () =>
       Effect.gen(function* () {
-        const tools = { [weatherToolName]: weatherRuntimeTool }
-        const request = LLM.request({
+        const tools = [weatherRuntimeTool]
+        const request = ai.request({
           model,
           system: "Call get_weather for every requested city in parallel, then answer in one short sentence.",
           prompt: "What is the weather in Paris and in Tokyo?",
-          tools: toDefinitions(tools),
+          tools,
           cache: "none",
         })
         const first = yield* LLMClient.generate(request)
@@ -43,7 +43,8 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
         expect(extraContent).toEqual({ google: { thought_signature: expect.any(String) } })
 
         const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call))
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
@@ -51,7 +52,7 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
               Message.tool({ id: call.id, name: call.name, result: results[index]!.result }),
             ),
           ],
-        })
+        }
         const prepared = yield* compileRequest(continuation)
         const assistant = prepared.body.messages.find((message) => message.role === "assistant")
         expect(assistant?.role === "assistant" ? assistant.tool_calls?.[0]?.extra_content : undefined).toEqual(

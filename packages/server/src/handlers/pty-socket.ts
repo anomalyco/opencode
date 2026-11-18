@@ -1,3 +1,4 @@
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { Effect, Queue } from "effect"
 import { Socket } from "effect/socket"
 
@@ -31,3 +32,16 @@ export function runPtySocket<R>(input: {
     Effect.orDie,
   )
 }
+
+// A socket borrows its Location for as long as it stays open. Its client reconnects right away when the socket
+// closes, so it keeps the idle sweep from evicting the Location (eviction would only boot a fresh one). Any other
+// shutdown (reload, VCS init, debug eviction) closes the socket with 1012, which releases the borrow so the
+// Location's scope can close, and the client reconnects to the replacement.
+export const holdLocation = Effect.fnUntraced(function* (outbox: Queue.Enqueue<Outbound>) {
+  const lifecycle = yield* LocationLifecycle.Service
+  yield* lifecycle.retain
+  yield* lifecycle.awaitShutdown.pipe(
+    Effect.andThen(Queue.offer(outbox, new Socket.CloseEvent(1012, "location shut down"))),
+    Effect.forkChild,
+  )
+})

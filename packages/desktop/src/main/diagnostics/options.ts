@@ -1,4 +1,4 @@
-import { debugBuild } from "@opencode/gui-extensions/debug/options"
+import { debugBuild } from "@opencode/gui-plugins/debug/options"
 
 /**
  * The remote debugging port, only in debug builds. The dev server opens 9222 unless told otherwise; Beta opens one only

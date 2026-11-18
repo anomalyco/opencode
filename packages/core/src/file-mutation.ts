@@ -28,22 +28,33 @@ export interface WriteResult {
   readonly existed: boolean
 }
 
+export interface TextWriteResult extends WriteResult {
+  readonly bom: boolean
+}
+
 export interface Interface {
   /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
   readonly withLock: (
     targets: ReadonlyArray<string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
+  /** Add bytes to the end of a file, creating it when missing. */
+  readonly append: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
   readonly writeTextPreservingBom: (
     input: TextWriteInput,
-  ) => Effect.Effect<WriteResult, Environment.WrongKind | Environment.Failed>
+  ) => Effect.Effect<TextWriteResult, Environment.WrongKind | Environment.Failed>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
 export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
   return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (files: Files, target: string) {
+  const result = yield* files.read(target).pipe(Effect.catchTag("Environment.NotFound", () => Effect.undefined))
+  return result ? Bom.decodeBytes(result.bytes) : undefined
 })
 
 export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
@@ -84,21 +95,24 @@ const layer = Layer.effect(
       existed,
     })
 
-    const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
+    const put = (input: WriteInput, store: Files["write"]) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const existed = yield* environment.files.stat(input.target.absolute).pipe(
             Effect.as(true),
             Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
           )
-          yield* environment.files.write(
+          yield* store(
             input.target.absolute,
             typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
           )
           return writeResult(input.target, existed)
         }),
-      ),
-    )
+      )
+
+    const write = Effect.fn("FileMutation.write")((input: WriteInput) => put(input, environment.files.write))
+
+    const append = Effect.fn("FileMutation.append")((input: WriteInput) => put(input, environment.files.append))
 
     const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
       withTargetLock(input.target)(
@@ -108,16 +122,14 @@ const layer = Layer.effect(
             Effect.map((result) => result.bytes),
             Effect.catchTag("Environment.NotFound", () => Effect.undefined),
           )
-          yield* environment.files.write(
-            input.target.absolute,
-            new TextEncoder().encode(Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom)),
-          )
-          return writeResult(input.target, current !== undefined)
+          const bom = Boolean(current && Bom.has(current)) || next.bom
+          yield* environment.files.write(input.target.absolute, new TextEncoder().encode(Bom.join(next.text, bom)))
+          return { ...writeResult(input.target, current !== undefined), bom }
         }),
       ),
     )
 
-    return Service.of({ withLock, write, writeTextPreservingBom })
+    return Service.of({ withLock, write, append, writeTextPreservingBom })
   }),
 )
 

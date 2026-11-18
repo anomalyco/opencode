@@ -1,17 +1,18 @@
 import { Effect, Schema } from "effect"
 import {
   DecisionResponse,
+  DecisionUsage,
   type DecisionAnswer,
   type DecisionModelCompatibility,
   type DecisionPart,
   type DecisionQuestion,
-  type DecisionRequestFor,
+  type DecisionRequest,
 } from "../decision.js"
 import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, Usage, mergeJsonRecords } from "../schema/index.js"
+import { AIError, UnsupportedOperationError, mergeJsonRecords } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 
@@ -37,11 +38,14 @@ const Answer = Schema.Union([
     probabilities: Schema.Record(Schema.String, Probability),
     confidence: Probability,
   }),
+  // OpenRouter's and OpenCode Zen's answer for a question the upstream model declined.
+  Schema.Struct({ type: Schema.Literal("refusal"), message: Schema.optional(Schema.String) }),
 ]).pipe(Schema.toTaggedUnion("type"))
 const NativeUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
+    cost: Schema.optional(Schema.Number),
   }),
   [JsonObject],
 )
@@ -59,10 +63,7 @@ const ID = "system-one"
 const NAME = "System One"
 
 /** The System One body without `model`; media goes where the model's `mediaInput` says, else `fallback`. */
-export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
-  request: DecisionRequestFor,
-  fallback: MediaInput,
-) {
+export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (request: DecisionRequest, fallback: MediaInput) {
   const questions = yield* encodeQuestions(request.questions)
   const placed = yield* placeMedia(request, request.model.compatibility?.mediaInput ?? fallback)
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
@@ -71,7 +72,14 @@ export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
 const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
   Effect.forEach(questions, (question): Effect.Effect<readonly [string, unknown], AIError> => {
     if (question.type === "predicate")
-      return Effect.succeed([question.name, { type: "noul", instructions: question.instructions }] as const)
+      return Effect.succeed([
+        question.name,
+        {
+          type: "noul",
+          instructions: question.instructions,
+          ...(question.criteria === undefined ? {} : { criteria: question.criteria }),
+        },
+      ] as const)
     if (question.type === "score")
       return Effect.succeed([
         question.name,
@@ -88,7 +96,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     if (new Set(keys).size !== keys.length)
       return Effect.fail(
         ProviderShared.invalidRequest(
-          `System One choice options are strings; "${question.name}" has a boolean and a string with the same text`,
+          `Decision choice options are sent as string keys; "${question.name}" has a boolean and a string with the same text`,
         ),
       )
     return Effect.succeed([
@@ -103,7 +111,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     ] as const)
   }).pipe(Effect.map(Object.fromEntries))
 
-const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, mediaInput: MediaInput) {
+const placeMedia = Effect.fnUntraced(function* (request: DecisionRequest, mediaInput: MediaInput) {
   const parts = request.input
   const unsupported = (asset: Media.Asset, accepted: string) =>
     new AIError({
@@ -116,7 +124,8 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, med
     })
   const media = parts.flatMap((part) => (part.type === "media" ? [part.media] : []))
   if (media.length === 0) return { state: state(parts.map(plain)) }
-  if (mediaInput === "state") return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported)) }
+  if (mediaInput === "state")
+    return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported, true)) }
   // Chat-style content in one user message: text and JSON as text parts, media as in `state`.
   if (mediaInput === "state.messages")
     return {
@@ -126,7 +135,7 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, med
             role: "user",
             content: yield* Effect.forEach(parts, (part) =>
               part.type === "media"
-                ? stateItem(part, unsupported)
+                ? stateItem(part, unsupported, false)
                 : Effect.succeed({ type: "text", text: part.type === "text" ? part.text : encodeJson(part.value) }),
             ),
           },
@@ -178,27 +187,46 @@ const plain = (part: DecisionPart) => {
   return undefined
 }
 
+/** A media part as a Chat Completions content part; `files` sends other media, such as PDFs, as `file` parts. */
 const stateItem = (
   part: DecisionPart,
   unsupported: (asset: Media.Asset, accepted: string) => AIError,
+  files: boolean,
 ): Effect.Effect<unknown, AIError> => {
   if (part.type !== "media") return Effect.succeed(plain(part))
   const asset = part.media
-  if (asset.kind !== "image" && asset.kind !== "audio" && asset.kind !== "video")
+  if (!files && asset.kind !== "image" && asset.kind !== "audio" && asset.kind !== "video")
     return Effect.fail(unsupported(asset, "images, audio and video"))
   return ProviderShared.requireInlineMedia(NAME, asset).pipe(
     Effect.map((inline) => {
       if (asset.kind === "image") return { type: "image_url", image_url: { url: inline.dataUrl } }
       if (asset.kind === "video") return { type: "video_url", video_url: { url: inline.dataUrl } }
-      return { type: "input_audio", input_audio: { data: inline.base64, format: inline.mime.slice("audio/".length) } }
+      if (asset.kind === "audio") {
+        const format = inline.mime.slice("audio/".length).toLowerCase()
+        return { type: "input_audio", input_audio: { data: inline.base64, format: audioFormats[format] ?? format } }
+      }
+      return {
+        type: "file",
+        file: { file_data: inline.dataUrl, ...(part.filename === undefined ? {} : { filename: part.filename }) },
+      }
     }),
   )
+}
+
+/** OpenRouter's `input_audio` format names for MIME subtypes that aren't one themselves. */
+const audioFormats: Readonly<Record<string, string>> = {
+  "x-wav": "wav",
+  wave: "wav",
+  "vnd.wave": "wav",
+  "x-m4a": "m4a",
+  "x-aiff": "aiff",
+  "x-flac": "flac",
 }
 
 /** Map System One's answers, keyed by question name, back to the request's question order. */
 export const toResponse = (
   data: Response,
-  request: DecisionRequestFor,
+  request: DecisionRequest,
   providerMetadataKey: string,
   invalid: (message: string) => AIError,
 ) => {
@@ -211,15 +239,16 @@ export const toResponse = (
       usage:
         data.usage === undefined
           ? undefined
-          : new Usage({
+          : new DecisionUsage({
               inputTokens: data.usage.input_tokens,
               outputTokens: data.usage.output_tokens,
               totalTokens: ProviderShared.totalTokens(data.usage.input_tokens, data.usage.output_tokens, undefined),
-              providerMetadata: { [providerMetadataKey]: data.usage },
+              cost: data.usage.cost,
             }),
       providerMetadata: {
         [providerMetadataKey]: {
           model: data.model,
+          ...(data.usage === undefined ? {} : { usage: data.usage }),
           ...(data.id === undefined ? {} : { responseId: data.id }),
           ...(data.provider === undefined ? {} : { provider: data.provider }),
           ...data.provider_metadata?.[providerMetadataKey],
@@ -230,6 +259,13 @@ export const toResponse = (
 }
 
 const toAnswer = (question: DecisionQuestion, answer: typeof Answer.Type): DecisionAnswer => {
+  if (answer.type === "refusal")
+    return {
+      name: question.name,
+      type: "error",
+      reason: "refusal",
+      ...(answer.message === undefined ? {} : { message: answer.message }),
+    }
   if (answer.type === "noul") return { name: question.name, type: "predicate", probability: answer.noul }
   if (answer.type === "choice") {
     const choices = question.type === "choice" ? question.choices : []
@@ -287,4 +323,13 @@ export const route = DecisionRoute.make({
   endpoint: Endpoint.path("/systemone", { baseURL: DEFAULT_BASE_URL }),
 })
 
-export const SystemOne = { Response, encodeBody, toResponse, protocol, route } as const
+export const SystemOne = {
+  Answer,
+  Response,
+  encodeBody,
+  encodeQuestions,
+  toAnswer,
+  toResponse,
+  protocol,
+  route,
+} as const

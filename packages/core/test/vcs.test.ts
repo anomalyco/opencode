@@ -19,7 +19,7 @@ import { FileSystem } from "@opencode/schema/filesystem"
 import { VcsEvent } from "@opencode/schema/vcs-event"
 import { initGit } from "./fixture/git"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it, testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
 
@@ -54,10 +54,7 @@ const provide = (directory: string, input: { git?: boolean; worktree?: string } 
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>, input: { scope?: string } = {}) =>
   withTmp((directory) =>

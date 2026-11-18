@@ -1,4 +1,4 @@
-import { For, Show, createMemo, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
@@ -14,10 +14,19 @@ import {
   type CommandSection,
 } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePluginHost } from "@/runtime/plugin/host"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
+import {
+  INITIAL_KEYBIND_CAPTURE_STATE,
+  selectCapturingKeybind,
+  transitionKeybindCapture,
+  type KeybindCaptureEffect,
+  type KeybindCaptureEvent,
+  type RecordedKeyInput,
+} from "./machine"
 
 const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -118,6 +127,13 @@ function recordKeybind(event: KeyboardEvent) {
   return parts.join("+")
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || !!target.closest("input, textarea, select, [contenteditable='true']"))
+  )
+}
+
 function signatures(config: string | undefined) {
   if (!config) return []
   const sigs: string[] = []
@@ -142,7 +158,12 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
-function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
+function listFor(
+  command: Pick<CommandContext, "catalog" | "options">,
+  map: KeybindMap,
+  palette: string,
+  plugins: ReadonlySet<string> | undefined,
+) {
   const out = new Map<string, KeybindMeta>()
   out.set(PALETTE_ID, { title: palette, group: "General" })
   // A command that shares another's shortcut is set through that command, unless it already has its own.
@@ -150,6 +171,9 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
+
+    // The catalog remembers commands that are not registered right now; a removed or renamed plugin's never return.
+    if (opt.plugin && plugins && !plugins.has(opt.plugin)) continue
 
     if (opt.hidden) continue
 
@@ -236,23 +260,27 @@ function filteredFor(
 
 export function createKeybindSettingsController(
   input: {
-    command: Pick<CommandContext, "catalog" | "options" | "keybinds">
+    command: Pick<CommandContext, "catalog" | "options" | "suspend">
+    /** The ids of the installed GUI plugins; remembered commands of any other plugin are not listed. */
+    plugins?: () => ReadonlySet<string>
     settings: {
       current: { keybinds?: KeybindMap }
       keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
     }
     target?: Document
     notify?: (toast: { title: string; description: string }) => void
+    /** Whether the Shortcuts page shows; hiding it ends a recording. */
+    active?: () => boolean
   },
   language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
 ) {
-  const [store, setStore] = createStore<{ active: string | null }>({ active: null })
+  const [captureState, setCaptureState] = createSignal(INITIAL_KEYBIND_CAPTURE_STATE)
   const overrides = createMemo(() => input.settings.current.keybinds ?? {})
 
   const list = createMemo(() => {
     language.locale()
 
-    return listFor(input.command, overrides(), language.t("command.palette"))
+    return listFor(input.command, overrides(), language.t("command.palette"), input.plugins?.())
   })
 
   const grouped = createMemo(() => groupedFor(list()))
@@ -291,45 +319,72 @@ export function createKeybindSettingsController(
     return value
   })
 
-  const stop = () => {
-    if (!store.active) return
-    setStore("active", null)
-    input.command.keybinds(true)
-  }
+  const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
+  const pageActive = () => input.active?.() ?? true
+  let release: (() => void) | undefined
 
-  const toggle = (id: string) => {
-    if (store.active === id) {
-      stop()
+  const dispatch = (event: KeybindCaptureEvent) =>
+    untrack(() => {
+      const previous = captureState()
+      const next = transitionKeybindCapture(previous, event)
+
+      if (next.state !== previous) setCaptureState(next.state)
+      next.effects.forEach(run)
+    })
+
+  function run(effect: KeybindCaptureEffect) {
+    if (effect.type === "keybinds.suspend") {
+      release?.()
+      release = input.command.suspend()
 
       return
     }
 
-    if (store.active) stop()
-    setStore("active", id)
-    input.command.keybinds(false)
-  }
+    if (effect.type === "keybinds.resume") {
+      release?.()
+      release = undefined
 
-  const unbind = (id: string) => {
-    input.settings.keybinds.set(id, "none")
-    stop()
-  }
+      return
+    }
 
-  const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
+    if (effect.type === "binding.set") return input.settings.keybinds.set(effect.id, effect.value)
+
+    if (effect.type === "bindings.reset") return input.settings.keybinds.resetAll()
+
+    if (effect.type === "notify.reset") {
+      notify({
+        title: language.t("settings.shortcuts.reset.toast.title"),
+        description: language.t("settings.shortcuts.reset.toast.description"),
+      })
+
+      return
+    }
+
+    notify({
+      title: language.t("settings.shortcuts.conflict.title"),
+      description: language.t("settings.shortcuts.conflict.description", {
+        keybind: formatKeybind(effect.keybind, language.t),
+        titles: effect.conflictTitles.join(", "),
+      }),
+    })
+  }
 
   const handle = (event: KeyboardEvent) => {
-    const id = store.active
+    const id = selectCapturingKeybind(untrack(captureState))
 
     if (!id) return
+
+    // A text field, such as the search box, gets its keys; typing there ends the recording.
+    if (isEditableTarget(event.target)) return dispatch({ type: "capture.cancelled" })
 
     event.preventDefault()
     event.stopPropagation()
     event.stopImmediatePropagation()
+    dispatch({ type: "key.pressed", input: recordedKey(event, id) })
+  }
 
-    if (event.key === "Escape") {
-      stop()
-
-      return
-    }
+  const recordedKey = (event: KeyboardEvent, id: string): RecordedKeyInput => {
+    if (event.key === "Escape") return { kind: "escape" }
 
     const clear =
       (event.key === "Backspace" || event.key === "Delete") &&
@@ -338,48 +393,42 @@ export function createKeybindSettingsController(
       !event.altKey &&
       !event.shiftKey
 
-    if (clear) {
-      unbind(id)
+    if (clear) return { kind: "clear" }
 
-      return
-    }
+    const keybind = recordKeybind(event)
 
-    const next = recordKeybind(event)
-
-    if (!next) return
+    if (!keybind) return { kind: "modifier-only" }
 
     const conflicts = new Map<string, string>()
 
-    for (const signature of signatures(next)) {
+    for (const signature of signatures(keybind)) {
       for (const item of used().get(signature) ?? []) {
         if (item.id === id) continue
         conflicts.set(item.id, item.title)
       }
     }
 
-    if (conflicts.size > 0) {
-      notify({
-        title: language.t("settings.shortcuts.conflict.title"),
-        description: language.t("settings.shortcuts.conflict.description", {
-          keybind: formatKeybind(next, language.t),
-          titles: [...conflicts.values()].join(", "),
-        }),
-      })
-
-      return
-    }
-
-    input.settings.keybinds.set(id, next)
-    stop()
+    return { kind: "combo", keybind, conflictTitles: [...conflicts.values()] }
   }
 
   const target = input.target ?? (typeof document !== "undefined" ? document : undefined)
 
-  if (target) makeEventListener(target, "keydown", handle, { capture: true })
+  if (target) {
+    makeEventListener(target, "keydown", handle, { capture: true })
+    makeEventListener(
+      target,
+      "focusin",
+      (event) => {
+        if (selectCapturingKeybind(untrack(captureState)) && isEditableTarget(event.target))
+          dispatch({ type: "capture.cancelled" })
+      },
+      { capture: true },
+    )
+  }
 
-  onCleanup(() => {
-    if (store.active) input.command.keybinds(true)
-  })
+  createEffect(() => dispatch({ type: "page.synced", active: pageActive() }))
+  createEffect(() => dispatch({ type: "catalog.synced", ids: new Set(list().keys()) }))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return {
     catalog: {
@@ -390,20 +439,13 @@ export function createKeybindSettingsController(
       keybind: (id: string) => formatKeybind(effective(id) ?? "", language.t),
     },
     capture: {
-      active: () => store.active,
-      toggle,
-      unbind,
+      active: () => selectCapturingKeybind(captureState()),
+      toggle: (id: string) => dispatch({ type: "capture.toggled", id, pageActive: pageActive() }),
+      unbind: (id: string) => dispatch({ type: "unbind.clicked", id }),
     },
     settings: {
       hasOverrides: () => Object.values(overrides()).some(Predicate.isString),
-      reset: () => {
-        stop()
-        input.settings.keybinds.resetAll()
-        notify({
-          title: language.t("settings.shortcuts.reset.toast.title"),
-          description: language.t("settings.shortcuts.reset.toast.description"),
-        })
-      },
+      reset: () => dispatch({ type: "reset.clicked" }),
     },
   }
 }
@@ -411,10 +453,14 @@ export function createKeybindSettingsController(
 export function SettingsKeybinds(props: { active?: boolean }) {
   const command = useCommand()
   const settings = useSettings()
+  const host = usePluginHost()
+  const plugins = createMemo(() => new Set(host.definitions().map((definition) => definition.id)))
 
   const controller = createKeybindSettingsController({
     command,
+    plugins,
     settings,
+    active: () => props.active ?? true,
   })
 
   return (

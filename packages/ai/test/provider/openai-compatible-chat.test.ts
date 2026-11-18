@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -20,13 +20,19 @@ const model = OpenAICompatibleChat.route
   })
   .model({ id: "deepseek-chat" })
 
-const request = LLM.request({
+const request = ai.request({
   id: "req_1",
   model,
   system: "You are concise.",
   prompt: "Say hello.",
-  generation: { maxTokens: 20, temperature: 0 },
+  maxTokens: 20,
+  temperature: 0,
 })
+
+const copilot = OpenAICompatibleChat.route
+  .with({ provider: "github-copilot", endpoint: { baseURL: "https://api.githubcopilot.test" } })
+  .model({ id: "gemini-3-pro" })
+const copilotRequest = ai.request({ model: copilot, prompt: "Read the project." })
 
 const deltaChunk = (delta: object, finishReason: string | null = null) => ({
   id: "chatcmpl_fixture",
@@ -46,7 +52,7 @@ describe("OpenAI-compatible Chat route", () => {
       const inline = "data:video/mp4;base64,AAEC"
       const url = "https://example.com/clip.mp4"
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: OpenAICompatibleChat.route
             .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
             .model({ id: "video-model" }),
@@ -83,12 +89,11 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-          toolChoice: ToolChoice.make({ type: "required" }),
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        toolChoice: ToolChoice.make({ type: "required" }),
+      })
 
       expect(prepared.route).toBe("openai-compatible-chat")
       expect(prepared.model).toMatchObject({
@@ -143,7 +148,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepare = (cacheFormat: "anthropic" | "alibaba" | undefined) =>
         compileRequest(
-          LLM.request({
+          ai.request({
             model: OpenAICompatibleChat.route
               .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
               .model({ id: "claude-sonnet-5", compatibility: cacheFormat === undefined ? undefined : { cacheFormat } }),
@@ -156,7 +161,10 @@ describe("OpenAI-compatible Chat route", () => {
       const declared = yield* prepare("anthropic")
       expect(declared.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
         tools: [{ function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
@@ -166,7 +174,10 @@ describe("OpenAI-compatible Chat route", () => {
       const alibaba = yield* prepare("alibaba")
       expect(alibaba.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
       })
@@ -181,9 +192,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
-      const prepared = yield* compileRequest(
-        LLM.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model: compatible, prompt: "Say hello.", maxTokens: 20 }))
 
       expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
@@ -194,7 +203,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const prepare = (provider: string, baseURL: string, id: string) =>
         compileRequest(
-          LLM.request({
+          ai.request({
             model: OpenAICompatibleChat.route.with({ provider, endpoint: { baseURL } }).model({ id }),
             prompt: "Use a tool.",
             tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: {} })],
@@ -216,7 +225,7 @@ describe("OpenAI-compatible Chat route", () => {
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           id: "req_tool_parity",
           model,
           tools: [
@@ -288,7 +297,7 @@ describe("OpenAI-compatible Chat route", () => {
       yield* Effect.forEach(cases, (item) =>
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: OpenAICompatibleChat.route
                 .with({ provider: item.provider, endpoint: { baseURL: "https://api.custom.test/v1" } })
                 .model({ id: item.model }),
@@ -330,7 +339,7 @@ describe("OpenAI-compatible Chat route", () => {
               compatibility: "override" in item ? { requireAssistantAfterTool: item.override } : undefined,
             })
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: selected,
               messages: [
                 Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
@@ -379,7 +388,7 @@ describe("OpenAI-compatible Chat route", () => {
             .with({ provider: item.provider, endpoint: { baseURL: item.baseURL } })
             .model({ id: item.id, compatibility: "compatibility" in item ? item.compatibility : undefined })
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: selected,
               messages: [
                 Message.assistant("Hello"),
@@ -517,13 +526,10 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("assembles indexless parallel tool calls across sparse chunks", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } }),
-          ],
-        }),
-      ).pipe(
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+      }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -567,7 +573,7 @@ describe("OpenAI-compatible Chat route", () => {
       const compatible = OpenAICompatibleChat.route
         .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
         .model({ id: "custom-model", compatibility: { requireFinishReason: false } })
-      const response = yield* LLMClient.generate(LLMRequest.update(request, { model: compatible })).pipe(
+      const response = yield* LLMClient.generate({ ...request, model: compatible }).pipe(
         Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
       )
 
@@ -651,6 +657,31 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("names the content filter that blocked a response", () =>
+    Effect.gen(function* () {
+      const finish = (choice: object) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents({ id: "chatcmpl_fixture", choices: [{ finish_reason: "content_filter", ...choice }] }),
+            ),
+          ),
+          Effect.map((response) => response.finishReason),
+        )
+
+      expect(yield* finish({ delta: { copilot_annotations: { TextCopyright: [{ id: 1 }] } } })).toMatchObject({
+        normalized: "content-filter",
+        category: "TextCopyright",
+      })
+      expect(
+        yield* finish({
+          delta: {},
+          content_filter_results: { hate: { filtered: false }, violence: { filtered: true } },
+        }),
+      ).toMatchObject({ normalized: "content-filter", category: "violence" })
+    }),
+  )
+
   it.effect("preserves late text and reasoning for replay without changing the finished tool call", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.encrypted", data: "opaque", id: "late-reasoning" }]
@@ -683,12 +714,81 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
         response.events.findIndex(LLMEvent.is.toolCall),
       )
-      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages[0]).toMatchObject({
         role: "assistant",
         content: "Hello world (refusal)",
         reasoning_content: "First then more thoughts",
         reasoning_details: details,
+      })
+    }),
+  )
+
+  it.effect("replays the latest reasoning_opaque with the concatenated reasoning text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(copilotRequest).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_text: "Read the readme first." }),
+              deltaChunk({
+                reasoning_opaque: "opaque-first",
+                tool_calls: [{ index: 0, id: "call_first", function: { name: "read", arguments: "{}" } }],
+              }),
+              deltaChunk({ reasoning_text: " Then the manifest." }),
+              deltaChunk({
+                reasoning_opaque: "opaque-second",
+                tool_calls: [{ index: 1, id: "call_second", function: { name: "read", arguments: "{}" } }],
+              }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Read the readme first. Then the manifest.")
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toMatchObject([
+        {
+          providerMetadata: {
+            "github-copilot": { reasoningField: "reasoning_text", reasoningOpaque: "opaque-second" },
+          },
+        },
+      ])
+      expect(response.toolCalls.map((call) => call.id)).toEqual(["call_first", "call_second"])
+      const replay = yield* compileRequest(ai.request({ model: copilot, messages: [response.message] }))
+      expect(replay.body.messages[0]).toMatchObject({
+        role: "assistant",
+        content: null,
+        reasoning_text: "Read the readme first. Then the manifest.",
+        reasoning_opaque: "opaque-second",
+      })
+    }),
+  )
+
+  it.effect("keeps a reasoning_opaque that arrives without reasoning text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(copilotRequest).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Checking.", reasoning_opaque: "opaque-only" }),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "read", arguments: "{}" } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toMatchObject([
+        { providerMetadata: { "github-copilot": { reasoningOpaque: "opaque-only" } } },
+      ])
+      const replay = yield* compileRequest(ai.request({ model: copilot, messages: [response.message] }))
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: "Checking.",
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "read", arguments: "{}" } }],
+        reasoning_opaque: "opaque-only",
       })
     }),
   )

@@ -33,6 +33,9 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
   )
 }
 
+// Temporary: managed policy is applied by the last internal plugin, and State shows each registration as soon as it is
+// made, so until activation finishes a provider the policy denies is still listed and usable. Only the endpoints that
+// list or use providers wait. Remove once a plugin batch becomes visible only when it ends.
 export const awaitPlugins = Plugin.awaitActivation.pipe(
   Effect.timeoutOrElse({
     duration: "5 seconds",

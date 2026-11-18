@@ -9,7 +9,9 @@ import { make, VLLMPlugin } from "@opencode/core/plugin/provider/vllm"
 import { Provider } from "@opencode/core/provider"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Layer, Schema } from "effect"
+import { Duration, Effect, Layer, Logger, Schema } from "effect"
+import { TestClock } from "effect/testing"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -18,23 +20,9 @@ const decode = Schema.decodeUnknownSync(Info)
 
 const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input = "1 hour") {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* make(origin, interval).effect(host)
 })
-
-function eventually<A>(
-  effect: Effect.Effect<A>,
-  predicate: (value: A) => boolean,
-  remaining = 3000,
-): Effect.Effect<A, Error> {
-  return Effect.gen(function* () {
-    const value = yield* effect
-    if (predicate(value)) return value
-    if (remaining === 0) return yield* Effect.fail(new Error("Timed out waiting for value"))
-    yield* Effect.promise(() => Bun.sleep(1))
-    return yield* eventually(effect, predicate, remaining - 1)
-  })
-}
 
 const remoteModel = (id: string, max_model_len = 32_768, owned_by = "vllm") => ({
   id,
@@ -112,6 +100,107 @@ describe("VLLMPlugin", () => {
     ),
   )
 
+  it.effect("waits for a slow endpoint instead of dropping its models", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const arrived = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        return {
+          arrived,
+          release,
+          server: Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              if (new URL(request.url).pathname === "/health") return new Response()
+              arrived.resolve()
+              await release.promise
+              return Response.json({ object: "list", data: [remoteModel("slow-model")] })
+            },
+          }),
+        }
+      }),
+      ({ arrived, release, server }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          yield* addPlugin(server.url.origin)
+          yield* Effect.promise(() => arrived.promise)
+          // The request is still open after ten seconds, as it is for a remote host that is slow to connect.
+          yield* TestClock.adjust("10 seconds")
+          release.resolve()
+          expect(
+            yield* eventually(
+              modelState.get(Provider.ID.make("vllm"), Model.ID.make("slow-model")),
+              (model) => model !== undefined,
+            ),
+          ).toBeDefined()
+        }),
+      ({ release, server }) =>
+        Effect.promise(() => {
+          release.resolve()
+          return server.stop(true)
+        }),
+    ),
+  )
+
+  it.effect("does not report a replaced endpoint's failure against the new one", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const arrived = Promise.withResolvers<void>()
+        const aborted = Promise.withResolvers<void>()
+        return {
+          arrived,
+          aborted,
+          slow: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              request.signal.addEventListener("abort", () => aborted.resolve())
+              arrived.resolve()
+              return new Promise<Response>(() => {})
+            },
+          }),
+          healthy: Bun.serve({
+            port: 0,
+            fetch: (request) =>
+              new URL(request.url).pathname === "/health"
+                ? new Response()
+                : Response.json({ object: "list", data: [remoteModel("healthy-model")] }),
+          }),
+        }
+      }),
+      ({ arrived, aborted, slow, healthy }) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const modelState = yield* Model.Service
+          const config = yield* Config.Test
+          const warnings: unknown[] = []
+          yield* config.setEntries([configuration({ baseURL: `${slow.url.origin}/v1` })])
+          yield* addPlugin(slow.url.origin).pipe(
+            Effect.provide(
+              Logger.layer([
+                Logger.make((entry) => {
+                  if (entry.logLevel === "Warn") warnings.push(entry.message)
+                }),
+              ]),
+            ),
+          )
+          yield* Effect.promise(() => arrived.promise)
+
+          yield* config.setEntries([configuration({ baseURL: `${healthy.url.origin}/v1` })])
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(
+            modelState.get(Provider.ID.make("vllm"), Model.ID.make("healthy-model")),
+            (model) => model !== undefined,
+          )
+
+          // The request to the replaced endpoint is still open, and now times out.
+          yield* TestClock.adjust("15 seconds")
+          yield* Effect.promise(() => aborted.promise)
+          expect(warnings).toEqual([])
+        }),
+      ({ slow, healthy }) => Effect.promise(() => Promise.all([slow.stop(true), healthy.stop(true)])),
+    ),
+  )
+
   it.live("refreshes inventory while retaining the last success through transient failures", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -142,10 +231,7 @@ describe("VLLMPlugin", () => {
           expect(yield* modelState.get(providerID, Model.ID.make("second-model"))).toBeUndefined()
 
           state.failing = false
-          yield* eventually(
-            modelState.get(providerID, Model.ID.make("second-model")),
-            (model) => model !== undefined,
-          )
+          yield* eventually(modelState.get(providerID, Model.ID.make("second-model")), (model) => model !== undefined)
           expect(yield* modelState.get(providerID, Model.ID.make("first-model"))).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
@@ -278,10 +364,7 @@ describe("VLLMPlugin", () => {
             requests.splice(0)
             yield* config.setEntries([configuration({ baseURL }), configuration({ apiKey: "next-secret" })])
             yield* bus.publish(Event.Updated, {})
-            yield* eventually(
-              providers.get(providerID),
-              (provider) => provider?.settings?.apiKey === "next-secret",
-            )
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "next-secret")
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/health" })
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/v1/models" })
           }),

@@ -3,6 +3,7 @@ export * as InstructionDiscovery from "./instruction-discovery.js"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { createPatch } from "diff"
+import { basename, dirname, join } from "path"
 import { Bus } from "./bus.js"
 import { Instructions } from "./instructions/index.js"
 import { State } from "./state.js"
@@ -40,6 +41,8 @@ export interface Interface extends State.Transformable<Editor> {
   // Move it into plugin config once plugins can consume their own options.
   readonly project: boolean
   readonly global: boolean
+  // Read CLAUDE.md where no AGENTS.md exists, and ~/.claude/CLAUDE.md when the global AGENTS.md is missing.
+  readonly claude: boolean
   readonly list: () => Effect.Effect<File[] | Instructions.Unavailable>
   readonly load: () => Effect.Effect<Instructions.List>
 }
@@ -47,6 +50,7 @@ export interface Interface extends State.Transformable<Editor> {
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
   global: Schema.optional(Schema.Boolean),
+  claude: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -98,6 +102,7 @@ export const layer = (options?: Options) =>
       return Service.of({
         project: options?.project !== false,
         global: options?.global !== false,
+        claude: options?.claude !== false,
         transform: state.transform,
         reload: state.reload,
         list,
@@ -120,6 +125,16 @@ export function configured(options?: Options) {
 
 export const node = configured()
 
+// CLAUDE.md stands in for AGENTS.md in a directory that has none.
+export function filenames(discovery: Pick<Interface, "claude">) {
+  return discovery.claude ? ["AGENTS.md", "CLAUDE.md"] : ["AGENTS.md"]
+}
+
+/** Drops each CLAUDE.md whose directory also has an AGENTS.md among `found`. */
+export function preferAgents(found: readonly string[]) {
+  return found.filter((file) => basename(file) !== "CLAUDE.md" || !found.includes(join(dirname(file), "AGENTS.md")))
+}
+
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")
 }
@@ -131,7 +146,7 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
     (file) => file.path,
     (before, after) => before.content !== after.content,
   )
-  return [
+  const parts = [
     ...changes.removed.map((file) => `The instructions from ${file.path} no longer apply.`),
     ...changes.added.map((file) => `New instructions apply from:\n${render([file])}`),
     ...changes.changed.map(({ previous: before, current: after }) => {
@@ -145,5 +160,6 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
       const replacement = `The instructions changed:\n${render([after])}`
       return diff.length < replacement.length ? diff : replacement
     }),
-  ].join("\n\n")
+  ]
+  return parts.length === 0 ? undefined : parts.join("\n\n")
 }

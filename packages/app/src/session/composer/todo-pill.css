@@ -1,52 +1,19 @@
-[data-color-scheme="dark"] [data-slot="session-todo-pill"] {
-  background: var(--v2-background-bg-layer-01);
+[data-composer-pill][data-slot="session-todo-pill"] {
+  gap: 6px;
+  padding-inline-start: 8px;
 }
 
-/* The activity capsule's overlays and focus ring. */
-[data-slot="session-todo-pill"] {
-  &:focus-visible {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
-  }
-
-  @media (hover: hover) {
-    &:hover:not(:active, [data-expanded]) {
-      background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
-    }
-  }
-
-  &:is(:active, [data-expanded]) {
-    background-image: linear-gradient(
-      var(--v2-overlay-simple-overlay-pressed),
-      var(--v2-overlay-simple-overlay-pressed)
-    );
-  }
-}
-
-[data-slot="session-todo-panel"] {
-  width: 320px;
-  max-width: calc(100vw - 56px);
-  padding-top: 6px;
-  border: 0.5px solid var(--v2-border-border-muted);
-  border-radius: 10px;
-  background: var(--v2-background-bg-layer-01);
-  box-shadow: var(--v2-elevation-floating);
-  transform-origin: var(--kb-popover-content-transform-origin);
-  animation: session-todo-panel-in 150ms ease-out;
-}
-
-@keyframes session-todo-panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
+[data-composer-pill-panel][data-slot="session-todo-panel"] {
+  width: max-content;
+  min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
+  max-width: min(400px, calc(100vw - 56px));
 }
 
 [data-slot="session-todo-glyph"] {
   color: var(--v2-icon-icon-faint);
 
   &[data-status="in_progress"] {
-    color: var(--v2-icon-icon-accent);
+    color: var(--v2-state-fg-warning);
   }
 
   &[data-status="completed"] {
@@ -54,50 +21,17 @@
   }
 }
 
-[data-slot="session-todo-pulse"] {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: session-todo-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes session-todo-pulse {
-  50% {
-    transform: scale(0.6);
-    opacity: 0.55;
-  }
-}
-
 [data-slot="session-todo-row"] {
-  &[data-status="in_progress"] {
-    background: var(--v2-overlay-simple-overlay-hover);
+  [data-slot="session-todo-text"] {
+    color: var(--v2-text-text-muted);
+  }
 
-    [data-slot="session-todo-text"] {
-      font-weight: 530;
-    }
+  &[data-status="in_progress"] [data-slot="session-todo-text"] {
+    color: var(--v2-text-text-base);
   }
 
   &:is([data-status="completed"], [data-status="cancelled"]) [data-slot="session-todo-text"] {
     color: var(--v2-text-text-faint);
-  }
-
-  &[data-status="cancelled"] [data-slot="session-todo-text"] {
     text-decoration: line-through;
-  }
-}
-
-:root[data-motion="reduce"] :is([data-slot="session-todo-pulse"], [data-slot="session-todo-panel"]) {
-  animation: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-slot="session-todo-pulse"],
-  [data-slot="session-todo-panel"] {
-    animation: none;
-  }
-}
-
-@media (hover: none) {
-  [data-slot="session-todo-pill"] {
-    min-height: 44px;
   }
 }

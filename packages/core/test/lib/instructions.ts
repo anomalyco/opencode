@@ -20,7 +20,7 @@ export const readInitial = (instructions: Instructions.List) =>
         ),
       ),
     )
-    return { ...current, text: Instructions.renderInitial(instructions, current.values) }
+    return { ...current, text: Instructions.join(Instructions.renderInitial(instructions, current.values)) }
   })
 
 export const readUpdate = (instructions: Instructions.List, previous: State) =>
