@@ -23,6 +23,8 @@ use crate::support::{self, Harness};
 enum Kind {
     Fetch,
     Foreground,
+    /// A timer of 20 ms (timers, 2.3): owned as a fetch is.
+    Timer,
     /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, the focus of
     /// field `fld` (`focus-input`), a blur, an offset of scroll `s`, and a move of the session transcript, the app's,
     /// which the user's handler may ask for.
@@ -40,7 +42,7 @@ enum Kind {
 impl Kind {
     /// A request, which gets a reply; else an effect, which applies.
     fn request(self) -> bool {
-        matches!(self, Kind::Fetch | Kind::Foreground)
+        matches!(self, Kind::Fetch | Kind::Foreground | Kind::Timer)
     }
 }
 
@@ -136,6 +138,9 @@ fn expected(row: Row) -> Outcome {
 
 /// Why a row cannot happen on `carrier`, when it cannot.
 fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
+    if row.kind == Kind::Timer && carrier == Carrier::Pipe {
+        return Some("a TS plugin keeps time with the JS host's own setTimeout, which is no request of the host's");
+    }
     if row.close == Close::Racing && carrier != Carrier::Pipe {
         return Some("in process and over the C ABI, what a call asks for leaves with its turn: no answer to race");
     }
@@ -165,7 +170,7 @@ fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
         };
     }
     match (row.kind, row.origin, row.close) {
-        (Kind::Fetch, _, Close::Launched) => Some("a fetch has no launch"),
+        (Kind::Fetch | Kind::Timer, _, Close::Launched) => Some("a fetch or a timer has no launch"),
         (_, Origin::Setup, Close::BeforeDispatch | Close::Racing | Close::Other) => {
             Some("setup asks before any mount shows")
         }
@@ -183,6 +188,7 @@ fn rows(carrier: Carrier) -> Vec<Row> {
     let kinds = [
         Kind::Fetch,
         Kind::Foreground,
+        Kind::Timer,
         Kind::Overlay,
         Kind::Mode,
         Kind::Focus,
@@ -478,6 +484,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         }
         (Outcome::Cancelled, Kind::Fetch, _) => served.load(Ordering::SeqCst) == asked.load(Ordering::SeqCst),
         (Outcome::Cancelled, Kind::Foreground, _) => !probe.asked().is_empty(),
+        (Outcome::Delivered | Outcome::Cancelled, Kind::Timer, _) => !probe.replies().is_empty(),
         (Outcome::Applied | Outcome::Dropped, ..)
         | (
             _,
@@ -524,6 +531,7 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
     let named = seen.replies.iter().all(|(reply, _)| *reply == id);
     let replied = |text: &str| seen.replies.len() == 1 && seen.replies[0].1.contains(text);
     let delivered = match (row.kind, pipe) {
+        (Kind::Timer, _) => replied("Ok(") && seen.sent == 0,
         (Kind::Fetch, false) => replied("held") && seen.sent == 1,
         (Kind::Fetch, true) => replied("Ok 0") && seen.sent == 1,
         (Kind::Foreground, false) => replied("code") && seen.launched == 1,
@@ -541,6 +549,7 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         _ => replied("cancelled"),
     };
     let cancelled = match row.kind {
+        Kind::Timer => told && seen.sent == 0,
         Kind::Fetch => told && seen.sent == sent,
         Kind::Foreground => told && seen.launched == 0,
         _ => unreachable!("an effect's row runs in run_effect"),
@@ -657,7 +666,7 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             Kind::Blur => last.focused.is_none(),
             Kind::Scroll => last.offsets.iter().any(|(id, offset)| id == "s" && *offset == 3),
             Kind::Transcript => moved.get() > 0,
-            Kind::Fetch | Kind::Foreground => unreachable!("a request"),
+            Kind::Fetch | Kind::Foreground | Kind::Timer => unreachable!("a request"),
         }
     };
     let outcome = expected(row);
@@ -869,6 +878,7 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             let (command, args) = MARK.with_borrow(|mark| witness(mark));
             host.try_foreground(abi::Foreground::new(command).args(args))
         }
+        Kind::Timer => host.try_timer(Duration::from_millis(20)),
         // An effect gets no ID: the call asked.
         Kind::Overlay => {
             let anchor = Anchor::Point { x: 0, y: 0 };
@@ -1110,11 +1120,12 @@ local function ask(host, origin)
     -- A request waits in a task of its own, started in this call, so the request is this call's. A task gets no
     -- request ID: 1 names the one it waits on, 0 a request the host did not take.
     local id
-    if KIND == "Fetch" or KIND == "Foreground" then
+    if KIND == "Fetch" or KIND == "Foreground" or KIND == "Timer" then
         local returned = false
         plugin.spawn(function()
             local value, error
             if KIND == "Fetch" then value, error = host:fetch({{ method = "GET", path = "/api/hold" }})
+            elseif KIND == "Timer" then value, error = plugin.sleep(20)
             else value, error = host:foreground({{ command = COMMAND, args = ARGS }}) end
             returned = true
             if id == 1 then record(host, "replies", {{ id = 1, text = describe(value, error) }}) end

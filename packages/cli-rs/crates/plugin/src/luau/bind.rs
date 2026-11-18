@@ -570,6 +570,18 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         })?;
         host.raw_set("call", f)?;
     }
+    // A timer of `ms` milliseconds, which the prelude's `plugin.sleep` waits on, as a fetch.
+    let timer = {
+        let current = current.clone();
+        lua.create_function(move |_, (_this, ms): (Value, f64)| {
+            let delay = std::time::Duration::from_millis(if ms.is_finite() && ms > 0.0 { ms as u64 } else { 0 });
+            Ok(match current.get().host()?.try_timer(delay) {
+                Ok(id) => (Some(id.0), None),
+                Err(error) => (None, Some(error)),
+            })
+        })?
+    };
+    host.raw_set("timer", timer)?;
     let memo = {
         let current = current.clone();
         lua.create_function(move |lua, (this, key, value, build): (Value, String, Value, Function)| {

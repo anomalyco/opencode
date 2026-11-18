@@ -213,6 +213,8 @@ pub struct Monitor {
     counted: Cell<Option<(u64, Duration)>>,
     /// The host has a close at the next paint pending.
     closing: Cell<bool>,
+    /// The frames that ended with no paint ([`Monitor::close_idle`]), which count on after the host's.
+    idle: Cell<u64>,
     record: OnceCell<(Arc<Record>, Instant)>,
     /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
     on_notice: RefCell<Option<Rc<OnNotice>>>,
@@ -351,6 +353,7 @@ impl Monitor {
             depth: Cell::new(0),
             counted: Cell::new(None),
             closing: Cell::new(false),
+            idle: Cell::new(0),
             record: OnceCell::new(),
             on_notice: RefCell::default(),
             told: RefCell::default(),
@@ -389,7 +392,22 @@ impl Monitor {
     /// frame the paint started in. So a frame is a paint's calls and the calls since the paint before it (review
     /// carbon 4.1).
     pub fn frame(&self) -> u64 {
-        (self.frame.borrow())().saturating_sub(u64::from(IN_FRAME.with(Cell::get)))
+        self.painted().saturating_sub(u64::from(IN_FRAME.with(Cell::get)))
+    }
+
+    /// The host's painted frames, and the frames that ended with no paint.
+    pub fn painted(&self) -> u64 {
+        (self.frame.borrow())() + self.idle.get()
+    }
+
+    /// Ends the frame open now as a frame of its own when no paint came since `painted` ([`Monitor::painted`]), then
+    /// closes as [`Monitor::close`] does: the calls of a timer's tick with nothing to paint count as one frame, not
+    /// summed with every later tick until a paint comes.
+    pub fn close_idle(&self, painted: u64) -> Vec<(String, String)> {
+        if self.painted() == painted {
+            self.idle.set(self.idle.get() + 1);
+        }
+        self.close()
     }
 
     /// Whether a frame open now is over a budget: a close must end it at a later paint, for the slow rule to see

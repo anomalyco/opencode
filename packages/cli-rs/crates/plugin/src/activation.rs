@@ -53,6 +53,8 @@ pub(crate) struct Activation {
     hinted: Cell<Option<u64>>,
     /// Times its updates against the frame budget ([`crate::schedule`]); the defaults until the host sets it.
     monitor: RefCell<Option<(Rc<crate::contain::Monitor>, crate::contain::Slot)>>,
+    /// Its timers that wait (2.3), at most [`abi::MAX_TIMERS`]: the app's timer of each, by request.
+    scheduled: RefCell<std::collections::HashMap<abi::RequestId, TimerId>>,
 }
 
 /// What one [`Activation::step`] did.
@@ -94,6 +96,7 @@ impl Activation {
                 owners: RefCell::default(),
                 hinted: Cell::new(None),
                 monitor: RefCell::default(),
+                scheduled: RefCell::default(),
             }
         })
     }
@@ -149,6 +152,11 @@ impl Activation {
         self.on_wake.borrow_mut().take();
         self.on_message.borrow_mut().take();
         self.on_panic.borrow_mut().take();
+        // Its timers wake nothing more.
+        let scheduled = self.scheduled.take();
+        if let Some(host) = self.host.upgrade() {
+            scheduled.into_values().for_each(|timer| _ = host.app().cancel_timer(timer));
+        }
         // Its input stops at once, and goes once the event that ended it is handled: a key layer may be the one that
         // runs now.
         let owners: Vec<_> = self.owners.take().iter().filter_map(Weak::upgrade).collect();
@@ -172,6 +180,34 @@ impl Activation {
 
     pub fn disposed(&self) -> bool {
         self.disposed.get()
+    }
+
+    /// Schedules timer `id` on the app's clock: `reply` gets `null` once `delay`, at least [`abi::MIN_TIMER`], passed,
+    /// unless the activation ended or the timer was cancelled first. With [`abi::MAX_TIMERS`] of its timers scheduled
+    /// already, `reply` gets the refusal at once.
+    pub(crate) fn start_timer(self: &Rc<Self>, app: &App, id: abi::RequestId, delay: Duration, reply: crate::Reply) {
+        if self.disposed() {
+            return;
+        }
+        if self.scheduled.borrow().len() >= abi::MAX_TIMERS {
+            return reply(Err(format!("more than {} timers of the plugin wait", abi::MAX_TIMERS)));
+        }
+        let this = Rc::downgrade(self);
+        let timer = app.set_timeout(delay.max(abi::MIN_TIMER), move |_| {
+            if let Some(activation) = this.upgrade() {
+                activation.scheduled.borrow_mut().remove(&id);
+            }
+            crate::ticking(true, || reply(Ok(serde_json::Value::Null)));
+        });
+        self.scheduled.borrow_mut().insert(id, timer);
+    }
+
+    /// Cancels timer `id` if it is scheduled: its mount closed. Another request's ID is none of its timers.
+    pub(crate) fn cancel_timer(&self, id: abi::RequestId) {
+        let timer = self.scheduled.borrow_mut().remove(&id);
+        if let (Some(timer), Some(host)) = (timer, self.host.upgrade()) {
+            host.app().cancel_timer(timer);
+        }
     }
 
     /// Sets what a wake runs before the claims render again: the plugin's wake handlers, which invalidate them.

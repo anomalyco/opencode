@@ -29,7 +29,7 @@ plugin.HIDE = table.freeze({ type = "hide" })
 --
 -- Each handler the host calls with a `host` (a command's, `onEvent`'s, `onMount`'s, `onRouteMount`'s, a layer's and a
 -- surface's) runs as a task: a coroutine this module drives. A waiting call (`host:fetch`, `host:foreground`,
--- `host:select`, `host:prompt`, `host:confirm`, `host:alert`, `plugin.all`) parks its task and returns once its answer
+-- `host:select`, `host:prompt`, `host:confirm`, `host:alert`, `plugin.all`, `plugin.sleep`) parks its task and returns once its answer
 -- comes, in the host call that carries the answer: a reply's, or the dialog's answer or close. So what a task asks for
 -- after a wait is the effects of that call, timed and limited as that call is: the CPU budget holds for each stretch
 -- between two waits, and a parked task costs no time. A render, a view, a search, `onDispose` and setup are not tasks,
@@ -264,6 +264,37 @@ local function namespace(prefix: string): any
 end
 plugin.client = namespace("")
 
+-- What `plugin.sleep` asks the host through, and the host `plugin.every` hands its function: the plugin's, once
+-- `plugin.define`'s setup started.
+local sleeper: ((number) -> (any, string?))? = nil
+local ticked: any = nil
+
+-- Waits `ms` milliseconds on the host's clock, at least 20, with no thread: `true`, or `nil` and why the host took no
+-- timer (32 of the plugin wait) or cancelled it (`"cancelled"`, its mount closed). Only a task waits.
+function plugin.sleep(ms: number): (boolean?, string?)
+    local sleep = sleeper
+    if sleep == nil then
+        error("plugin.sleep needs a plugin of plugin.define", 2)
+    end
+    local _, err = sleep(ms)
+    if err ~= nil then
+        return nil, err
+    end
+    return true, nil
+end
+
+-- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails. A tick that
+-- runs long delays the next: a late period is one tick, not one for each it missed.
+function plugin.every(ms: number, f: (any) -> boolean?)
+    plugin.spawn(function()
+        while plugin.sleep(ms) do
+            if f(ticked) == false then
+                return
+            end
+        end
+    end)
+end
+
 -- How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until its
 -- answer or its close runs; the host runs a dialog's answer before its close, so an answer that runs late, after other
 -- dialogs showed, still reaches its own dialog (big-boi `acf-1`). A dialog that finds every command held answers `nil`
@@ -290,8 +321,8 @@ local function tasked(raw)
     end
     local shown = 0
 
-    local function request(name: string, send, self, spec): (any, string?)
-        local co = task(name, 4)
+    local function request(name: string, send, self, spec, level: number?): (any, string?)
+        local co = task(name, level or 4)
         local id, why = send(self, spec)
         if id == nil then
             return nil, why
@@ -331,6 +362,13 @@ local function tasked(raw)
         end
         return body.data, nil
     end
+    -- The timer is `plugin.sleep`'s alone.
+    local timer = host.timer
+    host.timer = nil
+    sleeper = function(ms: number)
+        return request("plugin.sleep", timer, host, ms, 5)
+    end
+    ticked = host
     raw.onReply(raw, function(_, id: number, value: any, err: string?)
         local co = requests[id]
         if co then

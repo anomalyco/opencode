@@ -98,6 +98,12 @@ pub const ABI_MINOR: u32 = 0;
 /// The symbol every 2.x plugin exports, of type [`EntryFn`].
 pub const ENTRY: &str = "opencode_plugin_v2";
 
+/// The shortest a timer waits ([`Host::try_timer`]): one asked for less waits this long. A shorter tick is a canvas's
+/// `animate`.
+pub const MIN_TIMER: std::time::Duration = std::time::Duration::from_millis(20);
+/// The most timers of a plugin that wait at once ([`Host::try_timer`]): the host refuses one more.
+pub const MAX_TIMERS: usize = 32;
+
 /// The optional features this crate's host side knows ([`HostApi::features`]).
 pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
 
@@ -2081,6 +2087,10 @@ pub enum HostRequest {
     ClearSelection,
     /// [`Host::try_foreground`], once the current call returns; answers the [`RequestId`].
     Foreground(Foreground),
+    /// [`Host::try_timer`]: answers the [`RequestId`] whose reply, `null`, comes once `ms` milliseconds passed.
+    Timer {
+        ms: u64,
+    },
     /// [`Host::set_title`], once the current call returns.
     Title {
         title: String,
@@ -3195,6 +3205,16 @@ pub trait Host: Read {
     fn try_foreground(&self, _program: Foreground) -> Result<RequestId, String> {
         Err("the host did not take the program".to_owned())
     }
+    /// Starts a timer: [`Setup::on_reply`] gets `null` with the ID this returns once `delay` passed on the host's
+    /// clock, on the UI thread, with no thread of the plugin's. A delay under [`MIN_TIMER`] waits [`MIN_TIMER`]. It is
+    /// owned as a fetch is ([`Host::try_fetch`]): a mount's timer ends with its mount, which [`Setup::on_cancelled`]
+    /// hears, and every timer ends with the activation. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply
+    /// is that refusal, at once. An error is a timer the host did not take, as for [`Host::try_fetch`]: no reply comes
+    /// for it. A host without timers, by default, takes none.
+    #[must_use = "a timer the host did not take gets no reply"]
+    fn try_timer(&self, _delay: std::time::Duration) -> Result<RequestId, String> {
+        Err("the host has no timers".to_owned())
+    }
     /// Sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
     /// change, such as a route change.
     fn set_title(&self, _title: &str) {}
@@ -3674,6 +3694,11 @@ impl Host for HostHandle {
 
     fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
         self.requested(&HostRequest::Fetch(fetch))
+    }
+
+    fn try_timer(&self, delay: std::time::Duration) -> Result<RequestId, String> {
+        let ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+        self.requested(&HostRequest::Timer { ms })
     }
 
     fn dialog(&self, dialog: Dialog) {

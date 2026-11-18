@@ -540,6 +540,8 @@ pub(crate) enum Effect {
     Tab(abi::TabEdit),
     ClearSelection,
     Foreground(abi::RequestId, abi::Foreground, Option<Weak<()>>),
+    /// A timer, with the mount that owns it.
+    Timer(abi::RequestId, std::time::Duration, Option<Weak<()>>),
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
@@ -1132,6 +1134,14 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             ctx.effects.push(Effect::Foreground(id, program, owning(ctx)));
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
+        HostRequest::Timer { ms } => {
+            if !crate::has_room(ctx.effects.len()) {
+                return Err(crate::REFUSED.to_owned());
+            }
+            let id = next_request();
+            ctx.effects.push(Effect::Timer(id, std::time::Duration::from_millis(ms), owning(ctx)));
+            return Ok(serde_json::to_value(id).unwrap_or_default());
+        }
         HostRequest::Title { title } => ctx.effects.push(Effect::Title(title)),
         HostRequest::Theme => return read(ctx, &mut |read| serde_json::to_value(read.theme())),
         HostRequest::Themes => return read(ctx, &mut |read| serde_json::to_value(read.themes())),
@@ -1246,6 +1256,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::Tab { .. }
         | HostRequest::ClearSelection
         | HostRequest::Foreground(_)
+        | HostRequest::Timer { .. }
         | HostRequest::Title { .. }
         | HostRequest::SetTheme { .. }
         | HostRequest::InstallTheme { .. }
@@ -1530,6 +1541,12 @@ pub(crate) trait Answers {
     fn cancel(self: Rc<Self>, request: abi::RequestId);
     /// Whether [`Answers::cancel`] tells it anything, so a mount's close queues a cancel for it at all.
     fn cancels(&self) -> bool;
+    /// Lets go at once of what the host holds for `request`, which its mount's close cancelled: a timer's schedule.
+    fn release(&self, _request: abi::RequestId) {}
+    /// Its activation, whose timers it asks for; none for the JS host, whose timers are its own.
+    fn activation(&self) -> Option<Rc<Activation>> {
+        None
+    }
 }
 
 impl Answers for Guest {
@@ -1547,6 +1564,14 @@ impl Answers for Guest {
 
     fn answer(self: Rc<Self>, request: Request) {
         self.handle("on-reply", &request);
+    }
+
+    fn release(&self, request: abi::RequestId) {
+        self.activation.cancel_timer(request);
+    }
+
+    fn activation(&self) -> Option<Rc<Activation>> {
+        Some(self.activation.clone())
     }
 
     fn cancel(self: Rc<Self>, request: abi::RequestId) {
@@ -1586,14 +1611,18 @@ pub(crate) fn reply_to(
     send(
         host,
         Box::new(move |result| {
+            // A timer's reply carries that to the call it makes, which then asks for no paint.
+            let ticking = crate::is_ticking();
             defer(&owner, move |_| {
-                // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
-                let waiting = mount.is_none() || take_inflight(request);
-                let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
-                match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
-                    true => guest.answer(Request::Reply { id: request, result }),
-                    false => guest.cancel(request),
-                }
+                crate::ticking(ticking, || {
+                    // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
+                    let waiting = mount.is_none() || take_inflight(request);
+                    let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
+                    match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
+                        true => guest.answer(Request::Reply { id: request, result }),
+                        false => guest.cancel(request),
+                    }
+                });
             });
         }),
     );
@@ -1688,7 +1717,12 @@ pub(crate) fn cancel_closed(key: usize) -> usize {
     });
     let count = cancelled.len();
     for (request, guest) in cancelled {
-        let Some(owner) = guest.upgrade().filter(|guest| guest.cancels()).map(|guest| guest.owner()) else { continue };
+        let Some(running) = guest.upgrade() else { continue };
+        running.release(request);
+        if !running.cancels() {
+            continue;
+        }
+        let owner = running.owner();
         defer(&owner, move |_| {
             if let Some(guest) = guest.upgrade() {
                 guest.cancel(request);
@@ -1724,7 +1758,7 @@ pub(crate) fn apply(
         let (id, guest) = (id.clone(), guest.clone());
         let plugin = id.clone();
         // A request given an ID had its room reserved then ([`crate::has_room`]): it is admitted past the bound.
-        let reserved = matches!(effect, Effect::Fetch(..) | Effect::Foreground(..));
+        let reserved = matches!(effect, Effect::Fetch(..) | Effect::Foreground(..) | Effect::Timer(..));
         let effect = move |host: &dyn Host| run(host, effect, &id, &guest, generation);
         match reserved {
             true => defer(host, effect),
@@ -1767,6 +1801,13 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
                 open && owner.upgrade().is_some_and(|guest| guest.running())
             });
             reply_to(guest, host, request, mount, |host, reply| host.foreground(program, alive, reply));
+        }
+        // Setup asks before its activation exists: the timer finds it as it starts.
+        Effect::Timer(request, delay, mount) => {
+            let Some(activation) = guest.upgrade().and_then(|guest| guest.activation()) else { return };
+            reply_to(guest, host, request, mount, move |host, reply| {
+                activation.start_timer(host.app(), request, delay, reply);
+            });
         }
         Effect::Title(title) => host.set_title(&title),
         Effect::Theme(name) => host.set_theme(&name),

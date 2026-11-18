@@ -764,6 +764,10 @@ impl loader::native::Answers for Scope {
         self.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
     }
 
+    fn release(&self, request: abi::RequestId) {
+        self.activation.cancel_timer(request);
+    }
+
     fn cancel(self: Rc<Self>, request: abi::RequestId) {
         let cancelled = self.cancelled.borrow().clone();
         if !cancelled.is_empty() && !self.activation.disposed() {
@@ -1403,7 +1407,16 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn try_fetch(&self, fetch: abi::Fetch) -> Result<abi::RequestId, String> {
-        self.request(move |host, reply| host.fetch(fetch, reply))
+        self.request(move |host, _, reply| host.fetch(fetch, reply))
+    }
+
+    fn try_timer(&self, delay: std::time::Duration) -> Result<abi::RequestId, String> {
+        let activation = Rc::downgrade(&self.scope.activation);
+        self.request(move |host, id, reply| {
+            if let Some(activation) = activation.upgrade() {
+                activation.start_timer(host.app(), id, delay, reply);
+            }
+        })
     }
 
     fn dialog(&self, dialog: abi::Dialog) {
@@ -1502,7 +1515,7 @@ impl abi::Host for Scoped<'_> {
                 owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none());
             active && mount.as_ref().is_none_or(|mount| mount.upgrade().is_some())
         });
-        self.request(move |host, reply| host.foreground(program, alive, reply))
+        self.request(move |host, _, reply| host.foreground(program, alive, reply))
     }
 
     fn set_title(&self, title: &str) {
@@ -1625,7 +1638,7 @@ impl Scoped<'_> {
     /// Queues `send` like an effect, unless the plugin is disposed by then, and returns the ID its reply comes back to
     /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first;
     /// [`REFUSED`] without room for it.
-    fn request(&self, send: impl FnOnce(&dyn Host, Reply) + 'static) -> Result<abi::RequestId, String> {
+    fn request(&self, send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static) -> Result<abi::RequestId, String> {
         // An ID is a promise of a reply: none is given unless the request's effect has room (bigboi's final pass).
         let staged = self.scope.call.borrow().as_ref().map_or(0, |call| call.effects.len());
         if !has_room(staged) {
@@ -1637,7 +1650,9 @@ impl Scoped<'_> {
         // A request a mount's call asked for ends with the mount, as over the C ABI: one whose mount closed first is
         // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
         let mount = self.scope.mount.borrow().clone();
-        self.defer_reserved(move |host| loader::native::reply_to(&scope, host, id, mount, send));
+        self.defer_reserved(move |host| {
+            loader::native::reply_to(&scope, host, id, mount, move |host, reply| send(host, id, reply));
+        });
         Ok(id)
     }
 
@@ -1787,7 +1802,10 @@ pub(crate) fn budget(
         defer(host, move |host| host.slow(&id, &cost));
     }
     if timed.opened && monitor.wants_close() {
-        close_at_paint(host, monitor);
+        match TICKING.get() {
+            true => close_idle(host, monitor),
+            false => close_at_paint(host, monitor),
+        }
     }
 }
 
@@ -1797,19 +1815,56 @@ pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monito
     let Some(strong) = host.upgrade() else { return };
     let (host, monitor) = (host.clone(), monitor.clone());
     strong.app().animate(move |_, _| {
-        for (id, cost) in monitor.close() {
-            defer(&host, move |host| host.slow(&id, &cost));
-        }
-        // Every change of slow, not only the first one a session that a toast tells (review carbon-4). A frame of
-        // plugin calls always ends here, at the paint, so a change is always seen here.
-        if monitor.take_flipped() {
-            defer(&host, |host| host.slow_changed());
-        }
-        if monitor.open_over() && monitor.wants_close() {
-            close_at_paint(&host, &monitor);
-        }
+        closed(&host, &monitor, monitor.close());
         false
     });
+}
+
+/// How long the frame a timer's call opened waits for a paint before it ends as a frame of its own: longer than a
+/// frame's slot, so a paint that was due anyway comes first and the frame ends as at any paint.
+const IDLE_CLOSE: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Closes the frames a timer's call opened without asking for a paint, unlike [`close_at_paint`]: [`IDLE_CLOSE`]
+/// later, as one frame of their own if no paint came by then. So a timer whose plugin changes nothing on screen costs
+/// a wake and no frame (timers, 2.3).
+fn close_idle(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
+    let Some(strong) = host.upgrade() else { return };
+    let (host, monitor, painted) = (host.clone(), monitor.clone(), monitor.painted());
+    strong.app().set_timeout(IDLE_CLOSE, move |_| closed(&host, &monitor, monitor.close_idle(painted)));
+}
+
+/// What a close of the frames found: plugins that became slow are told, a change of slow is told, and a frame still
+/// open over the budget is closed at the next paint too.
+fn closed(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>, news: Vec<(String, String)>) {
+    for (id, cost) in news {
+        defer(host, move |host| host.slow(&id, &cost));
+    }
+    // Every change of slow, not only the first one a session that a toast tells (review carbon-4). A frame of plugin
+    // calls always ends at a close, so a change is always seen here.
+    if monitor.take_flipped() {
+        defer(host, |host| host.slow_changed());
+    }
+    if monitor.open_over() && monitor.wants_close() {
+        close_at_paint(host, monitor);
+    }
+}
+
+thread_local! {
+    /// A timer's reply runs: the call it makes asks for no paint of its own ([`close_idle`]).
+    static TICKING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs `f` as a timer's reply when `ticking`: what it calls closes its frame with no paint ([`close_idle`]).
+pub(crate) fn ticking<R>(ticking: bool, f: impl FnOnce() -> R) -> R {
+    let outer = TICKING.replace(ticking || TICKING.get());
+    let result = f();
+    TICKING.set(outer);
+    result
+}
+
+/// Whether a timer's reply runs ([`ticking`]).
+pub(crate) fn is_ticking() -> bool {
+    TICKING.get()
 }
 
 /// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
