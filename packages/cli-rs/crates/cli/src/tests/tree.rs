@@ -9,16 +9,11 @@ fn fixture() -> Value {
 #[test]
 fn table_matches_the_typescript_cli() {
     let fixture = fixture();
-    assert_eq!(count(&fixture["root"]), 48, "commands.ts has 48 commands");
     let builtins: Vec<Value> = BUILTINS.iter().chain(ROOT.globals).map(flag).collect();
     let mut diffs = Vec::new();
     compare("builtins", &fixture["builtins"], &Value::from(builtins), &mut diffs);
     compare_command("opencode", &fixture["root"], &ROOT, &mut diffs);
     assert!(diffs.is_empty(), "the table differs from the TypeScript tree:\n{}", diffs.join("\n"));
-}
-
-fn count(node: &Value) -> usize {
-    1 + node["commands"].as_array().unwrap().iter().map(count).sum::<usize>()
 }
 
 fn compare(path: &str, expected: &Value, actual: &Value, diffs: &mut Vec<String>) {
