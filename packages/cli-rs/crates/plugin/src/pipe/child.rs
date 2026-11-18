@@ -556,10 +556,13 @@ fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
 fn read(shared: &Shared, reader: channel::Reader) {
     let mut input = std::io::BufReader::with_capacity(64 << 10, reader);
     let mut hello = false;
+    // The pieces of a control message too large for one frame, until its control frame (CT-36), within the bytes the
+    // host holds of what it has not taken.
+    let mut pieces = Vec::new();
     loop {
         let frame = wire::read(&mut input);
         let gone = |why: String| Event::Gone(why, None);
-        let (kind, payload) = match frame {
+        let (kind, mut payload) = match frame {
             Ok(Some(frame)) => frame,
             Ok(None) => {
                 deliver(shared, gone(ended(shared, "the JS host exited")), 0);
@@ -570,11 +573,23 @@ fn read(shared: &Shared, reader: channel::Reader) {
                 return;
             }
         };
-        let len = payload.len();
-        shared.read.fetch_add(len as u64 + 5, Ordering::Relaxed);
+        shared.read.fetch_add(payload.len() as u64 + 5, Ordering::Relaxed);
         if kind == wire::TREE {
-            shared.read_trees.fetch_add(len as u64 + 5, Ordering::Relaxed);
+            shared.read_trees.fetch_add(payload.len() as u64 + 5, Ordering::Relaxed);
         }
+        if kind == wire::PIECE || (kind == wire::CONTROL && !pieces.is_empty()) {
+            if pieces.len() + payload.len() > shared.limits.inbox {
+                let why = format!("the JS host sent a message of over {} bytes", shared.limits.inbox);
+                deliver(shared, gone(ended(shared, &why)), 0);
+                return;
+            }
+            pieces.append(&mut payload);
+            if kind == wire::PIECE {
+                continue;
+            }
+            payload = std::mem::take(&mut pieces);
+        }
+        let len = payload.len();
         let event = match kind {
             wire::TREE => serde_json::from_slice::<Revision>(&payload).map(|tree| Event::Tree(Box::new(tree))),
             _ => serde_json::from_slice::<Up>(&payload).map(|up| Event::Up(Box::new(up))),
@@ -1236,6 +1251,33 @@ mod tests {
         let events = take_until(&child, |events| gone(events).is_some());
         assert!(gone(&events).is_some_and(|why| why.contains("hello")), "{events:?}");
         assert_eq!(events.len(), 1, "{events:?}");
+    }
+
+    // Expected (CT-36): a control message too large for one frame comes in pieces, the last in a control frame, and reads
+    // as the one message; pieces past the bytes the host holds of what it has not taken end the stream.
+    #[test]
+    fn a_message_in_pieces_reads_whole_within_its_bound() {
+        let log = Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(600 << 10) };
+        let json = serde_json::to_vec(&log).unwrap();
+        let mut frames = hello();
+        let pieces: Vec<&[u8]> = json.chunks(wire::CONTROL_CAP).collect();
+        for (index, piece) in pieces.iter().enumerate() {
+            let kind = if index + 1 == pieces.len() { wire::CONTROL } else { wire::PIECE };
+            frames.extend(wire::encode(kind, piece));
+        }
+        frames.extend(control(&Up::Ack { seq: 0 }));
+        for (inbox, whole) in [(8 << 20, true), (512 << 10, false)] {
+            let (child, _dir) = fake(&frames, Limits { inbox, ..Limits::default() });
+            let events = take_until(&child, |events| {
+                events.iter().any(|event| {
+                    matches!(event, Event::Gone(..) | Event::Up(_))
+                        && !matches!(event, Event::Up(up) if matches!(**up, Up::Hello { .. }))
+                })
+            });
+            let read = events.iter().any(|event| matches!(event, Event::Up(up) if **up == log));
+            let gone = events.iter().any(|event| matches!(event, Event::Gone(..)));
+            assert_eq!((read, gone), (whole, !whole), "inbox {inbox}: {} events", events.len());
+        }
     }
 
     // Expected (the bound on ordered messages): the bound's worth of messages the host has not taken is held; one more
