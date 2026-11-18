@@ -60,7 +60,7 @@ export const Input = Schema.Struct({
     description:
       "Images, videos or audio that guide the subject, style, motion or voice without being shown as-is. Local file paths or http(s) URLs.",
   }),
-  duration: Schema.optionalKey(Schema.Number.check(Schema.isGreaterThan(0))).annotate({
+  duration: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
     description: "Length in seconds.",
   }),
   aspect: Schema.optionalKey(Schema.String).annotate({
