@@ -139,8 +139,9 @@ impl Fences {
     fn in_flight(&self) -> Option<bool> {
         let scripts = self.pipe.scripts();
         let seq = scripts.ping();
+        // A wait for the JS host moves no clock (compat-harness).
         self.pipe.harness.app.wait_until(Duration::from_secs(5), || {
-            self.now();
+            crate::plugin_pipe::still(&self.pipe.harness.app);
             scripts.ponged(seq).is_some()
         });
         scripts.ponged(seq)

@@ -479,6 +479,20 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         close();
     }
     turns(h, 3);
+    // A key or command of the mount's needs the mount, whose layers it brings, and the probe's `x`, a printable key of
+    // a global layer, reaches it only once the composer let the focus go (FT-14): a dialog takes it a turn or more after
+    // it opens, which under load three turns did not always see (ownership-harness: `asked []`).
+    if !matches!(row.origin, Origin::Setup | Origin::MountBegin) {
+        let mounts = || opencode_plugin::behave::mounts(h.app.app(), probe.id(), "probe");
+        let typing = || row.origin == Origin::Input && opencode_plugin::Host::composer_focused(&*h.tui);
+        let ready = h.app.wait_until(support::WAIT, || {
+            probe.turn();
+            mounts().len() == 1 && !typing()
+        });
+        if !ready {
+            return Err(format!("{carrier:?} {row:?}: the mount never began, or never took the focus"));
+        }
+    }
     trigger(h, row, &close);
     if racing {
         probe.hold(false);
@@ -505,7 +519,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
     // The program ran, which closed the route; over the pipe it waits for the JS host's answer.
     if row.close == Close::Launched {
         h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
+            probe.turn();
             launched() == 1
         });
     }
@@ -534,11 +548,11 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         _ => unreachable!("an effect runs in run_effect"),
     };
     h.app.wait_until(support::WAIT, || {
-        h.app.advance(Duration::from_millis(1));
+        probe.turn();
         shown()
     });
     h.app.wait_until(Duration::from_millis(300), || {
-        h.app.advance(Duration::from_millis(1));
+        probe.turn();
         false
     });
     opencode_tui::features::foreground::on_exit(None);
@@ -618,7 +632,7 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     let mounts = || opencode_plugin::behave::mounts(h.app.app(), plugin, "probe");
     let shows = |count: usize| {
         h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
+            probe.turn();
             mounts().len() == count && mounts().last().is_some_and(|mount| !mount.offsets.is_empty())
         })
     };
@@ -655,7 +669,7 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
         // The close is the call's own effect, which over the pipe applies only when the JS host answers: the route
         // opens again once it closed, or the close would end the new mount instead.
         let closed = h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
+            probe.turn();
             mounts().is_empty()
         });
         if !closed {
@@ -684,12 +698,12 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     };
     let outcome = expected(row);
     h.app.wait_until(support::WAIT, || {
-        h.app.advance(Duration::from_millis(1));
+        probe.turn();
         h.app.render();
         probe.asked().len() == 1 && applied() == (outcome == Outcome::Applied)
     });
     h.app.wait_until(Duration::from_millis(300), || {
-        h.app.advance(Duration::from_millis(1));
+        probe.turn();
         false
     });
     let (asked, did) = (probe.asked().len(), applied());
@@ -817,6 +831,17 @@ impl Probe {
         }
     }
 
+    /// One turn of the UI thread as a row polls. Over the pipe it moves no clock (`plugin_pipe::still`): the wait is for
+    /// the JS host, whose real latency no deadline of the host's may see (compat-harness). The other carriers' work is
+    /// on the UI thread's clock, a timer's too, so it moves 1 ms.
+    fn turn(&self) {
+        let h = self.harness();
+        match self {
+            Probe::Pipe(..) => crate::plugin_pipe::still(&h.app),
+            _ => h.app.advance(Duration::from_millis(1)),
+        }
+    }
+
     fn id(&self) -> &'static str {
         match self {
             Probe::Native(_) => "test.probe",
@@ -881,7 +906,7 @@ impl Probe {
     /// Waits until the TypeScript fetch settled, or long enough to say it did not: how it settled.
     fn wait_settled(&self, h: &Harness) -> Vec<String> {
         h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
+            self.turn();
             !self.replies().is_empty()
         });
         self.replies().into_iter().map(|(_, settled)| settled).collect()
@@ -890,7 +915,7 @@ impl Probe {
     /// Waits until the request was answered: the reply came, or the program ran.
     fn wait_replied(&self, h: &Harness, kind: Kind, launched: &dyn Fn() -> usize) {
         h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
+            self.turn();
             match (kind, self) {
                 (Kind::Foreground, Probe::Pipe(..)) => launched() == 1,
                 _ => !self.replies().is_empty(),

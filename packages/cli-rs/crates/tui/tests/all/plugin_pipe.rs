@@ -617,8 +617,7 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
     toasts(&pipe.harness);
     let begun = Instant::now();
     pipe.harness.tui.keymap.dispatch(command, input);
-    pipe.harness.wait(&format!("{command} ended the JS host"), || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    until(&pipe.harness, &format!("{command} ended the JS host"), || {
         whole_or_placeholder(&pipe.harness.app.text());
         pipe.scripts().pid().is_some_and(|now| now != pid) || failed(&pipe, PROBE).is_some()
     });
@@ -626,8 +625,7 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
     assert!(begun.elapsed() < setup, "the end took the setup's limit");
     // The failure's toast stays, and any after it waits, until read, as when the user holds it: the new JS host's start
     // may take longer than a toast shows.
-    pipe.harness.wait("the failure's toast", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    until(&pipe.harness, "the failure's toast", || {
         let title = pipe.harness.tui.toasts.current().and_then(|toast| toast.title);
         title.is_some_and(|title| title.starts_with("Plugin failed"))
     });
@@ -676,10 +674,7 @@ fn a_plugin_that_floods_fails_alone_and_the_js_host_starts_again() {
         pipe.settle();
         // The UI thread takes nothing while the flood comes.
         std::thread::sleep(Duration::from_millis(1500));
-        pipe.harness.wait("the flood ended the JS host", || {
-            pipe.harness.app.advance(Duration::from_millis(1));
-            failed(&pipe, PROBE).is_some()
-        });
+        until(&pipe.harness, "the flood ended the JS host", || failed(&pipe, PROBE).is_some());
         pipe.settle();
         let error = failed(&pipe, PROBE).unwrap();
         assert!(error.contains("flooded the host with effects"), "queued {queued:?}: {error}");
@@ -710,8 +705,7 @@ fn a_raw_write_to_standard_output_is_logged_and_breaks_nothing() {
         pipe.settle();
     }
     assert_eq!(calls(&log).iter().filter(|call| **call == serde_json::json!({ "raw": true })).count(), 3);
-    pipe.harness.wait("the raw bytes are logged", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    until(&pipe.harness, "the raw bytes are logged", || {
         pipe.scripts().stray().iter().filter(|record| record.contains("not a frame")).count() == 3
     });
     let stray = pipe.scripts().stray();
@@ -733,8 +727,7 @@ fn a_js_host_over_its_memory_budget_starts_again() {
     let (pipe, log) = probe_and_twin(config, false);
     let pid = pipe.scripts().pid().unwrap();
     pipe.harness.tui.keymap.dispatch("probe.leak", Some("256"));
-    pipe.harness.wait("the budget ended the JS host", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    until(&pipe.harness, "the budget ended the JS host", || {
         std::thread::sleep(Duration::from_millis(1));
         pipe.scripts().pid().is_some_and(|now| now != pid)
     });
@@ -751,16 +744,14 @@ fn three_ends_in_a_minute_fail_every_plugin() {
     for end in 0..3 {
         let pid = pipe.scripts().pid().unwrap();
         pipe.scripts().kill();
-        pipe.harness.wait(&format!("end {end} was noticed"), || {
-            pipe.harness.app.advance(Duration::from_millis(1));
+        until(&pipe.harness, &format!("end {end} was noticed"), || {
             std::thread::sleep(Duration::from_millis(1));
             pipe.scripts().pid() != Some(pid)
         });
         if end < 2 {
             // The next starts as the loader reconciles again, which a settle with no JS host does not wait for
             // (pipe-flakes: under load it had not started, and the next end found none).
-            pipe.harness.wait(&format!("a JS host started after end {end}"), || {
-                pipe.harness.app.advance(Duration::from_millis(1));
+            until(&pipe.harness, &format!("a JS host started after end {end}"), || {
                 std::thread::sleep(Duration::from_millis(1));
                 pipe.scripts().pid().is_some()
             });
@@ -848,10 +839,7 @@ fn a_js_host_that_ends_mid_revision_leaves_the_last_whole_tree() {
     for _ in 0..2 {
         pipe.harness.tui.keymap.dispatch("twin.bump", Some("3"));
         // The handler returned, so the end names nobody; its tree may be on its way.
-        pipe.harness.wait("the bump returned", || {
-            pipe.harness.app.advance(Duration::from_millis(1));
-            pipe.scripts().idle()
-        });
+        until(&pipe.harness, "the bump returned", || pipe.scripts().idle());
         pipe.scripts().kill();
         for _ in 0..40 {
             pipe.harness.app.advance(Duration::from_millis(1));
@@ -1118,7 +1106,7 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     let begun = Instant::now();
     let mut reloaded = false;
     while begun.elapsed() < Duration::from_secs(10) && !reloaded {
-        harness.app.advance(Duration::from_millis(1));
+        still(&harness.app);
         std::thread::sleep(Duration::from_millis(2));
         assert_eq!(pipe.status(twin::ID), Some(Status::Active), "the running build left while the new one loaded");
         let text = harness.app.text();
@@ -1489,10 +1477,7 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
             .any(|entry| entry.target.as_deref() == Some(&*dir.to_string_lossy()) && entry.status == status)
     };
     // The decision is recorded off the UI thread, as the walk is.
-    harness.wait("the plugin was declined", || {
-        app.advance(Duration::from_millis(1));
-        listed(Status::Declined)
-    });
+    until(&harness, "the plugin was declined", || listed(Status::Declined));
     assert!(
         tui.plugins.scripts.borrow().as_ref().unwrap().pid().is_none(),
         "the JS host started for a declined plugin"
@@ -1508,20 +1493,20 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     app.advance(Duration::from_millis(16));
     app.press("right");
     app.press("enter");
-    harness.wait("the approved plugin runs", || {
-        app.advance(Duration::from_millis(1));
+    until(&harness, "the approved plugin runs", || {
         tui.plugins.entries().iter().any(|entry| entry.id == PROBE && entry.status == Status::Active)
     });
 }
 
 // Review bigboi: rows that fail without each fix.
 
-/// Waits, advancing frames and sending nothing else to the JS host, until `done` holds.
+/// Waits, painting frames and sending nothing else to the JS host, until `done` holds. It moves no clock ([`still`]):
+/// a key hold's deadline must not see how long the JS host takes.
 fn quietly(pipe: &Pipe, what: &str, done: impl Fn() -> bool) {
     let begun = Instant::now();
     while !done() {
         assert!(begun.elapsed() < Duration::from_secs(20), "{what}:\n{}", pipe.harness.app.text());
-        pipe.harness.app.advance(Duration::from_millis(1));
+        still(&pipe.harness.app);
         std::thread::sleep(Duration::from_millis(1));
     }
 }
@@ -1739,7 +1724,7 @@ fn a_revision_for_a_replaced_size_is_never_shown() {
     pipe.harness.app.resize(70, 30);
     let begun = Instant::now();
     while begun.elapsed() < Duration::from_secs(10) && header(&pipe) != "twin 2 · 70" {
-        pipe.harness.app.advance(Duration::from_millis(1));
+        still(&pipe.harness.app);
         assert_ne!(header(&pipe), "twin 2 · 80", "a revision for the old width was shown");
         std::thread::sleep(Duration::from_micros(500));
     }
@@ -2500,15 +2485,9 @@ export default {{ id: "example.ending", setup(api) {{
     pipe.settle();
     let (h, scripts) = (&pipe.harness, pipe.scripts());
     h.tui.keymap.dispatch("ending.fetch", None);
-    h.wait("the server has the request", || {
-        h.app.advance(Duration::from_millis(1));
-        asked.load(std::sync::atomic::Ordering::SeqCst)
-    });
+    until(h, "the server has the request", || asked.load(std::sync::atomic::Ordering::SeqCst));
     h.tui.keymap.dispatch("ending.stall", None);
-    h.wait("the JS host stalled", || {
-        h.app.advance(Duration::from_millis(1));
-        stalled.exists()
-    });
+    until(h, "the JS host stalled", || stalled.exists());
     // A backlog until the overflow refuses what comes: it is full.
     let refused = pipe::crossed().refused_sends;
     for _ in 0..10_000 {
@@ -2534,10 +2513,7 @@ export default {{ id: "example.ending", setup(api) {{
     std::fs::write(&gate, "").unwrap();
     pipe.settle();
     assert_eq!(scripts.overflow_bytes(), 0, "the overflow drained");
-    h.wait("the fetch settled", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch settled", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     open.store(true, std::sync::atomic::Ordering::SeqCst);
     for _ in 0..200 {
         h.app.advance(Duration::from_millis(2));
@@ -2596,10 +2572,7 @@ export default {{ id: "example.quota", setup(api) {{
     let bytes = value.len();
     assert_eq!(bytes, 32_779);
     h.tui.keymap.dispatch("quota.stall", None);
-    h.wait("the JS host stalled", || {
-        h.app.advance(Duration::from_millis(1));
-        stalled.exists()
-    });
+    until(h, "the JS host stalled", || stalled.exists());
     // A backlog that leaves the overflow less room than the read.
     for _ in 0..10_000 {
         if scripts.overflow_bytes() > (64 << 10) - bytes / 2 {
@@ -2612,10 +2585,7 @@ export default {{ id: "example.quota", setup(api) {{
     let host = opencode_tui::plugins::host::host(&h.tui);
     opencode_plugin::Host::storage_write(&*host, "plugin.example.quota.a", &value).unwrap();
     opencode_plugin::Host::storage_changed(&*host);
-    h.wait("the read was refused", || {
-        h.app.advance(Duration::from_millis(1));
-        pipe::crossed().refused_sends > refused
-    });
+    until(h, "the read was refused", || pipe::crossed().refused_sends > refused);
     // A failed read holds nothing, as one past the frame: what is left is the neighbour's.
     assert_eq!(limits::held(id).content, null, "the refused read is still charged");
     std::fs::write(&gate, "").unwrap();
@@ -2629,10 +2599,7 @@ export default {{ id: "example.quota", setup(api) {{
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
     h.tui.keymap.dispatch("quota.report", None);
-    h.wait("the report", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the report", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     let report = std::fs::read_to_string(&log).unwrap();
     let (a, b) = report.trim_end().split_once(" | ").unwrap();
     assert_eq!(a, format!("a {} none", value.len()));
@@ -2990,10 +2957,7 @@ fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
     let pipe = mount_server(root, config, server);
     pipe.active("example.large");
     pipe.harness.tui.keymap.dispatch("large.fetch", None);
-    pipe.harness.wait("the fetch ended", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(&pipe.harness, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), format!("{length} {first} {last} true\n"));
     assert_eq!(pipe.status("example.large"), Some(opencode_plugin::Status::Active));
 }
@@ -3024,17 +2988,11 @@ fn a_repeated_reply_in_parts_leaves_nothing_kept() {
     let pipe = mount_server(root, config, server);
     pipe.active("example.twice");
     pipe.harness.tui.keymap.dispatch("twice.fetch", None);
-    pipe.harness.wait("the server has the request", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        seen.load(std::sync::atomic::Ordering::SeqCst)
-    });
+    until(&pipe.harness, "the server has the request", || seen.load(std::sync::atomic::Ordering::SeqCst));
     // The next call the host sends is the reply's.
     pipe.scripts().fault(pipe::Fault::Repeat);
     open.store(true, std::sync::atomic::Ordering::SeqCst);
-    pipe.harness.wait("the fetch ended", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(&pipe.harness, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), format!("{} 0\n", 1 << 20));
 }
 
@@ -3056,10 +3014,7 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     let pipe = mount_server(root, config, server);
     pipe.active("example.huge");
     pipe.harness.tui.keymap.dispatch("huge.fetch", None);
-    pipe.harness.wait("the fetch ended", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(&pipe.harness, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
 
@@ -3088,15 +3043,11 @@ fn a_fetch_across_a_reload_of_the_registrations_settles() {
     pipe.active("example.gated");
     let h = &pipe.harness;
     h.tui.keymap.dispatch("gated.fetch", None);
-    h.wait("the reload took the late command", || {
-        h.app.advance(Duration::from_millis(1));
+    until(h, "the reload took the late command", || {
         matches!(h.tui.keymap.dispatch("gated.late", None), opentui::keymap::RunResult::Ok)
     });
     open.store(true, std::sync::atomic::Ordering::SeqCst);
-    h.wait("the fetch ended", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok\n");
     assert_eq!(pipe.status("example.gated"), Some(opencode_plugin::Status::Active));
 }
@@ -3158,17 +3109,13 @@ fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
     let h = &pipe.harness;
     h.wait_for("viewed before");
     h.tui.keymap.dispatch("viewed.fetch", None);
-    h.wait("the reload took the late command and the view", || {
-        h.app.advance(Duration::from_millis(1));
+    until(h, "the reload took the late command and the view", || {
         matches!(h.tui.keymap.dispatch("viewed.late", None), opentui::keymap::RunResult::Ok)
             && h.app.text().contains("viewed after")
     });
     pipe.settle();
     open.store(true, std::sync::atomic::Ordering::SeqCst);
-    h.wait("the fetch ended", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
 }
 
@@ -3221,8 +3168,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     let (h, scripts) = (&pipe.harness, pipe.scripts());
     let runs = |name: &str| matches!(h.tui.keymap.dispatch(name, None), opentui::keymap::RunResult::Ok);
     let held = |types: &[&str]| {
-        h.wait(&format!("{types:?} held"), || {
-            h.app.advance(Duration::from_millis(1));
+        until(h, &format!("{types:?} held"), || {
             let held = scripts.held_types();
             types.iter().all(|kind| held.iter().any(|known| known == kind))
         })
@@ -3234,8 +3180,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     opencode_tui::plugins::host::reconcile(&h.tui);
     if early {
         // The loader sets the build up once it read what the load described: that goes on, what follows is held.
-        h.wait("the load described or set up", || {
-            h.app.advance(Duration::from_millis(1));
+        until(h, "the load described or set up", || {
             scripts.held_types().iter().any(|kind| kind == "described" || kind == "loaded")
         });
         if !scripts.held_types().iter().any(|kind| kind == "loaded") {
@@ -3245,16 +3190,12 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         held(&["loaded", "manifest", "effects"]);
         scripts.hold_answers(false);
     } else {
-        h.wait("the new build is registered", || {
-            h.app.advance(Duration::from_millis(1));
-            runs("build.two")
-        });
+        until(h, "the new build is registered", || runs("build.two"));
         assert!(runs("build.go"));
     }
     // The setup's write settles once, and so does the fetch: its line is the other one.
     let lines = || std::fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect::<Vec<_>>();
-    h.wait("the setup's write and the fetch settled", || {
-        h.app.advance(Duration::from_millis(1));
+    until(h, "the setup's write and the fetch settled", || {
         lines().iter().any(|line| line == "setup settled") && lines().iter().any(|line| line != "setup settled")
     });
     pipe.settle();
@@ -3269,8 +3210,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         // Refused at once, while the setup's write may still wait to be refused as the activation ends.
         let fetch = fetch();
         assert!(fetch.len() == 1 && fetch[0].starts_with("Err "), "{case}: {fetch:?}");
-        h.wait("the build failed", || {
-            h.app.advance(Duration::from_millis(1));
+        until(h, "the build failed", || {
             matches!(pipe.status("example.build"), Some(opencode_plugin::Status::Failed(_)))
         });
         let Some(opencode_plugin::Status::Failed(error)) = pipe.status("example.build") else { unreachable!() };
@@ -3283,14 +3223,8 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     }
     assert_eq!(stored().as_deref(), Some(r#"{"build":"two"}"#), "the setup's write of the build");
     assert_eq!(fetch(), ["Ok 0"]);
-    h.wait("the late command is registered", || {
-        h.app.advance(Duration::from_millis(1));
-        runs("build.late")
-    });
-    h.wait("the late command ran", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with("late\n"))
-    });
+    until(h, "the late command is registered", || runs("build.late"));
+    until(h, "the late command ran", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with("late\n")));
     assert_eq!(fetched(), 1, "one request for the one fetch");
     assert_eq!(pipe.status("example.build"), Some(opencode_plugin::Status::Active));
 }
@@ -3322,15 +3256,9 @@ fn a_fetch_of_an_activation_that_ends_settles_once() {
     pipe.active("example.ending");
     let h = &pipe.harness;
     h.tui.keymap.dispatch("ending.fetch", None);
-    h.wait("the server has the request", || {
-        h.app.advance(Duration::from_millis(1));
-        asked.load(std::sync::atomic::Ordering::SeqCst)
-    });
+    until(h, "the server has the request", || asked.load(std::sync::atomic::Ordering::SeqCst));
     h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "example.ending", false);
-    h.wait("the fetch ended", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch ended", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     open.store(true, std::sync::atomic::Ordering::SeqCst);
     for _ in 0..200 {
         h.app.advance(Duration::from_millis(2));
@@ -3383,35 +3311,25 @@ fn snapshot_across_a_new_build(held: bool) {
     std::fs::write(plugin.join("tui.ts"), second).unwrap();
     opencode_tui::plugins::host::reconcile(&h.tui);
     if held {
-        h.wait("the load described or set up", || {
-            h.app.advance(Duration::from_millis(1));
+        until(h, "the load described or set up", || {
             scripts.held_types().iter().any(|kind| kind == "described" || kind == "loaded")
         });
         if !scripts.held_types().iter().any(|kind| kind == "loaded") {
             scripts.hold_answers(false);
             scripts.hold_answers(true);
         }
-        h.wait("the new build's Loaded held", || {
-            h.app.advance(Duration::from_millis(1));
-            scripts.held_types().iter().any(|kind| kind == "loaded")
-        });
+        until(h, "the new build's Loaded held", || scripts.held_types().iter().any(|kind| kind == "loaded"));
         // The running build is still the host's: its read follows the change.
         change(5);
         scripts.hold_answers(false);
     }
-    h.wait("the new build is registered", || {
-        h.app.advance(Duration::from_millis(1));
-        runs("snap.read")
-    });
+    until(h, "the new build is registered", || runs("snap.read"));
     if !held {
         change(5);
         assert!(runs("snap.read"));
     }
     pipe.settle();
-    h.wait("the read was logged", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.contains("read "))
-    });
+    until(h, "the read was logged", || std::fs::read_to_string(&log).is_ok_and(|text| text.contains("read ")));
     let logged = std::fs::read_to_string(&log).unwrap();
     assert_eq!(logged.lines().last(), Some("read undefined"), "{logged}");
     assert!(!logged.contains("heard"), "{logged}");
@@ -3440,10 +3358,7 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
         h.app.render();
     }
     h.tui.keymap.dispatch("refused.fetch", None);
-    h.wait("the refused fetch ended", || {
-        h.app.advance(Duration::from_millis(1));
-        lines().ends_with('\n')
-    });
+    until(h, "the refused fetch ended", || lines().ends_with('\n'));
     assert_eq!(lines(), "Err\n");
     h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "probe", false);
     // A frame runs its budget of what waits: the drain is so many frames, however long each takes under load
@@ -3454,10 +3369,7 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     }
     assert_eq!(opencode_plugin::effects_waiting(), 0, "the queue drained within a frame for each budget of {waiting}");
     h.tui.keymap.dispatch("refused.fetch", None);
-    h.wait("the fetch ended", || {
-        h.app.advance(Duration::from_millis(1));
-        lines().lines().count() == 2
-    });
+    until(h, "the fetch ended", || lines().lines().count() == 2);
     assert_eq!(lines(), "Err\nOk\n");
 }
 
@@ -3481,10 +3393,7 @@ fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     h.wait_for("owned route");
     h.tui.keymap.dispatch("owned.route", None);
     // The JS host answers the command, and the host sends its fetch, before the route closes.
-    h.wait("the route's fetch went out", || {
-        h.app.advance(Duration::from_millis(1));
-        asked.load(std::sync::atomic::Ordering::SeqCst) >= 1
-    });
+    until(h, "the route's fetch went out", || asked.load(std::sync::atomic::Ordering::SeqCst) >= 1);
     h.tui.navigate(Route::Home);
     h.app.advance(Duration::from_millis(16));
     h.tui.navigate(route);
@@ -3493,16 +3402,10 @@ fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     gate.1.notify_all();
     let lines = || std::fs::read_to_string(&log).unwrap_or_default();
     h.wait("the route's reply was served", || served.load(std::sync::atomic::Ordering::SeqCst) >= 1);
-    h.wait("the route's fetch settled", || {
-        h.app.advance(Duration::from_millis(1));
-        lines().ends_with('\n')
-    });
+    until(h, "the route's fetch settled", || lines().ends_with('\n'));
     assert_eq!(lines(), "route AbortError 0\n", "a reply reached a mount opened again, or its fetch did not settle");
     h.tui.keymap.dispatch("owned.global", None);
-    h.wait("the global reply arrived", || {
-        h.app.advance(Duration::from_millis(1));
-        lines().lines().count() == 2
-    });
+    until(h, "the global reply arrived", || lines().lines().count() == 2);
     assert_eq!(lines(), "route AbortError 0\nglobal Ok 0\n");
 }
 
@@ -3551,10 +3454,7 @@ export default {{ id: "example.flooded", setup(api) {{
     // The answer that asks for the fetch waits, so the fetch's own answer goes once the overflow is full.
     scripts.hold_answers(true);
     h.tui.keymap.dispatch("flooded.go", None);
-    h.wait("the JS host stalled", || {
-        h.app.advance(Duration::from_millis(1));
-        stalled.exists()
-    });
+    until(h, "the JS host stalled", || stalled.exists());
     // Calls fill what the JS host's input takes and the overflow, each size until one is refused, then a smaller one:
     // few enough that their answers are no flood, and the overflow keeps less room than the fetch's answer takes.
     for size in [200 << 10, 30 << 10, 4 << 10, 512, 0] {
@@ -3569,10 +3469,7 @@ export default {{ id: "example.flooded", setup(api) {{
     }
     scripts.hold_answers(false);
     std::fs::write(&gate, "").unwrap();
-    h.wait("the fetch settled", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch settled", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Ok 0\n");
 }
 
@@ -3645,10 +3542,7 @@ export default {{ id: "example.queued", setup(api) {{
     scripts.hold_answers(true);
     let command = if behind == Behind::Cancelled { "queued.route" } else { "queued.global" };
     h.tui.keymap.dispatch(command, None);
-    h.wait("the JS host stalled", || {
-        h.app.advance(Duration::from_millis(1));
-        stalled.exists()
-    });
+    until(h, "the JS host stalled", || stalled.exists());
     for _ in 0..10_000 {
         if scripts.overflow_bytes() > 0 {
             break;
@@ -3662,10 +3556,7 @@ export default {{ id: "example.queued", setup(api) {{
     match behind {
         Behind::Cancelled => h.tui.navigate(Route::Home),
         Behind::Reply => {
-            h.wait("the fetch was sent", || {
-                h.app.advance(Duration::from_millis(1));
-                asked.load(std::sync::atomic::Ordering::SeqCst) == 1
-            });
+            until(h, "the fetch was sent", || asked.load(std::sync::atomic::Ordering::SeqCst) == 1);
             *server_gate.0.lock().unwrap() = true;
             server_gate.1.notify_all();
             h.wait("the server answered", || served.load(std::sync::atomic::Ordering::SeqCst) == 1);
@@ -3675,10 +3566,7 @@ export default {{ id: "example.queued", setup(api) {{
         h.app.advance(Duration::from_millis(1));
     }
     std::fs::write(&gate, "").unwrap();
-    h.wait("the fetch settled", || {
-        h.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    until(h, "the fetch settled", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     // Once, and nothing pending: a second settling or a late one would show here.
     h.app.wait_until(Duration::from_millis(300), || {
         h.app.advance(Duration::from_millis(1));
@@ -3716,13 +3604,9 @@ fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.pending");
-    pipe.harness.wait("the inbox loaded", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        pipe.harness.app.text().contains("1 queued")
-    });
+    until(&pipe.harness, "the inbox loaded", || pipe.harness.app.text().contains("1 queued"));
     pipe.harness.tui.keymap.dispatch("pending.log", None);
-    pipe.harness.wait("the plugin read its inbox", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    until(&pipe.harness, "the plugin read its inbox", || {
         std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
     });
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "[\"msg_3\"]\n");

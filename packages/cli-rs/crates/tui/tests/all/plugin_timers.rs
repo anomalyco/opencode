@@ -139,10 +139,7 @@ export default {{ id: "example.timer", setup(api) {{
     pipe.active("example.timer");
     pipe.harness.tui.keymap.dispatch("timer.go", None);
     let read = || std::fs::read_to_string(&log).unwrap_or_default();
-    pipe.harness.app.wait_until(support::WAIT, || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        !read().is_empty()
-    });
+    pipe.until("the timer's call answered", || !read().is_empty());
     assert_eq!(read(), "result null\n", "the pipe gave a timer an ID");
 }
 
