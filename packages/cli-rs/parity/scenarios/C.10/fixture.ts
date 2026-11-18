@@ -93,8 +93,6 @@ type Script = {
   listed?: boolean
   // The last event, `session.execution.succeeded` by default; `null` for none.
   end?: unknown
-  // Events pushed once the wait has answered.
-  late?: unknown[]
 }
 
 // The scripted events carry `ses_run`; a script for another session gets its ID.
@@ -149,9 +147,6 @@ export function server(script: Script = {}): Options {
         path: `/api/experimental/session/${id}/wait`,
         status: 204,
         delay: 400,
-        then: () => retarget(script.late ?? [], id),
-        // After the run has started to reconcile.
-        thenDelay: 300,
       },
       { path: "/api/experimental/job", json: { data: [] } },
       { path: "/api/session/active", json: { data: {} } },
