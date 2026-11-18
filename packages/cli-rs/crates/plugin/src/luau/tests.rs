@@ -836,12 +836,26 @@ fn a_luau_build_the_crash_list_names_is_held() {
     assert!(!footer(&host, &registry).contains("hello"));
 }
 
-// Expected (review luau-1): a small DAG of shared tables, which the decoder would expand on the Rust heap with no
-// safepoint of the budget's, is refused at once and fails the plugin with why; so is a value past the limits it is
-// charged against, and a refusal the plugin catches still fails the call.
+// Expected (review luau-1, O-174): a table used in two places is read in both. A small DAG of shared tables, which the
+// decoder would expand on the Rust heap with no safepoint of the budget's, is charged for each place it is read, and the
+// parts bound refuses it at once and fails the plugin with why; so is any value past the limits it is charged against,
+// and a refusal the plugin catches still fails the call.
 #[test]
 fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     let host = host();
+    let shared = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:slot({ path = "home.footer" }, function()
+                local leaf = { text = "leaf", bold = true }
+                return plugin.show(plugin.column({ plugin.text({ leaf, leaf }), plugin.text({ leaf }) }))
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(shared), None).unwrap().0);
+    assert!(footer(&host, &registry).contains("leafleaf"));
+    assert_eq!(failure(&registry, "test.luau"), None);
+
     let dag = r#"
         local plugin = require("@opencode/plugin")
         return plugin.define(function(setup)
@@ -857,7 +871,7 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     let text = footer(&host, &registry);
     assert!(start.elapsed() < Duration::from_millis(500), "{:?}", start.elapsed());
     let error = failure(&registry, "test.luau").expect("refused");
-    assert!(error.contains("a table appears twice"), "{error}");
+    assert!(error.contains("the plugin's value is refused: it holds more than 320000 parts"), "{error}");
     assert!(!text.contains("leaf"));
 
     let caught = r#"
@@ -866,7 +880,8 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
             setup:command({ name = "big" }, function(host)
                 local spans = {}
                 for i = 1, 50 do spans[i] = { text = "x" } end
-                pcall(function() host:toast({ variant = "info", message = "big", title = spans }) end)
+                -- Stored as JSON: every part of it is read, and charged.
+                pcall(function() host:storageSet("big", spans) end)
                 host:toast({ variant = "info", message = "after the refusal" })
             end)
         end)
@@ -1157,10 +1172,7 @@ fn a_json_value_crosses_into_luau_and_back() {
     let value = serde_json::json!({
         "a": [1, null, "x", { "b": null, "c": 2.5 }], "d": { "e": [] }, "é ü": true, "n": null, "s": "ß\u{0}t",
     });
-    let back = |value: &mlua::Value| match json::Walk::new().json(&lua, value) {
-        Ok(value) => value,
-        Err(json::Refused::Bound(why) | json::Refused::Value(why)) => panic!("{why}"),
-    };
+    let back = |value: &mlua::Value| decode::Decode::new().decode::<serde_json::Value>(&lua, value).unwrap();
     let crossed = json::luau(&lua, &value).unwrap();
     let expected =
         serde_json::json!({ "a": [1, null, "x", { "c": 2.5 }], "d": { "e": [] }, "é ü": true, "s": "ß\u{0}t" });
@@ -1172,6 +1184,128 @@ fn a_json_value_crosses_into_luau_and_back() {
     let crossed = json::luau(&lua, &deep).unwrap();
     let depth = lua.load("local v, n = ..., 0 while type(v) == 'table' do v, n = v[1], n + 1 end return n, v");
     assert_eq!(depth.call::<(u32, String)>(crossed).unwrap(), (500, "leaf".to_owned()));
+}
+
+/// The tables `source` returns, each read by the decoder as a `T` and as before, through JSON and serde: the results
+/// are equal, and so are the refusals' messages; a table decoded is charged what its JSON is. Returns which of them
+/// decoded (`+`) and which were refused (`-`).
+fn decodes_as_serde<T>(source: &str) -> String
+where
+    T: serde::de::DeserializeOwned + PartialEq + std::fmt::Debug + 'static,
+{
+    let lua = mlua::Lua::new();
+    let tables: Vec<mlua::Value> = lua.load(source).call(()).unwrap();
+    let mut decoded = String::new();
+    for (at, table) in tables.iter().enumerate() {
+        let (mut by_hand, mut by_json) = (decode::Decode::new(), decode::Decode::new());
+        let direct = by_hand.decode::<T>(&lua, table).map_err(|error| error.to_string());
+        let json = by_json.decode::<serde_json::Value>(&lua, table).unwrap();
+        let serde = serde_json::from_value::<T>(json.clone()).map_err(|error| error.to_string());
+        assert_eq!(direct, serde, "table {} ({json})", at + 1);
+        if direct.is_ok() {
+            assert_eq!(by_hand.charged(), by_json.charged(), "the charges of table {} ({json})", at + 1);
+        }
+        decoded.push(if direct.is_ok() { '+' } else { '-' });
+        eprintln!("table {}: {direct:?}", at + 1);
+    }
+    decoded
+}
+
+// Expected (luau-decode): a node tree decodes straight from the VM's stack as serde decoded its JSON: every field the
+// hand decoder reads, the kinds it leaves to serde, and the refusals, with serde's messages.
+#[test]
+fn a_node_tree_decodes_as_serde_reads_it() {
+    let renders = r##"
+        local click = { action = { type = "command", name = "x" }, on = "up" }
+        local span = { text = "a", fg = "text.muted", bg = "#010203ff", bold = true, italic = true, underline = true,
+            dim = true, strikethrough = true, link = "https://x" }
+        local text = { type = "text", spans = { span, { text = "b", fg = "#abcdef" } }, fg = "#abcdef", wrap = "char",
+            truncate = true, selectable = false, hover_fg = "accent", layout = { grow = true }, on_click = click }
+        local box = { type = "box", row = true, gap = 2, padding = { 1, 2 }, justify = "space-between", align = "center",
+            bg = "#11223344", layout = { grow = true }, on_click = click, border = { title = "t" },
+            padding_sides = { top = 1, left = -1 }, wrap = true, overflow = "hidden", children = {
+                text, { type = "slot", path = "home.footer.x" }, { type = "markdown", text = "**m**" },
+                { type = "spinner", label = "l" }, { type = "box" }, { type = "text", spans = {} },
+            } }
+        return {
+            { type = "show", node = box }, { type = "keep" }, { type = "hide" },
+            { type = "show", node = { type = "text", spans = { { text = "c" } }, id = "unknown key" } },
+            { type = "show", node = { type = "text", spans = {},
+                on_click = { action = { type = "command", name = "x", input = "v" }, on = "down" } } },
+            { type = "show", node = { type = "text", spans = {}, on_click = { action = { type = "nope" }, on = "up" } } },
+            { type = "show", node = { type = "text", spans = {}, on_click = { action = { type = "command", name = "x" } } } },
+            { type = "show", node = { type = "text", spans = {}, on_click = { action = click.action, on = "sideways" } } },
+            { type = "show", node = { type = "nope" } },
+            { type = "show", node = { type = "text" } },
+            { type = "show", node = { type = "box", gap = "x" } },
+            { type = "show", node = { type = "box", gap = 70000 } },
+            { type = "show", node = { type = "text", spans = { { text = 1 } } } },
+            { type = "show", node = { type = "text", spans = { { text = "a", fg = 5 } } } },
+            { type = "show", node = { type = "text", spans = { { fg = "x" } } } },
+            { type = "show", node = { type = "box", children = { { type = "box", children = { { type = "x" } } } } } },
+            { type = "show", node = { type = "box", children = { a = 1 } } },
+            { type = "show" }, { type = "keep", node = box }, { type = "wat" }, { node = box }, "show", 5,
+        }
+    "##;
+    assert_eq!(decodes_as_serde::<abi::Render>(renders), "+++++------------------");
+    let surfaces = r##"
+        return {
+            { type = "box", id = "b", row = true, gap = 1, visible = false, bg = "text.base", children = {
+                { type = "text", id = "t", spans = { { text = "x", bold = true } }, hover_events = true },
+                { type = "box", focusable = true, id = "f" },
+                { type = "spinner", label = "s" },
+            } },
+            { type = "text", spans = {} },
+            { type = "box", children = { { type = "text", spans = { { text = 1 } } } } },
+            { type = "text", spans = { { text = "x" } }, hover_events = "yes" },
+        }
+    "##;
+    assert_eq!(decodes_as_serde::<abi::v2::Node>(surfaces), "++--");
+}
+
+// Expected (luau-decode): each refusal of the decoder names its cause, a bound's as a bound (which fails the call) and
+// a value's as a value, for a node tree read by hand as for any other value.
+#[test]
+fn each_refusal_of_the_decoder_names_its_cause() {
+    let lua = mlua::Lua::new();
+    let refused = |source: &str| -> Vec<String> {
+        let value: mlua::Value = lua.load(source).call(()).unwrap();
+        let as_json = decode::Decode::new().decode::<serde_json::Value>(&lua, &value);
+        let as_render = decode::Decode::new().decode::<abi::Render>(&lua, &value);
+        [as_json.map(drop), as_render.map(drop)]
+            .into_iter()
+            .map(|refusal| match refusal {
+                Err(decode::Refused::Bound(why)) => format!("bound: {why}"),
+                Err(decode::Refused::Value(why)) => format!("value: {why}"),
+                Ok(()) => "decoded".to_owned(),
+            })
+            .collect()
+    };
+    let node = |inner: &str| format!("return {{ type = 'show', node = {{ type = 'text', spans = {{ {inner} }} }} }}");
+    // Boxes in boxes: each is two tables deep, so 70 of them pass the 128 a value may nest.
+    let boxes = format!("{}{{ type = 'box' }}{}", "{ type = 'box', children = { ".repeat(70), " } }".repeat(70));
+    let deep = format!("return {{ type = 'show', node = {boxes} }}");
+    assert_eq!(refused(&deep), ["bound: its tables nest more than 128 deep"; 2]);
+    let cases = [
+        (node("{ text = '\\255' }"), "value: a string that is not UTF-8"),
+        (node("{ text = 'x', ['\\255'] = 1 }"), "value: a key that is not UTF-8"),
+        (node("{ text = print }"), "value: a function cannot cross to the host"),
+        (node("{ text = 'x', [true] = 1 }"), "value: a key of type value"),
+        (node("{ text = 0/0 }"), "value: NaN is not a finite number"),
+    ];
+    for (source, why) in cases {
+        assert_eq!(refused(&source), [why; 2], "{source}");
+    }
+    let text = crate::limits::Limits { plugin_content: 8, ..crate::limits::Limits::default() };
+    let restore = crate::limits::set(text);
+    assert_eq!(refused(&node("{ text = 'more than 8' }")), ["bound: its text is more than 8 bytes"; 2]);
+    drop(restore);
+    let _restore = crate::limits::set(crate::limits::Limits { nodes: 1, ..crate::limits::Limits::default() });
+    let parts = format!(
+        "return {{ type = 'show', node = {{ type = 'box', children = {{ {} }} }} }}",
+        "{ type = 'box' }, ".repeat(20)
+    );
+    assert_eq!(refused(&parts), ["bound: it holds more than 16 parts"; 2]);
 }
 
 // Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
