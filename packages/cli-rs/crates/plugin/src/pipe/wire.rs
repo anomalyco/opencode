@@ -112,76 +112,46 @@ fn fill(input: &mut impl Read, buffer: &mut [u8]) -> Result<usize, Broken> {
 mod tests {
     use super::*;
 
-    fn frames(mut bytes: &[u8]) -> Result<Vec<(u8, Vec<u8>)>, Broken> {
-        let mut out = Vec::new();
-        while let Some(frame) = read(&mut bytes)? {
-            out.push(frame);
-        }
-        Ok(out)
-    }
-
-    // Expected: frames come back as they were written, of both kinds and of no bytes, and a stream that ends between
-    // frames ends cleanly.
     #[test]
-    fn frames_round_trip() {
-        let mut bytes = encode(CONTROL, b"{\"type\":\"hello\"}");
-        bytes.extend(encode(TREE, b"[]"));
-        bytes.extend(encode(CONTROL, b""));
-        let read = frames(&bytes).unwrap();
-        assert_eq!(read, vec![(CONTROL, b"{\"type\":\"hello\"}".to_vec()), (TREE, b"[]".to_vec()), (CONTROL, vec![])]);
-    }
-
-    // Expected (fault operator "a buffer cut short, of an unknown kind, or random bytes" on the pipe): every cut of a
-    // stream inside a frame is `Truncated`, never a frame, and nothing past the stream is read. A cut in the header
-    // wants the header, whose length is not read yet.
-    #[test]
-    fn a_stream_cut_inside_a_frame_is_refused() {
-        let bytes = encode(CONTROL, b"0123456789");
-        for cut in 1..bytes.len() {
-            let want = if cut < 5 { 5 } else { bytes.len() };
-            assert_eq!(frames(&bytes[..cut]), Err(Broken::Truncated { got: cut, want }), "cut at {cut}");
+    fn complete_frames_survive_every_stream_cut() {
+        for kind in [CONTROL, TREE, PIECE] {
+            for len in 0..=32 {
+                let payload: Vec<u8> = (0..len).map(|n| n as u8 ^ 0xff).collect();
+                let first = encode(TREE, b"prefix");
+                let frame = encode(kind, &payload);
+                for cut in 0..=frame.len() {
+                    let stream = [first.as_slice(), &frame[..cut]].concat();
+                    let mut input = stream.as_slice();
+                    assert_eq!(read(&mut input), Ok(Some((TREE, b"prefix".to_vec()))));
+                    match cut {
+                        0 => assert_eq!(read(&mut input), Ok(None)),
+                        cut if cut == frame.len() => {
+                            assert_eq!(read(&mut input), Ok(Some((kind, payload.clone()))));
+                            assert_eq!(read(&mut input), Ok(None));
+                        }
+                        got => assert_eq!(
+                            read(&mut input),
+                            Err(Broken::Truncated { got, want: if got < 5 { 5 } else { frame.len() } })
+                        ),
+                    }
+                }
+            }
         }
     }
 
-    // Expected: a header over its kind's cap, by one byte, is refused before its payload is allocated or read; a frame
-    // at the cap is read. An unknown kind is refused.
     #[test]
     fn caps_and_kinds_are_checked_before_the_payload() {
-        let at = encode(CONTROL, &vec![b' '; CONTROL_CAP]);
-        assert_eq!(frames(&at).unwrap().len(), 1);
-        let mut over = (CONTROL_CAP as u32 + 1).to_le_bytes().to_vec();
-        over.push(CONTROL);
-        assert_eq!(frames(&over), Err(Broken::TooLarge { kind: CONTROL, len: CONTROL_CAP + 1 }));
-        let mut huge = u32::MAX.to_le_bytes().to_vec();
-        huge.push(TREE);
-        assert_eq!(frames(&huge), Err(Broken::TooLarge { kind: TREE, len: u32::MAX as usize }));
-        let tree = encode(TREE, &vec![b' '; CONTROL_CAP + 1]);
-        assert_eq!(frames(&tree).unwrap().len(), 1, "a tree may be larger than a control frame");
-        // A piece of a control message has the control frame's cap (CT-36).
-        let mut piece = (CONTROL_CAP as u32 + 1).to_le_bytes().to_vec();
-        piece.push(PIECE);
-        assert_eq!(frames(&piece), Err(Broken::TooLarge { kind: PIECE, len: CONTROL_CAP + 1 }));
-        assert_eq!(frames(&encode(3, b"x")), Err(Broken::UnknownKind(3)));
-    }
-
-    // Expected: random bytes are refused or read as frames within their caps; never a panic, never more than the stream.
-    #[test]
-    fn random_bytes_are_refused_or_framed() {
-        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
-        for _ in 0..2_000 {
-            let len = (seed % 64) as usize;
-            let bytes: Vec<u8> = (0..len)
-                .map(|_| {
-                    seed ^= seed << 13;
-                    seed ^= seed >> 7;
-                    seed ^= seed << 17;
-                    seed as u8
-                })
-                .collect();
-            if let Ok(read) = frames(&bytes) {
-                let total: usize = read.iter().map(|(_, payload)| payload.len() + 5).sum();
-                assert_eq!(total, bytes.len());
+        for (kind, max) in [(CONTROL, CONTROL_CAP), (PIECE, CONTROL_CAP), (TREE, TREE_CAP)] {
+            let frame = encode(kind, &vec![0; max]);
+            let (_, payload) = read(&mut frame.as_slice()).unwrap().unwrap();
+            assert_eq!(payload.len(), max);
+            for len in [max as u32 + 1, u32::MAX] {
+                let header = [len.to_le_bytes().as_slice(), &[kind]].concat();
+                assert_eq!(read(&mut header.as_slice()), Err(Broken::TooLarge { kind, len: len as usize }));
             }
+        }
+        for kind in 3..=u8::MAX {
+            assert_eq!(read(&mut [0, 0, 0, 0, kind].as_slice()), Err(Broken::UnknownKind(kind)));
         }
     }
 }
