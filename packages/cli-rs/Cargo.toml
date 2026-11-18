@@ -126,6 +126,10 @@ tree-sitter-xml = "=0.7.0"
 [patch.crates-io]
 mlua = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
 mlua-sys = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
+# Luau 747 with simonklee/luau's fixes (O-176): linear-time plain `string.find`, `string.split` and literal `gsub`,
+# their flags on by default, and a build without the codegen-only libraries in one parallel pass. Each fix moves back
+# to stock once upstream takes it; the patch goes when the fork's diff is empty. mlua-sys 0.14 takes 0.24.1 unchanged.
+luau0-src = { git = "https://github.com/simonklee/luau-src-rs", rev = "1ac5ecd2183f9d0e9b95a62d6e5b41ee7fdfc185" }
 
 # Debug info stays in the object files instead of passing through the linker, and dependencies keep only file and line
 # tables. Backtraces still show file and line, and a test binary links in about half the time and memory. `test`

@@ -478,6 +478,62 @@ fn a_sparse_table_move_returns_at_once() {
     assert_eq!(message, "true nil", "the move returns its empty destination");
 }
 
+/// Runs command `name` of a plugin of `init` and returns how long the call held the thread, with the plugin's failure
+/// if it failed and the message of its last toast.
+fn timed(init: &str, name: &str) -> (Duration, Option<String>, Option<String>) {
+    let host = host();
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    let start = Instant::now();
+    keymap(&host).dispatch(name, None);
+    let took = start.elapsed();
+    host.app.advance(Duration::from_millis(1));
+    let toast = host.toasts.borrow().last().map(|toast| toast.message.clone());
+    (took, failure(&registry, "test.luau"), toast)
+}
+
+// Expected (luau-fork, safety-audit #3): a plain search and a pattern with no specials for a 64 KiB periodic needle in
+// 1 MiB return within the budget. Stock Luau's search compares the whole needle at every position, with no safepoint:
+// 0.6 s of CPU in a release build, which the budget fails once the call returns.
+#[test]
+fn a_long_plain_search_is_linear() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "find" }, function(host)
+                local haystack = string.rep("a", 1024 * 1024)
+                local needle = string.rep("a", 64 * 1024 - 1) .. "b"
+                local plain = string.find(haystack, needle, 1, true)
+                local bare = string.find(haystack, needle)
+                host:toast({ variant = "info", message = `{plain} {bare}` })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "find");
+    assert_eq!(failed, None, "took {took:?}");
+    assert_eq!(toast.as_deref(), Some("nil nil"));
+    assert!(took < Duration::from_millis(1500), "the search held the thread {took:?}");
+}
+
+// Expected (luau-fork, safety-audit #4): `string.split` with a 64 KiB separator over 1 MiB returns within the budget,
+// where stock Luau compares the whole separator at every position: 0.55 s of CPU in a release build.
+#[test]
+fn a_split_on_a_long_separator_is_linear() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "split" }, function(host)
+                local text = string.rep("a", 1024 * 1024)
+                local parts = text:split(string.rep("a", 64 * 1024 - 1) .. "b")
+                host:toast({ variant = "info", message = `{#parts} {#parts[1]}` })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "split");
+    assert_eq!(failed, None, "took {took:?}");
+    assert_eq!(toast.as_deref(), Some("1 1048576"));
+    assert!(took < Duration::from_millis(1500), "the split held the thread {took:?}");
+}
+
 /// A plugin in `dir` whose `init.luau` holds a table literal of `items` numbers: about `2 * items` bytes.
 fn big_plugin(dir: &Path, items: usize) {
     fs::create_dir_all(dir).unwrap();

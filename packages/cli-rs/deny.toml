@@ -56,4 +56,6 @@ allow-git = [
     "https://github.com/tree-sitter-grammars/tree-sitter-hcl",
     # mlua and mlua-sys at Luau 747, behind opencode-plugin's `luau` feature, until mlua 0.12.3 is on crates.io (O-172).
     "https://github.com/mlua-rs/mlua",
+    # luau0-src with simonklee/luau's fixes, behind the same feature, until upstream Luau takes them (O-176).
+    "https://github.com/simonklee/luau-src-rs",
 ]
