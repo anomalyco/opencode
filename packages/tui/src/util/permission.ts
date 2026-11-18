@@ -36,7 +36,7 @@ export function permissionPresentation(
     const diff = text(first.patch) || text(first.diff) || text(metadata.diff) || undefined
     return {
       icon: "→",
-      title: `Edit ${formatPath(file)}`,
+      title: I18n.t("permission.action.edit", { path: formatPath(file) }),
       lines: [],
       diff,
       patch: diff ? undefined : text(input.patchText) || undefined,
@@ -78,7 +78,7 @@ export function permissionPresentation(
     const description = text(input.description)
     return {
       icon: "#",
-      title: `${Locale.titlecase(agent)} Subagent`,
+      title: I18n.t("permission.action.subagent", { agent: Locale.titlecase(agent) }),
       lines: description ? [`◉ ${description}`] : [],
     }
   }
@@ -87,8 +87,8 @@ export function permissionPresentation(
     const url = text(input.url) || text(metadata.url)
     return {
       icon: "%",
-      title: `WebFetch ${url}`,
-      lines: url ? [`URL: ${url}`] : [],
+      title: I18n.t("permission.action.webfetch", { url }),
+      lines: url ? [I18n.t("permission.field.url", { url })] : [],
     }
   }
 
@@ -98,7 +98,7 @@ export function permissionPresentation(
     return {
       icon: "◈",
       title: query ? `${title} "${query}"` : title,
-      lines: query ? [`Query: ${query}`] : [],
+      lines: query ? [I18n.t("permission.field.query", { query })] : [],
     }
   }
 
@@ -108,13 +108,14 @@ export function permissionPresentation(
     const line = finiteNumber(input.line)
     const character = finiteNumber(input.character)
     const position = line !== undefined && character !== undefined ? `${line}:${character}` : undefined
+    const suffix = file ? ` ${formatPath(file)}${position ? `:${position}` : ""}` : ""
     return {
       icon: "→",
-      title: `LSP ${operation}${file ? ` ${formatPath(file)}${position ? `:${position}` : ""}` : ""}`,
+      title: I18n.t("permission.action.lsp", { operation, suffix }),
       lines: [
-        ...(input.operation ? [`Operation: ${operation}`] : []),
-        ...(file ? [`Path: ${formatPath(file)}`] : []),
-        ...(position ? [`Position: ${position}`] : []),
+        ...(input.operation ? [I18n.t("permission.field.operation", { operation })] : []),
+        ...(file ? [I18n.t("permission.field.path", { path: formatPath(file) })] : []),
+        ...(position ? [I18n.t("permission.field.position", { position })] : []),
       ],
     }
   }
@@ -124,7 +125,7 @@ export function permissionPresentation(
     const directory = wildcardDirectory(raw)
     return {
       icon: "←",
-      title: `Access external directory ${formatPath(directory)}`,
+      title: I18n.t("permission.action.external_directory", { path: formatPath(directory) }),
       lines: resources.map((item) => `- ${item}`),
     }
   }
@@ -132,15 +133,15 @@ export function permissionPresentation(
   if (action === "doom_loop") {
     return {
       icon: "⟳",
-      title: "Continue after repeated failures",
-      lines: ["This keeps the session running despite repeated failures."],
+      title: I18n.t("permission.action.doom_loop"),
+      lines: [I18n.t("permission.action.doom_loop.line")],
     }
   }
 
   return {
     icon: "⚙",
-    title: `Call tool ${source.action}`,
-    lines: [`Tool: ${source.action}`],
+    title: I18n.t("permission.action.tool", { action: source.action }),
+    lines: [I18n.t("permission.field.tool", { tool: source.action })],
   }
 }
 
