@@ -23,8 +23,7 @@ export type Registration = {
   setViewport(tabID: Browser.TabID, viewport: Viewport): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
-  /** `forget` deletes the tabs saved for this server and session; set it only when the session is gone. */
-  close(forget?: boolean): void
+  close(): void
 }
 
 // One binding of a session's pane with main. It holds no lifecycle state: the model's machine decides what each
@@ -80,11 +79,11 @@ export function openBinding(input: {
     setViewport: (tabID, viewport) => ready.then(() => client.setViewport({ binding, tabID, viewport })),
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
-    close(forget = false) {
+    close() {
       if (status.closed) return
       status.closed = true
       stop()
-      void ready.then(() => client.close(forget ? { binding, forget: true } : { binding })).catch(() => undefined)
+      void ready.then(() => client.close({ binding })).catch(() => undefined)
     },
   }
 }
