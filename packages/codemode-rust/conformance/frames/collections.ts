@@ -1,4 +1,4 @@
-// Map, Set, WeakMap, groupBy and the Promise combinators: cases for conformance/streaming.ts (see its `searching`, `after` and `during`).
+// Map, Set, WeakMap, groupBy and the Promise combinators: cases for conformance/streaming.ts (see its `holding`, `after` and `during`).
 type Helpers = {
   after: (setup: string, work: string) => string
   during: (setup: string, loop: string) => string
@@ -10,7 +10,7 @@ const keysOf = (values: string, extra = "") =>
   `keys() { const v = ${values}; let i = 0; return { next: () => (i < v.length ? { done: false, value: v[i++] } : { done: true }) ${extra} } }`
 
 export default (_: Helpers) => ({
-  searches: [
+  holds: [
     // The Set methods given a Set-like object: its `has`, its `keys()`, the iterator's `next` and `return`.
     "[...new Set([1, 2, 3]).intersection({ size: 5, has: (x) => S(x) > 0 && x !== 2, keys: () => [].values() })]",
     "[...new Set([1, 2, 3]).difference({ size: 3, has: (x) => S(x) > 0 && x === 2, keys: () => [].values() })]",
@@ -68,10 +68,10 @@ export default (_: Helpers) => ({
     `return [Object.groupBy([1, 2], (x) => ({ x })), Map.groupBy([1, 2], (x) => ({ toString: () => 'never' })).size]`,
   ] as Array<string>,
   suspensions: [
-    // Suspended while a search parks in a callback these built-ins call.
-    `const m = new Map(); const v = m.getOrInsertComputed('k', () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1); return [v, m.get('k')]`,
-    `return [...new Set([1, 2]).intersection({ size: 3, has: (x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x > 2, keys: () => [].values() })]`,
-    `return await Promise.all({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + n++ }) } } })`,
-    `return Object.groupBy([1, 2], (x) => ({ toString: () => 'g' + (search({ query: tools.wait({}).then(() => 'echo') }).items.length + x) }))`,
+    // Suspended while a `hold` call parks in a callback these built-ins call.
+    `const m = new Map(); const v = m.getOrInsertComputed('k', () => hold({ query: wait({}).then(() => 'echo') }).items.length + 1); return [v, m.get('k')]`,
+    `return [...new Set([1, 2]).intersection({ size: 3, has: (x) => hold({ query: wait({}).then(() => 'echo') }).items.length + x > 2, keys: () => [].values() })]`,
+    `return await Promise.all({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: hold({ query: wait({}).then(() => 'echo') }).items.length + n++ }) } } })`,
+    `return Object.groupBy([1, 2], (x) => ({ toString: () => 'g' + (hold({ query: wait({}).then(() => 'echo') }).items.length + x) }))`,
   ] as Array<string>,
 })

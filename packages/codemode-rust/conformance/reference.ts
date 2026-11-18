@@ -58,3 +58,41 @@ export const toolsGlobal = (ref: Reference) => {
     },
   })
 }
+
+/**
+ * A host value as data, for recordings: what a host function received, in a form JSON keeps. `{ undefined: true }`,
+ * `{ number: "NaN" | "Infinity" | "-Infinity" }`, JSON primitives as they are, `{ function: name }`,
+ * `{ date: ms | "NaN" }`, `{ regexp: [source, flags] }`, `{ url: href }`, `{ params: [[k, v], ...] }`,
+ * `{ headers: [[k, v], ...] }`, `{ buffer: [bytes] }`, `{ bytes: [bytes] }`, `{ arrayBuffer: [bytes] }`,
+ * `{ map: [[k, v], ...] }`, `{ set: [v, ...] }`, `{ array: [v | { hole: true }, ...] }`,
+ * `{ error: { name, message, cause?, fields: [[k, v], ...] } }`, `{ object: [[k, v], ...] }`.
+ */
+export const describe = (v: unknown): unknown => {
+  if (v === undefined) return { undefined: true }
+  if (typeof v === "number" && !Number.isFinite(v)) return { number: String(v) }
+  if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v
+  if (typeof v === "function") return { function: v.name }
+  if (v instanceof Date) return { date: Number.isNaN(v.getTime()) ? "NaN" : v.getTime() }
+  if (v instanceof RegExp) return { regexp: [v.source, v.flags] }
+  if (v instanceof URL) return { url: v.href }
+  if (v instanceof URLSearchParams) return { params: [...v] }
+  if (v instanceof Headers) return { headers: [...v] }
+  if (Buffer.isBuffer(v)) return { buffer: [...v] }
+  if (v instanceof Uint8Array) return { bytes: [...v] }
+  if (v instanceof ArrayBuffer) return { arrayBuffer: [...new Uint8Array(v)] }
+  if (v instanceof Map) return { map: [...v].map(([k, x]) => [describe(k), describe(x)]) }
+  if (v instanceof Set) return { set: [...v].map(describe) }
+  if (Array.isArray(v)) return { array: Array.from({ length: v.length }, (_, i) => (i in v ? describe(v[i]) : { hole: true })) }
+  if (v instanceof Error) {
+    const fields = v as unknown as Record<string, unknown>
+    return {
+      error: {
+        name: v.name,
+        message: v.message,
+        ...("cause" in v ? { cause: describe(v.cause) } : {}),
+        fields: Object.keys(v).map((k) => [k, describe(fields[k])]),
+      },
+    }
+  }
+  return { object: Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, describe(x)]) }
+}

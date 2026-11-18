@@ -1,4 +1,4 @@
-// Iterators, iterator helpers and the built-ins that drive generators: cases for conformance/streaming.ts (see its `searching`, `after` and `during`).
+// Iterators, iterator helpers and the built-ins that drive generators: cases for conformance/streaming.ts (see its `holding`, `after` and `during`).
 type Helpers = {
   after: (setup: string, work: string) => string
   during: (setup: string, loop: string) => string
@@ -14,9 +14,9 @@ const logged = `const log = []
 const busy = "for (let i = 0; i < 200000000; i++) {}"
 
 export default ({ after, during, text }: Helpers) => ({
-  // A search parked inside a helper's callback or the source's `next` it calls fails in the reference ("Iterator
-  // helper is already running."), so only `Iterator.from` calling an iterable's own method searches here.
-  searches: [
+  // A `hold` call parked inside a helper's callback or the source's `next` it calls fails in the reference ("Iterator
+  // helper is already running."), so only `Iterator.from` calling an iterable's own method calls `hold` here.
+  holds: [
     "Iterator.from({ [Symbol.iterator]() { const n = S(1); return [n, 2].values() } }).toArray()",
   ] as Array<string>,
   programs: [

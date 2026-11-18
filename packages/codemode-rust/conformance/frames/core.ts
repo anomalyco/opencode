@@ -1,17 +1,17 @@
 // The VM itself: conversions, iteration in bytecode, generators. Cases for conformance/streaming.ts (see its
-// `searching`, `after` and `during`).
+// `holding`, `after` and `during`).
 type Helpers = {
   after: (setup: string, work: string) => string
   during: (setup: string, loop: string) => string
   text: unknown
 }
 
-// An iterable whose `[Symbol.iterator]`, `next` and `return` are the program's, each calling `S` (see `searching`).
+// An iterable whose `[Symbol.iterator]`, `next` and `return` are the program's, each calling `S` (see `holding`).
 const counting =
   "({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })"
 
 export default ({ after, text }: Helpers) => ({
-  searches: [
+  holds: [
     `(() => { const r = []; for (const x of ${counting}) r.push(x); return r })()`,
     `(() => { const r = []; for (const x of ${counting}) { r.push(x); break } return r })()`,
     `(() => { const [a] = ${counting}; return a })()`,
@@ -68,28 +68,28 @@ export default ({ after, text }: Helpers) => ({
     // ... the for-in right side, a labeled loop, an object spread, ...
     `for (const k in Promise.resolve(1)) {}`,
     `x: y: for (const a of 5) {}`,
-    `const o = { a: 1, ...tools.t }`,
+    `const o = { a: 1, ...tools.git }`,
     // ... a member's object without parentheses, a namespace path's key and a key that doesn't convert, ...
     `const o = null; return (((o))).a`,
     `const o = Promise.resolve(1); (o).a = 1`,
     `const o = null; delete (o)[0]`,
-    `return (tools.t)[(0)]`,
-    `tools.t[Symbol.iterator] = 1`,
+    `return (tools.git)[(0)]`,
+    `tools.git[Symbol.iterator] = 1`,
     `const o = {}; o[{ toString() { return {} } }] += 1`,
     // ... a callee without parentheses, a comparison with a constant, a template's substitution, ...
     `const o = {}; (o.f)()`,
     `return Promise.resolve(1) > 1`,
     `let x = Promise.resolve(1); x += 1`,
     "return `a${(({ toString() { return {} } }))}`",
-    // ... and a tool call's or import()'s arguments that can't cross.
-    `const x = 1; await tools.t.echo({ s: Symbol.iterator })`,
-    `let d = []; for (let i = 0; i < 300; i++) d = [d]; const p = tools.t.echo(1, d); await p`,
+    // ... and a host call's or import()'s arguments that can't cross.
+    `const x = 1; await send({ s: Symbol.iterator })`,
+    `let d = []; for (let i = 0; i < 300; i++) d = [d]; const p = send(1, d); await p`,
     `await import("z")`,
     // An update or compound assignment checks the member it writes first, and a computed one before its right side
     // runs or its key converts.
-    `tools.t.a += 1`,
-    `tools.t.a ??= 1`,
-    `tools.t[0]++`,
+    `tools.a += 1`,
+    `tools.a ??= 1`,
+    `tools.git[0]++`,
     `const s = "abc"; s.length += 1`,
     `const s = "abc"; s[0] = "x"`,
     `const o = null; o[(() => { console.log("key"); return 1 })()] = console.log("value")`,
@@ -325,14 +325,14 @@ export default ({ after, text }: Helpers) => ({
   ],
   suspensions: [
     // A resumed run reaches unsupported syntax at the same instruction.
-    `const n = await tools.wait({}); try { class A {} } catch (e) { return [n, e.name] }`,
-    `const o = { valueOf: () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1 }; return [o + 1, 'a'.padStart(o)]`,
-    `const r = []; for (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
+    `const n = await wait({}); try { class A {} } catch (e) { return [n, e.name] }`,
+    `const o = { valueOf: () => hold({ query: wait({}).then(() => 'echo') }).items.length + 1 }; return [o + 1, 'a'.padStart(o)]`,
+    `const r = []; for (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: hold({ query: wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
     // Suspended inside the program's iterator methods called by `for await` and `yield*`.
-    `const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
-    `const r = []; for await (const x of { [Symbol.asyncIterator]() { const k = search({ query: tools.wait({}).then(() => 'echo') }).items.length; let n = 0; return { next: async () => ({ done: n > 1, value: k + ++n }) } } }) r.push(x); return r`,
-    `const r = []; for await (const x of { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }), return() { r.push('closed ' + search({ query: tools.wait({}).then(() => 'echo') }).items.length); return { done: true } } } } }) { r.push(x); break } return r`,
-    `const r = []; for await (const x of { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { r.push('closed ' + search({ query: tools.wait({}).then(() => 'echo') }).items.length); return {} } } } }) { r.push(x); break } return r`,
+    `const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: hold({ query: wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
+    `const r = []; for await (const x of { [Symbol.asyncIterator]() { const k = hold({ query: wait({}).then(() => 'echo') }).items.length; let n = 0; return { next: async () => ({ done: n > 1, value: k + ++n }) } } }) r.push(x); return r`,
+    `const r = []; for await (const x of { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }), return() { r.push('closed ' + hold({ query: wait({}).then(() => 'echo') }).items.length); return { done: true } } } } }) { r.push(x); break } return r`,
+    `const r = []; for await (const x of { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { r.push('closed ' + hold({ query: wait({}).then(() => 'echo') }).items.length); return {} } } } }) { r.push(x); break } return r`,
     ...[
       "const it = { n: 0, [Symbol.iterator]() { return this }, next() { if (this.n === 0) for (let i = 0; i < 200000000; i++) {} return { done: this.n > 1, value: ++this.n } } }; function* g() { yield* it } const r = []; for (const x of g()) r.push(x)",
       "const r = []; function* inner() { try { yield 1 } finally { for (let i = 0; i < 200000000; i++) {} r.push('finally') } } function* g() { return yield* inner() } const a = g(); a.next(); r.push(a.return(5))",

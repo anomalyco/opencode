@@ -1,4 +1,4 @@
-// JSON, crossings to the host, strings and the web globals: cases for conformance/streaming.ts (see its `searching`, `after` and `during`).
+// JSON, crossings to the host, strings and the web globals: cases for conformance/streaming.ts (see its `holding`, `after` and `during`).
 type Helpers = {
   after: (setup: string, work: string) => string
   during: (setup: string, loop: string) => string
@@ -11,11 +11,11 @@ const iterable = (value: string) =>
 const busy = "for (let i = 0; i < 200000000; i++) {}"
 
 export default ({ after, during, text }: Helpers) => ({
-  searches: [
-    // A search inside a toJSON while values cross: tool arguments, search input.
-    "await tools.search({ query: { toJSON: () => 'echo' + S(1) } }).then((r) => r.items.length)",
-    "search({ query: { toJSON: () => 'echo' + S(1) } }).items.length",
-    "await tools.t.echo({ a: { toJSON: () => S(1) }, p: Promise.resolve(2) })",
+  holds: [
+    // A `hold` call inside a toJSON while values cross (a function in an argument is left out, so no toJSON runs there).
+    "await send({ query: { toJSON: () => 'echo' + S(1) } }).then((r) => r.query)",
+    "hold({ query: { toJSON: () => 'echo' + S(1) } }).items.length",
+    "await send({ a: { toJSON: () => S(1) }, p: Promise.resolve(2) })",
     `Object.fromEntries(${iterable("['k' + n, S(++n)]")})`,
     `new AggregateError(${iterable("S(++n)")}, 'm').errors`,
     `AggregateError(${iterable("S(++n)")}).errors`,
@@ -24,13 +24,13 @@ export default ({ after, during, text }: Helpers) => ({
     `[...new Headers([${iterable("'v' + S(++n)")}])]`,
     `[...new Headers(${iterable("['x' + n, String(S(++n))]")})]`,
     "({ toString: () => 'x' + S(1) }).toLocaleString()",
-    // A search whose walk calls a toJSON, then awaits: its frame parks with the search's.
-    "search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1) }).items.length",
-    "search({ p: Promise.resolve(1), query: { toJSON: () => 'echo' } }).items.length",
-    "[1, 2].map((x) => search({ query: { toJSON() { log.push('tj ' + x); return 'echo' } }, p: Promise.resolve(x) }).items.length + x)",
-    "(() => { try { search({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }) } catch (e) { return [e.name, e.message] } })()",
-    "(() => { try { search({ p: Promise.resolve(1), query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] } })()",
-    "await Promise.resolve(1).then((x) => search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(x) }).items.length + x)",
+    // A `hold` call whose arguments hold a toJSON and a promise: its frame parks while the promise settles.
+    "hold({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1) }).items.length",
+    "hold({ p: Promise.resolve(1), query: { toJSON: () => 'echo' } }).items.length",
+    "[1, 2].map((x) => hold({ query: { toJSON() { log.push('tj ' + x); return 'echo' } }, p: Promise.resolve(x) }).items.length + x)",
+    "(() => { try { hold({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }) } catch (e) { return [e.name, e.message] } })()",
+    "(() => { try { hold({ p: Promise.resolve(1), query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] } })()",
+    "await Promise.resolve(1).then((x) => hold({ query: { toJSON: () => 'echo' }, p: Promise.resolve(x) }).items.length + x)",
     // A key or part converted by the program's toString or valueOf inside the loop over the entries or pairs.
     // An entry holding a function is rejected, so a key's methods are inherited.
     "Object.fromEntries([[Object.create({ toString: () => 'k' + S(1) }), 1], ['b', 2]])",
@@ -41,8 +41,8 @@ export default ({ after, during, text }: Helpers) => ({
     `[...new URLSearchParams(${iterable("[{ toString: () => 'k' + S(++n) }, n]")})]`,
   ] as Array<string>,
   programs: [
-    // A search inside a toJSON of the program's result.
-    `const log = []; return { t: { toJSON: () => (log.push('call'), search({ query: Promise.resolve('echo') }).items.length) }, log }`,
+    // A `hold` call inside a toJSON of the program's result.
+    `const log = []; return { t: { toJSON: () => (log.push('call'), hold({ query: Promise.resolve('echo') }).items.length) }, log }`,
     // The internal walk: order of toJSON and replacer calls, keys and holders, what is left out, and errors.
     `const log = []; const r = (k, v) => { log.push([k, typeof v]); return k === 'skip' ? undefined : v }
      const v = { a: 1, skip: 2, b: [1, , { toJSON(k) { log.push('toJSON ' + k); return { c: undefined, d: () => 1, e: 'x' } } }], f: undefined }
@@ -88,22 +88,22 @@ export default ({ after, during, text }: Helpers) => ({
     `return [({}).toLocaleString(), Object.prototype.toLocaleString.call(5), Object.prototype.toLocaleString.call([1, [2]])]`,
     `try { return Object.prototype.toLocaleString.call({ toString: 7 }) } catch (e) { return [e.name, e.message] }`,
     `const t = Promise.prototype.then; const log = []; Promise.prototype.then = function (f, r) { log.push('then'); return t.call(this, f, r) }
-     const n = await search({ query: 'echo' }).then((r) => r.items.length); Promise.prototype.then = t; return [n > 0, log]`,
-    `const r = search({ query: 'echo' }); return [await r.catch(() => 0) === r, await r.finally(5) !== r, (await r.finally(() => 1)).items.length > 0]`,
-    // A toJSON a crossing to the host calls runs in the crossing's frame: its jobs, what it returns and throws.
-    `const log = []; const p = tools.t.echo({ p: Promise.resolve(1), t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } } })
+     const n = await hold({ query: 'echo' }).then((r) => r.items.length); Promise.prototype.then = t; return [n > 0, log]`,
+    `const r = hold({ query: 'echo' }); return [await r.catch(() => 0) === r, await r.finally(5) !== r, (await r.finally(() => 1)).items.length > 0]`,
+    // A toJSON in a host call's arguments, which the crossing leaves out with the other functions.
+    `const log = []; const p = send({ p: Promise.resolve(1), t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } } })
      Promise.resolve().then(() => log.push('job')); log.push('after'); const r = await p; return [r, log]`,
     `const log = []; Promise.resolve().then(() => log.push('job')); return { t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } }, p: Promise.resolve(1), log }`,
-    `Date.prototype.toJSON = () => 'mine'; return [await tools.t.echo({ d: new Date(0) }), await tools.t.echo({ d: new Date(0), p: Promise.resolve(1) })]`,
-    `URL.prototype.toJSON = () => 'mine'; return [await tools.t.echo({ u: new URL('https://a.b/c') }), await tools.t.echo({ u: new URL('https://a.b/c'), p: Promise.resolve(1) })]`,
-    `return search({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }).items.length`,
-    `return search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1), q: { toJSON() { null.x } } }).items.length`,
-    `return [{ toJSON: () => 'echo' }].map((q) => search.call(null, { query: q }).items.length)`,
-    `return await tools.t.echo({ a: { toJSON: Object.prototype.toString }, p: Promise.resolve(1) })`,
-    `return await tools.t.echo({ a: { toJSON: () => tools.t.echo(1) } })`,
-    `const t = { toJSON(k) { return { k, n: { toJSON: (k2) => k2 + '!' } } } }; return [await tools.t.echo({ t, u: [t] }), await tools.t.echo({ t, p: Promise.resolve(1) }), search({ query: 'echo', t }).items.length]`,
-    `return [{ t: { toJSON() { return Promise.resolve(5) } } }, await tools.t.echo({ t: { toJSON() { return Promise.resolve(5) } } })]`,
-    `try { return [{ toJSON: () => 'echo' }].map((q) => search.call(null, { query: q, p: Promise.resolve(1) }).items.length) } catch (e) { return [e.name, e.message] }`,
+    `Date.prototype.toJSON = () => 'mine'; return [await send({ d: new Date(0) }), await send({ d: new Date(0), p: Promise.resolve(1) })]`,
+    `URL.prototype.toJSON = () => 'mine'; return [await send({ u: new URL('https://a.b/c') }), await send({ u: new URL('https://a.b/c'), p: Promise.resolve(1) })]`,
+    `return hold({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }).items.length`,
+    `return hold({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1), q: { toJSON() { null.x } } }).items.length`,
+    `return [{ toJSON: () => 'echo' }].map((q) => hold.call(null, { query: q }).items.length)`,
+    `return await send({ a: { toJSON: Object.prototype.toString }, p: Promise.resolve(1) })`,
+    `return await send({ a: { toJSON: () => send(1) } })`,
+    `const t = { toJSON(k) { return { k, n: { toJSON: (k2) => k2 + '!' } } } }; return [await send({ t, u: [t] }), await send({ t, p: Promise.resolve(1) }), hold({ query: 'echo', t }).items.length]`,
+    `return [{ t: { toJSON() { return Promise.resolve(5) } } }, await send({ t: { toJSON() { return Promise.resolve(5) } } })]`,
+    `try { return [{ toJSON: () => 'echo' }].map((q) => hold.call(null, { query: q, p: Promise.resolve(1) }).items.length) } catch (e) { return [e.name, e.message] }`,
     // A key or part whose conversion throws closes the iterator; the order of the conversions against the reads.
     `const log = []; const it = { [Symbol.iterator]() { return { next: () => ({ done: false, value: [Object.create({ toString() { throw new Error('ts') } }), 1] }), return: () => (log.push('closed'), {}) } } }
      try { Object.fromEntries(it) } catch (e) { log.push(e.message) } return log`,
@@ -118,16 +118,16 @@ export default ({ after, during, text }: Helpers) => ({
     `const p = fetch(${JSON.stringify(text)}); const o = Object.fromEntries(${iterable(`(n++ ? (() => { ${busy} return ['b', n] })() : ['a', n])`)}); const r = await p; return [r.status, o]`,
     `const p = fetch(${JSON.stringify(text)}); const h = new Headers([${iterable(`(n++ ? (() => { ${busy} return 'v' })() : 'k')`)}]); const r = await p; return [r.status, [...h]]`,
     `const p = fetch(${JSON.stringify(text)}); const s = ({ toString() { ${busy} return 's' } }).toLocaleString(); const r = await p; return [r.status, s]`,
-    // Suspended inside a toJSON a crossing calls, and while a crossing's frame is parked with its search.
-    `const w = tools.wait({}); return await tools.t.echo({ a: { toJSON() { ${busy} return 2 } }, w })`,
-    `const w = tools.wait({}); return { a: { toJSON() { ${busy} return 2 } }, w }`,
-    `const w = tools.wait({}); const n = search({ query: { toJSON() { ${busy} return 'echo' } } }).items.length; return [n, await w]`,
-    `return await tools.t.echo({ w: tools.wait({}), a: { toJSON() { for (let i = 0; i < 2000000; i++) {} return 2 } } })`,
-    `function f() { return search({ query: { toJSON: () => 'echo' }, w: tools.wait({}) }).items.length } return [f(), 1]`,
-    `function f() { return search({ w: tools.wait({}), query: { toJSON: () => 'echo' } }).items.length } return [f(), 1]`,
+    // Suspended inside a toJSON while values cross, and while a `hold` call's frame is parked.
+    `const w = wait({}); return await send({ a: { toJSON() { ${busy} return 2 } }, w })`,
+    `const w = wait({}); return { a: { toJSON() { ${busy} return 2 } }, w }`,
+    `const w = wait({}); const n = hold({ query: { toJSON() { ${busy} return 'echo' } } }).items.length; return [n, await w]`,
+    `return await send({ w: wait({}), a: { toJSON() { for (let i = 0; i < 2000000; i++) {} return 2 } } })`,
+    `function f() { return hold({ query: { toJSON: () => 'echo' }, w: wait({}) }).items.length } return [f(), 1]`,
+    `function f() { return hold({ w: wait({}), query: { toJSON: () => 'echo' } }).items.length } return [f(), 1]`,
     // Suspended inside the toString of an entry's key or a pair's part.
-    `return Object.fromEntries([[Object.create({ toString: () => 'k' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }), 1]])`,
-    `return String(new URLSearchParams([['a', { toString: () => 'b' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }]]))`,
-    `return [...new Headers([[Object.create({ toString: () => 'x-' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }), 'v']])]`,
+    `return Object.fromEntries([[Object.create({ toString: () => 'k' + hold({ query: wait({}).then(() => 'echo') }).items.length }), 1]])`,
+    `return String(new URLSearchParams([['a', { toString: () => 'b' + hold({ query: wait({}).then(() => 'echo') }).items.length }]]))`,
+    `return [...new Headers([[Object.create({ toString: () => 'x-' + hold({ query: wait({}).then(() => 'echo') }).items.length }), 'v']])]`,
   ] as Array<string>,
 })
