@@ -533,14 +533,25 @@ fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
 
 #[test]
 fn the_footer_measures_throughput_from_the_first_token() {
-    let mut reply = assistant("msg_2", 2000, json!([{ "type": "text", "text": "Original answer" }]), Some(5000));
-    reply["time"] = json!({ "created": 2000, "firstToken": 2500, "streamed": 3000, "completed": 5000 });
-    reply["tokens"]["output"] = json!(20);
-    let messages = vec![user("msg_1", 1000, "Current input"), reply];
-    let h = open(80, 20, "ses_f", messages, Info { session: Some(medium()), ..Info::default() });
-    let screen = h.wait_for("tok/s");
-    assert!(screen.contains("4.0s · 40.0 tok/s"), "{screen}");
-    assert!(!screen.contains("ttft"), "{screen}");
+    for (first, second, streamed, rate) in
+        [(Some(8_000), Some(25_000), 28_000, "13.0"), (None, Some(25_000), 28_000, "9.3"), (None, None, 30_000, "6.5")]
+    {
+        let mut step = assistant("msg_2", 6_000, json!([{ "type": "text", "text": "First step" }]), Some(20_000));
+        step["finish"] = json!("tool-calls");
+        step["time"]["firstToken"] = json!(first);
+        step["time"]["streamed"] = json!(10_000);
+        step["tokens"]["output"] = json!(20);
+        step["tokens"]["reasoning"] = json!(5);
+        let mut reply = assistant("msg_3", 24_000, json!([{ "type": "text", "text": "Final answer" }]), Some(31_000));
+        reply["time"]["firstToken"] = json!(second);
+        reply["time"]["streamed"] = json!(streamed);
+        reply["tokens"]["output"] = json!(30);
+        reply["tokens"]["reasoning"] = json!(10);
+        let messages = vec![user("msg_1", 1_000, "Current input"), step, reply];
+        let h = open(80, 20, "ses_f", messages, Info { session: Some(medium()), ..Info::default() });
+        let screen = h.wait_for(&format!("{rate} tok/s"));
+        assert!(!screen.contains("ttft"), "{screen}");
+    }
 }
 
 #[test]

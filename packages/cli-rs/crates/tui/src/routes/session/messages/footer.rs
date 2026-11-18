@@ -467,59 +467,6 @@ pub fn locale(value: f64) -> String {
 mod tests {
     use super::*;
 
-    use opencode_api::generated::{
-        SessionInboxUserTime, SessionMessageAssistantTime, SessionMessageID, SessionMessageUser, TokenUsageInfo,
-    };
-
-    fn input(created: f64) -> SessionMessageInfo {
-        SessionMessageInfo::User(SessionMessageUser {
-            r#type: "user".into(),
-            time: SessionInboxUserTime { created },
-            ..Default::default()
-        })
-    }
-
-    fn step(id: &str, time: [Option<f64>; 4], output: f64, reasoning: f64) -> SessionMessageInfo {
-        SessionMessageInfo::Assistant(SessionMessageAssistant {
-            id: SessionMessageID(id.into()),
-            r#type: "assistant".into(),
-            time: SessionMessageAssistantTime {
-                created: time[0].unwrap(),
-                first_token: time[1],
-                streamed: time[2],
-                completed: time[3],
-            },
-            tokens: Some(TokenUsageInfo { output, reasoning, ..Default::default() }),
-            ..Default::default()
-        })
-    }
-
-    // `session-turn.test.ts`: throughput counts from the first streamed token, and steps recorded
-    // without one count from request dispatch.
-    #[test]
-    fn measures_decode_throughput_from_the_first_streamed_token() {
-        let messages = [
-            input(1_000.0),
-            step("a1", [Some(6_000.0), Some(8_000.0), Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
-            step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
-        ];
-        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(13.0));
-
-        let messages = [
-            input(1_000.0),
-            step("a1", [Some(6_000.0), None, Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
-            step("a2", [Some(24_000.0), Some(25_000.0), Some(28_000.0), Some(31_000.0)], 30.0, 10.0),
-        ];
-        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(65.0 / 7.0));
-
-        let messages = [
-            input(1_000.0),
-            step("a1", [Some(6_000.0), None, Some(10_000.0), Some(20_000.0)], 20.0, 5.0),
-            step("a2", [Some(24_000.0), None, Some(30_000.0), Some(31_000.0)], 30.0, 10.0),
-        ];
-        assert_eq!(tokens_per_second(&messages, Some(2), true), Some(6.5));
-    }
-
     #[test]
     fn locale_groups_thousands() {
         assert_eq!(locale(0.0), "0");
