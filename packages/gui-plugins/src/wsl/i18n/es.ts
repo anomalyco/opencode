@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "Se agotó el tiempo de espera de {{command}} {{args}} tras {{timeout}} ms",
   "error.failedPort": "No se pudo obtener el puerto",
   "menu.remove": "Quitar",
+  "error.busy": "{{distro}} está ocupada con otra tarea. Inténtalo de nuevo cuando termine.",
 }

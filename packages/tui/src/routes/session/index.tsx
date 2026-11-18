@@ -13,7 +13,7 @@ import {
   type Accessor,
 } from "solid-js"
 import path from "node:path"
-import { EOL } from "node:os"
+import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
@@ -120,6 +120,7 @@ import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { SessionTurn } from "@opencode/util/session-turn"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import { createDelayedPresence } from "../../util/delayed-presence"
@@ -207,7 +208,6 @@ export function Session(props: {
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
   })
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
     return [route.sessionID, ...descendantSessionIDs()].flatMap(
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
@@ -233,6 +233,9 @@ export function Session(props: {
     open: false,
     tab: undefined as string | undefined,
   })
+  const composerVisible = createMemo(
+    () => promptedPermissions().length === 0 && (composer.open || (!!session()?.parentID && forms().length === 0)),
+  )
   props.onTerminalPicker?.(() => setComposer({ open: true, tab: "terminals" }))
   onCleanup(() => props.onTerminalPicker?.(undefined))
   createEffect(() => {
@@ -1377,7 +1380,7 @@ export function Session(props: {
           }
 
           const filepath = path.join(
-            paths.cwd,
+            options.location === "temp" ? tmpdir() : paths.cwd,
             `session-${crypto.randomUUID()}.${options.format === "markdown" ? "md" : "json"}`,
           )
           await writeExport(filepath, content)
@@ -1601,7 +1604,7 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
+                open={composerVisible()}
                 defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
                 onClose={() => {
                   const parent = session()?.parentID
@@ -1615,7 +1618,7 @@ export function Session(props: {
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
-                <Match when={composer.open || (!!session()?.parentID && forms().length === 0)}>{null}</Match>
+                <Match when={composerVisible()}>{null}</Match>
                 <Match when={promptedPermissions().length > 0}>
                   <Show when={promptedPermissions()[0]?.id} keyed>
                     {(_) => {
@@ -1908,8 +1911,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     )
     const part = current?.content.find((part): part is SessionMessageAssistantTool => {
       if (part.type !== "tool" || part.state.status !== "running") return false
-      const name = canonicalToolName(part.name)
-      return name === "shell" || name === "subagent"
+      return canonicalToolName(part.name) === "shell"
     })
     if (!current || !part) return
     return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
@@ -2725,7 +2727,8 @@ function inlineToolImages(part: SessionMessageAssistantTool) {
   return toolDisplayContent(part.state).flatMap((content) =>
     content.type === "file" &&
     content.mime.startsWith("image/") &&
-    (content.uri.startsWith("data:image/") || mediaHashFromUri(content.uri))
+    // An emptied `data:` URI is a payload the store dropped while previews were off.
+    ((content.uri.startsWith("data:image/") && !content.uri.endsWith(",")) || mediaHashFromUri(content.uri))
       ? [{ uri: content.uri }]
       : [],
   )
@@ -3069,7 +3072,7 @@ function ShellDisplay(props: {
           const next = stripAnsi(output + response.data.output)
           if (next.length <= SHELL_DISPLAY_LIMIT) return next
           setOutputTruncated(true)
-          return next.slice(-SHELL_DISPLAY_LIMIT)
+          return TextBoundary.tail(next, SHELL_DISPLAY_LIMIT)
         })
       if (response.data.cursor <= cursor) break
       cursor = response.data.cursor
@@ -3336,11 +3339,6 @@ function Subagent(props: ToolProps) {
         const id = sessionID()
         if (id) navigate({ type: "session", sessionID: id })
       }}
-      status={
-        isBackgroundSubagent(props.metadata, props.part.state.status) ? (
-          <StatusBadge>Background</StatusBadge>
-        ) : undefined
-      }
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
     </InlineTool>
@@ -3358,13 +3356,6 @@ export function subagentModelLabel(
   const modelID = separator === -1 ? reference : reference.slice(separator + 1)
   const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
   return `${name ?? reference}${variant ? ` (${variant})` : ""}`
-}
-
-export function isBackgroundSubagent(
-  metadata: Record<string, unknown>,
-  status: SessionMessageAssistantTool["state"]["status"],
-) {
-  return status === "completed" && metadata.status === "running"
 }
 
 export { executeCallSummary }

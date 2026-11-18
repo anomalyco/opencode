@@ -15,6 +15,7 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
+  type UserMessage,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
@@ -77,7 +78,21 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream, Tracer } from "effect"
+import {
+  Cause,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Queue,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -376,6 +391,7 @@ const layer = Layer.unwrap(
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,
       global: true,
+      claude: true,
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
@@ -1174,6 +1190,51 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
     expect(s.requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
     expect(s.executions).toEqual(["renamed"])
+  })
+
+  scenario("passes stored message metadata to the context hook but not to the model request", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "prompt", (event) =>
+      Effect.sync(() => {
+        event.metadata = { canary: { context: ["CANARY-TOKEN"] } }
+      }),
+    )
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        // Mirrors JavaScript plugins, which edit the payload in place.
+        for (const message of event.messages) {
+          const canary = message.metadata?.canary as { context: string[] } | undefined
+          if (message.role !== "user" || canary === undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text(canary.context.join("\n")))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("CANARY-TOKEN"), Message.text("Start")])
+    expect(s.requests[0]?.messages.some((message) => Object.hasOwn(message, "metadata"))).toBe(false)
+    const compiled = yield* compileRequest(s.requests[0]!)
+    expect(JSON.stringify(compiled.body)).toContain("CANARY-TOKEN")
+    expect(JSON.stringify(compiled.body)).not.toContain('"metadata"')
+  })
+
+  scenario("keeps context hook edits to messages without stored metadata", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        for (const message of event.messages) {
+          if (message.role !== "user" || message.metadata !== undefined) continue
+          ;(message.content as Array<UserMessage["content"][number]>).unshift(Message.text("EDITED"))
+        }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+
+    yield* s.runPrompt("Start")
+
+    expect(s.requests[0]?.messages.at(-1)?.content).toEqual([Message.text("EDITED"), Message.text("Start")])
   })
 
   for (const resume of [false, true]) {
@@ -1999,6 +2060,32 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
 
     expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+    // The surviving "Changed context" update predates the fresh baseline and would contradict it.
+    expect(messageRoles(s.requests.at(-1))).toEqual(["user", "user"])
+    expect((yield* s.context).some((message) => message.type === "system")).toBe(false)
+  })
+
+  scenario("hides an update a revert left behind once the source is removed", function* (s) {
+    s.systemRemoved = true
+    yield* s.runPrompt("First")
+    s.systemRemoved = false
+    s.systemBaseline = "Entered mode"
+    const second = yield* s.runPrompt("Second")
+    s.systemRemoved = true
+    yield* s.runPrompt("Third")
+
+    // The removal is delivered with "Third"; the "Entered mode" update survives before "Second".
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    yield* s.runPrompt("Fourth")
+
+    const last = s.requests.at(-1)!
+    expect(systemTexts(last)).toEqual([])
+    expect(userTexts(last)).toEqual(["First", "Fourth"])
+    expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
+    // Clients still see every message; only the model context hides the stale update.
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
+      { text: "Entered mode" },
+    ])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -2837,6 +2924,10 @@ describe("SessionRunnerLLM", () => {
       scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
         const agents = yield* Agent.Service
         const hooks = yield* PluginHooks.Service
+        const compaction = yield* SessionCompaction.Service
+        // The idle step past the threshold would start a background summary, which keeps the next prompt verbatim
+        // instead of summarizing it; this covers the summary written when compaction is due.
+        yield* compaction.transform((editor) => editor.configure({ background: false }))
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
         s.currentModel = LanguageModel.make({
@@ -4228,6 +4319,10 @@ describe("SessionRunnerLLM", () => {
     expect(assistant.time.streamed).toBeDefined()
     expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
       5_000,
+    )
+    // The tool call was the first output, recorded two seconds after dispatch and before the stream ended.
+    expect(DateTime.toEpochMillis(assistant.time.firstToken!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
+      2_000,
     )
     expect(assistant.time.completed).toBeUndefined()
     expect(assistant.content).toMatchObject([{ type: "tool", state: { status: "running" } }])

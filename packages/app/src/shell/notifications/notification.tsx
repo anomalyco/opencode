@@ -79,6 +79,8 @@ export function createServerNotificationState(input: {
   data: Data
   key: ServerConnection.Key
   coordinator: ReturnType<typeof createNotificationCoordinator>
+  muted: (sessionID: string) => boolean
+  preferencesLoaded?: Promise<unknown>
 }) {
   const platform = usePlatform()
   const settings = useSettings()
@@ -294,6 +296,7 @@ export function createServerNotificationState(input: {
 
   // Loading the session keeps a background completion visible in the server-derived unread state.
   const lookup = async (sessionID: string) => {
+    if (input.preferencesLoaded) await input.preferencesLoaded
     const session = input.data.session.get(sessionID)
 
     if (session) return session
@@ -309,7 +312,7 @@ export function createServerNotificationState(input: {
     if (hasRunningChild(input.data, sessionID)) return
 
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (!session) return
 
@@ -333,7 +336,7 @@ export function createServerNotificationState(input: {
 
   const handleSessionError = (sessionID: string, eventID: string) => {
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (session?.parentID) return
 
@@ -369,7 +372,7 @@ export function createServerNotificationState(input: {
     const category = kind === "question" || kind === "mcp-elicitation" ? "questions" : "permissions"
 
     const pending = () => {
-      if (disposed.value) return false
+      if (disposed.value || input.muted(sessionID) || input.muted(input.data.session.root(sessionID))) return false
 
       if (kind !== "permission") return input.data.session.form.list(sessionID)?.some((form) => form.id === requestID)
 

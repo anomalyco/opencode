@@ -14,8 +14,15 @@ let anchors = 0
  * carousel's track, cuts it off, and stays tied to its box by CSS anchor positioning as the page
  * scrolls, cut where it passes under the header, which stays on top. A browser without anchor
  * positioning keeps it in its box.
+ *
+ * A menu placed before goes back to its box first: still fixed to the window it has no box to measure
+ * against, and closing it (closeMenus) may have taken it out of the top layer already.
  */
 export function placeMenu(menu: HTMLElement) {
+  if (menu.popover) {
+    menu.removeAttribute("popover")
+    menu.removeAttribute("style")
+  }
   const box = menu.offsetParent
   if (!(box instanceof HTMLElement)) return
   // Measured as laid out, not as drawn: the opening animation scales the menu from a corner.

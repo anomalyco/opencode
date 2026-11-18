@@ -1,6 +1,19 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import {
+  children,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Loader } from "@opencode/ui/loader"
@@ -116,6 +129,10 @@ export type HomeSessionsViewProps = {
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
+  /** Shown at the end of the search field, such as the project the list is scoped to. */
+  searchScope?: JSX.Element
+  /** The search filters `groups` in place: there is no results panel, and Enter opens the first match. */
+  searchInline?: boolean
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
@@ -286,6 +303,19 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
               />
             )}
           </Match>
+          <Match
+            when={
+              props.searchInline &&
+              props.searchValue.trim() &&
+              !props.searchLoading &&
+              props.listView.status === "ready" &&
+              props.groups.length === 0
+            }
+          >
+            <div class={`px-2 pt-6 text-[13px] leading-[var(--line-height-compact)] ${HOME_SECTION_LABEL}`}>
+              {props.searchNoResultsLabel}
+            </div>
+          </Match>
           <Match when={props.listView.status === "ready" && props.groups.length === 0}>
             <HomeSessionsEmpty
               onNewSession={props.canCreateSession ? props.onCreateSession : undefined}
@@ -402,6 +432,8 @@ function HomeSessionSearch(
     onHoverSession: (sessionID: string | undefined) => void
   },
 ) {
+  const scope = children(() => props.searchScope)
+
   return (
     <div class="w-full">
       <div
@@ -511,6 +543,13 @@ function HomeSessionSearch(
                 return
               }
 
+              if (props.searchInline && event.key === "Enter" && !event.isComposing && props.searchResults.length > 0) {
+                event.preventDefault()
+                props.onSearchSelectActive()
+
+                return
+              }
+
               if (!props.searchOpen || props.searchResults.length === 0) return
 
               if (event.altKey || event.metaKey) return
@@ -539,9 +578,11 @@ function HomeSessionSearch(
             <IconButton
               type="button"
               variant="ghost-muted"
-              size="small"
+              size={props.searchInline ? "normal" : "small"}
               class="relative z-20 shrink-0"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={
+                <Icon name="close" size={props.searchInline ? "normal" : "large"} class="text-v2-icon-icon-muted" />
+              }
               aria-label={props.searchPlaceholder}
               onClick={() => {
                 props.onSearchClose()
@@ -549,6 +590,10 @@ function HomeSessionSearch(
               }}
             />
           </Show>
+          <Show when={props.searchValue && scope()}>
+            <div aria-hidden="true" class="relative z-20 mx-0.5 h-4 w-px shrink-0 bg-v2-border-border-muted" />
+          </Show>
+          {scope()}
         </label>
       </div>
     </div>
@@ -631,9 +676,15 @@ function HomeSessionGroupHeader(props: {
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
 }) {
+  let element!: HTMLDivElement
+
+  // Index reuses a header in place for whichever group lands at its position, so it reports itself again when its
+  // group changes; a one-time ref would leave it registered under the group it was created for.
+  createEffect(() => props.onSetRef(element))
+
   return (
     <div
-      ref={props.onSetRef}
+      ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
         bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]

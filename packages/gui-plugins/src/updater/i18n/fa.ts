@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "بعدی",
   "releaseNotes.action.hideFuture": "اینها را در آینده نشان ندهید",
   "releaseNotes.media.alt": "پیش نمایش انتشار",
+  "action.reload": "بارگیری مجدد برای به‌روزرسانی",
+  "action.reloading": "در حال بارگیری مجدد…",
+  "web.ready.title": "به‌روزرسانی آماده است",
+  "web.ready.message": "نسخه جدید OpenCode آماده است. برای استفاده از آن در همه پنجره‌های باز، بارگیری مجدد کنید.",
+  "web.reload": "بارگیری مجدد",
+  "web.reset.title": "بارگیری مجدد از سرور",
+  "web.reset.description": "نسخه ذخیره‌شده برنامه را پاک کنید و نسخه فعلی سرور را بارگیری کنید",
+  "web.reset.action": "بارگیری مجدد از سرور",
 }

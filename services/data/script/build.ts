@@ -1,11 +1,11 @@
 // Builds the data site's three Workers into one Build Output Specification tree (.cloudflare/output) for
 // `cf deploy --prebuilt --worker <dir>` (script/deploy.ts):
-// - default: the SolidStart site (packages/stats/app, Nitro's cloudflare-module preset) with .output/public as assets
+// - default: the SolidStart site (packages/data/app, Nitro's cloudflare-module preset) with .output/public as assets
 // - og: the Open Graph image Worker, whose Wasm engines and fonts ship as modules
-// - sync: the StatsSyncWorkflow and its cron handler (packages/stats/server)
+// - sync: the DataSyncWorkflow and its cron handler (packages/data/server)
 // cf's own build step can't detect these projects, so they deploy prebuilt.
 //
-//   bun script/build.ts [--mode dev|production]
+//   bun script/build.ts --mode dev|production
 import { cp, mkdir, readdir } from "node:fs/promises"
 import path from "node:path"
 import {
@@ -16,14 +16,14 @@ import {
   writeWorkerConfig,
 } from "@cloudflare/build-output-utils"
 import { resolveAndParseConfig } from "@cloudflare/config"
+import { stage } from "../stage"
 
 const root = path.resolve(import.meta.dir, "..")
-const app = path.resolve(root, "../../packages/stats/app")
-const server = path.resolve(root, "../../packages/stats/server")
+const app = path.resolve(root, "../../packages/data/app")
+const server = path.resolve(root, "../../packages/data/server")
 const modeIndex = process.argv.indexOf("--mode")
-const mode = modeIndex === -1 ? "production" : process.argv[modeIndex + 1]
-if (mode !== "dev" && mode !== "production") throw new Error(`Unknown --mode ${mode}; use dev or production`)
-// STAGE picks the stage's headers for the static assets (packages/stats/app/src/lib/noindex.ts).
+const mode = stage(modeIndex === -1 ? undefined : process.argv[modeIndex + 1])
+// STAGE picks the stage's headers for the static assets (packages/data/app/src/lib/noindex.ts).
 const env = { ...process.env, STAGE: mode }
 
 await Bun.$`bun run build`.cwd(app).env(env)

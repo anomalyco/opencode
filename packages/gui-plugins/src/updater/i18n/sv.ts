@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Nästa",
   "releaseNotes.action.hideFuture": "Visa inte dessa i framtiden",
   "releaseNotes.media.alt": "Förhandsvisning av version",
+  "action.reload": "Ladda om för att uppdatera",
+  "action.reloading": "Laddar om…",
+  "web.ready.title": "Uppdateringen är klar",
+  "web.ready.message": "En ny version av OpenCode är klar. Ladda om för att använda den i alla öppna fönster.",
+  "web.reload": "Ladda om",
+  "web.reset.title": "Ladda om från servern",
+  "web.reset.description": "Rensa den sparade kopian av appen och läs in serverns aktuella version",
+  "web.reset.action": "Ladda om från servern",
 }

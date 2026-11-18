@@ -29,6 +29,9 @@ function SessionListStory(props: {
   height: number
   currentArchived: boolean
   neverRun: boolean
+  loading: boolean
+  announcement: string
+  recentExpanded: boolean
 }) {
   const language = useLanguage()
 
@@ -38,12 +41,13 @@ function SessionListStory(props: {
     archived: props.archived,
     removed: new Array<string>(),
     action: "",
-    recentExpanded: false,
+    recentExpanded: props.recentExpanded,
   })
 
   createEffect(() => setState("selected", props.selectedSession))
   createEffect(() => setState("expanded", props.workingExpanded))
   createEffect(() => setState("archived", props.archived))
+  createEffect(() => setState("recentExpanded", props.recentExpanded))
 
   const sessions = (section: "current" | "needs" | "unread" | "recent" | "working", count: number) =>
     Array.from({ length: count }, (_, index) => {
@@ -172,6 +176,8 @@ function SessionListStory(props: {
         style={{ width: `${props.width}px`, height: `${props.height}px` }}
       >
         <InboxSessionList
+          loading={props.loading}
+          announcement={props.announcement}
           current={{
             get count() {
               return current().length
@@ -204,7 +210,7 @@ function SessionListStory(props: {
               archived: props.archived,
               removed: [],
               action: "",
-              recentExpanded: false,
+              recentExpanded: props.recentExpanded,
             })
           }
         >
@@ -236,6 +242,9 @@ export default {
     height: 640,
     currentArchived: false,
     neverRun: false,
+    loading: false,
+    announcement: "",
+    recentExpanded: false,
   },
   argTypes: {
     currentCount: { control: { type: "range", min: 0, max: 1, step: 1 } },
@@ -245,7 +254,7 @@ export default {
     workingCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
     selectedSession: {
       control: "select",
-      options: ["current-0", "recent-1", "recent-0", "needs-0", "working-0", "none"],
+      options: ["current-0", "recent-1", "recent-0", "needs-0", "working-0", "unread-0", "none"],
     },
     width: { control: { type: "range", min: 136, max: 640, step: 8 } },
     height: { control: { type: "range", min: 240, max: 900, step: 20 } },
@@ -312,3 +321,9 @@ export const Dense = { args: { needsCount: 4, recentCount: 10, workingCount: 5 }
 export const Narrow = { args: { width: 136 } }
 
 export const ShortSidebar = { args: { height: 360 } }
+
+export const Loading = { args: { loading: true } }
+
+export const RecentExpanded = { args: { recentCount: 16, recentExpanded: true } }
+
+export const ArchivedOnly = { args: { needsCount: 0, unreadCount: 0, recentCount: 0, workingCount: 0 } }

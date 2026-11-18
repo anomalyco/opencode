@@ -7,12 +7,14 @@ import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
 
 export type ExportFormat = "markdown" | "json"
+export type ExportLocation = "project" | "temp"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
   onConfirm?: (options: {
     action: "copy" | "export"
     format: ExportFormat
+    location?: ExportLocation
     thinking: boolean
     tools: boolean
     sanitize: boolean
@@ -31,12 +33,13 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   )
 }
 
-type Row = "format" | "thinking" | "tools" | "sanitize"
+type Row = "format" | "location" | "thinking" | "tools" | "sanitize"
 
 /** Export options as a list of values, under the "new-designs" experiment: ↑/↓ moves, ←/→ or space changes. */
 function DialogExportOptionsList(props: DialogExportOptionsProps) {
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
+    location: "project" as ExportLocation,
     thinking: props.defaultThinking,
     tools: true,
     sanitize: false,
@@ -47,6 +50,7 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     props.onConfirm?.({
       action,
       format: store.format,
+      location: store.location,
       thinking: store.thinking,
       tools: store.tools,
       sanitize: store.sanitize,
@@ -54,6 +58,7 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
 
   const change = (row: Row) => {
     if (row === "format") return setStore("format", store.format === "markdown" ? "json" : "markdown")
+    if (row === "location") return setStore("location", store.location === "project" ? "temp" : "project")
     setStore(row, !store[row])
   }
 
@@ -65,6 +70,13 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
       onSelect: () => change("format"),
       footerOverhang: 2,
       footer: <DialogSelectChoice value={store.format} active={selected() === "format"} />,
+    },
+    {
+      title: "Location",
+      value: "location" as Row,
+      onSelect: () => change("location"),
+      footerOverhang: 2,
+      footer: <DialogSelectChoice value={store.location} active={selected() === "location"} />,
     },
     ...(store.format === "markdown"
       ? [
@@ -286,6 +298,7 @@ DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => 
   return new Promise<{
     action: "copy" | "export"
     format: ExportFormat
+    location?: ExportLocation
     thinking: boolean
     tools: boolean
     sanitize: boolean

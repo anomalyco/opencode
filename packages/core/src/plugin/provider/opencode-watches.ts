@@ -253,7 +253,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       editor.namespace({
         name: namespace,
         description:
-          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change. A pull request it opened wakes it as each check finishes, so don't wait on CI with `gh pr checks --watch`, `gh run watch` or `sleep`.",
+          "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console. The session wakes on its own when they change. A pull request it opened wakes it when a check fails and once when all have finished, so don't wait on CI with `gh pr checks --watch`, `gh run watch` or `sleep`.",
       })
       editor.add({
         name: "watch",

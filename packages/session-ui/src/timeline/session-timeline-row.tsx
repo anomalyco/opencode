@@ -322,6 +322,10 @@ export function createSessionTimelineRowRenderer(input: {
       : undefined
   }
 
+  const latestCopyTurn = createMemo(() =>
+    Array.from(input.projection.assistantMessagesByParent().keys()).findLast((id) => !!copyContentID(id)),
+  )
+
   const padding = () => input.padding?.() ?? "px-4 md:px-6"
 
   const indexGroupContents = (refs: PartRef[]) => {
@@ -576,6 +580,7 @@ export function createSessionTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                keepCopyVisible={latestCopyTurn() === row().userMessageID}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}

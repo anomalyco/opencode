@@ -2,6 +2,7 @@
 //! its OVERLAPPED/event and is cancelled and reaped before its buffer is released.
 //! No FlushFileBuffers: it can wait indefinitely for an uncooperative client.
 
+use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -540,9 +541,22 @@ impl Drop for Operation {
     }
 }
 
-fn event() -> io::Result<OwnedHandle> {
+pub(crate) fn event() -> io::Result<OwnedHandle> {
     // SAFETY: create an unnamed, non-inheritable, initially unset manual-reset event.
     owned_handle(unsafe { CreateEventW(null(), 1, 0, null()) })
+}
+
+/// A NUL-terminated UTF-16 copy of `value`, refusing an embedded NUL.
+pub(crate) fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
+    let mut wide = value.encode_wide().collect::<Vec<_>>();
+    if wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path contains a NUL",
+        ));
+    }
+    wide.push(0);
+    Ok(wide)
 }
 
 pub(crate) fn owned_handle(handle: HANDLE) -> io::Result<OwnedHandle> {

@@ -1,3 +1,4 @@
+import { createEffect, createSignal, For } from "solid-js"
 import { Tabs, type TabsProps } from "./tabs"
 
 const docs = `
@@ -11,6 +12,7 @@ export default {
   title: "UI/Tabs",
   id: "ui-tabs",
   component: Tabs,
+  args: { disabled: false },
   tags: ["autodocs"],
   parameters: {
     frameHeight: "240px",
@@ -33,6 +35,13 @@ export default {
   },
 }
 
+function StoryTabs(props: TabsProps) {
+  const [value, setValue] = createSignal(props.defaultValue)
+  createEffect(() => setValue(props.defaultValue))
+
+  return <Tabs {...props} value={value()} onChange={setValue} />
+}
+
 export const Settings = {
   args: {
     variant: "settings",
@@ -40,7 +49,7 @@ export const Settings = {
     defaultValue: "general",
   },
   render: (props: TabsProps) => (
-    <Tabs {...props}>
+    <StoryTabs {...props}>
       <Tabs.List>
         <Tabs.Trigger value="general">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -83,7 +92,7 @@ export const Settings = {
       <Tabs.Content value="appearance">
         <p class="text-[12px] text-[#5c5c5c] mx-4 my-3.5">Appearance settings</p>
       </Tabs.Content>
-    </Tabs>
+    </StoryTabs>
   ),
 }
 
@@ -94,7 +103,7 @@ export const Normal = {
     defaultValue: "first",
   },
   render: (props: TabsProps) => (
-    <Tabs {...props}>
+    <StoryTabs {...props}>
       <Tabs.List>
         <Tabs.Trigger value="first">First</Tabs.Trigger>
         <Tabs.Trigger value="second">Second</Tabs.Trigger>
@@ -105,8 +114,57 @@ export const Normal = {
       <Tabs.Content value="second">
         <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Some more alt content</p>
       </Tabs.Content>
-    </Tabs>
+    </StoryTabs>
   ),
+}
+
+type StoryTab = { value: string; label: string; content: string; closable?: boolean }
+
+function closableTabs(initialTabs: StoryTab[]) {
+  return (props: TabsProps) => {
+    const [tabs, setTabs] = createSignal(initialTabs)
+
+    const [value, setValue] = createSignal(props.defaultValue)
+    createEffect(() => {
+      setValue(props.defaultValue)
+      setTabs(initialTabs)
+    })
+
+    function close(tab: StoryTab) {
+      if (props.disabled) return
+      const index = tabs().indexOf(tab)
+
+      const remaining = tabs().filter((item) => item !== tab)
+
+      if (value() === tab.value) setValue((remaining[index] ?? remaining[index - 1])?.value)
+      setTabs(remaining)
+    }
+
+    return (
+      <Tabs {...props} value={value()} onChange={setValue}>
+        <Tabs.List>
+          <For each={tabs()}>
+            {(tab) => (
+              <Tabs.Trigger
+                value={tab.value}
+                onMiddleClick={tab.closable ? () => close(tab) : undefined}
+                closeButton={tab.closable && <Tabs.CloseButton disabled={props.disabled} onClick={() => close(tab)} />}
+              >
+                {tab.label}
+              </Tabs.Trigger>
+            )}
+          </For>
+        </Tabs.List>
+        <For each={tabs()}>
+          {(tab) => (
+            <Tabs.Content value={tab.value}>
+              <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">{tab.content}</p>
+            </Tabs.Content>
+          )}
+        </For>
+      </Tabs>
+    )
+  }
 }
 
 export const Pill = {
@@ -115,29 +173,11 @@ export const Pill = {
     orientation: "horizontal",
     defaultValue: "first",
   },
-  render: (props: TabsProps) => (
-    <Tabs {...props}>
-      <Tabs.List>
-        <Tabs.Trigger value="first">First</Tabs.Trigger>
-        <Tabs.Trigger value="second">Second</Tabs.Trigger>
-        <Tabs.Trigger
-          value="third"
-          closeButton={<Tabs.CloseButton onClick={() => console.log("Close tab-3")} />}
-        >
-          Closable
-        </Tabs.Trigger>
-      </Tabs.List>
-      <Tabs.Content value="first">
-        <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Normal content</p>
-      </Tabs.Content>
-      <Tabs.Content value="second">
-        <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Some more alt content</p>
-      </Tabs.Content>
-      <Tabs.Content value="third">
-        <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Closable content</p>
-      </Tabs.Content>
-    </Tabs>
-  ),
+  render: closableTabs([
+    { value: "first", label: "First", content: "Normal content" },
+    { value: "second", label: "Second", content: "Some more alt content" },
+    { value: "third", label: "Closable", content: "Closable content", closable: true },
+  ]),
 }
 
 export const Closable = {
@@ -146,23 +186,8 @@ export const Closable = {
     orientation: "horizontal",
     defaultValue: "tab-1",
   },
-  render: (props: TabsProps) => (
-    <Tabs {...props}>
-      <Tabs.List>
-        <Tabs.Trigger
-          value="tab-1"
-          closeButton={<Tabs.CloseButton onClick={() => console.log("Close tab-1")} />}
-        >
-          Tab 1
-        </Tabs.Trigger>
-        <Tabs.Trigger value="tab-2">Tab 2</Tabs.Trigger>
-      </Tabs.List>
-      <Tabs.Content value="tab-1">
-        <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Closable content</p>
-      </Tabs.Content>
-      <Tabs.Content value="tab-2">
-        <p class="text-[12px] text-[#5c5c5c] mx-3.5 my-2">Standard content</p>
-      </Tabs.Content>
-    </Tabs>
-  ),
+  render: closableTabs([
+    { value: "tab-1", label: "Tab 1", content: "Closable content", closable: true },
+    { value: "tab-2", label: "Tab 2", content: "Standard content" },
+  ]),
 }

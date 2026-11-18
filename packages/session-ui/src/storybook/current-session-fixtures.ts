@@ -1085,12 +1085,32 @@ export const compactionCancelledDocument = document([
   },
 ] satisfies SessionMessageInfo[])
 
+export type SubagentReport = {
+  childID: string
+  agent: string
+  state: "completed" | "error" | "cancelled"
+  description: string
+  body: string
+}
+
+export function subagentReport(id: string, created: number, report: SubagentReport): SessionMessageInfo {
+  return {
+    id,
+    type: "synthetic",
+    description: report.description,
+    text: `<subagent sessionID="${report.childID}" state="${report.state}" description="${report.description}">\n${report.body}\n</subagent>`,
+    metadata: { source: "subagent", childID: report.childID, agent: report.agent, state: report.state },
+    time: { created },
+  }
+}
+
 export const subagentDocument = document(
   [
     user("msg_user_subagent", "Delegate the fixture review and report the result.", 70_000),
     assistant({
       id: "msg_assistant_subagent",
       offset: 71_000,
+      completed: 74_000,
       agent: "build",
       content: [
         completedTool({
@@ -1102,10 +1122,10 @@ export const subagentDocument = document(
             description: "Review current Session fixtures",
             prompt: "Check the current Session fixtures for protocol accuracy and report findings.",
           },
-          output: "The fixtures use fixed current protocol messages and nested tool states.",
-          metadata: { sessionID: "session_child_review", status: "completed" },
+          output: "The subagent is working in the background.",
+          metadata: { sessionID: "session_child_review", status: "running" },
         }),
-        runningTool({
+        completedTool({
           id: "tool_subagent_tests",
           name: "subagent",
           offset: 73_000,
@@ -1114,9 +1134,17 @@ export const subagentDocument = document(
             description: "Check the Storybook scenarios",
             prompt: "Run the focused Storybook scenario checks and report any failures.",
           },
-          metadata: { sessionId: "session_child_tests" },
+          output: "The subagent is working in the background.",
+          metadata: { sessionID: "session_child_tests", status: "running" },
         }),
       ],
+    }),
+    subagentReport("msg_review_report", STORY_TIME + 75_000, {
+      childID: "session_child_review",
+      agent: "review",
+      state: "completed",
+      description: "Review current Session fixtures",
+      body: "The fixtures use fixed current protocol messages and nested tool states.",
     }),
   ] satisfies SessionMessageInfo[],
   { type: "busy" },

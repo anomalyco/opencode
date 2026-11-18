@@ -13,6 +13,8 @@ export type Item = Job.Info
 export type Live = {
   readonly info: Info
   readonly isBackgrounded: boolean
+  readonly consumed?: boolean
+  readonly settling?: boolean
   readonly recovery?: Recovery
 }
 
@@ -30,6 +32,15 @@ function toItem(input: {
     ...(input.completed !== undefined ? { completed: input.completed } : {}),
   }
   const recovery = input.recovery
+  if (recovery.kind === "codemode")
+    return {
+      kind: "codemode",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      time,
+      ...(title !== undefined ? { title } : {}),
+    }
   if (recovery.kind === "shell") {
     return {
       kind: "shell",
@@ -108,6 +119,7 @@ export function read<Entry extends Live>(
       )
     }
     for (const live of active.values()) {
+      if (live.consumed || live.settling) continue
       if (!live.isBackgrounded || !live.recovery) continue
       if (live.info.notificationID && seen.has(live.info.notificationID)) continue
       items.push(

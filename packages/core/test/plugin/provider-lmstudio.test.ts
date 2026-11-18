@@ -1,5 +1,6 @@
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -243,6 +244,126 @@ describe("LMStudioPlugin", () => {
         ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
       ),
     10_000,
+  )
+
+  it.live("discovers with a key saved through /connect as soon as it is saved", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: Array<string | null> = []
+        return {
+          requests,
+          server: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              requests.push(request.headers.get("authorization"))
+              if (request.headers.get("authorization") !== "Bearer saved-key")
+                return Response.json({ error: { code: "invalid_api_key" } }, { status: 401 })
+              return Response.json({
+                models: [
+                  {
+                    type: "llm",
+                    key: "secured-model",
+                    display_name: "Secured",
+                    loaded_instances: [],
+                    max_context_length: 8192,
+                  },
+                ],
+              })
+            },
+          }),
+        }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const modelState = yield* Model.Service
+          const providerID = Provider.ID.make("lmstudio")
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "LMStudio"
+            })
+            editor.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
+          })
+          yield* addPlugin(server.url.origin)
+          yield* eventually(
+            Effect.sync(() => requests.length),
+            (count) => count > 0,
+          )
+          expect(requests).toEqual([null])
+
+          yield* credentials.create({
+            integrationID: Integration.ID.make("lmstudio"),
+            value: Credential.Key.make({ type: "key", key: "saved-key" }),
+          })
+          yield* eventually(modelState.get(providerID, Model.ID.make("secured-model")), (model) => model !== undefined)
+          expect(requests.at(-1)).toBe("Bearer saved-key")
+          // The saved key stays listed under the integration, so /connect can still manage it.
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("keeps sending the integration's env key after models load", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        process.env.OPENCODE_TEST_LMSTUDIO_KEY = "env-key"
+        const requests: Array<string | null> = []
+        return {
+          requests,
+          server: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              requests.push(request.headers.get("authorization"))
+              if (request.headers.get("authorization") !== "Bearer env-key")
+                return Response.json({ error: { code: "invalid_api_key" } }, { status: 401 })
+              return Response.json({
+                models: [
+                  {
+                    type: "llm",
+                    key: "secured-model",
+                    display_name: "Secured",
+                    loaded_instances: [],
+                    max_context_length: 8192,
+                  },
+                ],
+              })
+            },
+          }),
+        }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const modelState = yield* Model.Service
+          yield* integrations.transform((editor) => {
+            editor.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "LMStudio"
+            })
+            editor.method.update({
+              integrationID: Integration.ID.make("lmstudio"),
+              method: { type: "env", names: ["OPENCODE_TEST_LMSTUDIO_KEY"] },
+            })
+          })
+          yield* addPlugin(server.url.origin, "5 millis")
+          yield* eventually(
+            modelState.get(Provider.ID.make("lmstudio"), Model.ID.make("secured-model")),
+            (model) => model !== undefined,
+          )
+          yield* eventually(
+            Effect.sync(() => requests.length),
+            (count) => count >= 3,
+          )
+
+          expect(requests.every((authorization) => authorization === "Bearer env-key")).toBe(true)
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
+        }),
+      ({ server }) =>
+        Effect.promise(() => server.stop(true)).pipe(
+          Effect.ensuring(Effect.sync(() => delete process.env.OPENCODE_TEST_LMSTUDIO_KEY)),
+        ),
+    ),
   )
 
   it.live("shares discovery requests across plugin instances", () =>

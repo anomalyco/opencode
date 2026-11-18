@@ -3,7 +3,7 @@ import "./badge.css"
 
 export interface BadgeProps extends ComponentProps<"span"> {
   appearance?: "standard" | "compact"
-  variant?: "neutral" | "accent" | "subtle"
+  variant?: "neutral" | "accent" | "subtle" | "danger"
 }
 
 export function Badge(props: BadgeProps) {

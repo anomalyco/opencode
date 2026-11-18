@@ -198,8 +198,8 @@ export const Plugin = {
               return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
             return (yield* environment.files.read(target.absolute)).bytes
           })
-      const mime = Mime.detect(bytes)
-      if (!INPUT_TYPES.includes(mime))
+      const mime = Mime.detectMedia(bytes)
+      if (!mime || !INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
       return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
     })
@@ -314,7 +314,8 @@ export const Plugin = {
                 const image = result.images[0]
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
-                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
+                const mime = Mime.detectMedia(bytes)
+                const file = stem + (EXTENSIONS[mime ?? "image/png"] ?? ".png")
                 // The edit prompt covered the requested path. Replacing a different existing file needs its own
                 // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
@@ -345,9 +346,9 @@ export const Plugin = {
                 title: input.prompt,
                 metadata: { sessionID: context.sessionID, path: stem, model: ref },
                 recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
+                background: true,
                 run,
               })
-              yield* jobs.background(id)
               yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
                 output: { id, path: stem, model: ref },
@@ -359,9 +360,7 @@ export const Plugin = {
                 ].join("\n"),
                 metadata: { path: stem, model: ref, jobID: id },
               }
-            }).pipe(
-              Effect.mapError(toolFailure("Unable to generate image")),
-            ),
+            }).pipe(Effect.mapError(toolFailure("Unable to generate image"))),
         })
       })
       .pipe(Effect.orDie)

@@ -10,15 +10,23 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
+  codemode_vm: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: ignored because Code Mode always runs on the VM.",
+  }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
+      "Enable all flags except opt-in-only flags on any build channel, like OPENCODE_FLAGS=all. Per-flag config settings take precedence over all_flags; false leaves the build defaults in effect.",
   }),
-  ...Record.map(ConfigFlag.registry, (description) =>
+  ...Record.map(ConfigFlag.registry, (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+      description: ConfigFlag.optInOnly.has(key)
+        ? description
+        : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
+  schedules: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: use experimental.automations.",
+  }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",

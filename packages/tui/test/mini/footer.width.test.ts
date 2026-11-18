@@ -31,7 +31,6 @@ describe("run footer width", () => {
         work: [
           { id: "queued", key: "ctrl+x q", label: "12 queued" },
           { id: "subagents", key: mono ? "down" : "\u2193", label: "2 sub", expanded: "2 subagents" },
-          { id: "background", key: "ctrl+b", label: "bg", expanded: "background" },
         ],
       },
       { work: [], status: { text: "Shell" }, escape: { key: "esc", label: "normal" }, context: screenshot.context },

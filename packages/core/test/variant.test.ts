@@ -513,7 +513,7 @@ test("spells reasoning variants for every bundled native package", () => {
   // Image and decision APIs have no reasoning setting, except Gemini's, which has a spelling.
   const missing = Array.from(Provider.builtinPackages).filter(
     (packageName) =>
-      !/\/(images|decisions|embeddings)$/.test(packageName) &&
+      !/\/(images|videos|decisions|embeddings)$/.test(packageName) &&
       Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
   expect(missing).toEqual([])

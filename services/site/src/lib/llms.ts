@@ -38,6 +38,14 @@ export async function llmsText(locale: Locale) {
             .join("\n"),
         ]
       : []),
+    "## Console",
+    [
+      `- ${link("Console", "/console.md")}: model inference, Go subscriptions and tools for teams`,
+      `- ${link("Go", "/console/go.md")}: a subscription to open-weight models, $10/month for Go and $40/month for Go Plus`,
+      `- ${link("Go Teams", "/console/teams.md")}: Go for your team at $20 per member per month, plus SSO, budgets and model access`,
+      `- ${link("Models", "/console/models.md")}: the models OpenCode Models serves, with list prices per million tokens`,
+      `- ${link("Enterprise", "/console/enterprise.md")}: SSO, SCIM, budgets and policies for larger organizations, and how to talk to our team`,
+    ].join("\n"),
     "## Site",
     ["/", "/changelog"].map(page).join("\n"),
     "## Docs",
@@ -60,7 +68,7 @@ export async function llmsText(locale: Locale) {
       page("/brand"),
       page("/legal/privacy-policy"),
       page("/legal/terms-of-service"),
-      `- ${link("Full site", context.route("/llms-full.txt"))}: every page above in one Markdown file`,
+      `- ${link("Full site", context.route("/llms-full.txt"))}: the site's own pages in one Markdown file, without the docs or Console`,
       `- ${link("Discord", config.social.discord)}: the community`,
       `- ${link("humans.txt", context.route("/humans.txt"))}: the team and contributors behind OpenCode, as plain text`,
       `- ${link("X", config.social.twitter)}: announcements`,

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Relácia uložená do {{filename}}",
   "export.failed.title": "Export relácie zlyhal",
   "export.failed.description": "Pri exporte relácie došlo k chybe",
+  "usage.toggle": "Prepnúť kontext relácie",
 }

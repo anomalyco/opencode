@@ -6,6 +6,8 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { dict as ar } from "../../src/runtime/i18n/ar"
+import { dict as en } from "../../src/runtime/i18n/en"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -61,6 +63,21 @@ test("settings has its own route and returns through app history", async ({ page
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
   await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab")).toHaveText([
+    "Preferences",
+    "Appearance",
+    "Notifications",
+    "Shortcuts",
+    "Providers",
+    "Models",
+    "Extensions",
+    "Projects",
+    "Worktrees",
+    "Server",
+    "Experimental",
+    "About",
+  ])
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(home).toHaveAttribute("aria-pressed", "false")
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(page).toHaveURL("/")
@@ -274,8 +291,20 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
-for (const locale of ["en", "ar"]) {
+for (const [locale, dict] of [
+  ["en", en],
+  ["ar", ar],
+] as const) {
   test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+    const label = dict["settings.timeline.row.backgroundActivity.title"]
+
+    const names = {
+      Hidden: dict["settings.timeline.row.backgroundActivity.off"],
+      Left: dict["settings.timeline.row.backgroundActivity.left"],
+      Center: dict["settings.timeline.row.backgroundActivity.center"],
+      Right: dict["settings.timeline.row.backgroundActivity.right"],
+    }
+
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
@@ -352,13 +381,13 @@ for (const locale of ["en", "ar"]) {
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
       const settings = page.getByTestId("settings-screen")
-      const control = settings.getByLabel("Background activity", { exact: true })
+      const control = settings.getByLabel(label, { exact: true })
       await expect(control).toBeVisible()
       await control.click()
       const options = page.getByRole("listbox")
-      await expect(options.getByRole("option")).toHaveText(["Hidden", "Left", "Center", "Right"])
-      await options.getByRole("option", { name: value, exact: true }).click()
-      await expect(control).toHaveText(value)
+      await expect(options.getByRole("option")).toHaveText([names.Hidden, names.Left, names.Center, names.Right])
+      await options.getByRole("option", { name: names[value], exact: true }).click()
+      await expect(control).toHaveText(names[value])
       await page.goBack()
 
       if (value === "Hidden") {
@@ -413,9 +442,7 @@ for (const locale of ["en", "ar"]) {
       .toBe("right")
     await page.keyboard.press("Control+,")
     await page.reload()
-    await expect(page.getByTestId("settings-screen").getByLabel("Background activity", { exact: true })).toHaveText(
-      "Right",
-    )
+    await expect(page.getByTestId("settings-screen").getByLabel(label, { exact: true })).toHaveText(names.Right)
   })
 }
 
@@ -1765,6 +1792,9 @@ for (const row of [
   })
 }
 
+const connectDialog = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("navigation", { name: "Connect steps", exact: true }) })
+
 const consoleIntegrations = [
   {
     id: "opencode",
@@ -1799,7 +1829,7 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
   await methods.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
   await expect(await popup).toHaveURL(url)
 
-  const signIn = page.getByRole("dialog", { name: "Connecting to OpenCode Console", exact: true })
+  const signIn = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
   await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
   await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })
@@ -1880,14 +1910,14 @@ test("providers: Back during a pending API key request does not report the provi
     .locator(".settings-provider-row", { hasText: "OpenRouter" })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
-  const dialog = page.getByRole("dialog", { name: "Connect OpenRouter", exact: true })
+  const dialog = connectDialog(page)
   await dialog.getByRole("button", { name: "API key", exact: true }).click()
   await dialog.getByPlaceholder("API key").fill("sk-late")
   await dialog.getByRole("button", { name: "Continue", exact: true }).click()
   await held.arrived
   await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled()
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenRouter", exact: true }).click()
   await expect(dialog.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
 
   // The server still saves the key, so its late success reloads the catalogs without leaving the method list.
@@ -1925,8 +1955,8 @@ test("providers: the free tier upsell opens Go on its own, sized to its content"
   const container = page.locator('[data-slot="dialog-container"]')
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   // Nothing to go back to: the upsell opened the dialog straight on Go.
-  await expect(dialog.getByRole("button", { name: "Navigate back", exact: true })).toHaveCount(0)
-  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+  await expect(dialog.getByRole("navigation").getByRole("button")).toHaveCount(0)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(368)
 })
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
@@ -1978,11 +2008,12 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
   await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
+  await expect(container).toHaveCSS("width", "480px")
+  await expect(container).toHaveCSS("max-height", "368px")
   const picker = await container.boundingBox()
   await openai.click()
 
-  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Connect OpenAI", exact: true })).toBeVisible()
   // The provider step fits its content below the list's top edge.
   await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(picker!.height)
   expect((await container.boundingBox())?.y).toBe(picker!.y)
@@ -2010,7 +2041,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
-  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Connect OpenAI", exact: true })).toBeVisible()
 
   await list.getByRole("button", { name: "Work options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
@@ -2025,7 +2056,7 @@ test("providers: the connect dialog lists connected providers and manages their 
 
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenAI", exact: true }).click()
   await expect(list).toBeVisible()
 })
 
@@ -2064,9 +2095,9 @@ test("providers: adding an account starts a lone method once", async ({ page, co
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   expect(attempts).toEqual([])
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode Go", exact: true }).click()
   await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
-  await dialog.getByRole("button", { name: "Integrations", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true }).click()
   await dialog.locator('[data-provider-id="github-copilot"]').click()
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
@@ -2101,9 +2132,9 @@ test("providers: Back from a pending sign-in cancels it and lets a backdrop clic
   const popup = page.waitForEvent("popup")
   await dialog.locator('[data-provider-id="github-copilot"]').click()
   await popup
-  await expect(dialog.getByText("Waiting for authorization…", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Waiting for authorization", { exact: true })).toBeVisible()
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true }).click()
   await expect(dialog.locator('[data-provider-id="github-copilot"]')).toBeVisible()
   await expect.poll(() => cancelled).toEqual(["con_mock_1"])
 
@@ -2132,9 +2163,9 @@ test("providers: Back from a Claude Agent check started by Add account returns t
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await dialog.getByRole("button", { name: "Check again", exact: true }).click()
   await held.arrived
-  await expect(dialog.getByText("Checking Claude Code…", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Checking Claude Code", { exact: true })).toBeVisible()
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "Claude Agent", exact: true }).click()
   await expect(dialog.getByRole("radio", { name: "Claude Code", exact: true })).toBeVisible()
   held.release()
 })
@@ -2173,13 +2204,13 @@ test("providers: Back from a Console connection without models returns to its si
     .locator(".settings-provider-row", { hasText: "OpenCode Console" })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
-  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  const dialog = connectDialog(page)
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
   await popup
   await expect(page.getByRole("dialog").getByText("OpenCode connected", { exact: true })).toBeVisible()
 
-  await page.getByRole("dialog").getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode Console", exact: true }).click()
   await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
     "OpenCode Console account",
     "API key (service account)",
@@ -2247,8 +2278,17 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await expect(trigger).toHaveText("Shared")
 
+  const confirm = page.getByRole("dialog", { name: "Remove Shared?", exact: true })
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toBeHidden()
+  await expect(trigger).toHaveText("Shared")
+  expect(removed).toEqual([])
+
+  await settings.getByRole("button", { name: "Shared options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
@@ -2265,6 +2305,10 @@ test("providers: a disconnect that finds no stored credentials keeps the provide
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
 
   await disconnect.click()
+  await page
+    .getByRole("dialog", { name: "Disconnect OpenRouter?", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click()
   await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
   await expect(disconnect).toBeVisible()

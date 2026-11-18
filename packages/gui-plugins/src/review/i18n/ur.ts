@@ -12,4 +12,12 @@ export default {
   noChanges: "کوئی تبدیلی نہیں۔",
   "settings.wrapLines.title": "سطریں لپیٹیں",
   "settings.wrapLines.description": "موبائل ڈف میں افقی اسکرولنگ کے بجائے لمبی سطریں لپیٹیں",
+  "menu.count.one": "⁨{{count}}⁩ فائل تبدیل ہوئی",
+  "menu.count.other": "⁨{{count}}⁩ فائلیں تبدیل ہوئیں",
+  "folder.more": "⁨{{count}}⁩ · مزید نہیں دکھائی گئیں",
+  "folder.failed": "تبدیلیاں لوڈ نہیں ہو سکیں",
+  "command.open": "جائزہ کھولیں",
+  "load.failed": "تبدیلیاں لوڈ نہیں ہو سکیں",
+  "load.timeout": "سرور نے جواب دینے میں بہت زیادہ وقت لیا",
+  offline: "اس سرور تک رسائی نہیں ہو سکتی",
 }

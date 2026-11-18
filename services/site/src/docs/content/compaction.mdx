@@ -1,5 +1,6 @@
 ---
 title: "Compaction"
+description: "Compaction summarizes older conversation, automatically or on request, so an OpenCode session can keep going past the model's context limit."
 ---
 
 Compaction makes room in a long session by replacing older conversation with a
@@ -83,6 +84,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | Field | Default | Behavior |
 | --- | ---: | --- |
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
+| `background` | `true` | Write the summary ahead of time so automatic compaction doesn't wait for it. See [Background compaction](#background-compaction). |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
 | `buffer` | `"15%"`, at least 16k | Share of the model's context window kept free. Automatic compaction starts once the conversation reaches the rest. Larger values compact earlier. |
 
@@ -120,21 +122,8 @@ If that model cannot be resolved, OpenCode falls back to the session's model.
 
 ## Background compaction
 
-<Callout type="warning">
-  Experimental. This may change, break, or be removed in any release without notice.
-</Callout>
-
-Automatic compaction normally pauses the session while the summary is written. With background compaction, OpenCode
-writes the summary ahead of time and swaps it in when compaction is due:
-
-```jsonc title="opencode.jsonc"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "experimental": {
-    "background_compaction": true,
-  },
-}
-```
+OpenCode writes the summary ahead of time, while the session keeps going, and swaps it in when compaction is due.
+Automatic compaction then doesn't pause the session to write one:
 
 ```text
 60k tokens before the threshold   summary of the conversation so far starts in the background
@@ -149,9 +138,20 @@ and the threshold.
 | --- | --- |
 | Cost | The summary request reuses the prompt cache. A summary that is never used, for example because the session ends before the threshold, still costs tokens. |
 | Waits | If the summary is still being written when compaction is due, the session waits for it to finish. |
-| Falls back | Compaction summarizes as usual if the conversation since the held summary grew past about 40% of the threshold, or if the model, instructions, or start of the conversation changed. |
-| Skipped | Not used for native compaction, right after a model switch, or when a provider rejects a request as too long. After a break longer than the prompt cache lifetime, it starts from the next response instead. |
+| Falls back | Compaction summarizes as usual if the conversation since the held summary grew past about 40% of the threshold, or if the start of the conversation changed. |
+| Skipped | Not used for native compaction. Right after a model switch, or after a break longer than the prompt cache lifetime, it starts from the next response instead. |
 | Storage | Held summaries live in memory and are lost on restart. |
+
+Turn it off to write the summary only when compaction is due:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "background": false,
+  },
+}
+```
 
 ## Providers
 

@@ -224,7 +224,7 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
-const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
+export const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&

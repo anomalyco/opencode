@@ -85,7 +85,7 @@ function TitlebarItemButton(props: { item: TitlebarItem; vertical?: boolean }) {
                 </svg>
               }
             >
-              {(icon) => <Icon name={icon()} size="small" />}
+              {(icon) => <Icon name={icon()} />}
             </Show>
           </Show>
         </span>
