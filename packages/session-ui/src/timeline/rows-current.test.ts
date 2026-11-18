@@ -1181,6 +1181,7 @@ describe("current session timeline rows", () => {
     { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
   ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
     const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
+
     const rows = Timeline.constructSessionMessageRows(
       storyDocument([
         storyTool("read", "read", "completed", { path: "src/a.ts" }),
@@ -1609,7 +1610,7 @@ describe("current session timeline rows", () => {
     )
   })
 
-  test("marks the free usage limit and its reset time, whichever message records the failure", () => {
+  test("marks the free and Go usage limits and their reset times, whichever message records the failure", () => {
     const error = { type: "provider.free-limit", message: "Free usage limit reached.", retryAfterMs: 60_000 }
     const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -1633,7 +1634,15 @@ describe("current session timeline rows", () => {
 
     const quota = [
       user,
-      { ...assistant, error: { type: "provider.quota", message: "Go usage limit exceeded", retryAfterMs: 60_000 } },
+      { ...assistant, error: { type: "provider.quota", message: "Credit limit exceeded.", retryAfterMs: 60_000 } },
+    ] satisfies SessionMessageInfo[]
+
+    const go = [
+      user,
+      {
+        ...assistant,
+        error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 25 * 86_400_000 },
+      },
     ] satisfies SessionMessageInfo[]
 
     expect(Timeline.constructSessionMessageRows(step, true, { type: "idle" }).rows.at(-1)).toEqual(
@@ -1661,15 +1670,26 @@ describe("current session timeline rows", () => {
         kind: "free-limit",
       }),
     )
+    expect(Timeline.constructSessionMessageRows(go, true, { type: "idle" }).rows.at(-1)).toEqual(
+      new TimelineRow.Error({
+        userMessageID: "msg_user",
+        text: "Go usage limit reached.",
+        kind: "go-limit",
+        resetAt: 1_000 + 25 * 86_400_000,
+      }),
+    )
     expect(Timeline.constructSessionMessageRows(quota, true, { type: "idle" }).rows.at(-1)).toEqual(
-      new TimelineRow.Error({ userMessageID: "msg_user", text: "Go usage limit exceeded" }),
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Credit limit exceeded." }),
     )
   })
 
   test("marks a Console budget refusal with the reset its envelope names", () => {
     const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
-    const refused = (type: string, body?: string) =>
-      Timeline.constructSessionMessageRows(
+
+    const refused = (type: string, body?: string) => {
+      const error = { type, message: "Budget reached.", status: 429 }
+
+      return Timeline.constructSessionMessageRows(
         [
           user,
           {
@@ -1679,13 +1699,14 @@ describe("current session timeline rows", () => {
             model: { id: "claude-opus-5", providerID: "opencode" },
             content: [],
             finish: "error",
-            error: { type, message: "Budget reached.", status: 429, ...(body ? { response: { body } } : {}) },
+            error: body ? { ...error, response: { body } } : error,
             time: { created: 2, completed: 3 },
           },
         ],
         true,
         { type: "idle" },
       ).rows.at(-1)
+    }
 
     // Anthropic and OpenAI clients get Console's own envelope; Google clients get the reset in ErrorInfo's metadata.
     expect(

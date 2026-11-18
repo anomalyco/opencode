@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { createEventListener } from "@solid-primitives/event-listener"
 import type { Panel, PanelProps, SessionRef } from "@opencode/plugin/gui"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
+import type { SessionPane } from "@/shell/state/session-tabs"
 
 /** The most closed tabs a session keeps. */
 export const CLOSED_TABS_LIMIT = 30
@@ -20,6 +21,9 @@ export type ClosedSideTab = {
   readonly detail?: string
   /** What the panel's `restore` needs. */
   readonly data?: string
+  /** The pane it showed in and its position in the strip, where it reopens. */
+  readonly pane?: SessionPane
+  readonly index?: number
   /** When it closed, in milliseconds since the epoch. */
   readonly closed: number
 }

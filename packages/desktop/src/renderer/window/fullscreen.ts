@@ -1,10 +1,29 @@
 import { createSignal } from "solid-js"
 import { api } from "../api"
+import {
+  createFullscreenState,
+  selectWindowFullscreen,
+  transitionFullscreen,
+  type FullscreenEvent,
+} from "./fullscreen-machine"
 
-const [windowFullscreen, setWindowFullscreen] = createSignal(false)
+let state = createFullscreenState()
 
-api.onWindowFullscreenChanged(setWindowFullscreen)
+const [windowFullscreen, setWindowFullscreen] = createSignal(selectWindowFullscreen(state))
 
-void api.getWindowFullscreen().then(setWindowFullscreen)
+const dispatch = (event: FullscreenEvent) => {
+  const next = transitionFullscreen(state, event)
+
+  if (next === state) return
+  state = next
+  setWindowFullscreen(selectWindowFullscreen(state))
+}
+
+api.onWindowFullscreenChanged((fullscreen) => dispatch({ type: "fullscreen.changed", fullscreen }))
+
+void api.getWindowFullscreen().then(
+  (fullscreen) => dispatch({ type: "fullscreen.seeded", fullscreen }),
+  () => dispatch({ type: "fullscreen.seed-failed" }),
+)
 
 export { windowFullscreen }

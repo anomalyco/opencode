@@ -1,8 +1,38 @@
-import { createEffect, mergeProps, on, onCleanup, onMount, Show, splitProps, type ComponentProps } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  mergeProps,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+  untrack,
+  type ComponentProps,
+  type JSX,
+} from "solid-js"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
+import {
+  HOVER_ENTERED,
+  HOVER_LEFT,
+  INITIAL_SCROLL_THUMB_STATE,
+  overflowChanged,
+  SCROLL_IDLE_ELAPSED,
+  SCROLL_IDLE_MS,
+  SCROLL_THUMB_DISPOSED,
+  SCROLLED,
+  selectDraggingAxis,
+  selectShowHorizontalThumb,
+  selectShowVerticalThumb,
+  selectThumbVisible,
+  transitionScrollThumb,
+  type ScrollAxis,
+  type ScrollThumbEvent,
+  type ScrollThumbState,
+} from "./scroll-view-machine"
 
 export type ScrollViewThumbVisibility = "hover" | "scroll"
 
@@ -113,19 +143,34 @@ export function scrollOffsetFromThumbPointer(input: {
   scrollClientSize?: number
   reverse?: boolean
 }) {
+  return thumbScrollOffset(
+    input.pointer - input.viewportStart - input.grabOffset,
+    input.clientSize,
+    input.scrollSize,
+    input.thumbSize,
+    input.scrollClientSize ?? input.clientSize,
+    input.reverse ?? false,
+  )
+}
+
+// Scalar arguments, so a drag's `pointermove` builds no options object.
+function thumbScrollOffset(
+  thumbOffset: number,
+  clientSize: number,
+  scrollSize: number,
+  thumbSize: number,
+  scrollClientSize: number,
+  reverse: boolean,
+) {
   const padding = 8
-  const maxThumbStart = input.clientSize - padding * 2 - input.thumbSize
+  const maxThumbStart = clientSize - padding * 2 - thumbSize
 
   if (maxThumbStart <= 0) return 0
 
-  const thumbStart = Math.max(
-    0,
-    Math.min(input.pointer - input.viewportStart - padding - input.grabOffset, maxThumbStart),
-  )
+  const thumbStart = Math.max(0, Math.min(thumbOffset - padding, maxThumbStart))
+  const progress = reverse ? 1 - thumbStart / maxThumbStart : thumbStart / maxThumbStart
 
-  const progress = input.reverse ? 1 - thumbStart / maxThumbStart : thumbStart / maxThumbStart
-
-  return progress * Math.max(0, input.scrollSize - (input.scrollClientSize ?? input.clientSize))
+  return progress * Math.max(0, scrollSize - scrollClientSize)
 }
 
 /**
@@ -169,52 +214,53 @@ export function ScrollView(props: ScrollViewProps) {
   let horizontalThumbRef!: HTMLDivElement
 
   const thumbMount = () => local.thumbContainer
-  const thumbHover = () => local.thumbHoverTarget
-  const hoverRoot = () => !local.thumbHoverTarget && !local.thumbContainer
 
   const [state, setState] = createStore({
-    isHovered: false,
-    dragging: undefined as "vertical" | "horizontal" | undefined,
-    isScrolling: false,
     verticalThumbSize: 0,
     verticalThumbStart: 0,
-    showVerticalThumb: false,
     horizontalThumbSize: 0,
     horizontalThumbStart: 0,
-    showHorizontalThumb: false,
   })
 
-  const isHovered = () => state.isHovered
-  const isDragging = () => state.dragging !== undefined
-  const isScrolling = () => state.isScrolling
+  const [thumbState, setThumbState] = createSignal<ScrollThumbState>(INITIAL_SCROLL_THUMB_STATE)
   const vertical = () => local.orientation === "vertical" || local.orientation === "both"
   const horizontal = () => local.orientation === "horizontal" || local.orientation === "both"
+  const thumbVisible = () => selectThumbVisible(thumbState(), local.thumbVisibility === "hover")
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
 
-  let scrollIdleTimer: ReturnType<typeof setTimeout> | undefined
-
-  const markScrolling = () => {
-    setState("isScrolling", true)
-
-    if (scrollIdleTimer !== undefined) clearTimeout(scrollIdleTimer)
-    scrollIdleTimer = setTimeout(() => setState("isScrolling", false), 800)
+  const onIdleElapsed = () => {
+    idleTimer = undefined
+    dispatch(SCROLL_IDLE_ELAPSED)
   }
 
-  const thumbVisible = () => {
-    if (isDragging()) return true
+  const dispatch = (event: ScrollThumbEvent) => {
+    const prev = untrack(thumbState)
+    const next = transitionScrollThumb(prev, event)
 
-    if (isScrolling()) return true
+    if (next.state !== prev) setThumbState(next.state)
 
-    return local.thumbVisibility === "hover" && isHovered()
+    for (const effect of next.effects) {
+      if (effect === "release-capture") {
+        if (prev.status !== "dragging") continue
+        const thumb = prev.axis === "vertical" ? verticalThumbRef : horizontalThumbRef
+
+        if (thumb?.hasPointerCapture(prev.pointerId)) thumb.releasePointerCapture(prev.pointerId)
+        continue
+      }
+
+      clearTimeout(idleTimer)
+      idleTimer = effect === "reset-idle-timer" ? setTimeout(onIdleElapsed, SCROLL_IDLE_MS) : undefined
+    }
   }
 
-  onCleanup(() => {
-    if (scrollIdleTimer !== undefined) clearTimeout(scrollIdleTimer)
-  })
+  onCleanup(() => dispatch(SCROLL_THUMB_DISPOSED))
 
   const updateThumb = () => {
     if (!viewportRef) return
     const trackPadding = 8
     const minThumbSize = 32
+    let verticalOverflow = false
+    let horizontalOverflow = false
 
     if (vertical()) {
       const adjustment = local.verticalScrollAdjustment ?? 0
@@ -227,14 +273,12 @@ export function ScrollView(props: ScrollViewProps) {
 
       const maxScroll = scrollHeight - viewportRef.clientHeight
       const maxStart = trackSize - size
-      setState("showVerticalThumb", maxScroll > 0)
+      verticalOverflow = maxScroll > 0
       setState("verticalThumbSize", size)
       setState(
         "verticalThumbStart",
         trackPadding + (maxScroll > 0 ? ((viewportRef.scrollTop + adjustment) / maxScroll) * maxStart : 0),
       )
-    } else {
-      setState("showVerticalThumb", false)
     }
 
     if (horizontal()) {
@@ -249,12 +293,12 @@ export function ScrollView(props: ScrollViewProps) {
       const rtl = getComputedStyle(viewportRef).direction === "rtl"
       const offset = Math.max(0, Math.min(rtl ? -viewportRef.scrollLeft : viewportRef.scrollLeft, maxScroll))
       const start = maxScroll > 0 ? (offset / maxScroll) * maxStart : 0
-      setState("showHorizontalThumb", maxScroll > 0)
+      horizontalOverflow = maxScroll > 0
       setState("horizontalThumbSize", size)
       setState("horizontalThumbStart", trackPadding + (rtl ? maxStart - start : start))
-    } else {
-      setState("showHorizontalThumb", false)
     }
+
+    dispatch(overflowChanged(verticalOverflow, horizontalOverflow))
   }
 
   onMount(() => {
@@ -266,7 +310,7 @@ export function ScrollView(props: ScrollViewProps) {
     // appears later), after layout. Measuring here as well would force a synchronous layout per
     // ScrollView while the page is still rendering.
     createResizeObserver(
-      () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
+      () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter((element) => element != null),
       updateThumb,
     )
   })
@@ -286,19 +330,22 @@ export function ScrollView(props: ScrollViewProps) {
     onCleanup(() => observer.disconnect())
   })
 
+  const onHoverEnter = () => dispatch(HOVER_ENTERED)
+  const onHoverLeave = () => dispatch(HOVER_LEFT)
+
+  // One element owns hover at a time. Swapping it ends the hover, so a target that stops owning it while hovered
+  // cannot leave the thumb shown.
   createEffect(() => {
-    const target = thumbHover()
+    const target = local.thumbHoverTarget ?? (local.thumbContainer ? undefined : rootRef)
 
     if (!target) return
 
-    const enter = () => setState("isHovered", true)
-    const leave = () => setState("isHovered", false)
-    target.addEventListener("pointerenter", enter)
-    target.addEventListener("pointerleave", leave)
+    target.addEventListener("pointerenter", onHoverEnter)
+    target.addEventListener("pointerleave", onHoverLeave)
     onCleanup(() => {
-      target.removeEventListener("pointerenter", enter)
-      target.removeEventListener("pointerleave", leave)
-      setState("isHovered", false)
+      target.removeEventListener("pointerenter", onHoverEnter)
+      target.removeEventListener("pointerleave", onHoverLeave)
+      dispatch(HOVER_LEFT)
     })
   })
 
@@ -309,59 +356,52 @@ export function ScrollView(props: ScrollViewProps) {
     }
   }
 
-  const onThumbPointerDown = (axis: "vertical" | "horizontal", e: PointerEvent) => {
+  const onThumbPointerDown = (axis: ScrollAxis, e: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     prepareScroll()
-    setState("dragging", axis)
-    const thumb = axis === "vertical" ? verticalThumbRef : horizontalThumbRef
+    const rect = e.currentTarget.getBoundingClientRect()
 
-    const grabOffset =
-      axis === "vertical"
-        ? e.clientY - thumb.getBoundingClientRect().top
-        : e.clientX - thumb.getBoundingClientRect().left
+    dispatch({
+      type: "drag.started",
+      axis,
+      pointerId: e.pointerId,
+      grabOffset: axis === "vertical" ? e.clientY - rect.top : e.clientX - rect.left,
+      rtl: axis === "horizontal" && getComputedStyle(viewportRef).direction === "rtl",
+    })
 
-    const track = thumbMount() ?? viewportRef
-
-    thumb.setPointerCapture(e.pointerId)
-
-    const onPointerMove = (e: PointerEvent) => {
-      prepareScroll()
-      const vertical = axis === "vertical"
-      const rtl = !vertical && getComputedStyle(viewportRef).direction === "rtl"
-
-      const offset = scrollOffsetFromThumbPointer({
-        pointer: vertical ? e.clientY : e.clientX,
-        viewportStart: vertical ? track.getBoundingClientRect().top : track.getBoundingClientRect().left,
-        grabOffset,
-        clientSize: vertical ? track.clientHeight : track.clientWidth,
-        scrollClientSize: vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
-        scrollSize: vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
-        thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
-        reverse: rtl,
-      })
-
-      if (vertical) {
-        viewportRef.scrollTop = offset
-
-        return
-      }
-
-      viewportRef.scrollLeft = rtl ? -offset : offset
-    }
-
-    const done = (e: PointerEvent) => {
-      setState("dragging", undefined)
-      thumb.releasePointerCapture(e.pointerId)
-      thumb.removeEventListener("pointermove", onPointerMove)
-      thumb.removeEventListener("pointerup", done)
-      thumb.removeEventListener("pointercancel", done)
-    }
-
-    thumb.addEventListener("pointermove", onPointerMove)
-    thumb.addEventListener("pointerup", done)
-    thumb.addEventListener("pointercancel", done)
+    if (e.isTrusted && selectDraggingAxis(untrack(thumbState)) === axis) e.currentTarget.setPointerCapture(e.pointerId)
   }
+
+  const onThumbPointerMove = (e: PointerEvent) => {
+    const drag = untrack(thumbState)
+
+    if (drag.status !== "dragging" || drag.pointerId !== e.pointerId) return
+    prepareScroll()
+    const vertical = drag.axis === "vertical"
+    const track = thumbMount() ?? viewportRef
+    const rect = track.getBoundingClientRect()
+
+    const offset = thumbScrollOffset(
+      vertical ? e.clientY - rect.top - drag.grabOffset : e.clientX - rect.left - drag.grabOffset,
+      vertical ? track.clientHeight : track.clientWidth,
+      vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
+      vertical ? state.verticalThumbSize : state.horizontalThumbSize,
+      vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
+      drag.rtl,
+    )
+
+    if (vertical) {
+      viewportRef.scrollTop = offset
+
+      return
+    }
+
+    viewportRef.scrollLeft = drag.rtl ? -offset : offset
+  }
+
+  const onThumbPointerEnd = (e: PointerEvent) => dispatch({ type: "drag.ended", pointerId: e.pointerId })
 
   const renderVerticalThumb = () => (
     <div
@@ -369,10 +409,14 @@ export function ScrollView(props: ScrollViewProps) {
         verticalThumbRef = el
       }}
       onPointerDown={(event) => onThumbPointerDown("vertical", event)}
+      onPointerMove={onThumbPointerMove}
+      onPointerUp={onThumbPointerEnd}
+      onPointerCancel={onThumbPointerEnd}
+      onLostPointerCapture={onThumbPointerEnd}
       class="scroll-view__thumb"
       data-orientation="vertical"
       data-visible={thumbVisible()}
-      data-dragging={state.dragging === "vertical"}
+      data-dragging={selectDraggingAxis(thumbState()) === "vertical"}
       style={{
         height: `${state.verticalThumbSize}px`,
         transform: `translateY(${state.verticalThumbStart}px)`,
@@ -387,10 +431,14 @@ export function ScrollView(props: ScrollViewProps) {
         horizontalThumbRef = el
       }}
       onPointerDown={(event) => onThumbPointerDown("horizontal", event)}
+      onPointerMove={onThumbPointerMove}
+      onPointerUp={onThumbPointerEnd}
+      onPointerCancel={onThumbPointerEnd}
+      onLostPointerCapture={onThumbPointerEnd}
       class="scroll-view__thumb"
       data-orientation="horizontal"
       data-visible={thumbVisible()}
-      data-dragging={state.dragging === "horizontal"}
+      data-dragging={selectDraggingAxis(thumbState()) === "horizontal"}
       style={{
         width: `${state.horizontalThumbSize}px`,
         transform: `translateX(${state.horizontalThumbStart}px)`,
@@ -468,12 +516,6 @@ export function ScrollView(props: ScrollViewProps) {
       class={`scroll-view ${local.class || ""}`}
       data-orientation={local.orientation}
       style={local.style}
-      onPointerEnter={() => {
-        if (hoverRoot()) setState("isHovered", true)
-      }}
-      onPointerLeave={() => {
-        if (hoverRoot()) setState("isHovered", false)
-      }}
       {...rest}
     >
       {/* Viewport */}
@@ -483,51 +525,56 @@ export function ScrollView(props: ScrollViewProps) {
         data-scrollable
         onScroll={(e) => {
           updateThumb()
-          markScrolling()
-
-          if (typeof events.onScroll === "function") events.onScroll(e as any)
+          dispatch(SCROLLED)
+          forward(events.onScroll, e)
         }}
         // Passive so the compositor never waits on the main thread to scroll; onWheel cannot cancel.
         on:wheel={{
           passive: true,
           handleEvent: (e) => {
-            markScrolling()
-            const handler = events.onWheel
-
-            if (typeof handler === "function") handler(e as any)
-
-            if (Array.isArray(handler)) handler[0](handler[1], e as any)
+            dispatch(SCROLLED)
+            // SAFETY: this listener is on the viewport div, so `currentTarget` is that div and `target` an element in it.
+            forward(events.onWheel, e as WheelEvent & { currentTarget: HTMLDivElement; target: Element })
           },
         }}
-        onTouchStart={events.onTouchStart as any}
-        onTouchMove={events.onTouchMove as any}
-        onTouchEnd={events.onTouchEnd as any}
-        onTouchCancel={events.onTouchCancel as any}
-        onPointerDown={events.onPointerDown as any}
-        onClick={events.onClick as any}
+        onTouchStart={events.onTouchStart}
+        onTouchMove={events.onTouchMove}
+        onTouchEnd={events.onTouchEnd}
+        onTouchCancel={events.onTouchCancel}
+        onPointerDown={events.onPointerDown}
+        onClick={events.onClick}
         tabIndex={0}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {
           onKeyDown(e)
-
-          if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)
+          forward(events.onKeyDown, e)
         }}
       >
         {local.children}
       </div>
 
       {/* Thumb Overlay — optionally portaled into an external track */}
-      <Show when={state.showVerticalThumb}>
+      <Show when={selectShowVerticalThumb(thumbState())}>
         <Show when={thumbMount()} fallback={renderVerticalThumb()}>
           {(mount) => <Portal mount={mount()}>{renderVerticalThumb()}</Portal>}
         </Show>
       </Show>
-      <Show when={state.showHorizontalThumb}>
+      <Show when={selectShowHorizontalThumb(thumbState())}>
         <Show when={thumbMount()} fallback={renderHorizontalThumb()}>
           {(mount) => <Portal mount={mount()}>{renderHorizontalThumb()}</Portal>}
         </Show>
       </Show>
     </div>
   )
+}
+
+// A forwarded handler may be a function or Solid's bound `[handler, data]` pair.
+function forward<E extends Event>(
+  handler: JSX.EventHandlerUnion<HTMLDivElement, E> | undefined,
+  event: E & { currentTarget: HTMLDivElement; target: Element },
+) {
+  if (handler instanceof Function) return handler(event)
+
+  if (handler) handler[0](handler[1], event)
 }

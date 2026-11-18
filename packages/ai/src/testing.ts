@@ -3,6 +3,7 @@ export { compileRequest } from "./route/client.js"
 
 import {
   LLMClient,
+  generateWith,
   type CompactionRequest,
   type CheckpointRequest,
   type EndpointCompactOptions,
@@ -10,7 +11,6 @@ import {
 } from "./route/client.js"
 import {
   LLMEvent,
-  LLMResponse,
   CompactionResponse,
   CompactionCheckpointResponse,
   type FinishReasonDetails,
@@ -33,7 +33,7 @@ type ClientInterface = Context.Service.Shape<typeof LLMClient.Service>
 
 export type Responder = (request: LLMRequest) => Response
 
-export interface TestInterface extends ClientInterface {
+interface Controls {
   /** Returns a snapshot of requests observed at execution time. */
   readonly requests: () => Effect.Effect<readonly LLMRequest[]>
   readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
@@ -45,6 +45,8 @@ export interface TestInterface extends ClientInterface {
   readonly wait: (count: number) => Effect.Effect<void>
   readonly gate: () => Effect.Effect<Gate, never, Scope.Scope>
 }
+
+export interface TestInterface extends ClientInterface, Controls {}
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
 
@@ -92,7 +94,7 @@ export const textWithUsage = (value: string, id: string, inputTokens: number) =>
     ...textEvents(value, id),
   )
 
-export const tool = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
+export const toolCall = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
 
 export const failAfter = (error: AIError, ...events: readonly LLMEvent[]) =>
   Stream.fromIterable(events).pipe(Stream.concat(Stream.fail(error)))
@@ -101,35 +103,10 @@ export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Strea
 
 const make = (options: LayerOptions) =>
   Effect.sync(() => {
-    const requests: LLMRequest[] = []
-    const responses: Response[] = []
-    let started = Deferred.makeUnsafe<void>()
-    let fallback: Response | Responder | undefined = options.fallback
-    let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
-    const wait = (count: number): Effect.Effect<void> =>
-      Effect.suspend(() =>
-        requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
-      )
-
-    const take = (request: LLMRequest) =>
-      Effect.suspend(() => {
-        const count = requests.push(options.transformRequest?.(request) ?? request)
-        const waiting = started
-        started = Deferred.makeUnsafe()
-        const gate = activeGate
-        try {
-          const response = responses.shift() ?? (typeof fallback === "function" ? fallback(request) : fallback)
-          if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
-          if (!gate) return Effect.succeed(response)
-          return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
-        } finally {
-          // Waiters can resume synchronously; assign the reply and gate before notifying them.
-          Deferred.doneUnsafe(waiting, Effect.void)
-        }
-      })
+    const script = makeScript(options)
     const stream: ClientInterface["stream"] = (request) =>
       Stream.unwrap(
-        take(request).pipe(
+        script.take(request).pipe(
           Effect.map((response) => {
             if (response instanceof CompactionResponse || response instanceof CompactionCheckpointResponse)
               return Stream.die("TestLLM generation requires an event response")
@@ -138,18 +115,18 @@ const make = (options: LayerOptions) =>
         ),
       )
     function compact(
-      request: CompactionRequest,
+      request: LLMRequest & Pick<CompactionRequest, "model">,
       options?: EndpointCompactOptions,
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(
-      request: CheckpointRequest,
+      request: LLMRequest & Pick<CheckpointRequest, "model">,
       options: TriggerCompactOptions,
     ): Effect.Effect<CompactionCheckpointResponse, AIError>
     function compact(
       request: LLMRequest,
       options?: EndpointCompactOptions | TriggerCompactOptions,
     ): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> {
-      return take(request).pipe(
+      return script.take(request).pipe(
         Effect.flatMap((response): Effect.Effect<CompactionResponse | CompactionCheckpointResponse> => {
           if (options?.mechanism === "trigger")
             return response instanceof CompactionCheckpointResponse
@@ -162,47 +139,10 @@ const make = (options: LayerOptions) =>
       )
     }
     return Test.of({
+      ...script.controls,
       compact,
       stream,
-      generate: (request) =>
-        stream(request).pipe(
-          Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-          Effect.flatMap((state) => {
-            const response = LLMResponse.complete(state)
-            if (response) return Effect.succeed(response)
-            return Effect.die("TestLLM response ended without a terminal finish event")
-          }),
-        ),
-      requests: () => Effect.sync(() => [...requests]),
-      push: (...input) =>
-        Effect.sync(() => {
-          responses.push(...input)
-        }),
-      always: (response) =>
-        Effect.sync(() => {
-          fallback = response
-        }),
-      serve: (responder) =>
-        Effect.sync(() => {
-          fallback = responder
-        }),
-      wait,
-      gate: () =>
-        Effect.gen(function* () {
-          const gate = {
-            started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
-            release: yield* Latch.make(),
-          }
-          activeGate = gate
-          const release = Effect.sync(() => {
-            if (activeGate === gate) activeGate = undefined
-          }).pipe(Effect.andThen(gate.release.open), Effect.asVoid)
-          yield* Effect.addFinalizer(() => release)
-          return {
-            started: Queue.take(gate.started),
-            release,
-          }
-        }),
+      generate: generateWith(stream),
     })
   })
 
@@ -211,3 +151,68 @@ export const testLayer = (options: LayerOptions = {}) =>
   Layer.effectContext(
     Effect.map(make(options), (test) => Context.make(LLMClient.Service, test).pipe(Context.add(Test, test))),
   )
+
+/** The response queue, fallback, request log, and gates behind the test controls. */
+const makeScript = (options: LayerOptions) => {
+  const requests: LLMRequest[] = []
+  const responses: Response[] = []
+  let started = Deferred.makeUnsafe<void>()
+  const initial = options.fallback
+  let fallback: Responder | undefined = initial === undefined ? undefined : () => initial
+  let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
+  const wait = (count: number): Effect.Effect<void> =>
+    Effect.suspend(() =>
+      requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
+    )
+
+  const take = (request: LLMRequest) =>
+    Effect.suspend(() => {
+      const count = requests.push(options.transformRequest?.(request) ?? request)
+      const waiting = started
+      started = Deferred.makeUnsafe()
+      const gate = activeGate
+      try {
+        const response = responses.shift() ?? fallback?.(request)
+        if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
+        if (!gate) return Effect.succeed(response)
+        return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
+      } finally {
+        // Waiters can resume synchronously; assign the reply and gate before notifying them.
+        Deferred.doneUnsafe(waiting, Effect.void)
+      }
+    })
+
+  const controls: Controls = {
+    requests: () => Effect.sync(() => [...requests]),
+    push: (...input) =>
+      Effect.sync(() => {
+        responses.push(...input)
+      }),
+    always: (response) =>
+      Effect.sync(() => {
+        fallback = () => response
+      }),
+    serve: (responder) =>
+      Effect.sync(() => {
+        fallback = responder
+      }),
+    wait,
+    gate: () =>
+      Effect.gen(function* () {
+        const gate = {
+          started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
+          release: yield* Latch.make(),
+        }
+        activeGate = gate
+        const release = Effect.sync(() => {
+          if (activeGate === gate) activeGate = undefined
+        }).pipe(Effect.andThen(gate.release.open), Effect.asVoid)
+        yield* Effect.addFinalizer(() => release)
+        return {
+          started: Queue.take(gate.started),
+          release,
+        }
+      }),
+  }
+  return { take, controls }
+}

@@ -29,6 +29,14 @@ export function SessionUserMessage(props: {
   historicalModel: SessionMessageAssistant["model"]
   actions?: SessionUserActions
   run?: UserRun
+  /** The newest delivered prompt, whose revert undoes the last turn. */
+  latest?: boolean
+  runSnaps?: () => boolean
+  runHovered?: boolean
+  onMenuOpenChange?: (open: boolean) => void
+  fold?: boolean
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }) {
   return (
     <CurrentUserMessageDisplay
@@ -42,6 +50,13 @@ export function SessionUserMessage(props: {
       model={props.historicalModel}
       actions={props.actions}
       run={props.run}
+      latest={props.latest}
+      runSnaps={props.runSnaps}
+      runHovered={props.runHovered}
+      onMenuOpenChange={props.onMenuOpenChange}
+      fold={props.fold}
+      expanded={props.expanded}
+      onExpandedChange={props.onExpandedChange}
     />
   )
 }
@@ -51,7 +66,9 @@ export function SessionAssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
   sources?: TurnSources
   onOpenSources?: () => void
   defaultOpen?: boolean
@@ -69,7 +86,9 @@ export function SessionAssistantContent(props: {
             text={content().text}
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
+            keepCopyVisible={props.keepCopyVisible}
             turnDurationMs={props.turnDurationMs}
+            turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
           />

@@ -1,11 +1,11 @@
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { OpenAICompatible } from "../../src/providers.js"
 
 const model = OpenAICompatible.configure({ baseURL: "https://compatible.example/v1" }).model("test-model")
 
-LLM.request({ model, prompt: "Hello", providerOptions: { store: false } })
+ai.request({ model, prompt: "Hello", providerOptions: { store: false } })
 
-LLM.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error OpenAI-compatible store must be boolean.

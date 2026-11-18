@@ -16,34 +16,6 @@
   background: var(--v2-background-bg-layer-01);
   border-radius: 6px;
   box-shadow: var(--v2-elevation-floating);
-  transform-origin: top center;
-  animation: select-v2-content-in 120ms ease-out;
-}
-
-[data-component="menu-v2-content"][data-slot="select-v2-content"][data-closed] {
-  animation: select-v2-content-out 80ms ease-in forwards;
-}
-
-@keyframes select-v2-content-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes select-v2-content-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
 }
 
 /* Shared trigger structure for the inline control. */
@@ -60,10 +32,9 @@
   border: 0;
   border-radius: 6px;
   outline: 1px solid transparent;
-  outline-offset: 0;
-  background:
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
-  box-shadow: var(--v2-elevation-button-neutral);
+  outline-offset: -1px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-input);
   flex: none;
   align-self: stretch;
   user-select: none;
@@ -73,19 +44,57 @@
     box-shadow 85ms ease-out;
 }
 
-[data-component="select-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within):not(
-    [data-expanded]
-  ) {
-  background:
-    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+[data-component="select-v2"][data-appearance="small"] {
+  height: 24px;
 }
 
-[data-component="select-v2"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
-  background:
-    linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+[data-component="select-v2"][data-appearance="large"] {
+  height: 32px;
+  padding-inline: 0 8px;
+}
+
+[data-component="select-v2"][data-surface="layer-1"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-component="select-v2"][data-surface="invisible"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* An inset overlay keeps the surface colour underneath, the same hover the text input uses. */
+@media (hover: hover) {
+  [data-component="select-v2"]:where(:hover):not(
+      [data-disabled],
+      [data-invalid],
+      [data-expanded],
+      [data-appearance="inline"],
+      [data-surface="invisible"]
+    ):not(:focus-within) {
+    box-shadow:
+      inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-hover),
+      var(--v2-elevation-input);
+  }
+
+  [data-component="select-v2"][data-surface="invisible"]:where(:hover):not(
+      [data-disabled],
+      [data-invalid],
+      [data-expanded]
+    ):not(:focus-within) {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}
+
+[data-component="select-v2"]:where([data-expanded]):not([data-disabled], [data-invalid], [data-appearance="inline"]) {
+  box-shadow:
+    inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-hover),
+    var(--v2-elevation-input);
   outline-color: transparent;
+}
+
+[data-component="select-v2"][data-surface="invisible"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
+  background: var(--v2-overlay-simple-overlay-hover);
+  box-shadow: none;
 }
 
 [data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
@@ -224,6 +233,14 @@
   padding: 0;
 }
 
+[data-component="menu-v2-content"][data-slot="select-v2-content"] > [data-component="menu-scroll"] {
+  max-height: 12rem;
+
+  > [data-scrollable] {
+    overflow-x: hidden;
+  }
+}
+
 /* Listbox inside menu surface */
 [data-component="menu-v2-content"][data-slot="select-v2-content"] [data-slot="select-v2-listbox"] {
   box-sizing: border-box;
@@ -235,9 +252,6 @@
   list-style: none;
   min-width: 0;
   width: 100%;
-  max-height: 12rem;
-  overflow-x: hidden;
-  overflow-y: auto;
   outline: none;
   white-space: nowrap;
 

@@ -3,8 +3,12 @@
 import { codeToTokens, isSupportedLanguage, LiveTokenizer, type ThemedToken } from "@pierre/highlights"
 import { createMarkdownParser } from "@opencode/ui/context/marked-parser"
 import { OpenCodeTheme } from "@opencode/ui/context/highlight-theme"
-import type { MarkdownToken, MarkdownWorkerRequest, MarkdownWorkerResponse } from "./markdown-worker-protocol"
-import { createLatestWorkerQueue } from "./markdown-worker-queue"
+import {
+  diffProjectionBlocks,
+  type MarkdownToken,
+  type MarkdownWorkerRequest,
+  type MarkdownWorkerResponse,
+} from "./markdown-worker-protocol"
 import { project, type Projection } from "./markdown-stream"
 
 type Stream = {
@@ -19,22 +23,13 @@ const projections = new Map<string, Projection>()
 
 const parser = createMarkdownParser()
 
-const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
-  run: highlight,
-  supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: closeStream,
-})
-
-const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "project" }>>({
-  run: runProject,
-  supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
-  dispose: (key) => void projections.delete(key),
-})
-
+// Requests run in arrival order. The main thread's lanes already keep at most one request per key in flight and drop
+// superseded snapshots before posting, so the worker needs no queue of its own.
 self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "dispose") {
-    highlightQueue.dispose(event.data.key)
-    projectQueue.dispose(event.data.key)
+    if (event.data.target === "project") projections.delete(event.data.key)
+
+    if (event.data.target === "highlight") closeStream(event.data.key)
 
     return
   }
@@ -46,12 +41,12 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   }
 
   if (event.data.type === "project") {
-    projectQueue.highlight(event.data)
+    runProject(event.data)
 
     return
   }
 
-  highlightQueue.highlight(event.data)
+  highlight(event.data)
 }
 
 async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>) {
@@ -62,12 +57,20 @@ async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>)
   }
 }
 
-async function runProject(request: Extract<MarkdownWorkerRequest, { type: "project" }>) {
+function runProject(request: Extract<MarkdownWorkerRequest, { type: "project" }>) {
   try {
-    const projection = project(projections.get(request.key), request.text, request.live)
+    const previous = projections.get(request.key)
+    const projection = project(previous, request.text, request.live)
+    post({
+      type: "project",
+      id: request.id,
+      key: request.key,
+      ...diffProjectionBlocks(previous?.blocks, projection.blocks),
+    })
+    // Kept only once posted: the main thread applies the next diff to the blocks it last received.
     projections.set(request.key, projection)
-    post({ type: "project", id: request.id, key: request.key, projection })
   } catch (error) {
+    projections.delete(request.key)
     post({
       type: "error",
       id: request.id,
@@ -77,7 +80,7 @@ async function runProject(request: Extract<MarkdownWorkerRequest, { type: "proje
   }
 }
 
-async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
+function highlight(request: Extract<MarkdownWorkerRequest, { type: "highlight" }>) {
   try {
     // Report the requested language so the viewer can label the block and spot Mermaid; lex unknown ones as text.
     const language = request.language
@@ -164,11 +167,7 @@ function token(value: ThemedToken): MarkdownToken {
 
   return [
     value.content,
-    [
-      value.color && `color:${value.color}`,
-      fontStyle & 1 && "font-style:italic",
-      fontStyle & 2 && "font-weight:bold",
-    ]
+    [value.color && `color:${value.color}`, fontStyle & 1 && "font-style:italic", fontStyle & 2 && "font-weight:bold"]
       .filter(Boolean)
       .join(";"),
   ]

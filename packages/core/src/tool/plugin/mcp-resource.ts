@@ -39,9 +39,7 @@ export const Plugin = {
                 resources: servers,
                 save: servers,
                 metadata: {},
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               if (input.server === undefined) return { output: yield* mcp.resourceCatalog() }
               return { output: yield* mcp.resources({ server: input.server }) }
@@ -68,9 +66,7 @@ export const Plugin = {
                 resources: [`${input.server}:${input.uri}`],
                 save: [`${input.server}:*`],
                 metadata: { server: input.server, uri: input.uri },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
               const resource = yield* mcp.readResource(input)
               if (!resource)

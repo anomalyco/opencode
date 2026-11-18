@@ -1,8 +1,9 @@
-import { batch, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createSignal, onCleanup, untrack } from "solid-js"
 import { showToast } from "@opencode/ui/toast"
+import { uuid } from "@opencode/util/uuid"
 import type { MountedSession, SetupContext } from "@opencode/plugin/gui"
 import type Btw from "./index"
+import { btwChatView, btwTabView, createBtwState, transitionBtw, type BtwEffect, type BtwEvent } from "./machine"
 
 const instructions = [
   "The user is asking a quick side question about the conversation so far.",
@@ -12,22 +13,124 @@ const instructions = [
 
 /** One-shot side questions per session, one tab each, stored until the tab closes. */
 export function createBtw(ctx: SetupContext<typeof Btw>) {
-  const controllers = new Map<string, AbortController>()
-  const [requests, setRequests] = createStore<{ pending: string[] }>({ pending: [] })
-  const saved = (session: MountedSession) => ctx.stores.chats(session)
+  const [state, setState] = createSignal(createBtwState())
+  // Driver handles only: the machine decides which attempt runs, these end its request and timeout.
+  const inFlight = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
-  const stop = (id: string) => {
-    controllers.get(id)?.abort()
-    controllers.delete(id)
-    setRequests("pending", (list) => list.filter((item) => item !== id))
+  const saved = (session: MountedSession) => {
+    const store = ctx.stores.chats(session)
+
+    return store.ready() ? (store.value?.chats ?? []) : undefined
+  }
+
+  // Effects act on `session`, the session of the action or request that caused the event.
+  const dispatch = (event: BtwEvent, session?: MountedSession) => {
+    const previous = untrack(state)
+    const result = transitionBtw(previous, event)
+
+    batch(() => {
+      if (result.state !== previous) setState(result.state)
+      result.effects.forEach((effect) => run(effect, session))
+    })
+  }
+
+  const run = (effect: BtwEffect, session: MountedSession | undefined) => {
+    if (effect.type === "abort") {
+      const handle = inFlight.get(effect.attempt)
+      inFlight.delete(effect.attempt)
+
+      if (!handle) return
+      clearTimeout(handle.timer)
+      handle.controller.abort()
+
+      return
+    }
+
+    // SAFETY: only `disposed`, `sessions.pruned` and request results without an answer dispatch without a session,
+    // and the machine answers those with `abort` alone.
+    if (!session) return
+    const store = ctx.stores.chats(session)
+
+    if (effect.type === "persist-question") {
+      // Desktop storage loads asynchronously; a write before load queues and lands once it loads, while the machine
+      // already shows the chat. The session's store lives while its tab stays open.
+      store.update((draft) => {
+        draft.chats.push({
+          id: effect.id,
+          question: effect.question,
+          created: effect.created,
+          agent: effect.agent,
+          model: effect.model,
+        })
+      })
+
+      return
+    }
+
+    if (effect.type === "open-tab") {
+      ctx.layout.open(`${ctx.id}:${effect.id}`, session, { tab: "select" })
+
+      return
+    }
+
+    if (effect.type === "persist-answer") {
+      store.update((draft) => {
+        const chat = draft.chats.find((item) => item.id === effect.id)
+
+        if (!chat) return
+        chat.answer = effect.answer
+        chat.duration = effect.duration
+
+        if (effect.agent) chat.agent = effect.agent
+
+        if (effect.model) chat.model = effect.model
+      })
+
+      return
+    }
+
+    if (effect.type === "delete-chat") {
+      store.update((draft) => {
+        draft.chats = draft.chats.filter((item) => item.id !== effect.id)
+      })
+
+      return
+    }
+
+    generate(session, effect)
   }
 
   // In-flight questions keep running when the user leaves their session and answer into its store; only a reload,
-  // closing the question's tab or disposing the plugin abandons one, which leaves it retryable.
-  onCleanup(() => Array.from(controllers.keys()).forEach(stop))
+  // closing the question's tab or session, or disposing the plugin abandons one, which leaves it retryable.
+  const generate = (session: MountedSession, effect: Extract<BtwEffect, { type: "generate" }>) => {
+    const key = session.key
+    const result = { sessionKey: key, id: effect.id, attempt: effect.attempt }
+    const controller = new AbortController()
 
-  const entry = (session: MountedSession, id: string) => saved(session).value?.chats.find((item) => item.id === id)
-  const pending = (id: string) => requests.pending.includes(id)
+    inFlight.set(effect.attempt, {
+      controller,
+      timer: setTimeout(() => dispatch({ type: "generate.timed-out", ...result }), effect.timeout),
+    })
+
+    session.server.client.session
+      .generate(
+        { sessionID: session.id, prompt: [instructions, effect.question].join("\n\n") },
+        { signal: AbortSignal.any([ctx.signal, controller.signal]) },
+      )
+      .then(
+        (reply) => {
+          if (ctx.signal.aborted) return
+          dispatch({ type: "generate.succeeded", ...result, text: reply.text, now: Date.now() }, session)
+        },
+        (cause) => {
+          if (ctx.signal.aborted) return
+          const message = cause instanceof Error ? cause.message : String(cause)
+          dispatch({ type: "generate.failed", ...result, message })
+        },
+      )
+  }
+
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   const selection = (session: MountedSession) => {
     const info = session.id ? session.server.data.session.get(session.id) : undefined
@@ -50,47 +153,6 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     }
   }
 
-  // Takes the question rather than reading it back, because a new chat's write may still wait for the store to load.
-  const generate = (session: MountedSession, id: string, question: string) => {
-    if (pending(id)) return
-
-    const store = saved(session)
-    const controller = new AbortController()
-    const started = Date.now()
-    const current = selection(session)
-    controllers.set(id, controller)
-    setRequests("pending", (list) => [...list, id])
-
-    return (
-      session.server.client.session
-        .generate(
-          { sessionID: session.id, prompt: [instructions, question].join("\n\n") },
-          { signal: controller.signal },
-        )
-        .then((result) => {
-          if (ctx.signal.aborted || controller.signal.aborted) return
-          const duration = Math.max(0, Date.now() - started)
-
-          store.update((draft) => {
-            const chat = draft.chats.find((item) => item.id === id)
-
-            if (!chat) return
-            chat.answer = result.text.trim()
-            chat.duration = duration
-
-            if (current.agent) chat.agent = current.agent
-
-            if (current.model) chat.model = current.model
-          })
-        })
-        // A missing answer is the retry state; no transient error flag is stored.
-        .catch(() => undefined)
-        .finally(() => {
-          if (controllers.get(id) === controller) stop(id)
-        })
-    )
-  }
-
   const ask = (value?: string) => {
     const question = value?.trim()
 
@@ -104,52 +166,34 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
 
     if (!session?.id) return
 
-    const id = crypto.randomUUID()
-    const created = Date.now()
-    const current = selection(session)
-
-    // Desktop storage loads asynchronously. A write before load queues and lands in the same batch that marks the
-    // store ready, and the panel keeps a tab hidden until then, so the chat and its tab need not wait. The session's
-    // store lives while its tab stays open, so leaving the session first still records the chat.
-    batch(() => {
-      saved(session).update((draft) => {
-        draft.chats.push({
-          id,
-          question,
-          created,
-          agent: current.agent,
-          model: current.model,
-        })
-      })
-      ctx.layout.open(`${ctx.id}:${id}`, session, { tab: "select" })
-    })
-    void generate(session, id, question)
+    dispatch(
+      { type: "chat.asked", sessionKey: session.key, id: uuid(), question, created: Date.now(), ...selection(session) },
+      session,
+    )
   }
 
   return {
     ask,
-    saved,
-    pending,
-    entry,
-    question: (session: MountedSession, id: string) => entry(session, id)?.question,
-    answer: (session: MountedSession, id: string) => entry(session, id)?.answer,
-    error: (session: MountedSession, id: string) => {
-      const item = entry(session, id)
-
-      return !!item && item.answer === undefined && !pending(id)
-    },
+    tab: (session: MountedSession, id: string) => btwTabView(state(), saved(session), session.key, id),
+    view: (session: MountedSession, id: string) => btwChatView(state(), saved(session), session.key, id),
     retry: (session: MountedSession, id: string) => {
-      const question = entry(session, id)?.question
-
-      if (question) void generate(session, id, question)
+      dispatch(
+        {
+          type: "chat.retried",
+          sessionKey: session.key,
+          id,
+          now: Date.now(),
+          saved: saved(session)?.find((item) => item.id === id),
+          ...selection(session),
+        },
+        session,
+      )
     },
     /** Closing a tab forgets its question and answer. */
-    remove: (session: MountedSession, id: string) => {
-      stop(id)
-      saved(session).update((draft) => {
-        draft.chats = draft.chats.filter((item) => item.id !== id)
-      })
-    },
+    remove: (session: MountedSession, id: string) =>
+      dispatch({ type: "chat.removed", sessionKey: session.key, id }, session),
+    /** Ends the requests of sessions whose shell tab closed and forgets their chats. */
+    prune: (keep: ReadonlySet<string>) => dispatch({ type: "sessions.pruned", keep }),
   }
 }
 

@@ -1,0 +1,48 @@
+/* The sound switch (sound-toggle.tsx), drawn like the site's theme switcher (site.css,
+   [data-component="theme-toggle"]) in its dark colours, fixed at the bottom left. */
+
+[data-component="arcade-sound"] {
+  /* As far from the left as the logo and nav, and as far from the bottom (chrome.css sets the inset). */
+  position: fixed;
+  inset-inline-start: calc(var(--arcade-inset, 1.5rem) + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--arcade-inset, 1.5rem) + env(safe-area-inset-bottom, 0px));
+  z-index: 10;
+  display: inline-flex;
+  border: 1px solid hsl(0, 0%, 18%);
+  background: rgb(12 12 12 / 0.6);
+
+  button {
+    width: 2rem;
+    height: 1.75rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: hsl(0, 0%, 56%);
+    cursor: pointer;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease;
+
+    &[aria-pressed="true"] {
+      color: hsl(0, 0%, 95%);
+      background: hsl(0, 0%, 10%);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: hsl(0, 0%, 95%);
+      }
+    }
+
+    &:active {
+      color: hsl(0, 0%, 95%);
+    }
+
+    &:focus-visible {
+      outline: 2px solid #6b8fff;
+      outline-offset: 2px;
+    }
+  }
+}

@@ -44,3 +44,11 @@
     }
   }
 }
+
+[data-component="file-comment-selection"] {
+  background-color: var(--v2-background-bg-base);
+}
+
+[data-color-scheme="dark"] [data-component="file-comment-selection"] {
+  background-color: var(--v2-background-bg-layer-02);
+}

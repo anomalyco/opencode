@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { EventTable } from "@opencode/core/event/sql"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Instructions } from "@opencode/core/instructions/index"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -23,7 +24,7 @@ import {
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, InstructionDiscovery.node]), [
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
@@ -228,6 +229,29 @@ describe("InstructionState", () => {
     }),
   )
 
+  it.effect("records reordered instructions without emitting update text", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_reorder")
+      const { db, events } = yield* setup(sessionID)
+      const discovery = yield* InstructionDiscovery.Service
+      const first = new InstructionDiscovery.File({ path: "/instructions/first.md", content: "one" })
+      const second = new InstructionDiscovery.File({ path: "/instructions/second.md", content: "two" })
+      const arrange = (files: InstructionDiscovery.File[]) =>
+        discovery.transform((editor) => {
+          for (const file of files) editor.add(file)
+        })
+
+      const initial = yield* arrange([first, second])
+      yield* InstructionState.prepare(db, events, yield* discovery.load(), sessionID)
+      yield* initial.dispose
+      yield* arrange([second, first])
+      yield* InstructionState.prepare(db, events, yield* discovery.load(), sessionID)
+
+      expect((yield* instructionEvents(db, sessionID)).map((event) => event.data.text)).toEqual([undefined, undefined])
+      expect(yield* db.select().from(SessionMessageTable).all().pipe(Effect.orDie)).toEqual([])
+    }),
+  )
+
   it.effect("keeps no-op observations free of events and blobs", () =>
     Effect.gen(function* () {
       const sessionID = SessionSchema.ID.make("ses_instruction_noop")
@@ -274,7 +298,10 @@ describe("InstructionState", () => {
 
       const assembled = yield* preview(db, sessionID, instructions)
 
-      expect(assembled).toEqual({ initial: "Changed context", update: "" })
+      expect(assembled).toEqual({
+        initial: [{ key: Instructions.Key.make("test/context"), text: "Changed context" }],
+        update: "",
+      })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
       expect(
@@ -314,7 +341,7 @@ describe("InstructionState", () => {
 
       const assembled = yield* preview(db, sessionID, instructions)
 
-      expect(assembled.initial).toBe("Initial context")
+      expect(assembled.initial).toEqual([{ key: Instructions.Key.make("test/context"), text: "Initial context" }])
       expect(assembled.update).toBe("Private update")
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
@@ -344,8 +371,10 @@ describe("InstructionState", () => {
 
       const assembled = yield* preview(db, sessionID, instructions)
 
-      expect(assembled.initial).toContain("Initial context")
-      expect(assembled.initial).toContain("Retired context")
+      expect(assembled.initial).toEqual([
+        { key: Instructions.Key.make("test/current"), text: "Initial context" },
+        { key: Instructions.Key.make("test/retired"), text: "Retired context" },
+      ])
       expect(assembled.update).toContain("Changed context")
       expect(assembled.update).toContain("Removed Retired context")
     }),
@@ -393,7 +422,7 @@ describe("InstructionState", () => {
       const instructions = source("test/context", Effect.succeed("Initial context"))
 
       expect(yield* preview(db, sessionID, instructions)).toEqual({
-        initial: "Initial context",
+        initial: [{ key: Instructions.Key.make("test/context"), text: "Initial context" }],
         update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual([])
@@ -418,7 +447,7 @@ describe("InstructionState", () => {
       const beforeState = yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)
 
       expect(yield* preview(db, sessionID, instructions)).toEqual({
-        initial: "Committed context",
+        initial: [{ key: Instructions.Key.make("test/context"), text: "Committed context" }],
         update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)

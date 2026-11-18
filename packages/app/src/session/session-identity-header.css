@@ -2,6 +2,29 @@
   padding-inline-end: 30px;
 }
 
+/* The location card takes the browser site popover's spacing. Its submenus render elsewhere and keep the menu's. */
+[data-component="menu-v2-content"][data-slot="session-location-card"] {
+  gap: 2px;
+  padding: 2px;
+
+  [data-component="menu-v2-item"] {
+    padding-inline: 8px;
+  }
+
+  /* A row whose submenu is open keeps the hover background while the pointer is in the submenu. */
+  [data-component="menu-v2-item"][data-expanded] {
+    background: var(--menu-v2-hover);
+  }
+
+  /* Spans the card edge to edge over its padding; a 1px line scaled to a hairline. */
+  [data-slot="menu-v2-separator"] {
+    width: calc(100% + 4px);
+    margin: 0 -2px;
+    background: var(--v2-border-border-base);
+    transform: scaleY(0.5);
+  }
+}
+
 .session-header-layout {
   display: flex;
   align-items: center;

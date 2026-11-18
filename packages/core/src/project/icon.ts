@@ -55,10 +55,12 @@ export const refresh = Effect.fn("ProjectIcon.refresh")(function* (
 })
 
 export const discover = Effect.fn("ProjectIcon.discover")(function* (fs: FSUtil.Interface, directory: string) {
-  const root = yield* fs.realPath(directory)
+  const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
+  if (!resolved) return
+  const root = resolved
   const children = yield* fs.readDirectoryEntries(root).pipe(Effect.orElseSucceed(() => []))
   const catalogs = children
-    .filter((e) => e.type === "directory" && !e.name.startsWith("."))
+    .filter((e) => e.type === "Directory" && !e.name.startsWith("."))
     .map((e) => e.name)
     .toSorted()
     .slice(0, 128)
@@ -102,7 +104,7 @@ export const discover = Effect.fn("ProjectIcon.discover")(function* (fs: FSUtil.
       windows ? Math.abs(Number(file.match(/^icon-(\d+)\.png$/i)?.[1]) - 128) : /128|256/.test(file) ? 0 : 1
     const files = entries
       ?.flatMap((e) =>
-        e.type === "file" &&
+        e.type === "File" &&
         (windows ? /^icon-\d+\.png$/i.test(e.name) : IMAGES.has(path.extname(e.name).toLowerCase()))
           ? [e.name]
           : [],

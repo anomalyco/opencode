@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { createComponent, createRoot, createSignal, onCleanup, type Accessor } from "solid-js"
+import { describe, expect, jest, test } from "bun:test"
+import { batch, createComponent, createRoot, createSignal, onCleanup, type Accessor } from "solid-js"
 import { Schema } from "effect"
 import {
   createKeyed,
@@ -14,6 +14,7 @@ import type { Platform } from "@/runtime/platform/platform"
 import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { createLocatedWrites } from "@/runtime/plugin/located"
+import { LOCATED_WRITE_TTL_MS } from "@/runtime/plugin/located-machine"
 import { createSessionStore, globalStoreTarget, persistedHandle, whenLoaded } from "@/runtime/plugin/stores"
 
 const pending = { status: "pending" } as const
@@ -250,6 +251,8 @@ describe("plugin primitives", () => {
   test.each([
     { name: "while the storage read is held", location: { directory: "/repo" } },
     { name: "while the session location is unknown", location: undefined },
+    // Before, the store opened inside the batch took the last write at once, ahead of the writes that waited.
+    { name: "as the session location becomes known in the same batch", location: undefined, batched: true },
     { name: "while held with an invalid returned replacement", location: { directory: "/repo" }, invalid: true },
   ])("store writes made $name apply in order over the stored value", async (row) => {
     const held = Promise.withResolvers<void>()
@@ -299,11 +302,18 @@ describe("plugin primitives", () => {
       }
     })
 
+    // Before, the invalid write threw before the load finished: the valid write after it never applied and the store
+    // never became ready.
     if ("invalid" in row) {
       // @ts-expect-error JavaScript plugins can return an invalid replacement before hydration too
       root.handle.update(() => ({ items: ["wrong"] }))
+      root.handle.update((draft) => void draft.items.push("valid"))
       held.resolve()
       await expect(Promise.all(opened.map(whenLoaded))).rejects.toThrow("Use set")
+      expect({ value: root.handle.value?.items, ready: root.handle.ready() }).toEqual({
+        value: ["stored", "valid"],
+        ready: true,
+      })
       root.dispose()
 
       return
@@ -312,11 +322,21 @@ describe("plugin primitives", () => {
     root.handle.update((draft) => void draft.items.push("discarded"))
     root.handle.set({ items: ["replacement"] })
     root.handle.update((draft) => void draft.items.push("first"))
-    root.handle.update((draft) => void draft.items.push("second"))
 
     const before = { value: root.handle.value, ready: root.handle.ready() }
+    const second = () => root.handle.update((draft) => void draft.items.push("second"))
 
-    setLocation({ directory: "/repo" })
+    if ("batched" in row)
+      batch(() => {
+        setLocation({ directory: "/repo" })
+        second()
+      })
+
+    if (!("batched" in row)) {
+      second()
+      setLocation({ directory: "/repo" })
+    }
+
     held.resolve()
     await Promise.all(opened.map(whenLoaded))
     expect({ before, after: root.handle.value?.items, ready: root.handle.ready() }).toEqual({
@@ -571,5 +591,26 @@ describe("plugin primitives", () => {
     setLocation({ directory: "/repo" })
     expect({ before, after: log }).toEqual({ before: [], after: ["open", "scroll"] })
     root.dispose()
+  })
+
+  // Before, a write held for a session that never located was kept forever and replayed whenever it did.
+  test("a held write expires when the session stays unlocated past the TTL", () => {
+    jest.useFakeTimers()
+    const [location, setLocation] = createSignal<{ directory: string } | undefined>()
+    const target = session(() => "server\nses_gone", location)
+    const log: string[] = []
+    const root = createRoot((dispose) => ({ dispose, writes: createLocatedWrites() }))
+
+    try {
+      root.writes.hold(target, () => log.push("open"))
+      jest.advanceTimersByTime(LOCATED_WRITE_TTL_MS)
+      setLocation({ directory: "/repo" })
+      root.writes.hold(target, () => log.push("later"))
+
+      expect(log).toEqual(["later"])
+    } finally {
+      root.dispose()
+      jest.useRealTimers()
+    }
   })
 })

@@ -10,10 +10,10 @@ const body = <A, E, R>(value: Body<A, E, R>) => Effect.suspend(() => (typeof val
 const loopback = new Set(["127.0.0.1", "localhost", "[::1]"])
 
 // Core is env-free, so nothing tells the default node graph to stay offline;
-// a test that boots it would phone home through FetchHttpClient. Every
-// FetchHttpClient reads this reference at request time, so refusing here covers
-// each node that shares the default client, while an explicit HttpClient
-// replacement never reaches it. Callers such as ModelsDev swallow request
+// a test that boots it would phone home through FetchHttpClient. The default
+// client node captures this reference when the test builds its layer, so
+// refusing here covers each node that shares the default client, while an
+// explicit HttpClient or fetch replacement never reaches it. Callers such as ModelsDev swallow request
 // failures, so the harness also records the attempt and fails the test itself.
 export const refuseNetwork = (violations: string[]): typeof fetch =>
   Object.assign(

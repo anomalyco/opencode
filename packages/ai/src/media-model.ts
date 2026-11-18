@@ -2,10 +2,17 @@ import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID, type ProviderOptions } from "./schema/index.js"
+import {
+  AIError,
+  InvalidRequestError,
+  ModelID,
+  ProviderID,
+  type ProviderOptions,
+  type TransportOptions,
+} from "./schema/index.js"
 
 /**
- * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
+ * What every media model carries: ids, the configured route, and deployment transport overlays. Modality classes
  * (`ImageModel`, `VideoModel`, `SpeechModel`, `TranscriptionModel`) extend it with their route type and a nominal
  * marker so one cannot stand in for the other in requests.
  */
@@ -16,7 +23,8 @@ export class MediaModel<Route, Options> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: Route
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays, below each request's own. */
+  readonly transport?: TransportOptions
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
 
@@ -24,7 +32,7 @@ export class MediaModel<Route, Options> {
     this.id = ModelID.make(input.id)
     this.provider = ProviderID.make(input.provider)
     this.route = input.route
-    this.http = input.http
+    this.transport = input.transport
     this.providerOptions = input.providerOptions
   }
 }
@@ -36,7 +44,7 @@ export namespace MediaModel {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly route: Route
-    readonly http?: HttpOptions
+    readonly transport?: TransportOptions
     readonly providerOptions?: ProviderOptions
   }
 
@@ -77,9 +85,15 @@ export const composeRoute = <Request extends MediaRoute.MediaRequest, Event, Res
   collect: (events: ReadonlyArray<Event>) => Effect.Effect<Response, AIError>,
 ): MediaRoute.AnyRoute<Request, Event, Response> => {
   if (isStreamInput(route)) return MediaRoute.stream({ ...composition(route, input), collect })
-  if (isQueuedInput(route)) return MediaRoute.queued(composition(route, input))
+  if (isQueuedInput(route)) return composeQueuedRoute(route, input)
   return MediaRoute.inline(composition(route, input))
 }
+
+/** Compose a queued protocol route input with one deployment through `MediaRoute.queued`. */
+export const composeQueuedRoute = <Request extends MediaRoute.MediaRequest, Response, Token>(
+  route: MediaModel.QueuedRouteInput<Request, Response, Token>,
+  input: MediaRoute.ModelInput,
+) => MediaRoute.queued(composition(route, input))
 
 const composition = <Request extends MediaRoute.MediaRequest, Protocol>(
   route: MediaModel.RouteInput<Request, Protocol>,
@@ -88,8 +102,7 @@ const composition = <Request extends MediaRoute.MediaRequest, Protocol>(
   protocol: route.protocol,
   endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
   auth: input.auth,
-  headers:
-    route.headers === undefined && input.headers === undefined ? undefined : { ...route.headers, ...input.headers },
+  headers: route.headers,
 })
 
 const isStreamInput = <Request extends MediaRoute.MediaRequest, Event, Response, Frame, State, Token>(
@@ -105,10 +118,12 @@ export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
     catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
+      error instanceof AIError
+        ? error
+        : new AIError({
+            reason: new InvalidRequestError({
+              message: error instanceof Error ? error.message : String(error),
+              cause: error,
+            }),
+          }),
   })

@@ -1,0 +1,521 @@
+/* Each style hands over in place: the old logo leaves, then the new one arrives --logo-delay
+   later. revealMotion (reveal.ts) sets the timing and each style's variables. Shared by the logo row
+   and the contributor avatars. */
+[data-site] [data-reveal] {
+  [data-slot="brand"][data-state],
+  [data-slot="brand"][data-state] [data-slot="mark"] {
+    animation-fill-mode: both;
+  }
+
+  [data-slot="brand"][data-state="out"] {
+    animation-duration: var(--logo-out);
+    animation-timing-function: var(--logo-easing-out);
+  }
+
+  [data-slot="brand"][data-state="in"] {
+    animation-duration: var(--logo-duration);
+    animation-delay: var(--logo-delay);
+    animation-timing-function: var(--logo-easing);
+  }
+
+  &[data-animation="fade"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-fade-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-fade-out;
+    }
+  }
+
+  &[data-animation="blur"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-blur-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-blur-out;
+    }
+  }
+
+  &[data-animation="rise"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-rise-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-rise-out;
+    }
+  }
+
+  /* A split-flap card: the old logo tips away, the new one drops into place. */
+  &[data-animation="flip"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-flip-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-flip-out;
+    }
+  }
+
+  &[data-animation="scale"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-scale-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-scale-out;
+    }
+  }
+
+  /* Terminal styles: hard edges and stepped timing. */
+  &:is(
+      [data-animation="pixel"],
+      [data-animation="dither"],
+      [data-animation="scanline"],
+      [data-animation="type"],
+      [data-animation="glitch"]
+    )
+    [data-slot="brand"] {
+    &[data-state],
+    &[data-state] [data-slot="mark"] {
+      animation-timing-function: linear;
+    }
+    &[data-state="out"] [data-slot="mark"] {
+      animation-duration: var(--logo-out);
+    }
+    &[data-state="in"] [data-slot="mark"] {
+      animation-duration: var(--logo-duration);
+      animation-delay: var(--logo-delay);
+    }
+  }
+
+  /* Pixel and dither: the slot is masked by square cells that fill in level by level. revealMotion
+     draws the levels (--level-1 to --level-15) from the block size, pattern and step count. */
+  &:is([data-animation="pixel"], [data-animation="dither"]) [data-slot="brand"] {
+    &[data-state] {
+      mask-size: var(--tile) var(--tile);
+      mask-repeat: repeat;
+    }
+    &[data-state="in"] {
+      animation-name: logo-levels-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-levels-out;
+    }
+  }
+
+  /* Scanline: drawn in stepped bands through spaced lines, like a terminal redrawing, then the
+     gaps fill in. */
+  &[data-animation="scanline"] [data-slot="brand"] {
+    &[data-state="in"] {
+      animation-name: logo-lines-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-lines-out;
+    }
+    &[data-state="in"] [data-slot="mark"] {
+      animation-name: logo-scan-in;
+      animation-timing-function: steps(var(--logo-steps), end);
+    }
+    &[data-state="out"] [data-slot="mark"] {
+      animation-name: logo-scan-out;
+      animation-timing-function: steps(var(--logo-steps), end);
+    }
+  }
+
+  /* Type: revealed in steps like characters being typed, and erased the same way. */
+  &[data-animation="type"] [data-slot="brand"] {
+    &[data-state="in"] [data-slot="mark"] {
+      animation-name: logo-type-in;
+      animation-timing-function: steps(var(--logo-steps), end);
+    }
+    &[data-state="out"] [data-slot="mark"] {
+      animation-name: logo-type-out;
+      animation-timing-function: steps(var(--logo-steps), end);
+    }
+  }
+
+  /* Wipe: a hard vertical line sweeps across the half, with the new logo behind it and the old
+     one ahead of it, so both take the full duration. */
+  &[data-animation="wipe"] [data-slot="brand"] {
+    &[data-state] {
+      animation-duration: var(--logo-duration);
+      animation-delay: var(--wipe-delay, 0ms);
+      animation-timing-function: var(--logo-easing);
+    }
+    &[data-state="in"] {
+      animation-name: logo-wipe-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-wipe-out;
+    }
+    &[data-state="out"]::after {
+      content: "";
+      display: var(--wipe-line);
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: var(--wipe-thickness);
+      background: currentColor;
+      animation: logo-wipe-line var(--logo-duration) var(--logo-easing) both;
+    }
+  }
+
+  /* Glitch: a few frames of horizontal slices jumping sideways, then the logo settles. */
+  &[data-animation="glitch"] [data-slot="brand"] {
+    &[data-state] {
+      animation-timing-function: steps(1, end);
+    }
+    &[data-state="in"] {
+      animation-name: logo-glitch-in;
+    }
+    &[data-state="out"] {
+      animation-name: logo-glitch-out;
+    }
+  }
+}
+
+@keyframes logo-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes logo-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes logo-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--logo-blur));
+  }
+}
+
+@keyframes logo-blur-out {
+  to {
+    opacity: 0;
+    filter: blur(var(--logo-blur));
+  }
+}
+
+@keyframes logo-rise-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--logo-rise);
+    filter: blur(var(--logo-blur));
+  }
+}
+
+@keyframes logo-rise-out {
+  to {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--logo-rise));
+    filter: blur(var(--logo-blur));
+  }
+}
+
+@keyframes logo-flip-in {
+  from {
+    opacity: 0;
+    transform: perspective(var(--flip-perspective)) var(--flip-in);
+  }
+}
+
+@keyframes logo-flip-out {
+  to {
+    opacity: 0;
+    transform: perspective(var(--flip-perspective)) var(--flip-out);
+  }
+}
+
+@keyframes logo-scale-in {
+  from {
+    opacity: 0;
+    scale: var(--logo-scale);
+  }
+}
+
+@keyframes logo-scale-out {
+  to {
+    opacity: 0;
+    scale: var(--logo-scale);
+  }
+}
+
+@keyframes logo-levels-in {
+  0% {
+    mask-image: linear-gradient(transparent 0 0);
+  }
+  6.25% {
+    mask-image: var(--level-1);
+  }
+  12.5% {
+    mask-image: var(--level-2);
+  }
+  18.75% {
+    mask-image: var(--level-3);
+  }
+  25% {
+    mask-image: var(--level-4);
+  }
+  31.25% {
+    mask-image: var(--level-5);
+  }
+  37.5% {
+    mask-image: var(--level-6);
+  }
+  43.75% {
+    mask-image: var(--level-7);
+  }
+  50% {
+    mask-image: var(--level-8);
+  }
+  56.25% {
+    mask-image: var(--level-9);
+  }
+  62.5% {
+    mask-image: var(--level-10);
+  }
+  68.75% {
+    mask-image: var(--level-11);
+  }
+  75% {
+    mask-image: var(--level-12);
+  }
+  81.25% {
+    mask-image: var(--level-13);
+  }
+  87.5% {
+    mask-image: var(--level-14);
+  }
+  93.75% {
+    mask-image: var(--level-15);
+  }
+  100% {
+    mask-image: linear-gradient(#000 0 0);
+  }
+}
+
+@keyframes logo-levels-out {
+  0% {
+    mask-image: linear-gradient(#000 0 0);
+  }
+  6.25% {
+    mask-image: var(--level-15);
+  }
+  12.5% {
+    mask-image: var(--level-14);
+  }
+  18.75% {
+    mask-image: var(--level-13);
+  }
+  25% {
+    mask-image: var(--level-12);
+  }
+  31.25% {
+    mask-image: var(--level-11);
+  }
+  37.5% {
+    mask-image: var(--level-10);
+  }
+  43.75% {
+    mask-image: var(--level-9);
+  }
+  50% {
+    mask-image: var(--level-8);
+  }
+  56.25% {
+    mask-image: var(--level-7);
+  }
+  62.5% {
+    mask-image: var(--level-6);
+  }
+  68.75% {
+    mask-image: var(--level-5);
+  }
+  75% {
+    mask-image: var(--level-4);
+  }
+  81.25% {
+    mask-image: var(--level-3);
+  }
+  87.5% {
+    mask-image: var(--level-2);
+  }
+  93.75% {
+    mask-image: var(--level-1);
+  }
+  100% {
+    mask-image: linear-gradient(transparent 0 0);
+  }
+}
+
+@keyframes logo-scan-in {
+  0% {
+    clip-path: var(--scan-hidden);
+  }
+  75%,
+  100% {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes logo-scan-out {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: var(--scan-gone);
+  }
+}
+
+@keyframes logo-lines-in {
+  0%,
+  75% {
+    mask-image: repeating-linear-gradient(#000 0 1px, transparent 1px var(--scan-spacing));
+  }
+  100% {
+    mask-image: linear-gradient(#000 0 0);
+  }
+}
+
+@keyframes logo-lines-out {
+  from,
+  to {
+    mask-image: repeating-linear-gradient(#000 0 1px, transparent 1px var(--scan-spacing));
+  }
+}
+
+@keyframes logo-type-in {
+  from {
+    clip-path: var(--type-hidden);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes logo-type-out {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: var(--type-hidden);
+  }
+}
+
+@keyframes logo-wipe-in {
+  from {
+    clip-path: var(--wipe-in-from);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes logo-wipe-out {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: var(--wipe-out-to);
+  }
+}
+
+@keyframes logo-wipe-line {
+  0% {
+    inset-inline-start: var(--wipe-line-from);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    inset-inline-start: var(--wipe-line-to);
+    opacity: 0;
+  }
+}
+
+/* --glitch-N and --shift-N are revealMotion's slices, from Settings › Slices and Max offset. */
+@keyframes logo-glitch-in {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+    translate: var(--shift-1) 0;
+    clip-path: var(--glitch-1);
+  }
+  24% {
+    opacity: 1;
+    translate: var(--shift-2) 0;
+    clip-path: var(--glitch-2);
+  }
+  36% {
+    opacity: 1;
+    translate: var(--shift-3) 0;
+    clip-path: var(--glitch-3);
+  }
+  48% {
+    opacity: 1;
+    translate: var(--shift-4) 0;
+    clip-path: var(--glitch-4);
+  }
+  60% {
+    opacity: 1;
+    translate: var(--shift-5) 0;
+    clip-path: var(--glitch-5);
+  }
+  72% {
+    opacity: 1;
+    translate: var(--shift-6) 0;
+    clip-path: var(--glitch-6);
+  }
+  84%,
+  100% {
+    opacity: 1;
+    translate: 0;
+    clip-path: inset(0);
+  }
+}
+
+@keyframes logo-glitch-out {
+  0% {
+    clip-path: inset(0);
+  }
+  30% {
+    translate: var(--shift-2) 0;
+    clip-path: var(--glitch-2);
+  }
+  65% {
+    translate: var(--shift-3) 0;
+    clip-path: var(--glitch-3);
+  }
+  100% {
+    opacity: 0;
+    translate: 0;
+    clip-path: inset(0);
+  }
+}
+
+/* Armed for an entrance: items wait unseen until they get a state. Opacity rather than visibility,
+   so links stay focusable and names stay in the accessibility tree meanwhile. */
+[data-site] [data-reveal][data-armed] [data-slot="brand"]:not([data-state]) {
+  opacity: 0;
+}
+
+/* Before the page's code runs, an entrance (`data-entrance`, until `data-mounted`) already waits
+   unseen, so the server's markup never shows and then hides when it arms. Only when the code will
+   run (the site root's data-js) and motion is allowed; if it never mounts, the items show after 4s. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-site][data-js] [data-entrance]:not([data-mounted]) [data-slot="brand"]:not([data-state]) {
+    opacity: 0;
+    animation: reveal-fallback 0s 4s forwards;
+  }
+}
+
+@keyframes reveal-fallback {
+  to {
+    opacity: 1;
+  }
+}

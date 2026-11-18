@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+source=${1:?usage: script/ghostty-bindings /path/to/pinned/ghostty}
+revision=$(cat "$root/ghostty-revision")
+test "$(git -C "$source" rev-parse HEAD)" = "$revision"
+test "$(bindgen --version)" = "bindgen 0.72.1"
+
+# Only regeneration needs bindgen/libclang. Normal builds use this checked-in
+# subset of the official C header, not a third-party Ghostty Rust crate.
+bindgen "$source/include/ghostty/vt.h" \
+  --allowlist-function 'ghostty_terminal_(new|free|resize|set|vt_write|get|grid_ref|scroll_viewport|point_from_grid_ref|selection_format_buf)' \
+  --allowlist-function 'ghostty_formatter_(terminal_new|format_buf|format_alloc|free)' \
+  --allowlist-function 'ghostty_free' \
+  --allowlist-type 'GhosttyString' \
+  --allowlist-type 'GhosttyTerminal(WritePty|TitleChanged)Fn' \
+  --no-prepend-enum-name --no-doc-comments --with-derive-default \
+  --rust-target 1.85 --rust-edition 2024 \
+  --raw-line "// Ghostty revision: $revision" \
+  --raw-line '// Generated from the official C API; regenerate with script/ghostty-bindings.' \
+  --raw-line '#![allow(dead_code, non_camel_case_types, non_snake_case, non_upper_case_globals, clippy::all)]' \
+  --output "$root/src/ghostty/ffi.rs" \
+  -- -std=c17 -I"$source/include"
+
+rustfmt --edition 2024 "$root/src/ghostty/ffi.rs"

@@ -1187,7 +1187,6 @@ built-ins/Promise/all/resolve-element-function-extensible.js  # Expected true bu
 built-ins/Promise/all/resolve-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
 built-ins/Promise/all/resolve-from-same-thenable.js  # TypeError: p1OnFulfilled is not a function.
 built-ins/Promise/all/resolve-not-callable-reject-with-typeerror.js  # "The promise should not be resolved."
-built-ins/Promise/all/resolve-thenable.js  # "The promise should be resolved with the expected value."
 built-ins/Promise/all/same-reject-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
 built-ins/Promise/allKeyed/ctx-ctor-throws.js  # Expected a Test262Error but got a TypeError
 built-ins/Promise/allKeyed/extensible.js  # Expected true but got false
@@ -1213,7 +1212,6 @@ built-ins/Promise/allSettled/reject-element-function-nonconstructor.js  # TypeEr
 built-ins/Promise/allSettled/resolve-element-function-extensible.js  # Expected true but got false
 built-ins/Promise/allSettled/resolve-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
 built-ins/Promise/allSettled/resolve-not-callable-reject-with-typeerror.js  # "The promise should not be resolved."
-built-ins/Promise/allSettled/resolve-thenable.js  # Expected SameValue(«[]», «object») to be true
 built-ins/Promise/allSettledKeyed/ctx-ctor-throws.js  # Expected a Test262Error but got a TypeError
 built-ins/Promise/allSettledKeyed/extensible.js  # Expected true but got false
 built-ins/Promise/allSettledKeyed/invoke-resolve-custom.js  # TypeError: Cannot read properties of undefined (reading '…').
@@ -1248,10 +1246,6 @@ built-ins/Promise/prototype/finally/this-value-then-throws.js  # Expected a Test
 built-ins/Promise/prototype/finally/this-value-thenable.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/Promise/prototype/then/S25.4.5.3_A2.1_T2.js  # TypeError: ZeroArgConstructor cannot be constructed: user-defined constructors and classes are not s
 built-ins/Promise/prototype/then/ctor-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Promise/prototype/then/resolve-pending-fulfilled-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
-built-ins/Promise/prototype/then/resolve-pending-rejected-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
-built-ins/Promise/prototype/then/resolve-settled-fulfilled-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
-built-ins/Promise/prototype/then/resolve-settled-rejected-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
 built-ins/Promise/race/S25.4.4.3_A3.1_T1.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Promise/race/S25.4.4.3_A3.1_T2.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Promise/race/S25.4.4.3_A5.1_T1.js  # Never settles.
@@ -1273,8 +1267,6 @@ built-ins/Promise/reject/S25.4.4.4_A3.1_T1.js  # Expected a TypeError to be thro
 built-ins/Promise/reject/capability-invocation-error.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 built-ins/Promise/reject/capability-invocation.js  # Expected SameValue(«"undefined"», «"object"») to be true
 built-ins/Promise/reject/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-built-ins/Promise/resolve-prms-cstm-then-deferred.js  # "The promise should be fulfilled with the provided value."
-built-ins/Promise/resolve-prms-cstm-then-immed.js  # "The promise should be fulfilled with the provided value."
 built-ins/Promise/resolve/arg-uniq-ctor.js  # Expected SameValue(«true», «false») to be true
 built-ins/Promise/resolve/capability-invocation-error.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 built-ins/Promise/resolve/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -1343,24 +1335,8 @@ built-ins/String/prototype/split/separator-tostring-error.js  # TypeError: Canno
 built-ins/String/prototype/split/transferred-to-custom.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/String/prototype/substring/S15.5.4.15_A3_T10.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/String/prototype/trim/15.5.4.20-2-43.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
-built-ins/decodeURI/S15.1.3.1_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURI/S15.1.3.1_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
 built-ins/decodeURI/S15.1.3.1_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/decodeURI/S15.1.3.1_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "%5E"}}; decodeURI(o
-built-ins/decodeURIComponent/S15.1.3.2_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
-built-ins/decodeURIComponent/S15.1.3.2_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
 built-ins/decodeURIComponent/S15.1.3.2_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/decodeURIComponent/S15.1.3.2_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "%5E"}}; decodeURICo
 built-ins/encodeURI/S15.1.3.3_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
@@ -1585,7 +1561,6 @@ language/statements/async-generator/dstr/ary-init-iter-get-err-array-prototype.j
 language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/async-generator/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/async-generator/return-undefined-implicit-and-explicit.js  # Actual ["tick 1", "tick 2", "g1 ret", "g2 ret", "g3 ret", "g4 ret"] and expected ["tick 1", "g1 ret"
 language/statements/const/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/const/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-in/S12.6.4_A7_T2.js  # for...in visits keys deleted during the loop

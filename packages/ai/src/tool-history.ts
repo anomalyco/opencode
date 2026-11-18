@@ -1,4 +1,4 @@
-import { Message, ToolResultPart, type ToolCallPart } from "./schema/messages.js"
+import { type Message, ToolMessage, ToolResultPart, type ToolCallPart } from "./schema/messages.js"
 
 const EMPTY_TOOL_OUTPUT = "(no tool output)"
 const MISSING_TOOL_RESULT = "Tool result missing"
@@ -48,7 +48,7 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
 }
 
 function missingToolResults(calls: Iterable<ToolCallPart>) {
-  return new Message({
+  return new ToolMessage({
     role: "tool",
     content: [...calls].map((call) =>
       ToolResultPart.make({
@@ -62,7 +62,7 @@ function missingToolResults(calls: Iterable<ToolCallPart>) {
   })
 }
 
-function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPart>): Message | undefined {
+function normalizeToolMessage(message: ToolMessage, pending: Map<string, ToolCallPart>): Message | undefined {
   const content = message.content.map((part) => {
     if (part.type !== "tool-result" || part.providerExecuted === true) return part
     const call = pending.get(part.id)
@@ -71,14 +71,7 @@ function normalizeToolMessage(message: Message, pending: Map<string, ToolCallPar
   })
   if (content.length === 0) return undefined
   if (content.every((part, index) => part === message.content[index])) return message
-  return new Message({
-    id: message.id,
-    role: message.role,
-    content,
-    metadata: message.metadata,
-    providerMetadata: message.providerMetadata,
-    native: message.native,
-  })
+  return new ToolMessage({ ...message, content })
 }
 
 function normalizeToolResult(part: ToolResultPart, call: ToolCallPart | undefined): ToolResultPart {

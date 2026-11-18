@@ -6,6 +6,7 @@ import { Config } from "@opencode/core/config"
 import { ConfigCompactionPlugin } from "@opencode/core/config/plugin/compaction"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
+import { Flag } from "@opencode/core/flag"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -39,15 +40,18 @@ const config = Config.testLayer()
 const it = testEffect(
   Layer.merge(
     config,
-    AppNodeBuilder.build(LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Bus.node]), [
-      llmClient.replace(
-        Layer.mock(LLMClient.Service)({
-          stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
-        }),
-      ),
-      Config.node.replace(config),
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
-    ]),
+    AppNodeBuilder.build(
+      LayerNode.group([SessionCompaction.node, SessionModelRequest.node, Config.node, Flag.node, Bus.node]),
+      [
+        llmClient.replace(
+          Layer.mock(LLMClient.Service)({
+            stream: () => Stream.make(LLMEvent.textDelta({ id: "summary", text: "## Objective\n- summary" })),
+          }),
+        ),
+        Config.node.replace(config),
+        Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
+      ],
+    ),
   ),
 )
 describe("ConfigCompactionPlugin.Plugin", () => {
@@ -170,7 +174,7 @@ const input = (tokens: number) => {
       model: resolved,
       messages,
       agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
-      initial: "",
+      initial: [],
       tools: { definitions: [], execute: () => Effect.die("unused") },
     },
   }

@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+if [ -z "${OPENCODE_REAL_ZIG:-}" ]; then
+  echo "OPENCODE_REAL_ZIG is required" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "build" ]; then
+  exec "$OPENCODE_REAL_ZIG" "$@" -Dcpu=baseline
+fi
+
+exec "$OPENCODE_REAL_ZIG" "$@"

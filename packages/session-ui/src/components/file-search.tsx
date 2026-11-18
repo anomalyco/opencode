@@ -26,14 +26,14 @@ export function FileSearchBar(props: {
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <Icon name="magnifying-glass" size="small" class="text-v2-icon-icon-muted shrink-0" />
+        <Icon name="magnifying-glass" class="text-v2-icon-icon-muted shrink-0" />
         <input
           ref={props.setInput}
           placeholder={i18n.t("ui.fileSearch.placeholder")}
           value={props.query}
           class="w-40 bg-transparent outline-none text-14-regular text-v2-text-text-base placeholder:text-v2-text-text-faint"
           onInput={(e) => props.onInput(e.currentTarget.value)}
-          onKeyDown={(e) => props.onKeyDown(e as KeyboardEvent)}
+          onKeyDown={(e) => props.onKeyDown(e)}
         />
         <div class="shrink-0 text-12-regular text-v2-text-text-faint tabular-nums text-right" style={{ width: "10ch" }}>
           {props.count ? `${props.index + 1}/${props.count}` : "0/0"}
@@ -46,7 +46,7 @@ export function FileSearchBar(props: {
             aria-label={i18n.t("ui.fileSearch.previousMatch")}
             onClick={props.onPrev}
           >
-            <Icon name="chevron-down" size="small" class="rotate-180" />
+            <Icon name="chevron-down" class="rotate-180" />
           </button>
           <button
             type="button"
@@ -55,7 +55,7 @@ export function FileSearchBar(props: {
             aria-label={i18n.t("ui.fileSearch.nextMatch")}
             onClick={props.onNext}
           >
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </button>
         </div>
         <button
@@ -64,7 +64,7 @@ export function FileSearchBar(props: {
           aria-label={i18n.t("ui.fileSearch.close")}
           onClick={props.onClose}
         >
-          <Icon name="close-small" size="small" />
+          <Icon name="close" />
         </button>
       </div>
     </Portal>

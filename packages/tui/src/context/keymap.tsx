@@ -174,8 +174,8 @@ export interface Keymap {
   readonly mode: {
     /** Returns the active mode. */
     current(): string
-    /** Pushes a mode until the returned cleanup is called. */
-    push(mode: string): () => void
+    /** Pushes a mode until the returned cleanup is called. The mode only claims input while `active` is true. */
+    push(mode: string, active?: Accessor<boolean>): () => void
   }
   /** Registers a low-level keymap interceptor. */
   intercept: OpenTuiKeymap["intercept"]
@@ -194,7 +194,10 @@ function use(): Keymap {
     },
     mode: {
       current: value.mode.current,
-      push: (mode) => value.mode.push(mode, resolveInteractivity(enabled)),
+      push: (mode, active) => {
+        const interactive = resolveInteractivity(enabled)
+        return value.mode.push(mode, active ? () => interactive() && active() : interactive)
+      },
     },
     intercept: value.keymap.intercept.bind(value.keymap),
     isLeader,
@@ -204,6 +207,9 @@ function use(): Keymap {
 function createLayer(input: () => KeymapLayer) {
   const value = useValue()
   const enabled = useInteractivity()
+  // The keymap rebuilds a re-registered layer when a command's `opencode` object is new,
+  // so each command keeps one object while its data is unchanged.
+  const stable = new Map<string, KeymapCommand & { readonly id: string }>()
   useBindings(() => {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
@@ -213,11 +219,19 @@ function createLayer(input: () => KeymapLayer) {
       enabled: enabled() ? options.enabled : false,
       ...(mode === "global" ? {} : { mode: mode ?? MODE.base }),
       commands: grouped.named.map((command) => {
-        const { id, description, group, palette, bind, run, ...definition } = command
+        const previous = stable.get(command.id)
+        if (previous && sameData(previous, command))
+          Object.assign(
+            previous,
+            Object.fromEntries(Object.entries(command).filter(([, value]) => typeof value === "function")),
+          )
+        else stable.set(command.id, command)
+        const kept = stable.get(command.id)!
+        const { id, description, group, palette, bind, run, ...definition } = kept
         return {
           ...definition,
           name: id,
-          opencode: command,
+          opencode: kept,
           run: (context: CommandContext<Renderable, KeyEvent>) => run(value.input(id), context.event),
           ...(description === undefined ? {} : { desc: description }),
           ...(group === undefined ? {} : { category: group }),
@@ -248,6 +262,33 @@ function createLayer(input: () => KeymapLayer) {
       ],
     }
   })
+}
+
+// Compares data fields only; functions are new closures on every run and take the latest by assignment.
+function sameData(previous: KeymapCommand, next: KeymapCommand) {
+  const keys = Object.keys(next) as (keyof KeymapCommand)[]
+  return (
+    keys.length === Object.keys(previous).length &&
+    keys.every((key) =>
+      typeof next[key] === "function"
+        ? typeof previous[key] === "function"
+        : Object.hasOwn(previous, key) && sameValue(previous[key], next[key]),
+    )
+  )
+}
+
+// Layers write `slash` inline, so its objects and arrays compare by their fields.
+function sameValue(previous: unknown, next: unknown): boolean {
+  if (Object.is(previous, next)) return true
+  if (typeof previous !== "object" || typeof next !== "object" || previous === null || next === null) return false
+  if (Array.isArray(previous) !== Array.isArray(next)) return false
+  const before = previous as Record<string, unknown>
+  const after = next as Record<string, unknown>
+  const keys = Object.keys(after)
+  return (
+    keys.length === Object.keys(before).length &&
+    keys.every((key) => Object.hasOwn(before, key) && sameValue(before[key], after[key]))
+  )
 }
 
 function groupCommands(commands: readonly KeymapCommand[] = []) {

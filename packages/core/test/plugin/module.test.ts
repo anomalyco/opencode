@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { cp } from "node:fs/promises"
+import { cp, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
@@ -8,7 +8,6 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Plugin } from "@opencode/core/plugin"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Rpc } from "@opencode/core/rpc"
 import { Tool } from "@opencode/core/tool"
@@ -18,6 +17,7 @@ import { Npm } from "@opencode/util/npm"
 import { createForeignPackageFilter, ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { createLoader, discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { tempGlobalLayer } from "../fixture/global"
+import { setOrganizationPolicy } from "../fixture/policy"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -40,6 +40,15 @@ it.live("watches creation of an external helper with missing parent directories"
     const modules = yield* PluginModule.make()
     const operation = { type: "add" as const, target: path.dirname(entry), options: {} }
     expect(Exit.isFailure(yield* modules.load(operation).pipe(Effect.exit))).toBe(true)
+    // Parcel's Windows backend starts reading changes on its own thread after subscribe resolves, so a file created
+    // right away can go unseen. Create probe directories, one event each, until the watch reports one.
+    const armed = yield* modules.changes().pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+    let probes = 0
+    yield* Effect.promise(() => mkdir(path.join(directory.path, `probe-${probes++}`))).pipe(
+      Effect.andThen(Fiber.join(armed).pipe(Effect.timeout("500 millis"))),
+      Effect.retry(Schedule.forever),
+      Effect.timeout("10 seconds"),
+    )
     const changed = yield* modules
       .changes()
       .pipe(Stream.runHead, Effect.timeout("5 seconds"), Effect.forkScoped({ startImmediately: true }))
@@ -415,15 +424,12 @@ it.live("blocks a local plugin before module initialization and honors replaceme
     `,
       ),
     )
-    const managed = yield* ManagedPolicy.Service
     const modules = yield* PluginModule.make()
     const operation = { type: "add" as const, target: directory.path, options: {} }
-    yield* managed.set({
-      statements: [{ action: "integration.use", resource: `plugin:${directory.path}`, effect: "deny" }],
-    })
+    yield* setOrganizationPolicy([{ action: "plugin.use", resource: directory.path, effect: "deny" }])
     expect(yield* modules.load(operation)).toEqual({ blocked: true })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
-    yield* managed.set({ statements: [] })
+    yield* setOrganizationPolicy(undefined)
     expect(yield* modules.load(operation)).toMatchObject({ id: "policy-fixture" })
     expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
   }),
@@ -476,13 +482,10 @@ it.live("loads a GUI-only package under its package name without running it, and
 for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
   it.live(`blocks versioned package ${target} before npm resolution or installation`, () =>
     Effect.gen(function* () {
-      const managed = yield* ManagedPolicy.Service
-      const modules = yield* PluginModule.make()
-      yield* managed.set({
-        statements: [
-          { action: "integration.use", resource: `plugin:${target.slice(0, target.lastIndexOf("@"))}`, effect: "deny" },
-        ],
-      })
+        const modules = yield* PluginModule.make()
+      yield* setOrganizationPolicy([
+        { action: "plugin.use", resource: target.slice(0, target.lastIndexOf("@")), effect: "deny" },
+      ])
       const operation = { type: "add" as const, target, options: {} }
       expect(yield* modules.load(operation, { install: false })).toEqual({ blocked: true })
       expect(yield* modules.load(operation, { install: true })).toEqual({ blocked: true })

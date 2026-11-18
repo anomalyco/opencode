@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Lägg till server",
   "menu.delete": "Radera",
+  "error.unavailable": "SSH är inte tillgängligt",
 }

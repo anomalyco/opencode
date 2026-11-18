@@ -12,4 +12,12 @@ export default {
   noChanges: "کوئی تبدیلی نئیں",
   "settings.wrapLines.title": "سطراں لپیٹو",
   "settings.wrapLines.description": "موبائل ڈف وچ پاسے سکرول کرن دی بجائے لمیاں سطراں لپیٹو",
+  "menu.count.one": "⁨{{count}}⁩ فائل بدلی",
+  "menu.count.other": "⁨{{count}}⁩ فائلاں بدلیاں",
+  "folder.more": "⁨{{count}}⁩ · باقی نئیں وکھائیاں",
+  "folder.failed": "تبدیلیاں لوڈ نئیں ہو سکیاں",
+  "command.open": "جائزہ کھولو",
+  "load.failed": "تبدیلیاں لوڈ نئیں ہو سکیاں",
+  "load.timeout": "سرور نے جواب دین وچ بہت ویلا لا دتا",
+  offline: "ایس سرور تک نئیں اپڑ سکدے",
 }

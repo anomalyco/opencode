@@ -16,7 +16,7 @@ import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
-import { tmpdir } from "./fixture/tmpdir"
+import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -28,11 +28,7 @@ const it = testEffect(
 type ConfigInput = typeof Info.Encoded
 
 function withTemp<A, E, R>(body: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => body(tmp.path),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  )
+  return withTempDir((tmp) => body(tmp.path))
 }
 
 function withFormatter<A, E, R>(

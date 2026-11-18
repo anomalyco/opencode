@@ -32,17 +32,16 @@ function UnreadBadge(props: { show: boolean; ring: "base" | "deep" }) {
 // 74px from the window edge. macOS 15 and earlier end at 68px.
 const macTrafficLightsBaseWidth = 74
 
-// Vertical tabs center the 14pt traffic lights on the session header's center line, 32px from the top, and inset them as
-// far from the left edge as from the top. The center scales with zoom. Returns window points; `width` is where the zoom
-// button ends.
+// Native buttons stay 14pt while their centers follow renderer zoom.
 export function macVerticalTrafficLights(zoom: number) {
-  const inset = 32 * zoom - 7
+  const x = 27 * zoom - 7
 
-  return { x: inset, y: inset, width: inset + macTrafficLightsBaseWidth - 14 }
+  const y = 32 * zoom - 7
+
+  return { x, y, width: x + macTrafficLightsBaseWidth - 14 }
 }
 
-// Matches the horizontal titlebar, whose first control starts 16px past the traffic lights.
-const macTrafficLightsGap = 16
+const macTrafficLightsGap = 10
 
 // The toggle's 28px plus a 4px gap before the header contents.
 const slotWidth = 32

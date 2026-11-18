@@ -17,24 +17,33 @@ export type SessionTabState = {
   preview?: string
 }
 
+/**
+ * Where a pane's "+" menu asked its next new tab to open; with `plugin`, only that plugin's tab. With `index`, the tab
+ * lands at that position in the strip, as a reopened tab returns where it closed.
+ */
+export type SessionPaneTarget = { readonly pane: SessionPane; readonly plugin?: string; readonly index?: number }
+
 export const sessionTabPane = (tabs: SessionTabs, tab: string): SessionPane => tabs.panes?.[tab] ?? "side"
+
+export const paneTargetMatches = (target: SessionPaneTarget, tab: string) =>
+  target.plugin === undefined || tab.startsWith(`${target.plugin}:`)
 
 const paneTabs = (tabs: SessionTabs, pane: SessionPane) => tabs.all.filter((tab) => sessionTabPane(tabs, tab) === pane)
 
 /**
  * Carries pane placement from `previous` into `next`, the strip and selection a tab operation just wrote. Kept tabs
- * keep their pane unless `next` places them. A new tab goes to `target` when given, else to the pane of the tab it
- * replaced in place (a preview), else to the pane of the last tab of its plugin, else to the side pane. A pane
+ * keep their pane unless `next` places them. A new tab goes to `target` when it matches, else to the pane of the tab
+ * it replaced in place (a preview), else to the pane of the last tab of its plugin, else to the side pane. A pane
  * whose shown tab left shows that tab's nearest neighbour.
  */
-export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, target?: SessionPane): SessionTabs {
+export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, target?: SessionPaneTarget): SessionTabs {
   const kept = new Set(previous.all)
   const placement = next.panes ? next : previous
 
   const placed = (tab: string, index: number): SessionPane => {
     if (kept.has(tab)) return sessionTabPane(placement, tab)
 
-    if (target) return target
+    if (target && paneTargetMatches(target, tab)) return target.pane
     const replaced = previous.all[index]
 
     if (replaced !== undefined && !next.all.includes(replaced)) return sessionTabPane(previous, replaced)
@@ -81,11 +90,22 @@ export function placeSessionTabs(previous: SessionTabs, next: SessionTabs, targe
   )
 
   return {
-    all: next.all,
+    all: landAt(next.all, kept, target),
     active: next.active,
     panes: Object.keys(panes).length > 0 ? panes : undefined,
     selected: Object.keys(selected).length > 0 ? selected : undefined,
   }
+}
+
+// Moves the new tab `target` asked for to the target's index.
+function landAt(all: string[], kept: ReadonlySet<string>, target: SessionPaneTarget | undefined) {
+  if (target?.index === undefined) return all
+  const landed = all.find((tab) => !kept.has(tab) && paneTargetMatches(target, tab))
+
+  if (landed === undefined) return all
+  const rest = all.filter((tab) => tab !== landed)
+
+  return [...rest.slice(0, target.index), landed, ...rest.slice(target.index)]
 }
 
 /**

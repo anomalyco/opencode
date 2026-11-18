@@ -59,8 +59,8 @@ export type DesktopMenuSeparator = {
 
 export type DesktopMenuEntry = DesktopMenuItem | DesktopMenuSeparator
 
-// Slack's desktop zoom levels from 100% up. Zoom In, Zoom Out and the Appearance setting all pick one.
-export const desktopZoomLevels = [1, 1.1, 1.25, 1.5, 1.75, 2] as const
+// Chromium's zoom levels from 50% to 200%. Zoom In, Zoom Out and the Appearance setting all pick one.
+export const desktopZoomLevels = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2] as const
 
 export type DesktopZoomLevel = (typeof desktopZoomLevels)[number]
 

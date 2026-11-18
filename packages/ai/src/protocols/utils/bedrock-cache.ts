@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { CacheTTL, type CacheHint, type LLMRequest } from "../../schema/index.js"
-import { newBreakpoints } from "./cache.js"
+import { newBreakpoints, take } from "./cache.js"
 
 // Bedrock cache markers are positional: emit a `cachePoint` block immediately
 // after the content the caller wants treated as a cacheable prefix. Bedrock
@@ -47,11 +47,7 @@ export type Breakpoints = ReturnType<typeof breakpoints>
 export const block = (breakpoints: Breakpoints, cache: CacheHint | undefined): CachePointBlock | undefined => {
   if (!breakpoints.supported) return undefined
   if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
-  if (breakpoints.remaining <= 0) {
-    breakpoints.dropped += 1
-    return undefined
-  }
-  breakpoints.remaining -= 1
+  if (!take(breakpoints)) return undefined
   // Older Claude releases cache for five minutes only, so a one-hour request falls back to the default.
   const ttl = cache.ttl === "1h" && !breakpoints.ttl1h ? undefined : cache.ttl
   return { cachePoint: { type: "default", ...(ttl === undefined ? {} : { ttl }) } }

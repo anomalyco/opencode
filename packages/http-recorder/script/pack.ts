@@ -11,13 +11,13 @@ export const pack = async () => {
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- package.json is validated by the package schema and build checks.
   const pkg = JSON.parse(original) as {
     readonly version: string
-    exports: Record<string, string | { readonly import: string; readonly types: string }>
+    exports: Record<string, string | { readonly types: string; readonly import: string }>
   }
 
   for (const [key, value] of Object.entries(pkg.exports)) {
     if (typeof value !== "string") continue
     const file = value.replace("./src/", "./dist/").replace(/\.ts$/, "")
-    pkg.exports[key] = { import: `${file}.js`, types: `${file}.d.ts` }
+    pkg.exports[key] = { types: `${file}.d.ts`, import: `${file}.js` }
   }
   await Bun.write("package.json", JSON.stringify(pkg, null, 2))
   try {

@@ -68,6 +68,43 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
+// Experimental routes carry no compatibility promise, so the generated clients nest them under
+// `client.experimental` instead of beside stable methods. The URL decides rather than the OpenAPI
+// id, because the URL is what callers depend on and an id can miss its `experimental.` prefix.
+export const clientNamespace = (endpoint: { readonly path: string }) =>
+  endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
+
+// The client paths that shipped before experimental methods moved under `client.experimental`. Each keeps a
+// deprecated alias until the next minor. Frozen: endpoints added since never had another path.
+export const deprecatedClientPaths = new Set([
+  "config.update",
+  "file.unwatch",
+  "file.watch",
+  "file.write",
+  "generate.decisions",
+  "generate.image",
+  "generate.text",
+  "integration.wellknown.add",
+  "mcp.add",
+  "mcp.client.token",
+  "mcp.connect",
+  "mcp.disconnect",
+  "mcp.remove",
+  "migration.v1.status",
+  "session.export",
+  "session.import",
+  "session.instructions.entry.list",
+  "session.instructions.entry.put",
+  "session.instructions.entry.remove",
+  "session.log",
+  "session.skill",
+  "session.stats",
+  "session.wait",
+  "usage.limits",
+  "voice.models",
+  "voice.session",
+])
+
 export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
@@ -78,6 +115,8 @@ export const effectOmitEndpoints = new Set([
   "fs.read",
   "fs.write",
   "media.get",
+  "blob.get",
+  "artifacts.view",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",

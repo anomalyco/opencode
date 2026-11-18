@@ -4,10 +4,15 @@ import { basename, dirname } from "node:path"
 import { Effect } from "effect"
 import { Browser } from "../src/rpc.js"
 import { BrowserFiles } from "../src/files.js"
+import { BrowserSkill } from "../src/skill.js"
 import { BrowserTools } from "../src/tools.js"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
 const navigate = (url: string) => BrowserTools.normalizeAction({ type: "navigate", tabID, url })
+
+test("built-in browser skill uses a virtual skill:// URI", () => {
+  expect(String(BrowserSkill.info.path)).toBe("skill://browser/SKILL.md")
+})
 
 test("URL normalization rejects filesystem paths instead of treating them as hostnames", () => {
   for (const path of ["/tmp/page.html", "./page.html", "../page.html", "C:\\Users\\me\\page.html", "D:/page.html"])

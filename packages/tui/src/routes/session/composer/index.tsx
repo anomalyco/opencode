@@ -112,6 +112,7 @@ export function Composer(props: ComposerProps) {
                         <text
                           fg={isActive() ? theme.text.base : theme.text.muted}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
+                          onMouseUp={() => setStore("active", t.id)}
                         >
                           {t.label}
                         </text>

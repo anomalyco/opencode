@@ -128,6 +128,69 @@ live(
   20_000,
 )
 
+live(
+  "PTY websocket closes with 1012 when its location reloads",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.acquireRelease(
+        Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-reload-"))),
+        (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+      )
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: ":memory:" },
+        models: { fetch: false },
+        config: { directory, project: false, content: "{}" },
+        fs: { filewatcher: false },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
+      const location = { directory }
+      yield* Effect.promise(async () => {
+        const terminal = await client.pty.create({
+          location,
+          command: "/bin/sh",
+          args: ["-c", "sleep 30"],
+          cwd: directory,
+        })
+        const token = await client.pty.connect.token({ location, ptyID: terminal.data.id, "x-opencode-ticket": "1" })
+        const url = new URL(`/api/pty/${terminal.data.id}/connect`, base)
+        url.protocol = "ws:"
+        url.searchParams.set("location[directory]", directory)
+        url.searchParams.set("ticket", token.data.ticket)
+        const socket = new WebSocket(url)
+        const state = { open: false, code: 0 }
+        socket.addEventListener("open", () => (state.open = true))
+        socket.addEventListener("close", (event) => (state.code = event.code))
+        try {
+          await waitFor(() => state.open)
+          // The socket holds the location; reload must still close it so the old location can shut down.
+          await client.location.reload()
+          await waitFor(() => state.code !== 0)
+          expect(state.code).toBe(1012)
+          // Releasing the socket let the old location close, and its shell with it.
+          await waitFor(() => !alive(terminal.data.pid))
+          expect(await client.pty.get({ location, ptyID: terminal.data.id }).catch(() => undefined)).toBeUndefined()
+        } finally {
+          socket.close()
+        }
+      })
+    }),
+  20_000,
+)
+
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function waitFor(predicate: () => boolean) {
   for (let attempt = 0; attempt < 200; attempt++) {
     if (predicate()) return

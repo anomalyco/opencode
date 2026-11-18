@@ -9,8 +9,16 @@ import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { useLocale } from "@kobalte/core/i18n"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
+import { prefersReducedMotion } from "@opencode/ui/motion"
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from "solid-js"
 import { getWorkerPool } from "../../pierre/worker"
+import {
+  SIDEBAR_EXIT_TIMEOUT_MS,
+  createSidebarPresenceState,
+  selectSidebarMounted,
+  transitionSidebarPresence,
+  type SidebarPresenceEvent,
+} from "./sidebar-presence-machine"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "./session-file-panel-v2"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
@@ -45,6 +53,8 @@ export type SessionReviewV2SidebarProps = {
   transition: boolean
   title?: JSX.Element
   stats?: JSX.Element
+  /** Controls at the header's end, after the stats. */
+  actions?: JSX.Element
   filter: string
   onFilterChange: (value: string) => void
   onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
@@ -67,26 +77,53 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const width = () => props.width ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT
   const minWidth = () => props.minWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN
   const maxWidth = () => props.maxWidth ?? SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
+  const [presence, setPresence] = createSignal(createSidebarPresenceState(untrack(() => props.open)))
+  let exitTimer: ReturnType<typeof setTimeout> | undefined
 
-  createEffect(() => {
-    if (!resizing()) return
-    const stop = () => setResizing(false)
-    makeEventListener(document, "pointerup", stop)
-    makeEventListener(document, "pointercancel", stop)
-  })
+  const dispatch = (event: SidebarPresenceEvent) => {
+    const next = transitionSidebarPresence(untrack(presence), event)
+
+    setPresence(next.state)
+    next.effects.forEach((effect) => {
+      clearTimeout(exitTimer)
+      exitTimer = setTimeout(
+        () => dispatch({ type: "exit.timed-out", attempt: effect.attempt }),
+        SIDEBAR_EXIT_TIMEOUT_MS,
+      )
+    })
+  }
+
+  createEffect(
+    on(
+      () => props.open,
+      (open) =>
+        dispatch({ type: "open.changed", open, animate: untrack(() => props.transition) && !prefersReducedMotion() }),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => clearTimeout(exitTimer))
+
+  const closing = () => presence().status === "closing"
 
   return (
     <div data-component="session-review-v2-sidebar-root">
-      <Show when={props.open}>
+      <Show when={selectSidebarMounted(presence())}>
         <aside
           data-slot="session-review-v2-sidebar"
+          data-presence={presence().status}
           data-transition={props.transition ? "" : undefined}
           data-resizing={resizing() ? "" : undefined}
-          style={{ width: `${width()}px` }}
+          aria-hidden={closing() || undefined}
+          inert={closing() || undefined}
+          style={{ "--session-review-v2-sidebar-width": `${width()}px` }}
+          onTransitionEnd={(event) => {
+            if (event.target === event.currentTarget && event.propertyName === "width") dispatch({ type: "exit.ended" })
+          }}
         >
           <div data-slot="session-review-v2-sidebar-header">
             <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
             {props.stats}
+            {props.actions}
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInput
@@ -136,13 +173,14 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         </aside>
       </Show>
       <Show when={props.open && props.onWidthChange}>
-        <div data-slot="session-review-v2-sidebar-resize" onPointerDown={() => setResizing(true)}>
+        <div data-slot="session-review-v2-sidebar-resize">
           <ResizeHandle
             direction="horizontal"
             size={width()}
             min={minWidth()}
             max={maxWidth()}
             onResize={(next) => props.onWidthChange?.(next)}
+            onDraggingChange={setResizing}
             onDblClick={() => props.onWidthChange?.(SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT)}
           />
         </div>
@@ -154,6 +192,8 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 export function SessionReviewV2(props: SessionReviewV2Props) {
   const i18n = useI18n()
   const locale = useLocale()
+  let previousButton: HTMLButtonElement | undefined
+  let nextButton: HTMLButtonElement | undefined
 
   createEffect(() => {
     getWorkerPool()
@@ -208,11 +248,17 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
 
     if (!props.hasDiffs || !canCycle()) return
-    const file = event.key === previousKey() ? prev() : next()
+    const previous = event.key === previousKey()
+    const file = previous ? prev() : next()
 
     if (!file) return
+    const active = document.activeElement
+
     event.preventDefault()
     cycle(file)
+
+    if (active !== previousButton && active !== nextButton) return
+    ;(previous ? previousButton : nextButton)?.focus({ preventScroll: true })
   })
 
   const toolbarStart = () => (
@@ -242,6 +288,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           }
         >
           <IconButton
+            ref={previousButton}
             icon={<Icon name="arrow-left" />}
             variant="ghost"
             size="small"
@@ -262,6 +309,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           }
         >
           <IconButton
+            ref={nextButton}
             icon={<Icon name="arrow-right" />}
             variant="ghost"
             size="small"

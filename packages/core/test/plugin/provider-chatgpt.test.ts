@@ -2,7 +2,7 @@ import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
-import { AIError, HttpContext, LLM, Message, RateLimitError } from "@opencode/ai/effect"
+import { ai, AIError, HttpContext, Message, RateLimitError } from "@opencode/ai/effect"
 import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
@@ -54,7 +54,7 @@ const addLegacyPlugin = Effect.fn(function* () {
 
 const addGithubCopilotPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GithubCopilotPlugin.effect(host)
 })
 
@@ -265,8 +265,12 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  for (const source of ["http", "stream"] as const) {
-    it.effect(`stops retries for ChatGPT usage limits from ${source} failures`, () =>
+  for (const [source, code] of [
+    ["http", "subscription_sharing_usage_limit_exceeded"],
+    ["stream", "subscription_sharing_usage_limit_exceeded"],
+    ["http", "subscription_sharing_workplace_individual_usage_limit_exceeded"],
+  ] as const) {
+    it.effect(`stops retries for ${code} from ${source} failures`, () =>
       Effect.gen(function* () {
         const credentials = yield* Credential.Service
         yield* credentials.create({
@@ -284,10 +288,10 @@ describe("ChatGPTPlugin", () => {
         const hooks = yield* PluginHooks.Service
         const body =
           source === "http"
-            ? JSON.stringify({ error: { code: "subscription_sharing_usage_limit_exceeded" } })
+            ? JSON.stringify({ error: { code } })
             : JSON.stringify({
                 type: "response.failed",
-                response: { error: { code: "subscription_sharing_usage_limit_exceeded" } },
+                response: { error: { code } },
               })
         const cause = new AIError({
           reason: new RateLimitError({
@@ -836,6 +840,40 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
+  it.effect("keeps the token-sharing safeguards when the token cannot be refreshed at load", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), () => {})
+      })
+      // An expired token without a registered client ID cannot be refreshed.
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "stale-token",
+          refresh: "refresh",
+          expires: 1,
+        }),
+      })
+      yield* addPlugin()
+      yield* addLegacyPlugin()
+
+      const provider = required(yield* catalog.get(Provider.ID.openai))
+      expect(provider.settings?.transport).toBe("http")
+      expect(provider.settings?.compaction).toEqual({ type: "summary" })
+      const model = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra")))
+      expect(model.compatibility?.supportsEffortUpdates).toBe(false)
+      expect(model.settings?.compaction).toEqual({ type: "summary" })
+    }),
+  )
+
   it.effect("keeps the full OpenAI catalog under an API key connection", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
@@ -1097,7 +1135,7 @@ describe("ChatGPTPlugin", () => {
         const model = required(yield* models.get(Provider.ID.openai, modelID))
         const body = (variant: string, messages: ReadonlyArray<Message>) =>
           resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
-            Effect.flatMap((resolved) => compileRequest(LLM.request({ model: resolved.model, messages }))),
+            Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
         const switched = [
