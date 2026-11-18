@@ -120,8 +120,9 @@ local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean
         built, text = pcall(traceback, co, mark)
     end
     if not built then
-        -- Out of memory, most likely with what the task holds: its stack goes first.
-        coroutine.close(co)
+        -- Out of memory. The task is no longer held, so its stack goes with the next collection. Not `coroutine.close`:
+        -- resetting the coroutine reallocates its stack, which with the heap full raises the memory error on the
+        -- coroutine's own state while this one runs, and Luau aborts the process on that.
         fail(if type(mark) == "string" then mark else "not enough memory")
     end
     error(text, 0)
