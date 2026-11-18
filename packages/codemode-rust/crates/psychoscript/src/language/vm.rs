@@ -2863,7 +2863,7 @@ impl<'rt> Vm<'rt> {
                     Op::In => {
                         let o = self.pop();
                         let k = self.pop();
-                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                        if matches!(k, Value::Obj(_)) && self.in_key_calls(&o, &k) {
                             conv_op!(code::IN, o, k, Value::Undef, 0, 0);
                         }
                         let r = tri!(self.has_property(&o, &k));
@@ -2948,7 +2948,7 @@ impl<'rt> Vm<'rt> {
                     Op::ObjectSpread => {
                         let src = self.pop();
                         if let Value::Obj(id) = self.top() {
-                            tri!(self.copy_props(id, &src, &[]));
+                            tri!(self.spread_props(id, &src));
                         }
                     }
                     Op::ObjRest(n) => {
@@ -2963,7 +2963,7 @@ impl<'rt> Vm<'rt> {
                             excluded.push(tri!(self.key_of(k)));
                         }
                         let id = self.new_object();
-                        tri!(self.copy_props(id, &src, &excluded));
+                        tri!(self.rest_props(id, &src, &excluded));
                         self.push(Value::Obj(id));
                     }
                     Op::ToKey => {
@@ -2993,7 +2993,7 @@ impl<'rt> Vm<'rt> {
                                 "undefined"
                             };
                             throw!(
-                                self.type_error(&format!("Cannot destructure '{t}' as it is {t}."))
+                                self.type_error(&format!("Cannot destructure {t} as it is {t}."))
                             );
                         }
                     }
@@ -3818,11 +3818,7 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::ForIn(slot) => {
                         let v = self.pop();
-                        if self.as_promise(&v).is_some() {
-                            throw!(self.invalid_data(
-                                "for...in received an un-awaited Promise; await it before inspecting the result."
-                            ));
-                        }
+                        tri!(self.for_in_source(&v));
                         let keys = self.for_in_keys(&v);
                         let proto = self.realm.iter_proto;
                         let id = self.alloc(Obj::new(

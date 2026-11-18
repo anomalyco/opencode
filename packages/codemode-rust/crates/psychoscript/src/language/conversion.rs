@@ -169,6 +169,14 @@ impl Vm<'_> {
             && (self.converts_by_call(v, Hint::Number) || self.converts_by_call(v, Hint::String))
     }
 
+    /// Whether `in` converts its key `k` by calling the program: only with a data object on the right (see
+    /// `Vm::has_property`).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn in_key_calls(&mut self, o: &Value, k: &Value) -> bool {
+        self.is_convertible_obj(o) && self.operand_calls(k)
+    }
+
     /// A conversion asked for where it can be restarted: the replayed answer, or the request (an `Err` the caller
     /// passes on). `None` when the conversion is made inline.
     #[inline]

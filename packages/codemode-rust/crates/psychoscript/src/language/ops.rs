@@ -61,9 +61,9 @@ impl<'rt> Vm<'rt> {
                 let p = self.realm.boolean_proto;
                 Ok(self.get_obj(p, key))
             }
+            // A symbol has no wrapper prototype in the reference.
             Value::Sym(_) => {
-                let p = self.realm.symbol_proto;
-                Ok(self.get_obj(p, key))
+                Err(self.type_error("Cannot access a property on a non-object value."))
             }
             Value::Undef | Value::Null | Value::Uninit => {
                 let k = self.key_text(key);
@@ -363,6 +363,7 @@ impl<'rt> Vm<'rt> {
     pub fn set(&mut self, v: &Value, key: Atom, val: Value) -> Result<(), Value> {
         match v {
             Value::Obj(id) => self.set_obj(*id, key, val),
+            // The reference resolves the base as a read does, so a nullish one fails as a read.
             Value::Undef | Value::Null | Value::Uninit => {
                 let k = self.key_text(key);
                 let t = if let Value::Null = v {
@@ -370,12 +371,17 @@ impl<'rt> Vm<'rt> {
                 } else {
                     "undefined"
                 };
-                Err(self.type_error(&format!("Cannot set properties of {t} (setting '{k}').")))
+                Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")))
+            }
+            Value::Sym(_) => {
+                Err(self.type_error("Cannot access a property on a non-object value."))
             }
             _ => {
                 let k = self.key_text(key);
                 let t = self.type_of(v);
-                Err(self.type_error(&format!("Cannot create property '{k}' on {t}")))
+                let s = self.string_of(v)?;
+                let s = self.text(s).to_owned();
+                Err(self.type_error(&format!("Cannot create property '{k}' on {t} '{s}'.")))
             }
         }
     }
@@ -631,22 +637,36 @@ impl<'rt> Vm<'rt> {
                 crate::convert::quote(&mut quoted, self.text(*s));
                 Err(self.type_error(&format!("Cannot delete property '{k}' of {quoted}.")))
             }
+            Value::Sym(_) => {
+                Err(self.type_error("Cannot access a property on a non-object value."))
+            }
             _ => Ok(true),
         }
     }
 
     #[inline(never)]
     pub fn has_property(&mut self, o: &Value, k: &Value) -> Result<bool, Value> {
-        let Value::Obj(id) = o else {
-            let ks = self.string_of(k)?;
-            let ks = self.text(ks).to_owned();
-            let d = self.describe(o);
-            return Err(self.type_error(&format!(
-                "Cannot use 'in' operator to search for '{ks}' in {d}"
-            )));
-        };
-        let key = self.key_of(k)?;
-        Ok(self.has_key(*id, key))
+        // The reference's `in`: a data object on the right and no namespace on the left, else an opaque operand is
+        // not data, else the right side is no object.
+        if let Value::Obj(id) = o
+            && !self.is_namespace(*id)
+            && !matches!(k, Value::Obj(kid) if self.is_namespace(*kid))
+        {
+            let key = self.key_of(k)?;
+            return Ok(self.has_key(*id, key));
+        }
+        if self.is_opaque_value(o) || self.is_opaque_value(k) {
+            return Err(self.invalid_data("Binary operators require data values."));
+        }
+        Err(self.type_error("The 'in' operator requires a data object on the right-hand side."))
+    }
+
+    /// The reference's `isOpaque`: a function, a promise, a generator, an iterator or a namespace.
+    fn is_opaque_value(&self, v: &Value) -> bool {
+        matches!(v, Value::Obj(id) if {
+            let o = &self.heap[*id as usize];
+            o.is_callable() || crate::cross::opaque(&o.kind)
+        })
     }
 
     pub fn has_key(&self, id: Id, key: Atom) -> bool {
@@ -715,15 +735,23 @@ impl<'rt> Vm<'rt> {
 
     #[inline(never)]
     pub fn instance_of(&mut self, v: &Value, c: &Value) -> Result<bool, Value> {
-        if !self.is_callable(c) {
-            return Err(self.type_error("Right-hand side of 'instanceof' is not callable"));
+        let Value::Obj(cid) = c else {
+            return Err(self.type_error("The right-hand side of 'instanceof' is not callable."));
+        };
+        if !self.is_callable(c) || self.is_namespace(*cid) {
+            return Err(self.type_error("The right-hand side of 'instanceof' is not callable."));
         }
-        let Value::Obj(cid) = c else { return Ok(false) };
         let pk = self.names.prototype;
         let Value::Obj(proto) = self.get_obj(*cid, pk) else {
-            return Err(self.type_error("Function has non-object prototype in instanceof check"));
+            return Err(
+                self.type_error("The right-hand side of 'instanceof' has no 'prototype' object.")
+            );
         };
+        // A namespace is no object, so it has no prototype chain.
         let Value::Obj(cur) = v else { return Ok(false) };
+        if self.is_namespace(*cur) {
+            return Ok(false);
+        }
         let mut cur = *cur;
         while let Some(p) = self.heap[cur as usize].proto {
             if p == proto {
@@ -896,6 +924,58 @@ impl<'rt> Vm<'rt> {
             .filter(|p| p.key <= SYM_ASYNC_ITERATOR && p.flags & ENUMERABLE != 0)
             .map(|p| (p.key, p.value))
             .collect()
+    }
+
+    /// The reference's `enumerableSource`: the value whose own enumerable properties `label` (`Object.keys(...)`,
+    /// `for...in`, `Object spread`, ...) reads. Null and undefined have none to read, and a promise or a namespace
+    /// is not data; anything else reads as its own properties (a primitive as an empty object, a string as its
+    /// characters).
+    #[inline(never)]
+    pub(crate) fn enumerable_source(&mut self, label: &str, v: &Value) -> Result<(), Value> {
+        match v {
+            Value::Null => Err(self.type_error(&format!("{label} cannot convert null to an object."))),
+            Value::Undef | Value::Uninit => {
+                Err(self.type_error(&format!("{label} cannot convert undefined to an object.")))
+            }
+            Value::Obj(id) if self.is_promise(*id) => Err(self.invalid_data(&format!(
+                "{label} received an un-awaited Promise; await it before inspecting the result."
+            ))),
+            Value::Obj(id) if self.is_namespace(*id) => Err(self.invalid_data(&format!(
+                "{label} cannot read tools: it is a namespace of host functions, not plain data. Use \
+                 Object.keys(tools) for its names."
+            ))),
+            _ => Ok(()),
+        }
+    }
+
+    /// An object spread of `v` into `target`: null and undefined spread nothing.
+    #[inline(never)]
+    pub(crate) fn spread_props(&mut self, target: Id, v: &Value) -> Result<(), Value> {
+        if !v.is_nullish() {
+            self.enumerable_source("Object spread", v)?;
+        }
+        self.copy_props(target, v, &[])
+    }
+
+    /// An object rest pattern's properties of `v`, but `excluded`, copied into `target`.
+    #[inline(never)]
+    pub(crate) fn rest_props(
+        &mut self,
+        target: Id,
+        v: &Value,
+        excluded: &[Atom],
+    ) -> Result<(), Value> {
+        self.enumerable_source("Object destructuring", v)?;
+        self.copy_props(target, v, excluded)
+    }
+
+    /// A `for...in` source: a namespace lists its names, and null and undefined iterate nothing.
+    #[inline(never)]
+    pub(crate) fn for_in_source(&mut self, v: &Value) -> Result<(), Value> {
+        if v.is_nullish() || matches!(v, Value::Obj(id) if self.is_namespace(*id)) {
+            return Ok(());
+        }
+        self.enumerable_source("for...in", v)
     }
 
     #[inline(never)]

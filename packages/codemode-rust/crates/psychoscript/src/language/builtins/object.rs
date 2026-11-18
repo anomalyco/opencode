@@ -158,15 +158,8 @@ fn object_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     }
 }
 
-fn require_object_coercible(vm: &mut Vm, v: &Value) -> Result<(), Value> {
-    if v.is_nullish() {
-        return Err(vm.type_error("Cannot convert undefined or null to object"));
-    }
-    Ok(())
-}
-
-fn entries_of(vm: &mut Vm, v: &Value) -> Result<Vec<(Value, Value)>, Value> {
-    require_object_coercible(vm, v)?;
+fn entries_of(vm: &mut Vm, label: &str, v: &Value) -> Result<Vec<(Value, Value)>, Value> {
+    vm.enumerable_source(label, v)?;
     Ok(match v {
         Value::Obj(id) => {
             let id = *id;
@@ -189,8 +182,10 @@ fn entries_of(vm: &mut Vm, v: &Value) -> Result<Vec<(Value, Value)>, Value> {
 
 fn object_keys(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let v = arg(args, 0);
-    if let Value::Obj(id) = v {
-        require_object_coercible(vm, &v)?;
+    // A namespace lists its names.
+    if let Value::Obj(id) = v
+        && (vm.is_namespace(id) || !vm.is_promise(id))
+    {
         let keys = vm.own_keys(id);
         let items = keys
             .into_iter()
@@ -198,12 +193,15 @@ fn object_keys(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
             .collect();
         return Ok(vm.new_array(items));
     }
-    let items = entries_of(vm, &v)?.into_iter().map(|(k, _)| k).collect();
+    let items = entries_of(vm, "Object.keys(...)", &v)?
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
     Ok(vm.new_array(items))
 }
 
 fn object_values(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let items = entries_of(vm, &arg(args, 0))?
+    let items = entries_of(vm, "Object.values(...)", &arg(args, 0))?
         .into_iter()
         .map(|(_, v)| v)
         .collect();
@@ -211,7 +209,7 @@ fn object_values(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn object_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let pairs = entries_of(vm, &arg(args, 0))?;
+    let pairs = entries_of(vm, "Object.entries(...)", &arg(args, 0))?;
     let items = pairs
         .into_iter()
         .map(|(k, v)| vm.new_array(vec![k, v]))
@@ -221,16 +219,32 @@ fn object_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 
 fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let target = arg(args, 0);
-    let Value::Obj(t) = target else {
-        return Err(vm.type_error("Object.assign target must be an object"));
+    let t = match target {
+        Value::Obj(t) if !vm.is_namespace(t) => t,
+        _ => {
+            let d = super::describe_value(vm, &target);
+            return Err(vm.type_error(&format!(
+                "Object.assign expects a data object or array target, received {d}."
+            )));
+        }
     };
     for src in args.iter().skip(1) {
+        if src.is_nullish() {
+            continue;
+        }
+        vm.enumerable_source("Object.assign(...)", src)?;
         if let Value::Obj(s) = src {
             let mut entries = vm.own_entries(*s);
             entries.extend(vm.own_symbol_entries(*s));
+            // The reference sets the fields as they are, on a promise too.
+            let promise = vm.is_promise(t);
             for (k, v) in entries {
                 vm.reject_circular(t, &v, "Object.assign result")?;
-                vm.set_obj(t, k, v)?;
+                if promise {
+                    vm.define(t, k, v);
+                } else {
+                    vm.set_obj(t, k, v)?;
+                }
             }
         } else {
             vm.copy_props(t, src, &[])?;
@@ -312,14 +326,18 @@ fn define_entry(vm: &mut Vm, fr: crate::native::Frame, k: &Value, v: Value) -> R
 
 fn object_has_own(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let o = arg(args, 0);
-    require_object_coercible(vm, &o)?;
+    vm.enumerable_source("Object.hasOwn(...)", &o)?;
     let k = vm.key_of(&arg(args, 1))?;
     Ok(Value::Bool(match o {
         Value::Obj(id) => vm.has_own(id, k),
-        Value::Str(s) => vm
-            .atoms
-            .index(k)
-            .is_some_and(|i| (i as usize) < vm.atoms.sref(s).len16()),
+        // A string reads as the array of its characters.
+        Value::Str(s) => {
+            k == vm.names.length
+                || vm
+                    .atoms
+                    .index(k)
+                    .is_some_and(|i| (i as usize) < vm.atoms.sref(s).len16())
+        }
         _ => false,
     }))
 }
@@ -371,26 +389,33 @@ fn object_is_extensible(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res
 
 fn object_create(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let proto = match arg(args, 0) {
-        Value::Obj(p) => Some(p),
+        Value::Obj(p) if !vm.is_namespace(p) => Some(p),
         Value::Null => None,
-        _ => return Err(vm.type_error("Object prototype may only be an Object or null")),
+        _ => return Err(vm.type_error("Object prototype may only be an Object or null.")),
     };
     if !matches!(arg(args, 1), Value::Undef) {
-        return Err(vm.type_error("Property descriptors are not supported"));
+        return Err(vm.type_error(
+            "Object.create property descriptors are not supported; assign the fields after creating the object.",
+        ));
     }
     Ok(Value::Obj(vm.alloc(Obj::new(proto, Kind::Ordinary))))
 }
 
 fn object_get_prototype_of(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(match arg(args, 0) {
-        Value::Obj(id) => vm.heap[id as usize]
+        Value::Obj(id) if !vm.is_namespace(id) => vm.heap[id as usize]
             .proto
             .map(Value::Obj)
             .unwrap_or(Value::Null),
         Value::Str(_) => Value::Obj(vm.realm.string_proto),
         Value::Num(_) => Value::Obj(vm.realm.number_proto),
         Value::Bool(_) => Value::Obj(vm.realm.boolean_proto),
-        _ => return Err(vm.type_error("Cannot convert undefined or null to object")),
+        v => {
+            let d = super::describe_value(vm, &v);
+            return Err(vm.type_error(&format!(
+                "Object.getPrototypeOf cannot convert {d} to an object."
+            )));
+        }
     })
 }
 
