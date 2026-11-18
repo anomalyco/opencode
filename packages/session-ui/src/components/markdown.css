@@ -402,13 +402,14 @@
 
     /* Like the shell output's Copy, the ghost buttons get the block's background behind them, so code under them
        doesn't show through. It fades out toward the start and the bottom, so a line it reaches softens instead of
-       being cut, and stops inside the block's border and rounded corner. */
+       being cut. It stops a pixel inside the block's 0.5px border and rounded corner: ending flush against the
+       hairline paints over it once the block sits at a fractional position. */
     &::before {
       content: "";
       position: absolute;
       z-index: -1;
-      inset: -3.5px -3.5px -8px -24px;
-      border-start-end-radius: 5.5px;
+      inset: -3px -3px -8px -24px;
+      border-start-end-radius: 6px;
       background: var(--markdown-code-background);
       mask-image:
         linear-gradient(to right, transparent, #000 24px), linear-gradient(#000 calc(100% - 8px), transparent);
