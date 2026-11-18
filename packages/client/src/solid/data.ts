@@ -441,9 +441,10 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
-  // Per-session send chain: prompts and compactions must be admitted in
-  // submission order. Each waits for the previous POST to settle, so one
-  // failure does not block the next.
+  // Per-session send chain: prompts, compactions and the requests a caller
+  // puts in it with `sequence` must reach the server in submission order.
+  // Each waits for the previous POST to settle, so one failure does not block
+  // the next.
   const sending = new Map<string, Promise<unknown>>()
   const messageLoads = new Map<string, Promise<unknown>>()
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
@@ -1773,6 +1774,13 @@ export function createData(config: CreateDataInput) {
           })
         compacting.set(input.sessionID, { id, observed, request })
         return request
+      },
+      // Runs a session request this layer does not model, such as a shell or a
+      // server command, in the session's send chain: `send` starts once the
+      // prompts, compactions and sequenced requests made before it have
+      // settled, so the server receives them in the order they were made.
+      sequence<Value>(sessionID: string, send: () => Promise<Value>) {
+        return sendAdmission(sessionID, send)
       },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
