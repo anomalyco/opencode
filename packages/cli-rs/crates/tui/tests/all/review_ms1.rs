@@ -1,6 +1,4 @@
-//! Regressions for the `carbon` review of MS1 (`reviews/ms1.review-carbon.md`): session views that leave their
-//! keys behind (carbon-2), keymap conditions that lock the store (carbon-5), and permission reads and focus
-//! after a reconnect or under a dialog (carbon-6).
+//! Session key ownership and permission refresh across route and connection changes.
 
 use crate::support::{self, WAIT};
 
@@ -153,7 +151,7 @@ fn a_reconnect_reads_permissions_again() {
     let h = mount(support::session_route("ses_a"));
     h.wait_for("the session", |screen| screen.contains("Review"));
     h.app.advance(Duration::from_millis(50));
-    // Asked while the stream was down: only the read after the reconnect can see it.
+    // Only the reconnect read can discover a request added while the stream is down.
     h.server.permissions.lock().unwrap().push(permission());
     h.server.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
     h.wait_for("the permission prompt", |screen| screen.contains("Permission required"));

@@ -90,7 +90,7 @@ fn the_leader_opens_its_commands_in_every_terminal_encoding() {
 
 #[test]
 fn tab_and_shift_tab_cycle_tabs_only_while_tabs_are_on() {
-    // `tabs.mode` wins over the legacy `enabled` (TS `config/index.tsx:295`), so "off" turns tabs off.
+    // Explicit `tabs.mode` takes precedence over legacy `enabled`.
     let h = mount("off");
     for key in [&b"\t"[..], b"\x1b[Z"] {
         h.app.feed(key);

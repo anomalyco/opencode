@@ -1,5 +1,4 @@
-//! The root command's TUI arguments (C.13) that P-APP cannot record, because the TS app fixture passes no
-//! `environment`: the terminal's variables go to the session on a local server, and to nobody otherwise.
+//! Drive terminal-environment uploads through the root command's TUI arguments.
 
 use crate::support;
 
@@ -126,8 +125,7 @@ fn an_opened_session_gets_the_environment_only_on_a_local_server() {
     }
 }
 
-/// TS uploads when the status turns connected (`app.tsx:529-539`), which follows `server.connected`
-/// (`connection.ts:114-115`). The connection is driven by hand to get that order.
+/// Trigger the upload on connected status; an earlier event alone does not suffice.
 #[test]
 fn the_environment_is_uploaded_when_the_status_follows_server_connected() {
     let app = TestApp::new(100, 30);

@@ -1,4 +1,4 @@
-//! TypeScript: `parity/component/E.17a-integrations.tsx`.
+//! Integration dialogs and their credential requests.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -547,7 +547,6 @@ fn form_steps_open_a_link_take_an_own_answer_and_a_multiselect() {
     }));
     let kit = Kit::with(list, "auto");
     opencode_tui::dialogs::integration::show_auto_connect(&kit.tui, &IntegrationID("mcp_aws".into()), None);
-    // "I finished" stays hidden until the link was opened.
     kit.wait_for("Open link");
     assert!(!kit.app.text().contains("I finished"));
     kit.app.press("return");
@@ -555,8 +554,7 @@ fn form_steps_open_a_link_take_an_own_answer_and_a_multiselect() {
     assert_eq!(*kit.opened.borrow(), ["https://aws.example/login"]);
     kit.down(1);
     kit.app.press("return");
-    // The own answer: row 2, typed, submitted with Enter. The list is as tall as its rows without their gaps
-    // (`count` in TS), so row 2 scrolls into view when selected.
+    // The second choice can be below the viewport because the height counts options but excludes the gaps.
     kit.wait_for("1. default");
     kit.down(1);
     kit.wait_for("2. Type your own answer");

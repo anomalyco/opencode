@@ -1,6 +1,5 @@
-//! P-APP, Rust side (`docs/testing.md`): replays every recording under `parity/fixtures/*/*.app.json`
-//! through the whole Rust TUI in a `TestApp`, over the in-memory transport, and compares each checkpoint's
-//! cells and the requests with what the TS TUI did. `PARITY_SCENARIO=<step>/<name>` selects one scenario.
+//! Replay recorded app scenarios against the full TUI and compare checkpoints and requests. `PARITY_SCENARIO` selects
+//! one recording.
 
 use crate::support::{self, ide};
 
@@ -39,8 +38,7 @@ fn scenarios() {
     let only = std::env::var("PARITY_SCENARIO").ok();
     let recordings = Recording::all(only.as_deref()).unwrap_or_else(|error| panic!("{error}"));
     assert!(!recordings.is_empty(), "no P-APP recording matches {only:?}");
-    // The built-ins' own screens (E.14) run on both carriers (P6a): with Rust values, and through the C ABI's byte
-    // shims. `PARITY_CARRIER=both` runs every selected scenario on both.
+    // Run built-in screens on both carriers. `PARITY_CARRIER=both` repeats every selected scenario on both.
     let both = std::env::var("PARITY_CARRIER").is_ok_and(|carrier| carrier == "both");
     let mut failed = Vec::new();
     for recording in &recordings {
@@ -94,7 +92,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
     #[cfg(not(feature = "ts"))]
     let cache: Option<opencode_util::temp::TempDir> = None;
     let args = &recording.args;
-    // TS opens `sessionID` unless it forks it (`app.tsx:680-686`).
     let session = args.session_id.clone().map(SessionID);
     let tui = opencode_tui::mount_with(
         &app,
@@ -146,14 +143,12 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         let config = opencode_plugin::pipe::Config {
             version: "test".to_owned(),
             channel: "test".to_owned(),
-            // TS's recorder runs in UTC (`parity/app/scenarios.test.tsx`), so a time a plugin writes in local time
-            // (`opencode-session-time`'s) reads the same on both sides on any machine.
+            // Match the recorder's UTC time zone for plugin-local timestamps.
             env: vec![("TZ".to_owned(), "UTC".to_owned())],
             ..opencode_plugin::pipe::Config::new(bun)
         };
         let root = opencode_util::temp::tempdir().expect("plugin root");
-        // The user's global opencode config names the scenario's cached packages, as a TS server plugin's TUI part
-        // loads without approval only then in Rust (O-162); TS asks for none.
+        // Global config vouches for cached server plugins so the replay does not require interactive approval.
         let user: Vec<&String> = recording.cache.keys().collect();
         std::fs::create_dir_all(root.path().join("config")).expect("config directory");
         let global = serde_json::json!({ "plugins": user }).to_string();
@@ -187,10 +182,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
     let sockets = Arc::new(Sockets::new(recording));
     tui.terminals.set_connector(sockets.clone());
 
-    // TS draws no route until its plugins' setups have run (`app.tsx`, `<Show when={plugins.ready()}>`), so its first
-    // checkpoint already has every plugin's commands and slots. The Rust route mounts first and the plugins load after
-    // it, a V2 plugin's commands in a reload after its first mount: under load a step could come before them, an Enter
-    // on a completion that has not listed `/files` yet (file-browser-flake). The replay starts once they have loaded.
+    // Wait for plugin registration before replaying keys. The recorder's first frame already has the plugin's commands.
     let starting = || {
         tui.plugins.entries().iter().any(|entry| match &entry.status {
             opencode_plugin::Status::Skipped(reason) => {
@@ -275,9 +267,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         }
     }
 
-    // A write a last key starts can come after the last checkpoint, as the recorder's stays open past it: a JS plugin's
-    // declined Enter goes on once the JS host answered, and the prompt goes then (CT-19). Wait, at most `UNTIL`, until as
-    // many writes went as TS sent.
+    // A key can start a write after its last checkpoint. Wait for the recorded number of writes before comparing.
     let writes = || memory.requests().iter().filter(|logged| !app::is_read(&logged.method, &logged.path)).count();
     let deadline = Instant::now() + SETTLE;
     while !(memory.in_flight() == 0 && writes() >= recording.requests.writes.len()) && Instant::now() < deadline {
@@ -334,8 +324,7 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
     (passed, report)
 }
 
-/// What a client sent the IDE server, each message once and without its request ID: TS connects again when
-/// the session's directory differs from its working directory, which the Rust runner's does not.
+/// Deduplicate IDE messages and omit request IDs: reconnects can repeat the handshake.
 fn handshake(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
     let mut unique: Vec<serde_json::Value> = Vec::new();
     for message in messages {
@@ -350,8 +339,7 @@ fn handshake(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
     unique
 }
 
-/// Replays the recorded fake PTY sockets (E.13a): each socket sends the TS fake's messages once the scenario reached
-/// the same step and the TUI sent as many frames, and keeps the frames the TUI sent.
+/// Replay PTY socket messages at their recorded steps once the client connects.
 struct Sockets {
     recorded: Vec<app::SocketRecording>,
     step: Arc<AtomicUsize>,
@@ -423,7 +411,6 @@ impl pty::Connector for Sockets {
 fn slot_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         for path in [slot::HOME_FOOTER, slot::SESSION_COMPOSER_TOP] {
-            // TS pads the left edge only; the line is short, so the right edge's padding shows nothing.
             let node = Node::column(vec![Node::text([Span::new(format!("slot plugin: {path}"))]).fg("text.muted")]);
             setup.slot(Placement::append(path), move |_, _, _| Render::Show(node.clone().padding(2, 0)));
         }
@@ -441,7 +428,7 @@ fn app_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.app", setup }
 }
 
-/// `parity/plugins/fence/tui.tsx`, as a renderer claim of `parity` fences (Pr): each line of the fence after a label.
+/// Render a label and the lines of each claimed fence.
 fn fence_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.claim(abi::claim::Claim::fence("parity", |_, part| {
@@ -495,7 +482,7 @@ fn p0a_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.p0a", setup }
 }
 
-/// `parity/plugins/p0b/tui.tsx`: one line appended to `app` that shows what the reads of ABI 1.6 answer.
+/// Append a line showing the plugin's host reads.
 fn p0b_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.slot(Placement::append(slot::APP), |read, input, _| {
@@ -568,8 +555,7 @@ fn npm_config(config: &serde_json::Value) -> String {
     config.to_string()
 }
 
-/// js-npm: an npm cache in a temporary directory holding each package of `packages` (spec to tarball name) as TS's
-/// `Npm.add` leaves it, as the TS recorder lays it out (`npmCache` in parity/app/scenarios.test.tsx).
+/// Build the npm cache layout for the pinned packages in an isolated directory.
 #[cfg(feature = "ts")]
 fn cache(packages: &BTreeMap<String, String>) -> opencode_util::temp::TempDir {
     let cache = opencode_util::temp::tempdir().expect("npm cache");
@@ -634,12 +620,7 @@ fn routes(recording: &Recording) -> Vec<MemoryRoute> {
         .collect()
 }
 
-/// Waits for `until` (bounded by [`UNTIL`]), then until nothing is in flight (`in_flight`), two renders 25 ms apart are
-/// equal, and the frame is `expected` (bounded by [`SETTLE`]). A frame can stay still before a read that changes it
-/// has even been sent, so stillness alone is not enough. Each 25 ms passes on the app's manual clock too: the TS
-/// recorder's settle lets real time pass, 30 ms a poll, three polls at least, and its timers run in it, such as the
-/// 50 ms poll by which the open list follows its prompt (flakes-10). A frozen clock left a list opened before its prompt
-/// laid out one row tall.
+/// Wait for readiness, idle requests, and matching cells across two renders. Retry with a bounded deadline.
 pub(crate) fn settle(
     app: &TestApp,
     in_flight: &dyn Fn() -> usize,

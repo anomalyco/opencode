@@ -1,6 +1,4 @@
-//! The live config (`rs-ms34-config`): settings writes and outside `cli.json` edits reach every reader at once,
-//! as TS's reactive `ConfigProvider` does (`packages/tui/src/config/index.tsx:354-371`), and writes queue
-//! instead of dropping.
+//! Apply live config changes from both settings writes and external file replacements.
 
 use std::path::Path;
 use std::rc::Rc;
@@ -66,7 +64,7 @@ fn the_leader_sequence_expires_on_the_app_clock() {
         let app = TestApp::new(100, 30);
         let tui = support::mount_empty(&app, opencode_local::cli_config::decode_text(config).unwrap(), None);
         app.press("ctrl+x");
-        // The first read prunes the sequence's captures, which restarts the timer as in TS; a frame reads it at once.
+        // Reading the pending sequence prunes captures and restarts its timer.
         assert!(tui.keymap.leader_active());
         app.advance(Duration::from_millis(wait));
         assert_eq!(tui.keymap.leader_active(), completes, "{config} after {wait} ms");
@@ -115,7 +113,7 @@ fn an_outside_cli_json_edit_reloads() {
     let app = TestApp::new(100, 30);
     let (tui, file) = mount_with_file(&app, home.path(), "{}\n");
     assert!(Tabs::enabled(&tui));
-    // As the TS TUI or an editor would: a new file renamed over the old one.
+    // Simulate an editor's atomic replacement.
     let temp = file.with_extension("json.edit");
     std::fs::write(&temp, "{\n  // edited elsewhere\n  \"tabs\": { \"mode\": \"off\" }\n}\n").unwrap();
     std::fs::rename(&temp, &file).unwrap();

@@ -1,7 +1,4 @@
-//! Tool rows (E.7a) over a fixture server: the inline tools (read, glob, grep, write before it
-//! lands, the generic tool), the block tools (shell, write, edit), each running and finished, the
-//! error and denied states, clicks that expand, and the warning color of a call that waits on a
-//! permission request.
+//! Tool transcript rows, states, and click actions.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -355,8 +352,6 @@ fn the_edit_diff_splits_in_a_session_pane_above_120_columns() {
         ),
     )]);
     let h = open(140, 30, messages, Vec::new());
-    // The docked sidebar leaves the session pane 98 columns, so the diff is unified (`contentWidth`,
-    // `session-frame.tsx:283-298`).
     let screen = h.wait_for("new();");
     let (_, removed) = h.find("old();");
     let (_, added) = h.find("new();");

@@ -372,15 +372,13 @@ fn startup_agent_and_model_reach_the_selection() {
         h.agent().as_deref() == Some("plan") && h.tui.local.current() == Some(Model::new("demo", "other"))
     });
     assert_eq!(h.tui.local.recent(), [Model::new("demo", "other")]);
-    // `--agent` shows over a session's own agent until the user picks one there (`local.tsx:90-96`).
     h.tui.navigate(session_route("ses_b"));
     h.wait_for("Write the docs");
     assert_eq!(h.agent().as_deref(), Some("plan"));
     assert_eq!(h.writes(), Vec::<String>::new());
 }
 
-// `--model` leaves the model saved on the session `-s` opens, and stays `fallbackModel`'s first choice
-// (`local.tsx:184-196,266-283`, `app.tsx:666-686`).
+// An existing session keeps its saved model; the flag still leads fallback selection.
 #[test]
 fn startup_model_keeps_a_saved_session_model_and_leads_the_fallback() {
     let h =

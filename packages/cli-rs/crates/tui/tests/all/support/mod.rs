@@ -142,9 +142,7 @@ pub fn base(seen: &Seen, directory: &str) -> Reply {
         ) => (200, list(directory, json!([]))),
         ("GET", _) if path.ends_with("/form") || path.ends_with("/permission") => (200, json!({ "data": [] })),
         ("GET", "/api/config") => (200, json!([])),
-        // The TUI reads the data migration's status a second after it connects (`features/overlays.rs`). A server
-        // with nothing to migrate says so; a 404 would toast "Data migration failed" over whatever a test is at by
-        // then, which a slow column under load reaches and a fast one does not.
+        // Report migration complete; a fixture 404 would produce an unrelated delayed toast.
         ("GET", "/api/experimental/migration/v1") => (200, json!({ "status": "completed" })),
         ("POST", _) if path.ends_with("/prompt") => (200, prompted(seen, "steer")),
         ("POST", _) if path.ends_with("/model") || path.ends_with("/agent") => (204, Value::Null),
@@ -245,11 +243,7 @@ pub fn still() -> Info {
     Info { animations: Some(false), ..Info::default() }
 }
 
-/// Whether the calling test goes on here: it does when this process runs in UTC (`TZ=UTC`). Elsewhere it runs again, in
-/// a child of this binary with `TZ=UTC`, which this asserts passed, and the caller returns. TS's recorder runs in UTC
-/// (`parity/app/scenarios.test.tsx`), so a time the client or a plugin shows in local time (`Read::utc_offset`,
-/// `Zone::Local`) reads the same on any machine. The zone is read once a process, so it is pinned by the child's
-/// environment, not set in this one.
+/// Run the test body in UTC, spawning the same test in a child when needed.
 pub fn in_utc() -> bool {
     if std::env::var("TZ").as_deref() == Ok("UTC") {
         return true;
@@ -295,8 +289,7 @@ pub fn roots(paths: Paths, channel: &str) -> Option<Roots> {
     Some(Roots { paths, storage_channel: channel.into() })
 }
 
-/// An app that clears with the dark `opencode` theme's page background, as the TS screens do, so a dialog's
-/// backdrop blends over the same color.
+/// Clear with the dark page background so dialog backdrop blending matches the fixture.
 pub fn dark_app(width: u16, height: u16) -> TestApp {
     let theme =
         opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
@@ -351,7 +344,7 @@ pub fn xdg_paths(home: &Path) -> Paths {
         .unwrap()
 }
 
-/// One op of the F.5 oracle's `config` command in `home`, or `None` without bun and `node_modules`.
+/// Run one reference configuration operation in `home`, or return `None` without the TypeScript test dependencies.
 pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
     use std::io::Write;
     use std::process::{Command, Stdio};
@@ -625,8 +618,7 @@ pub fn at(screen: &str, needle: &str) -> Option<(u16, u16)> {
     })
 }
 
-/// Limits of host work no tree reaches, until the guard drops: for rows that check something else than the limits
-/// with trees past them (Pl).
+/// Temporarily lift host limits for fixtures that measure work above the default limits.
 pub fn unlimited() -> opencode_plugin::limits::Restore {
     let most = u64::MAX;
     opencode_plugin::limits::set(opencode_plugin::limits::Limits {

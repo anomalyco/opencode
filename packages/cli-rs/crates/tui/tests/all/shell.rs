@@ -10,7 +10,6 @@ use opentui::testing::TestApp;
 fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
     let app = TestApp::new(80, 30);
     let tui = opencode_tui::mount(&app, support::deps(Arc::new(support::empty())));
-    // The home's logo (E.1).
     support::wait_for(&app, "█▀▀█");
 
     // The terminal reports a light background between the leader and its second key.
@@ -31,8 +30,6 @@ fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
     support::wait_for(&app, "draft kept");
 }
 
-// Expected: in the `system` theme, the terminal's color scheme notice (`?997`) reads the palette again and the theme
-// follows it, as TS `theme.tsx` does. Actual: the palette was read once at startup and `system` stayed stale.
 #[test]
 fn the_system_theme_follows_the_terminal_palette_after_a_color_scheme_change() {
     use opentui::input::OscColor;

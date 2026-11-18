@@ -22,7 +22,7 @@ thread_local! {
     static THREAD: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Counts what this thread allocates from now on, until the measure drops.
+/// Count allocations on this thread until the guard drops.
 pub fn measure() -> Measure {
     let lock = ONE_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     LIVE.store(0, Ordering::SeqCst);
@@ -36,7 +36,7 @@ pub struct Measure {
 }
 
 impl Measure {
-    /// The bytes this thread allocated since the measure started and that are not freed yet.
+    /// Bytes allocated on this thread during the measurement that remain live.
     pub fn kept(&self) -> isize {
         LIVE.load(Ordering::SeqCst)
     }

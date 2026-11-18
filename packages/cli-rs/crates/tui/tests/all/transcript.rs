@@ -162,7 +162,6 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     assert!(!screen.contains("The loop stops early."), "{screen}");
     assert!(screen.contains("Build · provider/model · 3.0s · 33.3 tok/s"), "{screen}");
     assert!(screen.contains("+ Tokens: 1 step · latest: 1,250 new · 3,000 cached · 4,250 total"), "{screen}");
-    // Rows keep the TS order.
     let order = ["Why does the parser fail?", "Thought", "The parser drops", "Build ·", "Tokens"];
     let positions: Vec<_> = order.iter().map(|text| screen.find(text).unwrap()).collect();
     assert!(positions.is_sorted(), "{screen}");
@@ -170,7 +169,6 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     let row = screen.lines().position(|line| line.contains("+ Thought")).unwrap();
     h.app.click(8, row as u16);
     let expanded = h.wait_for("The loop stops early.");
-    // Open, the group header drops the title (`group-view.tsx:186`).
     assert!(expanded.contains("- Thought · 1.5s"), "{expanded}");
 
     let shown = Info { session: Some(Session { thinking: Some(Visibility::Show), ..medium() }), ..Info::default() };
@@ -186,8 +184,6 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     assert!(screen.contains("┃ Plan the fix."), "{screen}");
 }
 
-/// A settings change reaches the rows at once, as TS's reactive config does: thinking opens and the
-/// tokens-per-second footer goes, then `session.toggle.thinking` writes the config back.
 #[test]
 fn config_changes_reach_the_transcript_without_a_restart() {
     let messages = vec![assistant(
@@ -287,7 +283,7 @@ fn long_session() -> View {
             ]
         })
         .collect();
-    // One row per wheel step, so each step's top line can be followed (TS scrolls 3 by default).
+    // Use single-row wheel steps so every viewport movement is observable.
     let info = Info { scroll: Some(Scroll { speed: Some(Bounded(1.0)), ..Scroll::default() }), ..Info::default() };
     open(80, 20, "ses_w", messages, info)
 }
@@ -478,10 +474,7 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     assert_eq!(h.older.load(Ordering::SeqCst), 4);
 }
 
-/// The timestamps of a recorded reply ("Debugging concurrent speaker mute issue"): one prompt, then 21 steps
-/// (created, streamed, completed) over 24 minutes. The first page of 20 messages starts inside the turn's
-/// exploration group, so TS loads the next page (`completeGroupBoundary`) and its footer measures from the
-/// prompt, not from the last step.
+/// A recorded sequence of multi-step timings spans a turn across the page boundary.
 #[test]
 fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
     const PROMPT: u64 = 1_787_836_326_838;
@@ -538,8 +531,6 @@ fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
     assert_eq!(h.older.load(Ordering::SeqCst), 1);
 }
 
-/// `app-lifecycle.test.tsx` (#63321, #63759): tokens per second count from the first streamed token, and the
-/// footer does not show the time to it.
 #[test]
 fn the_footer_measures_throughput_from_the_first_token() {
     let mut reply = assistant("msg_2", 2000, json!([{ "type": "text", "text": "Original answer" }]), Some(5000));
@@ -616,9 +607,6 @@ fn a_theme_switch_restyles_the_transcript_in_place() {
     assert_eq!(diff.map(|(x, y)| (x, y, switched.cell(x, y), expected.cell(x, y))), None, "{}", switched.text());
 }
 
-/// P11 as a work counter: a theme switch builds no fence or diff again, so it parses none. The widgets one switch
-/// creates are as many with 0, 3 or 36 fences, and with 1 or 12 edit diffs. A kept code view restyles its highlight
-/// without a parse (OpenTUI's `option_changes_keep_builtin_fences_streaming` counts them).
 #[test]
 fn a_theme_switch_builds_no_fence_or_diff_again() {
     let fence = |language: &str, line: &str| format!("```{language}\n{}```\n", format!("{line}\n").repeat(15));

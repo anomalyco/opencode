@@ -1,5 +1,4 @@
-//! The home footer on the one plugin API (O-67): its nested `home.footer.status` slot, which keeps rendering while
-//! the footer keeps its node, and the footer through the C ABI's byte shims.
+//! Home footer status claims across carriers and screen sizes.
 
 use crate::support::{self, DIRECTORY, Fake, Harness, list};
 

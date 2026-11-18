@@ -1,5 +1,4 @@
-//! The store-to-UI pump survives a full UI queue (reviews bigboi-1 and carbon-2 of the plugin fixes): a burst while
-//! the UI thread is busy delays events, it never stops later ones.
+//! Exercise store-to-UI delivery while the UI queue is full.
 
 use crate::support::{self, DIRECTORY};
 

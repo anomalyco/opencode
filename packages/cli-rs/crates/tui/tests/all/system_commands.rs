@@ -1,11 +1,4 @@
-//! System commands, selection and copy, links, console copy, and the working directory dialog (E.20).
-//!
-//! - `TestApp` over a test sink (`features::links::testing`): copies and opens are recorded, so no test writes
-//!   the host clipboard or starts a browser.
-//! - P-FILE: the toggles write a `cli.json` in a temporary home, compared byte for byte with what the TS
-//!   `Config` service writes for the same updates, and read back by it (`parity/oracle/F.5-config.ts`; skipped
-//!   without bun and `node_modules`).
-//! - P-APP (`parity/scenarios/E.20/*`) and P-PTY (`E.20/copy.pty.ts`) are in `tests/app.rs` and the PTY runner.
+//! System commands, clipboard actions, and working-directory interactions.
 
 use crate::support::{self, Fake, WAIT, wait_for};
 
@@ -43,7 +36,7 @@ fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
     )
 }
 
-/// Copy on select, which is the default outside Windows only (`app.tsx:586`).
+/// Explicitly enable copy-on-select on every platform.
 fn select() -> Info {
     support::component_info(json!({ "terminal": { "copy": "select" } }))
 }
@@ -186,7 +179,6 @@ fn system_commands_run_from_their_keys_and_the_palette() {
     assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/docs"]);
     assert!(!tui.dialogs.is_open());
 
-    // Only these three of E.20's commands are in the palette, as in TS.
     let palette: Vec<String> = tui
         .keymap
         .commands()
@@ -251,7 +243,7 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
         Some(Roots { paths: paths.clone(), storage_channel: "test".into() }),
     );
     wait_for(&app, "/project");
-    // One write at a time: the settings writer ignores a change while one is in flight, as TS does.
+    // Wait between writes because the settings dialog ignores changes during a save.
     let toggles: [(&str, &[&str], Value); 5] = [
         ("f5", &["animations"], json!(false)),
         ("f6", &["diffs", "wrap"], json!("none")),
@@ -269,7 +261,6 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     }
     let text = std::fs::read_to_string(&file).unwrap();
 
-    // TS writes the same bytes for the same updates, and reads what Rust wrote.
     let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();

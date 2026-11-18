@@ -1,6 +1,4 @@
-//! Prompt autocomplete (E.3) over a fixture server that records requests: slash commands (the
-//! keymap's and the server's), `@` mentions of agents, skills, references, and files, `/cd` with
-//! directory completion and recents, and the mentions as atomic prompt parts.
+//! Exercise completion through key bindings, submitted parts, and persisted recents.
 
 use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -132,7 +130,6 @@ impl Setup {
 fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     let setup = Setup::new();
     setup.app.type_text("/");
-    // The first ten of the sorted list, keymap commands with their titles; E.14's `/btw` is among them.
     let screen = setup.wait_for("/agents");
     for row in ["/btw", "/cd", "/compact", "Change working directory"] {
         assert!(screen.contains(row), "{row:?} missing:\n{screen}");
@@ -150,13 +147,10 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     assert!(setup.requests("POST", "/prompt").is_empty());
 }
 
-/// Slash commands TS declares that this fixture's session route does not list: `/restart` (deviation K04), and
-/// the ones TS also offers only in a state the fixture lacks (an available update, release highlights, a revert to
-/// redo, terminal support).
+/// Commands absent from this fixture's session route.
 const SLASH_ELSEWHERE: &[&str] = &["restart", "update", "highlights", "redo", "terminal"];
 
-// Every `slash: { name, aliases }` in the TS TUI sources, with the id of the command it sits in, against the
-// commands the Rust keymap registers. E.3's fixture shows only a filtered list.
+// Compare registered slash names and aliases with their declarations in the reference client.
 #[test]
 fn slash_names_and_aliases_match_the_typescript_sources() {
     let tui = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tui/src");
@@ -186,8 +180,7 @@ fn slash_names_and_aliases_match_the_typescript_sources() {
     assert!(missing.is_empty() && extra.is_empty(), "TypeScript only: {missing:#?}\nRust only: {extra:#?}");
 }
 
-/// `<command id> /<name> [aliases]` for each `slash: {` block under `dir`. The id is the nearest `id: "…"` or
-/// `name: "…"` before the block, as the TS command objects declare it.
+/// Find command IDs and aliases in slash declarations, ignoring lines outside each declaration.
 fn typescript_slashes(dir: &Path) -> Vec<String> {
     let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().path()).collect();
     entries.sort();
@@ -342,8 +335,7 @@ fn a_mention_keeps_its_part_through_a_theme_switch() {
     );
 }
 
-// Undo brings a deleted mention's mark back with its id, but not its part: TS maps parts by mark id and forgets the
-// id with the part (`syncExtmarksWithPromptParts`), so the mention is sent as text.
+// Undo restores the mention's text but not the removed attachment.
 #[test]
 fn undo_brings_a_mention_back_as_text() {
     let setup = Setup::new();
@@ -528,9 +520,6 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     setup.wait_for("/agents");
 }
 
-/// Expected (js-followups, TS `autocomplete.tsx` keeps `store.selected` until the filter changes): the route mounting
-/// again under an open list, as it does when a plugin loads or reloads, keeps the list open with its search and the
-/// selection by its place, and the screen equals the one before. Keys go on to the list, and Enter runs its command.
 #[test]
 fn an_open_list_stays_open_when_the_route_mounts_again() {
     let setup = Setup::new();
@@ -547,9 +536,6 @@ fn an_open_list_stays_open_when_the_route_mounts_again() {
     assert_eq!(setup.text(), "");
 }
 
-/// Expected (select-search-flake, the lane's `P.8/select-search`): a list typed into a composer that a plugin's load
-/// mounted again, before the screen laid it out, lays out as the list of a composer that was never remounted: all its
-/// rows, the first selected, once the frame comes.
 #[test]
 fn a_list_typed_before_a_remounted_composer_lays_out_shows_every_row() {
     let screen = |remount: bool| {
@@ -569,9 +555,6 @@ fn a_list_typed_before_a_remounted_composer_lays_out_shows_every_row() {
     assert_eq!(screen(true), twin);
 }
 
-/// Expected (flakes-10, the lane's `P.8/select-search` again): the P-APP replay's settle, which compares a checkpoint,
-/// shows a list typed into a remounted composer before it laid out with all its rows, as the TS recorder's settle does
-/// once its 50 ms poll ran. On a frozen app clock the follow never ran, and the list stayed one row tall.
 #[test]
 fn the_replay_settles_a_list_typed_before_its_composer_laid_out() {
     let screen = |remount: bool| {
@@ -583,7 +566,6 @@ fn the_replay_settles_a_list_typed_before_its_composer_laid_out() {
         setup.app.type_text("/se");
         setup.wait_for("Open settings");
         let settled = crate::app::settle(&setup.app, &|| 0, None, |_| true);
-        // The settled frame is the last one painted: its text is the app's now.
         (settled, setup.app.render().text())
     };
     let (twin, text) = screen(false);
@@ -607,8 +589,6 @@ fn an_open_list_keeps_its_height_across_two_remounts_in_one_turn() {
     assert_eq!(setup.app.render().text(), before);
 }
 
-/// Expected (review jsnpm-1): a dialog opened over an open list keeps its keys across a remount, as without one. Escape
-/// closes it and the list is open again under it, and Ctrl+C closes the dialog and does not end the client.
 #[test]
 fn a_dialog_over_an_open_list_keeps_its_keys_across_a_remount() {
     let setup = Setup::new();
@@ -628,8 +608,6 @@ fn a_dialog_over_an_open_list_keeps_its_keys_across_a_remount() {
     }
 }
 
-/// Expected (review jsnpm-1): an `@` list keeps its file search's results and its selection across a remount: Enter
-/// picks the same row as a list that never remounted, and the search is not asked again.
 #[test]
 fn a_file_list_keeps_its_results_and_selection_across_a_remount() {
     let picked = |remount: bool| {
@@ -673,7 +651,7 @@ fn frecency_file_is_shared_with_typescript() {
     assert_eq!(rust.lines().count(), 2, "{rust}");
     let state = setup.home.path().join("state");
 
-    // TypeScript keeps the latest line per path and counts on from it.
+    // The last frequency line for a path wins.
     let frequencies = typescript_frecency(&root, &state, json!(["src/main.rs", "README.md"]));
     assert_eq!(frequencies, json!({ "/project/src/main.rs": 3, "/project/README.md": 1 }));
     let typescript = std::fs::read_to_string(state.join("frecency.jsonl")).unwrap();

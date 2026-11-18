@@ -1,11 +1,4 @@
-//! The form prompt (E.9b) over a fixture server: a pending form shows above the session prompt or over home, and
-//! each answer sends one request (P-REQ: method, path, body, and the directory header of a global form). The
-//! server answers 204, as it does, and lists no forms once one settled. The flows follow
-//! `packages/tui/test/cli/tui/form.test.tsx`.
-//!
-//! P-COMP: `parity/component/E.9b-form.tsx` renders the TS prompt alone at 96x30, one fixture per field kind and
-//! the review; here the prompt sits in the session route of a 100x30 app, two columns in. The comparison covers
-//! the prompt's rows (those with its left border).
+//! Drive session and global forms through their visible fields and inspect the submitted answers.
 
 use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 

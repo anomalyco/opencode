@@ -1,10 +1,4 @@
-//! Pastes, attachments, and the stash (E.4) over a fixture server that records requests. Clipboard reads go
-//! to the test sink (`features::links::testing`), never to the real clipboard.
-//!
-//! - Long pastes collapse into parts that submit their text, and expand on a click or a second paste.
-//! - Clipboard images and pasted file paths attach as `[Image N]`, preview above the prompt, and open in the
-//!   image preview dialog.
-//! - The stash pushes, pops, and lists, and `prompt-stash.jsonl` is shared with the TypeScript TUI (P-FILE).
+//! Clipboard reads use a test sink; the fake server records attachment and stash requests.
 
 use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -48,7 +42,7 @@ impl Setup {
         Self::with(opencode_util::temp::tempdir().unwrap(), Info::default(), false)
     }
 
-    /// Releasing a drag copies it, which is the default outside Windows only (`app.tsx:586`).
+    /// Enable copy-on-select explicitly across platforms.
     fn copying_on_select() -> Self {
         let info = opencode_local::cli_config::merge(&[Some(json!({ "terminal": { "copy": "select" } }))]);
         Self::with(opencode_util::temp::tempdir().unwrap(), info, false)
@@ -148,8 +142,6 @@ fn a_second_paste_or_a_click_expands_a_paste_and_backspace_removes_it() {
     setup.wait_text("");
 }
 
-// #63265 (`prompt-paste.test.tsx`): undo brings a cleared paste label back as the paste, so a submit sends its text.
-// A fragment of the label comes back as plain text.
 #[test]
 fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
     let pasted = "one\ntwo\nthree\nfour";
@@ -461,7 +453,7 @@ fn stash_file_is_shared_with_typescript() {
     again.wait_stash_file(str::is_empty);
 }
 
-/// The TypeScript TUI's `push`: one appended line, without a lock.
+/// Append one unlocked line as an independent stash writer.
 fn ts_stash(state: &Path, text: &str) {
     use std::io::Write;
     let line = json!({

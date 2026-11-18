@@ -1,5 +1,4 @@
-//! The permission prompt (E.9a) over a fixture server: a pending request from the store shows above the
-//! prompt, and each answer sends one reply request (P-REQ: method, path, body).
+//! Drive permission decisions and inspect their server requests.
 
 use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
@@ -238,8 +237,6 @@ fn autoaccept_replies_once_to_each_request_without_prompting() {
     assert!(!screen.contains("Permission required"), "{screen}");
 }
 
-// `index.tsx:208-215`: in autoaccept the prompted list is empty, so a request already shown goes when the mode
-// turns on, and the session prompt comes back.
 #[test]
 fn turning_on_autoaccept_answers_and_hides_the_shown_request() {
     let harness = mount(
@@ -342,13 +339,8 @@ fn a_pending_permission_does_not_take_the_plugin_manager_search() {
     harness.wait_for("Permission required");
 }
 
-/// The permission prompt's model test (M5, `round2/models.md`): random asks, replies from this client and from
-/// others, reply failures, `autoaccept` toggles, session switches and keys, some dispatched before the keys of the
-/// prompt they replace are gone. After each event the test compares what the TUI shows, which keys it holds, which
-/// widget has focus and which replies the server got with a small model of the TS prompt.
-///
-/// `PERMISSION_SEED` runs one seed, `PERMISSION_SEEDS` sets how many seeds run otherwise, and `PERMISSION_STEPS`
-/// sets the events per seed.
+/// Generate asks, replies, cancellations, and failures across a session family. Compare the visible prompt and sent
+/// replies with the model after each action.
 mod model {
     use crate::support::{self, WAIT};
 
@@ -405,7 +397,7 @@ mod model {
         message: Option<String>,
     }
 
-    /// The server: pending requests in ask order, the replies it got, and whether it fails them now.
+    /// Pending requests in arrival order, received replies, and injected failures.
     struct Server {
         memory: Memory,
         state: Mutex<ServerState>,
