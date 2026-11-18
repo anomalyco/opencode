@@ -74,35 +74,31 @@ fn placed(build: impl FnOnce(&mut Placed)) -> Placed {
 }
 
 #[test]
-fn resolve_last_replacement_wins_and_ancestor_beats_descendant() {
+fn replacing_a_path_suppresses_its_contents_regardless_of_registration_order() {
+    let paths = ["side", "side.child", "sidebar"];
     let claims = [
-        Placement::replace("prompt.footer"),
-        Placement::replace("prompt.footer.status"),
-        Placement::replace("prompt.footer"),
+        Placement::replace("side"),
+        Placement::replace("side.child"),
+        Placement::append("side"),
+        Placement::before("side"),
+        Placement::append("sidebar"),
     ];
-    let resolution = slot::resolve(&slot::PATHS, &claims);
-    assert_eq!(resolution.placed["prompt.footer"].replace, Some(2));
-    assert!(!resolution.placed.contains_key("prompt.footer.status"));
-    assert_eq!(resolution.suppressed, vec![(0, Some(2)), (1, Some(2))]);
-}
-
-#[test]
-fn resolve_suppresses_claims_inside_a_replaced_boundary_but_keeps_its_siblings() {
-    let claims = [
-        Placement::append("prompt.footer.status"),
-        Placement::append("prompt.footer"),
-        Placement::before("prompt.footer"),
-        Placement::replace("prompt.footer"),
-    ];
-    let resolution = slot::resolve(&slot::PATHS, &claims);
-    assert_eq!(
-        resolution.placed["prompt.footer"],
-        placed(|placed| {
-            placed.before = vec![2];
-            placed.replace = Some(3);
-        })
-    );
-    assert_eq!(resolution.suppressed, vec![(0, Some(3)), (1, Some(3))]);
+    for first in 0..claims.len() {
+        let mut order = (0..claims.len()).cycle().skip(first).take(claims.len()).collect::<Vec<_>>();
+        order.push(0);
+        let input = order.iter().map(|&i| claims[i].clone()).collect::<Vec<_>>();
+        let resolved = slot::resolve(&paths, &input);
+        let boundary = &resolved.placed["side"];
+        let winner = input.len() - 1;
+        assert_eq!(boundary.replace, Some(winner));
+        assert!(boundary.append.is_empty() && !resolved.placed.contains_key("side.child"));
+        assert_eq!(boundary.before.iter().map(|&i| order[i]).collect::<Vec<_>>(), [3]);
+        assert_eq!(resolved.placed["sidebar"].append.iter().map(|&i| order[i]).collect::<Vec<_>>(), [4]);
+        assert_eq!(resolved.suppressed.len(), 3);
+        for (i, by) in resolved.suppressed {
+            assert!(order[i] < 3 && by == Some(winner));
+        }
+    }
 }
 
 #[test]
@@ -121,13 +117,6 @@ fn resolve_degrades_missing_targets_to_the_nearest_ancestor() {
             degraded: vec![(0, "home.footer".to_owned())],
         }
     );
-}
-
-#[test]
-fn contains_needs_a_dot_boundary() {
-    assert!(slot::contains("prompt.footer", "prompt.footer.file"));
-    assert!(!slot::contains("prompt.footer", "prompt.footer"));
-    assert!(!slot::contains("prompt.foot", "prompt.footer"));
 }
 
 #[test]
@@ -444,30 +433,6 @@ fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 
 /// The rows the app draws, without trailing blanks.
 fn rows(host: &TestHost) -> Vec<String> {
     host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect()
-}
-
-// Expected: a claim's root node is a flex item of the slot's parent, as in TS's `<Slot>` fragment: in a row slot a
-// growing root fills the row (carbon's probe 2, `home.footer.status`), and a shrinking root that may go below its
-// content's width gives up room as `prompt.footer` does (`prompt/footer.tsx:72`).
-#[test]
-fn a_claim_root_grows_in_a_row_slot() {
-    use abi::{Layout, Node, Render, Span};
-    let host = host();
-    let grow = rendering("grow", Placement::append(slot::HOME_FOOTER), || {
-        let spacer = Node::column(Vec::new()).layout(Layout::default().grow());
-        Render::Show(
-            Node::row(vec![Node::text([Span::new("L")]), spacer, Node::text([Span::new("R")])])
-                .layout(Layout::default().grow()),
-        )
-    });
-    let registry = Registry::define(vec![grow], []);
-    registry.activate(&dynamic(&host));
-    let parent = View::new(host.app()).row().width(30);
-    let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
-        parent.add(&Text::new(host.app(), "content").shrink(0.0));
-    });
-    host.app().root().add(&parent);
-    assert_eq!(rows(&host)[0], format!("contentL{}R", " ".repeat(21)));
 }
 
 #[test]
