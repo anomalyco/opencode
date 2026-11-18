@@ -1,26 +1,5 @@
-//! The host's side of contract 2.0's input (synthesis 3.8 and 4.2, phase P2): who owns a key layer, a mode, a
-//! pointer capture, a hold and an overlay, and how a key, a paste or a pointer event reaches a plugin's handler.
-//!
-//! An [`Owner`] is one mount of a surface, or one activation of a plugin (the layers of its setup). Each of its
-//! layers is a layer of the TUI's keymap, whose binds call its handler: [`Handled::Pass`] rejects the key and the
-//! keymap tries the next candidate. Listeners of every key and of pastes ([`Layer::any`], [`Layer::paste`]) are in
-//! the [`Router`]'s list, which a key intercept of the keymap reads before any layer. When the owner ends, everything
-//! it owns goes with it.
-//!
-//! The machine, which P2's `delivery` and `ledger` check:
-//!
-//! | State | Event | Next | The host |
-//! | --- | --- | --- | --- |
-//! | any | the reserved chord | the same | before the hold, the selection and every layer: every plugin mode ends, a hold's input is dropped, the plugins' layers stop holding where the focus is until it moves; the chord goes on to the host |
-//! | any | a key, not held | the same | the intercept: the listeners in order (priority, then newest) until one consumes; else the keymap's layers |
-//! | any | a handler returns | the same | its effects apply before the next event of the batch (the TUI flushes after each key) |
-//! | free | a consumed [`Bind::hold`] key | held | the keys and pastes after it wait behind it, at most [`HOLD_LIMIT`] |
-//! | held | its owner's `release_keys`, its own [`input::HOLD`] timer, [`HOLD_LIMIT`], the owner ends | free | what waited is routed in order after the event; what was meant for a focus that something else moved (a press, a command) is dropped |
-//! | no mode | `set_mode(m)` | mode m | the keymap's mode is the plugin's `m` while no host dialog is open: its layers of `m` hold, base layers do not |
-//! | mode m | a move of the focus out of the owner's scope, the reserved chord, `set_mode(None)`, the owner ends | no mode | the mode is gone for good |
-//! | no capture | a press on a pointer node, consumed | captured | its drags reach it |
-//! | captured | release, the owner ends, the node leaves its tree, a move of the focus, a host dialog opens, a resize | no capture | |
-//! | any | the owner ends | gone | its layers, listeners, mode, capture, hold and overlays go |
+//! Routes input to plugin handlers and tracks ownership of layers, modes, pointer captures, held keys and overlays.
+//! Revoking a mount releases its input state.
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
@@ -75,7 +54,7 @@ pub struct Owner {
     /// Brings a widget of the mount's tree into view in the scrolls of the tree that hold it.
     reveal: RefCell<Option<Reveal>>,
     /// What waits for the mount's first tree of the plugin's, and the focus it asked for with it, or for the mount's
-    /// end: input typed while a dialog surface opened goes on then (big-boi ds-3).
+    /// end: input typed while a dialog surface opened goes on then.
     focus_waiters: RefCell<Vec<Box<dyn FnOnce()>>>,
     /// The mount showed a tree of the plugin's, not only the pipe's stand-in.
     viewed: Cell<bool>,
@@ -86,13 +65,13 @@ pub struct Owner {
     /// The ids of its tree's nodes, and of its focusable ones.
     ids: RefCell<Vec<String>>,
     focusable: RefCell<Vec<String>>,
-    /// A node its calls asked to focus that its tree does not hold yet: a handler shows a field and focuses it in one
-    /// call, and the focus applies before the view that shows it (contract 2.x, step B). It waits for the mount's next
-    /// view and no longer ([`Owner::settle_pending`]), one at a time.
+    /// A node its calls asked to focus that its tree does not hold yet: a handler shows a field and focuses it in
+    /// one call, and the focus applies before the view that shows it. It waits for the mount's next view and no
+    /// longer ([`Owner::settle_pending`]), one at a time.
     pending: RefCell<Option<Pending>>,
     /// The mount it holds the input of, as long as it lives; `None` for an activation.
     mount: Option<Weak<()>>,
-    /// That mount's ID, which a call for it names to the plugin (big-boi 4).
+    /// That mount's ID, which a call for it names to the plugin.
     id: Option<opencode_plugin_abi::v2::MountId>,
 }
 
@@ -104,9 +83,8 @@ struct Mode {
     disposer: Disposer,
 }
 
-/// Where a surface's own scope holds: while the focus is in a view (a panel, an overlay's frame, a slot's root), or,
-/// for a route, while it shows and no dialog of the host is over it (the route of synthesis 4.2's `Scope::Route`), or,
-/// for a dialog surface, while the dialog whose body is the view is on top, wherever the focus is in it.
+/// A surface layer is active while focus is in its view. A route can also handle input while visible and unobscured
+/// by a host dialog.
 enum Held {
     Within(View),
     Route,
@@ -190,7 +168,7 @@ pub(crate) trait InputHold {
     fn paste(&self, text: &str) -> bool;
     /// The reserved chord: what it holds goes, and an answer after it puts nothing back.
     fn escape(&self);
-    /// Which listeners heard the key it puts back now, which it skips (cg2-5).
+    /// Which listeners heard the key it puts back now, which it skips.
     fn heard(&self) -> Heard;
 }
 
@@ -446,10 +424,9 @@ impl Owner {
                 let listener = Listener { owner: me.clone(), layer: layer.clone(), deliver: deliver.clone() };
                 router.listeners.borrow_mut().push(listener);
             }
-            // The reserved chord stops every plugin layer before the keymap sees it (`Router::escape`), so a bind of it
-            // never runs.
-            // A printable key of a global layer is the text's while the composer or another text input has the focus
-            // (FT-14): a plugin's `h` must not take the user's typing. It reaches the plugin everywhere else.
+            // The reserved chord stops every plugin layer before the keymap sees it (`Router::escape`), so a bind of
+            // it never runs. A printable key of a global layer is the text's while the composer or another text input
+            // has the focus: a plugin's `h` must not take the user's typing. It reaches the plugin everywhere else.
             let (typed, other): (Vec<&Bind>, Vec<&Bind>) = layer
                 .keys
                 .iter()
@@ -484,7 +461,7 @@ impl Owner {
     }
 
     /// Whether the keymap can take `bind`: one with no key and no name would fail its whole layer, and one named after
-    /// the plugin manager's commands would take `/plugins` from the user (carbon's review of P6c, 5).
+    /// the plugin manager's commands would take `/plugins` from the user.
     fn takes(&self, bind: &Bind) -> bool {
         let named = bind.command.as_deref().filter(|name| !name.is_empty());
         if named.is_none() && (bind.key.is_empty() || bind.command.is_some()) {
@@ -526,7 +503,7 @@ impl Owner {
             }
             handled
         };
-        // A bind of the user's keybind takes its keys by name (P6c), as a host command of that name does.
+        // A bind of the user's keybind takes its keys by name, as a host command of that name does.
         let mut command = match (&declared.command, declared.key.is_empty()) {
             (Some(name), true) => TuiCommand::new(name.clone(), run),
             (Some(name), false) => {
@@ -727,10 +704,9 @@ impl Owner {
     /// Settles the focus that waits ([`Owner::focus`]) with the mount's next view, `tree`: the view after the call
     /// that asked for it on a linked carrier, the next revision over the pipe. If that view holds the node, the node
     /// takes the focus, under [`Owner::focus`]'s refusals; if not, the focus is dropped. A resize, a theme or another
-    /// mount's view that comes later never applies it (big-boi's G2 of step B).
-    /// A focus the user moved meanwhile, a click or the host's own, is dropped too (carbon c2b-2): the user's choice
-    /// stands.
-    /// `shows`: the view is the plugin's tree, not the pipe's stand-in before its first.
+    /// mount's view that comes later never applies it. A focus the user moved meanwhile, a click or the host's own, is
+    /// dropped too: the user's choice stands. `shows`: the view is the plugin's tree, not the pipe's stand-in before
+    /// its first.
     pub(crate) fn settle_pending(&self, host: &dyn Host, shows: bool) {
         // The plugin's tree is here, and the focus it asked for settles now: input that waits for it goes on, after
         // (its waiters go after the turn). The pipe's stand-in before the first tree is no answer.
@@ -776,7 +752,7 @@ impl Owner {
         self.id.as_ref()
     }
 
-    /// Calls the mount's handler with what one of its widgets or scrolls sends (P3): an edit, a scroll.
+    /// Calls the mount's handler with what one of its widgets or scrolls sends: an edit, a scroll.
     pub(crate) fn hear(self: &Rc<Self>, event: &Event) {
         if let Some(host) = self.host.upgrade() {
             self.send(&*host, event);
@@ -786,7 +762,7 @@ impl Owner {
     /// Calls the mount's handler with `event`.
     fn send(self: &Rc<Self>, host: &dyn Host, event: &Event) -> Handled {
         match (&self.deliver, self.alive()) {
-            // What the handler asks for is one deeper than what made the router send it (review carbon new-1).
+            // What the handler asks for is one deeper than what made the router send it.
             (Some(deliver), true) => crate::deeper(|| delivered(deliver, host, self, event)),
             _ => Handled::Pass,
         }
@@ -857,7 +833,7 @@ impl Router {
         *self.host.borrow_mut() = Some(weak.clone());
         let keyed = weak.clone();
         // Below the JS host's hold (`pipe::Scripts`, at the top): a key it holds reaches no listener until it is put
-        // back, and then once (CT-19).
+        // back, and then once.
         let disposer = host.keymap().keymap().intercept_key(i32::MAX - 1, false, move |context| {
             let Some(host) = keyed.upgrade() else { return };
             let Some(router) = host.router() else { return };
@@ -910,7 +886,7 @@ impl Router {
             })
             .collect();
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
-        // A key put back resumes below the listeners that heard it, so none acts on one key twice (cg2-5).
+        // A key put back resumes below the listeners that heard it, so none acts on one key twice.
         let heard = self
             .others
             .borrow()
@@ -945,9 +921,8 @@ impl Router {
         taken
     }
 
-    /// The key a listener of every key hears, while it hears it, and the listeners that heard it, this one last: a
-    /// carrier whose handler answers later takes it and puts it back if the handler did not, below them (the JS host,
-    /// contract gaps 2, cg2-5).
+    /// Returns the key being routed and the listeners it has passed. Resume below them after an asynchronous
+    /// decline.
     #[cfg(feature = "ts")]
     pub(crate) fn listened(&self) -> Option<(KeyEvent, Vec<usize>)> {
         self.listened.borrow().clone()
@@ -961,15 +936,15 @@ impl Router {
         others.push(hold);
     }
 
-    /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt
-    /// drops typed-ahead input, and the plugins' layers stop holding where the focus is until it moves. The chord goes
-    /// on to the host. The host calls it before anything else sees the key: its selection, the hold and the keymap.
+    /// The reserved chord: every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt drops
+    /// typed-ahead input, and the plugins' layers stop holding where the focus is until it moves. The chord goes on to
+    /// the host. The host calls it before anything else sees the key: its selection, the hold and the keymap.
     pub fn escape(&self, host: &dyn Host) {
         for owner in self.owners.borrow().iter().filter_map(Weak::upgrade) {
             if let Some(mode) = &*owner.mode.borrow() {
                 mode.ended.set(true);
             }
-            // A focus that waits for a view is dropped: the chord takes the focus back (carbon c2b-2).
+            // A focus that waits for a view is dropped: the chord takes the focus back.
             owner.pending.borrow_mut().take();
         }
         // The keymap's intercept prunes them before the chord reaches any layer, so the host's own handler of it runs in
@@ -1094,7 +1069,7 @@ impl Router {
     /// and in the plugins' surfaces before the host, as in TS, and elsewhere only once no host widget took it
     /// (`Pasted::Elsewhere`), since OpenTUI routes a paste to the focused widget before anything else.
     pub fn paste(&self, host: &dyn Host, text: &str, at: Pasted) -> bool {
-        // Behind a hold, it waits for the keys before it; behind the JS host's too (ce-6, cg2-3).
+        // Behind a hold, it waits for the keys before it; behind the JS host's too.
         if !self.replaying.get() && self.held(Input::Paste(text.to_owned())) {
             return true;
         }
@@ -1500,8 +1475,8 @@ fn focused(app: &App) -> Option<u32> {
     app.focused().map(|widget| widget.id())
 }
 
-/// Calls `deliver` with `event`, as the user's input when the user caused it ([`Event::by_user`]), which a verb on the
-/// transcript needs (P3's rule), on either carrier; a hover or a close keeps what the code that sent it is.
+/// Calls `deliver` with `event`, as the user's input when the user caused it ([`Event::by_user`]), which a verb on
+/// the transcript needs, on either carrier; a hover or a close keeps what the code that sent it is.
 fn delivered(deliver: &Deliver, host: &dyn Host, owner: &Rc<Owner>, event: &Event) -> Handled {
     match event.by_user() {
         Some(user) => crate::behave::as_user(user, || deliver(host, owner, event)),
@@ -1701,7 +1676,7 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
             // The press is the plugin's: no selection of the text under it starts, and a surface that does not have
             // the focus takes it, unless the handler gave it to a node.
             host.app().clear_selection();
-            // An overlay the handler opened keeps the focus it took (review carbon-1).
+            // An overlay the handler opened keeps the focus it took.
             if let Some(view) = owner.within().filter(|view| !focus_within(host.app(), view.id()))
                 && !router.overlaid(host)
             {
@@ -1718,8 +1693,6 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
 
 #[cfg(test)]
 mod tests {
-    // Expected (FT-14): a key types text when one of its alternatives starts with a character or `space` and no
-    // modifier but Shift.
     #[test]
     fn a_printable_key_types_text() {
         for key in ["h", "H", "shift+h", "?", "]", "+", "space", "ctrl+a,h", "g g"] {

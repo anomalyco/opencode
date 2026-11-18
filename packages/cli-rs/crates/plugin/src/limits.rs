@@ -1,15 +1,4 @@
-//! Limits on host work (synthesis 4.2, phase Pl): what a plugin's tree may make the host's UI thread build and hold,
-//! on every carrier, built-ins too. Each limit is checked before anything is built: a tree's nodes, the rows the
-//! host builds for it at once, a node's text and hunks, an image's header. Over a limit, the one node that crosses
-//! it shows a placeholder and the rest of the tree draws ([`crate::reconcile`]); a malformed tree is still refused
-//! whole.
-//!
-//! What the host holds for a plugin (the nodes of its mounted trees, its content and its decoded images) is charged
-//! to the plugin and to the total, here, outside any mount: a plugin cannot spend what another left, and none can
-//! spend more than the total. A charge is released when the tree, the content or the image goes. The canvas bounds
-//! are [`crate::canvas`]'s, on the same rule.
-//!
-//! The numbers come from measurement (`steps/plugins-pl.md`); tests change them with [`set`].
+//! Bounds the UI work and memory a plugin can request. Charge trees, rows and content before building widgets.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -41,14 +30,14 @@ pub struct Limits {
     pub plugin_images: u64,
     pub all_images: u64,
     /// The rows all trees may build in one frame, every plugin's and every list item's: past it, a revision waits for
-    /// the next frame, and a list mounts the items left in the frames after (review bigboi 3).
+    /// the next frame, and a list mounts the items left in the frames after.
     pub frame_rows: u64,
 }
 
-/// Measured in release, `TestApp` 200x58 (`steps/plugins-pl.md`): a row costs the host about 4 us to build and lay out
-/// the first time, so 3,000 rows of any kind are under a 16.7 ms frame; 20,000 nodes of a list's data cost 12 ms; a
-/// patch's hunk 0.12 ms; a text of 1 MiB 4 ms; an image of 2048x2048 pixels 28 ms to decode, which a worker does, and
-/// 0.6 ms to copy in.
+/// Measured in release, `TestApp` 200x58: a row costs the host about 4 us to build and lay out the first time, so
+/// 3,000 rows of any kind are under a 16.7 ms frame; 20,000 nodes of a list's data cost 12 ms; a patch's hunk 0.12
+/// ms; a text of 1 MiB 4 ms; an image of 2048x2048 pixels 28 ms to decode, which a worker does, and 0.6 ms to copy
+/// in.
 impl Default for Limits {
     fn default() -> Self {
         Self {
@@ -98,7 +87,7 @@ thread_local! {
     static FRAME: Cell<Option<((usize, u64), u64)>> = const { Cell::new(None) };
     static LIMITS: Cell<Limits> = Cell::new(Limits::default());
     static HELD: RefCell<HashMap<String, Held>> = RefCell::default();
-    /// What all plugins hold, apart from any plugin's ID (review carbon 5.2).
+    /// What all plugins hold, apart from any plugin's ID.
     static TOTAL: Cell<Held> = Cell::new(Held::default());
 }
 
@@ -250,8 +239,6 @@ impl std::fmt::Display for Over {
 mod tests {
     use super::*;
 
-    // Expected (fixed row; review carbon 5.2): what all plugins hold is apart from any plugin's ID, the empty one too:
-    // a charge to it counts once in the total.
     #[test]
     fn the_total_counts_each_charge_once() {
         let before = total().nodes;
@@ -261,8 +248,6 @@ mod tests {
         assert_eq!((held("").nodes, total().nodes), (0, before));
     }
 
-    // Expected (4.2): a plugin cannot spend what another left, nor more than the total; a replacement gives back
-    // what it replaces; a release ends the charge.
     #[test]
     fn a_plugin_spends_only_its_own_share_of_the_total() {
         let _limits = set(Limits { plugin_content: 10, all_content: 15, ..Limits::default() });

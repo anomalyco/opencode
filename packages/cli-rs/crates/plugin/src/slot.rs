@@ -1,5 +1,4 @@
-//! The slot tree: the `SlotMap` paths (`packages/plugin/src/tui/context.ts:191-202`), their inputs, and
-//! the pure resolution of claims into placements (`packages/tui/src/plugin/structure.ts`).
+//! Published slot paths and the rules for ordering, replacing and suppressing their claims.
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
@@ -31,8 +30,8 @@ pub const PATHS: [&str; 10] = [
     SIDEBAR_FOOTER,
 ];
 
-/// The slot paths mounted now, each with its count of mounts (TS `registerSlot`): a path exists while any mount of it
-/// lives, so a claim on a child slot its parent did not mount degrades onto the parent.
+/// The slot paths mounted now, each with its count of mounts: a path exists while any mount of it lives, so a claim on
+/// a child slot its parent did not mount degrades onto the parent.
 #[derive(Default)]
 pub struct Live {
     counts: RefCell<HashMap<String, usize>>,

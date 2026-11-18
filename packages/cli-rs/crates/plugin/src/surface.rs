@@ -1,9 +1,5 @@
-//! A mount of a contract 2.0 surface ([`v2::Surface`], synthesis 4.2): one showing of a plugin's route or slot claim,
-//! with a generation that is new every time. What it holds is its own and goes with it: the reconciled widgets, the
-//! SDK's [`v2::Memo`] table, and the content handles the view gave the host. A view whose tree the host refuses
-//! changes nothing; the host asks at once for a whole tree, and a second refusal in a row fails the plugin.
-//!
-//! A theme change restyles the widgets in place with no call, unless the surface reads the palette.
+//! Owns the widgets, memo entries and content of a mounted plugin surface. Reopening the same key creates a new
+//! generation; work from the old one cannot update it.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -29,17 +25,17 @@ use crate::{Claimed, Host, SlotInput, behave, slot};
 /// `false` when it panicked, which fails the plugin.
 pub(crate) type Call = Rc<dyn Fn(&'static str, &dyn Host, &Rc<Owner>, &mut dyn FnMut(&dyn abi::Read)) -> bool>;
 
-/// What a mount routes of the input (P2): its plugin, its handler, the layers each mount registers, and whether it is
-/// a panel, whose view gets [`v2::SurfaceInput::panel`].
+/// What a mount routes of the input: its plugin, its handler, the layers each mount registers, and whether it is a
+/// panel, whose view gets [`v2::SurfaceInput::panel`].
 pub(crate) struct Input {
     pub plugin: String,
     pub deliver: Option<interact::Deliver>,
     pub layers: Vec<abi::interact::Layer>,
     pub panel: bool,
-    /// Its handler hears each mount begin and end ([`abi::interact::Event::Mount`], P6a).
+    /// Requests mount and unmount events for the surface handler.
     pub mounts: bool,
     /// The activation's own input owner, which hears the mount events: what they ask for is the plugin's, and ends
-    /// with the activation (review carbon-3).
+    /// with the activation.
     pub activation: Rc<Owner>,
 }
 /// Adds what `from` says changed to `into`.
@@ -91,7 +87,7 @@ pub(crate) struct Place {
     pub name: String,
     pub at: v2::Place,
     pub palette: bool,
-    /// P3: what its `layout` call is told about.
+    /// What its `layout` call is told about.
     pub notify: Vec<v2::Notify>,
 }
 
@@ -117,8 +113,8 @@ pub(crate) trait Viewer {
     }
     /// The mount ended; `focused` names its node that had the focus then.
     fn forget(&self, _host: &dyn Host, _mount: &v2::MountId, _focused: Option<String>) {}
-    /// Frame `frame`'s geometry is final, and it laid the mount out: a carrier that pushes layout reads to its plugin
-    /// pushes what changed now (contract 2.x, addition 1, R2).
+    /// Frame `frame`'s geometry is final, and it laid the mount out: a carrier that pushes layout reads to its
+    /// plugin pushes what changed now.
     fn laid_out(&self, _mount: &v2::MountId, _frame: u64) {}
     /// A slot's first view before a solve shows a placeholder and waits for the room the solve gives it: the surface
     /// views again after its first solve, also when the room equals the terminal's size that stood in.
@@ -225,8 +221,8 @@ thread_local! {
     static ADOPTED: Cell<u64> = const { Cell::new(0) };
 }
 
-/// How many trees the mounts on this thread adopted, a keep of a root that is taken as it is not counted: a view's tree
-/// that equals the last costs the host no reconcile work, but is adopted (review carbon-7).
+/// How many trees the mounts on this thread adopted, a keep of a root that is taken as it is not counted: a view's
+/// tree that equals the last costs the host no reconcile work, but is adopted.
 pub fn adopted() -> u64 {
     ADOPTED.get()
 }
@@ -243,7 +239,7 @@ pub fn ledger() -> Ledger {
     })
 }
 
-/// What the mounts of `plugin` hold on this thread now (P6a: the built-ins' own mounts show beside another plugin's).
+/// Resources held by this plugin’s mounts on the current thread.
 pub fn ledger_of(plugin: &str) -> Ledger {
     LEDGER.with(|ledgers| ledgers.borrow().get(plugin).copied().unwrap_or_default())
 }
@@ -283,7 +279,7 @@ pub(crate) struct Surface {
     slot_input: SlotInput,
     palette: bool,
     pub(crate) id: v2::MountId,
-    /// P3: the plugin's `layout` and scroll handler, what `layout` is told about, and what the behaviors hold.
+    /// The plugin's `layout` and scroll handler, what `layout` is told about, and what the behaviors hold.
     pub(crate) calls: behave::Calls,
     pub(crate) notify: Vec<v2::Notify>,
     pub(crate) behave: RefCell<behave::State>,
@@ -343,7 +339,7 @@ thread_local! {
     static JOB: Cell<u64> = const { Cell::new(0) };
 }
 
-/// Runs the host's own work for a plugin's nodes, timed as its host time (synthesis 4.4).
+/// Runs the host's own work for a plugin's nodes, timed as its host time.
 pub(crate) type HostTime = Rc<dyn Fn(&mut dyn FnMut())>;
 
 /// An image's source: content by its handle, inline bytes by their hash.
@@ -392,8 +388,8 @@ fn count_pictures(plugin: &Rc<str>, by: isize) {
     });
 }
 
-/// A mount that shows images: a surface's, or a claimed part's (review bigboi 1), which share one way to admit,
-/// decode, hold and give them back.
+/// A mount that shows images: a surface's, or a claimed part's, which share one way to admit, decode, hold and give
+/// them back.
 pub(crate) trait Shows {
     fn pictures(&self) -> &Pictures;
     fn host_time(&self) -> &HostTime;
@@ -406,7 +402,7 @@ pub(crate) trait Shows {
 pub(crate) struct Pictures {
     plugin: Rc<str>,
     held: RefCell<HashMap<ImageKey, (Picture, Charge)>>,
-    /// The image sources an adoption admitted: a refused one gives them back (review carbon 3.2).
+    /// The image sources an adoption admitted: a refused one gives them back.
     attempt: RefCell<Vec<ImageKey>>,
 }
 
@@ -445,7 +441,7 @@ impl Pictures {
     fn admit(&self, app: &App, key: ImageKey, bytes: Arc<[u8]>, mount: Weak<dyn Shows>) -> Picture {
         self.attempt.borrow_mut().push(key);
         let limits = limits::get();
-        // Past one image's bytes it is over, image or not (review carbon 3.1).
+        // Past one image's bytes it is over, image or not.
         if bytes.len() as u64 > limits.image_bytes {
             self.put(key, (Picture::Over, Charge::Held(0)));
             return Picture::Over;
@@ -714,12 +710,12 @@ impl Surface {
             owned.mark_dialog();
         }
         owned.register(host, &input.layers, &deliver);
-        // A surface that asks hears its mount begin before its first view, as a render claim's `on_mount` (P6a).
+        // A surface that asks hears its mount begin before its first view, as a render claim's `on_mount`.
         mounted.tell_mount(host, true);
         *mounted.holder.borrow_mut() = Some(owned);
         let weak = Rc::downgrade(&mounted);
         // The host's own state and the terminal's size change outside change batches. A view that ran after the last
-        // change of the host's state has seen it: a notice of it, which comes later, calls no view (review bigboi-7).
+        // change of the host's state has seen it: a notice of it, which comes later, calls no view.
         let watch = host.watch(Rc::new(move |changed: &abi::Changed| {
             if let (Some(mounted), Some(host)) = (weak.upgrade(), owner.upgrade()) {
                 // A view now would see the room of the last solve: a laid-out mount hears the terminal's size from
@@ -760,7 +756,7 @@ impl Surface {
         match fills {
             true if mounted.pending.get() => {}
             // A route's first view runs once the page it replaces is gone, whose keymap layers go in this turn's
-            // deferred work, before the next frame: the view sees the keymap the route has (review bigboi-7).
+            // deferred work, before the next frame: the view sees the keymap the route has.
             true => {
                 let weak = Rc::downgrade(&mounted);
                 host.app().defer(move |_| {
@@ -800,7 +796,7 @@ impl Surface {
     }
 
     /// Calls the view and adopts its tree; on a refusal, once more for a whole tree. A revision the frame has no rows
-    /// left for, by what the last one built, waits for the next frame; a first view does not (review bigboi 3).
+    /// left for, by what the last one built, waits for the next frame; a first view does not.
     fn draw_sized(&self, host: &dyn Host, changed: &abi::Changed) {
         let estimate = {
             let state = self.state.borrow();
@@ -826,9 +822,9 @@ impl Surface {
                 return;
             };
             let (mut memo, remote, shows) = (called.memo, called.remote, !called.stand_in);
-            // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a), when the
-            // pass would change nothing: no node shows what the host reads again (a tool call's output), and the tree
-            // is in the theme of the moment. The memo table stays as it is: the next view discards what this one staged.
+            // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame, when the pass
+            // would change nothing: no node shows what the host reads again (a tool call's output), and the tree is in
+            // the theme of the moment. The memo table stays as it is: the next view discards what this one staged.
             if !full && called.staged.given.is_empty() && self.keeps_root(&node) && self.settled(&theme) {
                 let mut state = self.state.borrow_mut();
                 let size = remote.unwrap_or(memo.len()) as i64;
@@ -1528,7 +1524,7 @@ fn decode(app: &App, bytes: &[u8]) -> Picture {
     let image = opentui::native::Image::decode(app.session().context(), bytes)
         .map_err(|error| log::warn!("an image node does not decode: {error}"))
         .ok();
-    // An image whose header names another size than it decodes to is not shown (review carbon 3.1).
+    // An image whose header names another size than it decodes to is not shown.
     let named = |info: opentui::native::ImageInfo| {
         (info.width, info.height) == (width, height) || (info.height, info.width) == (width, height)
     };

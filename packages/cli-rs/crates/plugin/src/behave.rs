@@ -1,37 +1,5 @@
-//! Host behaviors of contract 2.0 (synthesis 3.5, 4.2, 4.4; phase P3): what the host resolves after the solve, with
-//! this frame's geometry and no plugin call, and the `layout` call that follows.
-//!
-//! **The hook.** OpenTUI's `App` calls the host between solve and paint only for a resize, so the hook is a node
-//! (spike S0): an absolute box of no height whose width [`arm`] flips between 1 and 2. The next solve resizes it, and
-//! its resize handler runs the behaviors of every live 2.0 mount of its app. A layout round walks the tree depth first
-//! in paint order, z-index then child order, and a rect reads the new solve once the walk has passed its node, so the
-//! hook is walked last: it has the highest z-index and is the root's last child, put in once and never moved (a node
-//! added or moved in a frame is resized before its siblings in it), and every root child added after it goes in
-//! before it ([`opencode_ui::root::add`]). Arming only flips its width. When a
-//! behavior changes something it reads (an offset, a mounted chunk or list item), the hook arms again and the stepper
-//! solves another round in the same frame. Then geometry is final: the landings of steps, then each surface's
-//! `layout` call when something it named changed. A view a resize asked for (a mount's root laid out at another size
-//! than its view saw) runs first in a round, with the room that solve gave, and the next round solves its tree, so the
-//! first frame after a resize shows the view of the new size (`settled-first`).
-//!
-//! **Budgets.** A frame runs at most [`ROUNDS`] rounds of the hook (OpenTUI's stepper fails the frame past 8 solves,
-//! and other widgets need some), and a mount gets at most [`DELIVERIES`] `layout` calls a frame, of which only the
-//! first may run its view again in the frame. Work left when a budget runs out (behaviors that have not settled, a
-//! delivery or a view `layout` asked for) goes on in the next frame, which the hook asks for; `layout` is never told
-//! a geometry the behaviors have not settled. After [`STALLED`] frames in a row with work left, the hook stops asking
-//! and waits for another cause.
-//!
-//! **What arms it** (4.4): a new tree, a verb, the wheel on a scroll of a mount, a resize of a scroll, its content or
-//! a mount's root, any key while a mount lives, and the published transcript's moves. Arming forces one solve in that
-//! frame.
-//!
-//! **What a mount holds** (4.2): its pending [`Scroll::To`]s and the memory of each scroll's last [`Scroll::Step`],
-//! the paints of its `layout` calls, and the signature of what the last call was told. All of it goes with the mount.
-//!
-//! **Whose it is.** Each app has its own hook, mounts and transcript. A verb belongs to the mount whose handler asked
-//! for it, found when it is asked for: when that mount is gone when the verb applies, it is dropped. A verb on the
-//! transcript is taken only from a handler of the user's input: a key, a click, the palette, the wheel; not a
-//! command the plugin dispatched, a reply, a wake or the report of its own verb.
+//! Resolves sticky nodes, scroll commands and anchors after layout. Calls the plugin's layout callback with settled
+//! geometry; a paint-only change must not start another layout pass.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -249,7 +217,7 @@ impl Index {
 
     fn walk(&mut self, nodes: &[Mounted], scroll: Option<&str>, parent: Option<&AnyWidget>) {
         for mounted in nodes {
-            // A hidden box shows nothing: what is in it is no anchor, sticky or scroll of the moment (review carbon-5).
+            // A hidden box shows nothing: what is in it is no anchor, sticky or scroll of the moment.
             if mounted.node.is_hidden() {
                 continue;
             }
@@ -562,8 +530,7 @@ impl Hook {
         self.app.request_redraw();
     }
 
-    /// The live mounts, newest last. A mount whose plugin failed leaves first, with what its behaviors held: its
-    /// pending verbs, its steps' memory and its paints (P4c's containment).
+    /// Live mounts, newest last. A failed mount drops its pending scroll commands, step state and paint overrides.
     fn live(&self) -> Vec<Rc<Surface>> {
         let (live, ended): (Vec<Rc<Surface>>, Vec<Rc<Surface>>) =
             self.mounts.borrow().iter().filter_map(Weak::upgrade).partition(|mount| !mount.calls.ended());
@@ -760,7 +727,7 @@ fn mount(caller: &Caller<'_>, surface: &str) -> Option<Rc<Surface>> {
     let own = caller.mount.as_ref().and_then(|own| mounts.iter().rposition(|mount| Weak::ptr_eq(&mount.alive(), own)));
     match own {
         Some(at) => Some(mounts.swap_remove(at)),
-        // A call of a mount that closed: its verb ends with it, and never reaches a mount opened since (carbon own-1).
+        // A call of a mount that closed: its verb ends with it, and never reaches a mount opened since.
         None if caller.mount.as_ref().is_some_and(|own| own.upgrade().is_none()) => None,
         None => mounts.pop(),
     }
@@ -783,8 +750,7 @@ pub(crate) fn scroll(caller: &Caller<'_>, target: Target, verb: Scroll) -> Box<d
         Target::Transcript => {
             let (key, plugin, own) = (key(caller.app), caller.plugin.to_owned(), caller.mount.clone());
             Box::new(move || {
-                // A mount's verb ends with it: once it closed, the transcript the user is back on is not its to move
-                // (carbon own-1, bigboi's pipe sign-off).
+                // A mount's verb ends with it: once it closed, the transcript the user is back on is not its to move.
                 if own.is_some_and(|own| own.upgrade().is_none()) {
                     return;
                 }

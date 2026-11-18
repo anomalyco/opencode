@@ -1,33 +1,5 @@
-//! The host's side of a canvas ([`v2::Node::Canvas`], P5): a widget that paints the display list its plugin drew
-//! ([`opencode_plugin_abi::canvas`]) and keeps it, so a frame the plugin did not draw replays it with no call.
-//!
-//! The host asks the surface's draw for a list from the canvas's paint, which OpenTUI runs after the last layout
-//! round, with the size the canvas has in that frame; at most once a frame:
-//!
-//! - when the canvas shows at a size or a version it has no list for: first, after a resize, after a new `version`;
-//! - while it animates: in each frame after one that showed it. The driver is OpenTUI's `App::animate`, as the
-//!   host's own spinners and shimmer have ([`opencode_ui::motion`]), with their rules: a canvas the last frame did not
-//!   show (hidden, scrolled out of view, under a closed route, or covered by what is drawn over it: none of a few
-//!   samples of it is the canvas's in that frame's hit grid) stops at the driver's next tick and costs no frame and no
-//!   wakeup; it starts again once a frame shows it, and the time between is not counted. With the `animations` switch
-//!   off it does not run, and the canvas keeps its last list. A canvas without a draw does not animate. The time the
-//!   terminal is handed to another program ([`handover`]) is not counted either.
-//!
-//! What lists cost the host is bounded: each list by its recording and the cells it touches at the size it is drawn
-//! at (what lands outside the canvas is culled), the lists a plugin's canvases hold and all canvases hold, and the
-//! recording of a frame's canvases. Over a bound a canvas shows a placeholder; the frame goes on.
-//!
-//! A canvas that does not show (out of view, or with no room: a dimension of none, which only the painter sees, since
-//! OpenTUI's `rect()` and resize report one cell) is not drawn; it is drawn in the paint that shows it again.
-//!
-//! A draw inside a paint is a plugin call like any other, timed and caught at the host's edge, and it can only read:
-//! it returns a list or nothing. What a failure does (the plugin fails, its mounts end, the budget's reports) is
-//! deferred until the frame is done, so the paint changes no widget but the canvas's own list.
-//!
-//! A list is checked whole before it is kept. One the host cannot read fails the plugin and the canvas keeps its last
-//! list until the mount ends; one over a limit is dropped and the canvas shows a placeholder.
-//!
-//! What canvases hold is counted per thread outside any mount ([`ledger`]), and what they cost ([`work`]).
+//! Replays a plugin's last accepted display list into its canvas. Ask for a new list on first paint, resize,
+//! version change or animation tick; a hidden or zero-size canvas does not draw.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -70,8 +42,8 @@ pub const CELL: usize = size_of::<PaintCell>();
 /// `None` to keep the list (also when the call panicked).
 pub(crate) type Draw = Box<dyn Fn(&str, Frame) -> Option<Option<Drawn>>>;
 
-/// A list a draw returned: its bytes, or why the host did not take them in, which a carrier that sees a list's
-/// length before its bytes tells without copying them (review bigboi 7).
+/// A list a draw returned: its bytes, or why the host did not take them in, which a carrier that sees a list's length
+/// before its bytes tells without copying them.
 pub(crate) type Drawn = Result<Vec<u8>, list::Error>;
 
 /// What the canvases on this thread hold now.
@@ -524,8 +496,8 @@ impl Component for Board {
                         count(|work| work.over += 1);
                     }
                 }
-                // A list kept across a resize is held to one list's bounds at the size it shows at, as a new one is
-                // (review bigboi 7): the frame's recording is another bound, not this one.
+                // A list kept across a resize is held to one list's bounds at the size it shows at, as a new one is:
+                // the frame's recording is another bound, not this one.
                 if !cost.fits() {
                     painter.text(0, 0, PLACEHOLDER, Style::new().dim());
                     return;
@@ -788,10 +760,6 @@ mod tests {
 
     use super::*;
 
-    // Expected (carbon-4 (1), OpenTUI #2118): work a draw defers while the canvas paints, as a plugin's failure defers
-    // its revocation, runs once the frame is presented, on OpenTUI's own event loop, with no input and no timer to wake
-    // it: here a list the host cannot read fails the canvas, whose failure defers the end of the run. Were the work to
-    // wait for input, the watchdog would end the run after 5 s.
     #[test]
     fn work_a_draw_defers_runs_without_input() {
         let app = App::headless(HeadlessOptions { width: 20, height: 4, ..HeadlessOptions::default() }).unwrap();
@@ -832,11 +800,6 @@ mod tests {
         (canvas, counted)
     }
 
-    // Expected (P5's bounds, 4.14 `limits`; review bigboi 7): a list the plugin keeps across a resize is held to one
-    // list's bounds at the size it shows at, as a list drawn for that size is, apart from the frame's recording: 32
-    // fills of the whole canvas touch 61,440 cells at 80x24 and 384,000 at 200x60, over 262,144, for 4,096 bytes of
-    // recording. At the larger size it shows the placeholder while a sibling canvas that fits replays; back at the
-    // smaller size the kept list replays again with no draw that gives a list.
     #[test]
     fn a_list_kept_across_a_resize_is_held_to_its_bounds_at_the_new_size() {
         let app = opentui::testing::TestApp::new(80, 24);

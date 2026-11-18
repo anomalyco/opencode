@@ -1,6 +1,6 @@
-//! A route of the one API (O-67), on either path: what its render returns, centered in a scroll box on the page
-//! background (TS `StatsPage`'s container), the plugin's commands of [`abi::Scope::Route`] while it shows, and its
-//! mount handlers as it mounts and unmounts.
+//! A route of the one API, on either path: what its render returns, centered in a scroll box on the page background
+//! (TS `StatsPage`'s container), the plugin's commands of [`abi::Scope::Route`] while it shows, and its mount handlers
+//! as it mounts and unmounts.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -82,9 +82,9 @@ impl View {
 }
 
 /// The keymap layers of a route's `commands`, as the host's own routes make theirs: the commands in a global layer, so
-/// the palette, which opens in the dialog's mode, lists them as TS does, and runs them there (PL-3); their keys in a
+/// the palette, which opens in the dialog's mode, lists them as TS does, and runs them there; their keys in a
 /// base-mode layer, so a key runs one only while no dialog is over the route. A surface's route makes them before its
-/// first view, which may read the keymap, so their arrival does not call the view again (review bigboi-7).
+/// first view, which may read the keymap, so their arrival does not call the view again.
 pub(crate) fn layer(host: &dyn Host, commands: Vec<TuiCommand>) -> Option<Disposer> {
     if commands.is_empty() {
         return None;

@@ -224,8 +224,6 @@ fn a_replacement_drops_the_content_and_inside_claims() {
     assert_eq!(host.app.render().text().lines().next().unwrap().trim_end(), "b0");
 }
 
-// Expected: as in TS, an external plugin with a built-in's ID replaces the built-in in its place among the claims, a
-// second plugin with that ID is refused, and unloading the plugin brings the built-in back in the same place and state.
 #[test]
 fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     let host = host();
@@ -278,8 +276,6 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
     );
 }
 
-// Expected (D3): an external plugin keeps its place among the claims when it is rebuilt and when it is disabled and
-// enabled again, as `docs/plugin-abi.md` and TS have it; so does a built-in that is enabled again.
 #[test]
 fn a_plugin_keeps_its_place_across_a_reload_and_a_toggle() {
     let host = host();
@@ -497,8 +493,6 @@ fn a_claim_root_shrinks_in_a_row_slot() {
     assert!(row.starts_with("0123456789abc") && row.chars().count() <= 20, "{row:?}");
 }
 
-// Expected: a replaced node frees its widgets, a hoverable, clickable text among them, so the click action, which
-// holds the host weakly, is dropped each time (bigboi's probe: ten replacements leave the count where it was).
 #[test]
 fn a_replaced_hover_text_drops_its_handlers() {
     use abi::{Click, Node, Render, Span};
@@ -527,8 +521,6 @@ fn a_replaced_hover_text_drops_its_handlers() {
     assert_eq!(Rc::weak_count(&host), weak);
 }
 
-// Expected: a claim on a child slot its parent did not mount, because the parent's plugin is off or hides, is
-// appended to the parent (TS `survivingAncestor`), and moves back inside once the child slot mounts again.
 #[test]
 fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
     use abi::{Node, Render, Span};
@@ -571,9 +563,6 @@ fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
     assert_eq!(rows(&host)[..2], ["content", "status"]);
 }
 
-// Expected: a parent claim that shows or hides its nested slot outside a change batch, on a wake or on the
-// invalidation after one of its handlers, moves the child slot's claim at once: the next frame shows it exactly once,
-// inside the parent claim or degraded after it.
 #[test]
 fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_parent() {
     use abi::{Node, Render, Span};
@@ -626,8 +615,6 @@ fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_pare
     assert_eq!(shown(&host), ["content", "footer status"]);
 }
 
-// Expected: a replaced diagram that scrolls on a drag frees its widgets and the drag handler with them: ten
-// replacements leave the handlers' hold on a shared value where it was.
 #[test]
 fn a_replaced_drag_text_drops_its_handlers() {
     use abi::Span;
@@ -655,9 +642,6 @@ fn a_replaced_drag_text_drops_its_handlers() {
     assert_eq!(Rc::strong_count(&held), start);
 }
 
-// Expected (r2 review, carbon-ui-6): as TS `context.tsx` restores the fallback, an external plugin whose setup fails
-// leaves the active built-in it would replace running, and its target reports the failure with "(previous version
-// still active)". A build that sets up replaces the built-in.
 #[test]
 fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
     let host = host();
@@ -681,9 +665,6 @@ fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
     assert_eq!((entries[0].source, entries[0].status.clone()), (Source::External, Status::Active));
 }
 
-// Expected (bigboi 7, carbon-p0a-3): a claim drawn again with another root layout draws as that layout mounted fresh:
-// the heights, minimum, maximum and margins of an earlier node do not stay on the slot's root, also across a hidden
-// render; and a percent height is of the slot's parent once, the box painted on all of it.
 #[test]
 fn a_claim_root_takes_each_layout_as_mounted_fresh() {
     use abi::{Edges, Layout, Node, Render, Span, Width};
@@ -747,8 +728,6 @@ thread_local! {
     static PANICS: Cell<bool> = const { Cell::new(false) };
 }
 
-// Expected (`ledger`): a 2.0 surface whose plugin fails shows nothing and holds no content or memo from then on, also
-// on a host that does not mount its route again, as this one: the mount itself goes when its slot does.
 #[test]
 fn a_failed_surface_drops_what_it_held() {
     use abi::v2;
@@ -786,8 +765,6 @@ thread_local! {
     static MOUNTS: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-// Expected (carbon's 8.3): when a surface builds the slot it shows again, the claims in it hear that their mount ends
-// before the next one starts.
 #[test]
 fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
     use abi::v2;
@@ -829,12 +806,12 @@ fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
     assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true, false, true]);
 }
 
-// The wake and the mailbox as a model with fault operators (reviews bigboi-2, -11; carbon-1). A real in-process
-// activation runs; its wake is handled in steps (`Activation::woken`), and the model puts a send, a wake of the plugin's
-// waker, a thread's report or a failing update into every gap between those steps, after zero, one or two of them
-// before the frame. After the host settles it checks: every message accepted arrived once, in order; the last wake of
-// the waker was followed by a run of the plugin's wake handlers; never more than one `Woken` was in flight; and a
-// failure was reported once, with the first cause.
+// The wake and the mailbox as a model with fault operators. A real in-process activation runs; its wake is handled in
+// steps (`Activation::woken`), and the model puts a send, a wake of the plugin's waker, a thread's report or a failing
+// update into every gap between those steps, after zero, one or two of them before the frame. After the host settles
+// it checks: every message accepted arrived once, in order; the last wake of the waker was followed by a run of the
+// plugin's wake handlers; never more than one `Woken` was in flight; and a failure was reported once, with the first
+// cause.
 
 const MODEL: &str = "model.mail";
 /// The message whose `update` panics.
@@ -1050,9 +1027,6 @@ fn the_wake_and_the_mailbox_lose_nothing_in_any_gap() {
     assert!(matches!(&status, Status::Failed(error) if error.contains("update failed")), "{status:?}");
 }
 
-// Expected (big-boi's catalog review, CT-1): an activation a reload handed a JS host's activation on to owns the dialogs
-// of the whole chain it goes on from, named by the chain's first activation alone, where each handover copied the list
-// of every earlier one: from that first one to itself, not one before it, not a later one, not another plugin's.
 #[test]
 fn an_activation_owns_the_dialogs_of_the_chain_it_goes_on_from() {
     let generation = Rc::new(Cell::new(0));
@@ -1074,9 +1048,6 @@ fn an_activation_owns_the_dialogs_of_the_chain_it_goes_on_from() {
     assert!(!registry.owns("q", now), "another plugin's");
 }
 
-// Expected (cf-1): a slash name or alias the prompt could not complete is left out, as TS's prompt completes no name
-// that is empty or has whitespace or a second `/`; an alias stands in for a left-out name, and aliases without a
-// slash name make no slash command.
 #[test]
 fn a_slash_name_the_prompt_cannot_complete_is_left_out() {
     let names = |command: abi::Command| {

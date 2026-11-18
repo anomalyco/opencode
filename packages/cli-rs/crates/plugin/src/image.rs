@@ -1,11 +1,5 @@
-//! Images off the UI thread (synthesis 4.2, phase Pl). The host reads an image's header first, on the UI thread, and
-//! admits it by its size: its bytes and pixels, and the decoded bytes its plugin and all plugins may hold
-//! ([`crate::limits`]). An admitted image decodes on a worker, with a native context of the worker's own, into
-//! pixels any thread may hold; the UI thread then only copies them into the app's context. Until then the node shows
-//! nothing, and over a limit it shows a placeholder.
-//!
-//! OpenTUI's `Image::decode` takes the app's context, which stays on the UI thread, and keeps its handle to itself,
-//! so the worker calls the native decoder and copies the pixels out itself.
+//! Check image dimensions and memory budgets before queueing a decode off the UI thread. A finished decode belongs
+//! to the mount that requested it.
 
 #![allow(unsafe_code)]
 
@@ -22,8 +16,8 @@ use opentui::sys;
 use crate::limits;
 
 /// The decoded bytes an image's job reserved for its plugin: the job holds them while it runs and its pixels wait for
-/// the UI thread, and gives them back when it is dropped, unless its mount took them over with the pixels (review
-/// bigboi 9). So a mount that closes, or a decode that fails, gives back nothing before the bytes are gone.
+/// the UI thread, and gives them back when it is dropped, unless its mount took them over with the pixels. So a mount
+/// that closes, or a decode that fails, gives back nothing before the bytes are gone.
 pub(crate) struct Reservation {
     plugin: Rc<str>,
     bytes: u64,
@@ -101,7 +95,7 @@ pub(crate) struct Pixels {
     pub rgba: Vec<u8>,
 }
 
-/// The image workers: the decodes that run at once, however many images wait (review carbon 3.3).
+/// The image workers: the decodes that run at once, however many images wait.
 const WORKERS: usize = 2;
 
 /// What a worker decoded for job `0`, sent to the UI thread: a send to a full queue is tried again with the same.
@@ -221,7 +215,7 @@ fn queue() -> &'static Mutex<mpsc::Sender<Request>> {
 }
 
 /// Decodes `bytes` into pixels of `size`, as their header named it, or of `size` turned (an orientation); `None` for
-/// any other: a header that names another size than the image decodes to is not shown (review carbon 3.1).
+/// any other: a header that names another size than the image decodes to is not shown.
 fn decode_as(bytes: &[u8], size: (u32, u32)) -> Option<Pixels> {
     decode(bytes).filter(|pixels| (pixels.width, pixels.height) == size || (pixels.height, pixels.width) == size)
 }
@@ -333,10 +327,6 @@ mod tests {
         out
     }
 
-    // Expected (rows for the reviews' mutants CM1 to CM3, and carbon 3.1): each format's header names its size as the
-    // format lays it out, written here from the formats' specifications; a JPEG's fill bytes, a marker without a
-    // length, and a comment that holds what looks like a frame header are read as the decoder reads them; a header that
-    // names no pixels names no image.
     #[test]
     fn a_header_names_the_size_its_format_lays_out() {
         let le16 = |value: u16| value.to_le_bytes();
@@ -370,7 +360,6 @@ mod tests {
         assert_eq!(size(b"not an image"), None);
     }
 
-    // Expected (carbon 3.1): a worker shows only pixels of the size the header named, or that size turned.
     #[test]
     fn a_decode_of_another_size_than_the_header_named_shows_nothing() {
         let bytes = png(3, 2);

@@ -1,20 +1,5 @@
-//! A plugin's mailbox (synthesis 4.2, "When a queue is full"; property `backlog`): what its threads send, which the
-//! UI thread hands to its message handler as the plugin's `update`. It holds at most [`abi::BOUND`] entries, and a send
-//! never blocks and never drops in silence:
-//!
-//! - `send` puts a message at the end, or refuses it with `Full` and stores nothing;
-//! - `replace` under a key takes the place of the entry that waits under that key, so a key holds one entry; a new key
-//!   in a full mailbox is `Full`; an empty key is no key;
-//! - once the plugin leaves `active` every send is `Closed`, and what waited is dropped; a plugin without a message
-//!   handler refuses messages the same way, and its threads still run;
-//! - a thread's panic report is one flag a plugin: the first is kept, the plugin fails once, after the messages that
-//!   were in before it and before any that came later (review bigboi 8).
-//!
-//! No message is dropped while the mailbox's lock is held: a message in process is the author's value, whose `Drop`
-//! may come back to the mailbox (a `Stop` check, a send) or wait for a thread that does. Replaced and closed entries
-//! are dropped after the lock is released.
-//!
-//! A send posts the activation's [`Wake`], so a burst wakes the UI thread once, and the last send is never lost.
+//! A bounded queue from plugin workers to the UI thread. `send` never blocks; replacing by key updates the pending
+//! entry in place.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -46,9 +31,7 @@ pub(crate) const REPORT: usize = 4096;
 pub(crate) struct Mailbox {
     state: Mutex<State>,
     wake: Arc<Wake>,
-    /// The bytes of the messages and keys it holds at most: the content bytes a plugin may hold (synthesis 4.2,
-    /// review carbon 4.4). A message of the linked carrier is a Rust value whose size the host cannot know: it counts
-    /// its key alone.
+    /// Budget for queued message bytes and keys.
     bytes: u64,
 }
 
@@ -295,7 +278,7 @@ impl Mailbox {
 }
 
 /// What a message under `key` counts of the mailbox's bytes: its key, and its JSON text, as the C ABI sends it or as
-/// an in-process value was written (review carbon-10).
+/// an in-process value was written.
 fn size(key: Option<&str>, message: &Message) -> u64 {
     let text = match message {
         Message::Json(text) => text.len(),
@@ -343,8 +326,6 @@ mod tests {
 
     use super::*;
 
-    // Expected (fixed row; review carbon 4.4): a mailbox holds the content bytes a plugin may hold of messages and keys:
-    // past them a send is `Full` and nothing is stored, and a message taken out frees its bytes.
     #[test]
     fn a_mailbox_holds_its_bytes_at_most() {
         let _limits =
@@ -367,8 +348,6 @@ mod tests {
         assert_eq!(mailbox.put_json(b"k", format!("{forty}{}", " ".repeat(20)).as_bytes()), abi::FULL, "by 61");
     }
 
-    // Expected (4.2): closing frees what waited, at once, and refuses every send after; the first panic report of an
-    // open mailbox is kept, cut to its bound, and one after the close is not.
     #[test]
     fn closing_frees_what_waited() {
         let mailbox = Mailbox::new("test.close", Arc::new(Wake::new(None)));
@@ -401,8 +380,6 @@ mod tests {
         }
     }
 
-    // Expected (review bigboi-1): a replaced or a closed message's drop may use its own mailbox; it runs after the lock
-    // is released, so neither the sender nor the UI thread waits for ever.
     #[test]
     fn a_message_dropped_by_the_mailbox_may_use_it() {
         for close in [false, true] {
@@ -424,8 +401,6 @@ mod tests {
         }
     }
 
-    // Expected (reviews bigboi-11, carbon-7): an empty key is no key; a key that is not UTF-8 or a message that is not
-    // JSON is an error; a full or closed mailbox answers before the text is read.
     #[test]
     fn the_c_abi_send_reads_keys_and_text() {
         let mailbox = Mailbox::new("test.json", Arc::new(Wake::new(None)));
@@ -480,10 +455,6 @@ mod tests {
         cached: u32,
     }
 
-    // Expected (`carrier-equal`; review carbon-10): an in-process plugin's messages count their JSON bytes against the
-    // mailbox's, as the C ABI's do: the same sends are taken and refused on both carriers, and the handler gets the
-    // message as its JSON reads back, the field JSON leaves out at its default, as a library's handler does. A refused
-    // message comes back to its sender as it was sent.
     #[test]
     fn both_carriers_take_and_refuse_the_same_messages() {
         let _limits =
@@ -510,7 +481,6 @@ mod tests {
         assert_eq!(outcomes[0], (vec![true, true, false, false], Some((read, 51))));
     }
 
-    // Expected (review bigboi low): toggling a plugin keeps one row of it, and a retired mailbox leaves none.
     #[test]
     fn the_registry_keeps_one_row_a_plugin() {
         let before = rows();

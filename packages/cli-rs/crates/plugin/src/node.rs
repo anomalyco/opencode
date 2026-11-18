@@ -1,5 +1,5 @@
-//! What a plugin of the one API (O-67) returns, turned into widgets, on both paths: fences ([`Fenced`]) with the keys
-//! the host mints for them, slot claims ([`Mount`] of a [`abi::Node`]), and rows ([`Line`]).
+//! What a plugin of the one API returns, turned into widgets, on both paths: fences ([`Fenced`]) with the keys the
+//! host mints for them, slot claims ([`Mount`] of a [`abi::Node`]), and rows ([`Line`]).
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -47,7 +47,7 @@ pub(crate) struct Mount {
     watch: RefCell<Option<Disposer>>,
     /// The renders for a new size in the current frame.
     resized: Cell<u8>,
-    /// The plugin its nodes are charged to, and what times the host's work for them (review carbon 2.4).
+    /// The plugin its nodes are charged to, and what times the host's work for them.
     charge: Charge,
 }
 
@@ -113,10 +113,10 @@ impl Mount {
         mount
     }
 
-    /// Gives the claim its laid-out size, and renders it again when the size changes (TS `onSizeChange`). It renders
-    /// in the frame that laid it out, which lays the new node out again, so the frame shows the claim at its size. A
-    /// claim whose node changes its own size each time could lay out without end, and OpenTUI fails the frame past a
-    /// few rounds: past [`RESIZE_DRAWS`] in one frame, the claim renders after it, from a timer, which wakes the loop.
+    /// Gives the claim its laid-out size, and renders it again when the size changes. It renders in the frame that
+    /// laid it out, which lays the new node out again, so the frame shows the claim at its size. A claim whose node
+    /// changes its own size each time could lay out without end, and OpenTUI fails the frame past a few rounds: past
+    /// [`RESIZE_DRAWS`] in one frame, the claim renders after it, from a timer, which wakes the loop.
     fn size(&self, weak: Weak<Self>, owner: Weak<dyn Host>) {
         self.root.on_resize(move |cx, rect| {
             let Some(mount) = weak.upgrade() else { return };
@@ -501,7 +501,7 @@ fn admits_lines(lines: &[Line]) -> Result<(), crate::limits::Over> {
 }
 
 /// Whether a node of a render the host draws without a [`reconcile::Tree`] (a panel's body) is within a tree's nodes
-/// and rows and each node within its text ([`crate::limits`]); past them it shows the placeholder (review carbon 2.4).
+/// and rows and each node within its text ([`crate::limits`]); past them it shows the placeholder.
 pub fn admits(node: &abi::Node) -> Result<(), crate::limits::Over> {
     fn walk(
         node: &abi::Node,
@@ -814,7 +814,7 @@ pub enum Scroll {
 
 /// Rows of spans as one no-wrap text. `fg` draws spans without their own; by default `text.base`.
 pub fn lines_widget(app: &App, theme: &Theme, lines: &[Line], fg: Option<&abi::Color>, scroll: Scroll) -> AnyWidget {
-    // The lines are one text: past a node's text, or the rows of a tree, they are its placeholder (review carbon 2.4).
+    // The lines are one text: past a node's text, or the rows of a tree, they are its placeholder.
     if let Err(over) = admits_lines(lines) {
         return add_placeholder(app, theme, &over);
     }
@@ -931,10 +931,6 @@ mod tests {
     use opencode_ui::theme::{Catalog, ThemeMode};
     use opentui::testing::TestApp;
 
-    // Expected: what the styling properties of a box do, read from a fresh layout's rects and cells: a border without a
-    // color is white and takes a cell on each side it draws; a negative padding counts as 0; a negative margin moves
-    // the box over its neighbor; a height, its minimum and its maximum bound the height its children ask for; and a
-    // box that hides its overflow does not draw what is past its height.
     #[test]
     fn a_box_lays_out_its_1_5_properties() {
         let app = TestApp::new(30, 12);
@@ -997,9 +993,6 @@ mod tests {
         assert_eq!(corner.symbol.as_str(), "┌");
     }
 
-    // Expected (carbon-p0a-8): each side of a box's padding and margin moves what it should, padding per side wins over
-    // `padding`, each border style draws its corner, and a title sits where its alignment says; read from the cells and
-    // rects of a fresh layout.
     #[test]
     fn a_box_draws_each_side_style_and_title_alignment() {
         let app = TestApp::new(40, 16);
@@ -1050,7 +1043,7 @@ mod tests {
         }
         // A title `T` on a box ten cells wide: a cell in from the left corner, in the middle, a cell in from the right.
         let wide = abi::Layout { width: Some(abi::Width::Cells(10)), ..abi::Layout::default() };
-        // A bottom title `B` the same on the box's last row (CT-26), beside a top title on the left.
+        // A bottom title `B` the same on the box's last row, beside a top title on the left.
         for (align, at) in [(abi::TitleAlign::Left, 2), (abi::TitleAlign::Center, 4), (abi::TitleAlign::Right, 7)] {
             let border = abi::Border::new().title("T").title_align(align);
             let (capture, _, _, _) = draw(content().border(border).layout(wide));
@@ -1065,9 +1058,6 @@ mod tests {
         }
     }
 
-    // Expected: a fence's key moves to the widget that replaces its block's widget, and goes once that widget is
-    // freed, as when its Markdown is destroyed, or once the block falls back to the code view; the plugin hears of
-    // each key that goes, once.
     #[test]
     fn a_fence_key_goes_with_its_widget() {
         let app = TestApp::new(40, 10);

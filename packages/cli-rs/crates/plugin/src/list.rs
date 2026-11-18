@@ -1,18 +1,5 @@
-//! A windowed [`Node::List`] (synthesis 3.4, 3.5; P3): the host scrolls the list and builds widgets only for the
-//! items near its viewport. An item that has no widgets keeps its node as data and takes the rows it took when it was
-//! last laid out, or the plugin's estimate (at least a row), in a spacer; so opening, toggling or resizing a list of a
-//! thousand cards builds and lays out the few on screen, not the thousand.
-//!
-//! An item is the unit of reconcile. Each item with widgets has a [`Tree`] of its own, reconciled with the item's
-//! node, so a node inside it keeps its widget while its id stays; a [`Node::Keep`] item keeps the item whole, with
-//! no work. An item's data is its node with every keep written out, so the host can build it whenever it comes into
-//! view; its anchors stand for it while it has no widgets, so a step can reach them.
-//!
-//! The window is resolved after the solve, with this frame's offset (the behavior pass of [`crate::behave`]); a
-//! change of it mounts or unmounts items and asks for another round. The list holds the reading position: the item
-//! at the viewport's top and the rows into it, taken before any height, order or width changes and given back after
-//! the solve, so what the reader looked at stays on screen. The rows before each item are kept as sums, so finding
-//! the window, an item's row or the top anchor takes no walk of the whole list.
+//! Mounts widgets near a list's viewport. Offscreen items retain their data and measured height, or the estimate if
+//! never measured.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -229,7 +216,7 @@ impl List {
             }
         }
         // A draft goes with its input: once the input's item went, or the plugin gave it another value, which would
-        // replace the text of a mounted input (review carbon-11).
+        // replace the text of a mounted input.
         let mut values = HashMap::new();
         for item in &self.items {
             inputs(&item.node, &mut values);
@@ -505,9 +492,9 @@ impl List {
         }
     }
 
-    /// Mounts the items the viewport and one viewport on each side reach, unmounts the others, and sizes the
-    /// spacers; whether anything changed. Items are mounted from the first in view outwards while the frame has rows
-    /// left, and one a frame without: the others are mounted in the frames after (review bigboi 3, carbon 2.1).
+    /// Mounts the items the viewport and one viewport on each side reach, unmounts the others, and sizes the spacers;
+    /// whether anything changed. Items are mounted from the first in view outwards while the frame has rows left, and
+    /// one a frame without: the others are mounted in the frames after.
     fn place(&mut self, env: &Env<'_>) -> bool {
         let wanted = if self.row { 0..self.items.len() } else { self.wanted(env) };
         let top = if self.row { 0.0 } else { self.top() };
@@ -709,7 +696,7 @@ fn unmount(mut mounted: Mounted, drafts: &mut crate::reconcile::Drafts) {
 fn logical(node: &Node, env: &Env<'_>) -> Vec<(String, AnchorAt)> {
     fn walk(node: &Node, env: &Env<'_>, out: &mut Vec<(String, AnchorAt)>) {
         match node {
-            // A hidden box shows nothing, so nothing in it is an anchor (review carbon-5).
+            // A hidden box shows nothing, so nothing in it is an anchor.
             Node::Box { .. } if node.is_hidden() => return,
             Node::Box { id: Some(id), anchor: Some(anchor), .. } => {
                 let at = AnchorAt {
@@ -722,7 +709,7 @@ fn logical(node: &Node, env: &Env<'_>) -> Vec<(String, AnchorAt)> {
             }
             Node::Diff { id: Some(id), hunks: Some(group), content, .. } => {
                 // A patch past one node's text or hunks, or whose content its plugin could not hold, is a placeholder
-                // once it mounts: it has no hunks (review carbon 2.2). Its text is read once a handle.
+                // once it mounts: it has no hunks. Its text is read once a handle.
                 let limits = crate::limits::get();
                 let text = match content {
                     Source::Content(handle) if (env.dropped)(*handle) => Default::default(),
