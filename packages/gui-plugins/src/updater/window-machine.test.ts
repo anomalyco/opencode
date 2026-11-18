@@ -45,6 +45,14 @@ describe("window updater machine", () => {
     expect(updaterAction({ status: "idle" }, initialWindowUpdater)).toEqual({ label: "action.checkNow", run: "check" })
   })
 
+  // A distro package without electron-updater's feed used to show "Check now", and checking toasted a raw ENOENT.
+  test("Settings says a build that does not update itself has no updates to check", () => {
+    expect(updaterAction({ status: "disabled" }, initialWindowUpdater)).toEqual({
+      label: "action.unavailable",
+      description: "check.unavailable",
+    })
+  })
+
   test("an install asked for during a check takes over, and the check's answer settles nothing", () => {
     const result = replay([
       ask("check"),

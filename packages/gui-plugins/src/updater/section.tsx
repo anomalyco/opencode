@@ -3,8 +3,12 @@ import { usePlugin } from "@opencode/plugin/gui"
 import type definition from "./index"
 import type en from "./i18n/en"
 
-/** The one update action the row offers: its label, and whether it runs now. */
-export type UpdatesAction = { readonly label: keyof typeof en; readonly run?: string }
+/** The one update action the row offers: its label, a description replacing the row's own, and whether it runs now. */
+export type UpdatesAction = {
+  readonly label: keyof typeof en
+  readonly description?: keyof typeof en
+  readonly run?: string
+}
 
 export default function UpdatesSection(props: {
   action: () => UpdatesAction
@@ -35,7 +39,11 @@ export default function UpdatesSection(props: {
         />
       </ui.SettingsRow>
 
-      <ui.SettingsRow id="settings-check-updates" title={ctx.t("check.title")} description={ctx.t("check.description")}>
+      <ui.SettingsRow
+        id="settings-check-updates"
+        title={ctx.t("check.title")}
+        description={ctx.t(props.action().description ?? "check.description")}
+      >
         <ui.Button disabled={!props.action().run} onClick={() => props.run()}>
           {ctx.t(props.action().label)}
         </ui.Button>
