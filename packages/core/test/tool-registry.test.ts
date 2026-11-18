@@ -818,6 +818,31 @@ describe("Tool", () => {
         expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
           "background",
         )
+
+        // Headless Tool.check also decodes Code Mode tools with their Code Mode input schema.
+        yield* service.transform((editor) =>
+          editor.add({
+            name: "task",
+            description: "Task",
+            input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
+            codemode: { input: Schema.Struct({ command: Schema.String }) },
+            output: Schema.String,
+            execute: (input) =>
+              Effect.succeed({
+                output: `${input.command}:${"background" in input ? String(input.background) : "omitted"}`,
+              }),
+          }),
+        )
+        expect(
+          yield* service.check({
+            code: 'return await tools.task({ command: "build", background: true })',
+            tools: ["task"],
+            bindings: {},
+            permissions: [],
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: true, value: "build:omitted" })
       }),
   )
 
