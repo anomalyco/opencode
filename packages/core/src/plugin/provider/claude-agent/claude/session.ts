@@ -34,7 +34,7 @@ export async function start(options: Options) {
     const error = ClaudeProbe.versionError(init.claude_code_version)
     if (error) throw error
     initialized = true
-    return { version: init.claude_code_version!, account: init.account, models: init.models }
+    return { version: init.claude_code_version!, account: init.account, models: ClaudeProbe.stable(init.models) }
   })
   // A cancel during startup can stop the session before anything awaits ready.
   ready.catch(() => {})

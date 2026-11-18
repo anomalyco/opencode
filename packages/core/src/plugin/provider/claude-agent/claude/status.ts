@@ -34,7 +34,7 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   const refresh = Effect.fn("ClaudeStatus.refresh")(function* () {
     const executable = io.which()
     if (!executable) return yield* SubscriptionRef.set(state, { type: "missing" })
-    const env = yield* connection()
+    const env = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io)
     const next = yield* ClaudeProbe.run(ClaudeQueryOptions.base({ executable, io, connection: env })).pipe(
       Effect.map((probe): State => ({ type: "ready", probe, configDir: env.CLAUDE_CONFIG_DIR })),
       Effect.catch((error) =>

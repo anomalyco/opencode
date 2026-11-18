@@ -65,7 +65,7 @@ export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options) {
         // No prompt is sent here, so an old Claude Code can still list its models.
         // The version is checked when a chat starts, and that chat's error tells the user to update.
         const version = init.claude_code_version
-        const models: Model[] = init.models.map((model) => ({ ...model }))
+        const models = stable(init.models)
         if (version && atLeast(version, CONTEXT_DISCOVERY_VERSION)) yield* discoverContext(session, models)
         return { version, account: init.account, models } satisfies Result
       }),
@@ -76,6 +76,15 @@ export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options) {
       }),
   )
 })
+
+// Claude Code can list a family's current model by its version, such as "Fable" as `claude-fable-5-2[1m]`. That ID
+// changes with each release, which would break a model saved in opencode's config. The family alias keeps working.
+export function stable(models: readonly ModelInfo[]): Model[] {
+  return models.map((model) => {
+    const family = model.displayName.toLowerCase()
+    return model.value.startsWith(`claude-${family}-`) ? { ...model, value: family } : { ...model }
+  })
+}
 
 // Sets each model's context window in place, so models discovered before a timeout keep theirs.
 const discoverContext = Effect.fn("ClaudeProbe.discoverContext")(
