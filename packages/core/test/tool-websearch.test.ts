@@ -52,7 +52,7 @@ class Fixture {
   ]
 }
 
-const it = testEffect(TestWebSearch.layer)
+const it = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, undefined)))
 const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service

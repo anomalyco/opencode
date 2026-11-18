@@ -25,7 +25,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fl
 
 /**
  * `OPENCODE_FLAGS`, a comma-separated list such as `automations,-media_blob`; a leading `-` turns a flag off, and
- * `all` enables all flags except opt-in-only flags and any disabled in the same list, as in `all,-media_blob`.
+ * `all` turns every flag on unless the same list opts one out, as in `all,-media_blob`.
  */
 export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/Overrides", {
   defaultValue: () => process.env.OPENCODE_FLAGS,
@@ -39,7 +39,6 @@ const onByDefault = (channel: string) => channel === "local" || channel === "dev
  * document that sets `experimental` (the same document every other `experimental` setting reads), then `all_flags: true`
  * from the highest-priority document that sets `all_flags`, so a global switch survives a project's own `experimental`
  * block, then on for local and dev builds. `all_flags: false` falls through rather than turning flags off.
- * Opt-in-only flags skip both wildcards and default to off on every channel.
  * A remote kill switch belongs above `OPENCODE_FLAGS` here.
  */
 export function resolve(input: {
@@ -62,17 +61,16 @@ export function resolve(input: {
     )?.info.experimental?.all_flags === true
   const names = Object.keys(ConfigFlag.aliases) as Array<keyof typeof ConfigFlag.aliases>
   return Record.map(ConfigFlag.registry, (_, key): State => {
-    const optInOnly = ConfigFlag.optInOnly.has(key)
     const old = names.find((name) => ConfigFlag.aliases[name] === key)
-    const override = env.get(key) ?? (old === undefined ? undefined : env.get(old)) ?? (all && !optInOnly ? true : undefined)
+    const override = env.get(key) ?? (old === undefined ? undefined : env.get(old)) ?? (all ? true : undefined)
     const configured =
-      experimental?.[key] ?? (old === undefined ? undefined : experimental?.[old]) ?? (allFlags && !optInOnly ? true : undefined)
+      experimental?.[key] ?? (old === undefined ? undefined : experimental?.[old]) ?? (allFlags ? true : undefined)
     const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]
         : configured !== undefined
           ? [configured, "config"]
-          : [!optInOnly && onByDefault(input.channel), "default"]
+          : [onByDefault(input.channel), "default"]
     return { enabled, source }
   })
 }

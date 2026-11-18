@@ -146,7 +146,7 @@ const exists = (target: string) =>
       () => false,
     ),
   )
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
   withTempDir((tmp) => {
     reset()
