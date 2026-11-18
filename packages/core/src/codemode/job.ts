@@ -13,7 +13,7 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   const state = job.status === "running" ? "cancelled" : job.status
   const body = job.status === "running" ? "Interrupted by server restart." : (job.output ?? job.error ?? state)
   return {
-    description: "Code Mode script",
+    description: "Script",
     text: `<codemode id="${job.id}" state="${state}">\n${body}\n</codemode>`,
     metadata: { source: "codemode", jobID: job.id, state },
   }

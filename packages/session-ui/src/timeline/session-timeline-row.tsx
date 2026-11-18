@@ -686,6 +686,19 @@ export function createSessionTimelineRowRenderer(input: {
       }
     }
 
+    if (source === "codemode") {
+      const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
+      const jobID = message.metadata?.jobID
+
+      return {
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
+        data: Predicate.isString(jobID) ? jobID : undefined,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
+      }
+    }
+
     return { label: message.description ?? message.text }
   }
 
