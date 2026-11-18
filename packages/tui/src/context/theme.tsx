@@ -17,7 +17,7 @@ import {
   subscribeThemes,
   type ThemeDocumentSource,
 } from "../theme"
-import { generateSystem, terminalMode } from "../theme/system"
+import { generateSystem, paletteMatchesMode, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
@@ -145,7 +145,10 @@ const themeContext = createSimpleContext({
       const theme = config.theme?.name
       if (!theme) return
       setStore("active", theme)
-      if (theme === "system") refreshPalette()
+      if (theme === "system") {
+        untrack(applyPalette)
+        refreshPalette()
+      }
     })
 
     createEffect(() => {
@@ -177,20 +180,23 @@ const themeContext = createSimpleContext({
     const cachedPalette = cache?.[0].colors
     let palette = usablePalette(cachedPalette) ? cachedPalette : undefined
     const applyPalette = () => {
-      if (palette) setSystemTheme(generateSystem(palette, store.mode))
+      if (!palette || (store.lock === undefined && !paletteMatchesMode(palette, store.mode))) {
+        setSystemTheme(undefined)
+        return
+      }
+      setSystemTheme(generateSystem(palette, store.mode))
     }
     if (palette) {
       const mode = store.lock ?? renderer.themeMode ?? terminalMode(palette) ?? store.mode
       if (store.mode !== mode) setStore("mode", mode)
-      applyPalette()
-    } else setSystemTheme(undefined)
+    }
+    applyPalette()
 
     let canProbe = false
     let probing = false
     let queued = false
     let disposed = false
     function refreshPalette() {
-      if (store.active !== "system") return
       queued = true
       if (!canProbe || probing || disposed) return
 
@@ -204,9 +210,9 @@ const themeContext = createSimpleContext({
         .then((colors) => {
           if (disposed || !usablePalette(colors)) return
           palette = colors
-          const mode = store.lock ?? terminalMode(colors) ?? store.mode
+          const mode = store.lock ?? renderer.themeMode ?? terminalMode(colors) ?? store.mode
           if (store.mode !== mode) setStore("mode", mode)
-          applyPalette()
+          if (store.active === "system") applyPalette()
           void cache?.[1]((draft) => {
             draft.colors = colors
           }).catch(() => {})
@@ -221,7 +227,7 @@ const themeContext = createSimpleContext({
 
     function afterPaint() {
       canProbe = true
-      refreshPalette()
+      if (queued || store.active === "system" || renderer.themeMode === null) refreshPalette()
     }
 
     function apply(mode: "dark" | "light") {
@@ -229,7 +235,7 @@ const themeContext = createSimpleContext({
         setStore("mode", mode)
         applyPalette()
       }
-      refreshPalette()
+      if (store.active === "system") refreshPalette()
     }
 
     function pin(mode: "dark" | "light" = store.mode, persist = true) {
@@ -259,10 +265,12 @@ const themeContext = createSimpleContext({
       apply(mode)
     }
     renderer.on(CliRenderEvents.THEME_MODE, handleMode)
+    const handleFocus = () => refreshPalette()
+    renderer.on(CliRenderEvents.FOCUS, handleFocus)
 
     const handleThemeNotification = (sequence: string) => {
       if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") return false
-      queueMicrotask(refreshPalette)
+      if (store.active === "system") queueMicrotask(refreshPalette)
       return false
     }
     renderer.prependInputHandler(handleThemeNotification)
@@ -282,6 +290,7 @@ const themeContext = createSimpleContext({
     onCleanup(() => {
       disposed = true
       renderer.off(CliRenderEvents.THEME_MODE, handleMode)
+      renderer.off(CliRenderEvents.FOCUS, handleFocus)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
       for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
@@ -340,7 +349,10 @@ const themeContext = createSimpleContext({
       set(theme: string) {
         if (!has(theme)) return false
         setStore("active", theme)
-        if (theme === "system") refreshPalette()
+        if (theme === "system") {
+          applyPalette()
+          refreshPalette()
+        }
         void configState
           .update((draft) => {
             draft.theme = { ...draft.theme, name: theme }

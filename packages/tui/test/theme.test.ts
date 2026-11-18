@@ -5,7 +5,7 @@ import type { TerminalColors } from "@opentui/core"
 import { allThemes, hasTheme, getOpenCodeTheme, parseTheme, resolveTheme } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
-import { terminalMode } from "../src/theme/system"
+import { paletteMatchesMode, terminalMode } from "../src/theme/system"
 import opencodeSource from "../src/theme/assets/opencode.json" with { type: "json" }
 import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { tmpdir } from "./fixture/fixture"
@@ -51,9 +51,7 @@ test("decodes native V2 themes lazily once", () => {
 })
 
 test("rejects invalid V2 themes when parsing", () => {
-  expect(() => parseTheme({ light: { categorical: [] } }, "invalid-v2")).toThrow(
-    "Invalid theme: invalid-v2",
-  )
+  expect(() => parseTheme({ light: { categorical: [] } }, "invalid-v2")).toThrow("Invalid theme: invalid-v2")
 })
 
 test("rejects invalid V1 themes when parsing", () => {
@@ -98,6 +96,25 @@ test("resolveTheme preserves full theme numeric color and marker semantics", () 
   expect(theme._hasSelectedListItemText).toBe(false)
 })
 
+const ansiPalette = [
+  "#000000",
+  "#cc0000",
+  "#4e9a06",
+  "#c4a000",
+  "#3465a4",
+  "#75507b",
+  "#06989a",
+  "#d3d7cf",
+  "#555753",
+  "#ef2929",
+  "#8ae234",
+  "#fce94f",
+  "#729fcf",
+  "#ad7fa8",
+  "#34e2e2",
+  "#eeeeec",
+]
+
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {
   return {
     palette,
@@ -120,6 +137,20 @@ test("terminalMode derives mode from refreshed background", () => {
 
 test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
+})
+
+test("paletteMatchesMode accepts colors captured in the current terminal mode", () => {
+  expect(paletteMatchesMode(terminalColors("#1a1b26", ansiPalette), "dark")).toBeTrue()
+  expect(paletteMatchesMode(terminalColors("#fbf1c7", ansiPalette), "light")).toBeTrue()
+})
+
+test("paletteMatchesMode rejects colors captured in the other terminal mode", () => {
+  expect(paletteMatchesMode(terminalColors("#1a1b26", ansiPalette), "light")).toBeFalse()
+  expect(paletteMatchesMode(terminalColors("#fbf1c7", ansiPalette), "dark")).toBeFalse()
+})
+
+test("paletteMatchesMode accepts a palette without a background color", () => {
+  expect(paletteMatchesMode(terminalColors(null, ansiPalette), "light")).toBeTrue()
 })
 
 test("custom theme precedence follows directory order", async () => {

@@ -8,6 +8,12 @@ export function terminalMode(colors: TerminalColors): "dark" | "light" | undefin
   return 0.299 * r + 0.587 * g + 0.114 * b > 0.5 ? "light" : "dark"
 }
 
+/** Whether a palette was captured in `mode`. A palette without a background color cannot disagree. */
+export function paletteMatchesMode(colors: TerminalColors, mode: "dark" | "light") {
+  const detected = terminalMode(colors)
+  return detected === undefined || detected === mode
+}
+
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light") {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
