@@ -1,7 +1,4 @@
-//! P-ORACLE for session target resolution: serves the routes of
-//! `parity/fixtures/F.8/session-target.json` (written by `parity/oracle/F.8-session-target.ts`
-//! from the TS `resolveSessionTarget`, `createWorktreeLocation`, and `parseSessionTargetModel`) to
-//! the Rust port, and compares the requests, what `prepare` saw, and the outcome.
+//! Compares session target resolution, preparation and outgoing requests to recorded results.
 
 mod common;
 

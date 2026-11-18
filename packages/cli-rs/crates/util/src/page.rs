@@ -1,9 +1,5 @@
-//! A file mapped into memory and shared with the file's pages, so what this process stores reaches the file at once
-//! and another process reads it after this one died: the plugin run record (synthesis 4.5). `mmap` with `MAP_SHARED`
-//! on Unix, `CreateFileMappingW` and `MapViewOfFile` on Windows.
-//!
-//! The mapping hands out a raw pointer and nothing else: the record that owns it decides the layout, gives each field
-//! one access type, and keeps the fields apart, which is what makes concurrent access sound.
+//! A shared writable file mapping. The owner must assign each field one access type and keep concurrently accessed
+//! fields disjoint.
 
 #![allow(unsafe_code)]
 

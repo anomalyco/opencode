@@ -1,8 +1,5 @@
-//! Migration of the V1 TUI config into `cli.json` (F.5, rows L04 and K03).
-//!
-//! Ports `packages/cli/src/config/migrate.ts`. When `cli.json` exists, its legacy
-//! `terminal.copy_on_select` and legacy keybind names are rewritten in place, keeping comments. When it
-//! does not, `tui.json` and the state's `kv.json` are folded into a new file.
+//! Migrates legacy keybinds and copy settings in place, preserving comments. If `cli.json` is absent, combine
+//! `tui.json` and `kv.json` into a new file.
 
 use std::fs;
 use std::io;
@@ -278,7 +275,6 @@ impl Decode for V1Keybinds {
 pub type V1ScrollSpeed = cli_config::ScrollSpeed;
 
 section!(
-    /// The V1 `tui.json` (`TuiConfigV1.Info`).
     V1 {
         #[serde(rename = "$schema")]
         schema = "$schema": String,

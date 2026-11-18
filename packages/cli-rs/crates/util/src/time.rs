@@ -227,8 +227,7 @@ pub fn iso(ms: i64) -> Option<String> {
     UTC.at(ms).map(|time| time.iso())
 }
 
-/// Milliseconds since the epoch. With `OPENCODE_DRIVE_NOW` (milliseconds), the clock starts at that instant and runs
-/// on, as `parity/sim/clock.ts` makes the TS side's: P-TUI scenarios whose screens show today's date set it.
+/// Milliseconds since the epoch. `OPENCODE_DRIVE_NOW` sets the simulation clock's starting instant.
 pub fn now_ms() -> i64 {
     static OFFSET: LazyLock<i64> = LazyLock::new(|| {
         std::env::var("OPENCODE_DRIVE_NOW")
@@ -471,9 +470,7 @@ mod tests {
         "2026",
     ];
 
-    /// The rows script/gen/time.ts wrote for `zone`, split at tabs: what the TypeScript client's `Date` and `Intl`
-    /// calls give under Bun. A `wall` row becomes one row per time, `wall y m d h mm ms`, and a `parse` row keeps
-    /// the result of `zone`, `parse text ms valid`.
+    /// Expands the recorded wall-clock readings and selects the parse results for one zone.
     fn rows(zone: &str) -> Vec<Vec<&'static str>> {
         let rows: Vec<_> = include_str!("../fixtures/time.tsv")
             .lines()

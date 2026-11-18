@@ -1,7 +1,3 @@
-//! Port of `packages/client/test/solid-refresh.test.ts`. The typed client decodes every response,
-//! so the fixtures add the fields the TS fixtures leave out: `project` on `/api/location`, a VCS
-//! `branch`, and complete agents.
-
 mod common;
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

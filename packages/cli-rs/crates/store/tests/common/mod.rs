@@ -1,5 +1,4 @@
-//! A scripted transport and small async helpers for the store tests, standing in for the TS tests'
-//! `fetch` overrides and `Promise.withResolvers`.
+//! Scripted HTTP transport for store tests.
 
 #![allow(dead_code)]
 

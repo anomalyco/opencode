@@ -1,8 +1,5 @@
-//! Change tracking (F.7): what each flush touched, by revision.
-//!
-//! Every store mutation records what it touched. A flush (the end of an event batch or of a read)
-//! numbers the changes with a revision and keeps the last [`LOG_LIMIT`] flushes. A view remembers
-//! the revision it rendered and asks [`crate::Data::changes_since`] what changed after it.
+//! Each flush assigns a revision to the store mutations it publishes. Views pass their last rendered revision to
+//! [`crate::Data::changes_since`].
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

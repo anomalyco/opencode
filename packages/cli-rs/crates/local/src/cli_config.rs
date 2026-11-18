@@ -1,12 +1,5 @@
-//! `cli.json` read, merge, overlay, and edits (F.5).
-//!
-//! Ports `packages/cli/src/config/config.ts` and the schema it decodes
-//! (`packages/cli/src/config/schema.ts`, `packages/tui/src/config/index.tsx:69-340`).
-//!
-//! Decoding is as strict as Effect Schema: a wrong type, a `null`, or a number out of range anywhere
-//! fails the whole document, which then reads as `{}`. Unknown keys are dropped. Decoded values keep
-//! the schema's field order, as Effect's output does, so the edit diff and the JSON the TypeScript
-//! client would write line up.
+//! Reads and edits `cli.json`. An invalid known value invalidates the entire document; unknown keys are ignored.
+//! Preserve schema field order so file edits agree across clients.
 
 use std::fs;
 use std::io;
@@ -333,8 +326,7 @@ impl Decode for Plugin {
     }
 }
 
-/// The `keybinds` overrides: known names only, in definition order, each a valid binding value in the
-/// shape Effect decodes it to. U.2's `Keybinds::resolve` takes [`Keybinds::map`].
+/// Valid overrides for known keybinds, in definition order.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct Keybinds(pub Map<String, Value>);
@@ -663,8 +655,8 @@ pub struct ResolvedTabs {
 }
 
 impl Resolved {
-    /// `resolve(info, { environment })`. Keybinds stay overrides; U.2's `Keybinds::resolve` applies the
-    /// Windows rules with `terminal_suspend`.
+    /// Resolves preferences against the environment. Keybinds remain overrides until the keymap applies platform
+    /// defaults.
     pub fn new(info: Info, environment: impl Fn(&str) -> Option<String>) -> Self {
         let attention = info.attention.clone().unwrap_or_default();
         let cursor = info.cursor.clone().unwrap_or_default();

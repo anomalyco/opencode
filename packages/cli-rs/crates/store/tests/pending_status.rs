@@ -1,5 +1,3 @@
-//! Port of `packages/client/test/solid-pending-status.test.ts`.
-
 mod common;
 
 use std::sync::atomic::{AtomicU64, Ordering};

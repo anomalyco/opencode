@@ -1,7 +1,5 @@
-//! Opt-in live test (`OPENCODE_LIVE=1`) of F.8: on `server.connected` the store reads the default
-//! location, its VCS, and the projects; then it reads every catalog of the location and resolves
-//! an existing session as `--session` does. Reads only: no environment upload, no creation, no
-//! usage limits, and never `/api/experimental/session/stats`.
+//! Read-only live service test (`OPENCODE_LIVE=1`). Resolves an existing session without uploading an environment,
+//! creating a session or requesting usage limits or stats.
 
 use std::time::Duration;
 

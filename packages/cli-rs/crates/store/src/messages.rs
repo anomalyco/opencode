@@ -1,4 +1,4 @@
-//! Messages and parts (F.7): transcripts, the streaming event fold, and paged reads.
+//! Paged transcripts and streaming message updates.
 
 use opencode_api::generated::*;
 use serde_json::Value;

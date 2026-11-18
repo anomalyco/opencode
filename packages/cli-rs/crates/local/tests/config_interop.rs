@@ -1,10 +1,5 @@
-//! P-ORACLE and P-FILE for F.5: JSONC edits, the config decoder, the V1 migration, `cli.json`,
-//! `model.json`, storage, and the JSONL parsers against the TypeScript code, through
-//! `parity/oracle/F.5-config.ts`.
-//!
-//! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout; without its `node_modules`
-//! the tests print "skipped" and pass, or fail when `OPENCODE_RS_REQUIRE_TS` is set. Every test uses
-//! temporary directories.
+//! Compares config edits and shared file contents with the TypeScript client in temporary directories. Set
+//! `OPENCODE_RS_REQUIRE_TS` to fail rather than skip when dependencies are missing.
 
 #![recursion_limit = "512"]
 

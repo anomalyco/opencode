@@ -1,8 +1,3 @@
-//! Port of the project, location, catalog, VCS, credential, and websearch cases of
-//! `packages/client/test/solid-data.test.ts`, plus forms, shells, and the optimistic session's
-//! project. The typed client decodes every response, so fixtures add required fields the TS
-//! fixtures leave out (`project` on locations, `time.active` on projects).
-
 mod common;
 
 use std::sync::{Arc, Mutex};

@@ -1,5 +1,4 @@
-//! Pending forms (F.8), keyed by owner: a session ID, or [`GLOBAL`] for MCP elicitations that
-//! have no session yet.
+//! Pending forms are keyed by session ID, or [`GLOBAL`] for elicitations without a session.
 use opencode_api::client::Client;
 use opencode_api::generated::*;
 

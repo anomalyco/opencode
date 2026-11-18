@@ -1,14 +1,6 @@
-//! Directory lock compatible with the TypeScript `Flock` (F.4).
-//!
-//! Ports `packages/util/src/flock.ts` (and `effect-flock.ts`, which writes the same layout), so a
-//! Rust and a TypeScript process exclude each other on the same file. The lock for `key` is the
-//! directory `<dir>/<sha1(key)>.lock`, created with `mkdir`. It holds an empty `heartbeat` file whose
-//! modification time the owner refreshes and a `meta.json` with the owner's token. A lock whose
-//! heartbeat is older than the stale time belongs to a crashed owner: one contender claims
-//! `<lock>.breaker`, checks again, and removes it. Release removes the directory only while
-//! `meta.json` still carries the owner's token.
-//!
-//! The calls block, so async callers run them on a blocking thread.
+//! Cross-process directory lock compatible with `Flock`. Each owner refreshes a heartbeat. A contender takes the
+//! breaker lock and rechecks before removing a stale lock; release verifies the owner's token. Run blocking calls off
+//! the UI thread.
 
 use std::fs;
 use std::io::{self, Write};
@@ -20,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime};
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
-/// `Hash.fast` from `packages/util/src/hash.ts`: lowercase SHA-1 hex.
+/// Lowercase SHA-1 hex, as required by the shared lock filename.
 pub fn hash(input: &str) -> String {
     Sha1::digest(input.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }

@@ -1,5 +1,4 @@
-//! Running shell commands (F.8), kept per location: read with the location's catalogs, added by
-//! `shell.created`, and removed when they exit or are deleted.
+//! Running shell commands by location. Exit and deletion both remove a shell from the list.
 
 use indexmap::IndexMap;
 use opencode_api::generated::*;
@@ -113,8 +112,8 @@ impl State {
     }
 }
 
-/// A location's shell read in flight (M1): the shells created (`Some`) and exited (`None`) since it began. Unlike
-/// the other list reads, an overflowed overlay still publishes its list, then reads again.
+/// Shells created or exited during an in-flight read. An overflowed overlay still publishes the list and triggers
+/// another read.
 pub(crate) type ShellRead = Overlay<Shell>;
 
 impl Data {

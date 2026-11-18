@@ -1,8 +1,4 @@
-//! Model preferences in `<state>/model.json` (F.5, row L07).
-//!
-//! Ports `packages/tui/src/model-preference.ts`: the lenient decoder, the recent and favorite lists,
-//! variants, and updates under the `Flock` lock in `<state>/locks` that keep every other field of the
-//! document.
+//! Recent models, favorites and variants in `<state>/model.json`. Locked updates preserve unrelated fields.
 
 use std::fs;
 use std::path::{Path, PathBuf};

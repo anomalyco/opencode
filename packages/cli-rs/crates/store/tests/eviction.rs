@@ -1,5 +1,3 @@
-//! Port of `packages/client/test/solid-eviction.test.ts`.
-
 mod common;
 
 use std::sync::Arc;

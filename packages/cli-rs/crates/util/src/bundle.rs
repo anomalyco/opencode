@@ -1,6 +1,4 @@
-//! The TypeScript `opencode` installed beside this executable (bundle-server): one download carries the client and
-//! the server it starts, at one version. It is `opencode` (`opencode.exe`) in the directory of the client's real path,
-//! so a link on `PATH` to the client leads to the directory that holds both.
+//! Finds the bundled server beside the real client executable, following symlinks on `PATH`.
 
 use std::path::{Path, PathBuf};
 
@@ -12,8 +10,7 @@ pub fn server() -> Option<PathBuf> {
     beside(&std::env::current_exe().ok()?)
 }
 
-/// [`SERVER`] in the directory of `executable`'s real path, when it is a file and not `executable` itself (the Rust
-/// binary may be named `opencode` one day, O-114). The path is real, without Windows' verbatim prefix.
+/// Returns the sibling server's real path, without a Windows verbatim prefix. Rejects the client executable itself.
 pub fn beside(executable: &Path) -> Option<PathBuf> {
     let real = realpath(executable)?;
     let server = realpath(&real.parent()?.join(SERVER))?;

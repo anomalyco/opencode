@@ -1,9 +1,4 @@
-//! TUI storage shared with the TypeScript TUI (F.5, row L05).
-//!
-//! Ports `createStorage` from `packages/tui/src/context/storage.tsx`. Key `k` lives in
-//! `<state>/<channel>/tui/<k>.json`; updates run under the `Flock` lock in `<state>/<channel>/locks`
-//! with the file path as the key, read the file again, and write it atomically. Values are
-//! `serde_json::Value`, so fields the other client wrote survive a write.
+//! Per-channel TUI storage. Reread values under the file lock before atomic replacement so unrelated fields survive.
 
 use std::fs;
 use std::io;

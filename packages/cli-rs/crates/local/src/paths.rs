@@ -1,8 +1,4 @@
-//! XDG roots and `OPENCODE_CONFIG_DIR` (F.4).
-//!
-//! Ports `packages/util/src/global-roots.ts` and `packages/util/src/global.ts`. Every path is
-//! computed from an environment lookup, so tests pass their own variables instead of touching the
-//! user's directories.
+//! Resolves client directories from the XDG environment.
 
 use std::ffi::OsString;
 use std::io;
@@ -33,10 +29,7 @@ impl Paths {
         Self::from_vars(|name| std::env::var_os(name))
     }
 
-    /// Paths from an environment lookup. Empty XDG values count as unset, as the TypeScript `||`
-    /// does. `OPENCODE_CONFIG_DIR` replaces the config directory, as the CLI's `Global` layer does
-    /// (`packages/cli/src/index.ts:136-142`); it does not move state, so locks and the service
-    /// registration stay where other clients look for them.
+    /// Empty XDG values are unset. `OPENCODE_CONFIG_DIR` replaces only config; locks and registration stay in state.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> io::Result<Self> {
         let set = |name: &str| var(name).filter(|value| !value.is_empty()).map(PathBuf::from);
         let home = home_dir(Flavor::NATIVE, &var).ok_or_else(|| {
@@ -50,7 +43,7 @@ impl Paths {
         let state = root("XDG_STATE_HOME", &[".local", "state"]);
         let config = set("OPENCODE_CONFIG_DIR").unwrap_or_else(|| root("XDG_CONFIG_HOME", &[".config"]));
         Ok(Self {
-            // `OPENCODE_TEST_HOME` moves only `home`, as in `global.ts:16-18`.
+            // `OPENCODE_TEST_HOME` overrides only the home directory.
             home: var("OPENCODE_TEST_HOME").map(PathBuf::from).unwrap_or(home),
             bin: cache.join("bin"),
             log: data.join("log"),
@@ -63,7 +56,6 @@ impl Paths {
         })
     }
 
-    /// The default lock directory, `<state>/locks` (`packages/util/src/flock.ts:18-21`).
     pub fn locks(&self) -> PathBuf {
         self.state.join("locks")
     }
@@ -114,11 +106,7 @@ fn tmpdir(flavor: Flavor, var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
     PathBuf::from(if trimmed.is_empty() { "/" } else { trimmed })
 }
 
-/// The directory a command starts in (row G18). Like `localDirectory` in
-/// `packages/cli/src/run/run.ts:184-191` and `packages/cli/src/mini.ts:204-212`: change to `PWD`
-/// when it is set, else stay, and return the working directory the kernel reports. `PWD` wins over
-/// an inherited working directory that differs from it; the result has symlinks resolved, as in
-/// TypeScript.
+/// Prefer `PWD` to the inherited working directory, then return the directory resolved by the kernel.
 pub fn start_directory() -> io::Result<PathBuf> {
     let root = std::env::var_os("PWD").map(PathBuf::from).map_or_else(std::env::current_dir, Ok)?;
     enter(&root)

@@ -1,10 +1,5 @@
-//! Service registration file (F.4).
-//!
-//! The background service writes `<state>/service.json` (or `service-<channel>.json`, see
-//! [`channel::filename`]) with its URL, PID, version, and private password, mode 0600. Clients read
-//! it to find the service (`packages/client/src/effect/service.ts:142-157`). This module reads it and
-//! runs the legacy-name migration of `packages/cli/src/services/service-config.ts:79-92,116-132`;
-//! probing and lifecycle belong to `opencode-service`.
+//! Reads service registrations and migrates legacy filenames. The registration contains a private password and must
+//! have mode 0600.
 
 use std::fmt;
 use std::fs;
@@ -64,8 +59,7 @@ impl Registration {
         })
     }
 
-    /// Whether two registrations describe the same service instance (`same` in
-    /// `packages/client/src/service-probe.ts:43-46`); the password is not compared.
+    /// Compares service identity without comparing passwords.
     pub fn same(&self, other: &Self) -> bool {
         self.id == other.id && self.version == other.version && self.url == other.url && self.pid == other.pid
     }

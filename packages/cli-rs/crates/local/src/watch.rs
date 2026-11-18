@@ -1,10 +1,5 @@
-//! Directory watches for live reload (F.5, rows L03 and L09).
-//!
-//! Ports `packages/tui/src/util/watch.ts` and the 50 ms debounce of its callers: one watch on one
-//! directory, not recursive, and one thread that calls back after a burst of events settles. Linux reads
-//! inotify directly; other platforms use `notify` for now. A watch that cannot start returns `None`; live
-//! reload is lost and nothing else. Unlike TypeScript's `fs.watch`, a watch survives its directory being
-//! removed and made again.
+//! Debounced, nonrecursive directory watches. A watch survives directory removal and recreation. If setup fails, only
+//! live reload is disabled.
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -12,7 +7,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-/// The debounce of the storage and `model.json` watches (`storage.tsx:126`, `model-preference.ts:168`).
 pub const DEBOUNCE: Duration = Duration::from_millis(50);
 
 /// A running watch; dropping it stops the watcher and its threads.

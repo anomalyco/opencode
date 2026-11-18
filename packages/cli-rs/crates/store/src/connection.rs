@@ -1,5 +1,4 @@
-//! Connection state and rehydration (F.7): applies event batches, reads what events leave
-//! stale, and drives the store from F.3's connection loop.
+//! Applies event batches and refreshes reads invalidated by events or reconnection.
 
 use std::sync::atomic::Ordering;
 
@@ -328,8 +327,7 @@ pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batc
                     continue;
                 }
                 let online = state.borrow_and_update().status == Status::Connected;
-                // F.3 queues the dying stream's last batch before it reports the disconnect.
-                // Apply it while still online, so the invalidation below also covers it.
+                // Apply the final queued batch while still online so disconnect invalidation covers it.
                 if !online {
                     while let Ok(batch) = batches.try_recv() {
                         data.apply(&batch);
@@ -356,7 +354,6 @@ fn is_delta(event: &V2Event) -> bool {
     )
 }
 
-/// The `/api/event` stream of a client, for F.3's [`events::connect`].
 pub struct Events {
     pub client: Client,
 }

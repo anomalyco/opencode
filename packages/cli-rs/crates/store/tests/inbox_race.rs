@@ -1,5 +1,3 @@
-//! Port of `packages/client/test/solid-inbox-race.test.ts`.
-
 mod common;
 
 use common::*;

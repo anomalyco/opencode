@@ -1,5 +1,5 @@
-//! A boxed error with a context chain, in place of `anyhow`: `{}` prints the outermost message, `{:#}` the whole chain
-//! joined by `: `, and `downcast_ref` finds the error under any context. No backtraces.
+//! Errors with context. `{}` prints the outermost message, `{:#}` prints the chain and `downcast_ref` finds the
+//! underlying error.
 
 use std::error::Error as StdError;
 use std::fmt::{self, Debug, Display};

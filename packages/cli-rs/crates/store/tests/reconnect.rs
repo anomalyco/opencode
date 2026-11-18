@@ -1,7 +1,4 @@
-//! The event stream of a managed client recovers when its service crashes (review carbon-1). The crashed
-//! service leaves its registration behind, so `ensure` waits the spawn delay (5 s) before it starts a
-//! replacement: longer than the connect timeout (2 s) a stream attempt may take. The connection loop
-//! must find the service between attempts, as TS `createClientConnection` runs `reconnect`.
+//! A stale registration can delay restart longer than a stream connection attempt. Rediscover between attempts.
 #![cfg(unix)]
 
 use std::ffi::OsString;

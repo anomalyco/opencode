@@ -1,8 +1,4 @@
-//! Channel and storage channel (F.4).
-//!
-//! The TypeScript build embeds its channel (`packages/cli/src/version.ts`); the Rust client reads it
-//! at run time (plan 6.6). The channel picks the service registration file, the service config file,
-//! and the default port (`packages/cli/src/services/service-config.ts:41-77`).
+//! The runtime channel selects the service registration, config file and default port.
 
 use std::ffi::OsString;
 
@@ -26,8 +22,7 @@ impl Channels {
         Self::from_vars(|name| std::env::var_os(name))
     }
 
-    /// `OPENCODE_CHANNEL`, else `latest`. The storage channel is `OPENCODE_TUI_CHANNEL`, else the
-    /// channel (`packages/cli/src/commands/handlers/default.ts:100`).
+    /// `OPENCODE_CHANNEL` defaults to `latest`. `OPENCODE_TUI_CHANNEL` overrides it for storage only.
     pub fn from_vars(var: impl Fn(&str) -> Option<OsString>) -> Self {
         let set =
             |name: &str| var(name).filter(|value| !value.is_empty()).map(|value| value.to_string_lossy().into_owned());

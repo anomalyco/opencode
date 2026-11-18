@@ -1,8 +1,4 @@
-//! Win32 calls that std does not cover: whether a process is alive, ending one, pointing stdin at the console, and
-//! ignoring Ctrl+C while a child runs; the executable, times and memory of a process, a thread's CPU time, and the OS release; shared
-//! libraries; stderr on a pipe; console modes and waits; time zones of Windows' ICU; file indexes and times of
-//! directories.
-//! Windows only.
+//! Windows process, console, library and time-zone operations.
 
 #![allow(unsafe_code)]
 
