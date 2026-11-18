@@ -758,186 +758,47 @@ fn a_wheel_step_and_a_resize_in_one_batch_keep_the_reader() {
     assert_eq!(shown(false), shown(true));
 }
 
-// Expected (the deep runs' rows, on both kinds, and on a list alone): a step that reaches the end, in a batch with a resize, ends at the end
-// of the new size (seed 17, 2,000 seeds); a step's memory ends once the offset moves, also when it comes back to the
-// offset the step left (seed 7225, 10,000 seeds).
 #[test]
 fn the_deep_runs_rows_hold() {
-    let rows = [
-        vec![
-            Command::Resize { width: 70, height: 17 },
-            Command::To(9),
-            Command::Batch { width: 70, height: 16, by: 1 },
-        ],
-        vec![
-            Command::To(8),
-            Command::Resize { width: 52, height: 18 },
-            Command::Batch { width: 52, height: 12, by: 1 },
-            Command::Resize { width: 78, height: 18 },
-            Command::Step(1),
-        ],
-        // Seed 35 (2,000 seeds, O-115): `Nearest` for a card taller than the view below the header shows its top.
-        vec![Command::Batch { width: 60, height: 8, by: 1 }, Command::Near(3)],
-        // Seeds 19 and 100 (2,000 seeds, reviews): a step's memory holds across a resize that re-estimates the
-        // items above, and a wheel at the end keeps it.
-        vec![
-            Command::Resize { width: 53, height: 14 },
-            Command::Edge { bottom: true },
-            Command::Step(1),
-            Command::Resize { width: 78, height: 12 },
-            Command::Step(-1),
-        ],
-        vec![
-            Command::Edge { bottom: true },
-            Command::Step(1),
-            Command::Wheel { down: true, steps: 1 },
-            Command::Step(1),
-        ],
+    use Command::{Fold, Near, Page, Review, Step, To};
+    let resize = |width, height| Command::Resize { width, height };
+    let batch = |width, height, by| Command::Batch { width, height, by };
+    let up = |steps| Command::Wheel { down: false, steps };
+    let down = |steps| Command::Wheel { down: true, steps };
+    const BOTTOM: Command = Command::Edge { bottom: true };
+    let both: &[&[Command]] = &[
+        &[resize(70, 17), To(9), batch(70, 16, 1)],
+        &[To(8), resize(52, 18), batch(52, 12, 1), resize(78, 18), Step(1)],
+        &[batch(60, 8, 1), Near(3)],
+        &[resize(53, 14), BOTTOM, Step(1), resize(78, 12), Step(-1)],
+        &[BOTTOM, Step(1), down(1), Step(1)],
+        &[resize(60, 8), To(2), Near(2)],
+        &[resize(60, 8), To(2), Page(50), Near(2)],
+    ];
+    // Virtualized lists must also preserve the offset when the measured and estimated item heights differ.
+    let lists: &[&[Command]] = &[
+        &[BOTTOM, Step(1), Fold(0), Step(1)],
+        &[Near(8), resize(59, 14), Review(8), Fold(9), Step(1), Fold(4), up(1), Step(-2)],
+        &[To(8), Step(1), Fold(1), Step(1)],
+        &[Review(7), BOTTOM, resize(64, 17), Near(7)],
+        &[Review(8), BOTTOM, Step(-1), Review(3), Step(-1), resize(78, 21), Step(-2)],
+        &[Review(5), resize(70, 14), Fold(9), Near(9), Review(7)],
+        &[resize(75, 12), Near(8), Review(5), Fold(6)],
+        &[Review(8), To(6), resize(40, 17), down(3), Fold(9)],
+        &[To(5), Step(1), Fold(3), Step(-2)],
+        &[To(8), Review(4), resize(40, 21), Step(-1)],
+        &[Review(5), Step(1), down(1), Page(250)],
+        &[Review(1), BOTTOM, resize(67, 18), Review(3), To(4)],
+        &[resize(77, 18), Review(4), resize(59, 13), BOTTOM, batch(59, 18, -1), Step(1)],
+        &[BOTTOM, Review(5), Step(-1), Step(-1), Step(-2)],
+        &[resize(71, 17), Review(0), BOTTOM, Step(1), batch(45, 9, -1), Step(1)],
+        &[Near(9), batch(45, 19, 1), batch(60, 11, 1), Step(1), Step(1)],
+        &[Fold(2), To(4), batch(45, 8, -1), Near(4)],
+        &[To(7), down(3), Step(1), Step(1), Step(2), batch(75, 8, 1), batch(45, 21, 1)],
+        &[BOTTOM, resize(58, 11), Page(250), batch(60, 11, 1), Step(-2)],
     ];
     for list in [false, true] {
-        for row in &rows {
-            assert_eq!(Behaviors { list }.run(row), None, "list {list}: {row:?}");
-        }
-    }
-    // A list's own rows (a scroll keeps no reading position by itself). Seed 32 (2,000 seeds, reviews): a fold keeps
-    // the card at the top while items mount above it. Seed 4: a fold near the end, whose reading lies past it, settles.
-    // Seed 40: a fold above moves a step's memory with the view. Seed 61: a step that the view after it would clamp, as
-    // an item it mounts is shorter than its estimate, lands where it was meant to. Seed 64: a page into an item shorter
-    // than its estimate goes its rows on. Seed 127: a jump through items far off their estimates settles in its frame.
-    // Seed 551: the reading a resize and a step hold reaches the end the new heights give. Seed 707: a step's memory
-    // follows the list's correction from where the step meant to go. Seed 98 (700 seeds, a mutant): a `Nearest` that
-    // moves the window resolves in the round after, so a fold after it keeps the card at the top. The list model's last
-    // open seeds (2,000 seeds, before the merge): seed 1283, a step's memory moves with a fold above the top, as the
-    // view did not move (six more seeds); seed 747, `Nearest` decides once its node has rows and then holds the node's
-    // row while items above mount; seed 850, a resize's correction counts from where the restore put the reading, not
-    // from where a solve clamped the offset in between (two more seeds). After those fixes, seed 1514: the shift counts
-    // from where the reading was taken, as a solve may clamp the offset before the restore runs (six more seeds); seed
-    // 1583: a user's move is at the end only by the sums the move saw, not an end the solve's newly mounted items
-    // moved.
-    let rows = [
-        vec![Command::Edge { bottom: true }, Command::Step(1), Command::Fold(0), Command::Step(1)],
-        vec![
-            Command::Near(8),
-            Command::Resize { width: 59, height: 14 },
-            Command::Review(8),
-            Command::Fold(9),
-            Command::Step(1),
-            Command::Fold(4),
-            Command::Wheel { down: false, steps: 1 },
-            Command::Step(-2),
-        ],
-        vec![Command::To(8), Command::Step(1), Command::Fold(1), Command::Step(1)],
-        vec![
-            Command::Review(7),
-            Command::Edge { bottom: true },
-            Command::Resize { width: 64, height: 17 },
-            Command::Near(7),
-        ],
-        vec![
-            Command::Review(8),
-            Command::Edge { bottom: true },
-            Command::Step(-1),
-            Command::Review(3),
-            Command::Step(-1),
-            Command::Resize { width: 78, height: 21 },
-            Command::Step(-2),
-        ],
-        vec![
-            Command::Review(5),
-            Command::Resize { width: 70, height: 14 },
-            Command::Fold(9),
-            Command::Near(9),
-            Command::Review(7),
-        ],
-        vec![Command::Resize { width: 75, height: 12 }, Command::Near(8), Command::Review(5), Command::Fold(6)],
-        vec![
-            Command::Review(8),
-            Command::To(6),
-            Command::Resize { width: 40, height: 17 },
-            Command::Wheel { down: true, steps: 3 },
-            Command::Fold(9),
-        ],
-        // A fold above the top moves the offset, not the view: a step's memory moves with it.
-        vec![Command::To(5), Command::Step(1), Command::Fold(3), Command::Step(-2)],
-        vec![Command::To(8), Command::Review(4), Command::Resize { width: 40, height: 21 }, Command::Step(-1)],
-        vec![Command::Review(5), Command::Step(1), Command::Wheel { down: true, steps: 1 }, Command::Page(250)],
-        vec![
-            Command::Review(1),
-            Command::Edge { bottom: true },
-            Command::Resize { width: 67, height: 18 },
-            Command::Review(3),
-            Command::To(4),
-        ],
-        vec![
-            Command::Resize { width: 77, height: 18 },
-            Command::Review(4),
-            Command::Resize { width: 59, height: 13 },
-            Command::Edge { bottom: true },
-            Command::Batch { width: 59, height: 18, by: -1 },
-            Command::Step(1),
-        ],
-        vec![
-            Command::Edge { bottom: true },
-            Command::Review(5),
-            Command::Step(-1),
-            Command::Step(-1),
-            Command::Step(-2),
-        ],
-        // viewer-frames, where a resize across 60 columns builds every card again in its frame: steps at the end with
-        // a resize between, whose memory holds by the rows the list kept (300 and 500 seeds); an item built again and
-        // unmounted before it was laid out takes its estimate in that frame (seed 517, 2,000 seeds); a step that finds
-        // nothing is no move, so a resize in its batch holds the reading, also where a taller viewport clamps the
-        // offset to an end the reader was not at (seed 1178); a step that lands at the end keeps its memory while the
-        // end shows the same, as the rows above it take their estimates (seed 1766).
-        vec![
-            Command::Resize { width: 71, height: 17 },
-            Command::Review(0),
-            Command::Edge { bottom: true },
-            Command::Step(1),
-            Command::Batch { width: 45, height: 9, by: -1 },
-            Command::Step(1),
-        ],
-        vec![
-            Command::Near(9),
-            Command::Batch { width: 45, height: 19, by: 1 },
-            Command::Batch { width: 60, height: 11, by: 1 },
-            Command::Step(1),
-            Command::Step(1),
-        ],
-        vec![Command::Fold(2), Command::To(4), Command::Batch { width: 45, height: 8, by: -1 }, Command::Near(4)],
-        vec![
-            Command::To(7),
-            Command::Wheel { down: true, steps: 3 },
-            Command::Step(1),
-            Command::Step(1),
-            Command::Step(2),
-            Command::Batch { width: 75, height: 8, by: 1 },
-            Command::Batch { width: 45, height: 21, by: 1 },
-        ],
-        vec![
-            Command::Edge { bottom: true },
-            Command::Resize { width: 58, height: 11 },
-            Command::Page(250),
-            Command::Batch { width: 60, height: 11, by: 1 },
-            Command::Step(-2),
-        ],
-    ];
-    for row in &rows {
-        assert_eq!(Behaviors { list: true }.run(row), None, "{row:?}");
-    }
-}
-
-// Expected (`scroll-step`, `Nearest`; `scrollIntoView` with `block: nearest`): under a view of 7 rows and a header of
-// one, an 8-row card that covers the view stays; one above the top with its end inside, taller than the view, brings
-// its end to the bottom.
-#[test]
-fn nearest_keeps_a_card_that_covers_the_view_and_aligns_a_tall_one_by_its_end() {
-    let rows = [
-        vec![Command::Resize { width: 60, height: 8 }, Command::To(2), Command::Near(2)],
-        vec![Command::Resize { width: 60, height: 8 }, Command::To(2), Command::Page(50), Command::Near(2)],
-    ];
-    for list in [false, true] {
-        for row in &rows {
+        for row in both.iter().chain(if list { lists } else { &[] }) {
             assert_eq!(Behaviors { list }.run(row), None, "list {list}: {row:?}");
         }
     }
