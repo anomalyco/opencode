@@ -16,8 +16,8 @@ export const registry = {
   video_generate: "Enable the experimental video generation API.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
-  console_library:
-    "Give agents the OpenCode Console organization's shared library: tools to search, read, publish and update its entries, and relevant entries delivered when a task starts.",
+  console_memory:
+    "Give agents the OpenCode Console workspace's shared memory: tools to search, read, publish and update its entries, and relevant entries delivered when a task starts.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode:

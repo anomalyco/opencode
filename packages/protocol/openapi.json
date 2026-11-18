@@ -17343,7 +17343,7 @@
               "console_watches": {
                 "type": "boolean"
               },
-              "console_library": {
+              "console_memory": {
                 "type": "boolean"
               },
               "mcp_events": {

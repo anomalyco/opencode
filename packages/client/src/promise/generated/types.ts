@@ -2629,7 +2629,7 @@ export type ConfigEntry =
           artifacts?: boolean
           video_generate?: boolean
           console_watches?: boolean
-          console_library?: boolean
+          console_memory?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
           schedules?: boolean
