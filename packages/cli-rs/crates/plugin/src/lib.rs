@@ -1892,7 +1892,7 @@ pub(crate) fn fail(
         host.revoked(&id);
         host.failed(&id);
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
-        host.remount();
+        behave::remount(host);
     });
     // The queued redraw still runs on a disposed activation, so the claims draw empty once. Disposing tells its threads
     // to end and drops what they sent (4.14: a wake for a plugin that is not active).
@@ -2838,7 +2838,7 @@ impl Registry {
             for (id, enabled) in toggles {
                 self.set_active(host, &id, enabled);
             }
-            host.remount();
+            behave::remount(&**host);
         }
         configured
     }

@@ -235,7 +235,7 @@ interface Surface {
   // A view that returns `undefined` has no tree yet: it views again when a snapshot comes (P8).
   view: (cx: ViewContext) => Json
   // P8: a mount of it ended.
-  unmount?: (mount: Json, handover?: boolean) => void
+  unmount?: (mount: Json, handover?: boolean, focused?: string) => void
 }
 
 // A renderer claim (contract 2.x, step D): a code block's renderer of the layer, which draws a part of the claim's
@@ -634,7 +634,7 @@ function context(plugin: Plugin) {
         on?: (event: Json) => unknown
         layers?: Json[]
         mounts?: boolean
-        unmount?: (mount: Json, handover?: boolean) => void
+        unmount?: (mount: Json, handover?: boolean, focused?: string) => void
       },
     ) {
       plugin.surfaces.push({
@@ -1239,8 +1239,10 @@ async function handle(message: Json) {
       if (plugin?.claimMounts.delete(mountKey(message.mount))) return
       const mount = plugin?.mounts.get(mountKey(message.mount))
       plugin?.mounts.delete(mountKey(message.mount))
-      // A reload's end of a mount it begins again (`handover`), which the layer may take the state of (CT-21).
-      if (plugin && mount) within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id, !!message.handover))
+      // A reload's end of a mount it begins again (`handover`), which the layer may take the state of (CT-21), and its
+      // node that had the focus then.
+      if (plugin && mount)
+        within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id, !!message.handover, message.focused))
       return
     }
     case "adopted": {

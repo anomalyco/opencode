@@ -929,7 +929,7 @@ export function context(base: Base, carrier: Carrier) {
     let removed = false
     const key = (cx: Json) => `${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`
     // The mount of a surface and key that ended last, kept for [`REMOUNT`] ms for the mount that begins it again.
-    const parked = new Map<string, { entry: Rendered; timer: ReturnType<typeof setTimeout> }>()
+    const parked = new Map<string, { entry: Rendered; timer: ReturnType<typeof setTimeout>; focused?: string }>()
     const adopt = (cx: Json) => {
       const slot = `${cx.mount.surface}\u0000${cx.mount.key}`
       const kept = parked.get(slot)
@@ -939,8 +939,10 @@ export function context(base: Base, carrier: Carrier) {
       rendered.set(key(cx), kept.entry)
       // The host's focus was the ended mount's: the field the plugin focused in the tree it adopts takes it again in the
       // new one, as TS's renderable never lost it (`P.8/session-manager`'s search, whose keybinds reload as it shows).
-      if (focusedNode && FOCUSABLE.has(focusedNode.tag) && rootOf(focusedNode) === kept.entry.root)
-        void carrier.effect({ type: "focus", node: idOf(focusedNode) }, cx.mount)
+      // A focus the user moved off the field before the mount ended stays where the user put it.
+      const field = focusedNode
+      if (field && kept.focused === idOf(field) && FOCUSABLE.has(field.tag) && rootOf(field) === kept.entry.root)
+        void carrier.effect({ type: "focus", node: idOf(field) }, cx.mount)
       return kept.entry
     }
     // As TS's plugin boundary: the render shows nothing from now on, and one toast says why.
@@ -1038,7 +1040,7 @@ export function context(base: Base, carrier: Carrier) {
       // message, and the new mount of the same surface and key adopts it, so its components do not run again. TS takes
       // a registration without a remount; a component that registers anew as it mounts (opencode-navigator names each
       // binding by a count) reloaded without end (CT-21). Any other end ends its components at once.
-      unmount(mount: Json, handover?: boolean) {
+      unmount(mount: Json, handover?: boolean, focused?: string) {
         // The panel closed: it is no longer the plugin's current one.
         if (place.type === "panel" && !handover) setPanelName("")
         const at = `${mount.surface}\u0000${mount.key}\u0000${mount.generation}`
@@ -1058,7 +1060,7 @@ export function context(base: Base, carrier: Carrier) {
           parked.delete(slot)
           entry.dispose()
         }, REMOUNT)
-        parked.set(slot, { entry, timer })
+        parked.set(slot, { entry, timer, focused })
       },
       on: (event: Json) => fieldEvent(name, event),
       // A route or a panel holds the focus, and a field in it: each key while it does comes to the field the plugin
@@ -1673,17 +1675,24 @@ export function context(base: Base, carrier: Carrier) {
             ...presented(),
           })).then((answer) => (answer === undefined ? undefined : answer === "true"))
         },
-        // Contract ergonomics 2.6: the field's starting text and the line above it, as TS's.
-        prompt: (options: Json) =>
-          ask({
-            type: "prompt",
-            title: options.title,
-            placeholder: options.placeholder,
-            ...(options.value === undefined || options.value === null ? {} : { value: String(options.value) }),
-            ...(options.description === undefined || options.description === null
-              ? {}
-              : { description: String(options.description) }),
-          }),
+        // Contract ergonomics 2.6: the field's starting text and the line above it, as TS's. Built a microtask later, as
+        // the other dialogs, so a `dialog.set` right after it is not one after it showed; the contract's prompt has no
+        // size, which the log says.
+        prompt: (options: Json) => {
+          presentation = { size: "medium", centered: false }
+          return ask(() => {
+            if (presentation.size !== "medium" || presentation.centered) unsupported("ui.dialog.set of a prompt")
+            return {
+              type: "prompt",
+              title: options.title,
+              placeholder: options.placeholder,
+              ...(options.value === undefined || options.value === null ? {} : { value: String(options.value) }),
+              ...(options.description === undefined || options.description === null
+                ? {}
+                : { description: String(options.description) }),
+            }
+          })
+        },
         async select(options: Json) {
           if ((options.actions?.length ?? 0) > SELECT_ACTIONS) unsupported(`ui.dialog.select over ${SELECT_ACTIONS} actions`)
           const search = options.search

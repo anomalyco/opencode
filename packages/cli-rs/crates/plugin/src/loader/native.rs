@@ -2145,7 +2145,7 @@ impl Viewer for Remote {
         Some(drawn.filter(|bytes| !bytes.is_empty()).map(Ok))
     }
 
-    fn forget(&self, _: &dyn Host, mount: &v2::MountId) {
+    fn forget(&self, _: &dyn Host, mount: &v2::MountId, _: Option<String>) {
         // Once the event that ended the mount is done, so the plugin is never entered from within a call of its own.
         let (guest, mount) = (Rc::downgrade(&self.guest), mount.clone());
         defer(&self.guest.host, move |_| {

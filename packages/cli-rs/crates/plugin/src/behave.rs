@@ -476,6 +476,16 @@ pub(crate) fn visited(items: usize) {
     tally(|counts| counts.visits += items as u64);
 }
 
+/// Mounts the current route again ([`crate::Host::remount`]), each live mount of the host's app noting first the node that has
+/// the focus: the remount detaches the old trees, which drops the focus, before their mounts end. A mount the remount
+/// keeps forgets it.
+pub(crate) fn remount(host: &dyn crate::Host) {
+    let mounts = hook(host.app()).map(|hook| hook.mounts.borrow().clone()).unwrap_or_default();
+    mounts.iter().filter_map(Weak::upgrade).for_each(|mount| mount.note_focus(true));
+    host.remount();
+    mounts.iter().filter_map(Weak::upgrade).for_each(|mount| mount.note_focus(false));
+}
+
 /// Makes `surface` one of the mounts the hook of its app resolves.
 pub(crate) fn attach(app: &App, surface: &Rc<Surface>) {
     let hook = HOOKS.with(|hooks| hooks.borrow_mut().entry(key(app)).or_insert_with(|| Hook::new(app)).clone());

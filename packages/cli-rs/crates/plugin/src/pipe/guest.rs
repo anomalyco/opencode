@@ -1422,7 +1422,7 @@ impl surface::Viewer for Viewer {
         }
     }
 
-    fn forget(&self, _host: &dyn Host, id: &v2::MountId) {
+    fn forget(&self, _host: &dyn Host, id: &v2::MountId, focused: Option<String>) {
         let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
         let guest = self.guest.upgrade().filter(|guest| !guest.ended());
         // A guest that handed its activation to a reload leaves its mounts to the replacement, which mounts its own.
@@ -1438,7 +1438,8 @@ impl surface::Viewer for Viewer {
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
         let seq = scripts.next();
-        scripts.send(Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover }, None);
+        let message = Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover, focused };
+        scripts.send(message, None);
     }
 }
 
@@ -1551,7 +1552,8 @@ impl ClaimViewer {
         let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
         let Some(scripts) = self.scripts.upgrade() else { return };
         let seq = scripts.next();
-        let message = Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover: false };
+        let message =
+            Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover: false, focused: None };
         scripts.send(message, None);
     }
 

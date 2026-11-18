@@ -113,6 +113,9 @@ pub enum Down {
         /// It ends as a reload of the plugin's registrations mounts it again (CT-21): the new mount may take its state.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handover: bool,
+        /// Its node that had the focus as it ended: a new mount that takes its state may give it the focus back.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        focused: Option<String>,
     },
     /// A part fence claim `claim` of plugin `id` draws (contract 2.x, step D): its first sight, which begins the part's
     /// mount, or a newer revision of it. The JS host answers with a whole revision of the mount ([`Up::Tree`]): its

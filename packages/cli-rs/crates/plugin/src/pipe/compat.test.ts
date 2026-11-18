@@ -1112,7 +1112,8 @@ test("a mount a reload begins again adopts the one it ended", async () => {
 
 // Contract ergonomics, step 8: the host's focus was the ended mount's, so the field the plugin focused in a mount a reload
 // begins again asks for it again, for the new mount, as that mount adopts the tree (`P.8/session-manager`'s search,
-// whose layer reloads as the field shows, lost what the user typed). A field not focused asks for nothing.
+// whose layer reloads as the field shows, lost what the user typed). A field not focused asks for nothing, and nor does
+// one whose mount ended after the user moved the focus out of it (cf-3).
 test("a mount a reload begins again focuses the field the plugin focused", () => {
   const fake = host()
   const ctx = plugin("t.refocus", fake)
@@ -1126,10 +1127,14 @@ test("a mount a reload begins again focuses the field the plugin focused", () =>
   surface.view(cx(2))
   expect(focuses()).toEqual([])
   refs.search.focus()
-  surface.options.unmount(cx(2).mount, true)
+  const search = fake.effects.find((effect: Json) => effect.type === "focus").node
+  surface.options.unmount(cx(2).mount, true, search)
   surface.view(cx(3))
   expect(focuses()).toEqual([2, 3])
-  surface.options.unmount(cx(3).mount)
+  surface.options.unmount(cx(3).mount, true, undefined)
+  surface.view(cx(4))
+  expect(focuses()).toEqual([2, 3])
+  surface.options.unmount(cx(4).mount)
 })
 
 // CT-15: a render that returns a renderable it built itself (opencode-quick-quote's slot marker) draws nothing and says
@@ -1828,6 +1833,12 @@ test("a prompt carries its value and description", async () => {
     { type: "prompt", title: "Bare" },
   ])
   expect(fake.warnings()).toEqual([])
+  // cf-3: built a microtask later, as the other dialogs: a `dialog.set` right after it is no set after it showed, and
+  // the contract's prompt has no size, which the log says.
+  void ctx.ui.dialog.prompt({ title: "Sized" })
+  ctx.ui.dialog.set({ size: "large" })
+  await turn()
+  expect(fake.warnings()).toEqual(["t.prompt: ui.dialog.set of a prompt is not supported by opencode-native yet"])
 })
 
 // Contract ergonomics 2.6: a command's slash aliases (oc-context-grid's `/ctx`, session-manager's `/sm`) go with its
