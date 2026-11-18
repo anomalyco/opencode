@@ -789,6 +789,69 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     }
 }
 
+// Expected (contract ergonomics 2.7): the board's dialog surface opens with its field focused, so what the user types
+// is the field's; the dialog's key moves the focus to its long scroll, which the arrows scroll, with its scrollbar;
+// escape closes the dialog, whose handler toasts. Opened again, `ctrl+c` empties the field and leaves the dialog open,
+// then closes it. Frames, toasts and status are the same on every carrier, the real library included.
+#[test]
+fn a_dialog_surface_is_equal_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        let mut seen = Vec::new();
+        let step = |name: &'static str, seen: &mut Vec<_>| {
+            settle(&board.harness);
+            seen.push((name, app.render().text(), observe(&board.harness)));
+        };
+        // Over the board's route: the home screen's composer draws its placeholder at random.
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        settle(&board.harness);
+        tui.keymap.dispatch("board.dialog", None);
+        step("open", &mut seen);
+        app.type_text("hi");
+        step("typed", &mut seen);
+        app.press("ctrl+l");
+        settle(&board.harness);
+        app.press("down");
+        app.press("down");
+        step("scrolled", &mut seen);
+        app.press("escape");
+        step("closed", &mut seen);
+        tui.keymap.dispatch("board.dialog", None);
+        settle(&board.harness);
+        app.type_text("yo");
+        app.press("ctrl+c");
+        step("cleared", &mut seen);
+        app.press("ctrl+c");
+        step("gone", &mut seen);
+        seen
+    };
+    let linked = run(Run::In(Carrier::Linked));
+    let at = |name: &str| &linked.iter().find(|seen| seen.0 == name).unwrap().1;
+    assert!(at("open").contains("Ask the board") && at("open").contains("at answer"), "{}", at("open"));
+    assert!(at("typed").contains("answered a:h a:hi at answer"), "{}", at("typed"));
+    assert!(at("scrolled").contains("a:hi at lines") && !at("scrolled").contains("line 0 "), "{}", at("scrolled"));
+    let toasts = |name: &str| linked.iter().find(|seen| seen.0 == name).unwrap().2.1.clone();
+    assert!(!at("closed").contains("Ask the board"), "{}", at("closed"));
+    assert!(toasts("closed").iter().any(|toast| toast.contains("ask closed")), "{:?}", toasts("closed"));
+    assert!(
+        at("cleared").contains("a:yo a: at answer") && at("cleared").contains("Ask the board"),
+        "{}",
+        at("cleared")
+    );
+    assert!(!at("gone").contains("Ask the board"), "{}", at("gone"));
+    assert!(toasts("gone").iter().any(|toast| toast.contains("ask closed")), "{:?}", toasts("gone"));
+    for other in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((name, _, linked), (_, text, seen)) in linked.iter().zip(run(other)) {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{other:?} at {name}: toasts and status");
+            if linked.0 != seen.0 {
+                let at = linked.0.iter().zip(&seen.0).position(|(a, b)| a != b);
+                panic!("{other:?} at {name}: the frames differ, first at cell {at:?} of 80 a row:\n{text}");
+            }
+        }
+    }
+}
+
 /// The board's claims in a session whose answer streams a `board` call that finishes, one that fails, and a `board`
 /// fence, then takes another theme; what each checkpoint sees, with the composer's random placeholder blanked.
 fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
