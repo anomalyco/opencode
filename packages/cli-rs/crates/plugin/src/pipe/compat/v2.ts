@@ -1040,7 +1040,7 @@ export function context(base: Base, carrier: Carrier) {
         entry?.dispose()
         const tries = entry ? entry.pending : 0
         const value = input(cx)
-        const [props, setProps] = createStore(structuredClone(value))
+        const [props, setProps] = createStore(copied(value))
         const reading = { pending: false, keys: new Set<string>() }
         const before = rendering
         rendering = reading
@@ -1062,7 +1062,7 @@ export function context(base: Base, carrier: Carrier) {
         entry = Object.assign(mounted, {
           pending: reading.pending ? tries + 1 : 0,
           input: value,
-          setInput: (next: Json) => setProps(reconcile(structuredClone(next))),
+          setInput: (next: Json) => setProps(reconcile(copied(next))),
         })
         rendered.set(key(cx), entry)
       }
@@ -1152,7 +1152,7 @@ export function context(base: Base, carrier: Carrier) {
     }
   }
 
-  const slotInput = (path: string) => (cx: Json) => {
+  const slotInput = (path: string, surface = "") => (cx: Json) => {
     const slot = cx.input.slot ?? {}
     if (path.startsWith("prompt.footer"))
       return {
@@ -1168,6 +1168,19 @@ export function context(base: Base, carrier: Carrier) {
         width: panel.width ?? cx.input.width,
         presentation: panel.fullscreen ? "fullscreen" : "panel",
         focused: !!panel.focused,
+        // CT-38: as TS's `PanelInput`. The contract has no focus of a pane: the panel's first field or scroll takes the
+        // focus, which moves the input to the panel as a click in it does (btw-sidechat focuses its field after).
+        focus() {
+          const root = rendered.get(`${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`)?.root
+          const first = (node: VNode): VNode | undefined =>
+            FOCUSABLE.has(node.tag) ? node : node.children.reduce<VNode | undefined>((found, child) => found ?? first(child), undefined)
+          const node = root && first(root)
+          if (node) focus.focus(node)
+          else unsupported("panel.focus() of a panel with no field or scroll")
+        },
+        close: () => void carrier.effect({ type: "close-panel", surface }),
+        toggleFullscreen: () =>
+          void carrier.effect({ type: "open-panel", surface, ...(panel.fullscreen ? {} : { fullscreen: true }) }),
       }
     }
     if (path.startsWith("sidebar.") || path === "session.composer.top") return { sessionID: slot.session_id ?? "" }
@@ -1177,6 +1190,13 @@ export function context(base: Base, carrier: Carrier) {
   // `enabled`, @cleocode/goal's) follows it (carbon ce-2).
   const [panelName, setPanelName] = createRoot(() => createSignal(""))
   const panels: string[] = []
+  // An input as the plugin's props hold it: a copy, but for its functions (a panel's `focus`, CT-38), which are kept.
+  const copied = (value: Json): Json =>
+    typeof value === "function" || value === null || typeof value !== "object"
+      ? value
+      : Array.isArray(value)
+        ? value.map(copied)
+        : Object.fromEntries(Object.entries(value).map(([field, item]) => [field, copied(item)]))
 
   const raw = OpenCode.make({
     baseUrl: "http://opencode.internal/",
@@ -1918,7 +1938,7 @@ export function context(base: Base, carrier: Carrier) {
         const name = `slot#${claims++}`
         if (path === "session.panel") {
           panels.push(name)
-          return surface(name, { type: "panel", name }, slotInput(path), claim.render, `slot ${path}`)
+          return surface(name, { type: "panel", name }, slotInput(path, name), claim.render, `slot ${path}`)
         }
         // As it is: the host degrades a path it does not publish as TS does (carbon-4): a `replace` of one never
         // degrades, an `append` goes to the nearest published ancestor, and a plugin's own `<Slot>` is a path too.
