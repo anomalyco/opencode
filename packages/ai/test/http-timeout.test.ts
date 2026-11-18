@@ -133,6 +133,36 @@ describe("HTTP transport timeouts", () => {
     }),
   )
 
+  it.effect("fails when an error response's body stalls for fifteen minutes", () =>
+    Effect.gen(function* () {
+      const stalled = yield* Deferred.make<void>()
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() =>
+          input.respond(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"error":'))
+              },
+              pull: () => Deferred.doneUnsafe(stalled, Effect.void) && new Promise<void>(() => {}),
+            }),
+            { status: 503 },
+          ),
+        ),
+      )
+      const fiber = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+        Effect.provide(layer),
+        Effect.flip,
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(stalled)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("15 minutes")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.message).toContain("HTTP 503")
+    }),
+  )
+
   it.effect("fails when only keepalives and pings arrive for fifteen minutes", () =>
     Effect.gen(function* () {
       const server = yield* pushedServer
