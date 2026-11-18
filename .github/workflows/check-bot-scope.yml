@@ -1,4 +1,4 @@
-name: check-bot-scope
+name: check-bot-scope 
 
 # Required on dev. bot-nix-hashes.yml pushes bot/nix-hashes and auto-merges its pull request without review, so this
 # fails that branch unless it changes nothing but a valid nix/hashes.json. Every other branch passes. The bot's own
