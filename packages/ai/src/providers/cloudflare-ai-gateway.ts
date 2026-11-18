@@ -96,6 +96,7 @@ export const configure = (input: Config) => {
     endpoint: { baseURL: baseURL(input) },
     auth: custom ?? credential(input, (credential) => credential.bearer()),
     headers: { "cf-aig-gateway-id": gatewayId(input), ...headers(input) },
+    timeout: input.timeout,
     http: input.http,
     providerOptions: input.providerOptions,
   }
@@ -131,6 +132,7 @@ export const configure = (input: Config) => {
         endpoint: { baseURL: runBaseURL(input) },
         auth: rest.auth,
         headers: rest.headers,
+        timeout: input.timeout,
         http: input.http,
       })
       .model({ id: value, providerOptions })

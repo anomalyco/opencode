@@ -269,6 +269,7 @@ export const configure = (input: Config = {}) => {
     endpoint: options.endpoint,
     auth: options.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const media = MediaRoute.deployment({ ...input, baseURL: options.endpoint.baseURL }, options.auth)
@@ -294,6 +295,7 @@ export const configure = (input: Config = {}) => {
     endpoint: options.endpoint,
     auth: options.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

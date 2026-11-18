@@ -252,6 +252,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: configured.endpoint.baseURL },
     auth: configured.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -261,6 +262,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: configured.endpoint.baseURL },
     auth: configured.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

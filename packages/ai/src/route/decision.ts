@@ -8,7 +8,14 @@ import {
   type DecisionRequest,
   type DecisionResponse,
 } from "../decision.js"
-import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
+import {
+  mergeTransport,
+  ProviderID,
+  type HttpOptions,
+  type AIError,
+  type ProviderOptions,
+  type RequestTimeout,
+} from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -40,6 +47,7 @@ export interface Patch {
   readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, DecisionRequest>
   readonly auth?: Auth.Definition
   readonly headers?: Record<string, string>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
 }
 
@@ -51,6 +59,7 @@ export interface Route {
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequest>
   readonly auth: Auth.Definition
   readonly headers?: Record<string, string>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   readonly with: (patch: Patch) => Route
   readonly model: <Options extends DecisionOptions = DecisionOptions>(input: {
@@ -77,6 +86,7 @@ export const make = (input: MakeInput): Route => {
     endpoint: input.endpoint,
     auth: input.auth ?? Auth.none,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   }
   return {
@@ -90,6 +100,7 @@ export const make = (input: MakeInput): Route => {
           patch.providerMetadataKey ?? (patch.provider === undefined ? route.providerMetadataKey : undefined),
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
         headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
+        timeout: mergeTransport({ timeout: route.timeout }, { timeout: patch.timeout }).timeout,
         http: patch.http ?? route.http,
       }),
     model: <Options extends DecisionOptions>(model: {
@@ -101,6 +112,7 @@ export const make = (input: MakeInput): Route => {
       return DecisionModel.make<Options>({
         id: model.id,
         provider,
+        timeout: route.timeout,
         http: route.http,
         providerOptions: model.providerOptions,
         compatibility:
@@ -133,7 +145,10 @@ const transport = (route: Omit<Route, "with" | "model">) => {
   })
   return Effect.fnUntraced(function* (request: DecisionRequest, execute: Execute) {
     if (!route.protocol.inlineMedia) return yield* composed.generate(request, execute)
-    const timed = RequestExecutor.withTimeout(execute, request.timeout)
+    const timed = RequestExecutor.withTimeout(
+      execute,
+      mergeTransport({ timeout: request.model.timeout }, request).timeout,
+    )
     const input = yield* Effect.forEach(request.input, (part) => materialize(part, timed))
     return yield* composed.generate({ ...request, input }, execute)
   })

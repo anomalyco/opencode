@@ -72,6 +72,7 @@ export const configure = (input: Config = {}) => {
     auth: options.auth,
     // DigitalOcean serves TypeSafe's Jev, which needs this header for images.
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
+    timeout: input.timeout,
     http: input.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -84,6 +85,7 @@ export const configure = (input: Config = {}) => {
     endpoint: options.endpoint,
     auth: options.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

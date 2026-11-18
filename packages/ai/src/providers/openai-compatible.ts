@@ -49,6 +49,7 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const decisionRoute = SystemOne.route.with({
@@ -56,6 +57,7 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   return {

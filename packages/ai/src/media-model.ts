@@ -9,10 +9,11 @@ import {
   ProviderID,
   type HttpOptions,
   type ProviderOptions,
+  type RequestTimeout,
 } from "./schema/index.js"
 
 /**
- * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
+ * What every media model carries: ids, the configured route, and deployment transport overlays. Modality classes
  * (`ImageModel`, `VideoModel`, `SpeechModel`, `TranscriptionModel`) extend it with their route type and a nominal
  * marker so one cannot stand in for the other in requests.
  */
@@ -23,6 +24,7 @@ export class MediaModel<Route, Options> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: Route
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
@@ -31,6 +33,7 @@ export class MediaModel<Route, Options> {
     this.id = ModelID.make(input.id)
     this.provider = ProviderID.make(input.provider)
     this.route = input.route
+    this.timeout = input.timeout
     this.http = input.http
     this.providerOptions = input.providerOptions
   }
@@ -43,6 +46,7 @@ export namespace MediaModel {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly route: Route
+    readonly timeout?: RequestTimeout
     readonly http?: HttpOptions
     readonly providerOptions?: ProviderOptions
   }

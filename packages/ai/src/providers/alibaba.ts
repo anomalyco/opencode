@@ -124,6 +124,7 @@ export const configure = (input: Config) => {
     endpoint: common.endpoint,
     auth: opts.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const embedding = (id: string | ModelID, providerOptions?: ProviderOptions) =>

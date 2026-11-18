@@ -124,6 +124,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: media.baseURL },
     auth: media.auth,
     headers: media.headers,
+    timeout: media.timeout,
     http: media.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -132,6 +133,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: media.baseURL },
     auth: media.auth,
     headers: media.headers,
+    timeout: media.timeout,
     http: media.http,
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

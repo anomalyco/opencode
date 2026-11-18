@@ -62,6 +62,7 @@ export const configure = (input: Config) => {
         endpoint: { baseURL: runBaseURL(input) },
         auth: auth,
         headers: input.headers,
+        timeout: input.timeout,
         http: input.http,
       })
       .model({ id: modelID, providerOptions })

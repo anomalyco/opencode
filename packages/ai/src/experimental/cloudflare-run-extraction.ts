@@ -99,6 +99,7 @@ export const model = (input: MediaRoute.ModelInput) =>
   new ExtractionModel({
     id: input.id,
     provider: route.provider,
+    timeout: input.timeout,
     http: input.http,
     route: MediaRoute.inline({
       protocol,

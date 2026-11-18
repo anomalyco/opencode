@@ -7,7 +7,14 @@ import {
   type EmbeddingOptions,
   type EmbeddingRequest,
 } from "../embedding.js"
-import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
+import {
+  mergeTransport,
+  ProviderID,
+  type HttpOptions,
+  type AIError,
+  type ProviderOptions,
+  type RequestTimeout,
+} from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { MediaProtocol } from "./media-protocol.js"
@@ -36,6 +43,7 @@ export interface Patch {
   readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, EmbeddingRequest>
   readonly auth?: Auth.Definition
   readonly headers?: Record<string, string>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   /**
    * Most values one HTTP request may carry. Longer requests are split into requests of this size, sent a few at a
@@ -52,6 +60,7 @@ export interface Route {
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, EmbeddingRequest>
   readonly auth: Auth.Definition
   readonly headers?: Record<string, string>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   readonly maxValues?: number
   readonly with: (patch: Patch) => Route
@@ -78,6 +87,7 @@ export const make = (input: MakeInput): Route => {
     endpoint: input.endpoint,
     auth: input.auth ?? Auth.none,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
     maxValues: input.maxValues,
   }
@@ -92,6 +102,7 @@ export const make = (input: MakeInput): Route => {
           patch.providerMetadataKey ?? (patch.provider === undefined ? route.providerMetadataKey : undefined),
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
         headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
+        timeout: mergeTransport({ timeout: route.timeout }, { timeout: patch.timeout }).timeout,
         http: patch.http ?? route.http,
         maxValues: patch.maxValues ?? route.maxValues,
       }),
@@ -102,6 +113,7 @@ export const make = (input: MakeInput): Route => {
       EmbeddingModel.make<Options>({
         id: model.id,
         provider,
+        timeout: route.timeout,
         http: route.http,
         providerOptions: model.providerOptions,
         route: { id: route.id, generate: split(route.maxValues, transport(route).generate) },

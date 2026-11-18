@@ -29,6 +29,7 @@ export type Execute = Interface["execute"]
 export type MediaRequest = BaseRequest<{
   readonly id: string
   readonly provider: ProviderID
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   readonly providerOptions?: ProviderOptions
 }>
@@ -42,6 +43,7 @@ export interface ModelInput {
   readonly auth: Auth.Definition
   readonly baseURL?: string
   readonly headers?: Record<string, string>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   /** Defaults under each request's `providerOptions`. */
   readonly providerOptions?: ProviderOptions
@@ -49,9 +51,20 @@ export interface ModelInput {
 
 /** A provider facade's `configure(...)` input as the `ModelInput` every media selector shares, minus the model id. */
 export const deployment = (
-  input: { readonly baseURL?: string; readonly headers?: Record<string, string>; readonly http?: HttpOptions },
+  input: {
+    readonly baseURL?: string
+    readonly headers?: Record<string, string>
+    readonly timeout?: RequestTimeout
+    readonly http?: HttpOptions
+  },
   auth: Auth.Definition,
-): Omit<ModelInput, "id"> => ({ auth, baseURL: input.baseURL, headers: input.headers, http: input.http })
+): Omit<ModelInput, "id"> => ({
+  auth,
+  baseURL: input.baseURL,
+  headers: input.headers,
+  timeout: input.timeout,
+  http: input.http,
+})
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -369,7 +382,8 @@ const makeTransport = <Request extends MediaRequest>(
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */
-    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers, http: model.http }),
+    exchange: (model: MediaRequest["model"]): Exchange =>
+      mergeTransport({ headers: input.headers, timeout: model.timeout, http: model.http }),
     /** POST the protocol body to the route endpoint. */
     submit: Effect.fn("MediaRoute.submit")(function* (
       request: Request,
@@ -385,7 +399,7 @@ const makeTransport = <Request extends MediaRequest>(
         headers: merged,
         timeout,
         http,
-      } = mergeTransport({ headers: input.headers, http: request.model.http }, request)
+      } = mergeTransport({ headers: input.headers, timeout: request.model.timeout, http: request.model.http }, request)
       const exchange = { headers: merged, timeout, http, fetch: request.fetch }
       const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(merged)

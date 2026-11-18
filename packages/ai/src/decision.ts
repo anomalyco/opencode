@@ -11,6 +11,7 @@ import {
   ProviderMetadata,
   ProviderOptions,
   type OpenString,
+  type RequestTimeout,
 } from "./schema/index.js"
 
 // ---------------------------------------------------------------------------
@@ -200,6 +201,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: DecisionModelRoute<Options>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   readonly compatibility?: DecisionModelCompatibility
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
@@ -209,6 +211,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
+    this.timeout = input.timeout
     this.http = input.http
     this.compatibility = input.compatibility
     this.providerOptions = input.providerOptions
@@ -228,6 +231,7 @@ export namespace DecisionModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: DecisionModelRoute<Options>
+    readonly timeout?: RequestTimeout
     readonly http?: HttpOptions
     readonly compatibility?: DecisionModelCompatibility
     readonly providerOptions?: ProviderOptions

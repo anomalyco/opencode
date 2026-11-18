@@ -320,6 +320,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   dependencies?: Dependencies,
 ) {
   const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const timeouts = Provider.timeouts(configured)
   const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
@@ -335,10 +336,19 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel || adapted instanceof VideoModel))
+    return adapted
+  const transport = mergeTransport(
+    { timeout: adapted.timeout, http: adapted.http },
+    {
+      timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+      http: { tls },
+    },
+  )
   // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
   const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
-    http: { ...adapted.http, tls },
+    timeout: transport.timeout,
+    http: transport.http,
   })
   return copy
 })

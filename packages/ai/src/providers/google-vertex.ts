@@ -183,7 +183,13 @@ export const configure = (input: Config = {}) => {
           message: "Google Vertex embedContent does not support Express Mode API keys; use project credentials",
         })
       return selected.route
-        .with({ endpoint: target.endpoint, auth: target.auth, headers: input.headers, http: input.http })
+        .with({
+          endpoint: target.endpoint,
+          auth: target.auth,
+          headers: input.headers,
+          timeout: input.timeout,
+          http: input.http,
+        })
         .model<VertexOptionsInput & PredictOptionsInput>({ id: modelID, providerOptions })
     },
     configure,

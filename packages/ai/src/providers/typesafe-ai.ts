@@ -1,4 +1,4 @@
-import { type HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type TransportOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
@@ -7,11 +7,10 @@ import { toConfig } from "./settings.js"
 export const id = ProviderID.make("typesafe-ai")
 const baseURL = "https://api.typesafe.ai/v1"
 
-export type Config = ProviderAuthOption<"optional"> & {
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+export type Config = TransportOptions &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 export type Settings = ProviderPackage.Settings & { readonly apiKey?: string | false }
 
@@ -23,6 +22,7 @@ export const configure = (input: Config = {}) => {
     auth: AuthOptions.bearer(input, "TYPESAFE_API_KEY"),
     // Required for images; text-only requests are unchanged with it.
     headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
+    timeout: input.timeout,
     http: input.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

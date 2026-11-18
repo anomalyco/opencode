@@ -10,6 +10,7 @@ import {
   ProviderID,
   ProviderMetadata,
   ProviderOptions,
+  type RequestTimeout,
 } from "./schema/index.js"
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,10 @@ export type EmbeddingOptions = Record<string, unknown>
 /** What an embedding model's route does; `EmbeddingRoute.make(...).model(...)` builds one from a protocol. */
 export interface EmbeddingModelRoute<Options extends EmbeddingOptions = EmbeddingOptions> {
   readonly id: string
-  generate(request: EmbeddingRequest<EmbeddingModel<Options>>, execute: Execute): Effect.Effect<EmbeddingResponse, AIError>
+  generate(
+    request: EmbeddingRequest<EmbeddingModel<Options>>,
+    execute: Execute,
+  ): Effect.Effect<EmbeddingResponse, AIError>
 }
 
 export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions> {
@@ -46,6 +50,7 @@ export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions>
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: EmbeddingModelRoute<Options>
+  readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
@@ -54,6 +59,7 @@ export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions>
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
+    this.timeout = input.timeout
     this.http = input.http
     this.providerOptions = input.providerOptions
   }
@@ -72,6 +78,7 @@ export namespace EmbeddingModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: EmbeddingModelRoute<Options>
+    readonly timeout?: RequestTimeout
     readonly http?: HttpOptions
     readonly providerOptions?: ProviderOptions
   }

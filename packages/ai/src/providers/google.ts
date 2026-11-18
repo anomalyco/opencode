@@ -64,6 +64,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: input.baseURL },
     auth: auth(input),
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   return {
@@ -82,7 +83,13 @@ export const configure = (input: Config = {}) => {
       embeddingRoute.model<GoogleEmbeddingOptionsInput>({ id: modelID, providerOptions }),
     decision: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       GoogleDecisions.route
-        .with({ endpoint: { baseURL: media.baseURL }, auth: media.auth, headers: media.headers, http: media.http })
+        .with({
+          endpoint: { baseURL: media.baseURL },
+          auth: media.auth,
+          headers: media.headers,
+          timeout: media.timeout,
+          http: media.http,
+        })
         .model<GoogleDecisions.OptionsInput>({ id: modelID, providerOptions }),
     configure,
   }

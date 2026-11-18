@@ -64,6 +64,7 @@ export const configure = (input: Config = {}) => {
     endpoint: Endpoint.path("/systemone", { baseURL: options.endpoint.baseURL }),
     auth: options.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>

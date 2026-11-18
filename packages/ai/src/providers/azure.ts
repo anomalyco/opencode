@@ -175,6 +175,7 @@ export const configure = (input: Config) => {
         endpoint: endpoint(input, modelID),
         auth: auth(input),
         headers: input.headers,
+        timeout: input.timeout,
         http: input.http,
       })
       .model({ id: modelID, providerOptions })

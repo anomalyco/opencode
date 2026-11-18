@@ -1,21 +1,22 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Redacted, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { ai, Media, VideoClient } from "../src/effect.js"
-import { LLMClient, mergeTransport } from "../src/route.js"
-import { configure } from "../src/providers/openai.js"
-import { XAI } from "../src/providers.js"
-import { dynamicResponse } from "./lib/http.js"
+import { ai, AIClient, type AIError, Media } from "../src/effect.js"
+import { Realtime } from "../src/experimental.js"
+import { LLMClient, mergeTransport, RequestExecutor } from "../src/route.js"
+import { AssemblyAI, BytePlus, OpenAI } from "../src/providers.js"
+import { dynamicResponse, handlerLayer } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
-const openai = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+const openai = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
 const model = openai.chat("gpt-4.1-mini")
-const video = XAI.configure({ baseURL: "https://api.xai.test/v1", apiKey: "test" }).video("grok-imagine-video-1.5")
+const video = BytePlus.configure({ baseURL: "https://api.byteplus.test/v3", apiKey: "test" }).video("seedance-1-5")
 const SSE = { headers: { "content-type": "text/event-stream" } }
 
 const silentServer = dynamicResponse(() => Effect.never)
+const silentClients = AIClient.layerWith(RequestExecutor.layer.pipe(Layer.provide(handlerLayer(() => Effect.never))))
 
 const slowHeadersServer = dynamicResponse((input) =>
   Effect.sleep("10 minutes").pipe(
@@ -175,71 +176,187 @@ describe("HTTP transport timeouts", () => {
     }),
   )
 
-  it.effect("applies default and configured timeouts to media routes", () =>
+  it.effect("applies provider-configured timeouts to every API method", () =>
     Effect.gen(function* () {
-      const videoSilent = VideoClient.layer.pipe(Layer.provideMerge(silentServer))
+      const timeout = { headers: 1_000 }
+      const timedOpenAI = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test", timeout })
+      const timedVideo = BytePlus.configure({ baseURL: "https://api.byteplus.test/v3", apiKey: "test", timeout }).video(
+        "seedance-1-5",
+      )
+      const timedTranscription = AssemblyAI.configure({
+        baseURL: "https://assemblyai.test",
+        apiKey: "test",
+        timeout,
+      }).transcription("universal-2")
+      const audio = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33, 1, 2, 3]), "audio/mpeg")
+      const image = timedOpenAI.image("gpt-image-2")
+      const chat = { model: timedOpenAI.chat("gpt-4.1-mini"), prompt: "Hello" }
+      const drain = <A, E, R>(stream: Stream.Stream<A, E, R>) => Stream.runDrain(stream)
 
-      const defaultFiber = yield* ai.video
-        .start({ model: video, prompt: "A kite" })
-        .pipe(Effect.provide(videoSilent), Effect.flip, Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("5 minutes")
-      const defaultError = yield* Fiber.join(defaultFiber)
-      expect(defaultError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+      // Every callable method on `ai` must be listed here (as a provider call or a local helper), so a new method
+      // cannot ship without timeout coverage.
+      const calls: Record<string, Effect.Effect<unknown, AIError, AIClient.Services>> = {
+        generate: ai.generate(chat),
+        stream: drain(ai.stream(chat)),
+        loop: drain(ai.loop(chat)),
+        compact: ai.compact(ai.request({ model: timedOpenAI.responses("gpt-5"), prompt: "Hello" })),
+        "image.generate": ai.image.generate({ model: image, prompt: "A kite" }),
+        "image.stream": drain(ai.image.stream({ model: image, prompt: "A kite" })),
+        "image.start": ai.image.start({ model: image, prompt: "A kite" }),
+        "image.status": ai.image.status(image, "job"),
+        "image.result": ai.image.result(image, "job"),
+        "image.cancel": ai.image.cancel(image, "job"),
+        "decision.generate": ai.decision.generate({
+          model: timedOpenAI.decision("gpt-6-luna"),
+          input: "hello",
+          questions: [{ name: "greeting", type: "choice", instructions: "Greeting?", choices: [{ value: true }] }],
+        }),
+        "embedding.generate": ai.embedding.generate({
+          model: timedOpenAI.embedding("text-embedding-3-small"),
+          values: ["hello"],
+        }),
+        "video.start": ai.video.start({ model: timedVideo, prompt: "A kite" }),
+        "video.status": ai.video.status(timedVideo, "job"),
+        "video.result": ai.video.result(timedVideo, "job"),
+        "video.cancel": ai.video.cancel(timedVideo, "job"),
+        "experimental.speech.generate": ai.experimental.speech.generate({
+          model: timedOpenAI.speech("gpt-4o-mini-tts"),
+          text: "Hello",
+        }),
+        "experimental.speech.stream": drain(
+          ai.experimental.speech.stream({ model: timedOpenAI.speech("gpt-4o-mini-tts"), text: "Hello" }),
+        ),
+        "experimental.transcription.generate": ai.experimental.transcription.generate({
+          model: timedTranscription,
+          audio,
+        }),
+        "experimental.transcription.stream": drain(
+          ai.experimental.transcription.stream({ model: timedTranscription, audio }),
+        ),
+        "experimental.transcription.start": ai.experimental.transcription.start({ model: timedTranscription, audio }),
+        "experimental.transcription.resume": ai.experimental.transcription.resume(timedTranscription, {
+          transcriptID: "tr_1",
+        }),
+      }
+      const local = [
+        "request",
+        "collect",
+        "canCompact",
+        "image.request",
+        "decision.request",
+        "embedding.request",
+        "video.request",
+        "experimental.speech.request",
+        "experimental.transcription.request",
+      ]
+      const listMethods = (value: object, prefix = ""): Array<string> =>
+        Object.entries(value).flatMap(([key, entry]) => {
+          if (typeof entry === "function") return [`${prefix}${key}`]
+          if (typeof entry === "object" && entry !== null) return listMethods(entry, `${prefix}${key}.`)
+          return []
+        })
+      expect(listMethods(ai).toSorted()).toEqual([...Object.keys(calls), ...local].toSorted())
 
-      const customFiber = yield* ai.video
-        .start({ model: video, prompt: "A kite", timeout: { headers: 1_000 } })
-        .pipe(Effect.provide(videoSilent), Effect.flip, Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("1 second")
-      const customError = yield* Fiber.join(customFiber)
-      expect(customError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+      const check = (effect: Effect.Effect<unknown, AIError, AIClient.Services>) =>
+        Effect.gen(function* () {
+          const fiber = yield* effect.pipe(
+            Effect.provide(silentClients),
+            Effect.flip,
+            Effect.forkChild({ startImmediately: true }),
+          )
+          // Retried status/result reads make up to 9 attempts with exponential backoff (< 4 min total, still under
+          // the 5 min default header timeout), so finishing here proves the 1 s configured timeout applied.
+          for (let i = 0; i < 240 && fiber.pollUnsafe() === undefined; i++) yield* TestClock.adjust("1 second")
+          const error = yield* Fiber.join(fiber)
+          if (error.reason._tag === "UnsupportedOperation") return
+          expect(error.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+        })
 
-      const server = yield* stalledServer
-      const bodyFiber = yield* ai.video
-        .start({ model: video, prompt: "A kite" })
-        .pipe(
-          Effect.provide(VideoClient.layer.pipe(Layer.provideMerge(server.layer))),
-          Effect.flip,
-          Effect.forkChild({ startImmediately: true }),
-        )
-      yield* Deferred.await(server.stalled)
-      yield* Effect.yieldNow
-      yield* TestClock.adjust("15 minutes")
-      const bodyError = yield* Fiber.join(bodyFiber)
-      expect(bodyError.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "Timeout" })
-      expect(bodyError.reason.http).toMatchObject({ status: 200 })
+      for (const effect of Object.values(calls)) yield* check(effect)
+      yield* check(
+        Realtime.connect({
+          model: "gpt-realtime",
+          apiKey: Redacted.make("test"),
+          transport: { type: "websocket" },
+          timeout,
+        }),
+      )
     }),
   )
 
-  it.effect("applies default timeouts to media URL downloads", () =>
+  it.effect("applies default timeouts, request overrides, and stalled-body timeouts to media and downloads", () =>
     Effect.gen(function* () {
-      const headerFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
+      const defaultFiber = yield* ai.video
+        .start({ model: video, prompt: "A kite" })
+        .pipe(Effect.provide(silentClients), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("5 minutes")
+      expect((yield* Fiber.join(defaultFiber)).reason).toMatchObject({
+        _tag: "Transport",
+        operation: "request",
+        code: "Timeout",
+      })
+
+      const slowConfigured = BytePlus.configure({
+        baseURL: "https://api.byteplus.test/v3",
+        apiKey: "test",
+        timeout: { headers: 10_000 },
+      }).video("seedance-1-5")
+      const overrideFiber = yield* ai.video
+        .start({ model: slowConfigured, prompt: "A kite", timeout: { headers: 1_000 } })
+        .pipe(Effect.provide(silentClients), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1 second")
+      expect((yield* Fiber.join(overrideFiber)).reason).toMatchObject({
+        _tag: "Transport",
+        operation: "request",
+        code: "Timeout",
+      })
+
+      const downloadHeaderFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
         .bytes()
         .pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
       yield* TestClock.adjust("5 minutes")
-      const headerError = yield* Fiber.join(headerFiber)
-      expect(headerError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+      expect((yield* Fiber.join(downloadHeaderFiber)).reason).toMatchObject({
+        _tag: "Transport",
+        operation: "request",
+        code: "Timeout",
+      })
 
-      const server = yield* stalledServer
-      const streamFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
-        .stream()
-        .pipe(Stream.runDrain, Effect.provide(server.layer), Effect.flip, Effect.forkChild({ startImmediately: true }))
-      yield* Deferred.await(server.stalled)
+      const mediaServer = yield* stalledServer
+      const bodyFiber = yield* ai.video
+        .start({ model: video, prompt: "A kite" })
+        .pipe(
+          Effect.provide(AIClient.layerWith(mediaServer.layer)),
+          Effect.flip,
+          Effect.forkChild({ startImmediately: true }),
+        )
+      yield* Deferred.await(mediaServer.stalled)
       yield* Effect.yieldNow
       yield* TestClock.adjust("15 minutes")
-      const streamError = yield* Fiber.join(streamFiber)
-      expect(streamError.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "Timeout" })
-      expect(streamError.reason.http).toMatchObject({ status: 200 })
-    }),
-  )
+      expect((yield* Fiber.join(bodyFiber)).reason).toMatchObject({
+        _tag: "Transport",
+        operation: "read",
+        code: "Timeout",
+        http: { status: 200 },
+      })
 
-  it.effect("applies request timeout to responses compaction", () =>
-    Effect.gen(function* () {
-      const fiber = yield* ai
-        .compact(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello", timeout: { headers: 1_000 } }))
-        .pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("1 second")
-      const error = yield* Fiber.join(fiber)
-      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+      const downloadServer = yield* stalledServer
+      const streamFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
+        .stream()
+        .pipe(
+          Stream.runDrain,
+          Effect.provide(downloadServer.layer),
+          Effect.flip,
+          Effect.forkChild({ startImmediately: true }),
+        )
+      yield* Deferred.await(downloadServer.stalled)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("15 minutes")
+      expect((yield* Fiber.join(streamFiber)).reason).toMatchObject({
+        _tag: "Transport",
+        operation: "read",
+        code: "Timeout",
+        http: { status: 200 },
+      })
     }),
   )
 })

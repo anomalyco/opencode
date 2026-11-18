@@ -42,6 +42,7 @@ export const configure = (input: Config = {}) => {
     endpoint: options.endpoint,
     auth: options.auth,
     headers: input.headers,
+    timeout: input.timeout,
     http: input.http,
   })
   return {
