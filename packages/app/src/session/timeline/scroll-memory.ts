@@ -45,3 +45,7 @@ export function rememberScroll(key: string, patch: TimelineScrollMemory) {
 export function recallScroll(key: string) {
   return memory.get(key)
 }
+
+export function forgetScroll(key: string) {
+  memory.delete(key)
+}

@@ -49,7 +49,7 @@ import {
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { holdLandingWidth } from "@/shell/panel-motion"
 import type { TimelineFollow } from "./follow"
-import { anchorAt, recallScroll, rememberScroll } from "./scroll-memory"
+import { anchorAt, forgetScroll, recallScroll, rememberScroll } from "./scroll-memory"
 import {
   CONTACT_LOST_EVENT,
   defersAdjustments,
@@ -428,7 +428,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (anchor) rememberScroll(ownerSessionKey, anchor)
   }
 
-  // Puts the remembered row back at the viewport top. A row the projection dropped leaves the view where it is.
+  // Puts the remembered row back at the viewport top. Returns false when it cannot, which lets the caller fall back.
   const restorePosition = () => {
     const saved = recallScroll(ownerSessionKey)
 
@@ -683,8 +683,13 @@ export function createTimelineVirtualizer(input: Input) {
       if (reveal) input.reveal?.consume(reveal.entryKey)
 
       if (!revealed && input.follow.following()) virtualizer.scrollToEnd()
-      // A session the reader had scrolled up in resumes its own row rather than the end.
-      else if (!revealed) restorePosition()
+      // A session the reader had scrolled up in resumes its own row. A row the transcript dropped (a revert, a
+      // compaction, paged history) leaves the end as the fallback, as it was before this change.
+      else if (!revealed && !restorePosition()) {
+        forgetScroll(ownerSessionKey)
+        input.follow.dispatch({ type: "follow" })
+        virtualizer.scrollToEnd()
+      }
 
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)
