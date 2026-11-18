@@ -61,13 +61,20 @@ export default defineApp({
     { type: "src" },
     { checkpoint: "typed", until: "2 matches", deviation },
     // Escape leaves the field and clears its search: its commands, disabled while it had the focus, are enabled again,
-    // so `j` moves the selection (carbon ce-2: read where the layer did not follow it, the field's focus left them
+    // so `q` closes the browser (carbon ce-2: read where the layer did not follow it, the field's focus left them
     // disabled for good).
     { keys: ["escape"] },
     // The user types once the field let the focus go: on the JS host it lets go as its `onKeyDown` runs, after the key,
     // and a key typed before that is still the field's.
     { checkpoint: "left", until: "tsconfig.json", deviation },
-    { keys: ["j"] },
-    { checkpoint: "explored", until: "tsconfig.json", deviation },
+    // Not a key that moves the selection: escape also starts the plugin's 220 ms debounced search of "", which sets
+    // the selection back to the first row when it runs, on Bun's clock in both clients. A `j` before it was undone
+    // once the replay's checkpoint came after it (fb-flake).
+    { keys: ["q"] },
+    {
+      checkpoint: "closed",
+      until: "ctrl+p commands",
+      masks: [{ x: 36, y: 18, width: 70, height: 1, reason: "the placeholder example: random in TS and Rust" }],
+    },
   ],
 })
