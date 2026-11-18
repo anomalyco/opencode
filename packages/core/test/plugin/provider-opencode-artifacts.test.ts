@@ -21,11 +21,13 @@ function fakeConsole() {
   const state = {
     artifacts: true,
     watches: true,
-    blobs: new Set<string>(),
+    blobs: new Map<string, Uint8Array>(),
+    blobReads: new Array<string>(),
     uploads: new Array<string>(),
     prepared: new Array<Record<string, unknown>>(),
     published: new Array<{ slug: string; body: Record<string, unknown> }>(),
     deleted: new Array<string>(),
+    gone: false,
   }
   const server = Bun.serve({
     port: 0,
@@ -48,9 +50,26 @@ function fakeConsole() {
         return Response.json({ missing: body.files.map((file) => file.sha256).filter((sha) => !state.blobs.has(sha)) })
       }
       if (url.pathname.startsWith("/api/artifacts/blobs/")) {
+        const bytes = new Uint8Array(await request.arrayBuffer())
         state.uploads.push(slug)
-        state.blobs.add(slug)
-        return Response.json({ sha256: slug, bytes: (await request.arrayBuffer()).byteLength })
+        state.blobs.set(slug, bytes)
+        return Response.json({ sha256: slug, bytes: bytes.byteLength })
+      }
+      // Lists the last published revision, inlining only index.html so other files download as blobs.
+      if (url.pathname.endsWith("/files")) {
+        if (state.gone) return new Response("Not found", { status: 404 })
+        const published = state.published.at(-1)?.body as { files: { path: string; sha256: string }[] }
+        return Response.json({
+          revision: state.published.length,
+          files: published.files.map((file) => ({
+            ...file,
+            ...(file.path === "index.html" ? { text: new TextDecoder().decode(state.blobs.get(file.sha256)) } : {}),
+          })),
+        })
+      }
+      if (url.pathname.includes("/blobs/")) {
+        state.blobReads.push(`${slug}?${url.searchParams}`)
+        return new Response(state.blobs.get(slug))
       }
       if (url.pathname.startsWith("/api/artifacts/") && request.method === "PUT") {
         const body = (await request.json()) as Record<string, unknown>
@@ -160,6 +179,32 @@ describe("OpencodePlugin artifacts", () => {
           expect(console.state.deleted).toEqual([slug])
         }),
       ),
+  )
+
+  it.effect("reads the files back, downloading the ones Console doesn't inline from the listed revision", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        yield* start(console)
+        const created = yield* artifacts.create({ title: "Report", files })
+        const content = yield* artifacts.get(created.id)
+        expect(content.files).toEqual(files)
+        expect(console.state.blobReads).toEqual([expect.stringMatching(/^[0-9a-f]{64}\?revision=1$/)])
+      }),
+    ),
+  )
+
+  it.effect("says Console has no such artifact when it was deleted there", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        yield* start(console)
+        const created = yield* artifacts.create({ title: "Report", files })
+        console.state.gone = true
+        const error = yield* Effect.flip(artifacts.get(created.id))
+        expect(String(error)).toContain(`OpenCode Console has no artifact named ${console.state.published[0]?.slug}`)
+      }),
+    ),
   )
 
   it.effect("gives two artifacts with one title their own Console artifacts", () =>
