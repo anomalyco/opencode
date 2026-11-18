@@ -146,7 +146,14 @@ pub enum Down {
         value: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// Its value is the [`Down::SnapshotPart`]s of its key before it, joined, and not the one it carries (CT-36).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        parted: bool,
     },
+    /// A piece of the JSON of the value of a read plugin `id` watches under `key`, in base64, which is too large for one
+    /// frame (CT-36: the `sessions` read of 900 sessions): its snapshot follows the pieces, in order, and says it is
+    /// [`Down::Snapshot::parted`].
+    SnapshotPart { id: String, activation: u64, key: String, data: String },
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
     Answered {
@@ -187,6 +194,7 @@ impl Down {
             | Down::Adopted { .. }
             | Down::Refused { .. }
             | Down::Snapshot { .. }
+            | Down::SnapshotPart { .. }
             | Down::Answered { .. }
             | Down::Part { .. }
             | Down::Cancelled { .. } => None,

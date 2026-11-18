@@ -31,6 +31,10 @@ const MAGIC = "opencode-js-host"
 const VERSION = 1
 const CONTROL = 0
 const TREE = 1
+// The first bytes of a control message too large for one frame (`wire::PIECE`).
+const PIECE = 2
+// The largest control frame the host reads (`wire::CONTROL_CAP`).
+const CONTROL_CAP = 256 << 10
 
 // Prints are logged a line at a time (review F4): every method of `console` (`dir` and `table` too, which Bun's own
 // console writes to standard output directly) and the whole `process.stdout` stream, also for a library that holds on
@@ -138,10 +142,19 @@ function trace(line: string) {
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))
   trace(`up ${body.toString()}`)
-  const head = Buffer.alloc(5)
-  head.writeUInt32LE(body.length, 0)
-  head[4] = kind
-  write(Buffer.concat([head, body]))
+  // A control message past a frame's cap goes in pieces, the last in a control frame, which the host joins within its
+  // bound on what it has not taken (CT-36: a plugin's stored value of 1 MB).
+  const frames: Buffer[] = []
+  for (let at = 0; at === 0 || at < body.length; at += CONTROL_CAP) {
+    const piece = kind === CONTROL ? body.subarray(at, at + CONTROL_CAP) : body
+    const last = kind !== CONTROL || at + CONTROL_CAP >= body.length
+    const head = Buffer.alloc(5)
+    head.writeUInt32LE(piece.length, 0)
+    head[4] = last ? kind : PIECE
+    frames.push(head, piece)
+    if (last) break
+  }
+  write(Buffer.concat(frames))
 }
 const send = (message: unknown) => frame(CONTROL, message)
 
@@ -334,6 +347,8 @@ interface Plugin {
   replies: Map<number, { resolve: (result: Json) => void; reject: (error: Error) => void }>
   // CT-5: the parts of each reply too large for one frame, until its call joins them.
   parts: Map<number, Buffer[]>
+  // CT-36: the parts of each read's value too large for one frame, until its snapshot joins them.
+  snapshotParts: Map<string, Buffer[]>
   batch: number
   // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
@@ -977,6 +992,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     answers: new Map(),
     replies: new Map(),
     parts: new Map(),
+    snapshotParts: new Map(),
     batch: 0,
     listening: {},
     listeners: [],
@@ -1056,6 +1072,7 @@ function deactivate(plugin: Plugin) {
   for (const reply of plugin.replies.values()) reply.resolve({ Err: "the plugin's activation ended" })
   plugin.replies.clear()
   plugin.parts.clear()
+  plugin.snapshotParts.clear()
   for (const mount of plugin.mounts.values()) {
     try {
       plugin.surfaces[mount.surface]?.unmount?.(mount.id)
@@ -1286,8 +1303,26 @@ async function handle(message: Json) {
       mount.last = undefined
       return within(plugin, () => view(plugin, mount))
     }
+    case "snapshot-part": {
+      if (!plugin) return
+      const parts = plugin.snapshotParts.get(message.key) ?? []
+      parts.push(Buffer.from(message.data, "base64"))
+      plugin.snapshotParts.set(message.key, parts)
+      return
+    }
     case "snapshot":
       if (!plugin) return
+      // A read too large for one frame: its value is the JSON of the parts that came before it (CT-36). Parts the
+      // host refused on the way make no value, which reads as a failed read.
+      if (message.parted) {
+        const parts = plugin.snapshotParts.get(message.key)
+        try {
+          message.value = JSON.parse(Buffer.concat(parts ?? []).toString())
+        } catch {
+          message.error = "the read's parts are not whole"
+        }
+      }
+      plugin.snapshotParts.delete(message.key)
       // A read over the host's bound is nothing, and says why.
       if (message.error) plugin.snapshots.delete(message.key)
       else plugin.snapshots.set(message.key, message.value)

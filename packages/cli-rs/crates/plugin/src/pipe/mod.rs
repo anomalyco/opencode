@@ -545,14 +545,76 @@ fn settles(message: &Down) -> bool {
     )
 }
 
-/// The call of reply `message` that follows its parts and says they are its result ([`Scripts::split`]).
-fn parted(message: &Down) -> Option<Down> {
-    let Down::Call { seq, id, activation, call: Request::Reply { id: request, .. }, route, parted: false } = message
-    else {
-        return None;
-    };
-    let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
-    Some(Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route: route.clone(), parted: true })
+/// What of a message too large for one frame goes in parts ([`Scripts::split`]): a reply's result (CT-5) and a read's
+/// value (CT-36).
+enum Parted<'a> {
+    Reply { activation: u64, request: opencode_plugin_abi::RequestId, result: &'a Result<serde_json::Value, String> },
+    Snapshot { id: &'a str, activation: u64, key: &'a str, value: &'a serde_json::Value },
+}
+
+impl<'a> Parted<'a> {
+    fn of(message: &'a Down) -> Option<Self> {
+        match message {
+            Down::Call { activation, call: Request::Reply { id, result }, parted: false, .. } => {
+                Some(Self::Reply { activation: *activation, request: *id, result })
+            }
+            Down::Snapshot { id, activation, key, value, error: None, parted: false } => {
+                Some(Self::Snapshot { id, activation: *activation, key, value })
+            }
+            _ => None,
+        }
+    }
+
+    /// The bytes of the JSON the parts carry.
+    fn len(&self) -> usize {
+        match self {
+            Self::Reply { result, .. } => json_len(result),
+            Self::Snapshot { value, .. } => json_len(value),
+        }
+    }
+
+    fn json(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Reply { result, .. } => serde_json::to_vec(result).ok(),
+            Self::Snapshot { value, .. } => serde_json::to_vec(value).ok(),
+        }
+    }
+
+    /// A part, with `data` of the JSON in base64.
+    fn part(&self, data: String) -> Down {
+        match self {
+            Self::Reply { activation, request, .. } => Down::Part { activation: *activation, request: *request, data },
+            Self::Snapshot { id, activation, key, .. } => {
+                Down::SnapshotPart { id: (*id).to_owned(), activation: *activation, key: (*key).to_owned(), data }
+            }
+        }
+    }
+
+    /// `message` as it follows its parts and says they are its own, without what they carry.
+    fn closing(&self, message: &Down) -> Down {
+        match (self, message) {
+            (Self::Reply { request, .. }, Down::Call { seq, id, activation, route, .. }) => {
+                let call = Request::Reply { id: *request, result: Ok(serde_json::Value::Null) };
+                Down::Call {
+                    seq: *seq,
+                    id: id.clone(),
+                    activation: *activation,
+                    call,
+                    route: route.clone(),
+                    parted: true,
+                }
+            }
+            (Self::Snapshot { id, activation, key, .. }, _) => Down::Snapshot {
+                id: (*id).to_owned(),
+                activation: *activation,
+                key: (*key).to_owned(),
+                value: serde_json::Value::Null,
+                error: None,
+                parted: true,
+            },
+            _ => unreachable!("a reply's parts close with its call"),
+        }
+    }
 }
 
 /// The plugin and the JS host's activation that sent `up`, a message of a plugin's own.
@@ -1306,7 +1368,7 @@ impl Scripts {
             }
             let error = Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
             let (id, key, activation) = (id.clone(), key.clone(), *activation);
-            let failed = Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error };
+            let failed = Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error, parted: false };
             return self.settle(&failed, 0);
         }
         let seq = message.seq();
@@ -1382,60 +1444,57 @@ impl Scripts {
         overflow.0.push_back((kept, bytes));
     }
 
-    /// `message` as the frames it goes in, when it is a reply too large for one ([`Scripts::split`]) whose parts and
-    /// call the overflow has room for now, within its bound ([`child::Limits::inbox`]). What goes is measured before
-    /// anything is built: the result's JSON is counted, and its parts are its base64, which escapes nothing, each in an
-    /// envelope of one size (big-boi's catalog review). By default a reply whose JSON is just under 6 MiB goes while the
-    /// overflow is empty (8 MiB of parts), less behind a backlog, where one past a frame's 256 KiB failed (CT-5:
-    /// snippets' `/api/skill`, 450 KB). One past that room is refused as before.
+    /// `message` as the frames it goes in, when it is a reply or a read's snapshot too large for one ([`Scripts::split`])
+    /// whose parts and closing message the overflow has room for now, within its bound ([`child::Limits::inbox`]). What
+    /// goes is measured before anything is built: the JSON is counted, and its parts are its base64, which escapes
+    /// nothing, each in an envelope of one size (big-boi's catalog review). By default a reply or a read whose JSON is
+    /// just under 6 MiB goes while the overflow is empty (8 MiB of parts), less behind a backlog, where one past a frame's
+    /// 256 KiB failed (CT-5: snippets' `/api/skill`, 450 KB; CT-36: the `sessions` read of 900 sessions). One past that
+    /// room is refused as before.
     fn admit(&self, message: &Down) -> Option<Vec<Down>> {
-        let Down::Call { activation, call: Request::Reply { id: request, result }, parted: false, .. } = message else {
-            return None;
-        };
-        let chunk = self.chunk();
+        self.admits(message).then(|| self.split(message)).flatten()
+    }
+
+    /// Whether `message` goes in parts the overflow has room for now ([`Scripts::admit`]), measured without building them.
+    fn admits(&self, message: &Down) -> bool {
+        let Some(parted) = Parted::of(message) else { return false };
+        let envelope = json_len(&parted.part(String::new()));
+        let chunk = self.chunk(envelope);
         if chunk == 0 {
-            return None;
+            return false;
         }
-        let json = json_len(result);
-        let envelope = json_len(&Down::Part { activation: *activation, request: *request, data: String::new() });
+        let json = parted.len();
         let base64 = |bytes: usize| bytes.div_ceil(3) * 4;
         let (full, rest) = (json / chunk, json % chunk);
         let last = if rest == 0 { 0 } else { envelope + base64(rest) };
         let bytes = full
             .saturating_mul(envelope + base64(chunk))
             .saturating_add(last)
-            .saturating_add(json_len(&parted(message)?));
-        let room = self.config.limits.inbox.saturating_sub(self.overflow.borrow().1);
-        (bytes <= room).then(|| self.split(message)).flatten()
+            .saturating_add(json_len(&parted.closing(message)));
+        bytes <= self.config.limits.inbox.saturating_sub(self.overflow.borrow().1)
     }
 
-    /// The bytes of a reply's JSON a part carries at most: what a frame of the queue takes, past its header, its
-    /// envelope and the largest request ID, before base64.
-    fn chunk(&self) -> usize {
-        let envelope = wire::encode(wire::CONTROL, &[]).len() + 96;
-        wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(envelope) / 4 * 3
+    /// The bytes of JSON a part carries at most: what a frame of the queue takes, past its header and the part's
+    /// `envelope` (its JSON with no data), before base64.
+    fn chunk(&self, envelope: usize) -> usize {
+        let header = wire::encode(wire::CONTROL, &[]).len();
+        wire::CONTROL_CAP.min(self.config.limits.queued).saturating_sub(header + envelope) / 4 * 3
     }
 
-    /// A reply as the parts of its result's JSON, each in a frame of its own, and its call after them, which says they
-    /// are its result. None for any other message, and for a queue too small for a part.
+    /// A reply or a read's snapshot as the parts of its JSON, each in a frame of its own, and its message after them,
+    /// which says they are its own. None for any other message, and for a queue too small for a part.
     fn split(&self, message: &Down) -> Option<Vec<Down>> {
-        let Down::Call { activation, call: Request::Reply { id: request, result }, parted: false, .. } = message else {
-            return None;
-        };
-        let chunk = self.chunk();
+        let parted = Parted::of(message)?;
+        let chunk = self.chunk(json_len(&parted.part(String::new())));
         if chunk == 0 {
             return None;
         }
         #[cfg(test)]
         tests::SPLITS.set(tests::SPLITS.get() + 1);
-        let json = serde_json::to_vec(result).ok()?;
-        let part = |bytes: &[u8]| Down::Part {
-            activation: *activation,
-            request: *request,
-            data: opencode_plugin_abi::base64::encode(bytes),
-        };
-        let mut parts: Vec<Down> = json.chunks(chunk).map(part).collect();
-        parts.push(parted(message)?);
+        let json = parted.json()?;
+        let mut parts: Vec<Down> =
+            json.chunks(chunk).map(|bytes| parted.part(opencode_plugin_abi::base64::encode(bytes))).collect();
+        parts.push(parted.closing(message));
         Some(parts)
     }
 
@@ -1449,6 +1508,12 @@ impl Scripts {
     fn unsendable(&self, message: &Down) -> Option<usize> {
         let size = json_len(message);
         (!self.fits(size)).then_some(size)
+    }
+
+    /// The size of `message` when it goes neither as one frame nor in the parts the overflow has room for now
+    /// ([`Scripts::write`]).
+    fn untaken(&self, message: &Down) -> Option<usize> {
+        self.unsendable(message).filter(|_| !self.admits(message))
     }
 
     /// Whether a message of `payload` bytes goes as one frame ([`Scripts::sendable`]).
@@ -2894,8 +2959,8 @@ mod tests {
             ]);
             sent.iter().for_each(|message| scripts.send(message.clone(), None));
             // Two loads as the loader asks for them, 85 and 86, the second's options past the cap; then two snapshots,
-            // the second a read of 262,131 bytes of JSON, under the read's bound and past the frame's cap with its
-            // envelope.
+            // the second a read of 262,131 bytes of JSON, past the frame's cap with its envelope, which goes in parts
+            // (CT-36).
             scripts.seq.set(84);
             let plugin = dir.path().join("plugin");
             std::fs::create_dir_all(&plugin).unwrap();
@@ -2919,8 +2984,14 @@ mod tests {
                 });
             }
             for (key, bytes) in [("k1", 16), ("k2", 262_131 - 2)] {
-                let snapshot =
-                    Down::Snapshot { id: "p".into(), activation: 1, key: key.into(), value: read(bytes), error: None };
+                let snapshot = Down::Snapshot {
+                    id: "p".into(),
+                    activation: 1,
+                    key: key.into(),
+                    value: read(bytes),
+                    error: None,
+                    parted: false,
+                };
                 scripts.send(snapshot.clone(), None);
                 sent.push(snapshot);
             }
@@ -2939,14 +3010,10 @@ mod tests {
                             .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
                             .collect(),
                     }],
-                    // A reply within the overflow's room goes in parts (CT-5), which join to its result below.
-                    Down::Call { call: Request::Reply { .. }, .. } => scripts.split(message).unwrap(),
-                    Down::Snapshot { id, activation, key, .. } => {
-                        let size = serde_json::to_vec(message).unwrap().len();
-                        let error =
-                            Some(format!("the read's snapshot of {size} bytes does not fit the JS host's queue"));
-                        let (id, key, activation) = (id.clone(), key.clone(), *activation);
-                        vec![Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error }]
+                    // A reply or a read within the overflow's room goes in parts (CT-5, CT-36), which join to its
+                    // result or value below.
+                    Down::Call { call: Request::Reply { .. }, .. } | Down::Snapshot { .. } => {
+                        scripts.split(message).unwrap()
                     }
                     other => vec![Down::Skipped { seq: other.seq().unwrap() }],
                 })
@@ -2992,6 +3059,20 @@ mod tests {
                 serde_json::from_slice(&joined).unwrap_or(Err("none".into()));
             if whole != Ok(serde_json::json!("r".repeat(300 << 10))) {
                 failed.push(format!("queued {queued}: the parts of the reply joined to {} bytes", joined.len()));
+            }
+            // And those of read k2 are its value.
+            let joined: Vec<u8> = got
+                .iter()
+                .filter_map(|message| match message {
+                    Down::SnapshotPart { key, data, .. } if key == "k2" => opencode_plugin_abi::base64::decode(data),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            if serde_json::from_slice::<serde_json::Value>(&joined).ok()
+                != Some(serde_json::json!("r".repeat(262_131 - 2)))
+            {
+                failed.push(format!("queued {queued}: the parts of read k2 joined to {} bytes", joined.len()));
             }
             // What the loader reads of each load: the one sent waits for its answer, the refused one failed.
             let stands =

@@ -9,6 +9,9 @@ use std::io::{self, Read, Write};
 pub const CONTROL: u8 = 0;
 /// A revision of a mount's tree: JSON, which may be larger.
 pub const TREE: u8 = 1;
+/// The first bytes of a control message from the JS host too large for one frame (CT-36: a plugin's stored value of
+/// 1 MB): the pieces before a control frame, and that frame's payload, joined, are the message.
+pub const PIECE: u8 = 2;
 
 /// The largest control frame (synthesis 4.3, bigboi's limits).
 pub const CONTROL_CAP: usize = 256 << 10;
@@ -44,7 +47,7 @@ impl std::fmt::Display for Broken {
 
 fn cap(kind: u8) -> Option<usize> {
     match kind {
-        CONTROL => Some(CONTROL_CAP),
+        CONTROL | PIECE => Some(CONTROL_CAP),
         TREE => Some(TREE_CAP),
         _ => None,
     }
@@ -155,7 +158,11 @@ mod tests {
         assert_eq!(frames(&huge), Err(Broken::TooLarge { kind: TREE, len: u32::MAX as usize }));
         let tree = encode(TREE, &vec![b' '; CONTROL_CAP + 1]);
         assert_eq!(frames(&tree).unwrap().len(), 1, "a tree may be larger than a control frame");
-        assert_eq!(frames(&encode(2, b"x")), Err(Broken::UnknownKind(2)));
+        // A piece of a control message has the control frame's cap (CT-36).
+        let mut piece = (CONTROL_CAP as u32 + 1).to_le_bytes().to_vec();
+        piece.push(PIECE);
+        assert_eq!(frames(&piece), Err(Broken::TooLarge { kind: PIECE, len: CONTROL_CAP + 1 }));
+        assert_eq!(frames(&encode(3, b"x")), Err(Broken::UnknownKind(3)));
     }
 
     // Expected: random bytes are refused or read as frames within their caps; never a panic, never more than the stream.

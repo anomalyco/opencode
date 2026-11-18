@@ -30,8 +30,6 @@ const WATCHES: usize = 128;
 /// the plugin's rect pushes until another cause comes (contract 2.x, addition 1, R3): a layout that follows its own
 /// size without end.
 const RECT_ROUNDS: u32 = crate::behave::STALLED;
-/// The bytes of JSON a watched read pushes at most: what one control frame carries.
-const READ: usize = super::wire::CONTROL_CAP;
 
 /// The bytes of a value's JSON and their hash, written without keeping them.
 #[derive(Default)]
@@ -845,7 +843,10 @@ impl Guest {
             // Answered as a failed read, so what waits for it ends (bigboi P8-2).
             let error = Some(format!("the plugin watches {WATCHES} reads already"));
             let (id, activation) = (self.id().to_owned(), self.js.get());
-            self.send(Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error }, None);
+            self.send(
+                Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error, parted: false },
+                None,
+            );
             return;
         }
         let (value, hash) = self.evaluate(&request);
@@ -854,24 +855,29 @@ impl Guest {
         self.push(key, value);
     }
 
-    /// Pushes the value of the read `key` watches: as a failed read when it is over [`READ`] bytes of JSON, past the
-    /// content its plugin may hold beside what it holds (4.2, phase Pl), or when its snapshot is larger than a frame the
-    /// JS host takes, which the plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
+    /// Pushes the value of the read `key` watches: as a failed read when it is past the content its plugin may hold
+    /// beside what it holds (4.2, phase Pl), or when its snapshot is more than the JS host takes now, in one frame or in
+    /// parts (CT-36), which the plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
     /// What it pushes is charged to its content while it watches it.
     fn push(&self, key: String, value: serde_json::Value) {
         let bytes = Measure::of(&value).bytes;
         let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
         let activation = self.js.get();
-        let snapshot = Down::Snapshot { id: self.id().to_owned(), activation, key: key.clone(), value, error: None };
-        let error = if bytes > READ {
-            Some(format!("the read is {bytes} bytes, over {READ}"))
-        } else if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
+        let snapshot = Down::Snapshot {
+            id: self.id().to_owned(),
+            activation,
+            key: key.clone(),
+            value,
+            error: None,
+            parted: false,
+        };
+        let error = if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
             Some(format!("the read is {bytes} bytes, past what the plugin may hold"))
         } else {
-            // The cap is the frame's, the snapshot whole: a read just under the bound is past it (bigboi's pipe
-            // sign-off). Sent as it is, the frame would be refused, and the plugin would keep the value before.
-            let unsendable = self.scripts.upgrade().and_then(|scripts| scripts.unsendable(&snapshot));
-            unsendable.map(|size| format!("the read's snapshot is {size} bytes, more than the JS host takes"))
+            // Sent as it is, a frame the queue refuses would leave the plugin with the value before (bigboi's pipe
+            // sign-off): what goes in neither one frame nor the parts the overflow has room for fails now.
+            let untaken = self.scripts.upgrade().and_then(|scripts| scripts.untaken(&snapshot));
+            untaken.map(|size| format!("the read's snapshot is {size} bytes, more than the JS host takes"))
         };
         let charged = if error.is_some() { 0 } else { bytes as u64 };
         limits::recharge(self.id(), limits::Kind::Content, held, charged);
@@ -880,7 +886,14 @@ impl Guest {
             Some(error) => {
                 log::warn!("plugin {}: the read it watches as {key}: {error}", self.id());
                 let id = self.id().to_owned();
-                Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error: Some(error) }
+                Down::Snapshot {
+                    id,
+                    activation,
+                    key,
+                    value: serde_json::Value::Null,
+                    error: Some(error),
+                    parted: false,
+                }
             }
             None => snapshot,
         };
