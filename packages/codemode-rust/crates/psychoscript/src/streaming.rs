@@ -6,10 +6,8 @@
 //! host supplies the body as chunks through [`HttpBody`]; reading, locking and cancelling follow the reference's host
 //! runtime, `ReadableStream` errors included.
 //!
-//! Like any asynchronous extension call in the reference, a read or cancel the program starts takes effect at the
-//! next point where the reference hands calls to the host: when the current job ends, after a synchronous extension
-//! call, when a throw unwinds, or when its interpreter's fuel runs out (see `HANDOVER_FUEL` in `vm.rs`). Until then
-//! `locked` and `bodyUsed` read as before the call.
+//! The reference hands the program the response's methods as plain functions inside a result, which it calls at once:
+//! a read or cancel the program starts takes effect when it is called, so `locked` and `bodyUsed` change right away.
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -490,7 +488,13 @@ pub(crate) struct Surface {
 
 fn op_call(stream: &Arc<Mutex<Stream>>, epoch: &Epoch, op: Op) -> Call {
     let now = epoch.load(Ordering::Relaxed);
-    let ticket = lock(stream).enqueue(now, op);
+    // The reference's response methods are plain functions, which the host calls at once: the operation starts now.
+    let ticket = {
+        let mut s = lock(stream);
+        let ticket = s.enqueue(now, op);
+        s.start_through(ticket);
+        ticket
+    };
     Call {
         stream: stream.clone(),
         ticket,
