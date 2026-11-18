@@ -89,6 +89,8 @@ function fakeConsole() {
     /** Publishes saved, by idempotency key: the same key answers the first one's result. */
     published: new Map<string, { id: string; revision: number }>(),
     matched: undefined as string[] | undefined,
+    /** Each entry's current revision, 1 until written. */
+    revisions: new Map<string, number>(),
     /** Applies a write over changes since its revision, as Console does when they don't touch it. */
     rebase: false,
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
@@ -127,7 +129,11 @@ function fakeConsole() {
         return Response.json({ ...created, nearest: state.hits })
       }
       const retired = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)\/retire$/)?.[1]
-      if (retired && request.method === "POST") return Response.json({ id: retired, revision: 2, nearest: [] })
+      if (retired && request.method === "POST") {
+        const revision = (state.revisions.get(retired) ?? 1) + 1
+        state.revisions.set(retired, revision)
+        return Response.json({ id: retired, revision, nearest: [] })
+      }
       const id = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)$/)?.[1]
       if (id === "mem_missing") return Response.json({ _tag: "NotFound" }, { status: 404 })
       if (id === "mem_retired" && request.method === "GET")
@@ -148,15 +154,15 @@ function fakeConsole() {
             changesSince: "@@ -2 +2 @@\n-More\n+Less",
             diff: "--- body\n-Body of\n+Use bun for",
           })
-        if (body?.expectedRevision !== 1)
+        const revision = state.revisions.get(id) ?? 1
+        if (body?.expectedRevision !== revision)
           return refuse(409, {
             _tag: "MemoryConflict",
-            revision: 2,
+            revision,
             changes: "@@ -2 +2 @@\n-More\n+Less",
             body: `Body of ${id}\nLess`,
-            next: "Apply your change to the current body and patch again with expectedRevision 2.",
-            message:
-              "The entry changed since the revision you read (now 2) and your change touches what changed, so nothing was written.",
+            next: `Apply your change to the current body and patch again with expectedRevision ${revision}.`,
+            message: `The entry changed since the revision you read (now ${revision}) and your change touches what changed, so nothing was written.`,
           })
         const edits = body?.edits as { oldText: string; newText: string }[] | undefined
         const missed = edits?.findIndex((edit) => current.split(edit.oldText).length !== 2) ?? -1
@@ -165,18 +171,19 @@ function fakeConsole() {
             _tag: "MemoryEditFailed",
             edit: missed,
             reason: "not-found",
-            revision: 1,
+            revision,
             candidates: [{ line: 1, text: `Body of ${id}`, similarity: 0.42 }],
             body: current,
-            next: "Copy oldText exactly from body and patch again with expectedRevision 1.",
-            message: `Edit ${missed + 1}: oldText isn't in revision 1; nothing was written. The closest passages start on lines 1.`,
+            next: `Copy oldText exactly from body and patch again with expectedRevision ${revision}.`,
+            message: `Edit ${missed + 1}: oldText isn't in revision ${revision}; nothing was written. The closest passages start on lines 1.`,
           })
         const changed =
           edits?.reduce((text, edit) => text.replace(edit.oldText, edit.newText), current) ??
           (typeof body?.append === "string" ? `${current}\n\n${body.append}` : (body?.body as string | undefined))
+        state.revisions.set(id, revision + 1)
         return Response.json({
           id,
-          revision: 2,
+          revision: revision + 1,
           nearest: [],
           ...(changed === undefined ? {} : { diff: `--- body\n-${current}\n+${changed}` }),
           ...(edits && state.matched ? { matched: state.matched } : {}),
@@ -415,6 +422,15 @@ describe("OpencodePlugin memory", () => {
           context(session.id),
         )
         expect(distinct.content).toBe("Published mem_new1 r1.")
+
+        // A duplicate of an entry this session published says so first.
+        console.state.duplicate = hit("mem_new0", 0.97, "Connect first")
+        const own = yield* publish
+          .execute({ kind: "gotcha", title: "The VPN, again", body: "Connect the VPN first" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(own.message.split("\n")[0]).toBe(
+          "You published mem_new0 in this session; edit it rather than publishing it again.",
+        )
       }),
     ),
   )
@@ -455,13 +471,16 @@ describe("OpencodePlugin memory", () => {
         const missed = yield* edit
           .execute({ id: "mem_1", revision: 1, oldText: "Moore", newText: "x" }, context(session.id))
           .pipe(Effect.flip)
+        // Cited from r1, sent from r2: the session's own edit since isn't news to it.
+        expect((console.state.requests.at(-1)?.body as { expectedRevision: number }).expectedRevision).toBe(2)
         expect(missed.message).toBe(
           [
-            "Edit 1: oldText isn't in revision 1; nothing was written. The closest passages start on lines 1.",
-            "line 1 (42% similar): Body of mem_1",
-            "Current body (r1):",
-            "Body of mem_1\nMore",
-            "Next: Copy oldText exactly from body and patch again with expectedRevision 1.",
+            "Edit 1: oldText isn't in revision 2; nothing was written. The closest passages start on lines 1.",
+            "Closest text, check it's your target: line 1 (42% similar)",
+            "```text\nBody of mem_1\n```",
+            "Current body (r2):",
+            "```text\nBody of mem_1\nMore\n```",
+            "Next: Copy oldText exactly from body and patch again with expectedRevision 2.",
           ].join("\n"),
         )
         const stale = yield* edit
@@ -471,9 +490,9 @@ describe("OpencodePlugin memory", () => {
           [
             "The entry changed since the revision you read (now 2) and your change touches what changed, so nothing was written.",
             "Changes since your revision:",
-            "@@ -2 +2 @@\n-More\n+Less",
+            "```text\n@@ -2 +2 @@\n-More\n+Less\n```",
             "Current body (r2):",
-            "Body of mem_1\nLess",
+            "```text\nBody of mem_1\nLess\n```",
             "Next: Apply your change to the current body and patch again with expectedRevision 2.",
           ].join("\n"),
         )
@@ -497,15 +516,33 @@ describe("OpencodePlugin memory", () => {
         )
         expect(fuzzy.content).toContain("An oldText matched only approximately: check the diff.")
 
+        // Cited from r1 again, sent from r3: r1 → r2 and r2 → r3 were this session's own writes.
         yield* edit.execute({ id: "mem_1", revision: 1, kind: "gotcha", title: "Bun, not npm" }, context(session.id))
         expect(console.state.requests.at(-1)?.body).toEqual({
-          expectedRevision: 1,
+          expectedRevision: 3,
           kind: "gotcha",
           title: "Bun, not npm",
           source: { sessionID: session.id },
         })
         const empty = yield* edit.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
         expect(empty.message).toBe("edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors")
+      }),
+    ),
+  )
+
+  it.effect("still conflicts when someone else wrote after the session's own write", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const edit = yield* memoryTool("edit")
+        yield* edit.execute({ id: "mem_1", revision: 1, oldText: "More", newText: "Less" }, context(session.id))
+        console.state.revisions.set("mem_1", 3)
+        const stale = yield* edit
+          .execute({ id: "mem_1", revision: 1, oldText: "Body of", newText: "Use bun for" }, context(session.id))
+          .pipe(Effect.flip)
+        expect((console.state.requests.at(-1)?.body as { expectedRevision: number }).expectedRevision).toBe(2)
+        expect(stale.message).toContain("now 3")
       }),
     ),
   )
@@ -558,28 +595,29 @@ describe("OpencodePlugin memory", () => {
           source: { sessionID: session.id },
         })
 
+        // The rewrite cites r1, which the session read; its own append since doesn't make it stale.
         const rewritten = yield* (yield* memoryTool("rewrite")).execute(
           { id: "mem_1", revision: 1, body: "Short" },
           context(session.id),
         )
         expect(console.state.requests.at(-1)?.body).toEqual({
-          expectedRevision: 1,
+          expectedRevision: 2,
           body: "Short",
           source: { sessionID: session.id },
         })
         expect(rewritten.content).toBe(
-          "mem_1 is now r2.\nWarning: The rewrite removed more than 30% of the body.\n--- body\n-Body of mem_1\nMore\n+Short",
+          "mem_1 is now r3.\nWarning: The rewrite removed more than 30% of the body.\n--- body\n-Body of mem_1\nMore\n+Short",
         )
 
         const retired = yield* (yield* memoryTool("retire")).execute(
           { id: "mem_1", revision: 1, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
           context(session.id),
         )
-        expect(retired.content).toBe("mem_1 is retired (r2); it's no longer searched or injected.")
+        expect(retired.content).toBe("mem_1 is retired (r4); it's no longer searched or injected.")
         expect(console.state.requests.at(-1)).toEqual({
           method: "POST",
           path: "/api/memory/entries/mem_1/retire",
-          body: { expectedRevision: 1, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
+          body: { expectedRevision: 3, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
           authorization: "Bearer secret",
         })
         const read = yield* (yield* memoryTool("read")).execute({ id: "mem_retired" }, context(session.id))

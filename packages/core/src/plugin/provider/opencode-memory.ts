@@ -12,7 +12,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
-import type { OpencodeWatches } from "./opencode-watches.js"
+import { OpencodeWatches } from "./opencode-watches.js"
 
 /** The `GET /api/v2/config` response header Console sends while the caller may use the workspace's memory. */
 export const header = "x-opencode-memory"
@@ -131,6 +131,10 @@ type Tracked = {
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
   /** The idempotency key of each publish the session asked for, by what it publishes. */
   readonly intents: Map<string, string>
+  /** Entries this session published, so a duplicate of one is named as its own. */
+  readonly published: Set<string>
+  /** Per entry, each revision this session wrote over the one before it, by that one: its own edits aren't news to it. */
+  readonly revisions: Map<string, Map<number, number>>
   task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
@@ -162,6 +166,8 @@ export const make = Effect.fnUntraced(function* (
       injected: { prompt: 0, failure: 0 },
       given: new Map(),
       intents: new Map(),
+      published: new Set<string>(),
+      revisions: new Map(),
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -173,11 +179,25 @@ export const make = Effect.fnUntraced(function* (
     state.given.set(entry.id, { ...entry, text: entry.text.slice(0, MAX_GIVEN_TEXT) })
     if (state.given.size > MAX_GIVEN) state.given.delete(state.given.keys().next().value ?? entry.id)
   }
-  // After this session writes an entry it was given, a nudge names the revision it now has.
-  const wrote = (sessionID: string, id: string, written: Written) => {
-    const state = sessions.get(sessionID)
-    const given = state?.given.get(id)
-    if (state && given && written.revision !== undefined) give(state, { ...given, revision: written.revision })
+  // After this session writes an entry, a nudge names the revision it now has, and a later write from the revision it
+  // wrote over goes on from this one. A write applied over someone else's change isn't chained: that change is news.
+  const wrote = (sessionID: string, id: string, expected: number, written: Written) => {
+    const state = tracked(sessionID)
+    const given = state.given.get(id)
+    if (written.revision === undefined) return
+    if (given) give(state, { ...given, revision: written.revision })
+    if (written.rebasedFrom !== undefined) return
+    const chain = state.revisions.get(id) ?? new Map<number, number>()
+    chain.set(expected, written.revision)
+    state.revisions.set(id, chain)
+  }
+  /**
+   * The revision to send for a write the agent bases on `revision`: the latest one this session wrote from it, so
+   * several writes to one entry in a turn, each citing the revision it read, don't conflict with each other.
+   */
+  const based = (sessionID: string, id: string, revision: number): number => {
+    const next = sessions.get(sessionID)?.revisions.get(id)?.get(revision)
+    return next === undefined || next <= revision ? revision : based(sessionID, id, next)
   }
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
@@ -219,14 +239,26 @@ export const make = Effect.fnUntraced(function* (
         .pipe(Effect.flatMap(expectOk), Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)))
     }).pipe(Effect.scoped)
   // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
-  const write = (sessionID: string, id: string, change: Record<string, unknown>) =>
+  const write = (
+    sessionID: string,
+    id: string,
+    revision: number,
+    change: Record<string, unknown>,
+    route: "" | "/retire" = "",
+  ) =>
     Effect.gen(function* () {
-      const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
-        ...change,
-        source: { ...(yield* checkout), sessionID },
-      })
-      wrote(sessionID, id, written)
-      return { output: written, content: receipt(id, written) }
+      const expectedRevision = based(sessionID, id, revision)
+      const written = yield* call(
+        Written,
+        route === "" ? "PATCH" : "POST",
+        `/api/memory/entries/${encodeURIComponent(id)}${route}`,
+        // Console's retire takes no provenance.
+        route === ""
+          ? { expectedRevision, ...change, source: { ...(yield* checkout), sessionID } }
+          : { expectedRevision, ...change },
+      )
+      wrote(sessionID, id, expectedRevision, written)
+      return written
     }).pipe(Effect.mapError(failure))
   const metadata = (input: {
     readonly kind?: OpencodeMemoryPolicy.Kind
@@ -489,7 +521,21 @@ export const make = Effect.fnUntraced(function* (
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...(yield* checkout), sessionID: context.sessionID },
               idempotencyKey,
-            })
+            }).pipe(
+              Effect.mapError((cause) => {
+                const candidates = cause instanceof ToolFailure ? cause.metadata?.candidates : undefined
+                const own = (Array.isArray(candidates) ? candidates : []).find(
+                  (id): id is string => typeof id === "string" && state.published.has(id),
+                )
+                return own === undefined || !(cause instanceof ToolFailure)
+                  ? cause
+                  : new ToolFailure({
+                      message: `You published ${own} in this session; edit it rather than publishing it again.\n${cause.message}`,
+                      metadata: cause.metadata,
+                    })
+              }),
+            )
+            if (published.id !== undefined) state.published.add(published.id)
             return {
               output: published,
               content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}.`,
@@ -528,11 +574,10 @@ export const make = Effect.fnUntraced(function* (
                 message: "edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors",
               }),
             )
-          return write(context.sessionID, input.id, {
-            expectedRevision: input.revision,
+          return write(context.sessionID, input.id, input.revision, {
             ...(edits.length === 0 ? {} : { edits }),
             ...fields,
-          })
+          }).pipe(Effect.map((written) => ({ output: written, content: receipt(input.id, written) })))
         },
       })
       editor.add({
@@ -547,7 +592,9 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, { expectedRevision: input.revision, append: input.text }),
+          write(context.sessionID, input.id, input.revision, { append: input.text }).pipe(
+            Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
+          ),
       })
       editor.add({
         name: "rewrite",
@@ -562,11 +609,9 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, {
-            expectedRevision: input.revision,
-            body: input.body,
-            ...metadata(input),
-          }),
+          write(context.sessionID, input.id, input.revision, { body: input.body, ...metadata(input) }).pipe(
+            Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
+          ),
       })
       editor.add({
         name: "retire",
@@ -583,16 +628,17 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          call(Written, "POST", `/api/memory/entries/${encodeURIComponent(input.id)}/retire`, {
-            expectedRevision: input.revision,
-            reason: input.reason,
-            ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
-          }).pipe(
+          write(
+            context.sessionID,
+            input.id,
+            input.revision,
+            { reason: input.reason, ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }) },
+            "/retire",
+          ).pipe(
             Effect.map((written) => ({
               output: written,
               content: `${written.id ?? input.id} is retired (r${written.revision}); it's no longer searched or injected.`,
             })),
-            Effect.mapError(failure),
           ),
       })
     })
@@ -673,7 +719,10 @@ function relative(directory: string, file: string) {
 function failure(cause: unknown) {
   return cause instanceof ToolFailure
     ? cause
-    : new ToolFailure({ message: "OpenCode Console didn't answer", error: cause })
+    : new ToolFailure({
+        message: "OpenCode Console didn't answer this time; the same call can be retried.",
+        error: cause,
+      })
 }
 
 /**
@@ -693,24 +742,35 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
           : `OpenCode Console answered ${response.status}`)
       // Console's message ends with its next call; it goes last, once, as Console wrote it.
       const next = body?.next
+      const candidates = body?.candidates ?? []
+      const passages = candidates.flatMap((item) => Option.toArray(decodePassage(item)))
+      const hits = candidates.flatMap((item) =>
+        Option.isSome(decodePassage(item)) ? [] : Option.toArray(decodeHit(item)),
+      )
       const message = [
         next !== undefined && said.endsWith(next) ? said.slice(0, -next.length).trim() : said,
-        ...(body?.candidates ?? []).flatMap((item) =>
-          Option.match(decodePassage(item), {
-            onSome: (passage) => [
-              `line ${passage.line}${passage.similarity === undefined ? "" : ` (${Math.round(passage.similarity * 100)}% similar)`}: ${passage.text}`,
-            ],
-            onNone: () =>
-              Option.match(decodeHit(item), { onSome: (hit) => [OpencodeMemoryPolicy.summary(hit)], onNone: () => [] }),
-          }),
-        ),
-        ...(body?.changes === undefined ? [] : ["Changes since your revision:", body.changes]),
+        // The closest passage is a suggestion: Console found it similar, not the same.
+        ...passages.flatMap((passage, index) => [
+          `${index === 0 ? "Closest text, check it's your target" : "Also similar"}: line ${passage.line}${passage.similarity === undefined ? "" : ` (${Math.round(passage.similarity * 100)}% similar)`}`,
+          OpencodeWatches.fence(passage.text),
+        ]),
+        ...hits.map(OpencodeMemoryPolicy.summary),
+        // Entry text is data, fenced so it can't read as instructions.
+        ...(body?.changes === undefined ? [] : ["Changes since your revision:", OpencodeWatches.fence(body.changes)]),
         ...(body?.body === undefined
           ? []
-          : [`Current body${body.revision === undefined ? "" : ` (r${body.revision})`}:`, body.body]),
+          : [
+              `Current body${body.revision === undefined ? "" : ` (r${body.revision})`}:`,
+              OpencodeWatches.fence(body.body),
+            ]),
         ...(next === undefined ? [] : [`Next: ${next}`]),
       ].join("\n")
-      return Effect.fail(new ToolFailure({ message, metadata: { status: response.status } }))
+      return Effect.fail(
+        new ToolFailure({
+          message,
+          metadata: { status: response.status, tag: body?._tag, candidates: hits.map((hit) => hit.id) },
+        }),
+      )
     }),
   )
 }
