@@ -692,7 +692,7 @@ export function createSessionTimelineRowRenderer(input: {
       const jobID = message.metadata?.jobID
 
       return {
-        label: i18n.t(outcomeNoticeKey(outcome), { actor: message.description ?? "Code Mode script" }),
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
         data: Predicate.isString(jobID) ? jobID : undefined,
         outcome,
         icon: outcomeNoticeIcon(outcome),

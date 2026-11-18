@@ -2119,7 +2119,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const state = () => stringValue(metadata()?.state)
   const actor = () => {
     if (source() === "shell") return "Shell"
-    if (source() === "codemode") return text() || "Code Mode script"
+    if (source() === "codemode") return "Script"
     return Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent")
   }
   const text = () => {
