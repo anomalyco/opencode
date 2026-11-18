@@ -188,6 +188,41 @@ describe("Cloud Code 429 bodies", () => {
     ).toBe(true)
   })
 
+  const fullQuota = (remainingFraction: number) => ({
+    groups: [{ displayName: "Gemini models", buckets: [{ window: "5h", remainingFraction, resetTime: reset }] }],
+  })
+
+  test("fails a bare RESOURCE_EXHAUSTED once when the model's 5h quota is nearly full", () => {
+    const explained = GoogleAntigravityWire.explainCloudCodeError({
+      error: { status: "RESOURCE_EXHAUSTED", message: "Resource has been exhausted (e.g. check quota)." },
+      summary: fullQuota(0.9998),
+      httpStatus: 429,
+      modelID: "gemini-3.8-flash-low",
+    })
+    expect(explained?.quota).toBe(false)
+    expect(explained?.rejected).toBe(true)
+    expect(explained?.message).toContain("likely Google rejecting the request content, not quota")
+    expect(explained?.message).toContain("gemini:5h remainingFraction=0.9998")
+    expect(JSON.parse(explained?.body ?? "{}").error.details).toEqual([
+      { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "CONTENT_BLOCKED" },
+    ])
+  })
+
+  test.each([
+    { name: "an explicit reason", error: { reason: "RATE_LIMIT_EXCEEDED" }, summary: fullQuota(1) },
+    { name: "partly used quota", error: {}, summary: fullQuota(0.5) },
+    { name: "no quota summary", error: {}, summary: undefined },
+  ])("keeps a bare throttle retryable with $name", ({ error, summary }) => {
+    expect(
+      GoogleAntigravityWire.explainCloudCodeError({
+        error: { status: "RESOURCE_EXHAUSTED", message: "Resource has been exhausted (e.g. check quota).", ...error },
+        summary,
+        httpStatus: 429,
+        modelID: "gemini-3.8-flash-low",
+      })?.rejected,
+    ).toBe(false)
+  })
+
   test("ignores success-shaped bodies", () => {
     expect(GoogleAntigravityWire.parseCloudCodeError('data: {"response":{"candidates":[]}}\n\n')).toBeUndefined()
   })

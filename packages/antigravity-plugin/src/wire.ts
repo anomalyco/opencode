@@ -322,20 +322,32 @@ export function explainCloudCodeError(input: {
     input.error.reason?.toLowerCase() === "quota_exhausted" ||
     (input.error.status === "RESOURCE_EXHAUSTED" && fiveHour !== undefined && fiveHour.remainingFraction <= 0) ||
     (input.error.status === "RESOURCE_EXHAUSTED" && messageIsLongQuota(input.error.message))
-  const headline =
+  // Cloud Code answers some request content with an instant bare RESOURCE_EXHAUSTED while quota is untouched.
+  // Retrying sends the same content again, so fail once instead of treating it as a throttle.
+  const rejected =
+    !quota &&
+    !input.error.reason &&
+    input.error.status === "RESOURCE_EXHAUSTED" &&
+    fiveHour !== undefined &&
+    fiveHour.remainingFraction >= 0.95
+  const status =
     input.error.status && input.error.message
       ? `${input.error.status}: ${input.error.message}`
       : (input.error.status ?? input.error.message ?? "")
+  const headline = rejected
+    ? `${status} Quota is nearly full, so this is likely Google rejecting the request content, not quota; not retrying.`
+    : status
   const readout = windows.map(
     (window) =>
       `${window.id} remainingFraction=${JSON.stringify(window.remainingFraction)}${window.resetTime ? ` resetTime=${window.resetTime}` : ""}`,
   )
   const fallbackReset = windows.length === 0 && input.error.resetTime ? [`resetTime=${input.error.resetTime}`] : []
   const message = [headline, ...readout, ...fallbackReset].filter((part) => part.length > 0).join(" ")
-  const reason = quota ? "QUOTA_EXHAUSTED" : input.error.reason
+  const reason = quota ? "QUOTA_EXHAUSTED" : rejected ? "CONTENT_BLOCKED" : input.error.reason
   return {
     message,
     quota,
+    rejected,
     body: JSON.stringify({
       error: {
         code: input.httpStatus,

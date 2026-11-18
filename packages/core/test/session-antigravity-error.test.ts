@@ -127,3 +127,24 @@ for (const modelID of ["gemini-4-argon-high", "gemini-3.8-flash-high"] as const)
     )
   }
 }
+
+it.effect("a bare RESOURCE_EXHAUSTED with nearly full quota classifies as a non-retryable content rejection", () =>
+  Effect.sync(() => {
+    const explained = GoogleAntigravityWire.explainCloudCodeError({
+      error: { status: "RESOURCE_EXHAUSTED", message: "Resource has been exhausted (e.g. check quota)." },
+      summary: { groups: [{ displayName: "Gemini models", buckets: [{ window: "5h", remainingFraction: 0.9998 }] }] },
+      httpStatus: 429,
+      modelID: "gemini-4-carbon-high",
+    })
+    const error = RequestExecutor.httpFailure({
+      message: explained!.body,
+      url: GoogleAntigravityWire.generateURL,
+      status: 429,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: explained!.body,
+    })
+    expect(error.reason._tag).toBe("ContentPolicy")
+    expect(isRetryable(error)).toBe(false)
+    expect(error.message).toContain("not quota")
+  }),
+)
