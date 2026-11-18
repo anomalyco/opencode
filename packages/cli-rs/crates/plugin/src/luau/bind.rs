@@ -246,7 +246,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
     let options = options.map(serde_json::from_str::<serde_json::Value>).transpose();
     let options = options.map_err(|error| mlua::Error::runtime(format!("the plugin's options: {error}")))?;
     object.raw_set("options", out(lua, &options)?)?;
-    object.raw_set("host", plugin.host.clone())?;
+    object.raw_set("host", &plugin.host)?;
     let weak = Rc::downgrade(plugin);
     let register = |name: &'static str, f: Register| {
         let weak: Weak<Plugin> = weak.clone();
@@ -272,7 +272,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         setup.command(command, move |host, input| {
             plugin.run(Current::acting(host), |lua| {
-                let value = run.call::<Value>((plugin.host.clone(), input))?;
+                let value = run.call::<Value>((&plugin.host, input))?;
                 // `"pass"` declines the key that ran it (contract ergonomics 2.5); the prelude's task gives nothing else.
                 Ok(optional::<Handled>(lua, value)?.unwrap_or(Handled::Consume))
             })
@@ -286,7 +286,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         setup.slot(abi::Placement::new(at.kind, at.path), move |read, slot, changed| {
             plugin.run(Current::reading(read), |lua| {
                 let value = plugin.inputs.lend(lua, |inputs| {
-                    render.call::<Value>((plugin.read.clone(), inputs.slot(slot)?, inputs.changed(lua, changed)?))
+                    render.call::<Value>((&plugin.read, inputs.slot(slot)?, inputs.changed(lua, changed)?))
                 })?;
                 Ok(optional(lua, value)?.unwrap_or(abi::Render::Hide))
             })
@@ -299,7 +299,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         setup.on_mount(abi::Placement::new(at.kind, at.path), move |host, slot, mounted| {
             plugin.run(Current::acting(host), |lua| {
-                plugin.inputs.lend(lua, |inputs| run.call::<()>((plugin.host.clone(), inputs.slot(slot)?, mounted)))
+                plugin.inputs.lend(lua, |inputs| run.call::<()>((&plugin.host, inputs.slot(slot)?, mounted)))
             });
         });
         Ok(())
@@ -311,7 +311,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
             plugin.run(Current::reading(read), |lua| {
                 let value = plugin
                     .inputs
-                    .lend(lua, |inputs| render.call::<Value>((plugin.read.clone(), inputs.changed(lua, changed)?)))?;
+                    .lend(lua, |inputs| render.call::<Value>((&plugin.read, inputs.changed(lua, changed)?)))?;
                 Ok(optional(lua, value)?.unwrap_or(abi::Render::Hide))
             })
         });
@@ -321,7 +321,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let (name, run): (String, Function) = lua.unpack_multi(args)?;
         let plugin = plugin.clone();
         setup.on_route_mount(&name, move |host, mounted| {
-            plugin.run(Current::acting(host), |_| run.call::<()>((plugin.host.clone(), mounted)));
+            plugin.run(Current::acting(host), |_| run.call::<()>((&plugin.host, mounted)));
         });
         Ok(())
     })?;
@@ -330,7 +330,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         setup.code_block(&language, move |read, fence| {
             plugin.run(Current::reading(read), |lua| {
-                let value = render.call::<Value>((plugin.read.clone(), out(lua, fence)?))?;
+                let value = render.call::<Value>((&plugin.read, out(lua, fence)?))?;
                 Ok(optional(lua, value)?.unwrap_or(abi::Fenced::Code))
             })
         });
@@ -341,7 +341,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let plugin = plugin.clone();
         let types: Vec<&str> = types.iter().map(String::as_str).collect();
         setup.on_event(&types, move |host, event| {
-            plugin.run(Current::acting(host), |lua| run.call::<()>((plugin.host.clone(), out(lua, event)?)));
+            plugin.run(Current::acting(host), |lua| run.call::<()>((&plugin.host, out(lua, event)?)));
         });
         Ok(())
     })?;
@@ -354,7 +354,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
                     Ok(value) => (out(lua, value)?, None),
                     Err(error) => (Value::Nil, Some(error.as_str())),
                 };
-                run.call::<()>((plugin.host.clone(), id.0, value, error))
+                run.call::<()>((&plugin.host, id.0, value, error))
             });
         });
         Ok(())
@@ -363,7 +363,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let run: Function = lua.unpack_multi(args)?;
         let plugin = plugin.clone();
         setup.on_cancelled(move |host, id| {
-            plugin.run(Current::acting(host), |_| run.call::<()>((plugin.host.clone(), id.0)));
+            plugin.run(Current::acting(host), |_| run.call::<()>((&plugin.host, id.0)));
         });
         Ok(())
     })?;
@@ -371,7 +371,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let run: Function = lua.unpack_multi(args)?;
         let plugin = plugin.clone();
         setup.on_dispose(move |host| {
-            plugin.run(Current::acting(host), |_| run.call::<()>(plugin.host.clone()));
+            plugin.run(Current::acting(host), |_| run.call::<()>(&plugin.host));
         });
         Ok(())
     })?;
@@ -411,7 +411,7 @@ fn surface_view(plugin: &Rc<Plugin>, view: &Function, surface: &mut v2::View<'_>
     plugin.run(Current::viewing(surface), |lua| {
         let node = plugin.inputs.lend(lua, |inputs| {
             let object = lua.create_table()?;
-            object.raw_set("read", plugin.read.clone())?;
+            object.raw_set("read", &plugin.read)?;
             object.raw_set("input", inputs.surface(lua, surface_input)?)?;
             object.raw_set("memo", plugin.memo.clone())?;
             view.call::<Value>(object)
@@ -423,7 +423,7 @@ fn surface_view(plugin: &Rc<Plugin>, view: &Function, surface: &mut v2::View<'_>
 /// A handler of input: `nil` passes the event on.
 fn handle(plugin: &Rc<Plugin>, handler: &Function, host: &dyn abi::Host, event: &interact::Event) -> Handled {
     plugin.run(Current::acting(host), |lua| {
-        let value = handler.call::<Value>((plugin.host.clone(), out(lua, event)?))?;
+        let value = handler.call::<Value>((&plugin.host, out(lua, event)?))?;
         Ok(optional(lua, value)?.unwrap_or(Handled::Pass))
     })
 }
