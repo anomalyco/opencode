@@ -240,21 +240,12 @@ const layer = Layer.effect(
         },
         add: (tool) => {
           const id = effectiveName(tool)
-          commit(editor, id, {
-            ...tool,
-            id,
-            options: tool.options && { ...tool.options },
-            codemode: tool.codemode && { ...tool.codemode },
-          })
+          commit(editor, id, { ...tool, id })
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
           if (!current) return
-          const tool = {
-            ...current,
-            options: current.options && { ...current.options },
-            codemode: current.codemode && { ...current.codemode },
-          }
+          const tool = cloneTool(current)
           update(tool)
           tool.name = current.name
           tool.id = id
@@ -288,38 +279,33 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
-        Effect.map(flags.enabled("full_codemode"), (enabled) => {
+        Effect.gen(function* () {
           const data = state.get()
           if (catalogData !== data) {
             catalogData = data
             catalogs.clear()
           }
-          const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
+          // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
+          const codeModeEnabled = !whollyDisabled("execute", rules)
           const hidden = options?.tools?.hidden
           const promoted = options?.tools?.codemode
+          const direct = new Map<string, Tool.Info>()
+          const codeModeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
-            active.set(name, tool)
+            if (codeModeEnabled && (tool.options?.codemode !== false || promoted?.has(name))) {
+              codeModeEntries.push([name, tool])
+              continue
+            }
+            direct.set(name, tool)
           }
-          const codeModeEnabled = !whollyDisabled("execute", rules)
-          const inCodeMode = (name: string, tool: Tool.Info) =>
-            tool.options?.codemode !== false || Boolean(promoted?.has(name))
-          // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const direct = codeModeEnabled
-            ? new Map(Array.from(active).filter(([name, tool]) => !inCodeMode(name, tool)))
-            : active
+          const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const codeMode = !codeModeEnabled
             ? undefined
             : (() => {
-                const full = enabled && options?.services !== undefined
-                const codeModeTools = new Map(
-                  Array.from(active)
-                    .filter(([name, tool]) => inCodeMode(name, tool))
-                    .map(([name, tool]) => [name, toCodeModeTool(tool)]),
-                )
-                const key = `${full ? "1" : "0"}\0${Array.from(codeModeTools.keys()).join("\0")}`
+                const key = `${full ? "1" : "0"}\0${codeModeEntries.map(([name]) => name).join("\0")}`
                 // Discovery is immutable for a registry revision and visible tool set. Keep executors
                 // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
                 // are cached by identity, and the execute tool's definition across steps.
@@ -328,7 +314,10 @@ const layer = Layer.effect(
                   catalogs.delete(key)
                   catalogs.set(key, cached)
                 }
-                const inventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
+                const inventory = cached?.inventory ?? {
+                  tools: new Map(codeModeEntries.map(([name, tool]) => [name, toCodeModeTool(tool)])),
+                  namespaces: data.namespaces,
+                }
                 const tool = CodeModeTool.create(
                   inventory,
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
@@ -425,10 +414,17 @@ const layer = Layer.effect(
   }),
 )
 
+const cloneTool = <T extends Tool.Info>(tool: T): Types.Mutable<T> => ({
+  ...tool,
+  options: tool.options && { ...tool.options },
+  codemode: tool.codemode && { ...tool.codemode },
+})
+
 /** Store a valid tool under its effective name, or record why it was skipped. */
 function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
   // JavaScript plugins may leave out `input` for a tool that takes none.
-  const tool = input.input === undefined || input.input === null ? { ...input, input: {} } : input
+  const cloned = cloneTool(input)
+  const tool = cloned.input === undefined || cloned.input === null ? { ...cloned, input: {} } : cloned
   const registered = register(tool)
   if (Result.isFailure(registered)) {
     editor.errors.push({
@@ -456,11 +452,6 @@ function toCodeModeTool(tool: Tool.Info): Tool.Info {
     ...tool,
     ...(tool.codemode.description === undefined ? {} : { description: tool.codemode.description }),
     ...(tool.codemode.input === undefined ? {} : { input: tool.codemode.input }),
-    options: {
-      ...tool.options,
-      codemode: true,
-      ...(tool.codemode.pinned === undefined ? {} : { pinned: tool.codemode.pinned }),
-    },
   }
 }
 
@@ -488,15 +479,11 @@ function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationEr
     return Result.fail(
       new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
     )
-  if (
-    tool.codemode?.input !== undefined &&
-    typeof tool.codemode.input !== "object" &&
-    typeof tool.codemode.input !== "function"
-  )
-    return Result.fail(
-      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
-    )
-  if (tool.codemode) {
+  if (tool.codemode?.input !== undefined) {
+    if (typeof tool.codemode.input !== "object" && typeof tool.codemode.input !== "function")
+      return Result.fail(
+        new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+      )
     const variant = Result.try({
       try: () => ToolDefinition.make(definition(toCodeModeTool(tool))),
       catch: (error) =>

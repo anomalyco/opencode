@@ -41,22 +41,12 @@ export interface Namespace {
   readonly description: string
 }
 
-interface BaseOptions {
+export interface Options {
   readonly namespace?: string
   readonly permission?: string
+  readonly codemode?: boolean
+  readonly pinned?: boolean
 }
-
-export type Options = BaseOptions &
-  (
-    | {
-        readonly codemode?: true
-        readonly pinned?: boolean
-      }
-    | {
-        readonly codemode: boolean
-        readonly pinned?: never
-      }
-  )
 
 export type ValueSchema<A = unknown> = Schema.Codec<A, any> | StandardSchemaV1<any, A> | JsonSchema.JsonSchema
 
@@ -109,7 +99,6 @@ export interface Result<Output extends ValueSchema<any> | undefined = ValueSchem
 export interface CodeMode {
   readonly description?: string
   readonly input?: ValueSchema<any>
-  readonly pinned?: boolean
 }
 
 export type Info<

@@ -12,6 +12,7 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
+import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -88,7 +89,9 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
+    const flags = yield* Flag.Service
     const location = yield* Location.Service
+    const selectedModels = new WeakMap<Selection, Effect.Success<ReturnType<SessionRunnerModel.Interface["select"]>>>()
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
@@ -153,22 +156,19 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
-      const [selected, hasWebSearch] = yield* Effect.all(
+      const [selected, hasWebSearch, fullCodeMode] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
-          Effect.all({
-            disabled: websearch.default().pipe(
-              Effect.as(false),
-              Effect.catchTag("WebSearch.Disabled", () => Effect.succeed(true)),
-            ),
-            providers: websearch.providers(),
-          }).pipe(Effect.map((result) => !result.disabled && result.providers.length > 0)),
+          websearch.available(),
+          flags.enabled("full_codemode"),
         ],
         { concurrency: "unbounded" },
       )
+      const fallbackRef = session.model ?? agent.info.model
+      const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
         services,
-        tools: modelTools({ model: selected?.info, websearch: hasWebSearch }),
+        tools: modelTools({ model: policyModel, websearch: hasWebSearch, fullCodeMode }),
       })
       const loaded = yield* Effect.all(
         {
@@ -176,12 +176,12 @@ const layer = Layer.effect(
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(permissions, tools.codeModeCatalog !== undefined),
+          mcp: mcpInstructions.load(tools),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
       )
-      return {
+      const selection: Selection = {
         session,
         agent: { ...agent, info: agent.info },
         // Ordered from most to least shared across sessions so the baseline stays a reusable
@@ -198,20 +198,27 @@ const layer = Layer.effect(
         ]),
         tools,
       }
+      if (selected) selectedModels.set(selection, selected)
+      return selection
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* resolveModel(selection.session, { kind: "primary", agent: selection.agent.id })
+      const resolved = yield* models.resolve(
+        selection.session,
+        model.available,
+        { kind: "primary", agent: selection.agent.id },
+        selectedModels.get(selection),
+      )
       const history = yield* SessionHistory.entriesForRunner(
         db,
         selection.session.id,
         selection.instructions,
-        model.ref,
+        resolved.ref,
       )
       return {
         session: selection.session,
         agent: selection.agent,
-        model,
+        model: resolved,
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,
@@ -248,6 +255,7 @@ export const node = makeLocationNode({
     FileAccess.node,
     FileMutation.node,
     FileWrite.node,
+    Flag.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,

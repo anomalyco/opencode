@@ -543,6 +543,7 @@ export function fromPromise(plugin: Plugin) {
                           output: value.output,
                           freeform: value.freeform,
                           options: value.options,
+                          codemode: value.codemode,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),
                         })

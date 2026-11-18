@@ -370,12 +370,11 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
+          // When placed in Code Mode, shell is pinned so the catalog always lists it, however many other tools there are.
+          options: { codemode: false, pinned: true },
           description: description(undefined, false),
           input: Input,
-          // When placed in Code Mode, shell is pinned so the catalog always lists it, however many other tools there are.
           codemode: {
-            pinned: true,
             description: description(undefined, true),
             input: CodeModeInput,
           },

@@ -1,5 +1,5 @@
 export { CallID, Error } from "@opencode/schema/tool"
-export type { Metadata, Options, Result } from "@opencode/schema/tool"
+export type { CodeMode, Metadata, Options, Result } from "@opencode/schema/tool"
 
 import { Tool } from "@opencode/schema/tool"
 import type { Agent } from "@opencode/schema/agent"

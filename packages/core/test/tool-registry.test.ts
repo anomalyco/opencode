@@ -43,7 +43,7 @@ const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHoo
   ...toolNodeReplacements(),
   Image.node.replace(imageStore),
 ])
-const it = testEffect(registryLayer)
+const it = testEffect(registryLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, undefined))))
 const codeModeIt = testEffect(registryLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 const identity = {
   agent: Agent.ID.make("build"),
@@ -764,12 +764,11 @@ describe("Tool", () => {
             description: "Direct shell",
             input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
             codemode: {
-              pinned: true,
               description: "Code Mode shell",
               input: Schema.Struct({ command: Schema.String }),
             },
             output: Schema.String,
-            options: { codemode: false },
+            options: { codemode: false, pinned: true },
             execute: (input) =>
               Effect.succeed({
                 output: `${input.command}:${"background" in input ? String(input.background) : "omitted"}`,
