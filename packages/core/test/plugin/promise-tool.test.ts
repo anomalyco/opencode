@@ -194,7 +194,7 @@ it.live("Promise tools infer codemode override schemas and pass info and codemod
       },
     }).effect(yield* PluginHost.make(plugins, "test"))
 
-    const direct = yield* tools.snapshot()
+    const direct = yield* tools.snapshot(undefined, { tools: { direct: new Set(["shell_like"]) } })
     expect(
       (yield* direct.execute({
         sessionID: Session.ID.make("ses_promise_override"),
@@ -204,9 +204,9 @@ it.live("Promise tools infer codemode override schemas and pass info and codemod
       })).output,
     ).toBe("ls:true")
 
-    const promoted = yield* tools.snapshot(undefined, { tools: { codemode: new Set(["shell_like"]) } })
+    const inCodeMode = yield* tools.snapshot()
     expect(
-      (yield* promoted.execute({
+      (yield* inCodeMode.execute({
         sessionID: Session.ID.make("ses_promise_override"),
         agent: Agent.ID.make("build"),
         messageID: SessionMessage.ID.make("msg_promise_override"),

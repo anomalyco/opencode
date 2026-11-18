@@ -43,14 +43,14 @@ const makeModel = (
 
 const policy = (model: Model.Info | undefined, websearch = true, fullCodeMode = true) => {
   const result = modelTools({ model, websearch, fullCodeMode })
-  return { codemode: [...result.codemode].sort(), hidden: [...result.hidden].sort() }
+  return { direct: [...result.direct].sort(), hidden: [...result.hidden].sort() }
 }
 
 describe("modelTools", () => {
-  test("gives GPT-5+ patch and places file tools, shell, and websearch in Code Mode when fullCodeMode is on", () => {
+  test("gives GPT-5+ patch and leaves file tools, shell, and websearch in Code Mode when fullCodeMode is on", () => {
     for (const model of [makeModel("openai", "gpt-5"), makeModel("azure", "dep", { modelID: Model.ID.make("gpt-6") })])
       expect(policy(model)).toEqual({
-        codemode: ["patch", "read", "shell", "websearch"],
+        direct: [],
         hidden: ["edit", "glob", "grep", "webfetch", "write"],
       })
   })
@@ -62,7 +62,7 @@ describe("modelTools", () => {
       makeModel("azure", "gpt-dep", { modelID: Model.ID.make("gpt-4o") }),
     ])
       expect(policy(model)).toEqual({
-        codemode: ["edit", "read", "shell", "websearch", "write"],
+        direct: [],
         hidden: ["glob", "grep", "patch", "webfetch"],
       })
   })
@@ -78,23 +78,32 @@ describe("modelTools", () => {
       makeModel("custom", "sonnet-v4", { family: Model.Family.make("claude-sonnet") }),
     ])
       expect(policy(model)).toEqual({
-        codemode: ["edit", "read", "shell", "websearch", "write"],
+        direct: [],
         hidden: ["glob", "grep", "patch", "webfetch"],
       })
   })
 
-  test("keeps strong-model tools direct when fullCodeMode is off while still applying patch and websearch rules", () => {
-    expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ codemode: [], hidden: ["edit", "write"] })
+  test("needs no demotion when fullCodeMode is off while still applying patch and websearch rules", () => {
+    expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ direct: [], hidden: ["edit", "write"] })
     expect(policy(makeModel("claude-agent", "opus"), false, false)).toEqual({
-      codemode: [],
+      direct: [],
       hidden: ["patch", "websearch"],
     })
   })
 
-  test("keeps non-strong and absent models direct even with fullCodeMode on, hiding websearch when unavailable", () => {
-    expect(policy(makeModel("deepseek", "deepseek-reasoner"))).toEqual({ codemode: [], hidden: ["patch"] })
-    expect(policy(undefined, true, true)).toEqual({ codemode: [], hidden: [] })
-    expect(policy(undefined, false, true)).toEqual({ codemode: [], hidden: ["websearch"] })
+  test("keeps non-strong and absent models direct when fullCodeMode is on, hiding websearch when unavailable", () => {
+    expect(policy(makeModel("deepseek", "deepseek-reasoner"))).toEqual({
+      direct: ["edit", "read", "shell", "websearch", "write"],
+      hidden: ["patch"],
+    })
+    expect(policy(undefined, true, true)).toEqual({
+      direct: ["edit", "patch", "read", "shell", "websearch", "write"],
+      hidden: [],
+    })
+    expect(policy(undefined, false, true)).toEqual({
+      direct: ["edit", "patch", "read", "shell", "write"],
+      hidden: ["websearch"],
+    })
   })
 })
 
@@ -135,6 +144,8 @@ const setupContext = Effect.gen(function* () {
   const websearch = yield* WebSearch.Service
   const sessions = yield* Session.Service
   const context = yield* SessionContext.Service
+  const flags = yield* Flag.Service
+  const fullCodeMode = yield* flags.enabled("full_codemode")
 
   yield* Effect.all([
     registerToolPlugin(EditTool.Plugin),
@@ -173,7 +184,13 @@ const setupContext = Effect.gen(function* () {
         description: `Direct ${name}`,
         input: Schema.Struct({}),
         output: Schema.String,
-        options: variant ? { codemode: { description: `Code Mode ${name}` }, pinned: true } : { codemode: false },
+        options: variant
+          ? fullCodeMode
+            ? { codemode: { pinned: true, description: `Code Mode ${name}` } }
+            : { codemode: false }
+          : name === "websearch"
+            ? { codemode: fullCodeMode }
+            : { codemode: false },
         execute: () => Effect.succeed({ output: name }),
       })
     }
@@ -182,7 +199,7 @@ const setupContext = Effect.gen(function* () {
       description: "Move session",
       input: Schema.Struct({}),
       output: Schema.String,
-      options: { namespace: "opencode", codemode: true, pinned: true },
+      options: { namespace: "opencode", codemode: { pinned: true } },
       execute: () => Effect.succeed({ output: "moved" }),
     })
   })
@@ -208,17 +225,7 @@ const codeModeIt = testEffect(makeContextLayer("full_codemode"))
 describe("SessionContext.select model tool policy", () => {
   defaultIt.effect("keeps strong-model tools direct when full_codemode is off", () =>
     Effect.gen(function* () {
-      const { registry, select } = yield* setupContext
-      const catalog = (yield* registry.snapshot(undefined, {
-        tools: { codemode: new Set(["edit", "write", "patch"]) },
-      })).codeModeCatalog!
-      for (const name of ["edit", "write", "patch"]) {
-        const entry = catalog.tools.find((item) => item.type === "tool" && item.name === name)
-        expect(entry).toMatchObject({ type: "tool", pinned: true })
-        if (entry?.type !== "tool") continue
-        expect(entry.description).not.toContain("\n")
-        expect(entry.description.length).toBeLessThan(500)
-      }
+      const { select } = yield* setupContext
       expect(names(yield* select("openai", "gpt-5")).join(",")).toBe(
         "glob,grep,patch,read,shell,webfetch,websearch,execute",
       )
@@ -229,7 +236,16 @@ describe("SessionContext.select model tool policy", () => {
     "places tools per model, propagates Code Mode to MCP instructions, and uses configured ref fallback",
     () =>
       Effect.gen(function* () {
-        const { websearch, context, select } = yield* setupContext
+        const { registry, websearch, context, select } = yield* setupContext
+
+        const catalog = (yield* registry.snapshot()).codeModeCatalog!
+        for (const name of ["edit", "write", "patch"]) {
+          const entry = catalog.tools.find((item) => item.type === "tool" && item.name === name)
+          expect(entry).toMatchObject({ type: "tool", pinned: true })
+          if (entry?.type !== "tool") continue
+          expect(entry.description).not.toContain("\n")
+          expect(entry.description.length).toBeLessThan(500)
+        }
 
         const gpt = yield* select("openai", "gpt-5")
         expect(names(gpt)).toEqual(["execute"])

@@ -304,7 +304,7 @@ export const effectiveName = (tool: Pick<Tool.Info, "name" | "options">) =>
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
 
-export const defaultCodeMode = (tool: Pick<Tool.Info, "options">) => (tool.options?.codemode ?? true) === true
+export const defaultCodeMode = (tool: Pick<Tool.Info, "options">) => tool.options?.codemode !== false
 
 /** For `Effect.mapError`: keep a `ToolFailure` as is, wrap anything else with `message`. */
 export const toolFailure = (message: string) => (error: unknown) =>

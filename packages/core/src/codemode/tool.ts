@@ -259,12 +259,14 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
   } satisfies CodeMode.Hooks
 }
 
+const isPinned = (registration: Info) => {
+  const codemode = registration.options?.codemode
+  const pinned = typeof codemode === "object" && codemode !== null ? codemode.pinned : undefined
+  return (pinned ?? registration.options?.pinned) === true
+}
+
 export const catalog = (inventory: Inventory) => {
-  const pinned = new Set(
-    Array.from(inventory.tools.values())
-      .filter((registration) => registration.options?.pinned === true)
-      .map(qualifiedName),
-  )
+  const pinned = new Set(Array.from(inventory.tools.values()).filter(isPinned).map(qualifiedName))
   const root: CatalogNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const tool of runtime(inventory).catalog)

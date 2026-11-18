@@ -754,7 +754,7 @@ describe("Tool", () => {
   )
 
   it.effect(
-    "keeps tools with options.codemode overrides direct by default and applies overrides when placed in Code Mode",
+    "places tools with options.codemode overrides in Code Mode by default, honors direct policy demotion, and resolves pinned",
     () =>
       Effect.gen(function* () {
         type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
@@ -793,11 +793,11 @@ describe("Tool", () => {
             output: Schema.String,
             options: {
               codemode: {
+                pinned: true,
                 description: "Code Mode shell",
                 input: codemodeInput,
                 output: codemodeOutput,
               },
-              pinned: true,
             },
             execute: (input, context) => {
               const _inputExact: Equal<
@@ -825,53 +825,32 @@ describe("Tool", () => {
             },
           })
           editor.add({ ...make(), name: "mcp_search" })
+          editor.add({ ...make(), name: "legacy_pin", options: { pinned: true } })
+          editor.add({ ...make(), name: "unpinned_override", options: { codemode: { pinned: false }, pinned: true } })
         })
 
         const listed = (yield* service.list()).find((tool) => tool.id === "shell")
         expect(listed?.description).toBe("Direct shell")
         expect(typeof listed?.options?.codemode).toBe("object")
 
-        // An override object does not move the tool into Code Mode: it stays direct unless promoted, and Tool.check skips it.
-        const direct = yield* service.snapshot()
-        expect(direct.definitions.map((tool) => tool.name)).toEqual(["glob", "shell", "execute"])
-        expect(direct.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
-        expect(direct.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
-          "background",
-        )
-        expect(
-          (yield* direct.execute({
-            ...call("shell"),
-            call: {
-              type: "tool-call",
-              id: "call-direct-shell",
-              name: "shell",
-              input: { command: "ls", background: true },
-            },
-          })).output,
-        ).toBe("ls:true:false")
-        expect(
-          yield* service.check({
-            code: 'return await tools.shell({ command: "build" })',
-            tools: ["shell"],
-            bindings: {},
-            permissions: [],
-            limits: {},
-            context: { sessionID, ...identity, progress: () => Effect.void },
-          }),
-        ).toMatchObject({ ok: false, error: { kind: "UnknownTool" } })
-
-        const policy = { hidden: new Set(["glob"]), codemode: new Set(["shell"]) }
-        const promoted = yield* service.snapshot(undefined, { tools: policy })
-        expect(promoted.definitions.map((tool) => tool.name)).toEqual(["execute"])
-        const listings = codeModeListings(promoted.codeModeCatalog!)
-        expect(listings.map((tool) => tool.path)).toEqual(["mcp_search", "shell"])
+        // An override object places the tool in Code Mode by default; codemode: false stays direct.
+        const defaultSnap = yield* service.snapshot()
+        expect(defaultSnap.definitions.map((tool) => tool.name)).toEqual(["glob", "execute"])
+        const listings = codeModeListings(defaultSnap.codeModeCatalog!)
+        expect(listings.map((tool) => tool.path)).toEqual(["legacy_pin", "mcp_search", "shell", "unpinned_override"])
         const shellListing = listings.find((tool) => tool.path === "shell")!
         expect(shellListing.line).toContain("Code Mode shell")
         expect(shellListing.line).not.toContain("background")
-        expect(promoted.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "legacy_pin")).toMatchObject({
+          pinned: true,
+        })
+        expect(defaultSnap.codeModeCatalog?.tools.find((tool) => tool.name === "unpinned_override")).toMatchObject({
+          pinned: false,
+        })
 
         // Decodes and encodes Code Mode calls with the Code Mode override schemas and passes context.codemode = true.
-        const executed = yield* promoted.execute({
+        const executed = yield* defaultSnap.execute({
           ...call("execute"),
           call: {
             type: "tool-call",
@@ -881,13 +860,58 @@ describe("Tool", () => {
           },
         })
         expect(executed.output).toMatchObject({ output: JSON.stringify({ summary: "ls:omitted:true" }) })
+        expect(
+          yield* service.check({
+            code: 'return await tools.shell({ command: "build", background: true })',
+            tools: ["shell"],
+            bindings: {},
+            permissions: [],
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: true, value: { summary: "build:omitted:true" } })
+        expect(
+          yield* service.check({
+            code: 'return await tools.glob({ pattern: "*" })',
+            tools: ["glob"],
+            bindings: {},
+            permissions: [],
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: false, error: { kind: "UnknownTool" } })
 
-        // When execute is denied, promoted tools fall back to their direct form while hidden tools stay hidden.
+        // Policy `direct` keeps a Code Mode tool on the direct list with its direct description and schemas.
+        const demotePolicy = { hidden: new Set(["glob"]), direct: new Set(["shell"]) }
+        const demoted = yield* service.snapshot(undefined, { tools: demotePolicy })
+        expect(demoted.definitions.map((tool) => tool.name)).toEqual(["shell", "execute"])
+        expect(demoted.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
+        expect(demoted.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
+          "background",
+        )
+        expect(
+          (yield* demoted.execute({
+            ...call("shell"),
+            call: {
+              type: "tool-call",
+              id: "call-direct-shell",
+              name: "shell",
+              input: { command: "ls", background: true },
+            },
+          })).output,
+        ).toBe("ls:true:false")
+
+        // When execute is denied, Code Mode tools fall back to their direct form while hidden tools stay hidden.
         const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }], {
-          tools: policy,
+          tools: { hidden: new Set(["glob"]) },
         })
         expect(denied.codeModeCatalog).toBeUndefined()
-        expect(denied.definitions.map((tool) => tool.name)).toEqual(["mcp_search", "shell"])
+        expect(denied.definitions.map((tool) => tool.name)).toEqual([
+          "legacy_pin",
+          "mcp_search",
+          "shell",
+          "unpinned_override",
+        ])
         expect(denied.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
         expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
           "background",
@@ -900,22 +924,24 @@ describe("Tool", () => {
             tool.description = "Edited direct shell"
           })
         })
-        expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "shell")?.description).toBe(
-          "Edited direct shell",
-        )
         expect(
-          codeModeListings((yield* service.snapshot(undefined, { tools: policy })).codeModeCatalog!).find(
-            (tool) => tool.path === "shell",
-          )?.line,
+          (yield* service.snapshot(undefined, { tools: demotePolicy })).definitions.find(
+            (tool) => tool.name === "shell",
+          )?.description,
+        ).toBe("Edited direct shell")
+        expect(
+          codeModeListings((yield* service.snapshot()).codeModeCatalog!).find((tool) => tool.path === "shell")?.line,
         ).toContain("Code Mode shell")
 
         expect(hooked).toEqual([
-          { phase: "before", tool: "shell", codemode: false, override: true },
-          { phase: "after", tool: "shell", codemode: false, override: true },
           { phase: "before", tool: "execute", codemode: false, override: false },
           { phase: "before", tool: "shell", codemode: true, override: true },
           { phase: "after", tool: "shell", codemode: true, override: true },
           { phase: "after", tool: "execute", codemode: false, override: false },
+          { phase: "before", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "shell", codemode: true, override: true },
+          { phase: "before", tool: "shell", codemode: false, override: true },
+          { phase: "after", tool: "shell", codemode: false, override: true },
         ])
       }),
   )

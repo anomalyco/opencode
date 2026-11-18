@@ -1,8 +1,10 @@
 import type { Model } from "@opencode/schema/model"
 
+const codeModeBuiltIns = ["read", "write", "edit", "patch", "shell", "websearch"] as const
+
 export interface ModelTools {
   readonly hidden: Set<string>
-  readonly codemode: Set<string>
+  readonly direct: Set<string>
 }
 
 export function modelTools(input: {
@@ -11,9 +13,16 @@ export function modelTools(input: {
   readonly fullCodeMode: boolean
 }): ModelTools {
   const hidden = new Set<string>()
-  const codemode = new Set<string>()
+  const direct = new Set<string>()
   if (!input.websearch) hidden.add("websearch")
-  if (!input.model) return { hidden, codemode }
+  if (!input.model) {
+    if (input.fullCodeMode) {
+      for (const name of codeModeBuiltIns) {
+        if (!hidden.has(name)) direct.add(name)
+      }
+    }
+    return { hidden, direct }
+  }
 
   const id = input.model.id.toLowerCase()
   const modelID = input.model.modelID.toLowerCase()
@@ -25,15 +34,19 @@ export function modelTools(input: {
     hidden.add("patch")
   }
 
-  if (input.fullCodeMode && (gpt !== undefined || isAnthropic(input.model, id, modelID))) {
+  if (!input.fullCodeMode) return { hidden, direct }
+
+  if (gpt !== undefined || isAnthropic(input.model, id, modelID)) {
     hidden.add("glob")
     hidden.add("grep")
     hidden.add("webfetch")
-    for (const name of ["read", "write", "edit", "patch", "shell", "websearch"]) {
-      if (!hidden.has(name)) codemode.add(name)
-    }
+    return { hidden, direct }
   }
-  return { hidden, codemode }
+
+  for (const name of codeModeBuiltIns) {
+    if (!hidden.has(name)) direct.add(name)
+  }
+  return { hidden, direct }
 }
 
 function gptMode(id: string, modelID: string): "patch" | "edit" | undefined {

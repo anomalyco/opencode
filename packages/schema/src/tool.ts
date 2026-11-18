@@ -52,10 +52,12 @@ export interface Options<
   readonly codemode?:
     | boolean
     | {
+        readonly pinned?: boolean
         readonly description?: string
         readonly input?: CMInput
         readonly output?: CMOutput
       }
+  /** @deprecated Use `codemode.pinned` instead. Removed in the next minor. */
   readonly pinned?: boolean
 }
 

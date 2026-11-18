@@ -62,7 +62,7 @@ type Data = {
 
 export interface Policy {
   readonly hidden?: ReadonlySet<string>
-  readonly codemode?: ReadonlySet<string>
+  readonly direct?: ReadonlySet<string>
 }
 
 export interface SnapshotOptions {
@@ -314,13 +314,13 @@ const layer = Layer.effect(
             catalogs.clear()
           }
           const hidden = options?.tools?.hidden
-          const promoted = options?.tools?.codemode
+          const keepDirect = options?.tools?.direct
           const direct = new Map<string, Tool.Info>()
           const codemodeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
-            if (codeModeEnabled && (defaultCodeMode(tool) || promoted?.has(name))) {
+            if (codeModeEnabled && defaultCodeMode(tool) && !keepDirect?.has(name)) {
               codemodeEntries.push([name, tool])
               continue
             }

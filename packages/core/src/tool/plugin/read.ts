@@ -5,6 +5,9 @@ import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
@@ -49,16 +52,18 @@ export const Plugin = {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const environment = yield* Environment.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
     const discovery = yield* InstructionDiscovery.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: {
-            codemode: { description: description(true) },
-            pinned: true,
-          },
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true, description: description(true) } }
+            : { codemode: false },
           description: description(false),
           input: Input,
           output: ReadToolFileSystem.Output,

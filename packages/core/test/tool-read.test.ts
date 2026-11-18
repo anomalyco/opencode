@@ -139,6 +139,7 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
     imageLayer,
   )
 const it = testEffect(readLayer(imageLayer))
+const codeModeIt = testEffect(readLayer(imageLayer).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // Real-file tests provide their own layer per temp folder.
 const live = testEffect(Layer.empty)
 // Reads through the real filesystem with the location at `directory`.
@@ -198,11 +199,6 @@ describe("ReadTool", () => {
       const direct = yield* toolDefinitions(registry)
       expect(direct.map((tool) => tool.name)).toEqual(["read", "execute"])
       expect(direct[0]?.description).toContain("Each text line is prefixed by its 1-based line number")
-      const promoted = yield* registry.snapshot(undefined, { tools: { codemode: new Set(["read"]) } })
-      expect(promoted.definitions.map((tool) => tool.name)).toEqual(["execute"])
-      expect(promoted.codeModeCatalog?.tools[0]?.description).toContain(
-        "Reading an image or PDF automatically attaches it to the execute result",
-      )
       expect(
         (yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).map(
           (tool) => tool.name,
@@ -226,6 +222,25 @@ describe("ReadTool", () => {
         },
       ])
       expect(listCalls).toEqual([])
+    }),
+  )
+
+  codeModeIt.effect("places read in Code Mode with full_codemode unless demoted to direct", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const inCodeMode = yield* registry.snapshot()
+      expect(inCodeMode.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(inCodeMode.codeModeCatalog?.tools[0]).toMatchObject({
+        type: "tool",
+        name: "read",
+        pinned: true,
+      })
+      expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toContain(
+        "Reading an image or PDF automatically attaches it to the execute result",
+      )
+      const demoted = yield* registry.snapshot(undefined, { tools: { direct: new Set(["read"]) } })
+      expect(demoted.definitions.map((tool) => tool.name)).toEqual(["read", "execute"])
+      expect(demoted.definitions[0]?.description).toContain("Each text line is prefixed by its 1-based line number")
     }),
   )
 

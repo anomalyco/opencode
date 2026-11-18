@@ -144,7 +144,7 @@ export const Plugin = {
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
           input: MoveInput,
           output: MoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode", codemode: { pinned: true } },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
@@ -180,7 +180,7 @@ export const Plugin = {
           description: "Create a named worktree. Returns its directory.",
           input: WorktreeCreateInput,
           output: Worktree.Info,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode", codemode: { pinned: true } },
           execute: (input) =>
             ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
               Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
@@ -194,7 +194,7 @@ export const Plugin = {
           description: "List a repository's worktrees.",
           input: Schema.Struct({}),
           output: Schema.Struct({ worktrees: Worktree.List }),
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode", codemode: { pinned: true } },
           execute: () =>
             ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
               Effect.map((worktrees) => ({ output: { worktrees } })),
@@ -207,7 +207,7 @@ export const Plugin = {
             "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
           input: WorktreeRemoveInput,
           output: WorktreeRemoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
+          options: { namespace: "opencode", codemode: { pinned: true }, permission: "edit" },
           execute: (input, context) =>
             Effect.gen(function* () {
               // Removing a worktree deletes files, so it requires the same approval as editing them.
@@ -229,9 +229,7 @@ export const Plugin = {
                 output: { directory: target.absolute, removed: true },
                 content: `Removed worktree ${target.absolute}.`,
               }
-            }).pipe(
-              Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`)),
-            ),
+            }).pipe(Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`))),
         })
         draft.add({
           name: "models",

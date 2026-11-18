@@ -174,8 +174,8 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
       }),
     )
 
-    const promoted = yield* registry.snapshot(undefined, { tools: { codemode: new Set(["inspect"]) } })
-    yield* promoted.execute({
+    const inCodeMode = yield* registry.snapshot()
+    yield* inCodeMode.execute({
       ...identity,
       call: {
         type: "tool-call",
@@ -184,7 +184,7 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
         input: { code: 'return await tools.inspect({ count: "3", detail: "true", extra: true })' },
       },
     })
-    const direct = yield* registry.snapshot()
+    const direct = yield* registry.snapshot(undefined, { tools: { direct: new Set(["inspect"]) } })
     yield* direct.execute({
       ...identity,
       call: {
