@@ -1528,6 +1528,8 @@ pub(crate) trait Answers {
     /// reply: a plugin whose manifest has [`abi::Manifest::cancelled`] as [`Request::Cancelled`] (a library, or one in
     /// process), the JS host as the rejection of the promise that waits for the reply.
     fn cancel(self: Rc<Self>, request: abi::RequestId);
+    /// Whether [`Answers::cancel`] tells it anything, so a mount's close queues a cancel for it at all.
+    fn cancels(&self) -> bool;
 }
 
 impl Answers for Guest {
@@ -1552,6 +1554,10 @@ impl Answers for Guest {
             self.handle("on-cancelled", &Request::Cancelled { id: request });
         }
     }
+
+    fn cancels(&self) -> bool {
+        self.cancels
+    }
 }
 
 /// Calls `send` unless the instance `guest` names is destroyed or its activation ended, as a call that panicked after
@@ -1570,7 +1576,11 @@ pub(crate) fn reply_to(
         if mount.upgrade().is_none() {
             return running.cancel(request);
         }
-        wait(mount, guest, request);
+        // Past the cap the request is not sent, and its reply is that refusal (carbon ac-1).
+        if !wait(mount, guest, request) {
+            let error = format!("more than {MOUNT_REQUESTS} requests of the plugin's mounts wait");
+            return running.answer(Request::Reply { id: request, result: Err(error) });
+        }
     }
     let (guest, owner) = (guest.clone(), running.owner());
     send(
@@ -1589,12 +1599,18 @@ pub(crate) fn reply_to(
     );
 }
 
+/// The most requests of one instance's mounts that wait for their reply at once: so many cancels fit in one frame's
+/// effects (`FRAME_EFFECTS`) when its mounts close.
+pub(crate) const MOUNT_REQUESTS: usize = 1024;
+
 /// The requests of mounts that wait for their reply ([`reply_to`]), by request and by mount, so that a reply and a
-/// mount's close each touch only their own (bigboi's ownership pass).
+/// mount's close each touch only their own (bigboi's ownership pass), and how many each instance has.
 #[derive(Default)]
 struct Inflight {
     /// Each request: its mount's key, and the instance that asked.
     requests: std::collections::HashMap<abi::RequestId, (usize, Weak<dyn Answers>)>,
+    /// Each instance's requests that wait, by its address, at most [`MOUNT_REQUESTS`].
+    instances: std::collections::HashMap<usize, usize>,
     /// Each mount's requests, by its key: the address of its token, which the weak reference here keeps from another
     /// mount while any of its requests waits.
     mounts: std::collections::HashMap<usize, (Weak<()>, std::collections::HashSet<abi::RequestId>)>,
@@ -1609,19 +1625,45 @@ pub(crate) fn mount_key(mount: &Weak<()>) -> usize {
     mount.as_ptr() as usize
 }
 
-/// Keeps `request` of mount `mount`, which `guest` asked for, until its reply or the mount's close.
-fn wait(mount: &Weak<()>, guest: &Weak<dyn Answers>, request: abi::RequestId) {
+/// Keeps `request` of mount `mount`, which `guest` asked for, until its reply or the mount's close; `false`, and keeps
+/// nothing, when [`MOUNT_REQUESTS`] of `guest` wait already.
+fn wait(mount: &Weak<()>, guest: &Weak<dyn Answers>, request: abi::RequestId) -> bool {
     let key = mount_key(mount);
     INFLIGHT.with_borrow_mut(|inflight| {
+        let count = inflight.instances.entry(instance(guest)).or_default();
+        if *count >= MOUNT_REQUESTS {
+            return false;
+        }
+        *count += 1;
         inflight.requests.insert(request, (key, guest.clone()));
         inflight.mounts.entry(key).or_insert_with(|| (mount.clone(), Default::default())).1.insert(request);
-    });
+        true
+    })
+}
+
+/// The key of instance `guest` in [`Inflight::instances`].
+fn instance(guest: &Weak<dyn Answers>) -> usize {
+    guest.as_ptr().cast::<()>() as usize
+}
+
+impl Inflight {
+    /// Counts one request of `guest` less.
+    fn release(&mut self, guest: &Weak<dyn Answers>) {
+        let key = instance(guest);
+        if let Some(count) = self.instances.get_mut(&key) {
+            *count -= 1;
+            if *count == 0 {
+                self.instances.remove(&key);
+            }
+        }
+    }
 }
 
 /// Whether `request` waited for its reply, which it does no more.
 fn take_inflight(request: abi::RequestId) -> bool {
     INFLIGHT.with_borrow_mut(|inflight| {
-        let Some((key, _)) = inflight.requests.remove(&request) else { return false };
+        let Some((key, guest)) = inflight.requests.remove(&request) else { return false };
+        inflight.release(&guest);
         if let Some((_, waiting)) = inflight.mounts.get_mut(&key) {
             waiting.remove(&request);
             if waiting.is_empty() {
@@ -1634,17 +1676,24 @@ fn take_inflight(request: abi::RequestId) -> bool {
 
 /// Cancels at once the waiting requests of the mount whose key is `key`, which closed, rather than once their replies
 /// come: the JS host's fetch of a mount that closed settles while the server still holds it (bigboi's freeze pass). A
-/// surface's mount calls it as it ends. How many requests it cancelled: no other mount's are looked at.
+/// surface's mount calls it as it ends. Each cancel an instance hears is an effect of its own, so many spread over
+/// frames as replies do (carbon ac-1). How many requests it cancelled: no other mount's are looked at.
 pub(crate) fn cancel_closed(key: usize) -> usize {
     let cancelled: Vec<_> = INFLIGHT.with_borrow_mut(|inflight| {
         let Some((_, waiting)) = inflight.mounts.remove(&key) else { return Vec::new() };
-        waiting.into_iter().filter_map(|request| Some((request, inflight.requests.remove(&request)?.1))).collect()
+        let cancelled: Vec<_> =
+            waiting.into_iter().filter_map(|request| Some((request, inflight.requests.remove(&request)?.1))).collect();
+        cancelled.iter().for_each(|(_, guest)| inflight.release(guest));
+        cancelled
     });
     let count = cancelled.len();
     for (request, guest) in cancelled {
-        if let Some(guest) = guest.upgrade() {
-            guest.cancel(request);
-        }
+        let Some(owner) = guest.upgrade().filter(|guest| guest.cancels()).map(|guest| guest.owner()) else { continue };
+        defer(&owner, move |_| {
+            if let Some(guest) = guest.upgrade() {
+                guest.cancel(request);
+            }
+        });
     }
     count
 }

@@ -134,6 +134,10 @@ impl Answers for Relay {
             guest.cancel(request);
         }
     }
+
+    fn cancels(&self) -> bool {
+        true
+    }
 }
 
 /// The definition of the plugin `loaded` names, whose setup registers what it listed.
@@ -839,6 +843,11 @@ impl Answers for Guest {
         if !self.ended() {
             self.send(Down::Cancelled { activation: self.activation(), request }, None);
         }
+    }
+
+    // The JS host settles the promise that waits.
+    fn cancels(&self) -> bool {
+        true
     }
 }
 

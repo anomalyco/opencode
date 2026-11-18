@@ -770,6 +770,10 @@ impl loader::native::Answers for Scope {
             self.run("on-cancelled", |host| cancelled.iter().for_each(|run| run(host, request)));
         }
     }
+
+    fn cancels(&self) -> bool {
+        !self.cancelled.borrow().is_empty()
+    }
 }
 
 /// Mounts an overlay surface into its frame.
