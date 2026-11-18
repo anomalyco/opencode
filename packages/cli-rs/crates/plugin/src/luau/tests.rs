@@ -676,6 +676,35 @@ fn a_luaurc_that_is_not_json_is_refused() {
     }
 }
 
+// Expected (luau-safety-2 2, carbon ls-2): carbon's pattern, `.` then 4 MiB of `a` then `b` against 4 MiB and 255 `a`,
+// matched over 5.4 s of CPU with no clock read on stock Luau 747, past the 2 s watchdog. The fork's pattern work counter
+// calls the interrupt every 8192 units, and the budget reads the clock by time: the call stops at its limit.
+#[test]
+fn a_long_pattern_match_is_stopped_at_the_budget() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "match" }, function(host)
+                local subject = string.rep("a", 4 * 1024 * 1024 + 255)
+                local pattern = "." .. string.rep("a", 4 * 1024 * 1024) .. "b"
+                string.find(subject, pattern)
+                host:toast({ variant = "info", message = "matched" })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "match");
+    let failed = failed.expect("the match was stopped");
+    let used: u64 = failed
+        .split("used ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|ms| ms.parse().ok())
+        .unwrap_or_else(|| panic!("{failed}"));
+    println!("luau: carbon's pattern stopped after {used} ms of CPU, {took:?}");
+    assert!(failed.contains("Luau budget") && used <= 200, "{failed} after {took:?}");
+    assert_ne!(toast.as_deref(), Some("matched"));
+}
+
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
 // one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
 #[test]
