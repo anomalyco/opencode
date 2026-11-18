@@ -847,6 +847,28 @@ struct Oauth {
     timer: Cell<Option<TimerId>>,
 }
 
+/// A pending device flow keeps polling; an unrecognized status expires it.
+pub(super) async fn oauth_complete(
+    client: opencode_api::client::Client,
+    input: IntegrationOauthStatusInput,
+) -> Result<bool, String> {
+    match client.integration_oauth_status(&input).await.map_err(|error| error.to_string())?.data {
+        IntegrationAttemptStatus::Pending(_) => Ok(false),
+        IntegrationAttemptStatus::Complete(_) => Ok(true),
+        IntegrationAttemptStatus::Failed(failed) => Err(failed.message),
+        _ => Err("Authorization expired".into()),
+    }
+}
+
+pub(super) fn copy_oauth(local: &Local, attempt: &IntegrationAttempt, failure: &str) {
+    let value = oauth_code(&attempt.instructions).unwrap_or_else(|| attempt.url.clone());
+    if crate::features::selection::put(&local.app, &value) {
+        local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
+    } else {
+        local.toasts.error(failure);
+    }
+}
+
 impl Oauth {
     fn status_input(&self) -> IntegrationOauthStatusInput {
         IntegrationOauthStatusInput {
@@ -902,40 +924,25 @@ impl Oauth {
         let client = self.flow.local.client.clone();
         let input = self.status_input();
         self.flow.local.app.spawn(
-            async move { client.integration_oauth_status(&input).await },
+            oauth_complete(client, input),
             bind!(self, |me, cx, result| {
                 if me.settled.get() {
                     return;
                 }
-                let status = match result {
-                    Ok(output) => output.data,
-                    Err(error) => {
-                        me.settled.set(true);
-                        return me.flow.fail(error.to_string());
-                    }
-                };
-                match status {
-                    IntegrationAttemptStatus::Pending(_) => {
-                        me.timer.set(Some(cx.set_timeout(
-                            POLL,
-                            bind!(me, |me, _| {
-                                me.timer.set(None);
-                                me.poll();
-                            }),
-                        )));
-                    }
-                    IntegrationAttemptStatus::Complete(_) => {
-                        me.settled.set(true);
-                        connected(&me.flow, &me.integration);
-                    }
-                    IntegrationAttemptStatus::Failed(failed) => {
-                        me.settled.set(true);
-                        me.flow.fail(failed.message);
-                    }
-                    _ => {
-                        me.settled.set(true);
-                        me.flow.fail("Authorization expired".into());
-                    }
+                if matches!(result, Ok(false)) {
+                    me.timer.set(Some(cx.set_timeout(
+                        POLL,
+                        bind!(me, |me, _| {
+                            me.timer.set(None);
+                            me.poll();
+                        }),
+                    )));
+                    return;
+                }
+                me.settled.set(true);
+                match result {
+                    Ok(_) => connected(&me.flow, &me.integration),
+                    Err(error) => me.flow.fail(error),
                 }
             }),
         );
@@ -1089,12 +1096,7 @@ impl Oauth {
     }
 
     fn copy(&self) {
-        let value = oauth_code(&self.attempt.instructions).unwrap_or(self.attempt.url.clone());
-        if crate::features::selection::put(&self.flow.local.app, &value) {
-            self.flow.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
-            return;
-        }
-        self.flow.local.toasts.error("Failed to copy to clipboard");
+        copy_oauth(&self.flow.local, &self.attempt, "Failed to copy to clipboard");
     }
 }
 
