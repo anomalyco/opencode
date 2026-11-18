@@ -3,6 +3,7 @@ import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
 import { ISOLATED_SERVER } from "../constants"
+import { registersProtocol } from "../deep-links/registration"
 import { DesktopPaths } from "../paths"
 import { stateHome, testRootDirectories } from "../service/registration"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
@@ -72,7 +73,7 @@ export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
 
-  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+  if (registersProtocol({ packaged: app.isPackaged }, process.env.OPENCODE_DESKTOP_REGISTER_PROTOCOL))
     app.setAsDefaultProtocolClient("opencode")
   const runFork = Effect.runForkWith(yield* Effect.context())
   setProtocolReporter((level, message, data) =>

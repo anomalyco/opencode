@@ -70,6 +70,7 @@ export default bench({
         OPENCODE_TEST_ONBOARDING: "0",
         OPENCODE_DESKTOP_TEST_ROOT: "{home}",
         OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT: "0",
+        // A base checkout from before source builds stopped registering `opencode://` by default.
         OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION: "1",
         // The test root moves XDG_CACHE_HOME, which would make every start transpile the source CLI
         // from scratch; a contributor's dev start reuses Bun's own cache.
