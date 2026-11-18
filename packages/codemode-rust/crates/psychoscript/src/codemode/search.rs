@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use serde_json::json;
 
 use crate::Json;
-use crate::schema::{self, Schema};
-use crate::tool::{Entry, compare_text, tool_expression};
+use crate::codemode::schema::{self, Schema};
+use crate::codemode::tool::{Entry, compare_text, tool_expression};
 
 const DEFAULT_LIMIT: usize = 10;
 const K1: f64 = 1.2;

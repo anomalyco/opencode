@@ -1,9 +1,10 @@
 //! The runtime a host makes, the counterpart of the reference's `CodeMode.make`: its tools, extensions, hooks and
 //! limits, and the outcome of a run.
 
+use super::{run, search, tool};
 use crate::{
     ConfigError, Diagnostic, Extension, Hooks, Interrupted, Json, Limits, Program, Schema,
-    Snapshot, SnapshotError, Tool, ToolDescription, ToolError, from_bytes, host, run, search, tool,
+    Snapshot, SnapshotError, Tool, ToolDescription, ToolError, from_bytes, host,
 };
 
 /// A host tool: plain data in, plain data out. A failure is thrown into the program as an error.

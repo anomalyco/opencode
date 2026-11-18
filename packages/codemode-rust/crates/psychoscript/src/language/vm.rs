@@ -12,7 +12,7 @@ use crate::conversion::code;
 use crate::object::*;
 use crate::strings::{StrId, Strings};
 use crate::value::{Id, Slot, Value};
-use crate::{DiagnosticKind, Limits, ToolCall};
+use crate::{DiagnosticKind, Json, Limits};
 
 pub type Res = Result<Value, Value>;
 /// A host call's result as it waits to settle its promise.
@@ -247,7 +247,8 @@ pub struct Vm<'rt> {
     pub inbox: VecDeque<(Id, ToolOutcome)>,
     pub coroutines: Vec<Coroutine>,
     pub logs: Vec<String>,
-    pub tool_calls: Vec<ToolCall>,
+    /// The calls into the embedder's namespace the run made, by path and input, which its limits count.
+    pub recorded_calls: Vec<(String, Json)>,
     pub host: crate::host::RunHost<'rt>,
     pub tool_refs: FxHashMap<Rc<str>, Id>,
     pub limits: Limits,
@@ -357,7 +358,7 @@ impl<'rt> Vm<'rt> {
             inbox: VecDeque::new(),
             coroutines: Vec::new(),
             logs: Vec::new(),
-            tool_calls: Vec::new(),
+            recorded_calls: Vec::new(),
             host,
             tool_refs: FxHashMap::default(),
             limits,
@@ -1411,7 +1412,8 @@ impl<'rt> Vm<'rt> {
     }
 
     pub fn call_tool(&mut self, path: &str, args: &[Value]) -> Res {
-        crate::host::call_tool(self, path, args)
+        let embedder = self.host.embedder;
+        embedder.call_namespace(self, path, args)
     }
 
     pub fn tool_ref(&mut self, path: &str) -> Value {

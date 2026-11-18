@@ -4,12 +4,12 @@ use std::borrow::Cow;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
 
+use crate::codemode::program::Running;
 use crate::compiler;
 use crate::convert;
 use crate::extension::Extension;
 use crate::host::{self, RunHost};
 use crate::object::{Closure, Kind, Obj};
-use crate::program::Running;
 use crate::strings::Strings;
 use crate::value::Value;
 use crate::vm::Vm;
@@ -233,7 +233,10 @@ pub fn finish(r: Running<'_>) -> Outcome {
         Vec::new()
     };
     let logs = std::mem::take(&mut vm.logs);
-    let tool_calls = std::mem::take(&mut vm.tool_calls);
+    let tool_calls = std::mem::take(&mut vm.recorded_calls)
+        .into_iter()
+        .map(|(path, input)| crate::ToolCall { path, input })
+        .collect();
     bound_output(
         Outcome {
             result,
@@ -380,7 +383,7 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
         .warnings
         .iter()
         .take_while(|w| {
-            used += crate::schema::js_stringify(&diagnostic_json(w)).len() + 1;
+            used += crate::codemode::schema::js_stringify(&diagnostic_json(w)).len() + 1;
             used <= max
         })
         .count();

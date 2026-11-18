@@ -11,3 +11,4 @@ pub(crate) mod search;
 #[cfg(feature = "test262")]
 pub mod test262;
 pub(crate) mod tool;
+pub(crate) mod tool_host;

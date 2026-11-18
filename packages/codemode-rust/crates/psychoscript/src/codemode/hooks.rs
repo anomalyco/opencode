@@ -8,8 +8,8 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::Json;
+use crate::codemode::tool::{BoxFuture, ToolError};
 use crate::extension::{HostError, HostValue};
-use crate::tool::{BoxFuture, ToolError};
 
 /// A tool call the program is making, with its decoded input.
 #[derive(Clone, Debug, PartialEq)]

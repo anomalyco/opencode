@@ -1,5 +1,6 @@
-//! The VM's side of host work: tool calls, the `search` built-in, extension globals and modules, and the host
-//! futures a run has in flight. Arguments cross out and results cross in as copies.
+//! The VM's side of host work: host function globals and modules, the host calls a run has in flight and how they
+//! settle, and what the layer embedding the language (Code Mode, through [`Embedder`]) gives programs besides.
+//! Arguments cross out and results cross in as copies.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -7,17 +8,13 @@ use std::task::Poll;
 
 use rustc_hash::FxHashMap;
 
-use crate::exec::{Tasks, block_on};
+use crate::exec::{BoxFuture, Tasks, block_on};
 use crate::extension::{Body, HostError, HostFunction, HostResult, HostValue};
-use crate::hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
 use crate::object::*;
-use crate::schema;
-use crate::search;
 use crate::strings::Atom;
-use crate::tool::{BoxFuture, Execute, Tool, ToolContext, tool_expression};
 use crate::value::{Id, Value};
-use crate::vm::{Res, Vm};
-use crate::{DiagnosticKind, Json, Setup, ToolCall};
+use crate::vm::{NativeFn, Res, Vm};
+use crate::{DiagnosticKind, Json};
 
 /// Globals every program has before extensions apply, as the reference names them; an extension may not shadow one.
 pub const BUILTIN_GLOBALS: &[&str] = &[
@@ -101,8 +98,16 @@ pub struct Failed {
     suggestions: Vec<String>,
 }
 
-impl Settlement {
-    fn failure(kind: DiagnosticKind, message: String) -> Self {
+impl Failed {
+    /// What the failure says.
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl Failed {
+    /// A call's failure as its settlement.
+    pub(crate) fn settlement(kind: DiagnosticKind, message: String) -> Settlement {
         Settlement::Failure(Failed::new(kind, message))
     }
 }
@@ -125,7 +130,7 @@ impl Failed {
     }
 
     #[cold]
-    fn new(kind: DiagnosticKind, message: String) -> Box<Self> {
+    pub(crate) fn new(kind: DiagnosticKind, message: String) -> Box<Self> {
         Box::new(Failed {
             kind,
             message,
@@ -207,6 +212,89 @@ pub fn random_run_id() -> String {
     )
 }
 
+// ---------- the embedder ----------
+
+/// What the language asks of the layer embedding it, Code Mode: the namespace of host functions it gives programs
+/// (`tools`) and the blocking global that answers about them (`search`), what a snapshot needs about the calls in flight,
+/// and the hooks it runs around a host function's calls. The language knows nothing else about tools.
+pub(crate) trait Embedder: Sync {
+    /// The embedder itself, for its own code to get back.
+    fn as_any(&self) -> &dyn std::any::Any;
+    /// A global the embedder makes when a program refers to it (`search`), or `None` when it has none by that name.
+    fn global(&self, vm: &mut Vm<'_>, name: &str) -> Option<Value>;
+    /// A call into the namespace, `tools.<path>(...args)`: its promise.
+    fn call_namespace(&self, vm: &mut Vm<'_>, path: &str, args: &[Value]) -> Res;
+    /// The blocking global's answer for its crossed arguments (`search(...)`).
+    fn call_blocking(&self, vm: &mut Vm<'_>, args: &[Option<Json>]) -> Res;
+    /// The names under a namespace path, as `Object.keys` lists them.
+    fn namespace_keys(&self, path: &str) -> Vec<String>;
+    /// Stops the work of a started durable call to `path` when the run ends for real.
+    fn cancel(&self, path: &str, data: Json);
+    /// Whether a call in flight to `path` that a snapshot saved can start again, as a durable call when `durable`.
+    fn restorable(&self, path: &str, durable: bool) -> Result<(), String>;
+    /// Starts a restored call in flight again.
+    fn restart(&self, vm: &mut Vm<'_>, p: Id, path: &str, input: Json, call: u64, start: Start);
+    /// The natives the embedder makes, which a snapshot names after the language's own.
+    fn natives(&self) -> &'static [NativeFn];
+    /// Whether it watches calls to the host functions in globals; `before_call` and `after_call` are asked only then.
+    fn watches_calls(&self) -> bool;
+    /// What to wait for before a watched call goes ahead; failing denies it.
+    fn before_call(&self, call: &HostCall) -> Option<BoxFuture<'static, Result<(), HostError>>>;
+    /// A watched call ended.
+    fn after_call(&self, call: &HostCall, ended: Ended<'_>);
+}
+
+/// A watched call: the function's extension, the label that names it, and its arguments as they crossed.
+pub(crate) struct HostCall {
+    pub extension: String,
+    pub label: String,
+    pub args: Vec<HostValue>,
+}
+
+/// How a watched call ended.
+pub(crate) enum Ended<'a> {
+    Returned(&'a HostResult),
+    Interrupted,
+}
+
+/// No embedder: no namespace, no blocking global, no hooks; what a run made for the snapshot's tables uses.
+pub(crate) struct NoEmbedder;
+
+impl Embedder for NoEmbedder {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn global(&self, _: &mut Vm<'_>, _: &str) -> Option<Value> {
+        None
+    }
+    fn call_namespace(&self, vm: &mut Vm<'_>, path: &str, _: &[Value]) -> Res {
+        Err(vm.type_error(&format!("{path} is not a function.")))
+    }
+    fn call_blocking(&self, _: &mut Vm<'_>, _: &[Option<Json>]) -> Res {
+        Ok(Value::Undef)
+    }
+    fn namespace_keys(&self, _: &str) -> Vec<String> {
+        Vec::new()
+    }
+    fn cancel(&self, _: &str, _: Json) {}
+    fn restorable(&self, path: &str, _: bool) -> Result<(), String> {
+        Err(format!(
+            "This state has a call to {path} in flight, which this runtime doesn't have."
+        ))
+    }
+    fn restart(&self, _: &mut Vm<'_>, _: Id, _: &str, _: Json, _: u64, _: Start) {}
+    fn natives(&self) -> &'static [NativeFn] {
+        &[]
+    }
+    fn watches_calls(&self) -> bool {
+        false
+    }
+    fn before_call(&self, _: &HostCall) -> Option<BoxFuture<'static, Result<(), HostError>>> {
+        None
+    }
+    fn after_call(&self, _: &HostCall, _: Ended<'_>) {}
+}
+
 /// What a run tells whoever may suspend it from another thread (Code Mode's suspenders), and asks of them.
 pub(crate) trait SuspendWatch: Send + Sync {
     /// Whether a suspend is waiting for the run to reach a step boundary.
@@ -247,14 +335,15 @@ impl RunHost<'_> {
 
 /// The host state of one run.
 pub struct RunHost<'rt> {
-    pub setup: &'rt Setup,
+    /// The layer embedding the language, which made the run and outlives it.
+    pub(crate) embedder: &'rt dyn Embedder,
+    /// The embedder's own state in the run, which only it reads.
+    pub(crate) embedded: Option<Box<dyn std::any::Any>>,
     /// The runtime's extensions this run gets, in the runtime's order.
     pub extensions: std::rc::Rc<[&'rt crate::Extension]>,
     /// Names the run's host calls; made on first use when the host gave none.
     pub(crate) run_id: RunId,
     pub(crate) next_call: u64,
-    /// The context handed to synchronous tools, its call id set for each call.
-    ctx: Option<ToolContext>,
     pub tasks: Tasks<'rt, Settlement>,
     pub(crate) functions: Vec<FnEntry>,
     /// Host calls in flight.
@@ -303,15 +392,15 @@ impl<'rt> RunHost<'rt> {
         self.epoch.store(self.epoch.load(Relaxed) + 1, Relaxed);
     }
 
-    pub fn new(
-        setup: &'rt Setup,
+    pub(crate) fn new(
+        embedder: &'rt dyn Embedder,
         extensions: std::rc::Rc<[&'rt crate::Extension]>,
         run_id: Option<String>,
     ) -> Self {
         Self {
-            setup,
+            embedder,
+            embedded: None,
             extensions,
-            ctx: None,
             run_id: Arc::new(run_id.map(std::sync::OnceLock::from).unwrap_or_default()),
             next_call: 0,
             tasks: Tasks::default(),
@@ -343,7 +432,7 @@ impl<'rt> RunHost<'rt> {
         !self.tasks.is_empty()
     }
 
-    fn next_call(&mut self) -> u64 {
+    pub(crate) fn next_call(&mut self) -> u64 {
         let id = self.next_call;
         self.next_call += 1;
         id
@@ -353,14 +442,9 @@ impl<'rt> RunHost<'rt> {
         self.run_id.clone()
     }
 
-    fn context(&mut self) -> ToolContext {
-        let id = self.next_call();
-        ToolContext::new(self.run_id(), id)
-    }
-
     /// The key of the call with this id.
     pub fn key(&self, call: u64) -> String {
-        ToolContext::new(self.run_id.clone(), call).key()
+        call_key(&self.run_id, call)
     }
 
     /// A call settled: it is no longer in flight.
@@ -372,7 +456,6 @@ impl<'rt> RunHost<'rt> {
 
     /// Stops durable work still running when the run ends or is interrupted for real; a suspend detaches it first.
     pub fn cancel_durable(&mut self) {
-        let setup = self.setup;
         for call in std::mem::take(&mut self.calls) {
             let CallKind::Durable(data) = &call.kind else {
                 continue;
@@ -381,22 +464,10 @@ impl<'rt> RunHost<'rt> {
                 continue;
             }
             let data = data.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            if let (Some(data), Some(tool)) = (data, setup.registry.get(&call.tool))
-                && let Execute::Durable(d) = &tool.execute
-            {
-                block_on((d.cancel)(data));
+            if let Some(data) = data {
+                self.embedder.cancel(&call.tool, data);
             }
         }
-    }
-
-    /// The shared context for a synchronous call, without a reference count change per call.
-    fn sync_context(&mut self, call: u64) -> &ToolContext {
-        if self.ctx.is_none() {
-            self.ctx = Some(ToolContext::new(self.run_id(), 0));
-        }
-        let ctx = self.ctx.as_mut().expect("context");
-        ctx.call = call;
-        ctx
     }
 }
 
@@ -419,14 +490,12 @@ pub fn install(vm: &mut Vm, referenced: &[Atom]) {
 
 /// Defines one host global by name; false when there is none.
 fn define_host_global(vm: &mut Vm, name: &str) -> bool {
+    let embedder = vm.host.embedder;
+    if let Some(v) = embedder.global(vm, name) {
+        global(vm, name, v);
+        return true;
+    }
     let v = match name {
-        "search" => {
-            let f = native(vm, "search", 0, search_native, Value::Undef);
-            if let Value::Obj(id) = f {
-                vm.search_fn = id;
-            }
-            f
-        }
         "require" => native(vm, "require", 1, require_native, Value::Undef),
         IMPORT_GLOBAL => native(vm, "import", 2, import_native, Value::Undef),
         _ => {
@@ -453,7 +522,7 @@ fn global(vm: &mut Vm, name: &str, v: Value) {
     vm.global_map.insert(a, v);
 }
 
-fn native(vm: &mut Vm, name: &str, length: u8, f: crate::vm::NativeFn, data: Value) -> Value {
+pub(crate) fn native(vm: &mut Vm, name: &str, length: u8, f: NativeFn, data: Value) -> Value {
     let name = vm.atoms.intern(name);
     let proto = vm.realm.function_proto;
     Value::Obj(vm.alloc(Obj::new(
@@ -468,82 +537,10 @@ fn native(vm: &mut Vm, name: &str, length: u8, f: crate::vm::NativeFn, data: Val
     )))
 }
 
-// ---------- tool calls ----------
+// ---------- host calls ----------
 
-/// `tools.<path>(...args)`: returns a promise at once. The arguments cross now (`cross::tool_args`): a failure there
-/// rejects the promise, and when they hold promises that haven't fulfilled the call waits for them first
-/// (`cross::wait_async`); otherwise the call starts, and settles the promise later.
-pub fn call_tool(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
-    use crate::cross::Args;
-    let p = vm.new_promise();
-    match crate::cross::tool_args(vm, args, crate::cross::Callee::Tool(path)) {
-        Err(e) if vm.fatal.is_some() => return Err(e),
-        Err(e) => vm.reject(p, e),
-        Ok(Args::Ready(json)) => start_tool(vm, p, path, json),
-        Ok(Args::Wait(promises)) => {
-            let callee = vm.tool_ref(path);
-            crate::cross::wait_async(vm, promises, callee, args, p);
-        }
-    }
-    Ok(Value::Obj(p))
-}
-
-/// A tool call's arguments as JSON, or the failure converting them met (`cross::tool_args`).
+/// A host call's arguments as JSON, or the failure converting them met (`cross::tool_args`).
 pub(crate) type Crossed = Result<Vec<Option<Json>>, Box<Failed>>;
-
-/// Everything about a call that happens before its tool runs: the reference's `decode` and `admit`.
-struct Admitted<'rt> {
-    tool: &'rt Tool,
-    input: Json,
-    call: u64,
-}
-
-/// Starts a call whose promise is `p`, once its arguments have crossed (`args`, `None` for undefined, or the failure
-/// the tool runtime's `toJson` meets, which fails a call that finds its tool). A call that ends at once queues its
-/// outcome; the rest become tasks.
-pub(crate) fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: Crossed) {
-    let setup = vm.host.setup;
-    // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
-    if path == "search" && !setup.registry.exists("search") {
-        let s = match args.and_then(|args| run_search(vm, &args)) {
-            Ok(json) => Settlement::Json(json),
-            Err(f) => Settlement::Failure(f),
-        };
-        vm.inbox.push_back((p, s));
-        return;
-    }
-    let admitted = match admit(vm, path, args) {
-        Ok(a) => a,
-        Err(f) => {
-            vm.inbox.push_back((p, Settlement::Failure(f)));
-            return;
-        }
-    };
-    let hooks = &setup.hooks;
-    if hooks.tool_before.is_none()
-        && hooks.tool_after.is_none()
-        && let Execute::Sync(f) = &admitted.tool.execute
-    {
-        vm.host.enter_sync(admitted.call, tool_expression(path));
-        let raw = f(admitted.input, vm.host.sync_context(admitted.call));
-        vm.host.leave_sync();
-        let s = finish(path, admitted.tool, raw);
-        if let Settlement::Interrupted = s {
-            interrupt(vm);
-        }
-        vm.inbox.push_back((p, s));
-        return;
-    }
-    spawn_tool(
-        vm,
-        p,
-        path,
-        admitted.tool,
-        admitted.input,
-        admitted.call,
-        Start::Call,
-    );
-}
 
 /// How a tool call's future begins: a new call, an idempotent call run again on resume, or a started durable call
 /// reconnected to its work through its data.
@@ -551,336 +548,6 @@ pub enum Start {
     Call,
     Again,
     Wait(Json),
-}
-
-/// Runs a tool call as a host future, recorded as in flight while it runs.
-pub fn spawn_tool<'rt>(
-    vm: &mut Vm<'rt>,
-    p: Id,
-    path: &str,
-    tool: &'rt Tool,
-    input: Json,
-    call: u64,
-    start: Start,
-) {
-    let setup = vm.host.setup;
-    let hooks = &setup.hooks;
-    let detached = Arc::new(AtomicBool::new(false));
-    let kind = match &tool.execute {
-        Execute::Idempotent(_) => CallKind::Idempotent,
-        Execute::Durable(_) => CallKind::Durable(Arc::new(Mutex::new(match &start {
-            Start::Wait(data) => Some(data.clone()),
-            _ => None,
-        }))),
-        _ => CallKind::Blocking,
-    };
-    let phase = match &kind {
-        CallKind::Durable(data) => Some(data.clone()),
-        _ => None,
-    };
-    let ctx = ToolContext::new(vm.host.run_id(), call);
-    let a = Admitted {
-        tool,
-        input: input.clone(),
-        call,
-    };
-    let future = Box::pin(hooked_tool(
-        hooks,
-        path.to_owned(),
-        a,
-        ctx,
-        detached.clone(),
-        phase,
-        start,
-    ));
-    match vm.host.tasks.spawn(p, future) {
-        Poll::Ready(s) => vm.inbox.push_back((p, s)),
-        Poll::Pending => vm.host.calls.push(Call {
-            promise: p,
-            call,
-            path: tool_expression(path),
-            tool: path.to_owned(),
-            input,
-            kind,
-            detached,
-        }),
-    }
-}
-
-#[inline]
-fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: Crossed) -> Result<Admitted<'rt>, Box<Failed>> {
-    let setup = vm.host.setup;
-    let Some(tool) = setup.registry.get(path) else {
-        return Err(unknown_tool(setup, path));
-    };
-    let tool: &'rt Tool = tool;
-    let args = args?;
-    let entry_field = if tool.freeform {
-        schema::string_parameter(tool.input.document()).map(|(name, _)| name)
-    } else {
-        None
-    };
-    let input = decode(path, &tool.input, entry_field.as_deref(), args, false)?;
-    admit_call(vm, path, &input)?;
-    let call = vm.host.next_call();
-    Ok(Admitted { tool, input, call })
-}
-
-/// Decodes the call's crossed argument with the tool's input schema.
-#[inline]
-fn decode(
-    name: &str,
-    schema: &crate::Schema,
-    string_field: Option<&str>,
-    args: Vec<Option<Json>>,
-    search: bool,
-) -> Result<Json, Box<Failed>> {
-    if args.len() > 1 {
-        return Err(Failed::new(
-            DiagnosticKind::InvalidToolInput,
-            format!("Tool '{name}' expects at most one input object."),
-        ));
-    }
-    let input = match args.into_iter().next() {
-        None => Json::Object(serde_json::Map::new()),
-        Some(j) => j.unwrap_or(Json::Null),
-    };
-    let input = match (string_field, input) {
-        (Some(field), Json::String(s)) => {
-            let mut map = serde_json::Map::new();
-            map.insert(field.to_owned(), Json::String(s));
-            Json::Object(map)
-        }
-        (_, input) => input,
-    };
-    schema
-        .validate(input)
-        .map_err(|e| Box::new(Failed {
-            kind: DiagnosticKind::InvalidToolInput,
-            message: format!("Invalid input for tool '{name}': {e}"),
-            suggestions: vec![if search {
-                "Pass search a query string or an object, such as search(\"issues\") or search({ namespace: \"github\" }).".into()
-            } else {
-                "The signature may have changed. Use search to get the current signature.".into()
-            }],
-        }))
-}
-
-/// Counts a call against `max_tool_calls` and records it.
-#[inline]
-fn admit_call(vm: &mut Vm, path: &str, input: &Json) -> Result<(), Box<Failed>> {
-    if let Some(max) = vm.limits.max_tool_calls
-        && vm.tool_calls.len() as u64 >= max
-    {
-        return Err(Failed::new(
-            DiagnosticKind::ToolCallLimitExceeded,
-            format!("Execution exceeded its tool-call limit of {max}."),
-        ));
-    }
-    vm.tool_calls.push(ToolCall {
-        path: path.to_owned(),
-        input: input.clone(),
-    });
-    Ok(())
-}
-
-/// A tool's raw result as the program receives it.
-#[inline]
-fn finish(name: &str, tool: &Tool, raw: Result<Json, crate::ToolError>) -> Settlement {
-    match raw {
-        Err(e) if e.is_interrupt() => Settlement::Interrupted,
-        Err(e) => Settlement::failure(DiagnosticKind::ToolFailure, e.message),
-        Ok(raw) => match &tool.output {
-            None => Settlement::Undefined,
-            Some(schema) => match schema.validate(raw) {
-                Ok(json) => Settlement::Json(json),
-                Err(e) => Settlement::failure(
-                    DiagnosticKind::InvalidToolOutput,
-                    format!("Invalid output from tool '{name}': {e}"),
-                ),
-            },
-        },
-    }
-}
-
-/// Runs `tool.after` as interrupted if the call is dropped while its tool runs, unless a suspend detached it.
-struct AfterGuard<'h> {
-    hooks: &'h Hooks,
-    call: Option<ToolInvocation>,
-    detached: Arc<AtomicBool>,
-}
-
-impl AfterGuard<'_> {
-    fn end(mut self, s: &Settlement) {
-        let (Some(after), Some(call)) = (&self.hooks.tool_after, self.call.take()) else {
-            return;
-        };
-        let null = Json::Null;
-        match s {
-            Settlement::Json(v) => after(&call, CallResult::Success(v)),
-            Settlement::Undefined => after(&call, CallResult::Success(&null)),
-            Settlement::Failure(f) => after(&call, CallResult::Failure(&f.message)),
-            Settlement::Interrupted => after(&call, CallResult::Interrupted),
-            Settlement::Host(_) | Settlement::Lost(..) => {}
-        }
-    }
-}
-
-impl Drop for AfterGuard<'_> {
-    fn drop(&mut self) {
-        if self.detached.load(Ordering::Relaxed) {
-            return;
-        }
-        if let (Some(after), Some(call)) = (&self.hooks.tool_after, self.call.take()) {
-            after(&call, CallResult::Interrupted);
-        }
-    }
-}
-
-async fn hooked_tool(
-    hooks: &Hooks,
-    name: String,
-    a: Admitted<'_>,
-    ctx: ToolContext,
-    detached: Arc<AtomicBool>,
-    phase: Option<Arc<Mutex<Option<Json>>>>,
-    start: Start,
-) -> Settlement {
-    let call = ToolInvocation {
-        name: name.clone(),
-        input: a.input.clone(),
-        key: ctx.key(),
-    };
-    // A durable call reconnecting on resume already passed its hook.
-    if !matches!(start, Start::Wait(_))
-        && let Some(before) = &hooks.tool_before
-        && let Err(e) = before(&call).await
-    {
-        return Settlement::failure(DiagnosticKind::ToolFailure, e.message);
-    }
-    let guard = AfterGuard {
-        hooks,
-        call: Some(call),
-        detached,
-    };
-    let raw = match &a.tool.execute {
-        Execute::Sync(f) => f(a.input, &ctx),
-        Execute::Async(f) | Execute::Idempotent(f) => f(a.input, ctx).await,
-        Execute::Durable(d) => {
-            let data = match start {
-                Start::Wait(data) => Ok(data),
-                _ => (d.start)(a.input, ctx.clone()).await,
-            };
-            match data {
-                Ok(data) => {
-                    if let Some(phase) = &phase {
-                        *phase.lock().unwrap_or_else(|e| e.into_inner()) = Some(data.clone());
-                    }
-                    let r = (d.wait)(data, ctx).await;
-                    // Finished: there is nothing left to cancel.
-                    if let Some(phase) = &phase {
-                        *phase.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                    }
-                    r
-                }
-                Err(e) => Err(e),
-            }
-        }
-    };
-    let s = finish(&name, a.tool, raw);
-    guard.end(&s);
-    s
-}
-
-#[cold]
-fn unknown_tool(setup: &Setup, path: &str) -> Box<Failed> {
-    let registry = &setup.registry;
-    let entries = registry.entries();
-    let index = registry.word_index();
-    let segments: Vec<&str> = path.split('.').collect();
-    if !registry.is_namespace(path) {
-        let first = segments[0];
-        let ns = (segments.len() > 1 && registry.exists(first)).then_some(first);
-        let (scope, query): (Vec<usize>, String) = match ns {
-            Some(ns) => {
-                let under = format!("{ns}.");
-                (
-                    (0..entries.len())
-                        .filter(|&i| entries[i].path.starts_with(&under))
-                        .collect(),
-                    segments[1..].join(" "),
-                )
-            }
-            None => ((0..entries.len()).collect(), path.to_owned()),
-        };
-        let closest = search::rank(entries, index, &scope, &query)
-            .into_iter()
-            .next();
-        let message = match closest {
-            Some(i) => format!(
-                "Unknown tool '{path}'. Did you mean {}?",
-                tool_expression(&entries[i].path)
-            ),
-            None => format!("Unknown tool '{path}'."),
-        };
-        return Box::new(Failed {
-            kind: DiagnosticKind::UnknownTool,
-            message,
-            suggestions: vec!["Use search to find available tools.".into()],
-        });
-    }
-    let under = format!("{path}.");
-    let scope: Vec<usize> = (0..entries.len())
-        .filter(|&i| entries[i].path.starts_with(&under))
-        .collect();
-    let mut shown = search::rank(
-        entries,
-        index,
-        &scope,
-        segments.last().copied().unwrap_or(""),
-    );
-    for &i in &scope {
-        if !shown.contains(&i) {
-            shown.push(i);
-        }
-    }
-    shown.truncate(3);
-    let shown: Vec<String> = shown
-        .iter()
-        .map(|&i| tool_expression(&entries[i].path))
-        .collect();
-    let more = scope.len() - shown.len();
-    let message = if shown.is_empty() {
-        format!("Tool '{path}' is not callable.")
-    } else {
-        format!(
-            "Tool '{path}' is not callable, it is a namespace. Did you mean {}?",
-            disjunction(&shown)
-        )
-    };
-    let suggestion = if more > 0 {
-        format!(
-            "{more} more under '{path}'. Use search({{ namespace: {} }}) to list them.",
-            schema::js_stringify(&Json::String(path.to_owned()))
-        )
-    } else {
-        "Use search to find available tools.".into()
-    };
-    Box::new(Failed {
-        kind: DiagnosticKind::UnknownTool,
-        message,
-        suggestions: vec![suggestion],
-    })
-}
-
-/// `Intl.ListFormat("en", { type: "disjunction" })`.
-fn disjunction(items: &[String]) -> String {
-    match items {
-        [] => String::new(),
-        [a] => a.clone(),
-        [a, b] => format!("{a} or {b}"),
-        [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
-    }
 }
 
 /// A promise was rejected with nothing to handle it: a warning, unless something handles it before the run ends.
@@ -904,7 +571,7 @@ pub fn interrupt(vm: &mut Vm) {
     if vm.fatal.is_none() {
         vm.fatal = Some((
             DiagnosticKind::ExecutionFailure,
-            crate::Interrupted.to_string(),
+            crate::diagnostic::Interrupted.to_string(),
         ));
     }
 }
@@ -979,123 +646,6 @@ fn failure_value(
         vm.host.suggestions.insert(id, suggestions);
     }
     e
-}
-
-// ---------- search ----------
-
-/// `search(...)` called other than from bytecode, which `call_op` runs itself (`cross::search_call`).
-fn search_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res {
-    crate::cross::search_call(vm, args)
-}
-
-/// What `search(...)` answers for its crossed arguments.
-pub(crate) fn search_value(vm: &mut Vm, args: &[Option<Json>]) -> Res {
-    match run_search(vm, args) {
-        Ok(json) => {
-            let v = crate::convert::from_json(vm, &json);
-            if let Value::Obj(id) = v {
-                vm.heap[id as usize].proto = Some(promise_like_proto(vm));
-            }
-            Ok(v)
-        }
-        Err(f) => Err(failure_value(vm, f.kind, f.message, f.suggestions)),
-    }
-}
-
-/// The built-in search, blocking: decode, admit, the hooks, then the ranking.
-fn run_search(vm: &mut Vm, args: &[Option<Json>]) -> Result<Json, Box<Failed>> {
-    let setup = vm.host.setup;
-    let mut args = args.to_vec();
-    if let Some(Some(Json::String(query))) = args.first() {
-        let mut map = serde_json::Map::new();
-        map.insert("query".into(), Json::String(query.clone()));
-        args[0] = Some(Json::Object(map));
-    }
-    let input = decode("search", &search::input_schema(), None, args, true)?;
-    admit_call(vm, "search", &input)?;
-    let ctx = vm.host.context();
-    let key = ctx.key();
-    vm.host.enter_sync(ctx.call, "search".into());
-    let hooks = &setup.hooks;
-    let call = ToolInvocation {
-        name: "search".into(),
-        input: input.clone(),
-        key,
-    };
-    if let Some(before) = &hooks.tool_before
-        && let Err(e) = block_on(before(&call))
-    {
-        vm.host.leave_sync();
-        return Err(Failed::new(DiagnosticKind::ToolFailure, e.message));
-    }
-    let registry = &setup.registry;
-    let result = search::search(registry.entries(), registry.word_index(), &input);
-    vm.host.leave_sync();
-    if let Some(after) = &hooks.tool_after {
-        after(&call, CallResult::Success(&result));
-    }
-    Ok(result)
-}
-
-/// The prototype of `search` results: an ordinary object whose `then`, `catch` and `finally` act on a settled copy,
-/// so a result can be used directly, awaited, or chained, while data views see only its own fields.
-fn promise_like_proto(vm: &mut Vm) -> Id {
-    if let Some(id) = vm.host.promise_like {
-        return id;
-    }
-    let object_proto = vm.realm.object_proto;
-    let id = vm.alloc(Obj::new(Some(object_proto), Kind::Ordinary));
-    for (name, length) in [("then", 2u8), ("catch", 1), ("finally", 1)] {
-        let key = vm.atoms.intern(name);
-        let f = native(
-            vm,
-            name,
-            length,
-            promise_like_method,
-            Value::Str(vm.atoms.atom_str(key)),
-        );
-        vm.define_hidden(id, key, f);
-    }
-    vm.host.promise_like = Some(id);
-    id
-}
-
-fn promise_like_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let Value::Obj(source) = this else {
-        return Err(vm.type_error("Method called on a non-object"));
-    };
-    let copy = vm.new_object();
-    for (k, v) in vm.own_entries(source) {
-        vm.define(copy, k, v);
-    }
-    let p = vm.new_promise();
-    vm.fulfill(p, Value::Obj(copy));
-    let Value::Str(name) = vm.native_data(callee) else {
-        return Ok(Value::Undef);
-    };
-    // As the reference does, the promise's own `then`, `catch` or `finally` runs, whatever the program put on
-    // `Promise.prototype`: it only registers its reactions.
-    let derived = vm.new_promise();
-    let (first, second) = (crate::builtins::arg(args, 0), crate::builtins::arg(args, 1));
-    let reaction = match vm.text(name) {
-        "then" => crate::vm::Reaction::Then {
-            on_ful: first,
-            on_rej: second,
-            derived,
-        },
-        "catch" => crate::vm::Reaction::Then {
-            on_ful: Value::Undef,
-            on_rej: first,
-            derived,
-        },
-        _ if vm.is_callable(&first) => crate::vm::Reaction::Finally {
-            cleanup: first,
-            derived,
-        },
-        _ => crate::vm::Reaction::Resolve(derived),
-    };
-    vm.perform_then(p, reaction);
-    Ok(Value::Obj(derived))
 }
 
 // ---------- extensions ----------
@@ -1593,9 +1143,8 @@ fn result_from_host(
 }
 
 /// Natives the host makes, which a snapshot names like the built-ins'.
-pub fn snapshot_natives() -> [crate::vm::NativeFn; 5] {
+pub fn snapshot_natives() -> [NativeFn; 4] {
     [
-        search_native,
         require_native,
         import_native,
         extension_native,
@@ -1665,19 +1214,19 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         Ok(host_args) => host_args,
         Err(made) => return Ok(made),
     };
-    let setup = vm.host.setup;
-    let hooks = &setup.hooks;
-    let invocation = hooked.then(|| ExtensionInvocation {
+    let embedder = vm.host.embedder;
+    let watched = (hooked && embedder.watches_calls()).then(|| HostCall {
         extension,
-        name: label.clone(),
+        label: label.clone(),
         args: host_args.clone(),
     });
     match &f.body {
         Body::Sync(body) => {
             let call_id = vm.host.next_call();
             vm.host.enter_sync(call_id, label.clone());
-            if let (Some(call), Some(before)) = (&invocation, &hooks.extension_before)
-                && let Err(e) = block_on(before(call))
+            if let Some(call) = &watched
+                && let Some(before) = embedder.before_call(call)
+                && let Err(e) = block_on(before)
             {
                 vm.host.leave_sync();
                 let thrown = HostValue::Error(Box::new(e));
@@ -1686,8 +1235,8 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
             let result = body(host_args);
             vm.host.leave_sync();
             vm.host.next_epoch();
-            if let (Some(call), Some(after)) = (&invocation, &hooks.extension_after) {
-                report(after.as_ref(), call, &result);
+            if let Some(call) = &watched {
+                embedder.after_call(call, Ended::Returned(&result));
             }
             match result {
                 Ok(v) => {
@@ -1707,8 +1256,9 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
             let call_id = vm.host.next_call();
             let path = label.clone();
             let future: BoxFuture<'_, Settlement> = Box::pin(async move {
-                if let (Some(call), Some(before)) = (&invocation, &hooks.extension_before)
-                    && let Err(e) = before(call).await
+                if let Some(call) = &watched
+                    && let Some(before) = embedder.before_call(call)
+                    && let Err(e) = before.await
                 {
                     return Settlement::Host(Box::new((
                         Err(HostValue::Error(Box::new(e))),
@@ -1719,8 +1269,8 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                     )));
                 }
                 let guard = ExtensionGuard {
-                    hooks,
-                    call: invocation,
+                    embedder,
+                    call: watched,
                 };
                 let result = body(host_args).await;
                 guard.end(&result);
@@ -1773,44 +1323,25 @@ fn extension_args(
     }
 }
 
-fn report(after: &crate::hooks::ExtensionAfter, call: &ExtensionInvocation, result: &HostResult) {
-    match result {
-        Ok(v) => after(call, CallResult::Success(v)),
-        Err(thrown) => {
-            let text = thrown_text(thrown);
-            after(call, CallResult::Failure(&text));
-        }
-    }
-}
-
-fn thrown_text(v: &HostValue) -> String {
-    match v {
-        HostValue::Error(e) => e.message.clone(),
-        HostValue::String(s) => s.clone(),
-        other => other
-            .to_json()
-            .map(|j| schema::js_stringify(&j))
-            .unwrap_or_default(),
-    }
-}
-
+/// Tells the embedder a watched async call ended: how it returned, or, when the call is dropped first, that it was
+/// interrupted.
 struct ExtensionGuard<'h> {
-    hooks: &'h Hooks,
-    call: Option<ExtensionInvocation>,
+    embedder: &'h dyn Embedder,
+    call: Option<HostCall>,
 }
 
 impl ExtensionGuard<'_> {
     fn end(mut self, result: &HostResult) {
-        if let (Some(after), Some(call)) = (&self.hooks.extension_after, self.call.take()) {
-            report(after.as_ref(), &call, result);
+        if let Some(call) = self.call.take() {
+            self.embedder.after_call(&call, Ended::Returned(result));
         }
     }
 }
 
 impl Drop for ExtensionGuard<'_> {
     fn drop(&mut self) {
-        if let (Some(after), Some(call)) = (&self.hooks.extension_after, self.call.take()) {
-            after(&call, CallResult::Interrupted);
+        if let Some(call) = self.call.take() {
+            self.embedder.after_call(&call, Ended::Interrupted);
         }
     }
 }

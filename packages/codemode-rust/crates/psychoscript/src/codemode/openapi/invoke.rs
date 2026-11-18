@@ -6,8 +6,8 @@ use std::sync::Arc;
 use super::spec::{Body, BodyMode, InputField, Location, SecurityRequirement, Style};
 use super::{ApiKeyLocation, AuthContext, AuthResolver, Credential, Operation, SecurityScheme};
 use crate::Json;
-use crate::schema::js_stringify;
-use crate::tool::{BoxFuture, ToolError};
+use crate::codemode::schema::js_stringify;
+use crate::codemode::tool::{BoxFuture, ToolError};
 use crate::value::write_num;
 
 const MAX_ERROR_BODY_CHARS: usize = 1024;

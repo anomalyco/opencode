@@ -6,7 +6,7 @@ use std::future::Future;
 use std::sync::{Arc, OnceLock};
 
 use crate::Json;
-use crate::schema::{self, Schema};
+use crate::codemode::schema::{self, Schema};
 
 pub use crate::exec::BoxFuture;
 use crate::host::RunId;
@@ -58,17 +58,7 @@ impl ToolError {
     }
 }
 
-/// A run that was interrupted, by a tool or a hook, instead of ending with an outcome.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Interrupted;
-
-impl fmt::Display for Interrupted {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("The run was interrupted.")
-    }
-}
-
-impl std::error::Error for Interrupted {}
+pub use crate::diagnostic::Interrupted;
 
 impl fmt::Display for ToolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -330,7 +320,7 @@ pub struct Registry {
     /// Paths in first-insertion order, which is the order namespaces enumerate their children in.
     order: Vec<String>,
     entries: OnceLock<Vec<Entry>>,
-    index: OnceLock<crate::search::WordIndex>,
+    index: OnceLock<crate::codemode::search::WordIndex>,
 }
 
 impl Registry {
@@ -343,9 +333,9 @@ impl Registry {
     }
 
     /// The search word index over [`Registry::entries`], built on the first query.
-    pub fn word_index(&self) -> &crate::search::WordIndex {
+    pub fn word_index(&self) -> &crate::codemode::search::WordIndex {
         self.index
-            .get_or_init(|| crate::search::WordIndex::build(self.entries()))
+            .get_or_init(|| crate::codemode::search::WordIndex::build(self.entries()))
     }
 
     pub fn namespace(&mut self, path: &str, description: &str) {

@@ -26,7 +26,7 @@ use crate::value::{Id, Slot, Value};
 use crate::vm::{
     Coroutine, Frame, FrameKind, Handler, Job, NativeFn, Reaction, Resume, SavedFrame, Vm,
 };
-use crate::{DiagnosticKind, Json, Limits, Setup};
+use crate::{DiagnosticKind, Json, Limits};
 
 /// Bumped whenever the shape of saved state changes.
 pub const FORMAT: u64 = 1;
@@ -114,14 +114,8 @@ struct Natives {
 fn natives() -> &'static Natives {
     static TABLE: OnceLock<Natives> = OnceLock::new();
     TABLE.get_or_init(|| {
-        let setup: &'static Setup = Box::leak(Box::new(Setup {
-            registry: Default::default(),
-            hooks: Default::default(),
-            extensions: Vec::new(),
-            limits: Limits::default(),
-        }));
         let mut vm = Vm::new(
-            host::RunHost::new(setup, Rc::from([]), None),
+            host::RunHost::new(&host::NoEmbedder, Rc::from([]), None),
             Limits::default(),
             crate::strings::Strings::new(),
         );
@@ -317,6 +311,8 @@ pub struct Capture<'c> {
 struct Enc<'v, 'rt> {
     vm: &'v Vm<'rt>,
     natives: &'static Natives,
+    /// The embedder's natives, named after the language's own.
+    extra: &'static [NativeFn],
     protos: FxHashMap<usize, usize>,
     buffers: Vec<Rc<RefCell<Vec<u8>>>>,
 }
@@ -348,6 +344,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
     let mut enc = Enc {
         vm,
         natives: natives(),
+        extra: vm.host.embedder.natives(),
         protos: vm
             .protos
             .iter()
@@ -375,7 +372,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
             "maxToolCalls": limits.max_tool_calls,
             "maxOutputBytes": limits.max_output_bytes,
         },
-        "budget": { "activeMs": c.active_ms, "toolCalls": vm.tool_calls.len() },
+        "budget": { "activeMs": c.active_ms, "toolCalls": vm.recorded_calls.len() },
         "base": base.json(),
     });
     Ok(Snapshot(
@@ -435,7 +432,7 @@ impl Enc<'_, '_> {
             "inbox": vm.inbox.iter().map(|(p, s)| self.settlement(*p, s)).collect::<R<Vec<_>>>()?,
             "coroutines": vm.coroutines.iter().map(|co| self.coroutine(co)).collect::<R<Vec<_>>>()?,
             "logs": vm.logs,
-            "toolCalls": vm.tool_calls.iter().map(|t| json!([t.path, t.input])).collect::<Vec<_>>(),
+            "toolCalls": vm.recorded_calls.iter().map(|(path, input)| json!([path, input])).collect::<Vec<_>>(),
             "rng": vm.rng.to_string(),
             "std": [std.regexp, std.date, std.uint8, std.buffer, std.text_encoder, std.text_decoder,
                     std.weak_map, std.weak_set, std.iterator_helper, std.uri_error, std.url, std.params,
@@ -557,7 +554,12 @@ impl Enc<'_, '_> {
                 length,
                 ctor,
             } => {
-                let Some(i) = self.natives.index.get(&(*f as usize)) else {
+                let own = self.natives.index.get(&(*f as usize)).map(|&i| i as usize);
+                let extra = || {
+                    let at = self.extra.iter().position(|g| *g as usize == *f as usize)?;
+                    Some(self.natives.list.len() + at)
+                };
+                let Some(i) = own.or_else(extra) else {
                     return Err(SnapshotError::new(
                         "The run can't be suspended: it holds a native function this build can't name.",
                     ));
@@ -895,7 +897,7 @@ fn baseline(vm: &Vm, code: &str) -> R<Vec<J>> {
     let mut atoms = crate::strings::Strings::new();
     let program =
         crate::compiler::compile(code, &mut atoms).map_err(|e| SnapshotError::new(e.message))?;
-    let host = host::RunHost::new(vm.host.setup, vm.host.extensions.clone(), None);
+    let host = host::RunHost::new(vm.host.embedder, vm.host.extensions.clone(), None);
     let mut fresh = Vm::new(host, vm.limits, atoms);
     fresh.setup();
     host::install(&mut fresh, &program.globals);
@@ -903,6 +905,7 @@ fn baseline(vm: &Vm, code: &str) -> R<Vec<J>> {
     let mut enc = Enc {
         vm: &fresh,
         natives: natives(),
+        extra: fresh.host.embedder.natives(),
         protos: FxHashMap::default(),
         buffers: Vec::new(),
     };
@@ -1206,6 +1209,7 @@ fn kind_named(name: &str) -> R<DiagnosticKind> {
 
 struct Dec<'p> {
     natives: &'static Natives,
+    extra: &'static [NativeFn],
     heap_len: usize,
     bufs_len: usize,
     protos: usize,
@@ -1590,7 +1594,12 @@ impl Dec<'_> {
             }
             "n" => {
                 let i = usize_(f(1)?)?;
-                let Some(native) = self.natives.list.get(i) else {
+                let len = self.natives.list.len();
+                let found = match i.checked_sub(len) {
+                    None => self.natives.list.get(i),
+                    Some(k) => self.extra.get(k),
+                };
+                let Some(native) = found else {
                     return Err(invalid("a native function is unknown."));
                 };
                 Kind::Native {
@@ -1911,6 +1920,7 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
     }
     let dec = Dec {
         natives: natives(),
+        extra: vm.host.embedder.natives(),
         heap_len: base.heap + rest.len(),
         bufs_len: vm.atoms.counts().0,
         protos: vm.protos.len(),
@@ -1990,14 +2000,9 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
         .iter()
         .map(string)
         .collect::<R<_>>()?;
-    vm.tool_calls = field_list(st, "toolCalls")?
+    vm.recorded_calls = field_list(st, "toolCalls")?
         .iter()
-        .map(|t| {
-            Ok(crate::ToolCall {
-                path: string(at(t, 0)?)?,
-                input: at(t, 1)?.clone(),
-            })
-        })
+        .map(|t| Ok((string(at(t, 0)?)?, at(t, 1)?.clone())))
         .collect::<R<_>>()?;
     vm.rng = field(st, "rng")?
         .as_str()
@@ -2103,7 +2108,7 @@ fn hooks_of<'s>(
 }
 
 fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
-    let setup = vm.host.setup;
+    let embedder = vm.host.embedder;
     let extensions = vm.host.extensions.clone();
     vm.host.next_call = uint(field(j, "nextCall")?)?;
     // Results an extension's hooks saved: decoded once each, their functions taken in order.
@@ -2193,23 +2198,14 @@ fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
         let call = uint(at(c, 2)?)?;
         let path = string(at(c, 3)?)?;
         let input = at(c, 4)?.clone();
-        let Some(tool) = setup.registry.get(&path) else {
-            return Err(SnapshotError::new(format!(
-                "This state has a call to tools.{path} in flight, which this runtime doesn't have."
-            )));
-        };
         let start = match tag {
             "again" => host::Start::Again,
-            "wait" => {
-                if !matches!(tool.execute, crate::tool::Execute::Durable(_)) {
-                    return Err(SnapshotError::new(format!(
-                        "This state has a started durable call to tools.{path}, which is no longer durable here."
-                    )));
-                }
-                host::Start::Wait(at(c, 5)?.clone())
-            }
+            "wait" => host::Start::Wait(at(c, 5)?.clone()),
             _ => return Err(invalid("a call in flight is unknown.")),
         };
+        embedder
+            .restorable(&path, matches!(start, host::Start::Wait(_)))
+            .map_err(SnapshotError::new)?;
         pending_calls(vm).push((promise, path, input, call, start));
     }
     Ok(())
@@ -2222,10 +2218,8 @@ fn pending_calls<'v>(vm: &'v mut Vm) -> &'v mut Vec<(Id, String, Json, u64, host
 
 /// The calls a resumed run restarts, in the order they were in flight.
 pub fn restart_calls(vm: &mut Vm) {
-    let setup = vm.host.setup;
+    let embedder = vm.host.embedder;
     for (p, path, input, call, start) in std::mem::take(&mut vm.host.restarts) {
-        if let Some(tool) = setup.registry.get(&path) {
-            host::spawn_tool(vm, p, &path, tool, input, call, start);
-        }
+        embedder.restart(vm, p, &path, input, call, start);
     }
 }

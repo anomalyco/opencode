@@ -11,11 +11,12 @@
 mod codemode;
 mod language;
 
-// The modules of both layers by their short names, so their files name each other as `crate::vm`, `crate::tool`.
-use codemode::{hooks, program, run, schema, search, tool};
+// The language layer's modules by their short names, so its files and Code Mode's name them as `crate::vm`. Code Mode's
+// modules are named only through `crate::codemode`, so the language layer can't reach them unnoticed
+// (`tests/language_boundary.rs`).
 use language::{
-    builtins, bytecode, compiler, conversion, convert, cross, exec, extension, host, iteration,
-    native, object, ops, promise, reach, snapshot, streaming, strings, value, vm,
+    builtins, bytecode, compiler, conversion, convert, cross, diagnostic, exec, extension, host,
+    iteration, native, object, ops, promise, reach, snapshot, streaming, strings, value, vm,
 };
 
 pub use codemode::openapi;
@@ -26,14 +27,14 @@ pub use codemode::runtime::{Outcome, RunOptions, Runtime, ToolCall, ToolFn, sear
 pub use codemode::test262;
 pub use language::diagnostic::{Diagnostic, DiagnosticKind, Limits};
 
-pub use extension::{Extension, HostError, HostFunction, HostValue, SnapshotHooks};
-pub use hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
-pub use program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
-pub use schema::Schema;
-pub use serde_json::Value as Json;
-pub use snapshot::{Snapshot, SnapshotError, from_bytes, to_bytes};
-pub use streaming::{HttpBody, StreamingResponse};
-pub use tool::{
+pub use codemode::hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
+pub use codemode::program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
+pub use codemode::schema::Schema;
+pub use codemode::tool::{
     BoxFuture, ConfigError, Execute, Interrupted, Tool, ToolContext, ToolDescription, ToolError,
     tool_expression,
 };
+pub use extension::{Extension, HostError, HostFunction, HostValue, SnapshotHooks};
+pub use serde_json::Value as Json;
+pub use snapshot::{Snapshot, SnapshotError, from_bytes, to_bytes};
+pub use streaming::{HttpBody, StreamingResponse};

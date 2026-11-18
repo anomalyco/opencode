@@ -1,4 +1,7 @@
-//! What a run ends with besides its value: diagnostics and their kinds, and the limits it runs under.
+//! What a run ends with besides its value: diagnostics and their kinds, the limits it runs under, and its
+//! interruption.
+
+use std::fmt;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Limits {
@@ -51,3 +54,15 @@ pub struct Diagnostic {
     /// What the model could do about it, such as `"Use search to find available tools."`.
     pub suggestions: Vec<String>,
 }
+
+/// A run that was interrupted, by a host call or a hook, instead of ending with an outcome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Interrupted;
+
+impl fmt::Display for Interrupted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("The run was interrupted.")
+    }
+}
+
+impl std::error::Error for Interrupted {}

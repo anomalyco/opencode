@@ -805,7 +805,7 @@ impl<'rt> Vm<'rt> {
     /// Own enumerable string keys in JavaScript order: integer keys ascending, then insertion order.
     pub fn own_keys(&mut self, id: Id) -> Vec<Atom> {
         if let Kind::ToolRef(path) = &self.heap[id as usize].kind {
-            let children = self.host.setup.registry.children(path);
+            let children = self.host.embedder.namespace_keys(path);
             return children.iter().map(|c| self.atoms.intern(c)).collect();
         }
         let mut out = Vec::new();

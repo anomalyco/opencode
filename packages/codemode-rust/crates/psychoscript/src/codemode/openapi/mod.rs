@@ -12,8 +12,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::Json;
-use crate::schema::Schema;
-use crate::tool::{BoxFuture, Tool, ToolError};
+use crate::codemode::schema::Schema;
+use crate::codemode::tool::{BoxFuture, Tool, ToolError};
 
 pub use invoke::{HttpClient, HttpRequest, HttpResponse};
 
@@ -161,7 +161,7 @@ impl std::error::Error for SpecError {}
 /// Builds one tool per representable operation of an OpenAPI 3.x document. Fails, as the reference throws, when
 /// an OpenAPI 3.0 schema uses a keyword that only JSON Schema 2020-12 defines.
 pub fn from_spec(mut options: Options) -> Result<Generated, SpecError> {
-    options.spec = crate::schema::js_key_order(std::mem::take(&mut options.spec));
+    options.spec = crate::codemode::schema::js_key_order(std::mem::take(&mut options.spec));
     let doc = &options.spec;
     let mut projector = project::Projector::new(doc);
     let schemes = spec::security_schemes(doc);

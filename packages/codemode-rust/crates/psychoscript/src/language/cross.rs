@@ -999,21 +999,14 @@ pub fn tool_args(
 /// What a host call is to its messages: a tool by its path, or a function by its label.
 #[derive(Clone, Copy)]
 pub enum Callee<'a> {
-    Tool(&'a str),
     Named(&'a str),
 }
 
 impl Callee<'_> {
     /// How the reference names an argument in a failure: `Argument 1 to tools.ns.tool`.
     pub fn label(self, arg: usize) -> String {
-        match self {
-            Callee::Tool(path) => format!(
-                "Argument {} to {}",
-                arg + 1,
-                crate::tool::tool_expression(path)
-            ),
-            Callee::Named(name) => format!("Argument {} to {name}", arg + 1),
-        }
+        let Callee::Named(name) = self;
+        format!("Argument {} to {name}", arg + 1)
     }
 }
 
@@ -1302,7 +1295,8 @@ fn resume_wait(vm: &mut Vm, state: Id, outcome: Result<Value, Value>) -> Result<
         // A tool is called through its namespace, which costs the reference nothing.
         Kind::ToolRef(path) => {
             let path = path.clone();
-            crate::host::call_tool(vm, &path, &args)
+            let embedder = vm.host.embedder;
+            embedder.call_namespace(vm, &path, &args)
         }
         _ => {
             let r = vm.call(&callee, Value::Undef, &args);
@@ -1450,7 +1444,10 @@ fn park_for(
 /// wait (`wait_sync`).
 pub fn search_call(vm: &mut Vm, args: &[Value]) -> Res {
     match tool_args(vm, args, Callee::Named("search"))? {
-        Args::Ready(Ok(json)) => crate::host::search_value(vm, &json),
+        Args::Ready(Ok(json)) => {
+            let embedder = vm.host.embedder;
+            embedder.call_blocking(vm, &json)
+        }
         Args::Ready(Err(f)) => Err(crate::host::failed_value(vm, *f)),
         Args::Wait(promises) => {
             let callee = Value::Obj(vm.search_fn);

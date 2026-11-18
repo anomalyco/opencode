@@ -9,9 +9,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
+use crate::codemode::run;
 use crate::exec;
 use crate::extension::Extension;
-use crate::run;
 use crate::snapshot::{self, Refusal, Snapshot};
 use crate::vm::Vm;
 use crate::{Interrupted, Json, Outcome, RunOptions, Runtime};
