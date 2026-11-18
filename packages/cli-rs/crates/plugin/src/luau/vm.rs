@@ -272,9 +272,9 @@ impl Vm {
         };
         if let Some(stopped) = self.budget.stopped.take() {
             // A failed task's error with its frames comes this way too ([`super::bind`]'s `fail`).
-            return Err(report(&self.id, &stopped));
+            return Err(report(&self.id, &stopped, self.cap));
         }
-        let result = result.map_err(|error| report(&self.id, &error.to_string()))?;
+        let result = result.map_err(|error| report(&self.id, &error.to_string(), self.cap))?;
         if self.lua.used_memory() + ROOM >= self.cap {
             // Garbage does not count: only what a full collection leaves, and only when the heap is that near the cap.
             let _ = self.lua.gc_collect();
@@ -357,10 +357,16 @@ impl Drop for Outer<'_> {
 
 /// What an author reads for Luau error `error` of plugin `id`: `<id>: <file>.luau:<line>: <message>`, then the
 /// traceback's frames in the plugin's own files. mlua's `runtime error:` prefix goes, and so do the frames of C
-/// functions, of mlua's `require` and of the host's `@opencode/plugin`, which say nothing about the plugin.
-fn report(id: &str, error: &str) -> String {
+/// functions, of mlua's `require` and of the host's `@opencode/plugin`, which say nothing about the plugin. An
+/// allocation over the heap's `cap` says so, with the cap.
+fn report(id: &str, error: &str, cap: usize) -> String {
     let (message, traceback) = error.split_once("\nstack traceback:\n").unwrap_or((error, ""));
     let message = message.trim_end().strip_prefix("runtime error: ").unwrap_or(message.trim_end());
+    // Luau's text for an allocation the cap refused, "not enough memory" (mlua's "memory error: " before it on a call,
+    // not on a task), names no cap.
+    let capped = format!("out of memory: an allocation went past its {} MiB Luau heap cap", cap >> 20);
+    let refused = message.strip_prefix("memory error: ").unwrap_or(message) == "not enough memory";
+    let message = if refused { &capped } else { message };
     let frames: Vec<String> = traceback
         .lines()
         .map(|line| line.trim_start_matches(['\t', ' ', '>']))
