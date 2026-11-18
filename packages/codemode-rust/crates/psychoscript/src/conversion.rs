@@ -297,6 +297,25 @@ impl Vm<'_> {
         r
     }
 
+    /// An instruction's slow path on two operands, out of line: its result, or `None` once it pushed a convert frame
+    /// because an operand converts by calling the program.
+    #[inline(never)]
+    pub(crate) fn slow_op(
+        &mut self,
+        code: u8,
+        a: Value,
+        b: Value,
+        extra: u32,
+        extra2: u32,
+    ) -> Result<Option<Value>, Value> {
+        if self.operand_calls(&a) || self.operand_calls(&b) {
+            self.convert_op(code, a, b, Value::Undef, extra, extra2)?;
+            return Ok(None);
+        }
+        self.op_slow(code, a, b, Value::Undef, extra, extra2)
+            .map(Some)
+    }
+
     /// The slow path of the instruction operation `code`, after its operands were popped: what the instruction
     /// pushes. A local or a jump it writes itself is written by the convert frame (`finish_op`).
     pub(crate) fn op_slow(

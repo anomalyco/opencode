@@ -2549,6 +2549,17 @@ impl<'rt> Vm<'rt> {
                     continue 'outer;
                 }};
             }
+            // An operation's slow path, out of line (`Vm::slow_op`): its result, or the convert frame it pushed.
+            macro_rules! slow {
+                ($code:expr, $a:expr, $b:expr, $x:expr, $y:expr) => {{
+                    self.frames[fi].pc = pc;
+                    match self.slow_op($code, $a, $b, $x, $y) {
+                        Ok(Some(v)) => v,
+                        Ok(None) => continue 'outer,
+                        Err(e) => throw!(e),
+                    }
+                }};
+            }
             macro_rules! num_op {
                 ($code:expr, $f:expr) => {{
                     let f: fn(f64, f64) -> f64 = $f;
@@ -2560,32 +2571,21 @@ impl<'rt> Vm<'rt> {
                     } else {
                         let b = self.pop();
                         let a = self.pop();
-                        if self.operand_calls(&a) || self.operand_calls(&b) {
-                            conv_op!($code, a, b, Value::Undef, 0, 0);
-                        }
-                        tri!(self.data_operands(&a, &b));
-                        let x = tri!(self.op_number(&a, &b));
-                        let y = tri!(self.op_number(&b, &a));
-                        self.push(Value::Num(f(x, y)));
+                        let r = slow!($code, a, b, 0, 0);
+                        self.push(r);
                     }
                 }};
             }
             macro_rules! int_op {
-                ($code:expr, $f:expr) => {{
+                ($code:expr) => {{
                     let b = self.pop();
                     let a = self.pop();
-                    if self.operand_calls(&a) || self.operand_calls(&b) {
-                        conv_op!($code, a, b, Value::Undef, 0, 0);
-                    }
-                    tri!(self.data_operands(&a, &b));
-                    let x = tri!(self.op_number(&a, &b));
-                    let y = tri!(self.op_number(&b, &a));
-                    let f: fn(f64, f64) -> f64 = $f;
-                    self.push(Value::Num(f(x, y)));
+                    let r = slow!($code, a, b, 0, 0);
+                    self.push(r);
                 }};
             }
             macro_rules! cmp_op {
-                ($code:expr, $op:tt, $swap:expr, $neg_undef:expr) => {{
+                ($code:expr, $op:tt) => {{
                     let n = self.stack.len();
                     let (a, b) = (self.stack[n - 2], self.stack[n - 1]);
                     if a.is_num() && b.is_num() {
@@ -2596,25 +2596,8 @@ impl<'rt> Vm<'rt> {
                     }
                     let b = self.pop();
                     let a = self.pop();
-                    if self.operand_calls(&a) || self.operand_calls(&b) {
-                        conv_op!($code, a, b, Value::Undef, 0, 0);
-                    }
-                    tri!(self.data_operands(&a, &b));
-                    let r = match (&a, &b) {
-                        (Value::Num(x), Value::Num(y)) => *x $op *y,
-                        (Value::Str(x), Value::Str(y)) => {
-                            self.atoms.sref(*x).cmp16(self.atoms.sref(*y)) $op std::cmp::Ordering::Equal
-                        }
-                        _ => {
-                            let (l, r) = if $swap { (b, a) } else { (a, b) };
-                            let c = tri!(self.less_than(&l, &r, !$swap));
-                            match c {
-                                Some(v) => if $neg_undef { !v } else { v },
-                                None => false,
-                            }
-                        }
-                    };
-                    self.push(Value::Bool(r));
+                    let r = slow!($code, a, b, 0, 0);
+                    self.push(r);
                 }};
             }
 
@@ -2699,14 +2682,10 @@ impl<'rt> Vm<'rt> {
                                 Arith::StrictNe => Slot::pack(Value::Bool(x != y)),
                             };
                         } else {
-                            let av = a.get();
-                            if self.operand_calls(&av) {
-                                self.stack.pop();
-                                let ac = crate::conversion::arith_code(op);
-                                conv_op!(code::ARITH, av, Value::Num(y), Value::Undef, ac, 0);
-                            }
-                            let r = tri!(self.arith(op, av, Value::Num(y)));
-                            self.stack[n - 1] = Slot::pack(r);
+                            self.stack.pop();
+                            let ac = crate::conversion::arith_code(op);
+                            let r = slow!(code::ARITH, a.get(), Value::Num(y), ac, 0);
+                            self.push(r);
                         }
                     }
                     Op::SetLocal(i) => {
@@ -3032,11 +3011,9 @@ impl<'rt> Vm<'rt> {
                         }
                         let b = self.pop();
                         let a = self.pop();
-                        if self.operand_calls(&a) || self.operand_calls(&b) {
-                            conv_op!(code::ADD, a, b, Value::Undef, 0, 0);
-                        }
                         let r = match (&a, &b) {
                             (Value::Num(x), Value::Num(y)) => Value::Num(x + y),
+                            (Value::Obj(_), _) | (_, Value::Obj(_)) => slow!(code::ADD, a, b, 0, 0),
                             _ => tri!(self.add(a, b)),
                         };
                         self.push(r);
@@ -3046,32 +3023,23 @@ impl<'rt> Vm<'rt> {
                     Op::Div => num_op!(code::DIV, |x, y| x / y),
                     Op::Mod => num_op!(code::MOD, js_rem),
                     Op::Pow => num_op!(code::POW, js_pow),
-                    Op::BitAnd => int_op!(code::BIT_AND, |x, y| (to_i32(x) & to_i32(y)) as f64),
-                    Op::BitOr => int_op!(code::BIT_OR, |x, y| (to_i32(x) | to_i32(y)) as f64),
-                    Op::BitXor => int_op!(code::BIT_XOR, |x, y| (to_i32(x) ^ to_i32(y)) as f64),
-                    Op::Shl => int_op!(code::SHL, |x, y| to_i32(x).wrapping_shl(to_u32(y) & 31)
-                        as f64),
-                    Op::Shr => int_op!(code::SHR, |x, y| (to_i32(x) >> (to_u32(y) & 31)) as f64),
-                    Op::UShr => int_op!(code::USHR, |x, y| (to_u32(x) >> (to_u32(y) & 31)) as f64),
+                    Op::BitAnd => int_op!(code::BIT_AND),
+                    Op::BitOr => int_op!(code::BIT_OR),
+                    Op::BitXor => int_op!(code::BIT_XOR),
+                    Op::Shl => int_op!(code::SHL),
+                    Op::Shr => int_op!(code::SHR),
+                    Op::UShr => int_op!(code::USHR),
                     Op::Eq => {
                         let b = self.pop();
                         let a = self.pop();
-                        if self.operand_calls(&a) || self.operand_calls(&b) {
-                            conv_op!(code::EQ, a, b, Value::Undef, 0, 0);
-                        }
-                        tri!(self.loose_eq_operands(&a, &b));
-                        let r = tri!(self.loose_eq(&a, &b));
-                        self.push(Value::Bool(r));
+                        let r = slow!(code::EQ, a, b, 0, 0);
+                        self.push(r);
                     }
                     Op::Ne => {
                         let b = self.pop();
                         let a = self.pop();
-                        if self.operand_calls(&a) || self.operand_calls(&b) {
-                            conv_op!(code::NE, a, b, Value::Undef, 0, 0);
-                        }
-                        tri!(self.loose_eq_operands(&a, &b));
-                        let r = tri!(self.loose_eq(&a, &b));
-                        self.push(Value::Bool(!r));
+                        let r = slow!(code::NE, a, b, 0, 0);
+                        self.push(r);
                     }
                     Op::StrictEq => {
                         let b = self.pop();
@@ -3085,10 +3053,10 @@ impl<'rt> Vm<'rt> {
                         let r = !self.strict_eq(&a, &b);
                         self.push(Value::Bool(r));
                     }
-                    Op::Lt => cmp_op!(code::LT, <, false, false),
-                    Op::Gt => cmp_op!(code::GT, >, true, false),
-                    Op::Le => cmp_op!(code::LE, <=, true, true),
-                    Op::Ge => cmp_op!(code::GE, >=, false, true),
+                    Op::Lt => cmp_op!(code::LT, <),
+                    Op::Gt => cmp_op!(code::GT, >),
+                    Op::Le => cmp_op!(code::LE, <=),
+                    Op::Ge => cmp_op!(code::GE, >=),
                     Op::Neg => {
                         let a = self.pop();
                         if self.operand_calls(&a) {
@@ -3229,10 +3197,7 @@ impl<'rt> Vm<'rt> {
                                 a
                             }
                             (a, b) => {
-                                if self.operand_calls(&a) || self.operand_calls(&b) {
-                                    conv_op!(code::ADD_LOCAL, a, b, Value::Undef, i, 0);
-                                }
-                                let r = tri!(self.add(a, b));
+                                let r = slow!(code::ADD_LOCAL, a, b, i, 0);
                                 if let Value::Str(id) = r {
                                     self.atoms.bufs[id as usize].builder = true;
                                 }
@@ -3247,13 +3212,8 @@ impl<'rt> Vm<'rt> {
                         if v.is_num() {
                             self.stack[slot] = Slot::num(v.f() + 1.0);
                         } else {
-                            let vv = v.get();
-                            if self.operand_calls(&vv) {
-                                conv_op!(code::INC_LOCAL, vv, Value::Undef, Value::Undef, i, 0);
-                            }
-                            tri!(self.data_operand(&vv, "'++' requires a data value."));
-                            let x = tri!(self.number_of(&vv));
-                            self.stack[slot] = Slot::num(x + 1.0);
+                            let r = slow!(code::INC_LOCAL, v.get(), Value::Undef, i, 0);
+                            self.stack[slot] = Slot::pack(r);
                         }
                     }
 
@@ -3285,12 +3245,8 @@ impl<'rt> Vm<'rt> {
                         let r = if a.is_num() && b.is_num() {
                             compare(cmp, a.f(), b.f())
                         } else {
-                            let (av, bv) = (a.get(), b.get());
-                            if self.operand_calls(&av) || self.operand_calls(&bv) {
-                                let ac = crate::conversion::arith_code(cmp);
-                                conv_op!(code::JUMP_UNLESS, av, bv, Value::Undef, ac, t);
-                            }
-                            let r = tri!(self.arith(cmp, av, bv));
+                            let ac = crate::conversion::arith_code(cmp);
+                            let r = slow!(code::JUMP_UNLESS, a.get(), b.get(), ac, t);
                             self.truthy(&r)
                         };
                         if !r {
@@ -3302,19 +3258,8 @@ impl<'rt> Vm<'rt> {
                         let r = if a.is_num() {
                             compare(cmp, a.f(), k as f64)
                         } else {
-                            let av = a.get();
-                            if self.operand_calls(&av) {
-                                let ac = crate::conversion::arith_code(cmp);
-                                conv_op!(
-                                    code::JUMP_UNLESS,
-                                    av,
-                                    Value::Num(k as f64),
-                                    Value::Undef,
-                                    ac,
-                                    t
-                                );
-                            }
-                            let r = tri!(self.arith(cmp, av, Value::Num(k as f64)));
+                            let ac = crate::conversion::arith_code(cmp);
+                            let r = slow!(code::JUMP_UNLESS, a.get(), Value::Num(k as f64), ac, t);
                             self.truthy(&r)
                         };
                         if !r {
@@ -3963,11 +3908,6 @@ fn compare(op: Arith, x: f64, y: f64) -> bool {
 #[inline]
 fn to_i32(x: f64) -> i32 {
     crate::value::to_int32(x)
-}
-
-#[inline]
-fn to_u32(x: f64) -> u32 {
-    crate::value::to_uint32(x)
 }
 
 pub fn js_rem(x: f64, y: f64) -> f64 {
