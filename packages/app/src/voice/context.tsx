@@ -16,6 +16,7 @@ import {
   type VoiceCallEffect,
   type VoiceCallEvent,
 } from "./call-machine"
+import { stripBasePath } from "@/runtime/platform/base-path"
 
 export const { provider: VoiceProvider, use: useVoice } = createSimpleContext({
   name: "Voice",
@@ -41,7 +42,7 @@ export const { provider: VoiceProvider, use: useVoice } = createSimpleContext({
         const check = () => {
           if (signal.aborted) return reject(signal.reason)
 
-          if (location.pathname === href) return resolve()
+          if (stripBasePath(location.pathname) === href) return resolve()
 
           if (Date.now() - started > 3000) return reject(new Error("Desktop did not show the session"))
           setTimeout(check, 50)
