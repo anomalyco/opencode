@@ -171,7 +171,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const view = sessions.current()
       const files = filesPanel()
 
-      if (view?.key === effect.sessionKey && files.status === "active") files.value.open(view, effect.path, effect.select ? "select" : "append")
+      // Nobody pressed anything for this file: the file panel holds a tab it selects this way behind its own guard.
+      if (view?.key === effect.sessionKey && files.status === "active") files.value.open(view, effect.path, effect.select ? "select" : "append", true)
 
       return
     }

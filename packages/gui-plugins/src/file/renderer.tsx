@@ -36,6 +36,13 @@ import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
 import { FileSource } from "./contract"
 import {
+  ARRIVAL_GUARD_MS,
+  createArrivalGuardState,
+  selectArrivalGuard,
+  transitionArrivalGuard,
+  type ArrivalGuardEvent,
+} from "./arrival-guard-machine"
+import {
   FileTree,
   OpenInApp,
   type FileListProps,
@@ -261,7 +268,22 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     void screen.file.sync(path)
   }
 
-  ctx.provide(FileSource, { open(session, address, tab) {
+  // The file tab an agent's show request put in front of the person (`arrival-guard-machine.ts`).
+  const [arrival, setArrival] = createSignal(createArrivalGuardState())
+  let arrivalTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(arrivalTimer))
+
+  const dispatchArrival = (event: ArrivalGuardEvent) => {
+    const next = transitionArrivalGuard(untrack(arrival), event)
+
+    setArrival(next.state)
+    next.effects.forEach((effect) => {
+      clearTimeout(arrivalTimer)
+      arrivalTimer = setTimeout(() => dispatchArrival({ type: "elapsed", token: effect.token }), ARRIVAL_GUARD_MS)
+    })
+  }
+
+  ctx.provide(FileSource, { open(session, address, tab, unprompted) {
     const files = ctx.screen.current()?.file
     const path = files?.resolve(address)
 
@@ -269,6 +291,10 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       return ctx.toast.show({ variant: "error", title: ctx.t("load.failed") })
 
     if (tab === "append" && layout.state(key(files, address), session) !== "visible") setUnseen(`${session.key}\n${fileTabId(files, address)}`, true)
+
+    // The selection changes what is under the person's pointer without a press of theirs.
+    if (unprompted && tab === "select" && layout.state(key(files, address), session) !== "visible")
+      dispatchArrival({ type: "arrived", key: `${session.key}\n${fileTabId(files, address)}` })
     openSource(session, address, tab ? { tab, background: true } : undefined)
   } })
 
@@ -504,6 +530,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     close(input) {
       setUnseen(`${input.session.key}\n${input.tab.id}`, undefined)
+
+      if (selectArrivalGuard(arrival(), `${input.session.key}\n${input.tab.id}`) !== undefined) dispatchArrival({ type: "left" })
       tabs.get(input.screen)?.delete(input.tab.id)
 
       if (isLauncher(input.tab.id))
@@ -514,21 +542,35 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     render: (props) => {
       const panel = usePanel()
       createKeyed(() => panel.visible() && `${props.session.key}\n${props.tab.id}`, id => setUnseen(id, undefined))
+      const guarded = createMemo(() => selectArrivalGuard(arrival(), `${props.session.key}\n${props.tab.id}`) !== undefined)
+
+      // The guard's delay starts when the person can see the tab, not while its pane is still closed or behind another.
+      createKeyed(
+        () => guarded() && panel.visible() && `${props.session.key}\n${props.tab.id}`,
+        (key) => dispatchArrival({ type: "shown", key }),
+      )
 
       return (
         <FileProvider>
-          <Suspense>
-            <Show
-              when={panel.placement() === "mobile"}
-              fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={props.screen} />}
-            >
-              <MobileFiles session={props.session} screen={props.screen} />
-            </Show>
-          </Suspense>
+          {/* No box of its own: the tab an agent just put here takes no click or key until its guard ends. */}
+          <div class="contents" inert={guarded()}>
+            <Suspense>
+              <Show
+                when={panel.placement() === "mobile"}
+                fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={props.screen} />}
+              >
+                <MobileFiles session={props.session} screen={props.screen} />
+              </Show>
+            </Suspense>
+          </div>
         </FileProvider>
       )
     },
     focus(input) {
+      // The person selected another of the file tabs themselves: nothing is held for that.
+      if (arrival().status !== "none" && selectArrivalGuard(arrival(), `${input.session.key}\n${input.tab.id}`) === undefined)
+        dispatchArrival({ type: "left" })
+
       if (!isFileTab(input.tab.id)) return
 
       // A file the user selects on a wide screen is what the narrow-screen view shows too, not the browser. Narrow
