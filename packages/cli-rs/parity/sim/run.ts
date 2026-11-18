@@ -411,6 +411,9 @@ function serverConfig(scenario: SimScenario) {
   return {
     model: "simulation/gpt-sim-model",
     snapshots: false,
+    // `full_codemode` defaults to on in the local channel (#64761), and with it a GPT model gets only `execute`
+    // (#64515). The scenarios script direct `shell`, `read` and `patch` calls, so keep those tools direct.
+    experimental: { full_codemode: false },
     permissions: [{ action: "*", resource: "*", effect: "allow" }, ...(scenario.permissions ?? [])],
     providers: {
       simulation: {
