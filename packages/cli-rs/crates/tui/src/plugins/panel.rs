@@ -123,14 +123,13 @@ pub fn close(tui: &Tui, id: &str) {
 /// Shows a dialog of `owner` with `replace`, which gets what the dialog runs as it closes, and records the owner
 /// once the dialog it replaced has closed.
 fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
-    let forgotten = owner.clone();
+    let showing = tui.reads.showings.get() + 1;
+    tui.reads.showings.set(showing);
     let dismissed = tui.reads.dismissed.borrow_mut().take().filter(|(of, _)| *of == owner);
     replace(Box::new(bind!(tui, |tui| {
-        {
-            let mut current = tui.reads.owner.borrow_mut();
-            if current.as_ref() == Some(&forgotten) {
-                current.take();
-            }
+        // The owner of this showing, also once a reload's activation updated it in place.
+        if tui.reads.showing.get() == showing {
+            tui.reads.owner.borrow_mut().take();
         }
         // After the dialog's own action, which an answer runs once the event that closed it is handled.
         if let Some((owner, action)) = dismissed {
@@ -138,6 +137,7 @@ fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
         }
     })));
     *tui.reads.owner.borrow_mut() = Some(owner);
+    tui.reads.showing.set(showing);
 }
 
 fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
@@ -821,10 +821,20 @@ pub struct Body {
     title: RefCell<Option<String>>,
     frame: View,
     header: View,
+    /// The body's bounded scroll, which holds the body while it is taller than the room the screen leaves: it then
+    /// scrolls, and a focused node in it shows. A body that fits sits in the frame itself, laid out as TS's.
+    scroll: ScrollBox,
+    /// The rows the screen leaves the body, and whether the scroll holds it.
+    room: Cell<u32>,
+    wrapped: Cell<bool>,
     body: View,
     /// The build of the moment, which the header is drawn in.
     cx: RefCell<Option<Rc<DialogCx>>>,
     mount: RefCell<Option<opencode_plugin::PanelMount>>,
+    /// What runs as the dialog closes for the requests that changed it in place (`abi::Dialog::Dismissable`).
+    dismissed: RefCell<Vec<(Owner, abi::Action)>>,
+    /// A node that took the focus before a solve laid it out, which the scroll brings into view once one does.
+    revealing: RefCell<Option<opentui::widget::WeakWidget>>,
 }
 
 /// Shows `shown`: a new mount of the plugin's dialog surface, or, under the key that is open, the same mount in a frame
@@ -834,11 +844,15 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
     let (size, centered) = (shown.size.map(dialog_size).unwrap_or_default(), shown.centered);
     let open = open(tui, &owner.0, shown.shown_key()).then(|| tui.reads.surface.borrow().clone()).flatten();
     if let Some(body) = open.filter(|body| body.key == key && body.surface == shown.surface) {
+        // A request that changes it in place and waits for its close hears it too (big-boi ds-10).
+        let dismissed = tui.reads.dismissed.borrow_mut().take().filter(|(of, _)| *of == owner);
+        body.dismissed.borrow_mut().extend(dismissed);
         *body.owner.borrow_mut() = owner.clone();
         *body.title.borrow_mut() = shown.title;
         body.draw_header();
         tui.dialogs.set_size(size);
         tui.dialogs.set_centered(centered);
+        body.fit(tui);
         *tui.reads.owner.borrow_mut() = Some(owner);
         tui.app.request_redraw();
         return;
@@ -853,6 +867,11 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
     }
     let app = &tui.app;
     let (header, body) = (View::new(app), View::new(app).column().focusable(true));
+    // As high as the body, up to the screen's room: a taller body scrolls rather than leaving the screen (big-boi ds-9).
+    let scroll = ScrollBox::new(app)
+        .scrollbar_colors(Color::rgb(0x9a, 0x9e, 0xa3), Color::rgb(0x25, 0x25, 0x27))
+        .min_height(0)
+        .shrink(0.0);
     let frame = View::new(app).column().child(&header).child(&body);
     let shown = Rc::new(Body {
         key: key.clone(),
@@ -862,9 +881,31 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
         title: RefCell::new(shown.title),
         frame,
         header,
+        scroll,
         body,
         cx: RefCell::default(),
         mount: RefCell::default(),
+        dismissed: RefCell::default(),
+        revealing: RefCell::default(),
+        room: Cell::new(u32::MAX),
+        wrapped: Cell::new(false),
+    });
+    // Once a layout placed the body, after the frame that laid it out, as the scroll reads that frame's positions.
+    let laid = Rc::downgrade(&shown);
+    shown.body.on_resize(move |cx, _| {
+        let Some(body) = laid.upgrade() else { return };
+        body.wrap(cx.app());
+        if body.revealing.borrow().is_none() {
+            return;
+        }
+        let laid = laid.clone();
+        cx.app().set_timeout(Duration::ZERO, move |_| {
+            let Some(body) = laid.upgrade() else { return };
+            let widget = body.revealing.borrow_mut().take().and_then(|widget| widget.upgrade());
+            if let Some(widget) = widget.filter(|_| body.overflows()) {
+                body.scroll.scroll_into_view(&widget);
+            }
+        });
     });
     *tui.reads.surface.borrow_mut() = Some(shown.clone());
     let closed = Rc::downgrade(&shown);
@@ -878,9 +919,14 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
             }
             // The mount ends now, so nothing it asked for after the close goes out; its handler hears it closed, as
             // the plugin's call, after the event that closed it.
-            let mount = closed.upgrade().and_then(|body| body.mount.borrow_mut().take());
+            let body = closed.upgrade();
+            let mount = body.as_ref().and_then(|body| body.mount.borrow_mut().take());
             if let Some(tell) = mount.and_then(opencode_plugin::PanelMount::close) {
                 tui.app.defer(bind!(tui, |tui, _| tell(&*super::host::host(&tui))));
+            }
+            let dismissed = body.map(|body| body.dismissed.take()).unwrap_or_default();
+            for (owner, action) in dismissed {
+                tui.app.defer(bind!(tui, |tui, _| run(&tui, &owner, &action, None)));
             }
         }));
         tui.dialogs.replace(
@@ -890,6 +936,24 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
         )
     });
     tui.dialogs.set_centered(centered);
+    if let Some(body) = tui.reads.surface.borrow().clone() {
+        body.fit(tui);
+    }
+}
+
+/// Brings `widget` into view in the scroll of the plugin dialog's body, if it is in it.
+pub fn reveal(tui: &Tui, widget: &AnyWidget) {
+    let Some(body) = tui.reads.surface.borrow().clone() else { return };
+    let within = std::iter::successors(widget.parent(), |widget| widget.parent()).any(|w| w.id() == body.body.id());
+    if !within {
+        return;
+    }
+    // A node no solve has laid out yet shows once the body's next layout places it; a body that fits never scrolls.
+    match widget.rect().height > 0.0 {
+        true if body.overflows() => drop(body.scroll.scroll_into_view(widget)),
+        true => {}
+        false => *body.revealing.borrow_mut() = Some(widget.downgrade()),
+    }
 }
 
 /// A reload of plugin `id`'s registrations ended the mount of its dialog surface on screen: the dialog stays and mounts
@@ -902,9 +966,15 @@ pub fn remount(tui: &Rc<Tui>, id: &str) {
     }
     let old = body.mount.borrow_mut().take();
     body.body.clear();
-    drop(old);
     let host = super::host::host(tui);
-    *body.mount.borrow_mut() = tui.plugins.dialog(&*host, id, &body.surface, &body.named, &body.body);
+    let new = tui.plugins.dialog(&*host, id, &body.surface, &body.named, &body.body);
+    // What the user typed stays, with the caret: the plugin keeps its components, and an uncontrolled field's value is
+    // the host's (big-boi ds-2).
+    if let (Some(old), Some(new)) = (&old, &new) {
+        old.hand_over(new);
+    }
+    drop(old);
+    *body.mount.borrow_mut() = new;
 }
 
 impl Body {
@@ -912,6 +982,25 @@ impl Body {
     fn build(self: &Rc<Self>, tui: &Rc<Tui>, cx: &Rc<DialogCx>) -> View {
         *self.cx.borrow_mut() = Some(cx.clone());
         self.draw_header();
+        // Built again in a new theme, the frame is put back: the node of the body that had the focus takes it again
+        // (big-boi ds-6).
+        let frame = self.frame.id();
+        let focused = tui.app.focused().filter(|widget| {
+            std::iter::successors(Some(widget.clone()), |widget| widget.parent()).any(|widget| widget.id() == frame)
+        });
+        if let Some(widget) = focused {
+            cx.focus(&widget);
+        }
+        let fitted = Rc::downgrade(self);
+        let resize = tui.app.on_resize(bind!(tui.weak(), |tui, _, _, _| {
+            if let Some(body) = fitted.upgrade() {
+                body.fit(&tui);
+            }
+        }));
+        let resizes = tui.app.clone();
+        cx.on_close(Disposer::new(move || {
+            resizes.remove_handler(resize);
+        }));
         let host = super::host::host(tui);
         // `ctrl+c` empties the field of the mount that has the focus before it closes the dialog.
         let cleared = Rc::downgrade(self);
@@ -929,7 +1018,56 @@ impl Body {
             }
             *self.mount.borrow_mut() = mount;
         }
+        self.fit(tui);
         self.frame.clone()
+    }
+
+    /// Whether the body is taller than the room its scroll has.
+    fn overflows(&self) -> bool {
+        self.wrapped.get()
+    }
+
+    /// The room the screen leaves the body where the dialog shows: a centered dialog's row of margin on each side,
+    /// else a quarter of the screen above it, and its header.
+    fn fit(&self, tui: &Tui) {
+        let rows = u32::from(tui.app.size().1);
+        let above = if tui.dialogs.centered() { 1 } else { rows / 4 };
+        let header = if self.title.borrow().is_some() { 3 } else { 0 };
+        self.room.set(rows.saturating_sub(above + 2 + header).max(3));
+        self.wrap(&tui.app);
+    }
+
+    /// Puts the body in its scroll while it is taller than its room, and back in the frame once it fits; the node of
+    /// the body that had the focus keeps it.
+    fn wrap(&self, app: &App) {
+        let (room, height) = (self.room.get(), self.body.rect().height.ceil() as u32);
+        let tall = height > room;
+        if tall {
+            self.scroll.height(room);
+        }
+        if tall == self.wrapped.get() {
+            return;
+        }
+        let within = self.body.id();
+        let focused = app.focused().filter(|widget| {
+            std::iter::successors(Some(widget.clone()), |widget| widget.parent()).any(|widget| widget.id() == within)
+        });
+        self.body.detach();
+        match tall {
+            true => {
+                self.scroll.add(&self.body);
+                self.frame.add(&self.scroll);
+            }
+            false => {
+                self.scroll.detach();
+                self.frame.add(&self.body);
+            }
+        }
+        self.wrapped.set(tall);
+        if let Some(widget) = focused {
+            app.focus(&widget);
+        }
+        app.request_redraw();
     }
 
     /// The header, with the title and the close label, and the dialog's inset around the body; neither without a

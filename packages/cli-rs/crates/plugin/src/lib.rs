@@ -275,6 +275,9 @@ pub trait Host: 'static {
     fn modal_holds(&self, _view: &View) -> bool {
         false
     }
+    /// Brings `widget`, which a plugin's node just focused, into view in the host's own scrolls around its mount, such
+    /// as a dialog's body.
+    fn reveal(&self, _widget: &AnyWidget) {}
     /// The layer the plugins' overlays show in: over the routes, under the host's dialogs.
     fn overlay_layer(&self) -> Option<View> {
         None
@@ -311,6 +314,12 @@ pub(crate) trait Claimed {
     fn clear_field(&self, _host: &dyn Host) -> bool {
         false
     }
+    /// What the user typed into the mount's fields over the values its tree gave.
+    fn drafts(&self) -> reconcile::Drafts {
+        reconcile::Drafts::default()
+    }
+    /// Shows `drafts` in the fields of the mount's first tree that gives them the values they were typed over.
+    fn hand(&self, _drafts: reconcile::Drafts) {}
 }
 
 impl Claimed for View {
@@ -1074,19 +1083,28 @@ impl Owners {
     }
 
     pub(crate) fn focus(&self, node: &str) -> Effect {
-        let Ok(owner) = self.owner_of(node) else { return Box::new(|_| {}) };
+        let Ok(own) = self.mount_owner() else { return Box::new(|_| {}) };
         let node = node.to_owned();
-        // A call of the plugin's own whose node no mount holds yet: a mount an earlier effect of the call opens (a dialog
-        // surface it shows) may hold it once the effects before this one applied.
-        if Rc::ptr_eq(&owner, &self.input) {
-            let (activation, input) = (self.activation.clone(), self.input.clone());
-            return Box::new(move |host| {
-                let mounts = activation.owners().into_iter().rev();
-                let owner = mounts.into_iter().find(|owner| owner.has(&node)).unwrap_or(input);
-                owner.focus(host, &node)
-            });
+        // A mount's call focuses in that mount.
+        if let Some(owner) = own {
+            return Box::new(move |host| owner.focus(host, &node));
         }
-        Box::new(move |host| owner.focus(host, &node))
+        // A call of the plugin's own names its mount once the effects before this one applied, as they may show a
+        // dialog surface or close one: the newest mount that holds the node and that no other host dialog is over (not
+        // a route under the dialog with the same id), else the newest such mount whose tree names no node yet (the JS
+        // host's first revision has not come), whose next view settles it; a mount a host dialog covers is refused.
+        let (activation, input) = (self.activation.clone(), self.input.clone());
+        Box::new(move |host| {
+            let mounts = activation.owners();
+            let eligible = || mounts.iter().rev().filter(|owner| owner.eligible(host));
+            let owner = eligible()
+                .find(|owner| owner.has(&node))
+                .or_else(|| eligible().find(|owner| !owner.named()))
+                .or_else(|| mounts.iter().rev().find(|owner| owner.has(&node)))
+                .cloned()
+                .unwrap_or(input);
+            owner.focus(host, &node)
+        })
     }
 
     pub(crate) fn blur(&self) -> Effect {
@@ -3458,6 +3476,12 @@ impl PanelMount {
     /// whether it did.
     pub fn clear_field(&self, host: &dyn Host) -> bool {
         self.0.clear_field(host)
+    }
+
+    /// Hands what the user typed into this mount's fields, with the caret, to `next`, the mount that replaces it in
+    /// place: its first tree shows it where it gives the fields the values they were typed over.
+    pub fn hand_over(&self, next: &PanelMount) {
+        next.0.hand(self.0.drafts());
     }
 }
 

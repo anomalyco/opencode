@@ -1678,23 +1678,66 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
         host.focus("outside");
     });
     setup.command(abi::Command::new("dlg.blur"), |host, _| host.blur());
+    // Big-boi's ds-4, ds-8 and ds-9: a dialog whose field has the id of the route's field, one whose field is below a
+    // scroll's rows, and one taller than the screen, each shown and focused in one call.
+    for (name, field) in [("same", "outside"), ("tall", "deep"), ("long", "end")] {
+        setup.command(abi::Command::new(format!("dlg.{name}")), move |host, _| {
+            host.dialog(abi::Dialog::Surface(abi::DialogSurface::new(name)));
+            host.focus(field);
+        });
+    }
+    setup.command(abi::Command::new("dlg.dismissed"), |_, _| {
+        DIALOG_SEEN.with_borrow_mut(|seen| seen.push("dismissed".to_owned()));
+    });
     let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]);
     setup.surface(v2::Surface::new("pg", v2::Place::Route("pg".into()), move |_| {
         v2::Node::column(vec![text("dialog page"), v2::Node::input("").with_id("outside")])
     }));
-    let surface = v2::Surface::new("ask", v2::Place::Dialog("ask".into()), move |_| {
-        v2::Node::column(vec![text("dialog body"), v2::Node::input("").with_id("name")])
-    })
-    .on(|_, event| {
+    let record = |_: &dyn abi::Host, event: &abi::interact::Event| {
         let line = match event {
-            abi::interact::Event::Change { text, .. } => format!("change {text}"),
+            abi::interact::Event::Change { node, text } if node == "name" => format!("change {text}"),
+            abi::interact::Event::Change { node, text } => format!("change {node} {text}"),
             abi::interact::Event::Closed { surface } => format!("closed {surface}"),
+            // Big-boi's ds-7: a bind of escape that would take it.
+            abi::interact::Event::Key(key) if key.bind.as_deref() == Some("esc") => {
+                DIALOG_SEEN.with_borrow_mut(|seen| seen.push("esc".to_owned()));
+                return abi::interact::Handled::Consume;
+            }
             _ => return abi::interact::Handled::Pass,
         };
         DIALOG_SEEN.with_borrow_mut(|seen| seen.push(line));
         abi::interact::Handled::Pass
-    });
+    };
+    let surface = v2::Surface::new("ask", v2::Place::Dialog("ask".into()), move |_| {
+        v2::Node::column(vec![text("dialog body"), v2::Node::input("").with_id("name")])
+    })
+    .layers(vec![abi::interact::Layer::default().keys(vec![abi::interact::Bind::new("escape", "esc")])])
+    .on(record);
     setup.surface(surface);
+    setup.surface(
+        v2::Surface::new("same", v2::Place::Dialog("same".into()), move |_| {
+            v2::Node::column(vec![text("same body"), v2::Node::input("").with_id("outside")])
+        })
+        .on(record),
+    );
+    setup.surface(
+        v2::Surface::new("tall", v2::Place::Dialog("tall".into()), move |_| {
+            let mut rows: Vec<v2::Node> = (0..24).map(|row| text(&format!("line {row}"))).collect();
+            rows.push(v2::Node::input("").with_id("deep"));
+            let scroll =
+                v2::Node::scroll(rows).with_id("sc").layout(abi::Layout::default().height(abi::Width::Cells(3)));
+            v2::Node::column(vec![text("tall body"), scroll])
+        })
+        .on(record),
+    );
+    setup.surface(
+        v2::Surface::new("long", v2::Place::Dialog("long".into()), move |_| {
+            let mut rows: Vec<v2::Node> = (0..45).map(|row| text(&format!("row {row}"))).collect();
+            rows.push(v2::Node::input("").with_id("end"));
+            v2::Node::column(rows)
+        })
+        .on(record),
+    );
     Ok(())
 }
 
@@ -1833,4 +1876,191 @@ fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
         let closes = dialog_seen(&h, carrier).iter().filter(|line| *line == "closed ask").count();
         assert_eq!(closes, 2, "{carrier:?}: {:?}", dialog_seen(&h, carrier));
     }
+}
+
+/// The native carriers of the dialog rows big-boi's hunt found (the host's behavior, not a carrier's).
+const DIALOG_NATIVE: [DialogCarrier; 2] = [DialogCarrier::Native(Carrier::Linked), DialogCarrier::Native(Carrier::Abi)];
+
+/// The probe's running activation, as the host names it.
+fn dialog_generation(h: &Harness) -> u64 {
+    (0..100_000).find(|generation| h.tui.plugins.live("test.dlg", *generation)).expect("a running activation")
+}
+
+// Expected (big-boi ds-6): a theme change keeps the focus on the dialog's field, which takes what the user types.
+#[test]
+fn a_dialog_surface_keeps_its_field_focused_in_a_new_theme() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.open", None);
+        h.wait_for("dialog body");
+        dialog_turns(&h);
+        h.tui.theme.borrow_mut().set("tokyonight");
+        h.tui.theme_changed();
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "ask").0.as_deref(), Some("name"), "{carrier:?}: the theme took the focus");
+        h.app.type_text("q");
+        dialog_turns(&h);
+        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change q"), "{carrier:?}");
+    }
+}
+
+// Expected (big-boi ds-7): a bind of the dialog's that takes escape is left out, so escape closes the dialog as it
+// closes the host's own.
+#[test]
+fn escape_closes_a_dialog_surface_whose_bind_would_take_it() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.open", None);
+        h.wait_for("dialog body");
+        dialog_turns(&h);
+        h.app.press("escape");
+        dialog_turns(&h);
+        assert!(!h.app.text().contains("dialog body"), "{carrier:?}: escape left the dialog open");
+        assert!(!dialog_seen(&h, carrier).contains(&"esc".to_owned()), "{carrier:?}: the bind took escape");
+    }
+}
+
+// Expected (big-boi ds-4): a command that shows a dialog and focuses its field, whose id the route under it has too,
+// focuses the dialog's field: the user's first key is the dialog's.
+#[test]
+fn a_dialog_shown_and_focused_takes_the_focus_from_a_field_with_its_id_under_it() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.same", None);
+        h.wait_for("same body");
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "same").0.as_deref(), Some("outside"), "{carrier:?}: no focus in the dialog");
+        h.app.type_text("k");
+        dialog_turns(&h);
+        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change outside k"), "{carrier:?}");
+    }
+}
+
+// Expected (big-boi ds-8): a focused field below a scroll's rows shows: the scroll scrolls to it.
+#[test]
+fn a_focused_field_of_a_dialog_below_a_scroll_shows() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.tall", None);
+        h.wait_for("tall body");
+        dialog_turns(&h);
+        let offset = opencode_plugin::behave::mounts(h.app.app(), "test.dlg", "tall")
+            .pop()
+            .and_then(|mount| mount.offsets.into_iter().find(|(id, _)| id == "sc"))
+            .map(|(_, offset)| offset);
+        assert!(offset.is_some_and(|offset| offset > 0), "{carrier:?}: the scroll stayed at {offset:?}");
+    }
+}
+
+// Expected (big-boi ds-9): a focused field below the screen, in a body taller than it, shows: the body scrolls to it.
+#[test]
+fn a_focused_field_of_a_dialog_taller_than_the_screen_shows() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.long", None);
+        h.wait_for("row 0");
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "long").0.as_deref(), Some("end"), "{carrier:?}");
+        assert!(h.app.text().contains("row 44"), "{carrier:?}: the field is below the screen:\n{}", h.app.text());
+    }
+}
+
+/// Shows the probe's dialog `same` as an earlier activation of the plugin did, before a reload, then changes it in
+/// place as the running one, with `change`.
+fn dialog_changed_in_place(h: &Harness, change: impl FnOnce(abi::Dialog) -> abi::Dialog) -> u64 {
+    let generation = dialog_generation(h);
+    let shown = || abi::Dialog::Surface(abi::DialogSurface::new("same"));
+    opencode_tui::plugins::panel::show(&h.tui, "test.dlg", generation + 1000, shown());
+    h.wait_for("same body");
+    opencode_tui::plugins::panel::show(&h.tui, "test.dlg", generation, change(shown()));
+    dialog_turns(h);
+    generation
+}
+
+// Expected (big-boi ds-10): a request that changes a dialog surface in place and waits for its close hears it.
+#[test]
+fn a_dialog_changed_in_place_by_a_waiting_request_tells_it_closed() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        dialog_changed_in_place(&h, |shown| abi::Dialog::Dismissable {
+            dialog: Box::new(shown),
+            dismissed: abi::Action::Command { name: "dlg.dismissed".into(), input: None },
+        });
+        h.app.press("escape");
+        dialog_turns(&h);
+        assert!(!h.app.text().contains("same body"), "{carrier:?}: escape left the dialog open");
+        assert!(
+            dialog_seen(&h, carrier).contains(&"dismissed".to_owned()),
+            "{carrier:?}: {:?}",
+            dialog_seen(&h, carrier)
+        );
+    }
+}
+
+// Expected (big-boi ds-1): a dialog surface changed in place by a later activation (a JS plugin's reload) leaves no
+// owner once it closes, so the plugin's close of whatever it shows does not close the host's own dialog shown after.
+#[test]
+fn a_dialog_changed_in_place_by_a_later_activation_leaves_no_owner() {
+    for carrier in DIALOG_NATIVE {
+        let h = dialog_open(carrier);
+        let generation = dialog_changed_in_place(&h, |shown| shown);
+        h.app.press("escape");
+        dialog_turns(&h);
+        assert!(!h.app.text().contains("same body"), "{carrier:?}: escape left the dialog open");
+        h.tui.dialogs.replace(|cx| opentui::prelude::View::new(&cx.app), None, Default::default());
+        let close = abi::Dialog::Close { key: String::new() };
+        opencode_tui::plugins::panel::show(&h.tui, "test.dlg", generation, close);
+        assert!(h.tui.dialogs.is_open(), "{carrier:?}: the plugin closed the host's dialog");
+        h.tui.dialogs.clear();
+    }
+}
+
+// Expected (big-boi ds-5): over the raw pipe, a handler that shows a dialog surface and focuses its only field gives the
+// field the focus once the JS host's first revision of the dialog came: what the user types is the field's.
+#[test]
+fn a_dialog_shown_and_focused_over_the_pipe_takes_the_typing() {
+    let Some(config) = crate::plugin_pipe::config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("changes");
+    let plugin = root.path().join("config").join("plugins").join("dlgraw");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let script = format!(
+        r#"import {{ appendFileSync }} from "node:fs"
+export default {{ id: "example.dlgraw", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  const field = {{ type: "box", children: [{{ type: "text", spans: [{{ text: "raw body" }}] }}, {{ type: "input", id: "f" }}] }}
+  carrier.surface("ask", {{ type: "dialog", name: "ask" }}, () => field, {{
+    on: (event) => {{ if (event.type === "change") appendFileSync({log:?}, event.text + "\n") }},
+  }})
+  carrier.command({{ name: "dlgraw.open", title: "dlgraw.open" }}, () => {{
+    carrier.effect({{ type: "dialog", dialog: {{ type: "surface", surface: "ask" }} }})
+    carrier.effect({{ type: "focus", node: "f" }})
+  }})
+}} }}
+"#
+    );
+    std::fs::write(plugin.join("tui.ts"), script).unwrap();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = opencode_tui::plugins::host::External {
+        config_dir: root.path().join("config"),
+        cwd: root.path().to_path_buf(),
+        dev: Vec::new(),
+    };
+    opencode_tui::plugins::host::external_with(&harness.tui, external, Some(config));
+    let pipe = crate::plugin_pipe::Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };
+    pipe.active("example.dlgraw");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("dlgraw.open", None);
+    pipe.harness.wait("the dialog shows", || {
+        pipe.settle();
+        pipe.harness.app.text().contains("raw body")
+    });
+    pipe.settle();
+    pipe.harness.app.type_text("x");
+    let changes = || std::fs::read_to_string(&log).unwrap_or_default();
+    pipe.harness.app.wait_until(Duration::from_secs(5), || {
+        pipe.settle();
+        !changes().is_empty()
+    });
+    assert_eq!(changes().trim(), "x", "the field took no typing");
 }

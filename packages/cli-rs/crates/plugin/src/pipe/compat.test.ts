@@ -151,9 +151,14 @@ function dialogView(fake: Json, key: string, generation = 1) {
   }
 }
 
-// The keys of the dialog surfaces `ui.dialog.show` asked the host for, in order.
-const surfaceKeys = (fake: Json): string[] =>
-  fake.effects.filter((effect: Json) => effect.dialog?.type === "surface").map((effect: Json) => effect.dialog.key)
+// The dialog surfaces `ui.dialog.show` asked the host for, in order, each as it waits for its close.
+const surfaces = (fake: Json): Json[] =>
+  fake.effects
+    .map((effect: Json) => (effect.dialog?.type === "dismissable" ? effect.dialog.dialog : effect.dialog))
+    .filter((dialog: Json) => dialog?.type === "surface")
+
+// Their keys.
+const surfaceKeys = (fake: Json): string[] => surfaces(fake).map((dialog: Json) => dialog.key)
 
 const text = (tree: Json): string =>
   tree === undefined ? "<none>" : [...(tree.spans ?? []).map((span: Json) => span.text), ...(tree.children ?? []).map(text)].join("")
@@ -1672,7 +1677,7 @@ test("each dialog settles once, and clear closes it", async () => {
   ctx.ui.dialog.clear()
   ctx.ui.dialog.show(() => h("text", { children: "small" }))
   await turn()
-  const dialogs = fake.effects.filter((effect) => effect.dialog?.type === "surface").map((effect) => effect.dialog)
+  const dialogs = surfaces(fake)
   // The first opened, then the `set` right after it sized it under its key; the next is the host's own size.
   expect(dialogs.map((dialog) => [dialog.key, dialog.size, dialog.centered])).toEqual([
     ["compat.dialog.1", undefined, undefined],
@@ -2198,4 +2203,22 @@ test("a node's minWidth and maxWidth are its layout's", () => {
     { min_width: { cells: 4 }, max_width: { percent: 50 } },
   ])
   expect(fake.warnings()).toEqual([])
+})
+
+// Big-boi ds-11: a dialog of the plugin's own that the host does not open (its plugin manager shows) is closed for the
+// plugin: its `onClose` runs, and a later `dialog.set` does not open it.
+test("a dialog of the plugin's own the host refuses is closed for it", async () => {
+  const fake = host()
+  const ctx = plugin("t.refused", fake)
+  const closed: string[] = []
+  await turn()
+  ctx.ui.dialog.show(() => h("text", { children: "refused" }), () => closed.push("closed"))
+  const sent = fake.effects.filter((effect: Json) => effect.dialog?.type === "dismissable").at(-1).dialog
+  expect(sent.dialog.type).toBe("surface")
+  // The host refuses it: it runs what waits for its close at once.
+  fake.commands.get(sent.dismissed.name)!(sent.dismissed.input)
+  expect(closed).toEqual(["closed"])
+  const before = surfaceKeys(fake).length
+  ctx.ui.dialog.set({ size: "large" })
+  expect(surfaceKeys(fake).length).toBe(before)
 })

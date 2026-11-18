@@ -766,6 +766,16 @@ fn mount(caller: &Caller<'_>, surface: &str) -> Option<Rc<Surface>> {
     }
 }
 
+/// Brings node `node` of `mount` into view in its scroll `scroll`, the least distance, once the solve laid it out: the
+/// focus of a node below a scroll's rows shows it.
+pub(crate) fn reveal(mount: &Surface, scroll: &str, node: &str) {
+    let to = Scroll::To { node: node.to_owned(), align: v2::ScrollAlign::Nearest { inset: 0 } };
+    if let Some(anchor) = mount.verb(scroll, &to) {
+        mount.landed(scroll, anchor);
+    }
+    arm(&mount.app);
+}
+
 /// The effect of plugin `caller`'s verb on `target`: the mount it names is found now, and the verb applies to it
 /// only while it lives.
 pub(crate) fn scroll(caller: &Caller<'_>, target: Target, verb: Scroll) -> Box<dyn FnOnce()> {
