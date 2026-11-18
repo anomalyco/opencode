@@ -194,6 +194,15 @@ export function pickerTreeView(state: PickerTreeState, policy: PickerPolicy) {
   }
 }
 
+/** Folders the user opened whose listing is still loading, as tree paths ending in "/". Preloads are left out. */
+export function pickerLoadingDirs(state: PickerTreeState): readonly string[] {
+  if (state.status !== "ready") return []
+
+  return Object.entries(state.dirs)
+    .filter(([dir, entry]) => dir !== "" && entry.status === "loading" && entry.priority === "user")
+    .map(([dir]) => `${dir}/`)
+}
+
 export function hasPickerGitRepo(state: PickerTreeState, dir: string) {
   return state.status === "ready" && Boolean(state.gitRepos[dir.replace(/\/+$/, "")])
 }

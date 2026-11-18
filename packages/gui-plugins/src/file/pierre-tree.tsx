@@ -1,7 +1,9 @@
 import "@pierre/trees/web-components"
 import { FileTree, type FileTreeDirectoryHandle, type FileTreeItemHandle } from "@pierre/trees"
 import { getIcon } from "@opencode/ui/icons/catalog"
-import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { Loader } from "@opencode/ui/loader"
+import { treeRowLoadingCss } from "@opencode/ui/tree-row-loading"
+import { createMemo, createSignal, onCleanup, onMount, Show, untrack } from "solid-js"
 import type { ChangeKind } from "@opencode/plugin/gui/review"
 import { createKeyed, usePlugin, type FileNode, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { startFileDrag } from "./drag"
@@ -204,6 +206,32 @@ export default function PierreFileTree(props: {
     return current && { type: "synced", input: current, kinds: props.kinds, active: active() }
   }
 
+  // The live root before its first listing, and the open folders still on theirs; a folder that lists again keeps its
+  // rows and shows nothing.
+  const listing = (path: string) => {
+    const state = file.tree.state(path)
+
+    return Boolean(state?.loading && !state.loaded)
+  }
+
+  const rootLoading = () => live() && listing("")
+
+  const loadingCss = createMemo(() => {
+    const model = liveModel()
+
+    if (!model) return ""
+
+    return treeRowLoadingCss(
+      model.expandedDirs.filter((dir) => listing(model.nodesByPath.get(dir.slice(0, -1))?.path ?? dir.slice(0, -1))),
+    )
+  })
+
+  // The rows live in the tree's shadow root, so the folders still listing are marked by a style inside it.
+  const loadingStyle = document.createElement("style")
+  createKeyed(loadingCss, (css) => {
+    loadingStyle.textContent = css
+  })
+
   const [machine, setMachine] = createSignal(createPierreTreeState())
   const mounted = createMemo(() => isPierreTreeMounted(machine()))
   let wrapper: HTMLDivElement | undefined
@@ -388,6 +416,7 @@ export default function PierreFileTree(props: {
     created.render({ containerWrapper: wrapper })
     widthHost = created.getFileTreeContainer()
     widthHost?.classList.add("opencode-pierre-file-tree")
+    widthHost?.shadowRoot?.append(loadingStyle)
     const list = widthHost?.shadowRoot?.querySelector<HTMLElement>("[data-file-tree-virtualized-list]")
     const scroller = list?.closest<HTMLElement>("[data-file-tree-virtualized-scroll]")
 
@@ -437,6 +466,11 @@ export default function PierreFileTree(props: {
 
   return (
     <OpenInAppContextMenuV2 state={openIn} resolvePath={resolveContextPath} fit>
+      <Show when={rootLoading()}>
+        <div role="status" aria-label={ctx.t("common.loading")} class="px-4 py-2">
+          <Loader delayed width={14} height={14} />
+        </div>
+      </Show>
       <div
         ref={wrapper}
         data-component="file-tree-v2"
