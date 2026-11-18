@@ -355,9 +355,71 @@ fn helper_next(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
         HelperState::Running => return Err(vm.type_error("Iterator helper is already running.")),
         _ => {}
     }
-    helper_mut(vm, id).state = HelperState::Running;
     let resumed = state == HelperState::Suspended;
+    if let Some(r) = next_direct(vm, id, resumed) {
+        return r;
+    }
+    helper_mut(vm, id).state = HelperState::Running;
     enter_helper(vm, callee, id, START, resumed, Value::Undef)
+}
+
+/// `next()` of a helper whose step calls nothing of the program's: `Iterator.from`, `take` with values left or `drop`,
+/// over a built-in iterator stepped by its native `next`. It runs the frame's loop at once, without a frame; `None`
+/// for any other helper.
+fn next_direct(vm: &mut Vm, id: Id, resumed: bool) -> Option<Res> {
+    let h = helper_mut(vm, id);
+    let (iter, next) = (h.iter, h.next);
+    match h.op {
+        HelperOp::Wrap | HelperOp::Drop(_) => {}
+        HelperOp::Take(n) if n > 0.0 => {}
+        _ => return None,
+    }
+    if !native_step(vm, &iter, &next) {
+        return None;
+    }
+    let mut back = resumed;
+    loop {
+        if std::mem::take(&mut back) {
+            fuel::step(vm);
+        }
+        let r = vm.call(&next, iter, &[]).and_then(|r| result_of(vm, r));
+        let item = match r {
+            Ok(Some(item)) => item,
+            Ok(None) => {
+                helper_mut(vm, id).state = HelperState::Done;
+                return Some(Ok(vm.iter_result(Value::Undef, true)));
+            }
+            Err(e) => {
+                helper_mut(vm, id).state = HelperState::Done;
+                return Some(Err(e));
+            }
+        };
+        let h = helper_mut(vm, id);
+        match &mut h.op {
+            HelperOp::Drop(n) if *n > 0.0 => {
+                *n -= 1.0;
+                back = true;
+                continue;
+            }
+            HelperOp::Take(n) => *n -= 1.0,
+            _ => {}
+        }
+        h.state = HelperState::Suspended;
+        return Some(Ok(vm.iter_result(item, false)));
+    }
+}
+
+/// Whether `iter` is a built-in iterator whose record steps it by a native `next`, which calls nothing of the
+/// program's.
+fn native_step(vm: &Vm, iter: &Value, next: &Value) -> bool {
+    matches!(iter, Value::Obj(id) if matches!(
+        vm.heap[*id as usize].kind,
+        Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+    )) && matches!(next, Value::Obj(n) if matches!(vm.heap[*n as usize].kind, Kind::Native { .. }))
 }
 
 fn helper_return(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
@@ -710,31 +772,22 @@ fn step(
     if !vm.is_callable(&next) {
         return Err(not_callable(vm, site));
     }
-    let direct = stepped_directly(vm, &iter);
-    if let Value::Obj(id) = iter {
-        match &vm.heap[id as usize].kind {
-            Kind::Generator(_) if next.as_obj() == Some(vm.realm.generator_next) => {
-                fr.set_index(vm, PHASE, phase + 1);
-                return Ok(match resume(vm, fr, id, 0)? {
-                    None => Stepped::Pending(Step::Pushed),
-                    Some((_, true)) => Stepped::Value(None),
-                    Some((v, false)) => Stepped::Value(Some(v)),
-                });
-            }
-            // A built-in iterator's native `next` calls nothing of the program's.
-            Kind::ArrayIter { .. }
-            | Kind::MapIter { .. }
-            | Kind::StrIter { .. }
-            | Kind::ListIter { .. }
-            | Kind::ExoticIter { .. }
-                if matches!(next, Value::Obj(n) if matches!(vm.heap[n as usize].kind, Kind::Native { .. })) =>
-            {
-                let r = vm.call(&next, iter, &[])?;
-                return result_of(vm, r).map(Stepped::Value);
-            }
-            _ => {}
-        }
+    if native_step(vm, &iter, &next) {
+        let r = vm.call(&next, iter, &[])?;
+        return result_of(vm, r).map(Stepped::Value);
     }
+    if let Value::Obj(id) = iter
+        && matches!(vm.heap[id as usize].kind, Kind::Generator(_))
+        && next.as_obj() == Some(vm.realm.generator_next)
+    {
+        fr.set_index(vm, PHASE, phase + 1);
+        return Ok(match resume(vm, fr, id, 0)? {
+            None => Stepped::Pending(Step::Pushed),
+            Some((_, true)) => Stepped::Value(None),
+            Some((v, false)) => Stepped::Value(Some(v)),
+        });
+    }
+    let direct = stepped_directly(vm, &iter);
     fr.set_index(vm, PHASE, phase);
     call(vm, fr, Slot::pack(next), Slot::pack(iter), [], !direct).map(Stepped::Pending)
 }
