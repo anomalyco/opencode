@@ -337,6 +337,23 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await expect(root.getByTestId("session-state")).toHaveText("open")
 })
 
+story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // The submenu is a portal of its own, outside the pane: it must still count as the pane for the pane's shortcuts.
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "More tools", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem").first()).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+})
+
 story(
   "reopening the side panel focuses a blank tab's address and closing it returns to the composer",
   async ({ page }) => {

@@ -1080,7 +1080,7 @@ export default function SessionBrowserPane(props: {
                 />
               </Tooltip>
               <Menu.Portal>
-                <Menu.Content class="w-[220px]">
+                <Menu.Content class="w-[220px]" data-browser-popup>
                   <Index each={extensions()}>
                     {(extension) => (
                       <Menu.Item
@@ -1207,7 +1207,7 @@ export default function SessionBrowserPane(props: {
                   <Menu.Sub gutter={4} overflowPadding={16} overlap>
                     <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
                     <Menu.Portal>
-                      <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")}>
+                      <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")} data-browser-popup>
                         <Menu.Item
                           disabled={!inspectable()}
                           onSelect={toggleInspect}
