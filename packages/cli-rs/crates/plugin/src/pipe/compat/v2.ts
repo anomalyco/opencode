@@ -1691,18 +1691,31 @@ export function context(base: Base, carrier: Carrier) {
           // The rows listed now, which an answer's index names: a plugin's search lists its own, flat and in its order,
           // with the category as the footer, as TS's does (FT-12).
           let listed: Json[] = search ? (search("", enabled) ?? []).filter((option: Json) => !option.disabled) : options.options
+          // A row's value names this select and the row itself, not its place: a search lists rows anew while the
+          // select stays open, and an action of a select a newer one replaced reaches nothing (bigboi cg2-7, cg2-8).
+          const mine = asked + 1
+          const tokens = new Map<Json, string>()
+          const named: Json[] = []
+          const token = (option: Json) => {
+            if (!tokens.has(option)) tokens.set(option, `${mine}.${named.push(option) - 1}`)
+            return tokens.get(option)!
+          }
+          const row = (value: string | undefined) => {
+            const [select, at] = (value ?? "").split(".")
+            return select === String(mine) ? named[Number(at)] : undefined
+          }
           const rows = () =>
-            listed.map((option: Json, index: number) => ({
+            listed.map((option: Json) => ({
               title: option.title,
-              value: String(index),
+              value: token(option),
               description: option.description,
               footer: search ? (option.category ?? option.footer) : option.footer,
               category: search ? undefined : option.category,
               disabled: !!option.disabled,
             }))
           const current = () => {
-            const at = listed.findIndex((option: Json) => option.value === options.current)
-            return at === -1 ? {} : { current: String(at) }
+            const at = listed.find((option: Json) => option.value === options.current)
+            return at === undefined ? {} : { current: token(at) }
           }
           // The host tells a plugin's search each query (P6c's `query`): it lists the rows the search returns, in place
           // under the select's key.
@@ -1710,19 +1723,20 @@ export function context(base: Base, carrier: Carrier) {
           // A new dialog is medium until the plugin's `dialog.set` says otherwise, as TS's.
           presentation = { size: "medium", centered: false }
           // Its footer actions, in the footer with their keys: one on the selected row gets its value, one of
-          // `selection: "none"` none. Triggering one leaves the select open, as TS's.
+          // `selection: "none"` none. Triggering one leaves the select open, as TS's. A rowless one's input is this
+          // select's, so it too reaches only this select.
           const actions: Json[] = (options.actions ?? []).slice(0, SELECT_ACTIONS)
-          const mine = asked + 1
-          triggers = actions.map((action) => (input: string | undefined) => {
+          const triggered = actions.map((action) => (input: string | undefined) => {
             if (asked !== mine || !answering) return
-            if (action.selection === "none") return action.onTrigger()
-            const row = listed[Number(input)]
-            if (row) action.onTrigger(row.value)
+            if (action.selection === "none") return input === String(mine) ? action.onTrigger() : undefined
+            const picked = row(input)
+            if (picked) action.onTrigger(picked.value)
           })
+          triggers = triggered
           const footer = actions.map((action, slot) => ({
             title: String(action.title),
             key: String(action.bind),
-            action: { type: "command", name: ACTIONS[slot] },
+            action: { type: "command", name: ACTIONS[slot], ...(action.selection === "none" ? { input: String(mine) } : {}) },
             ...(action.side === "left" ? { primary: true } : action.side === "right" ? { primary: false } : {}),
             ...(action.selection === "none" ? { rowless: true } : {}),
           }))
@@ -1745,11 +1759,12 @@ export function context(base: Base, carrier: Carrier) {
             : undefined
           searching = run
           const answer = await ask(dialog)
-          // A select that replaced this one searches on.
+          // A select that replaced this one searches on, and an answered or closed one keeps no actions (cg2-10).
           if (searching === run) searching = undefined
+          if (triggers === triggered) triggers = []
           // A keyed select stays open as a row is picked.
           if (search && answer !== undefined) void carrier.effect({ type: "dialog", dialog: { type: "close", key } })
-          return answer === undefined ? undefined : listed[Number(answer)]?.value
+          return row(answer)?.value
         },
       },
       toast: {
