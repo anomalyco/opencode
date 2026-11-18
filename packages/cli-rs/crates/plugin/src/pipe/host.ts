@@ -491,7 +491,12 @@ function view(plugin: Plugin, mount: Mount) {
   let text: string
   try {
     node = surface.view(cx)
-    if (node === undefined) return
+    // A view that drew nothing yet (a compat first render that waits for its reads) still owes the mount a tree, which a
+    // ping reports as waiting: a settle does not end on the mount's placeholder.
+    if (node === undefined) {
+      mount.dirty = true
+      return
+    }
     text = JSON.stringify(node)
   } catch (error) {
     fail(plugin, `view threw: ${thrown(error)}`)
