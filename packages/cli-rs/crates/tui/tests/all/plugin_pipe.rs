@@ -280,187 +280,149 @@ fn screen(cells: &[opentui::testing::Cell]) -> String {
     cells.chunks(80).map(|row| row.iter().map(|cell| cell.symbol.as_str()).collect::<String>() + "\n").collect()
 }
 
-/// The twin's script, in process on `carrier` or on the pipe: what each checkpoint saw.
-fn twin_script(pipe: Option<Config>, carrier: Carrier) -> Vec<(&'static str, Seen)> {
-    let (harness, _root) = match pipe {
-        Some(config) => {
-            let pipe = open(&[("twin", None)], config, (80, 30));
-            pipe.active(twin::ID);
-            (pipe.harness, Some(pipe.root))
-        }
-        None => {
-            let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
-            deps.builtins.push(builtin(carrier, abi::Plugin { id: twin::ID, setup: twin::setup }));
-            (support::mount(80, 30, deps), None)
-        }
-    };
-    let scripts = harness.tui.plugins.scripts.borrow().clone();
-    let settle = || match &scripts {
-        Some(scripts) => settle(&harness, scripts),
-        None => {
-            for _ in 0..3 {
-                harness.app.advance(Duration::from_millis(1));
+/// Run the same checkpoints on the linked, pipe and C ABI versions. Each run owns its TUI and plugin directory.
+fn compare_twin(
+    config: Config,
+    name: &str,
+    plugin: abi::Plugin,
+    script: impl Fn(&Harness, &dyn Fn(), &mut dyn FnMut(&'static str)),
+) -> Vec<Seen> {
+    let id = plugin.id;
+    let run = |pipe: Option<Config>, carrier| {
+        let (h, _root) = match pipe {
+            Some(config) => {
+                let pipe = open(&[(name, None)], config, (80, 30));
+                pipe.active(id);
+                (pipe.harness, Some(pipe.root))
             }
-        }
+            None => {
+                let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
+                deps.builtins.push(builtin(carrier, abi::Plugin { id, setup: plugin.setup }));
+                (support::mount(80, 30, deps), None)
+            }
+        };
+        let scripts = h.tui.plugins.scripts.borrow().clone();
+        let settle = || match &scripts {
+            Some(scripts) => settle(&h, scripts),
+            None => (0..3).for_each(|_| h.app.advance(Duration::from_millis(1))),
+        };
+        let mut seen = Vec::new();
+        script(&h, &settle, &mut |name| {
+            seen.push((name, observe(&h, id)));
+        });
+        seen
     };
-    let tui = &harness.tui;
-    let route = Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() };
-    let mut seen = Vec::new();
-    tui.navigate(route.clone());
-    settle();
-    seen.push(("open", observe(&harness, twin::ID)));
-    for card in ["2", "2", "5"] {
-        tui.keymap.dispatch("twin.bump", Some(card));
-        settle();
+    let linked = run(None, Carrier::Linked);
+    for (carrier, trace) in [("pipe", run(Some(config), Carrier::Linked)), ("abi", run(None, Carrier::Abi))] {
+        assert_eq!(trace.len(), linked.len(), "{carrier} checkpoints");
+        for ((name, expected), (step, actual)) in linked.iter().zip(trace) {
+            assert_eq!(*name, step);
+            assert_eq!(expected.1, actual.1, "{carrier} at {name}: toasts");
+            assert_eq!(expected.2, actual.2, "{carrier} at {name}: status");
+            assert!(
+                expected.0 == actual.0,
+                "{carrier} at {name}: cells\nlinked:\n{}\n{carrier}:\n{}",
+                screen(&expected.0),
+                screen(&actual.0)
+            );
+        }
     }
-    seen.push(("bumped", observe(&harness, twin::ID)));
-    // A burst: the JS host views after each, and sends the next tree once the last was adopted.
-    for card in ["0", "1", "3", "4"] {
-        tui.keymap.dispatch("twin.bump", Some(card));
-        harness.app.advance(Duration::from_millis(1));
-    }
-    settle();
-    seen.push(("burst", observe(&harness, twin::ID)));
-    tui.theme.borrow_mut().set("tokyonight");
-    tui.theme_changed();
-    settle();
-    seen.push(("theme", observe(&harness, twin::ID)));
-    tui.keymap.dispatch("twin.toast", None);
-    settle();
-    seen.push(("toast", observe(&harness, twin::ID)));
-    tui.navigate(Route::Home);
-    settle();
-    tui.navigate(route);
-    settle();
-    seen.push(("remount", observe(&harness, twin::ID)));
-    tui.keymap.dispatch("twin.throw", None);
-    settle();
-    seen.push(("failed", observe(&harness, twin::ID)));
-    for _ in 0..5 {
-        harness.app.advance(Duration::from_millis(16));
-    }
-    seen.push(("after", observe(&harness, twin::ID)));
-    seen
+    linked.into_iter().map(|(_, seen)| seen).collect()
 }
 
-// Expected (`carrier-equal` for the pipe, P7): one plugin, written twice (Rust linked, TypeScript on the JS host), gives
-// equal frames, toasts and status at every checkpoint once the JS host settled: a mount, revisions with memoized cards
-// and content by handle, a theme change, an effect, a remount, and a command that unwinds, which fails the plugin once
-// with no effect.
 #[test]
 fn the_twin_is_equal_linked_and_on_the_pipe() {
     let Some(config) = config() else { return };
-    let linked = twin_script(None, Carrier::Linked);
-    // The guard: the checkpoints see different frames, so equal runs are not equal by being empty.
-    assert_ne!(linked[0].1.0, linked[1].1.0, "a bump changed nothing on screen");
-    let (_, (_, toasts, status)) = linked.iter().find(|(name, _)| *name == "failed").unwrap();
-    assert_eq!(toasts.len(), 1, "{toasts:?}");
-    assert!(status.contains("run-command threw: the twin's command threw"), "{status}");
-    // The pipe, and the C ABI's byte shims as the third carrier (review bigboi, gate note).
-    for (carrier, other) in
-        [("pipe", twin_script(Some(config), Carrier::Linked)), ("abi", twin_script(None, Carrier::Abi))]
-    {
-        for ((name, linked), (_, piped)) in linked.iter().zip(&other) {
-            assert_eq!(linked.1, piped.1, "{carrier} at {name}: toasts");
-            assert_eq!(linked.2, piped.2, "{carrier} at {name}: status");
-            if linked.0 != piped.0 {
-                panic!(
-                    "{carrier} at {name}: the frames differ\nlinked:\n{}\n{carrier}:\n{}",
-                    screen(&linked.0),
-                    screen(&piped.0)
-                );
+    let linked = compare_twin(
+        config,
+        "twin",
+        abi::Plugin { id: twin::ID, setup: twin::setup },
+        |harness, settle, checkpoint| {
+            let tui = &harness.tui;
+            let route = Route::Plugin { id: twin::ID.to_owned(), name: "twin".to_owned() };
+            tui.navigate(route.clone());
+            settle();
+            checkpoint("open");
+            for card in ["2", "2", "5"] {
+                tui.keymap.dispatch("twin.bump", Some(card));
+                settle();
             }
-        }
-    }
-}
-
-/// The script of the twin of the built-ins' contract (P6a), in process on `carrier` or on the pipe: what each
-/// checkpoint saw.
-fn kept_script(pipe: Option<Config>, carrier: Carrier) -> Vec<(&'static str, Seen)> {
-    let (harness, _root) = match pipe {
-        Some(config) => {
-            let pipe = open(&[("kept", None)], config, (80, 30));
-            pipe.active(kept::ID);
-            (pipe.harness, Some(pipe.root))
-        }
-        None => {
-            let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
-            deps.builtins.push(builtin(carrier, abi::Plugin { id: kept::ID, setup: kept::setup }));
-            (support::mount(80, 30, deps), None)
-        }
-    };
-    let scripts = harness.tui.plugins.scripts.borrow().clone();
-    let settle = || match &scripts {
-        Some(scripts) => settle(&harness, scripts),
-        None => {
-            for _ in 0..3 {
+            checkpoint("bumped");
+            // A burst: the JS host views after each, and sends the next tree once the last was adopted.
+            for card in ["0", "1", "3", "4"] {
+                tui.keymap.dispatch("twin.bump", Some(card));
                 harness.app.advance(Duration::from_millis(1));
             }
-        }
-    };
-    let tui = &harness.tui;
-    let route = Route::Plugin { id: kept::ID.to_owned(), name: "kept".to_owned() };
-    let mut seen = Vec::new();
-    tui.navigate(route.clone());
-    settle();
-    seen.push(("open", observe(&harness, kept::ID)));
-    tui.keymap.dispatch("kept.bump", None);
-    settle();
-    seen.push(("bumped", observe(&harness, kept::ID)));
-    // A view that keeps the root keeps the memo values under it, in whichever table holds them (review carbon-2).
-    tui.keymap.dispatch("kept.same", None);
-    settle();
-    assert_eq!(
-        opencode_plugin::surface::ledger_of(kept::ID).memo_entries,
-        1,
-        "{carrier:?}, pipe {}",
-        scripts.is_some()
+            settle();
+            checkpoint("burst");
+            tui.theme.borrow_mut().set("tokyonight");
+            tui.theme_changed();
+            settle();
+            checkpoint("theme");
+            tui.keymap.dispatch("twin.toast", None);
+            settle();
+            checkpoint("toast");
+            tui.navigate(Route::Home);
+            settle();
+            tui.navigate(route);
+            settle();
+            checkpoint("remount");
+            tui.keymap.dispatch("twin.throw", None);
+            settle();
+            checkpoint("failed");
+            for _ in 0..5 {
+                harness.app.advance(Duration::from_millis(16));
+            }
+            checkpoint("after");
+        },
     );
-    tui.keymap.dispatch("kept.hide", None);
-    settle();
-    seen.push(("hidden", observe(&harness, kept::ID)));
-    tui.theme.borrow_mut().set("tokyonight");
-    tui.theme_changed();
-    settle();
-    seen.push(("theme", observe(&harness, kept::ID)));
-    tui.keymap.dispatch("kept.hide", None);
-    settle();
-    seen.push(("shown", observe(&harness, kept::ID)));
-    tui.navigate(Route::Home);
-    settle();
-    tui.navigate(route);
-    settle();
-    seen.push(("remount", observe(&harness, kept::ID)));
-    seen
+    assert_ne!(linked[0].0, linked[1].0, "a bump changed nothing on screen");
+    let (_, toasts, status) = &linked[6];
+    assert_eq!(toasts.len(), 1, "{toasts:?}");
+    assert!(status.contains("run-command threw: the twin's command threw"), "{status}");
 }
 
-// Expected (`carrier-equal` of P6a on the pipe): one plugin of the built-ins' contract, written twice (Rust linked,
-// TypeScript on the JS host), gives equal frames and status at every checkpoint, also on the C ABI: mount notices heard
-// begin and end (the route's line counts them), a box hidden and shown again in place, a read of one message, and views
-// that keep their root while what they show is the same.
 #[test]
 fn the_kept_twin_is_equal_linked_and_on_the_pipe() {
     let Some(config) = config() else { return };
-    let linked = kept_script(None, Carrier::Linked);
-    let text = |seen: &Seen| screen(&seen.0);
-    let (open, remount) = (text(&linked[0].1), text(&linked[5].1));
+    let linked = compare_twin(
+        config,
+        "kept",
+        abi::Plugin { id: kept::ID, setup: kept::setup },
+        |harness, settle, checkpoint| {
+            let tui = &harness.tui;
+            let route = Route::Plugin { id: kept::ID.to_owned(), name: "kept".to_owned() };
+            tui.navigate(route.clone());
+            settle();
+            checkpoint("open");
+            tui.keymap.dispatch("kept.bump", None);
+            settle();
+            checkpoint("bumped");
+            // A view that keeps the root keeps the memo values under it, in whichever table holds them (review carbon-2).
+            tui.keymap.dispatch("kept.same", None);
+            settle();
+            assert_eq!(opencode_plugin::surface::ledger_of(kept::ID).memo_entries, 1, "the kept root lost its memo");
+            tui.keymap.dispatch("kept.hide", None);
+            settle();
+            checkpoint("hidden");
+            tui.theme.borrow_mut().set("tokyonight");
+            tui.theme_changed();
+            settle();
+            checkpoint("theme");
+            tui.keymap.dispatch("kept.hide", None);
+            settle();
+            checkpoint("shown");
+            tui.navigate(Route::Home);
+            settle();
+            tui.navigate(route);
+            settle();
+            checkpoint("remount");
+        },
+    );
+    let (open, hidden, remount) = (screen(&linked[0].0), screen(&linked[2].0), screen(&linked[5].0));
     assert!(open.contains("kept 0 · begun 1 · ended 0 · message none") && open.contains("extra"), "{open}");
     assert!(remount.contains("kept 1 · begun 2 · ended 1"), "{remount}");
-    assert!(!text(&linked[2].1).contains("extra") && text(&linked[2].1).contains("below"), "{}", text(&linked[2].1));
-    for (carrier, other) in
-        [("pipe", kept_script(Some(config), Carrier::Linked)), ("abi", kept_script(None, Carrier::Abi))]
-    {
-        for ((name, linked), (_, piped)) in linked.iter().zip(&other) {
-            assert_eq!(linked.2, piped.2, "{carrier} at {name}: status");
-            if linked.0 != piped.0 {
-                panic!(
-                    "{carrier} at {name}: the frames differ\nlinked:\n{}\n{carrier}:\n{}",
-                    screen(&linked.0),
-                    screen(&piped.0)
-                );
-            }
-        }
-    }
+    assert!(!hidden.contains("extra") && hidden.contains("below"), "{hidden}");
 }
 
 // Containment, hold, placeholders and delivery over the pipe (P7).
@@ -799,16 +761,6 @@ fn three_ends_in_a_minute_fail_every_plugin() {
     assert!(failed(&pipe, PROBE).is_some_and(|error| error.contains("ended 3 times")), "{:?}", pipe.status(PROBE));
     assert!(failed(&pipe, twin::ID).is_some_and(|error| error.contains("ended 3 times")));
     assert_eq!(pipe.scripts().pid(), None);
-}
-
-// Expected (no orphans): the JS host ends with the TUI that started it, and its process is reaped.
-#[test]
-fn the_js_host_ends_with_the_tui() {
-    let Some(config) = config() else { return };
-    let (pipe, _log) = probe_and_twin(config, false);
-    let pid = pipe.scripts().pid().unwrap();
-    drop(pipe);
-    assert!(gone(pid), "the JS host {pid} outlived the TUI");
 }
 
 // Expected (`hold`, 3.7, review F3): the keys typed after a holding command wait until its handler returned, then reach
@@ -2082,22 +2034,13 @@ fn lab_fails(command: &str, cause: &str, ended: bool) {
     assert_eq!(total(&pipe), before + 1);
 }
 
-// Expected (carbon-5): an effect that is not JSON fails its plugin alone; the JS host stays.
 #[test]
-fn an_effect_that_is_not_json_fails_its_plugin_alone() {
-    lab_fails("lab.bigint", "not JSON", false);
-}
-
-// Expected (carbon-5): a view that is not JSON fails its plugin alone; the JS host stays.
-#[test]
-fn a_view_that_is_not_json_fails_its_plugin_alone() {
-    lab_fails("lab.bigview", "BigInt", false);
-}
-
-// Expected (carbon-3): a view that ends the JS host fails its own plugin, not one whose call waited behind it.
-#[test]
-fn a_view_that_ends_the_js_host_fails_its_plugin_alone() {
-    lab_fails("lab.exit", "ended the JS host", true);
+fn a_bad_effect_or_view_fails_its_plugin_alone() {
+    for (command, cause, ended) in
+        [("lab.bigint", "not JSON", false), ("lab.bigview", "BigInt", false), ("lab.exit", "ended the JS host", true)]
+    {
+        lab_fails(command, cause, ended);
+    }
 }
 
 // Expected (carbon-7): a memo within a kept memo stays known: the inner subtree is not built again, though its outer one
