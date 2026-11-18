@@ -10,7 +10,7 @@ type Helpers = {
 const counting =
   "({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })"
 
-export default ({ after }: Helpers) => ({
+export default ({ after, text }: Helpers) => ({
   searches: [
     `(() => { const r = []; for (const x of ${counting}) r.push(x); return r })()`,
     `(() => { const r = []; for (const x of ${counting}) { r.push(x); break } return r })()`,
@@ -28,6 +28,13 @@ export default ({ after }: Helpers) => ({
     `[3, 1, 2].sort((a, b) => ({ valueOf: () => S(a) * 0 + a - b }))`,
     `'abc'.replace('b', () => ({ toString: () => 'X' + S(1) }))`,
     `[{ toLocaleString: () => ({ toString: () => 'T' + S(2) }) }].toLocaleString()`,
+    // `for await` and an async generator's `yield*` over iterators whose methods are the program's.
+    "await (async () => { const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) + n }) } } }) r.push(x); return r })()",
+    "await (async () => { const r = []; const it = { n: 0, [Symbol.asyncIterator]() { S(0); return this }, next() { return Promise.resolve({ done: this.n > 1, value: S(++this.n) }) } }; for await (const x of it) r.push(x); return r })()",
+    "await (async () => { const r = []; const it = { [Symbol.asyncIterator]() { return this }, next: async () => ({ done: false, value: S(1) }), return() { r.push('return ' + S(9)); return { done: true } } }; for await (const x of it) { r.push(x); break } return r })()",
+    "await (async () => { const r = []; const src = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: false, value: S(++n) }), return: () => (r.push('ret ' + S(8)), {}) } } }; for await (const x of src) { r.push(x); break } return r })()",
+    "await (async () => { try { for await (const x of { [Symbol.iterator]: () => ({ next: () => { S(1); throw new Error('next threw') } }) }) {} } catch (e) { return e.message } })()",
+    "await (async () => { const it = { [Symbol.asyncIterator]() { return this }, next: async () => ({ done: false, value: S(1) }), return: async (v) => ({ done: true, value: S(2) + v }), throw: async (e) => ({ done: false, value: S(3) + e }) }; async function* g() { yield* it } const gen = g(); return [await gen.next(), await gen.throw(10), await gen.return(5), await gen.next()] })()",
   ],
   programs: [
     `const log = []; function* g() { try { yield 1; yield 2 } finally { log.push('finally'); throw new Error('close') } }
@@ -50,9 +57,49 @@ export default ({ after }: Helpers) => ({
       "for (let j = 0; j < 300; j++) { o + 1; o < 2; o == 1; `${o}`; [o].join(); 'a'.padStart(o); String(o); Math.max(o, 0); const m = {}; m[o] = 1 }",
     ),
     after("const o = { valueOf() { return 3 } }", "for (let j = 0; j < 300; j++) { let s = 0; for (let i = 0; i < o; i++) s++; let x = o; x++ }"),
+    // `yield*` over a custom iterator and over a generator that gets `return()` and `throw()`, and `for await`: results,
+    // errors and closing.
+    `const log = []; const it = { i: 0, [Symbol.iterator]() { return this }, next(v) { log.push('next ' + v); return { done: this.i > 1, value: ++this.i } }, return(v) { log.push('return ' + v); return { done: true, value: v * 2 } }, throw(e) { log.push('throw ' + e); return { done: false, value: e + 100 } } }; function* g() { const r = yield* it; log.push('r ' + r); return r } const out = []; for (const x of g()) out.push(x); it.i = 0; const gen = g(); out.push(gen.next(1), gen.next(2), gen.throw(3), gen.return(4), gen.next(5)); return [out, log]`,
+    `const log = []; function* inner() { try { yield 1; yield 2 } catch (e) { log.push('caught ' + e); yield 'c' } finally { log.push('inner finally') } return 'done' } function* g() { try { const r = yield* inner(); log.push('r ' + r); yield r } finally { log.push('outer finally') } } const a = g(); const b = g(); const c = g(); return [a.next(), a.return(7), a.next(), b.next(), b.throw(3), b.next(), b.next(), c.return(1), log]`,
+    `const log = []; function* inner() { try { yield 1 } finally { log.push('f'); yield 'in finally' } } function* g() { const r = yield* inner(); return r } const a = g(); return [a.next(), a.return(9), a.next(), log]`,
+    `function* inner() { try { yield 1 } finally { throw new Error('from finally') } } function* g() { try { yield* inner() } catch (e) { yield 'caught ' + e.message } } const a = g(); a.next(); const b = g(); b.next(); return [a.return(1), a.next(), b.throw(new Error('x'))]`,
+    `function* inner() { yield 1 } function* g() { yield* inner() } const a = g(); a.next(); try { a.throw(new Error('uncaught')) } catch (e) { return [e.message, a.next()] }`,
+    `const r = []; const bad = (o) => ({ [Symbol.iterator]() { return o } }); function* g(o) { yield* bad(o) } for (const o of [{ next: 5 }, { next: () => 5 }, { next: () => ({ value: 1, done: false }), throw: 5 }, { next: () => ({ value: 1, done: false }), return: () => 5 }, { next: () => ({ value: 1, done: false }) }]) { const it = g(o); try { r.push(it.next()); r.push(it.throw(1)) } catch (e) { r.push(e.message) } try { r.push(it.return(2)) } catch (e) { r.push(e.message) } } return r`,
+    `const log = []; const src = { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return: () => { log.push('closed'); return {} } } } }; async function* g() { return yield* src } const gen = g(); await gen.next(); try { await gen.throw(4) } catch (e) { log.push(e.message) } return log`,
+    `const log = []; const src = { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return: () => 5 } } }; async function* g() { return yield* src } const gen = g(); await gen.next(); try { await gen.throw(4) } catch (e) { log.push(e.message) } return log`,
+    `const log = []; const src = { [Symbol.iterator]() { return { next: (v) => ({ done: false, value: 'n' + v }), return: (v) => ({ done: true, value: 'r' + v }), throw: (e) => { throw new Error('t' + e) } } } }; async function* g() { return yield* src } const a = g(); const b = g(); return [await a.next(), await a.next(1), await a.return(2), await b.next(), await b.throw(3).catch((e) => e.message), log]`,
+    `const r = []; async function f(src) { try { for await (const x of src) r.push(x) } catch (e) { r.push(e.message) } } await f({ [Symbol.asyncIterator]: () => 5 }); await f({ [Symbol.asyncIterator]: () => ({ next: 5 }) }); await f({ [Symbol.asyncIterator]: 5 }); await f({ [Symbol.iterator]: () => 5 }); await f({ [Symbol.iterator]: () => ({}) }); await f({ [Symbol.iterator]: () => ({ next: () => { throw new Error('next threw') } }) }); await f({ [Symbol.iterator]: () => ({ next: () => 5 }) }); await f({ [Symbol.asyncIterator]: () => ({ next: () => 5 }) }); return r`,
+    `const r = []; const it = { [Symbol.asyncIterator]() { return this }, next: () => Promise.resolve({ done: false, value: 1 }), return: () => 5 }; try { for await (const x of it) break } catch (e) { r.push(e.message) } try { for await (const x of it) throw new Error('body') } catch (e) { r.push(e.message) } const sync = { [Symbol.iterator]: () => ({ next: () => ({ done: false, value: Promise.reject(new Error('rejected value')) }), return: () => { r.push('sync closed'); return {} } }) }; try { for await (const x of sync) r.push(x) } catch (e) { r.push(e.message) } return r`,
+    `async function* agen() { yield 1; yield 2 } const r = []; const it = { [Symbol.asyncIterator]: agen }; for await (const x of it) r.push(x); for await (const x of { [Symbol.iterator]: function* () { yield 3; yield Promise.resolve(4) } }) r.push(x); return r`,
+    // Their fuel.
+    after(
+      "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() } let closed = 0; function* inner() { try { yield 1 } finally { closed++ } } function* h() { yield* inner() }",
+      "for (let j = 0; j < 100; j++) { for (const x of g()) {} const b = h(); b.next(); b.return(3) }",
+    ),
+    after(
+      "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() } let closed = 0; function* inner() { try { yield 1 } finally { closed++ } } function* h() { yield* inner() }",
+      "for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.return(2); const b = h(); b.next(); b.return(3) }",
+    ),
+    after(
+      "const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 1, value: n }), return: () => ({}) } } }; const asy = { [Symbol.asyncIterator]() { let n = 0; return { next: () => Promise.resolve({ done: n++ > 1, value: n }), return: () => ({}) } } }; async function* g() { return yield* asy } function* gen() { yield 1; yield 2 }",
+      "for (let j = 0; j < 30; j++) { for await (const x of sync) {} for await (const x of asy) {} for await (const x of asy) break }",
+    ),
+    after(
+      "const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 1, value: n }), return: () => ({}) } } }; const asy = { [Symbol.asyncIterator]() { let n = 0; return { next: () => Promise.resolve({ done: n++ > 1, value: n }), return: () => ({}) } } }; async function* g() { return yield* asy } function* gen() { yield 1; yield 2 }",
+      "for (let j = 0; j < 30; j++) { for await (const x of g()) {} for await (const x of gen()) {} }",
+    ),
   ],
   suspensions: [
     `const o = { valueOf: () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1 }; return [o + 1, 'a'.padStart(o)]`,
     `const r = []; for (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
+    // Suspended inside the program's iterator methods called by `for await` and `yield*`.
+    `const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r`,
+    `const r = []; for await (const x of { [Symbol.asyncIterator]() { const k = search({ query: tools.wait({}).then(() => 'echo') }).items.length; let n = 0; return { next: async () => ({ done: n > 1, value: k + ++n }) } } }) r.push(x); return r`,
+    `const r = []; for await (const x of { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }), return() { r.push('closed ' + search({ query: tools.wait({}).then(() => 'echo') }).items.length); return { done: true } } } } }) { r.push(x); break } return r`,
+    `const r = []; for await (const x of { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { r.push('closed ' + search({ query: tools.wait({}).then(() => 'echo') }).items.length); return {} } } } }) { r.push(x); break } return r`,
+    ...[
+      "const it = { n: 0, [Symbol.iterator]() { return this }, next() { if (this.n === 0) for (let i = 0; i < 200000000; i++) {} return { done: this.n > 1, value: ++this.n } } }; function* g() { yield* it } const r = []; for (const x of g()) r.push(x)",
+      "const r = []; function* inner() { try { yield 1 } finally { for (let i = 0; i < 200000000; i++) {} r.push('finally') } } function* g() { return yield* inner() } const a = g(); a.next(); r.push(a.return(5))",
+    ].map((work) => `const p = fetch(${JSON.stringify(text)}); ${work}; const res = await p; return [res.status, r]`),
   ],
 })
