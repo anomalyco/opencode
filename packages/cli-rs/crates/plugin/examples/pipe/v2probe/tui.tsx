@@ -1,11 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-// The V2 probe of the compatibility layer's tests (P8): a `{ id, setup }` module written against `@opencode/plugin/tui`
-// as an npm plugin is, with JSX over OpenTUI's intrinsics. It logs each call, one JSON line, to the file its `log`
-// option names. Its commands add an item to the list its home footer claim draws, make that render throw, spin, use an
-// intrinsic without a node or bare text, flood the host with toasts, ask the host's dialogs (also sized and centered),
-// show a dialog of its own, open its pages (one whose commands have no `id`, one whose registrations never settle, one
-// that shows a field and focuses it in one handler), toast a theme color, and use what the layer does not map. An event
-// it hears is logged.
+// Exercises the public V2 plugin context and JSX intrinsics. The configured log records the plugin side of each
+// call.
 
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
@@ -70,7 +65,7 @@ export default Plugin.define({
           },
         },
         { id: "v2probe.arm", run: (input?: string) => void (keyArm = String(input)) },
-        // A printable key bound globally by a command whose `enabled` follows a signal (contract ergonomics 2.5).
+        // A printable key bound globally by a command whose `enabled` follows a signal.
         { id: "v2probe.caret", bind: "^", enabled: () => caret(), run: () => log({ caret: true }) },
         { id: "v2probe.caretOn", run: (input?: string) => void setCaret(input === "on") },
         // Declares a store, which reloads the plugin's registrations (a layer's commands change in place), and enables
@@ -82,7 +77,6 @@ export default Plugin.define({
             setTimeout(() => setCaret(true), 0)
           },
         },
-        // A palette command on `ctrl+p` that declines its key (ce-4): the host's palette opens, and lists it.
         { id: "v2probe.hotkey", title: "Probe hotkey", bind: "ctrl+p", palette: true, run: () => false },
         // A key listener (contract gaps 2), registered with the first run: it takes `ctrl+p` with `preventDefault`
         // while the run's input is "take", and lets it go on otherwise.
@@ -135,7 +129,7 @@ export default Plugin.define({
           },
         },
         // A select, then an alert, each sized and centered by `dialog.set` right after, as opencode-session-time's
-        // `/time` (contract 2.x, addition 4).
+        // `/time`.
         {
           id: "v2probe.centered",
           run: async () => {
@@ -168,20 +162,17 @@ export default Plugin.define({
           },
         },
         { id: "v2probe.unshow", run: () => context.ui.dialog.clear() },
-        // A dialog of its own with an uncontrolled field, which a registration after setup reloads under (big-boi ds-2).
         {
           id: "v2probe.draft",
           run: () =>
             context.ui.dialog.show(() => <input id="draft" focused onInput={(value: string) => log({ draft: value })} />),
         },
-        // A key that opens a dialog of its own with a focused field, which the user types into at once (big-boi ds-3).
         {
           id: "v2probe.ahead",
           bind: "f2",
           run: () =>
             context.ui.dialog.show(() => <input id="ahead" focused onInput={(value: string) => log({ ahead: value })} />),
         },
-        // A key that opens a dialog of its own with nothing to focus, which the user types past at once (big-boi ds-3).
         { id: "v2probe.plain", bind: "f3", run: () => context.ui.dialog.show(() => <text>Plain dialog</text>) },
         { id: "v2probe.relayer", run: () => context.keymap.layer(() => ({ commands: [{ id: "v2probe.relayered", run() {} }] })) },
         {
@@ -203,12 +194,10 @@ export default Plugin.define({
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
         { id: "v2probe.panel", run: () => log({ opened: context.ui.panel.open("probe.panel") }) },
-        // What the panel's input does (CT-38): close it, full screen and back, and take the focus.
         { id: "v2probe.panel-close", run: () => shownPanel?.close() },
         { id: "v2probe.panel-full", run: () => shownPanel?.toggleFullscreen() },
         { id: "v2probe.panel-focus", run: () => shownPanel?.focus() },
         { id: "v2probe.settle", run: () => context.ui.router.navigate({ type: "plugin", name: "settle" }) },
-        // A handler that rejects later, after a reload perhaps (carbon-5).
         {
           id: "v2probe.reject",
           run: async () => {
@@ -216,7 +205,6 @@ export default Plugin.define({
             throw new Error("late")
           },
         },
-        // A store made after setup, written at once (carbon-2).
         {
           id: "v2probe.late",
           run: async () => {
@@ -225,7 +213,6 @@ export default Plugin.define({
             log({ stored: true })
           },
         },
-        // Two reloads of the registrations, apart (carbon-2).
         {
           id: "v2probe.twice",
           run: () => {
@@ -309,8 +296,6 @@ export default Plugin.define({
         )
       },
     })
-    // A page whose layer's commands have no `id`, as tokscope's (CT-1), and one whose command is new each mount, which
-    // never settles.
     context.ui.router.register({
       name: "inline",
       render: () => {
@@ -323,7 +308,6 @@ export default Plugin.define({
         return <text>inline page</text>
       },
     })
-    // A page that names its layer's command anew each time it mounts, as opencode-navigator does (CT-21).
     let churns = 0
     context.ui.router.register({
       name: "churn",
@@ -332,8 +316,6 @@ export default Plugin.define({
         return <text>churn page</text>
       },
     })
-    // A session panel whose render registers a key layer, as opencode-self-improvement's /memory panel does: the panel
-    // stays open (CT-29). It keeps its input for the panel commands, and has a field to take the focus (CT-38).
     context.ui.slot({
       append: "session.panel",
       render: (panel: PanelInput) => {
@@ -347,9 +329,9 @@ export default Plugin.define({
         )
       },
     })
-    // Two pages sized from their own width (contract 2.x, addition 1, R3): `grow` widens its box by a cell each time
-    // its size comes, without end; `settle` takes the width it first measured plus one, once. Built as Solid compiles
-    // a plugin's JSX, so the box and its width signal stay as the size changes.
+    // Two pages sized from their own width: `grow` widens its box by a cell each time its size comes, without end;
+    // `settle` takes the width it first measured plus one, once. Built as Solid compiles a plugin's JSX, so the box
+    // and its width signal stay as the size changes.
     const sized = (name: string, next: (width: number) => number) =>
       context.ui.router.register({
         name,

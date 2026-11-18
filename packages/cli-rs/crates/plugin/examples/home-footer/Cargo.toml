@@ -1,7 +1,4 @@
-# The built-in home footer (P6a), its own source in `crates/tui/src/plugins/home_footer.rs`, built as a `cdylib`, so
-# the TUI's `home_footer` tests load a built-in from a library file through the loader and compare it with the linked
-# one. `shim` stands in for the host crate `opencode-plugin`: the ABI crate and the two slot paths the source names.
-# Not a workspace member.
+# Builds the TUI's built-in footer as a library for comparison with its linked behavior.
 [package]
 name = "opencode-home-footer-plugin"
 version = "0.1.0"

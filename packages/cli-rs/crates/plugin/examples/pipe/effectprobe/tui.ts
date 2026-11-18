@@ -1,6 +1,4 @@
-// A V2 plugin that imports the `effect` package, which the layer does not serve (O-170): its load fails, and the row
-// checks the reason names the package. Its setup, did it run, would log what it computed with effect to the file its
-// `log` option names.
+// Imports a deliberately unavailable package to check the loader diagnostic.
 import { Plugin } from "@opencode/plugin/tui"
 import { Option, Schema } from "effect"
 import { appendFileSync } from "node:fs"

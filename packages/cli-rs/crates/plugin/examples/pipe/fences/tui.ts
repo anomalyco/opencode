@@ -1,6 +1,5 @@
-// Contract 2.x, step D: code-block renderers on the JS host, through the V2 compatibility layer, as a `{ id, setup }`
-// module written against `@opencode/plugin/tui`, as an npm plugin is. Each language is a behavior a row of
-// `plugin_fences.rs` checks:
+// Tests code-block renderers through the public V2 plugin context. Each language selects a distinct renderer
+// behavior.
 //
 // - `probe`: good-fences' shape, a box of a label (`| <lang> (<n>)`, numbered by render) and the host's own code
 //   view in the raised color;

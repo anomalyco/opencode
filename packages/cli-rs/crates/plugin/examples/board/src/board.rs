@@ -1,29 +1,5 @@
-//! A board of cards on a route of contract 2.0, in a scroll that takes the page below the header. Each card shows a
-//! value and a patch by content handle, memoized on its value; the header shows the plugin's own call log: how many
-//! views ran, how many cards they built, and how many messages arrived. A meter, a canvas below the header, draws the
-//! cards' total as a bar, with the frame it drew for: its version follows the total, and it animates on request,
-//! adding up the animation's time. Commands bump a card, toast, panic, animate the meter or make its next draw panic,
-//! start a task that awaits a confirm and then a fetch, and start threads: one that floods the mailbox, waiting on
-//! `Full`, and one that panics. Keys of the route (P2) bump
-//! a card, pass a key on to the plugin's own global layer, set a mode in which the same key bumps another card, and
-//! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
-//! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
-//! overlay under its pad, gives its field the focus (`focus-input`), and gives the focus back; a centered select lists
-//! the cards a search finds. `board.facts`, also `/inspect`, reads the host's locale, UTC offset and measure of a text, shows
-//! them in a row its layout bounds at both widths, and asks for a name in a prompt filled with a value under a
-//! description (contract ergonomics 2.6 and 2.9). `board.hotkey`, on `ctrl+p` and in the palette, starts disabled, so
-//! the host's own `ctrl+p` takes the key; `board.gate` enables or disables it, and `board.passing` makes its run decline
-//! the key, which goes on to the host as if it were not there (contract ergonomics 2.5). `board.dialog` shows its
-//! dialog surface `ask` (2.7), whose field the command focuses, whose key moves the focus to its long scroll, and whose
-//! close the board toasts.
-//!
-//! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
-//! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
-//! `Nearest`; `layout` paints the header from the top file, and the header shows where the last step landed and how
-//! many `layout` calls ran.
-//! It also claims the calls of a `board` tool and the `board` fences of the transcript (Pr): each part is a card
-//! of its own, and a fence's card holds the host's own code view of it (`fence-node`), which follows the fence as it
-//! streams.
+//! Scrollable card board for carrier comparisons. Each card memoizes its patch by value. Header counters expose
+//! view calls, rebuilt cards and delivered messages.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -55,11 +31,9 @@ struct Board {
     /// The meter's next draw panics.
     broken: bool,
     keys: Vec<String>,
-    /// What the panel's input told its handler (P3's `Input` on P2's events).
     said: Vec<String>,
     /// What `board.facts` read of the host, which a row under the header shows.
     facts: Option<String>,
-    /// A box with a top and a bottom border title shows under the header (CT-26).
     titled: bool,
     /// What the dialog's field told its handler.
     answered: Vec<String>,
@@ -190,8 +164,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     });
     notes(setup, &board);
     asking(setup, &board);
-    // The plugin's own layer hears the key the route's handler passes. A global bind takes a key with a modifier: a
-    // plain letter is the user's typing in the composer (FT-14).
+    // An unmodified printable key belongs to the composer; use a modified key for the global binding.
     let global = board.clone();
     let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("alt+h", "help")]);
     setup.layer(layer, move |_, _| {
@@ -320,8 +293,8 @@ fn files_view(files: &Files) -> v2::Node {
     v2::Node::column(vec![head, list]).layout(Layout::default().grow())
 }
 
-/// The dialog surface `ask` (contract ergonomics 2.7): a field, which the command that shows it focuses, and a long
-/// scroll, which its key `ctrl+l` focuses; its handler hears the field's edits and the dialog's close.
+/// The dialog surface `ask`: a field, which the command that shows it focuses, and a long scroll, which its key
+/// `ctrl+l` focuses; its handler hears the field's edits and the dialog's close.
 fn asking(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
     setup.command(command("board.dialog"), |host, _| {
         host.dialog(Dialog::Surface(DialogSurface::new("ask").title("Ask the board").size(PanelSize::Large)));

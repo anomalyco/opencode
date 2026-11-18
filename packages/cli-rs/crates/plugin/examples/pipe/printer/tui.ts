@@ -1,7 +1,4 @@
-// A plugin that prints, for the pipe's tests (P7, review F4): its own module, a module of its own it imports, and a
-// dependency from `node_modules` (`chatty`, which the test writes there) print at import, in setup and in a command,
-// through every console method and `process.stdout`. None of it may reach the protocol. Its log is a hidden file beside
-// its directory; a write's callback is logged once it ran.
+// Writes from import, setup and a command to check stdout attribution, including dependency output.
 
 import { appendFileSync } from "node:fs"
 import path from "node:path"
@@ -24,7 +21,7 @@ export default {
       console.error("error")
       console.debug("debug")
       console.trace("trace")
-      // Bun's own console writes these to standard output directly (review carbon-5).
+      // Bun writes these methods directly to stdout.
       console.dir({ dir: true })
       console.table([{ table: 1 }])
       console.count("count")

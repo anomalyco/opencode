@@ -141,10 +141,7 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The commands of the P-PTY scenarios `P.0b/*`: `/p0btitle` sets the title (`parity/plugins/title/tui.ts` in TS),
-/// `/p0blong` sets one of 6009 bytes,
-/// `/p0brun <shell command>` runs `sh -c <command>` in the foreground, twice with `/p0btwice`, and toasts how each
-/// ended and sets it as the title.
+/// Commands for exercising terminal titles and foreground processes in a PTY.
 fn pty(setup: &mut Setup) {
     let title = command("p0b.title", "Set the title", None).slash("p0btitle");
     setup.command(title, |host, _| host.set_title("p0b title"));

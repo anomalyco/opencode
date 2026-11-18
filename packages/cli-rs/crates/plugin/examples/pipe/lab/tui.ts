@@ -1,8 +1,4 @@
-// The lab of the pipe's tests (P7, review carbon): a V2 `{ id, setup }` module whose commands each show one thing the
-// carrier keeps. What the setup context says (`app`, `themeMode`); what an effect answered; a stored value it watches,
-// and stops watching; more watches than the host keeps; an effect or a view that is not JSON; a view that ends the JS
-// host. Its slot on the home footer has a memo within a memo, whose inner builds it counts by mount, content it gives
-// and releases on each view, and no rows at all once asked.
+// Exercises reads, effects and snapshots through the public plugin context.
 
 export default {
   id: "example.lab",

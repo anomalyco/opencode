@@ -1,6 +1,4 @@
-// The reload probe of the pipe's tests (P7, review bigboi-6): its command toasts what its helper module says, so an
-// edit of the helper alone shows whether a reload imported the plugin's modules afresh. The test replaces this file
-// with a setup that waits, or one that throws.
+// Toasts an imported helper's value so changing just that helper tests the module cache on reload.
 
 import { label } from "./label"
 

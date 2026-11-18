@@ -1,7 +1,4 @@
-//! The linked twin of `twin/tui.ts`, for `carrier-equal` on the pipe (P7): a board of cards on a route of contract 2.0,
-//! each a value and a patch by content handle, memoized on its value, below a header with their total. Commands bump a
-//! card, toast, and fail. The two are two programs; each is checked against the other's frames, and neither shares code
-//! with the host.
+//! Linked counterpart to `twin/tui.ts`: a route of memoized cards with a content handle per patch.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -41,7 +38,6 @@ fn view(values: &[u32], cx: &mut v2::View<'_>) -> v2::Node {
         })
         .collect();
     let total: u32 = values.iter().sum();
-    // The width it was built for: a revision built for another size shows (review bigboi-7).
     let header = v2::Node::text(vec![Span::new(format!("twin {total} · {}", cx.input.width))]).with_id("header");
     let cards = v2::Node::scroll(cards).with_id("cards").layout(Layout::default().grow());
     v2::Node::column(vec![header, cards]).with_id("twin").layout(Layout::default().grow())

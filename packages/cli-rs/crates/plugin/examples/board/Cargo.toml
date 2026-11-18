@@ -1,6 +1,4 @@
-# A plugin of contract 2.0 (P4): a route of memoized cards, commands, and a thread that floods its mailbox. The TUI's
-# `plugin_carriers` tests build it as a `cdylib` and link `src/board.rs` itself, and compare the two
-# (`carrier-equal`). Not a workspace member.
+# The carrier harness builds this library and links the same source into the test process.
 [package]
 name = "opencode-board-plugin"
 version = "0.1.0"
