@@ -1,8 +1,8 @@
 //! A port of `@prevalentware/opencode-goal-plugin` 0.1.98's TUI (`src/tui.ts`, its V2 part): a sidebar block with the
 //! session's goal, read from the newest goal tool result among the session's messages and from the goal server's state
-//! file, which it reads again each second on the host's clock; and a palette command, `Goal`, whose select shows the
-//! goal's summary and sends the prompt that refreshes, lists the history of, pauses, resumes or clears it. The options'
-//! `locale` picks English or Chinese, as TS's.
+//! file, which it reads again each second on the host's clock while the sidebar shows; and a palette command, `Goal`,
+//! whose select shows the goal's summary and sends the prompt that refreshes, lists the history of, pauses, resumes or
+//! clears it. The options' `locale` picks English or Chinese, as TS's.
 //!
 //! Where it differs from TS: TS's `dialog.set({ size: "large" })` comes before its select, which opens medium, so
 //! this one opens medium too; and `locale: "auto"` reads `LC_ALL` and `LANG` but not the system's locale (TS's `Intl`).
@@ -65,11 +65,27 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         }
     });
     // TS reads the state file each second, and counts an active goal's time each second: a tick on the host's clock,
-    // after which the sidebar draws again.
-    let ticked = state.clone();
-    setup.tasks().every(setup.host(), Duration::from_secs(1), move |_| {
-        ticked.borrow_mut().read_state_file();
-        async { ControlFlow::Continue(()) }
+    // after which the sidebar draws again. It runs only while a block shows: a mount reads the file, the first starts
+    // the tick, and the first tick after the last mount went ends it.
+    let (mounted, tasks) = (state.clone(), setup.tasks());
+    setup.on_mount(Placement::append("sidebar.content"), move |host, _, mount| {
+        let start = {
+            let mut state = mounted.borrow_mut();
+            if !mount {
+                state.mounts = state.mounts.saturating_sub(1);
+                return;
+            }
+            state.mounts += 1;
+            state.read_state_file();
+            !std::mem::replace(&mut state.ticking, true)
+        };
+        if start {
+            let ticked = mounted.clone();
+            tasks.every(host, Duration::from_secs(1), move |_| {
+                let flow = ticked.borrow_mut().tick();
+                async move { flow }
+            });
+        }
     });
     Ok(())
 }
@@ -85,6 +101,9 @@ struct State {
     seen: Option<(u64, SystemTime)>,
     /// The session the summary was shown for.
     session: String,
+    /// The sidebar blocks mounted, and whether the tick runs.
+    mounts: usize,
+    ticking: bool,
 }
 
 impl State {
@@ -183,6 +202,16 @@ impl State {
         if let Err(error) = call::fetch_of(&client::session_prompt(&input)).and_then(|fetch| host.try_fetch(fetch)) {
             toast(host, t, &error, Variant::Error);
         }
+    }
+
+    /// The tick, while a block shows: the state file is read again if it changed.
+    fn tick(&mut self) -> ControlFlow<()> {
+        if self.mounts == 0 {
+            self.ticking = false;
+            return ControlFlow::Break(());
+        }
+        self.read_state_file();
+        ControlFlow::Continue(())
     }
 
     /// TS `usePersistedGoal`'s `refresh`, for every session at once: the state file, read again once it changed.
