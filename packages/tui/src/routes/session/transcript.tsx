@@ -179,6 +179,8 @@ function Transcript(props: SessionTranscriptInput) {
           stickyStart="bottom"
           scrollAcceleration={scrollAcceleration()}
           viewportOptions={{ paddingRight: showScrollbar() ? 1 : 0, onSizeChange: updateAway }}
+          // The scroll offset can stay unchanged as new content moves the bottom away from it.
+          contentOptions={{ onSizeChange: updateAway }}
           verticalScrollbarOptions={{
             paddingLeft: 1,
             visible: showScrollbar(),

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { ScrollBoxRenderable } from "@opentui/core"
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client"
 import { createAppFixture } from "./fixture/app"
 import { copyPlugin } from "./fixture/fixture"
@@ -29,6 +30,12 @@ test("a plugin streams and opens child links in a transcript outside the active 
     [
       aside.id,
       [
+        ...Array.from({ length: 12 }, (_, index) => ({
+          id: `msg_history_${index}`,
+          type: "user" as const,
+          text: `History prompt ${index}`,
+          time: { created: 1 },
+        })),
         { id: "msg_aside", type: "user", text: asidePrompt, time: { created: 1 } },
         {
           id: "msg_aside_reply",
@@ -98,8 +105,17 @@ test("a plugin streams and opens child links in a transcript outside the active 
     await setup.mockMouse.click(lines[y].indexOf(text) + 1, y)
   }
 
+  const history = panel?.findDescendantById("transcript-older")?.parent
+  if (!(history instanceof ScrollBoxRenderable)) throw new Error("Missing aside scrollbox")
+  expect(history.scrollTop).toBeGreaterThan(0)
+  history.scrollTo(0)
+  await setup.waitForFrame((frame) => frame.includes("Load older messages"))
   await click("Load older messages")
-  await setup.waitForFrame((frame) => frame.includes(olderPrompt) && !frame.includes("Load older messages"))
+  await setup.waitFor(() => panel?.findDescendantById("msg_older") !== undefined)
+  // Wait for pinAbove's afterLayout anchor to settle before scrolling to the top.
+  await setup.renderOnce()
+  history.scrollTo(0)
+  await setup.waitForFrame((frame) => frame.includes(olderPrompt) && frame.includes("Jump to latest"))
 
   setup.events.emit({
     id: "evt_aside_step",
@@ -127,8 +143,12 @@ test("a plugin streams and opens child links in a transcript outside the active 
     type: "session.text.delta",
     data: { sessionID: aside.id, assistantMessageID: "msg_aside_live", ordinal: 0, delta: "Live aside output" },
   })
+  await setup.waitFor(() => panel?.findDescendantById("msg_aside_live") !== undefined)
+  expect(setup.captureCharFrame()).not.toContain("Live aside output")
+  await click("Jump to latest")
   const frame = await waitForHighlightedFrame(setup, (frame) => frame.includes("Live aside output"))
   expect(frame).toContain(mainPrompt)
+  expect(history.scrollTop).toBe(history.scrollHeight - history.viewport.height)
   await click("General finished", frame)
   await setup.waitForFrame((frame) => frame.includes(childPrompt) && frame.includes(mainPrompt))
   expect(panel?.findDescendantById("msg_child")).toBeDefined()
