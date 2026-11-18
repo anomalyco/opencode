@@ -800,6 +800,7 @@ function restoreDraft(
 function sendShell(session: ComposerSession, value: ComposerSubmission) {
   return inTurn(session.id, async (turn) => {
     if (turn.before) await turn.before
+
     const sending = session.data.session.sequence(session.id, () =>
       session.api.shell({ sessionID: session.id, id: value.id, command: value.text }),
     )

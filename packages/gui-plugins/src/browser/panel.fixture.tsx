@@ -600,7 +600,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         // The open pane shows each session's current tab; its other tab is in the strip behind it.
         state: (key: string) => (tabs.some((tab) => key === `browser:${tab.id}` && tab !== current(tab.owner)) ? "open" : "visible"),
         // As the host does for the model's own selection of a tab: the strip selects it.
-        open(key: string, _session: unknown, options?: { tab?: string }) {
+        open(key: string, _session: SessionRef, options?: { tab?: string }) {
           const tab = tabs.find((item) => key === `browser:${item.id}`)
 
           if (options?.tab !== "select" || !tab || tab.owner !== "Alpha" || tab === current("Alpha")) return

@@ -91,6 +91,7 @@ function fixture(
 
     return status === "active" ? { status, generation: 1, value: pane } : { status }
   })
+
   const history = { value: { visits: [] }, set: () => undefined }
 
   const fake = {
@@ -143,11 +144,11 @@ afterEach(() => void jest.useRealTimers())
 
 // What the system says of the network, which nothing but the navigator's own property can change. Returns the undo.
 const network = (online: boolean) => {
-  const own = Object.getOwnPropertyDescriptor(navigator, "onLine")
+  const was = navigator.onLine
 
   Object.defineProperty(navigator, "onLine", { configurable: true, get: () => online })
 
-  return () => (own ? Object.defineProperty(navigator, "onLine", own) : Reflect.deleteProperty(navigator, "onLine"))
+  return () => void Object.defineProperty(navigator, "onLine", { configurable: true, get: () => was })
 }
 
 // A prompt waits for the desktop's attachment only while one is in flight on a server that can answer it. In every

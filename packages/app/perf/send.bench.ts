@@ -5,10 +5,10 @@ import { bench, web } from "@hona/strobe"
 import { cached } from "./fixtures/mock"
 import { composer, mockTimelineSession, timeline } from "./fixtures/timeline"
 
-// One arrival per run: the run ends when the server has the request.
-const arrivals = { waiting: undefined as (() => void) | undefined }
+// The runs waiting for their request to reach the server: one at a time.
+const waiting: (() => void)[] = []
 
-const arrived = () => new Promise<void>((resolve) => (arrivals.waiting = resolve))
+const arrived = () => new Promise<void>((resolve) => void waiting.push(resolve))
 
 export default bench({
   targets: {
@@ -19,7 +19,7 @@ export default bench({
         mockTimelineSession(cached(ctx), {
           server: new URL(ctx.url).origin,
           historyTurns: 20,
-          onPrompt: () => arrivals.waiting?.(),
+          onPrompt: () => waiting.splice(0).forEach((resolve) => resolve()),
         }),
       url: ({ prepared }) => prepared.path,
     }),

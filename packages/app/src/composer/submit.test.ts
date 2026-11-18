@@ -128,13 +128,14 @@ function session(input: {
   /** Requests leave as the data layer's send chain lets them: each once the one before it has settled. */
   chained?: boolean
 }): ComposerSession {
-  const chain = { last: Promise.resolve() as Promise<unknown> }
+  // The requests made so far, settled or not: the next one starts once they all have.
+  const chain: Promise<unknown>[] = []
 
   const sequence = <Value,>(_sessionID: string, send: () => Promise<Value>) => {
     if (!input.chained) return send()
-    const next = chain.last.then(send)
+    const next = Promise.all(chain.splice(0)).then(send)
 
-    chain.last = next.catch(() => undefined)
+    chain.push(next.catch(() => undefined))
 
     return next
   }
