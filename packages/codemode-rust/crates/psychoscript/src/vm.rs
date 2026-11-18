@@ -1936,13 +1936,17 @@ impl<'rt> Vm<'rt> {
         self.stack = std::mem::take(&mut regions[0]);
         let mut splits = Vec::with_capacity(gens.len() + 1);
         // An async generator parked from its own frame: the VM goes back to its resumer's stack, as its `await` does,
-        // and `GENERATOR_FIRST` marks it.
-        if let FrameKind::Generator(g, _) = first.kind
-            && let Some(s) = self.running_saved(g)
-        {
-            self.stack = std::mem::take(&mut s.stack);
-            splits.push((GENERATOR_FIRST, 0));
-        }
+        // and `GENERATOR_FIRST` marks it, ahead of the splits once they are made.
+        let generator_first = match first.kind {
+            FrameKind::Generator(g, _) => match self.running_saved(g) {
+                Some(s) => {
+                    self.stack = std::mem::take(&mut s.stack);
+                    true
+                }
+                None => false,
+            },
+            _ => false,
+        };
         let mut region = 0;
         for (j, f) in parked.iter_mut().enumerate() {
             if region < gens.len() && gens[region].0 == j {
@@ -1955,6 +1959,9 @@ impl<'rt> Vm<'rt> {
                 r => splits[r - 1].1 as usize + f.base - 2,
             };
             f.hbase -= hbase;
+        }
+        if generator_first {
+            splits.insert(0, (GENERATOR_FIRST, 0));
         }
         let mut saved = self.coroutines[c as usize].saved.take().unwrap_or_else(|| {
             Box::new(SavedFrame {
