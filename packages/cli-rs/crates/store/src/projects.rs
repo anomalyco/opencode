@@ -100,8 +100,8 @@ pub fn adopt(project: &str, directory: &str, event: &WorktreeResolvedData) -> Op
     if key != parent && !key.starts_with(&format!("{parent}/")) {
         return None;
     }
-    // The segments after the root's. TS slices `directory.slice(root.length + 1)`, which is wrong when
-    // lowercasing changed a length (deviation O89-adopt-case-fold).
+    // Case folding can change byte length, so count matching path segments rather than slicing at the root's byte
+    // length.
     let subpath =
         (key != parent).then(|| directory.split('/').skip(root.split('/').count()).collect::<Vec<_>>().join("/"));
     Some((event.project_id.0.clone(), subpath))

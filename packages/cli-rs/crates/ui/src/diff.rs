@@ -308,10 +308,8 @@ pub fn added_lines(patch: &str) -> Option<usize> {
     (added == count).then_some(count)
 }
 
-/// `VirtualAddedPatch`: an added file over 3,000 lines in chunks of 128 rows, unwrapped so each chunk is exactly its
-/// rows tall. Only the chunks [`Chunked::show`] puts in view are mounted; the others are blank rows of their height.
-/// Each chunk is highlighted on its own (deviation `H06-chunked-diff-highlights`). A theme restyles the mounted chunks
-/// in place and the ones mounted later take it.
+/// Virtualizes added files over 3,000 lines in unwrapped 128-row chunks. Unmounted chunks reserve their full height;
+/// mounted chunks highlight independently.
 pub struct Chunked {
     root: View,
     app: App,

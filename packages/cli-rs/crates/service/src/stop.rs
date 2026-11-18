@@ -44,8 +44,7 @@ pub enum Error {
     NotTheServer { pid: u32, file: PathBuf },
 }
 
-/// Stops the service registered in `file`, if any. A live pid that is not that service's process
-/// (a stale registration whose pid was reused) is never signalled (deviation O89-service-stop-pid).
+/// Stops the registered service. Never signal a PID that has been reused by another process.
 pub async fn stop(transport: Arc<dyn Transport>, file: &Path, pty: Pty, poll: Poll) -> Result<(), Error> {
     let info = registration::read(file);
     if let Some(info) = &info

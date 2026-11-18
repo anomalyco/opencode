@@ -430,10 +430,8 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         &self.keymap
     }
 
-    /// The key sequences a layer's binding `key` binds, as the keymap expands it when the layer registers: a comma
-    /// separates bindings, none of them empty, and each alias of [`ALIASES`] between the boundaries the engine uses
-    /// (`+`, `,`, `<`, `>`, whitespace) is its key. [`Keymap::parse_key_sequence`] alone runs neither expansion, so a
-    /// check of what a binding takes must judge these (review carbon new-3).
+    /// Expands comma-separated bindings and key aliases at token boundaries before parsing the sequences, just as
+    /// layer registration does.
     pub fn parse_binding(&self, key: &str) -> Result<Vec<Vec<opentui::keymap::KeySequencePart>>, String> {
         let bindings: Vec<&str> = match key.contains(',') {
             true => key.split(',').map(str::trim).collect(),

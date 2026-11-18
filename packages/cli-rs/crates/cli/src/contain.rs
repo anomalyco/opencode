@@ -666,7 +666,6 @@ mod sys {
     /// handler was set, or the console closing.
     const CONTROL_C_EXIT: u32 = 0xC000_013A;
 
-    /// The parent is this binary again: a small binary of its own was not built (synthesis 4.5 prices both).
     pub fn supervise(raw: Vec<OsString>, restart: Restart) -> Result<Vec<OsString>, i32> {
         let Ok(exe) = std::env::current_exe() else { return Ok(raw) };
         // Before any client starts: Ctrl+C reaches every process on the console, and the client owns it; the end of

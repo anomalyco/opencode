@@ -127,10 +127,8 @@ pub struct State {
 /// Maximum changes retained by one in-flight list read.
 pub(crate) const OVERLAY_LIMIT: usize = 1024;
 
-/// What overtook one list read (model M1, deviation O89-list-snapshots): the items events added
-/// (`Some`) or settled (`None`) while it was in flight, by ID in arrival order. Only the read whose
-/// ticket it carries publishes. More than [`OVERLAY_LIMIT`] changes overflow it: the read then
-/// publishes nothing and reads again, so the bound costs a read, never an item.
+/// Changes that overtake a list read, keyed by ID in arrival order. Only the current ticket can publish. Beyond
+/// [`OVERLAY_LIMIT`], retry instead of losing an item.
 #[derive(Debug, Clone)]
 pub(crate) struct Overlay<V> {
     ticket: u64,
@@ -648,10 +646,8 @@ impl Data {
         task
     }
 
-    /// A list read under an [`Overlay`] (model M1, deviation O89-list-snapshots), registered in `reads` under
-    /// `read`. `fetch` reads the list and `publish` stores it with the overlay applied, unless a newer read
-    /// replaced this one or `session` was deleted after it began. An overflowed overlay publishes nothing: `key`
-    /// is invalidated and `again` reads again.
+    /// Fetches a list and applies its overlay before publishing. Discard superseded reads and reads for deleted
+    /// sessions. An overflow invalidates the key and schedules another read.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn overlay_sync<K, V, T, F>(
         &self,

@@ -958,9 +958,8 @@ fn edit_session(event: &V2Event) -> Option<&SessionID> {
 }
 
 impl Data {
-    /// Reads the newest page of a transcript once per invalidation (`message.sync`). What events
-    /// created or edited while the read was in flight is merged by `durable.seq` (models M2,
-    /// deviation O89-transcript-refresh, see [`State::publish_head`]).
+    /// Reads the newest transcript page once per invalidation. Merge concurrent events by `durable.seq`; see
+    /// [`State::publish_head`].
     pub fn message_sync(&self, session: &SessionID) -> Task<()> {
         let key = format!("session.message:{}", session.0);
         let begin = session.clone();
@@ -1147,10 +1146,8 @@ impl Data {
     }
 }
 
-/// Fetches older pages and publishes them once; false when cancelled before publishing. A latest-page
-/// refresh that replaced the cursor meanwhile, or a window that ended (models M2 rule 5), makes the
-/// pages stale: stitching them onto the new list would leave a gap, so the load starts again from
-/// the current cursor (deviation O89-older-page).
+/// Publishes older pages once. If a refresh changes the cursor, restart from the new cursor to avoid a gap. Returns
+/// false on cancellation before publication.
 async fn load_pages(
     data: &Data,
     session: &SessionID,

@@ -110,12 +110,8 @@ pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
     styles
 }
 
-/// The paste chip's text: the page color, dark in dark mode and light in light mode (#62930). A transparent page (the
-/// system theme) still holds the terminal's background in its channels, so the chip takes that. A transparent page
-/// without one takes the end of the neutral scale that reads better on the chip.
-///
-/// TypeScript takes the selected-row text instead, which is the light foreground on the system theme in dark mode
-/// (`parity/deviations/O89-paste-chip-contrast.md`).
+/// Paste chips use the page color for contrast. For transparent pages, use the terminal background if known or a
+/// contrasting neutral shade.
 fn paste_text(theme: &Theme) -> Color {
     let page = theme.background.base;
     if page.a == 255 {

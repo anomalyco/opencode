@@ -53,8 +53,8 @@ impl State {
 }
 
 impl Data {
-    /// Reads pending permissions once per invalidation (`permission.sync`). Requests asked or
-    /// settled while the read was in flight win over the snapshot (deviation O89-list-snapshots).
+    /// Reads pending permissions once per invalidation. Requests opened or settled during the read take precedence
+    /// over its snapshot.
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
         let (fetched, again) = (session.clone(), session.clone());
         self.overlay_sync(

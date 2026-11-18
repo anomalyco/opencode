@@ -28,8 +28,7 @@ pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
 /// `LOCAL_REPLAY_ROW_LIMIT`: rows printed only locally (errors, prompts in flight) that a resize replays.
 pub const LOCAL_ROW_LIMIT: usize = 100;
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
-/// The events a resize replay holds while it lists. TS holds any number
-/// (`parity/deviations/O92-mini-relist-overflow.md`).
+/// Maximum events buffered during a resize replay.
 pub const RELIST_LIMIT: usize = 4096;
 
 /// A part of a message whose text arrives in pieces (`FragmentRef`).
@@ -507,8 +506,8 @@ impl Transcript {
         if commit.message_id.as_ref().is_some_and(|message| self.message_ids.contains(message)) {
             return None;
         }
-        // A prompt the list did not have yet counts as shown, so it does not print again once listed. TS does not
-        // record it (`parity/deviations/O89-mini-restored-prompt.md`).
+        // Mark the restored prompt as shown even when the snapshot lacks it, so a later listing cannot print it
+        // twice.
         if commit.kind == EntryKind::User
             && let Some(message) = &commit.message_id
         {

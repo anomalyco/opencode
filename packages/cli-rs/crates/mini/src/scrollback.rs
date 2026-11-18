@@ -1169,8 +1169,6 @@ mod tests {
         assert_eq!(capture.cell(0, 2).unwrap().fg, entry_color(&commit, &theme));
     }
 
-    /// A table is borderless columns two cells apart in both modes, as TS's top-level Markdown draws it. The `-:` column
-    /// is right-aligned, where TS on Core 0.8.4 left-aligns it (`parity/deviations/OT2112-table-alignment.md`).
     #[test]
     fn tables_are_borderless_columns() {
         let commit = assistant("", Phase::Final);
@@ -1191,9 +1189,6 @@ mod tests {
         }
     }
 
-    /// Mini hides the tildes of `~~x~~` and strikes the text through, in every theme and body: native code strikes
-    /// `markup.strikethrough` unless a style turns the bit off, which a Rust `Style` cannot. TS mini on Core 0.8.4
-    /// draws the text plain (`parity/deviations/OT2079-strikethrough.md`).
     #[test]
     fn strikethrough_text_is_struck() {
         let full = crate::theme::resolve(&crate::theme::ThemeInput {

@@ -45,9 +45,6 @@ fn syntax_theme_matches_generate_syntax() {
     }
 }
 
-/// The paste chip keeps the page color on its warning background under a transparent page too
-/// (`parity/deviations/O89-paste-chip-contrast.md`): the terminal's background when the system theme read one, else the
-/// neutral end that reads better on the chip. TypeScript draws the light foreground on the dark-mode system theme.
 #[test]
 fn paste_chip_text_is_the_page_color_on_a_transparent_page() {
     let tokyo = "#1a1b26 #f7768e #9ece6a #e0af68 #7aa2f7 #ad8ee6 #449dab #a9b1d6 #414868 #ff7a93 #b9f27c #ff9e64 #7da6ff #bb9af7 #0db9d7 #c0caf5";

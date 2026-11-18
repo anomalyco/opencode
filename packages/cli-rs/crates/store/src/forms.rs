@@ -118,9 +118,8 @@ impl State {
 }
 
 impl Data {
-    /// Reads pending forms once per invalidation: a session's, or the global forms of a location
-    /// (the default one for `None`). Forms created or settled while the read was in flight win over
-    /// the snapshot (model M1, deviation O89-list-snapshots).
+    /// Reads pending forms for a session or location. Forms created or settled during the read take precedence over
+    /// its snapshot.
     pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
         let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
