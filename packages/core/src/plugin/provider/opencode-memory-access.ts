@@ -100,13 +100,28 @@ export function localize(text: string, roots: { readonly checkout?: string; read
 export function share(
   fields: Record<string, unknown>,
   roots: { readonly checkout?: string; readonly home?: string },
-): { readonly fields: Record<string, unknown> } | { readonly field: string; readonly kind: string } {
-  const found: Array<{ field: string; kind: string }> = []
+):
+  | { readonly fields: Record<string, unknown> }
+  | { readonly field: string; readonly kind: string; readonly repair: string } {
+  const found: Array<{ field: string; kind: string; repair: string }> = []
   const visit = (value: unknown, field: string): unknown => {
     if (typeof value === "string") {
       const kind = secret(value)
-      if (kind !== undefined) found.push({ field, kind })
-      return localize(value, roots)
+      if (kind !== undefined)
+        found.push({
+          field,
+          kind,
+          repair: "Replace it with a variable reference such as $TOKEN or a placeholder such as <password>",
+        })
+      const localized = localize(value, roots)
+      // What's left in a home directory after this machine's own paths were made relative is someone else's.
+      if (kind === undefined && HOME.test(localized))
+        found.push({
+          field,
+          kind: "a path in a home directory",
+          repair: "Write it relative to the repository, or from ~/ for a path in the user's own home directory",
+        })
+      return localized
     }
     if (Array.isArray(value)) return value.map((item, index) => visit(item, `${field}[${index}]`))
     if (typeof value === "object" && value !== null)
@@ -121,6 +136,10 @@ export function share(
   const shared = visit(fields, "")
   return found[0] ?? { fields: shared as Record<string, unknown> }
 }
+
+/** A path into someone's home directory, as Console's scan finds one. */
+const HOME =
+  /(?:^|[\s"'`(=:[,])(?:\/home\/[^/\s"'`]+|\/Users\/[^/\s"'`]+|\/root(?=[/\s"'`]|$)|[A-Za-z]:\\Users\\[^\\\s"'`]+)/
 
 function escape(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

@@ -63,6 +63,15 @@ describe("OpencodeMemoryAccess.share", () => {
     expect(OpencodeMemoryAccess.share({ title: "ok", errors: ["fine", "mysql -uroot -ps3cret"] }, roots)).toEqual({
       field: "errors[1]",
       kind: "a password after mysql -p",
+      repair: "Replace it with a variable reference such as $TOKEN or a placeholder such as <password>",
+    })
+    // Another account's home directory is left after localizing, and refused; the user's own becomes ~/.
+    expect(OpencodeMemoryAccess.share({ body: "Logs in /home/ada/.cache and /home/bob/.cache" }, roots)).toMatchObject({
+      field: "body",
+      kind: "a path in a home directory",
+    })
+    expect(OpencodeMemoryAccess.share({ body: "Logs in /home/ada/.cache, not /root2 or /srv/root" }, roots)).toEqual({
+      fields: { body: "Logs in ~/.cache, not /root2 or /srv/root" },
     })
   })
 })

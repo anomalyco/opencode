@@ -238,7 +238,7 @@ export const make = Effect.fnUntraced(function* (
       const result = OpencodeMemoryAccess.share(fields, yield* roots)
       if ("fields" in result) return result.fields
       return yield* new ToolFailure({
-        message: `Nothing was sent: ${result.field} holds ${result.kind}, which may not go into the workspace's shared memory. Replace it with a variable reference such as $TOKEN or a placeholder such as <password>, then call ${namespace}.${tool} again.`,
+        message: `Nothing was sent: ${result.field} holds ${result.kind}, which may not go into the workspace's shared memory. ${result.repair}, then call ${namespace}.${tool} again.`,
       })
     })
 
