@@ -20,14 +20,24 @@ describe("OpencodeMemoryAccess.secret", () => {
 
   test("rejects literal credentials in command arguments, and lets references and placeholders through", () => {
     const secret = OpencodeMemoryAccess.secret
-    expect(secret("PGPASSWORD=hunter2 psql -h db")).toBe("a password in PGPASSWORD=")
+    expect(secret("PGPASSWORD=hunter2 psql -h db")).toBe("a password, secret or token assigned to a variable")
     expect(secret("PGPASSWORD=$PGPASSWORD psql -h db")).toBeUndefined()
+    expect(secret("OPENAI_API_KEY=abc123 bun run eval")).toBe("a password, secret or token assigned to a variable")
+    expect(
+      secret('GH_TOKEN=${{ secrets.GH_TOKEN }} gh pr list, or NPM_TOKEN=<token>, or DB_PASSWORD=""'),
+    ).toBeUndefined()
+    // Only assignments count: a variable named in prose, or one merely ending in TOKEN_URL, doesn't.
+    expect(secret("Set API_TOKEN in CI; TOKEN_URL=https://x.io/t is public")).toBeUndefined()
+    expect(secret("psql --password=hunter2")).toBe("a password after --password=")
+    expect(secret(`curl -H "Authorization: Basic dXNlcjpwdw==" https://api`)).toBe(
+      "a credential in an Authorization header",
+    )
+    expect(secret(`hf_${"c".repeat(34)}`)).toBe("a Hugging Face token")
+    expect(secret(`oc_sk_abcd1234_${"d".repeat(20)}`)).toBe("an OpenCode Console key")
     expect(secret("mysql -uroot -ps3cret app")).toBe("a password after mysql -p")
     expect(secret("mysql -u root -p app")).toBeUndefined()
     expect(secret("sshpass -p 'pw' ssh deploy@host")).toBe("a password after sshpass -p")
-    expect(secret(`curl -H "Authorization: Bearer abc123" https://api`)).toBe(
-      "a bearer token in an Authorization header",
-    )
+    expect(secret(`curl -H "Authorization: Bearer abc123" https://api`)).toBe("a credential in an Authorization header")
     expect(secret(`curl -H "Authorization: Bearer $TOKEN" https://api`)).toBeUndefined()
     expect(secret("DATABASE_URL=postgres://app:s3cret@db:5432/app")).toBe("a password in a URL")
     expect(secret("DATABASE_URL=postgres://app:${DB_PASSWORD}@db:5432/app")).toBeUndefined()

@@ -491,7 +491,7 @@ describe("OpencodePlugin memory", () => {
           )
           .pipe(Effect.flip)
         expect(refused.message).toBe(
-          "Nothing was sent: body holds a password in PGPASSWORD=, which may not go into the workspace's shared memory. Replace it with a variable reference such as $TOKEN or a placeholder such as <password>, then call memory.publish again.",
+          "Nothing was sent: body holds a password, secret or token assigned to a variable, which may not go into the workspace's shared memory. Replace it with a variable reference such as $TOKEN or a placeholder such as <password>, then call memory.publish again.",
         )
         expect(refused.message).not.toContain("hunter2")
         expect(console.state.requests.length).toBe(asked)
@@ -507,7 +507,9 @@ describe("OpencodePlugin memory", () => {
             context(session.id),
           )
           .pipe(Effect.flip)
-        expect(header.message).toStartWith("Nothing was sent: edits[0].newText holds a bearer token")
+        expect(header.message).toStartWith(
+          "Nothing was sent: edits[0].newText holds a credential in an Authorization header",
+        )
         expect(header.message).toEndWith("then call memory.edit again.")
         expect(console.state.requests.length).toBe(asked)
 

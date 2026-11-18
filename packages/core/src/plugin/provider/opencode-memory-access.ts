@@ -41,25 +41,32 @@ const FORMATS: ReadonlyArray<readonly [string, RegExp]> = [
   ["a GitLab token", /\bglpat-[A-Za-z0-9_-]{20,}/],
   ["an AWS access key", /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/],
   ["a Slack token", /\bxox[abposr]-[A-Za-z0-9-]{10,}/],
-  ["a Stripe key", /\b[rs]k_live_[0-9A-Za-z]{16,}/],
+  ["a Stripe key", /\b[rs]k_(?:live|test)_[0-9A-Za-z]{16,}/],
   ["an Anthropic key", /\bsk-ant-[A-Za-z0-9_-]{20,}/],
   ["an OpenAI key", /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}/],
   ["a Google API key", /\bAIza[0-9A-Za-z_-]{35}/],
   ["an npm token", /\bnpm_[A-Za-z0-9]{36}/],
+  ["an OpenCode Console key", /\boc_sk_[A-Za-z0-9]{8,}_[A-Za-z0-9_-]{16,}/],
+  ["a PyPI token", /\bpypi-[A-Za-z0-9_-]{50,}/],
+  ["a Hugging Face token", /\bhf_[A-Za-z0-9]{30,}/],
+  ["a SendGrid key", /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/],
   ["a private key", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/],
 ]
 // Credentials given as literal command arguments; the first group is the value, which may only be a reference.
 const ARGUMENTS: ReadonlyArray<readonly [string, RegExp]> = [
-  ["a password in PGPASSWORD=", /\bPGPASSWORD=([^\s;&|]+)/g],
-  ["a password in MYSQL_PWD=", /\bMYSQL_PWD=([^\s;&|]+)/g],
+  [
+    "a password, secret or token assigned to a variable",
+    /(?<![A-Za-z0-9_])(?:[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY)|MYSQL_PWD)=([^\s;&|]+)/g,
+  ],
   ["a password after mysql -p", /\b(?:mysql|mysqldump|mariadb|mysqladmin)\b[^\n|;&]*?\s-p(?!\s)([^\s;&|]+)/g],
+  ["a password after --password=", /\s--password=([^\s;&|]+)/g],
   ["a password after sshpass -p", /\bsshpass\s+-p\s*([^\s;&|]+)/g],
-  ["a bearer token in an Authorization header", /\bAuthorization:\s*Bearer\s+([^\s"'`\\]+)/gi],
+  ["a credential in an Authorization header", /\bAuthorization:\s*(?:Bearer|Basic|token)\s+([^\s"'`\\]+)/gi],
   ["a password in a URL", /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"`]+:([^\s/@'"`]+)@[^\s/'"`]/gi],
 ]
 /** A variable reference or a placeholder, which stands for a credential without being one. */
 const REFERENCE =
-  /^["'`]?(?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\(|%[A-Za-z_][A-Za-z0-9_]*%|<[^<>]+>|\{\{[^}]+\}\}|\*{3,}|\.{3}|…|x{3,}|X{3,})/
+  /^(?:""|''|["'`]?(?:\$\{\{|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$\(|%[A-Za-z_][A-Za-z0-9_]*%|<[^<>]+>|\{\{[^}]+\}\}|\*{3,}|\.{3}|…|x{3,}|X{3,}))/
 
 /** What in `text` may not reach the workspace's pool, by its kind and never its value, or undefined. */
 export function secret(text: string): string | undefined {
