@@ -673,11 +673,14 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         assert!(refused, "loopback {loopback}: a fetch with no room returned {under:?}");
         // The fan-out ends, the queue drains, and a fetch with room is given an ID and its reply.
         h.tui.plugins.set_active(&host, "probe", false);
-        let drained = h.app.wait_until(support::WAIT, || {
+        // A frame runs its budget of what waits: the drain is so many frames, however long each takes under load
+        // (pipe-flakes: it outlasted the 30 s of a wait under load).
+        let waiting = opencode_plugin::effects_waiting();
+        for _ in 0..waiting.div_ceil(opencode_plugin::FRAME_EFFECTS) {
             h.app.render();
-            opencode_plugin::effects_waiting() == 0
-        });
-        assert!(drained, "loopback {loopback}: the queue did not drain");
+        }
+        let left = opencode_plugin::effects_waiting();
+        assert_eq!(left, 0, "loopback {loopback}: the queue did not drain within a frame for each budget of {waiting}");
         h.tui.keymap.dispatch("fetcher.go", None);
         let replied = h.app.wait_until(support::WAIT, || {
             let (given, replies) = FETCHES.with_borrow(|fetches| fetches.clone());
