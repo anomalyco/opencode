@@ -4,6 +4,8 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { deepLinkArguments, relaunchArguments } from "../deep-links/arguments"
+import { takeEarlyLinks } from "../deep-links/launch"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
@@ -73,7 +75,7 @@ const runtime = Layer.effect(
         const exit = setImmediate(() => {
           exits.delete(exit)
 
-          if (mode === "relaunch") app.relaunch()
+          if (mode === "relaunch") app.relaunch({ args: relaunchArguments(process.argv) })
           app.quit()
         })
 
@@ -103,7 +105,7 @@ const runtime = Layer.effect(
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const urls = deepLinkArguments(argv)
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
@@ -153,6 +155,16 @@ const runtime = Layer.effect(
     }
 
     let windowsWired = false
+
+    // The link the app was started for: its own arguments on Windows and Linux, an `open-url` before `ready` on
+    // macOS. Taken in the tick that starts listening below, so no link falls between the entry module's listener and
+    // this one. No renderer is ready this early, so the links wait for the first one.
+    const launch = [...deepLinkArguments(process.argv), ...takeEarlyLinks()]
+
+    if (launch.length) {
+      runFork(Effect.logInfo("deep link received at launch", { urls: launch }))
+      deepLinks.receive(launch)
+    }
 
     app.on("second-instance", secondInstance)
     app.on("open-url", openUrl)

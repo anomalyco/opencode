@@ -58,14 +58,74 @@ describe("deep link delivery", () => {
     expect(after.state.links).toEqual([])
   })
 
-  test("queues a link until the first window is ready", () => {
-    const result = replay([{ type: "links.received", urls: [project] }, { type: "window.opened", windowID: "a" }])
-    expect(result.commands.flat()).toEqual([])
-    expect(result.state.links).toEqual([{ status: "queued", url: project, target: undefined }])
+  // The link the app was started for arrives before any renderer can take it: with the first instance's arguments on
+  // Windows and Linux, as an `open-url` before `ready` on macOS.
+  test.each<{ name: string; before: DeepLinkEvent[]; held: string[]; windowID: string }>([
+    {
+      name: "before the first window exists",
+      before: [
+        { type: "links.received", urls: [project] },
+        { type: "window.opened", windowID: "a" },
+      ],
+      held: [project],
+      windowID: "a",
+    },
+    {
+      name: "while the first window loads",
+      before: [
+        { type: "window.opened", windowID: "a" },
+        { type: "window.focused", windowID: "a" },
+        { type: "links.received", urls: [project] },
+      ],
+      held: [project],
+      windowID: "a",
+    },
+    {
+      name: "as two arrivals",
+      before: [
+        { type: "links.received", urls: [project] },
+        { type: "links.received", urls: [oauth] },
+        { type: "window.opened", windowID: "a" },
+      ],
+      held: [project, oauth],
+      windowID: "a",
+    },
+    {
+      name: "and the first window closes before its renderer is ready",
+      before: [
+        { type: "window.opened", windowID: "a" },
+        { type: "links.received", urls: [project] },
+        { type: "window.closed", windowID: "a" },
+        { type: "window.opened", windowID: "b" },
+      ],
+      held: [project],
+      windowID: "b",
+    },
+  ])("holds a launch link for the first ready renderer and delivers it once: $name", (input) => {
+    const waiting = replay(input.before)
+    expect(waiting.commands.flat().filter((command) => command.type === "links.deliver")).toEqual([])
+    expect(waiting.state.links.map((link) => [link.status, link.url])).toEqual(input.held.map((url) => ["queued", url]))
 
-    expect(transitionDeepLinks(result.state, { type: "window.ready", windowID: "a", clientID: 1 }).commands).toEqual([
-      { type: "links.deliver", windowID: "a", clientID: 1, attempt: 1, urls: [project] },
+    const delivered = transitionDeepLinks(waiting.state, {
+      type: "window.ready",
+      windowID: input.windowID,
+      clientID: 1,
+    })
+
+    expect(delivered.commands).toEqual([
+      { type: "links.deliver", windowID: input.windowID, clientID: 1, attempt: 1, urls: input.held },
     ])
+
+    const after = replay(
+      [
+        { type: "delivery.acknowledged", clientID: 1, attempt: 1 },
+        { type: "client.disconnected", clientID: 1 },
+        { type: "window.ready", windowID: input.windowID, clientID: 2 },
+      ],
+      delivered.state,
+    )
+
+    expect(after.commands.flat()).toEqual([])
   })
 
   test("waits for the window a console return names instead of the focused one", () => {
