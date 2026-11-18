@@ -1,4 +1,4 @@
-name: check-docs
+name: check-docs 
 
 # Builds the V2 docs on their own (services/site/src/docs/script/build.ts): compiles every MDX page,
 # prerenders it, builds search, checks every link and that pages load nothing from outside /docs. The
