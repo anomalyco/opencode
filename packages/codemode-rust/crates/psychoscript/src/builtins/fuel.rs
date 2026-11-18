@@ -91,6 +91,15 @@ impl Conversions {
                 self.paid = true;
             }
         }
+        // A list holding an object whose conversion calls the program is converted in a convert frame, and the
+        // built-in run again with it (see `conversion.rs`).
+        if let Some(r) = vm.restartable_list(hints, values, coerce) {
+            let list = r?;
+            for (v, c) in values.iter_mut().zip(list) {
+                *v = c;
+            }
+            return Ok(());
+        }
         for (i, v) in values.iter_mut().enumerate() {
             let hint = hints[i.min(hints.len() - 1)];
             *v = vm.primitive_of(v, hint)?;

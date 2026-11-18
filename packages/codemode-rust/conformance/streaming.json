@@ -210242,6 +210242,198 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = { valueOf: () => S(1) + 3, toString: () => 'x' + S(2) }; return ['a' + o, o * 2, o < 5, o == 4, `${o}`, -o, ~o] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "a4",
+            8,
+            true,
+            true,
+            "x1",
+            -4,
+            -5
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = { toString: () => 'k' + S(1) }; const m = {}; m[o] = 1; return [m, 'k1' in m, delete m[o], { [o]: 2 }] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            {},
+            true,
+            true,
+            {
+              "k1": 2
+            }
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = { valueOf: () => S(1) + 2 }; let x = o; x++; let s = 0; for (let i = 0; i < o; i++) s += i; return [x, s] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            4,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = { valueOf: () => S(1) + 3, toString: () => 'x' + S(2) }; return ['a'.padStart(o), String(o), Number(o), Math.max(o, 1), [1, 2, 3, 4].slice(o), [o, o].join('-')] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "   a",
+            "x1",
+            4,
+            4,
+            [],
+            "x1-x1"
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const d = new Date(0); const r = d.setSeconds({ valueOf: () => (S(1), d.setTime(5000), 7) }); return [r, d.getTime()] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            7000,
+            7000
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [3, 1, 2].sort((a, b) => ({ valueOf: () => S(a) * 0 + a - b })); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 3",
+            "answer 3",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = 'abc'.replace('b', () => ({ toString: () => 'X' + S(1) })); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "aX1c",
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [{ toLocaleString: () => ({ toString: () => 'T' + S(2) }) }].toLocaleString(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "T1",
+          [
+            "call 2",
+            "job",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const log = []; function* g() { try { yield 1; yield 2 } finally { log.push('finally'); throw new Error('close') } }\n     const r = []; try { for (const x of g()) { r.push(x); break } } catch (e) { r.push(e.message) }\n     try { const [a] = g(); r.push(a) } catch (e) { r.push(e.message) }\n     try { new Map([[1, 2]].values().map((x) => x)) } catch (e) { r.push(e.message) }\n     try { Array.from(g(), (x) => { if (x === 1) throw new Error('mapper') }) } catch (e) { r.push(e.message) }\n     return [r, log]",
       "outcome": {
         "ok": true,
@@ -210275,6 +210467,48 @@
         ]
       },
       "log": []
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf() { return 1 }, toString() { return 'a' } }\n   for (let j = 0; j < 300; j++) { o + 1; o < 2; o == 1; `${o}`; [o].join(); 'a'.padStart(o); String(o); Math.max(o, 0); const m = {}; m[o] = 1 }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 595
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const o = { valueOf() { return 3 } }\n   for (let j = 0; j < 300; j++) { let s = 0; for (let i = 0; i < o; i++) s++; let x = o; x++ }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2199
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
     }
   ],
   "suspensions": [
@@ -210854,6 +211088,20 @@
           0
         ]
       ]
+    },
+    {
+      "code": "const o = { valueOf: () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1 }; return [o + 1, 'a'.padStart(o)]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          3,
+          " a"
+        ]
+      },
+      "log": []
     },
     {
       "code": "const r = []; for (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r",

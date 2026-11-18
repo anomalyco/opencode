@@ -850,7 +850,9 @@ const REP_OUT: usize = 1;
 const REP_K: usize = 2;
 const REP_N: usize = 3;
 const REP_CHECK: usize = 4;
-const REP_MATCHES: usize = 5;
+/// Set while a callback's result is converted by a call (see `Frame::convert`).
+const REP_CONV: usize = 5;
+const REP_MATCHES: usize = 6;
 
 /// Pushes a frame that replaces each match with what the callback `f` returns for it, as the reference's prelude
 /// `replaceWith` does once the matches are found: the result as a string, then `String`'s fifty and a back-edge.
@@ -870,6 +872,7 @@ pub(crate) fn enter_replace_with(
         Value::Num(0.0),
         Value::Num(n as f64),
         Value::Bool(check),
+        Value::Num(0.0),
     ];
     for (gap, args) in gaps.into_iter().zip(calls) {
         let args = vm.new_array(args);
@@ -904,7 +907,14 @@ pub(crate) fn replace_with_step(
     };
     match input {
         Input::Returned(r) => {
-            let r = vm.string_of(&r.get())?;
+            let r = r.get();
+            let converted = fr.index(vm, REP_CONV) == 1;
+            fr.set_index(vm, REP_CONV, 0);
+            if !converted && vm.converts_by_call(&r, crate::ops::Hint::String) {
+                fr.set_index(vm, REP_CONV, 1);
+                return fr.convert(vm, r, crate::ops::Hint::String);
+            }
+            let r = vm.string_of(&r)?;
             super::fuel::native(vm);
             super::fuel::step(vm);
             append(vm, Value::Str(r));

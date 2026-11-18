@@ -10,6 +10,7 @@
 mod builtins;
 mod bytecode;
 mod compiler;
+mod conversion;
 mod convert;
 mod cross;
 mod exec;

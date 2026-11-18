@@ -670,16 +670,29 @@ fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> 
     fuel::native(vm);
     let empty = vm.static_str("");
     let op = crate::native::NativeOp::ToLocaleString;
-    vm.enter_native(op, callee, Value::Obj(id), &[empty, Value::Num(0.0)])
+    vm.enter_native(
+        op,
+        callee,
+        Value::Obj(id),
+        &[empty, Value::Num(0.0), Value::Num(0.0)],
+    )
 }
 
-/// The step of `toLocaleString`: the slots are the text so far and the next index.
+/// The step of `toLocaleString`: the slots are the text so far, the next index, and whether a result is being
+/// converted by a call.
 pub(crate) fn to_locale_string_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
     let id = fr.this_slot(vm).obj().unwrap_or(0);
     let mut i = fr.index(vm, 1);
     match input {
         Input::Returned(r) => {
-            let s = vm.string_of(&r.get())?;
+            let r = r.get();
+            let converted = fr.index(vm, 2) == 1;
+            fr.set_index(vm, 2, 0);
+            if !converted && vm.converts_by_call(&r, Hint::String) {
+                fr.set_index(vm, 2, 1);
+                return fr.convert(vm, r, Hint::String);
+            }
+            let s = vm.string_of(&r)?;
             fuel::native(vm);
             let out = fr.get(vm, 0);
             let Value::Str(o) = out else {
@@ -1366,9 +1379,11 @@ const SORT_RIGHT: usize = 7;
 const SORT_UNDEFS: usize = 8;
 const SORT_HOLES: usize = 9;
 const SORT_TARGET: usize = 10;
+/// Set while the comparator's result is converted by a call (see `Frame::convert`).
+const SORT_CONV: usize = 11;
 /// The values, at `SORT_WORK + i`; the buffer a merge fills, at the same indexes past `SORT_WORK + n`; then the
 /// merges to make, in order, as `low, middle, high` triples.
-const SORT_WORK: usize = 11;
+const SORT_WORK: usize = 12;
 
 /// Starts a sort with the comparator `f` as the reference's `sortWith` runs it: a stable top-down merge sort, its
 /// merges planned in post-order so the comparator sees the pairs the recursive sort compares, in the same order. A
@@ -1418,6 +1433,7 @@ pub(super) fn sort_with(
             Value::Num(undefs.len() as f64),
             Value::Num(holes as f64),
             Value::Num(target as f64),
+            Value::Num(0.0),
         ],
     )?;
     vm.stack.extend(work.into_iter().map(Slot::pack));
@@ -1434,9 +1450,18 @@ pub(crate) fn sort_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Va
     match input {
         Input::Start => {}
         Input::Returned(r) => {
+            let converted = fr.index(vm, SORT_CONV) == 1;
+            fr.set_index(vm, SORT_CONV, 0);
             let order = match r.is_num() {
                 true => r.f(),
-                false => vm.number_of(&r.get())?,
+                false => {
+                    let v = r.get();
+                    if !converted && vm.converts_by_call(&v, Hint::Number) {
+                        fr.set_index(vm, SORT_CONV, 1);
+                        return fr.convert(vm, v, Hint::Number);
+                    }
+                    vm.number_of(&v)?
+                }
             };
             // Merged values fill the merge's range in order: as many as each half has given.
             let at = left + right - middle;

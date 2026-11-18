@@ -71,9 +71,11 @@ pub enum NativeOp {
     Callbacks,
     /// Iteration in bytecode over an iterator the VM does not step itself, by sub-op (see `iteration.rs`).
     Iteration,
+    /// A conversion that calls the program, by sub-op (see `conversion.rs`).
+    Convert,
 }
 
-const OPS: [NativeOp; 21] = [
+const OPS: [NativeOp; 22] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
@@ -95,6 +97,7 @@ const OPS: [NativeOp; 21] = [
     NativeOp::Collections,
     NativeOp::Callbacks,
     NativeOp::Iteration,
+    NativeOp::Convert,
 ];
 
 impl NativeOp {
@@ -185,6 +188,7 @@ pub fn step(vm: &mut Vm, op: NativeOp, sub: u16, base: usize, input: Input) -> R
         NativeOp::Collections => crate::builtins::sets::family_step(vm, sub, frame, input),
         NativeOp::Callbacks => crate::builtins::object::family_step(vm, sub, frame, input),
         NativeOp::Iteration => crate::iteration::step(vm, sub, frame, input),
+        NativeOp::Convert => crate::conversion::step(vm, sub, frame, input),
     }
 }
 

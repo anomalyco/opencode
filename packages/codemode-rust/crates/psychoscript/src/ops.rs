@@ -215,10 +215,7 @@ impl<'rt> Vm<'rt> {
                 }
             }
             (Value::Undef | Value::Null, _) => {
-                let k = self
-                    .string_of(k)
-                    .map(|s| self.text(s).to_owned())
-                    .unwrap_or_default();
+                let k = self.quiet_string(k);
                 let t = if let Value::Null = v {
                     "null"
                 } else {
@@ -485,10 +482,7 @@ impl<'rt> Vm<'rt> {
             }
         }
         if v.is_nullish() {
-            let k = self
-                .string_of(k)
-                .map(|s| self.text(s).to_owned())
-                .unwrap_or_default();
+            let k = self.quiet_string(k);
             let t = if let Value::Null = v {
                 "null"
             } else {
@@ -998,6 +992,18 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// A value's string for a message, made inline with a failure ignored: never a restartable conversion, whose
+    /// request an ignored failure would leave behind (see `conversion.rs`).
+    pub(crate) fn quiet_string(&mut self, v: &Value) -> String {
+        let ok = std::mem::replace(&mut self.convert_ok, false);
+        let s = self
+            .string_of(v)
+            .map(|s| self.text(s).to_owned())
+            .unwrap_or_default();
+        self.convert_ok = ok;
+        s
+    }
+
     #[inline(never)]
     pub fn number_of(&mut self, v: &Value) -> Result<f64, Value> {
         Ok(match v {
@@ -1072,6 +1078,11 @@ impl<'rt> Vm<'rt> {
         let Value::Obj(id) = v else {
             return Ok(*v);
         };
+        if self.convert_ok
+            && let Some(r) = self.restartable_conversion(v, hint)
+        {
+            return r;
+        }
         self.fuel(1);
         let hint = if hint == Hint::Default && exotic::prefers_string(self, *id) {
             Hint::String

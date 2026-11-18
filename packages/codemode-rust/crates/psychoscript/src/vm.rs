@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap;
 
 use crate::bytecode::{Arith, Capture, FuncProto, Op, Program, TemplateSite};
 use crate::compiler::{DELEGATE_ASYNC, DELEGATE_NO_ARG};
+use crate::conversion::code;
 use crate::object::*;
 use crate::strings::{StrId, Strings};
 use crate::value::{Id, Slot, Value};
@@ -286,6 +287,14 @@ pub struct Vm<'rt> {
     no_upvals: Rc<[u32]>,
     /// Set by a built-in that pushed a native frame instead of returning its result (`enter_native`).
     pub(crate) entered: bool,
+    /// Set while a built-in called from bytecode or a convert frame's rerun runs: a conversion that calls the
+    /// program is then restarted instead of made inline (see `conversion.rs`).
+    pub(crate) convert_ok: bool,
+    /// The conversion a restartable run asked for.
+    pub(crate) convert_req: Option<crate::conversion::Request>,
+    /// The answers a rerun takes in order, and what the meter was when it started.
+    pub(crate) replay: VecDeque<Value>,
+    pub(crate) replay_meter: Option<crate::conversion::Meter>,
 }
 
 impl<'rt> Vm<'rt> {
@@ -369,6 +378,10 @@ impl<'rt> Vm<'rt> {
             native_proto: Rc::new(crate::native::proto()),
             no_upvals: Rc::from([]),
             entered: false,
+            convert_ok: false,
+            convert_req: None,
+            replay: VecDeque::new(),
+            replay_meter: None,
         }
     }
 
@@ -562,18 +575,35 @@ impl<'rt> Vm<'rt> {
     #[cold]
     fn budget_out(&mut self, check: bool) -> Result<(), Value> {
         self.settle_budget();
+        // A replay's fuel is given back when it ends (see `conversion.rs`): it starts nothing meanwhile.
+        let replaying = self.replay_meter.is_some();
         if self.host.meter.handover <= 0 {
             self.host.meter.handover = HANDOVER_FUEL;
-            self.host.next_epoch();
+            if !replaying {
+                self.host.next_epoch();
+            }
         }
         let mut r = Ok(());
-        if check && self.host.meter.fuel <= 0 {
+        if check && !replaying && self.host.meter.fuel <= 0 {
             self.host.meter.fuel = FUEL;
             self.checkpoint();
             r = self.check_time();
         }
         self.rebudget();
         r
+    }
+
+    /// The step budget and the meter, as a replay saves them.
+    pub(crate) fn meter_state(&self) -> crate::conversion::Meter {
+        let m = &self.host.meter;
+        [self.budget, m.start, m.handover, m.fuel]
+    }
+
+    pub(crate) fn set_meter_state(&mut self, s: crate::conversion::Meter) {
+        self.budget = s[0];
+        self.host.meter.start = s[1];
+        self.host.meter.handover = s[2];
+        self.host.meter.fuel = s[3];
     }
 
     /// Charges what was spent since the budget was set to both counters.
@@ -1199,7 +1229,16 @@ impl<'rt> Vm<'rt> {
                 let this = self.pop();
                 self.stack.pop();
                 self.host.meter.counted = true;
+                self.convert_ok = true;
                 let r = f(self, this, &args, id);
+                self.convert_ok = false;
+                if self.convert_req.is_some() {
+                    let c = self.convert_native(id, this, &args, true, false);
+                    args.clear();
+                    self.arg_pool.push(args);
+                    c?;
+                    return Ok(true);
+                }
                 args.clear();
                 self.arg_pool.push(args);
                 if self.entered {
@@ -1279,7 +1318,13 @@ impl<'rt> Vm<'rt> {
         {
             let f = *f;
             self.host.meter.counted = false;
+            self.convert_ok = true;
             let r = f(self, Value::Uninit, &args, id);
+            self.convert_ok = false;
+            if self.convert_req.is_some() {
+                self.convert_native(id, Value::Uninit, &args, false, true)?;
+                return Ok(true);
+            }
             if std::mem::take(&mut self.entered) {
                 return Ok(true);
             }
@@ -1449,7 +1494,13 @@ impl<'rt> Vm<'rt> {
                 let this = self.pop();
                 self.stack.pop();
                 self.host.meter.counted = false;
+                self.convert_ok = true;
                 let r = f(self, this, &args, id);
+                self.convert_ok = false;
+                if self.convert_req.is_some() {
+                    self.convert_native(id, this, &args, false, false)?;
+                    return Ok(true);
+                }
                 if std::mem::take(&mut self.entered) {
                     return Ok(true);
                 }
@@ -2264,8 +2315,17 @@ impl<'rt> Vm<'rt> {
                     }
                 };
             }
+            // An operation whose operand converts by calling the program runs in a convert frame (see
+            // `conversion.rs`), which hands its result back as the instruction would.
+            macro_rules! conv_op {
+                ($code:expr, $a:expr, $b:expr, $c:expr, $x:expr, $y:expr) => {{
+                    self.frames[fi].pc = pc;
+                    tri!(self.convert_op($code, $a, $b, $c, $x, $y));
+                    continue 'outer;
+                }};
+            }
             macro_rules! num_op {
-                ($f:expr) => {{
+                ($code:expr, $f:expr) => {{
                     let f: fn(f64, f64) -> f64 = $f;
                     let n = self.stack.len();
                     let (a, b) = (self.stack[n - 2], self.stack[n - 1]);
@@ -2275,6 +2335,9 @@ impl<'rt> Vm<'rt> {
                     } else {
                         let b = self.pop();
                         let a = self.pop();
+                        if self.operand_calls(&a) || self.operand_calls(&b) {
+                            conv_op!($code, a, b, Value::Undef, 0, 0);
+                        }
                         tri!(self.data_operands(&a, &b));
                         let x = tri!(self.op_number(&a, &b));
                         let y = tri!(self.op_number(&b, &a));
@@ -2283,9 +2346,12 @@ impl<'rt> Vm<'rt> {
                 }};
             }
             macro_rules! int_op {
-                ($f:expr) => {{
+                ($code:expr, $f:expr) => {{
                     let b = self.pop();
                     let a = self.pop();
+                    if self.operand_calls(&a) || self.operand_calls(&b) {
+                        conv_op!($code, a, b, Value::Undef, 0, 0);
+                    }
                     tri!(self.data_operands(&a, &b));
                     let x = tri!(self.op_number(&a, &b));
                     let y = tri!(self.op_number(&b, &a));
@@ -2294,7 +2360,7 @@ impl<'rt> Vm<'rt> {
                 }};
             }
             macro_rules! cmp_op {
-                ($op:tt, $swap:expr, $neg_undef:expr) => {{
+                ($code:expr, $op:tt, $swap:expr, $neg_undef:expr) => {{
                     let n = self.stack.len();
                     let (a, b) = (self.stack[n - 2], self.stack[n - 1]);
                     if a.is_num() && b.is_num() {
@@ -2305,6 +2371,9 @@ impl<'rt> Vm<'rt> {
                     }
                     let b = self.pop();
                     let a = self.pop();
+                    if self.operand_calls(&a) || self.operand_calls(&b) {
+                        conv_op!($code, a, b, Value::Undef, 0, 0);
+                    }
                     tri!(self.data_operands(&a, &b));
                     let r = match (&a, &b) {
                         (Value::Num(x), Value::Num(y)) => *x $op *y,
@@ -2405,7 +2474,13 @@ impl<'rt> Vm<'rt> {
                                 Arith::StrictNe => Slot::pack(Value::Bool(x != y)),
                             };
                         } else {
-                            let r = tri!(self.arith(op, a.get(), Value::Num(y)));
+                            let av = a.get();
+                            if self.operand_calls(&av) {
+                                self.stack.pop();
+                                let ac = crate::conversion::arith_code(op);
+                                conv_op!(code::ARITH, av, Value::Num(y), Value::Undef, ac, 0);
+                            }
+                            let r = tri!(self.arith(op, av, Value::Num(y)));
                             self.stack[n - 1] = Slot::pack(r);
                         }
                     }
@@ -2546,6 +2621,9 @@ impl<'rt> Vm<'rt> {
                     Op::GetElem => {
                         let k = self.pop();
                         let o = self.pop();
+                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                            conv_op!(code::GET_ELEM, o, k, Value::Undef, 0, 0);
+                        }
                         let v = tri!(self.get_elem(&o, &k));
                         self.push(v);
                     }
@@ -2553,6 +2631,9 @@ impl<'rt> Vm<'rt> {
                         let v = self.pop();
                         let k = self.pop();
                         let o = self.pop();
+                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                            conv_op!(code::SET_ELEM, o, k, v, 0, 0);
+                        }
                         tri!(self.check_assignment(&o, &v));
                         tri!(self.set_elem(&o, &k, v));
                         self.push(v);
@@ -2571,6 +2652,9 @@ impl<'rt> Vm<'rt> {
                     Op::DelElem => {
                         let k = self.pop();
                         let o = self.pop();
+                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                            conv_op!(code::DEL_ELEM, o, k, Value::Undef, 0, 0);
+                        }
                         let a = tri!(self.key_of(&k));
                         let r = tri!(self.delete(&o, a));
                         self.push(Value::Bool(r));
@@ -2578,6 +2662,9 @@ impl<'rt> Vm<'rt> {
                     Op::In => {
                         let o = self.pop();
                         let k = self.pop();
+                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                            conv_op!(code::IN, o, k, Value::Undef, 0, 0);
+                        }
                         let r = tri!(self.has_property(&o, &k));
                         self.push(Value::Bool(r));
                     }
@@ -2596,6 +2683,9 @@ impl<'rt> Vm<'rt> {
                     Op::DefineElem => {
                         let v = self.pop();
                         let k = self.pop();
+                        if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
+                            conv_op!(code::DEFINE_ELEM, k, v, Value::Undef, 0, 0);
+                        }
                         let a = tri!(self.key_of(&k));
                         if let Value::Obj(id) = self.top() {
                             self.define(id, a, v);
@@ -2679,6 +2769,10 @@ impl<'rt> Vm<'rt> {
                         let k = self.top();
                         if !matches!(k, Value::Num(_) | Value::Str(_) | Value::Sym(_)) {
                             self.frames[fi].pc = pc;
+                            if self.operand_calls(&k) {
+                                self.stack.pop();
+                                conv_op!(code::TO_KEY, k, Value::Undef, Value::Undef, 0, 0);
+                            }
                             let a = tri!(self.key_of(&k));
                             self.stack.pop();
                             let v = if a <= SYM_ASYNC_ITERATOR {
@@ -2713,26 +2807,33 @@ impl<'rt> Vm<'rt> {
                         }
                         let b = self.pop();
                         let a = self.pop();
+                        if self.operand_calls(&a) || self.operand_calls(&b) {
+                            conv_op!(code::ADD, a, b, Value::Undef, 0, 0);
+                        }
                         let r = match (&a, &b) {
                             (Value::Num(x), Value::Num(y)) => Value::Num(x + y),
                             _ => tri!(self.add(a, b)),
                         };
                         self.push(r);
                     }
-                    Op::Sub => num_op!(|x, y| x - y),
-                    Op::Mul => num_op!(|x, y| x * y),
-                    Op::Div => num_op!(|x, y| x / y),
-                    Op::Mod => num_op!(js_rem),
-                    Op::Pow => num_op!(js_pow),
-                    Op::BitAnd => int_op!(|x, y| (to_i32(x) & to_i32(y)) as f64),
-                    Op::BitOr => int_op!(|x, y| (to_i32(x) | to_i32(y)) as f64),
-                    Op::BitXor => int_op!(|x, y| (to_i32(x) ^ to_i32(y)) as f64),
-                    Op::Shl => int_op!(|x, y| to_i32(x).wrapping_shl(to_u32(y) & 31) as f64),
-                    Op::Shr => int_op!(|x, y| (to_i32(x) >> (to_u32(y) & 31)) as f64),
-                    Op::UShr => int_op!(|x, y| (to_u32(x) >> (to_u32(y) & 31)) as f64),
+                    Op::Sub => num_op!(code::SUB, |x, y| x - y),
+                    Op::Mul => num_op!(code::MUL, |x, y| x * y),
+                    Op::Div => num_op!(code::DIV, |x, y| x / y),
+                    Op::Mod => num_op!(code::MOD, js_rem),
+                    Op::Pow => num_op!(code::POW, js_pow),
+                    Op::BitAnd => int_op!(code::BIT_AND, |x, y| (to_i32(x) & to_i32(y)) as f64),
+                    Op::BitOr => int_op!(code::BIT_OR, |x, y| (to_i32(x) | to_i32(y)) as f64),
+                    Op::BitXor => int_op!(code::BIT_XOR, |x, y| (to_i32(x) ^ to_i32(y)) as f64),
+                    Op::Shl => int_op!(code::SHL, |x, y| to_i32(x).wrapping_shl(to_u32(y) & 31)
+                        as f64),
+                    Op::Shr => int_op!(code::SHR, |x, y| (to_i32(x) >> (to_u32(y) & 31)) as f64),
+                    Op::UShr => int_op!(code::USHR, |x, y| (to_u32(x) >> (to_u32(y) & 31)) as f64),
                     Op::Eq => {
                         let b = self.pop();
                         let a = self.pop();
+                        if self.operand_calls(&a) || self.operand_calls(&b) {
+                            conv_op!(code::EQ, a, b, Value::Undef, 0, 0);
+                        }
                         tri!(self.loose_eq_operands(&a, &b));
                         let r = tri!(self.loose_eq(&a, &b));
                         self.push(Value::Bool(r));
@@ -2740,6 +2841,9 @@ impl<'rt> Vm<'rt> {
                     Op::Ne => {
                         let b = self.pop();
                         let a = self.pop();
+                        if self.operand_calls(&a) || self.operand_calls(&b) {
+                            conv_op!(code::NE, a, b, Value::Undef, 0, 0);
+                        }
                         tri!(self.loose_eq_operands(&a, &b));
                         let r = tri!(self.loose_eq(&a, &b));
                         self.push(Value::Bool(!r));
@@ -2756,12 +2860,15 @@ impl<'rt> Vm<'rt> {
                         let r = !self.strict_eq(&a, &b);
                         self.push(Value::Bool(r));
                     }
-                    Op::Lt => cmp_op!(<, false, false),
-                    Op::Gt => cmp_op!(>, true, false),
-                    Op::Le => cmp_op!(<=, true, true),
-                    Op::Ge => cmp_op!(>=, false, true),
+                    Op::Lt => cmp_op!(code::LT, <, false, false),
+                    Op::Gt => cmp_op!(code::GT, >, true, false),
+                    Op::Le => cmp_op!(code::LE, <=, true, true),
+                    Op::Ge => cmp_op!(code::GE, >=, false, true),
                     Op::Neg => {
                         let a = self.pop();
+                        if self.operand_calls(&a) {
+                            conv_op!(code::NEG, a, Value::Undef, Value::Undef, 0, 0);
+                        }
                         tri!(self.data_operand(&a, "Unary operators require data values."));
                         let x = match a {
                             Value::Num(x) => x,
@@ -2771,6 +2878,14 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::ToNumber | Op::ToNumeric => {
                         let a = self.pop();
+                        if self.operand_calls(&a) {
+                            let which = match (op, code.get(pc..pc + 3)) {
+                                (Op::ToNumeric, Some(next)) if next.contains(&Op::Dec) => 1,
+                                (Op::ToNumeric, _) => 0,
+                                _ => 2,
+                            };
+                            conv_op!(code::TO_NUMBER, a, Value::Undef, Value::Undef, which, 0);
+                        }
                         if self.is_opaque_operand(&a) {
                             let msg = match (op, code.get(pc..pc + 3)) {
                                 (Op::ToNumeric, Some(next)) if next.contains(&Op::Dec) => {
@@ -2793,6 +2908,9 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::BitNot => {
                         let a = self.pop();
+                        if self.operand_calls(&a) {
+                            conv_op!(code::BIT_NOT, a, Value::Undef, Value::Undef, 0, 0);
+                        }
                         tri!(self.data_operand(&a, "Unary operators require data values."));
                         let x = tri!(self.number_of(&a));
                         self.push(Value::Num(!to_i32(x) as f64));
@@ -2815,6 +2933,14 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::Inc | Op::Dec => {
                         let a = self.pop();
+                        if self.operand_calls(&a) {
+                            let c = if matches!(op, Op::Inc) {
+                                code::INC
+                            } else {
+                                code::DEC
+                            };
+                            conv_op!(c, a, Value::Undef, Value::Undef, 0, 0);
+                        }
                         let msg = if matches!(op, Op::Inc) {
                             "'++' requires a data value."
                         } else {
@@ -2833,6 +2959,9 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::ToStr => {
                         let a = self.pop();
+                        if self.operand_calls(&a) {
+                            conv_op!(code::TO_STR, a, Value::Undef, Value::Undef, 0, 0);
+                        }
                         let s = match a {
                             Value::Str(_) => a,
                             _ => Value::Str(tri!(self.string_of(&a))),
@@ -2875,6 +3004,9 @@ impl<'rt> Vm<'rt> {
                                 a
                             }
                             (a, b) => {
+                                if self.operand_calls(&a) || self.operand_calls(&b) {
+                                    conv_op!(code::ADD_LOCAL, a, b, Value::Undef, i, 0);
+                                }
                                 let r = tri!(self.add(a, b));
                                 if let Value::Str(id) = r {
                                     self.atoms.bufs[id as usize].builder = true;
@@ -2890,8 +3022,12 @@ impl<'rt> Vm<'rt> {
                         if v.is_num() {
                             self.stack[slot] = Slot::num(v.f() + 1.0);
                         } else {
-                            tri!(self.data_operand(&v.get(), "'++' requires a data value."));
-                            let x = tri!(self.number_of(&v.get()));
+                            let vv = v.get();
+                            if self.operand_calls(&vv) {
+                                conv_op!(code::INC_LOCAL, vv, Value::Undef, Value::Undef, i, 0);
+                            }
+                            tri!(self.data_operand(&vv, "'++' requires a data value."));
+                            let x = tri!(self.number_of(&vv));
                             self.stack[slot] = Slot::num(x + 1.0);
                         }
                     }
@@ -2924,7 +3060,12 @@ impl<'rt> Vm<'rt> {
                         let r = if a.is_num() && b.is_num() {
                             compare(cmp, a.f(), b.f())
                         } else {
-                            let r = tri!(self.arith(cmp, a.get(), b.get()));
+                            let (av, bv) = (a.get(), b.get());
+                            if self.operand_calls(&av) || self.operand_calls(&bv) {
+                                let ac = crate::conversion::arith_code(cmp);
+                                conv_op!(code::JUMP_UNLESS, av, bv, Value::Undef, ac, t);
+                            }
+                            let r = tri!(self.arith(cmp, av, bv));
                             self.truthy(&r)
                         };
                         if !r {
@@ -2936,7 +3077,19 @@ impl<'rt> Vm<'rt> {
                         let r = if a.is_num() {
                             compare(cmp, a.f(), k as f64)
                         } else {
-                            let r = tri!(self.arith(cmp, a.get(), Value::Num(k as f64)));
+                            let av = a.get();
+                            if self.operand_calls(&av) {
+                                let ac = crate::conversion::arith_code(cmp);
+                                conv_op!(
+                                    code::JUMP_UNLESS,
+                                    av,
+                                    Value::Num(k as f64),
+                                    Value::Undef,
+                                    ac,
+                                    t
+                                );
+                            }
+                            let r = tri!(self.arith(cmp, av, Value::Num(k as f64)));
                             self.truthy(&r)
                         };
                         if !r {

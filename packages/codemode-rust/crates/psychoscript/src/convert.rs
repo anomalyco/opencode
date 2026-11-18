@@ -201,17 +201,11 @@ pub fn error_parts(vm: &mut Vm, id: Id) -> (String, String) {
     let (nk, mk) = (vm.names.name, vm.names.message);
     let name = match vm.get_obj(id, nk) {
         Value::Undef => "Error".to_owned(),
-        v => vm
-            .string_of(&v)
-            .map(|s| vm.text(s).to_owned())
-            .unwrap_or_default(),
+        v => vm.quiet_string(&v),
     };
     let message = match vm.get_obj(id, mk) {
         Value::Undef => String::new(),
-        v => vm
-            .string_of(&v)
-            .map(|s| vm.text(s).to_owned())
-            .unwrap_or_default(),
+        v => vm.quiet_string(&v),
     };
     (name, message)
 }

@@ -970,6 +970,8 @@ fn set(vm: &mut Vm, c: &mut Conversions, this: Value, args: &[Value], callee: Id
     listed.push(Value::Num(time));
     listed.extend_from_slice(given);
     c.convert(vm, &[Hint::Number], &mut listed, true)?;
+    // The time as the list kept it: read before the conversions, which a rerun after them must not read again.
+    let time = listed[0].as_num();
     let mut v = Vec::with_capacity(given.len());
     for a in &listed[1..] {
         v.push(vm.number_of(a)?);
