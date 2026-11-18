@@ -58,6 +58,38 @@
 
 #![allow(unsafe_code)]
 
+// A builder for a variant field leaves nodes of other kinds unchanged.
+macro_rules! node_setters {
+    ($($name:ident($($arg:ident: $ty:ty),*) on $($variant:ident)|+: $field:ident = $value:expr;)*) => {$(
+        #[doc = concat!("Sets `", stringify!($field), "` on `", stringify!($($variant)|+), "` nodes.")]
+        pub fn $name(mut self, $($arg: $ty),*) -> Self {
+            if let $(Self::$variant { $field: slot, .. })|+ = &mut self {
+                *slot = $value;
+            }
+            self
+        }
+    )*};
+}
+
+macro_rules! common_node_setters {
+    () => {
+        node_setters! {
+            on_click(click: Click) on Box | Text: on_click = Some(click);
+            gap(cells: u16) on Box: gap = cells;
+            padding(x: u16, y: u16) on Box: padding = (x, y);
+            justify(value: Justify) on Box: justify = value;
+            align(value: Align) on Box: align = value;
+            unselectable() on Text: selectable = false;
+            fg(color: impl Into<Color>) on Text: fg = Some(color.into());
+            hover_fg(color: impl Into<Color>) on Text: hover_fg = Some(color.into());
+            truncate() on Text: truncate = true;
+            border(value: Border) on Box: border = Some(Box::new(value));
+            padding_sides(edges: Edges) on Box: padding_sides = Some(edges);
+            flex_wrap() on Box: wrap = true;
+        }
+    };
+}
+
 mod build;
 pub mod call;
 pub mod canvas;
@@ -874,6 +906,8 @@ pub enum Node {
 }
 
 impl Node {
+    common_node_setters!();
+
     /// A box of `children` in a column.
     pub fn column(children: Vec<Node>) -> Self {
         Node::Box {
@@ -921,132 +955,11 @@ impl Node {
         Node::Slot { path: path.into() }
     }
 
-    /// The node with `click`; a slot is unchanged.
-    pub fn on_click(mut self, click: Click) -> Self {
-        if let Node::Box { on_click, .. } | Node::Text { on_click, .. } = &mut self {
-            *on_click = Some(click);
-        }
-        self
-    }
-
-    /// The node laid out with `layout`; a slot is unchanged.
-    pub fn layout(mut self, value: Layout) -> Self {
-        if let Node::Box { layout, .. } | Node::Text { layout, .. } = &mut self {
-            *layout = value;
-        }
-        self
-    }
-
-    /// A box with `cells` between its children; text is unchanged.
-    pub fn gap(mut self, cells: u16) -> Self {
-        if let Node::Box { gap, .. } = &mut self {
-            *gap = cells;
-        }
-        self
-    }
-
-    /// A box with `x` cells inside its left and right edges and `y` inside its top and bottom; text is unchanged.
-    pub fn padding(mut self, x: u16, y: u16) -> Self {
-        if let Node::Box { padding, .. } = &mut self {
-            *padding = (x, y);
-        }
-        self
-    }
-
-    /// A box whose children share the room left as `value` says; text is unchanged.
-    pub fn justify(mut self, value: Justify) -> Self {
-        if let Node::Box { justify, .. } = &mut self {
-            *justify = value;
-        }
-        self
-    }
-
-    /// A box whose children sit across it as `value` says; text is unchanged.
-    pub fn align(mut self, value: Align) -> Self {
-        if let Node::Box { align, .. } = &mut self {
-            *align = value;
-        }
-        self
-    }
-
-    /// Text the mouse cannot select; a box is unchanged.
-    pub fn unselectable(mut self) -> Self {
-        if let Node::Text { selectable, .. } = &mut self {
-            *selectable = false;
-        }
-        self
-    }
-
-    /// A box on `color`; text is unchanged.
-    pub fn bg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Box { bg, .. } = &mut self {
-            *bg = Some(color.into());
-        }
-        self
-    }
-
-    /// Text in `color` where its spans have none; a box is unchanged.
-    pub fn fg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Text { fg, .. } = &mut self {
-            *fg = Some(color.into());
-        }
-        self
-    }
-
-    /// Text in `color` while the pointer is over it; a box is unchanged.
-    pub fn hover_fg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Text { hover_fg, .. } = &mut self {
-            *hover_fg = Some(color.into());
-        }
-        self
-    }
-
-    /// Text that wraps as `value` says; a box is unchanged.
-    pub fn wrap(mut self, value: Wrap) -> Self {
-        if let Node::Text { wrap, .. } = &mut self {
-            *wrap = value;
-        }
-        self
-    }
-
-    /// Text that cuts lines that do not fit; a box is unchanged.
-    pub fn truncate(mut self) -> Self {
-        if let Node::Text { truncate, .. } = &mut self {
-            *truncate = true;
-        }
-        self
-    }
-
-    /// A box with `value` on its edge; text is unchanged.
-    pub fn border(mut self, value: Border) -> Self {
-        if let Node::Box { border, .. } = &mut self {
-            *border = Some(std::boxed::Box::new(value));
-        }
-        self
-    }
-
-    /// A box with `edges` cells inside each edge, instead of [`Node::padding`]; text is unchanged.
-    pub fn padding_sides(mut self, edges: Edges) -> Self {
-        if let Node::Box { padding_sides, .. } = &mut self {
-            *padding_sides = Some(edges);
-        }
-        self
-    }
-
-    /// A box whose children go on to another row or column when they do not fit; text is unchanged.
-    pub fn flex_wrap(mut self) -> Self {
-        if let Node::Box { wrap, .. } = &mut self {
-            *wrap = true;
-        }
-        self
-    }
-
-    /// A box that draws what does not fit in it as `value` says; text is unchanged.
-    pub fn overflow(mut self, value: Overflow) -> Self {
-        if let Node::Box { overflow, .. } = &mut self {
-            *overflow = value;
-        }
-        self
+    node_setters! {
+        layout(value: Layout) on Box | Text: layout = value;
+        bg(color: impl Into<Color>) on Box: bg = Some(color.into());
+        wrap(value: Wrap) on Text: wrap = value;
+        overflow(value: Overflow) on Box: overflow = value;
     }
 }
 

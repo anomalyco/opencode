@@ -566,116 +566,19 @@ impl Node {
         Node::Keep { key: key.into() }
     }
 
-    /// A box with `border`; anything else is unchanged.
-    pub fn border(mut self, value: Border) -> Self {
-        if let Node::Box { border, .. } = &mut self {
-            *border = Some(Box::new(value));
-        }
-        self
-    }
-
-    /// A box whose children go on to another row or column when they do not fit; anything else is unchanged.
-    pub fn flex_wrap(mut self) -> Self {
-        if let Node::Box { wrap, .. } = &mut self {
-            *wrap = true;
-        }
-        self
-    }
-
-    /// A row whose first child the user resizes; it needs an id. Anything else is unchanged.
-    pub fn split(mut self, value: Split) -> Self {
-        if let Node::Box { split, .. } = &mut self {
-            *split = Some(value);
-        }
-        self
-    }
-
-    /// A scroll `rows` high; anything else is unchanged.
-    pub fn height(mut self, rows: u16) -> Self {
-        if let Node::Scroll { height, .. } = &mut self {
-            *height = Some(rows);
-        }
-        self
-    }
-
-    /// A scroll that stays at the bottom while it is there; anything else is unchanged.
-    pub fn follow(mut self) -> Self {
-        if let Node::Scroll { follow, .. } = &mut self {
-            *follow = true;
-        }
-        self
-    }
-
-    /// A list of items left to right; anything else is unchanged.
-    pub fn horizontal(mut self) -> Self {
-        if let Node::List { row, .. } = &mut self {
-            *row = true;
-        }
-        self
-    }
-
-    /// A text field showing `value` while it is empty; anything else is unchanged.
-    pub fn placeholder(mut self, value: impl Into<String>) -> Self {
-        if let Node::Input { placeholder, .. } = &mut self {
-            *placeholder = value.into();
-        }
-        self
-    }
-
-    /// A text field of `rows` lines; anything else is unchanged.
-    pub fn lines(mut self, rows: u16) -> Self {
-        if let Node::Input { lines, .. } = &mut self {
-            *lines = Some(rows);
-        }
-        self
-    }
-
-    /// Code or a diff highlighted as `value`, such as `rust`; anything else is unchanged.
-    pub fn filetype(mut self, value: impl Into<String>) -> Self {
-        if let Node::Code { filetype, .. } | Node::Diff { filetype, .. } = &mut self {
-            *filetype = Some(value.into());
-        }
-        self
-    }
-
-    /// Code with line numbers in a gutter; anything else is unchanged.
-    pub fn numbers(mut self) -> Self {
-        if let Node::Code { numbers, .. } = &mut self {
-            *numbers = true;
-        }
-        self
-    }
-
-    /// An image that fits its room as `value` says; anything else is unchanged.
-    pub fn fit(mut self, value: Fit) -> Self {
-        if let Node::Image { fit, .. } = &mut self {
-            *fit = value;
-        }
-        self
-    }
-
-    /// A diff in `value`'s view; anything else is unchanged.
-    pub fn view(mut self, value: DiffView) -> Self {
-        if let Node::Diff { view, .. } = &mut self {
-            *view = value;
-        }
-        self
-    }
-
-    /// A diff whose hunks are anchors of `group`; anything else is unchanged.
-    pub fn hunks(mut self, group: impl Into<String>) -> Self {
-        if let Node::Diff { hunks, .. } = &mut self {
-            *hunks = Some(group.into());
-        }
-        self
-    }
-
-    /// A diff with `cells` of padding; anything else is unchanged.
-    pub fn diff_padding(mut self, cells: u16) -> Self {
-        if let Node::Diff { padding, .. } = &mut self {
-            *padding = cells;
-        }
-        self
+    node_setters! {
+        split(value: Split) on Box: split = Some(value);
+        height(rows: u16) on Scroll: height = Some(rows);
+        follow() on Scroll: follow = true;
+        horizontal() on List: row = true;
+        placeholder(value: impl Into<String>) on Input: placeholder = value.into();
+        lines(rows: u16) on Input: lines = Some(rows);
+        filetype(value: impl Into<String>) on Code | Diff: filetype = Some(value.into());
+        numbers() on Code: numbers = true;
+        fit(value: Fit) on Image: fit = value;
+        view(value: DiffView) on Diff: view = value;
+        hunks(group: impl Into<String>) on Diff: hunks = Some(group.into());
+        diff_padding(cells: u16) on Diff: padding = cells;
     }
 }
 

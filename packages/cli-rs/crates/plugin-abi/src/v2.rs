@@ -806,6 +806,8 @@ fn print(node: &Node) -> u64 {
 }
 
 impl Node {
+    common_node_setters!();
+
     /// A box of `children` in a column.
     pub fn column(children: Vec<Node>) -> Self {
         Node::Box {
@@ -831,14 +833,6 @@ impl Node {
         }
     }
 
-    /// A box with `value`'s focus, pointer and hover; anything else is unchanged.
-    pub fn interact(mut self, value: Interact) -> Self {
-        if let Node::Box { interact, .. } = &mut self {
-            *interact = value;
-        }
-        self
-    }
-
     /// A box of `children` in a row.
     pub fn row(children: Vec<Node>) -> Self {
         let mut node = Self::column(children);
@@ -862,14 +856,6 @@ impl Node {
             on_click: None,
             hover_events: false,
         }
-    }
-
-    /// A text whose hover comes as events ([`Node::Text`]'s `hover_events`); anything else is unchanged.
-    pub fn hover_events(mut self) -> Self {
-        if let Node::Text { hover_events, .. } = &mut self {
-            *hover_events = true;
-        }
-        self
     }
 
     /// A scroll box of `children`.
@@ -925,22 +911,6 @@ impl Node {
         }
     }
 
-    /// The box pinned to `edge` of its scroll while its parent is in view; anything else is unchanged.
-    pub fn sticky(mut self, edge: Edge) -> Self {
-        if let Node::Box { sticky, .. } = &mut self {
-            *sticky = Some(edge);
-        }
-        self
-    }
-
-    /// The box as an anchor of `group` with `variant`; anything else is unchanged.
-    pub fn anchor(mut self, group: impl Into<String>, variant: impl Into<String>) -> Self {
-        if let Node::Box { anchor, .. } = &mut self {
-            *anchor = Some(Anchor::new(group, variant));
-        }
-        self
-    }
-
     /// The host's own code view of the claimed fence ([`Node::Fence`]), on the page's background.
     pub fn fence() -> Self {
         Node::Fence { id: None, bg: None, layout: Layout::default() }
@@ -949,22 +919,6 @@ impl Node {
     /// A canvas with id `id`, still and at version 0.
     pub fn canvas(id: impl Into<String>) -> Self {
         Node::Canvas { id: Some(id.into()), layout: Layout::default(), version: 0, animate: false }
-    }
-
-    /// A canvas at `value`: a new version asks for a list. Anything else is unchanged.
-    pub fn version(mut self, value: u64) -> Self {
-        if let Node::Canvas { version, .. } = &mut self {
-            *version = value;
-        }
-        self
-    }
-
-    /// A canvas that animates while `on`. Anything else is unchanged.
-    pub fn animate(mut self, on: bool) -> Self {
-        if let Node::Canvas { animate, .. } = &mut self {
-            *animate = on;
-        }
-        self
     }
 
     /// The node with id `key`; a slot and a keep are unchanged.
@@ -1065,117 +1019,17 @@ impl Node {
         self
     }
 
-    /// A box or a fence on `color`; anything else is unchanged.
-    pub fn bg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Box { bg, .. } | Node::Fence { bg, .. } = &mut self {
-            *bg = Some(color.into());
-        }
-        self
-    }
-
-    /// Text in `color` where its spans have none; anything else is unchanged.
-    pub fn fg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Text { fg, .. } = &mut self {
-            *fg = Some(color.into());
-        }
-        self
-    }
-
-    /// The node with `click`; only a box and a text take one.
-    pub fn on_click(mut self, click: Click) -> Self {
-        if let Node::Box { on_click, .. } | Node::Text { on_click, .. } = &mut self {
-            *on_click = Some(click);
-        }
-        self
-    }
-
-    /// A box with `cells` between its children; anything else is unchanged.
-    pub fn gap(mut self, cells: u16) -> Self {
-        if let Node::Box { gap, .. } = &mut self {
-            *gap = cells;
-        }
-        self
-    }
-
-    /// A box with `x` cells inside its left and right edges and `y` inside its top and bottom; anything else is
-    /// unchanged.
-    pub fn padding(mut self, x: u16, y: u16) -> Self {
-        if let Node::Box { padding, .. } = &mut self {
-            *padding = (x, y);
-        }
-        self
-    }
-
-    /// P6c: a box with `edges` cells inside each edge, instead of [`Node::padding`]; anything else is unchanged.
-    pub fn padding_sides(mut self, edges: Edges) -> Self {
-        if let Node::Box { padding_sides, .. } = &mut self {
-            *padding_sides = Some(edges);
-        }
-        self
-    }
-
-    /// P6c: a box that cuts off what does not fit in it; anything else is unchanged.
-    pub fn clip(mut self) -> Self {
-        if let Node::Box { overflow, .. } = &mut self {
-            *overflow = Overflow::Hidden;
-        }
-        self
-    }
-
-    /// A box whose children share the room left as `value` says; anything else is unchanged.
-    pub fn justify(mut self, value: Justify) -> Self {
-        if let Node::Box { justify, .. } = &mut self {
-            *justify = value;
-        }
-        self
-    }
-
-    /// A box whose children sit across it as `value` says; anything else is unchanged.
-    pub fn align(mut self, value: Align) -> Self {
-        if let Node::Box { align, .. } = &mut self {
-            *align = value;
-        }
-        self
-    }
-
-    /// A box shown or hidden; anything else is unchanged.
-    pub fn visible(mut self, value: bool) -> Self {
-        if let Node::Box { visible, .. } = &mut self {
-            *visible = value;
-        }
-        self
-    }
-
-    /// Text in `color` while the pointer is over it; anything else is unchanged.
-    pub fn hover_fg(mut self, color: impl Into<Color>) -> Self {
-        if let Node::Text { hover_fg, .. } = &mut self {
-            *hover_fg = Some(color.into());
-        }
-        self
-    }
-
-    /// Text or a diff that wraps as `value` says; anything else is unchanged.
-    pub fn wrap(mut self, value: Wrap) -> Self {
-        if let Node::Text { wrap, .. } | Node::Diff { wrap, .. } = &mut self {
-            *wrap = value;
-        }
-        self
-    }
-
-    /// Text the mouse cannot select; anything else is unchanged.
-    pub fn unselectable(mut self) -> Self {
-        if let Node::Text { selectable, .. } = &mut self {
-            *selectable = false;
-        }
-        self
-    }
-
-    /// Text that cuts lines that do not fit; anything else is unchanged.
-    pub fn truncate(mut self) -> Self {
-        if let Node::Text { truncate, .. } = &mut self {
-            *truncate = true;
-        }
-        self
+    node_setters! {
+        interact(value: Interact) on Box: interact = value;
+        hover_events() on Text: hover_events = true;
+        sticky(edge: Edge) on Box: sticky = Some(edge);
+        anchor(group: impl Into<String>, variant: impl Into<String>) on Box: anchor = Some(Anchor::new(group, variant));
+        version(value: u64) on Canvas: version = value;
+        animate(on: bool) on Canvas: animate = on;
+        bg(color: impl Into<Color>) on Box | Fence: bg = Some(color.into());
+        clip() on Box: overflow = Overflow::Hidden;
+        visible(value: bool) on Box: visible = value;
+        wrap(value: Wrap) on Text | Diff: wrap = value;
     }
 
     /// Whether the node is a box hidden with [`Node::visible`].
