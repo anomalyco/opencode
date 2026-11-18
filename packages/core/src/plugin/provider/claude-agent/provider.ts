@@ -12,6 +12,8 @@ import type { ClaudeStatus } from "./claude/status.js"
 
 export const ID = Provider.ID.claudeAgent
 export const PACKAGE = "@opencode/claude-agent"
+// The login form's answer, kept as credential metadata
+export const CONFIG_DIR_KEY = "configDir"
 
 // The model list we keep between starts, so opencode can list models without running `claude`
 const CatalogModel = Schema.Struct({
