@@ -129,7 +129,7 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
 
-  const runningVersion = yield* fs.readFileString(setup.file ?? setup.client.fallback(serviceChannel())).pipe(
+  const runningVersion = yield* fs.readFileString(setup.file ?? setup.client.fallback()).pipe(
     Effect.map(
       (text) =>
         Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(RegisteredService))(text))?.version,
