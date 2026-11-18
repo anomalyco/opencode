@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นที่ ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
+  "ui.lineComment.add": "เพิ่มความคิดเห็น",
+  "ui.lineComment.actions": "การดำเนินการกับส่วนที่เลือก",
   "ui.lineComment.contextPlaceholder": "เพิ่มบริบทสำหรับการเปลี่ยนแปลงนี้",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
   "ui.lineComment.cancel": "ยกเลิก",

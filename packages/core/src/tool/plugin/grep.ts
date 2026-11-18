@@ -4,7 +4,10 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import path from "path"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
+import { Flag } from "../../flag.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
@@ -70,9 +73,14 @@ export const Plugin = {
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
+    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        if (flags.resolve(loaded.entries).full_codemode.enabled) return
         editor.add({
           name,
           options: { codemode: false },
@@ -145,8 +153,8 @@ export const Plugin = {
                 return new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error })
               }),
             ),
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
   }),
 }

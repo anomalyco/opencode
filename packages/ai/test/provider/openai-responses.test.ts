@@ -128,8 +128,10 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
-        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
-        instructions: "You are concise.",
+        input: [
+          { type: "message", role: "developer", content: "You are concise." },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] },
+        ],
         store: false,
         include: ["reasoning.encrypted_content"],
         stream: true,
@@ -1967,9 +1969,10 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "You are concise. Continue from the provided history.",
         input: [
+          { type: "message", role: "developer", content: "You are concise. Continue from the provided history." },
           {
             type: "message",
             role: "user",

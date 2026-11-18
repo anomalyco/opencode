@@ -12,6 +12,7 @@ import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node
 import { filesystem } from "@opencode/util/effect/app-node-platform"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -52,7 +53,7 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
-import { codeModeListings, toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -177,9 +178,9 @@ const replacements = [
   PersistentPty.node.replace(disabledPersistentPtyLayer),
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(
-  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
-)
+const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
+const it = testEffect(shellLayer)
+const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
 const daemonIt = testEffect(
   AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
@@ -858,38 +859,104 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("moves shell into Code Mode with full_codemode and returns both parallel results", () =>
+  it.live("returns both parallel CodeMode shell results", () =>
     withTempDir((tmp) => {
       reset()
-      return Effect.promise(() =>
-        Bun.write(path.join(tmp.path, "opencode.json"), JSON.stringify({ experimental: { full_codemode: true } })),
-      ).pipe(
-        Effect.andThen(
-          withSession(tmp.path, (registry) =>
-            Effect.gen(function* () {
-              const snapshot = yield* registry.snapshot()
-              expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
-              expect(codeModeListings(snapshot.codeModeCatalog!).map((entry) => entry.path)).toEqual(["shell"])
-              const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
-              const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
-              const result = yield* executeTool(registry, {
-                sessionID,
-                ...toolIdentity,
-                call: {
-                  type: "tool-call",
-                  id: "call-parallel-shells",
-                  name: "execute",
-                  input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
-                },
-              }).pipe(Effect.timeout("3 seconds"))
-              expect(result.status).toBe("completed")
-              expect(JSON.parse(result.output.output)).toEqual([
-                { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-                { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-              ])
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          yield* registry.transform((editor) =>
+            editor.update("shell", (tool) => {
+              tool.options = { ...tool.options, codemode: true }
             }),
-          ),
-        ),
+          )
+          const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
+          const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+          const result = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-parallel-shells",
+              name: "execute",
+              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+            },
+          }).pipe(Effect.timeout("3 seconds"))
+          expect(result.status).toBe("completed")
+          expect(JSON.parse(result.output.output)).toEqual([
+            { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
+            { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
+          ])
+        }),
+      )
+    }),
+  )
+
+  codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const snapshot = yield* registry.snapshot()
+          // Pinned: listed even when the catalog has no room for other tools, with the result contract in the field
+          // annotations.
+          const pinned = CodeModeCatalog.summarize(snapshot.codeModeCatalog!, { budget: 0 }).namespaces.flatMap(
+            (namespace) => namespace.entries,
+          )
+          expect(pinned.map((entry) => entry.path)).toEqual(["shell"])
+          expect(pinned[0]!.line).toContain("600000")
+          expect(pinned[0]!.line).toContain("Execute a shell command and return its output.")
+          // No background parameter in Code Mode.
+          expect(pinned[0]!.line).not.toContain("background?: boolean")
+          expect(pinned[0]!.line).not.toContain("Background commands return immediately")
+          expect(pinned[0]!.line).toContain("A result without shellID is final")
+          expect(pinned[0]!.line).toContain("there are no separate stdout or stderr fields")
+          const timeouts: number[] = []
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.register("shell", "create.before", (event) =>
+            Effect.sync(() => {
+              timeouts.push(event.timeout)
+            }),
+          )
+          const bus = yield* Bus.Service
+          const notice = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const quick = JSON.stringify({ command: bodyExitCommand })
+          const long = JSON.stringify({ command: progressOverflowCommand(6, "release"), timeout: 10 })
+          const result = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-parallel-shells",
+              name: "execute",
+              input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
+            },
+          }).pipe(Effect.timeout("3 seconds"))
+          expect(result.status).toBe("completed")
+          const [completed, running] = JSON.parse(result.output.output)
+          expect(completed).toEqual({
+            output: "body",
+            exitCode: 7,
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(running).toEqual({
+            output: expect.stringContaining("did not finish within its timeout of 0.01 seconds"),
+            exitCode: null,
+            shellID: expect.stringMatching(/^sh_/),
+            pid: expect.any(Number),
+            outputPath: expect.any(String),
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect((yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload).toMatchObject({
+            text: expect.stringContaining("xxxxxx"),
+            metadata: { source: "shell", shellID: running.shellID, state: "completed", exit: 0 },
+          })
+        }),
       )
     }),
   )

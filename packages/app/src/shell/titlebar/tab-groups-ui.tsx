@@ -706,6 +706,9 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
     const onPointerDown = (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => {
       if (event.pointerType !== "touch" && event.button !== 0) return
 
+      // While an inline filter hides non-matching rows, dragging would only measure visible blocks and push hidden tabs behind them.
+      if (local.query.trim().length > 0) return
+
       if (!(event.target instanceof Element)) return
 
       if (
@@ -858,7 +861,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       combineOfTab: (key: string) => selectCombineOfTab(drag(), key),
       onPointerDown,
       onScroll,
-      overlay: () => undefined,
     }
 
     return {
@@ -1018,7 +1020,6 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
         </Show>
         <Icon
           name="chevron-down"
-          size="small"
           class="ms-auto shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] duration-[120ms] ease-out motion-reduce:transition-none group-hover/group-row:opacity-100"
           classList={{ "-rotate-90 rtl:rotate-90 opacity-100": props.group.collapsed }}
         />
@@ -1036,7 +1037,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
           size="small"
           data-group-menu-trigger
           aria-label={language.t("common.moreOptions")}
-          icon={<Icon name="outline-dots" size="small" />}
+          icon={<Icon name="outline-dots" />}
           class="shrink-0 opacity-0 group-hover/group-row:opacity-100 data-[expanded]:opacity-100"
         />
         <Menu.Portal>
@@ -1068,7 +1069,7 @@ export function TabAddToGroupMenuItems(props: { tab: Tab }) {
         <Menu.Portal>
           <Menu.SubContent class="min-w-[164px]">
             <Menu.Item onSelect={() => tabGroups.createManualGroup([props.tab])}>
-              <Icon name="plus" size="small" />
+              <Icon name="plus" />
               <span>{language.t("tabs.groups.new")}</span>
             </Menu.Item>
             <Menu.Separator />
@@ -1115,7 +1116,7 @@ export function TabGroupingMenu() {
         data-action="tab-groups-menu"
         class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
       >
-        <Icon name="outline-sliders" size="small" />
+        <Icon name="sliders" />
       </Menu.Trigger>
 
       <Menu.Portal>
@@ -1142,7 +1143,7 @@ export function TabGroupingMenu() {
           <Show when={tabGroups.effectiveMode() === "none"}>
             <Menu.Separator />
             <Menu.Item onSelect={() => tabGroups.createManualGroup()}>
-              <Icon name="plus" size="small" />
+              <Icon name="plus" />
               <span>{language.t("tabs.groups.new")}</span>
             </Menu.Item>
           </Show>
@@ -1170,7 +1171,7 @@ export function TabFilterInput(props: { trailing?: JSX.Element }) {
         class="!w-full min-w-0 [app-region:no-drag]"
         leadingIcon={<Icon name="magnifying-glass" />}
         showClearButton={tabGroups.query().length > 0}
-        clearIcon="circle-xmark"
+        clearIcon="close"
         onClearClick={() => {
           tabGroups.setQuery("")
           inputRef?.focus()

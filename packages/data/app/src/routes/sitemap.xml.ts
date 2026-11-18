@@ -1,4 +1,4 @@
-import { getStatsHomeData } from "@opencode/data-core/domain/home"
+import { getStatsHomeData, getStatsModelUpdates } from "@opencode/data-core/domain/home"
 import { runtime } from "@opencode/data-core/runtime"
 import {
   canonicalFamilyComparisonPath,
@@ -8,8 +8,8 @@ import {
   latestFamilyComparisonPath,
   resolveComparisonFamily,
 } from "../lib/comparison-pages"
-import { baseUrl } from "../lib/language"
-import { catalogModelPath, findModelCatalogEntry, loadModelCatalog } from "./model-catalog"
+import { baseUrl, LOCALES, localizedUrl, tag } from "../lib/language"
+import { catalogModelPath, findModelCatalogEntry, loadModelCatalog, type ModelCatalogEntry } from "./model-catalog"
 
 type SitemapEntry = {
   path: string
@@ -17,14 +17,18 @@ type SitemapEntry = {
 }
 
 export async function GET() {
-  const [catalog, stats] = await Promise.all([
+  const [catalog, stats, updates] = await Promise.all([
     loadModelCatalog(),
     runtime.runPromise(getStatsHomeData()).catch(() => undefined),
+    runtime.runPromise(getStatsModelUpdates()).catch(() => []),
   ])
-  const lastmod = sitemapDate(
-    stats?.updatedAt,
-    ...catalog.models.map((model) => model.lastUpdated ?? model.releaseDate),
-  )
+  const snapshots = updates.reduce<Record<string, number>>((result, update) => {
+    const id = findModelCatalogEntry(catalog, update.model, update.provider)?.id
+    if (id) result[id] = Math.max(result[id] ?? 0, update.updatedAt)
+    return result
+  }, {})
+  // A model's page changes with its catalog entry and its own stats, not with every stats refresh.
+  const modelDates = (model: ModelCatalogEntry) => [snapshots[model.id], model.lastUpdated ?? model.releaseDate]
   const families = comparisonFamilies.flatMap((family) => {
     const resolved = resolveComparisonFamily(catalog, family.slug)
     return resolved ? [resolved] : []
@@ -32,11 +36,7 @@ export async function GET() {
   const familyComparisons = families.flatMap((first, index) =>
     families.slice(index + 1).map((second) => ({
       path: canonicalFamilyComparisonPath(first, second),
-      lastmod: sitemapDate(
-        stats?.updatedAt,
-        first.model.lastUpdated ?? first.model.releaseDate,
-        second.model.lastUpdated ?? second.model.releaseDate,
-      ),
+      lastmod: sitemapDate(...modelDates(first.model), ...modelDates(second.model)),
     })),
   )
   const models = comparisonSitemapModels(catalog, stats?.leaderboard["All Users"]["2M"])
@@ -46,29 +46,28 @@ export async function GET() {
       return [
         {
           path: canonicalModelComparisonPath(first, second),
-          lastmod: sitemapDate(
-            stats?.updatedAt,
-            first.lastUpdated ?? first.releaseDate,
-            second.lastUpdated ?? second.releaseDate,
-          ),
+          lastmod: sitemapDate(...modelDates(first), ...modelDates(second)),
         },
       ]
     }),
   )
   const labPages = catalog.labs.map((lab) => ({
     path: `/data/${lab.id}`,
-    lastmod: sitemapDate(stats?.updatedAt, ...lab.models.map((model) => model.lastUpdated ?? model.releaseDate)),
+    lastmod: sitemapDate(...lab.models.flatMap(modelDates)),
   }))
   // Skip entries whose URL resolves to another model, such as stats aliases.
   const modelPages = [...catalog.models, ...(catalog.aliases ?? [])]
     .filter((model) => findModelCatalogEntry(catalog, model.slug, model.lab)?.id === model.id)
     .map((model) => ({
       path: catalogModelPath(model),
-      lastmod: sitemapDate(stats?.updatedAt, model.lastUpdated ?? model.releaseDate),
+      lastmod: sitemapDate(...modelDates(model)),
     }))
   const entries = uniqueSitemapEntries([
     { path: "/data/", lastmod: sitemapDate(stats?.updatedAt) },
-    { path: "/data/compare", lastmod },
+    {
+      path: "/data/compare",
+      lastmod: sitemapDate(...catalog.models.map((model) => model.lastUpdated ?? model.releaseDate)),
+    },
     ...labPages,
     ...modelPages,
     ...familyComparisons,
@@ -96,7 +95,7 @@ function sitemapXml(entries: SitemapEntry[]) {
   const urls = entries
     .map(
       (entry) => `  <url>
-    <loc>${escapeXml(new URL(entry.path, baseUrl).toString())}</loc>${
+    <loc>${escapeXml(new URL(entry.path, baseUrl).toString())}</loc>${alternates(entry.path)}${
       entry.lastmod
         ? `
     <lastmod>${entry.lastmod}</lastmod>`
@@ -106,19 +105,30 @@ function sitemapXml(entries: SitemapEntry[]) {
     )
     .join("\n")
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls}
 </urlset>`
 }
 
-function sitemapDate(...values: (string | undefined | null)[]) {
+// The same hreflang alternates as the page's own head (component/locale-links.tsx).
+function alternates(path: string) {
+  return [...LOCALES.map((locale) => [tag(locale), locale] as const), ["x-default", "en"] as const]
+    .map(
+      ([hreflang, locale]) => `
+    <xhtml:link rel="alternate" hreflang="${hreflang}" href="${escapeXml(localizedUrl(locale, path))}"/>`,
+    )
+    .join("")
+}
+
+function sitemapDate(...values: (string | number | undefined | null)[]) {
   const dates = values.flatMap((value) => {
     if (!value) return []
     const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? [] : [date]
+    // A future release date says nothing about when the page last changed.
+    return Number.isNaN(date.getTime()) || date.getTime() > Date.now() ? [] : [date]
   })
   if (dates.length === 0) return undefined
-  return new Date(Math.min(Date.now(), Math.max(...dates.map((date) => date.getTime())))).toISOString().slice(0, 10)
+  return new Date(Math.max(...dates.map((date) => date.getTime()))).toISOString().slice(0, 10)
 }
 
 function escapeXml(value: string) {

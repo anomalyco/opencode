@@ -128,7 +128,7 @@ export function ModelDetails(props: {
               </Show>
               <Show when={props.model.capabilities.toolcall}>
                 <div class="flex h-6 min-w-0 items-center gap-1.5 px-2">
-                  <Icon name="outline-console" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                  <Icon name="terminal" class="shrink-0 text-v2-icon-icon-muted" />
                   <dt class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-faint">
                     {language.t("model.details.tools")}
                   </dt>
@@ -162,13 +162,6 @@ export function ModelDetails(props: {
           })}
         </bdi>
         <Show when={summary()}>{(value) => <div>{value()}</div>}</Show>
-        <Show when={props.usage}>
-          {(usage) => (
-            <div classList={{ "text-v2-state-fg-danger": usage().reached }}>
-              {language.t("model.details.usage", { label: usage().label, time: usage().resets })}
-            </div>
-          )}
-        </Show>
       </div>
     </Show>
   )

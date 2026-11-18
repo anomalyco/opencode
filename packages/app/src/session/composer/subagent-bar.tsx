@@ -51,13 +51,13 @@ export function SubagentBar(props: {
               <SessionProgressIndicatorV2 />
             </Match>
             <Match when={props.status === "succeeded"}>
-              <Icon name="check" size="small" />
+              <Icon name="check" />
             </Match>
             <Match when={props.status === "failed"}>
-              <Icon name="circle-xmark" size="small" />
+              <Icon name="close" />
             </Match>
             <Match when={props.status === "interrupted"}>
-              <Icon name="outline-xmark" size="small" />
+              <Icon name="close" />
             </Match>
           </Switch>
         </span>

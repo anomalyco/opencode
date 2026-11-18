@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
-import { activeCredential } from "./credential-settings.js"
+import { storedCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const integrationID = Integration.ID.make("openai")
@@ -20,7 +20,7 @@ export const OpenAIContextCapsPlugin = define({
     let signedIn = false
 
     const load = Effect.fn("OpenAIContextCapsPlugin.load")(function* () {
-      const { credential } = yield* activeCredential(ctx, integrationID)
+      const { credential } = yield* storedCredential(ctx, integrationID)
       const previous = signedIn
       signedIn = credential?.type === "oauth" && methodIDs.has(credential.methodID)
       return signedIn !== previous

@@ -69,7 +69,7 @@ function RawMessage(props: {
             </div>
             <div class="flex items-center gap-3">
               <div class="shrink-0 text-12-regular text-text-weak">{props.time(props.message.time.created)}</div>
-              <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
+              <Icon name="chevron-grabber-vertical" class="shrink-0 text-text-weak" />
             </div>
           </div>
         </Accordion.Trigger>
@@ -432,7 +432,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
               disabled={!props.session.id || exporting()}
               onClick={exportSession}
             >
-              <Show when={exporting()} fallback={<Icon name="download" size="small" />}>
+              <Show when={exporting()} fallback={<Icon name="download" />}>
                 <Loader class="size-4 shrink-0" />
               </Show>
               <span>{ctx.t("export.session")}</span>

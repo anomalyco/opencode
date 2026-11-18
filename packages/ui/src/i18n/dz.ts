@@ -50,6 +50,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "བསམ་འཆར་བཀོད་དོན།",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "བསམ་འཆར་ཁ་སྣོན་འབད།",
+  "ui.lineComment.add": "བསམ་འཆར་ཁ་སྣོན་འབད།",
+  "ui.lineComment.actions": "སེལ་འཐུའི་བྱ་སྤྱོད།",
   "ui.lineComment.contextPlaceholder": "བསྒྱུར་བཅོས་འདི་གི་དོན་ལུ་ སྐབས་དོན་ཁ་སྐོང་བརྐྱབ།",
   "ui.lineComment.submit": "བསམ༌འཆར",
   "ui.lineComment.cancel": "ཆ་མེད་བཏང་པ་",

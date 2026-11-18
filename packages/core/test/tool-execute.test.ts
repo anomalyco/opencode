@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import path from "path"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -9,6 +11,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
 import { Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
 
@@ -150,6 +153,46 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+describe("path", () => {
+  const directory = AbsolutePath.make(path.resolve("/session/dir"))
+  const withPath = () =>
+    CodeModeTool.create(
+      { tools: new Map() },
+      (_, tool, input, context) => execute(tool, input, context),
+      allowAll,
+      location({ directory }),
+    )
+  const run = async (code: string, codeMode = withPath()) =>
+    JSON.parse((await Effect.runPromise(codeMode.execute({ code }, context))).output.output)
+
+  test("without the experimental flag there is no path", async () => {
+    expect(await run("return [typeof path]", createCodeMode(new Map()))).toEqual(["undefined"])
+  })
+
+  test("path is the host's path module, resolving against the session's directory", async () => {
+    expect(
+      await run(
+        `return [path.resolve("a", "b"), path.relative("a", "c"), path.join("out", "..", "x.txt"), path.basename("/a/b.ts", ".ts"), path.posix.join("a", "b"), path.win32.join("a", "b"), path.sep]`,
+      ),
+    ).toEqual([path.resolve(directory, "a", "b"), path.join("..", "c"), "x.txt", "b", "a/b", "a\\b", path.sep])
+  })
+
+  test("the other platform's flavour resolves from its own root, not the server's working directory", async () => {
+    const other = path.sep === "/" ? "win32" : "posix"
+    const [resolved] = await run(`return [path.${other}.resolve("a")]`)
+    expect(resolved).toBe(path[other].resolve(path[other].sep, "a"))
+    expect(resolved).not.toContain(process.cwd())
+  })
+
+  test("path is importable by its Node module names", async () => {
+    expect(
+      await run(`import { join } from "node:path"
+        const posix = require("path").posix
+        return [join("a", "b"), posix.dirname("a/b")]`),
+    ).toEqual([path.join("a", "b"), "a"])
+  })
 })
 
 describe("execute output", () => {

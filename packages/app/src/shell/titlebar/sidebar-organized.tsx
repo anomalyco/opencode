@@ -32,8 +32,19 @@ import { useLayout } from "@/shell/state/layout"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { useTabs, type Tab } from "@/shell/tabs/tabs"
 import { pathKey } from "@/workspaces/path-key"
+import { useDirectoryPicker } from "@/workspaces/selection/picker"
+import { addProjects } from "@/home/projects/add"
+import { homeProjectDirectories } from "@/shell/layout/helpers"
 import "./tab-nav.css"
 import { ProjectSessionRow } from "./project-session-row"
+import type { SidebarStripGrouping } from "./sidebar-customized"
+import {
+  createPinnedSessions,
+  createSessionPins,
+  PinMuteMenuItems,
+  SidebarSectionLabel,
+  type SessionPins,
+} from "./sidebar-pins"
 import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
 
 const SidebarState = Persistence.struct({
@@ -76,9 +87,11 @@ export function createSidebarActivityListener() {
 
 export function SidebarOrganized(props: {
   currentTab: Tab | undefined
-  children: (highlightActive: Accessor<boolean>, onNavigate: () => void) => JSX.Element
+  children: (highlightActive: Accessor<boolean>, onNavigate: () => void, grouping: SidebarStripGrouping) => JSX.Element
 }) {
   const language = useLanguage()
+
+  const global = useGlobal()
 
   const tabs = useTabs()
 
@@ -100,6 +113,26 @@ export function SidebarOrganized(props: {
   })
 
   const grouped = () => connections().length > 1
+
+  const pickDirectory = useDirectoryPicker()
+
+  const addTarget = () => {
+    const server = props.currentTab?.server ?? layout.home.selection().server
+
+    return connections().find((conn) => ServerConnection.key(conn) === server) ?? connections()[0]
+  }
+
+  const addProject = (conn: ServerConnection.Any) =>
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: (result) => {
+        const ctx = global.serverCtx(ServerConnection.key(conn))
+
+        if (ctx) void addProjects(ctx, homeProjectDirectories(result))
+      },
+    })
 
   createSidebarActivityListener()
 
@@ -131,6 +164,39 @@ export function SidebarOrganized(props: {
   const isOpenTab = (server: ServerConnection.Key, sessionId: string) =>
     tabs.store.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === sessionId)
 
+  const pins = createSessionPins()
+
+  const pinned = createPinnedSessions({
+    pins,
+    currentTab: () => props.currentTab,
+    highlightActive: () => !projectSelected(),
+    onSelect: selectTabs,
+  })
+
+  // Pinned sessions leave the tab list, which keeps the rest of the open tabs under Recent.
+  const recentTabs = createMemo(() => tabs.store.filter((tab) => !pinned.holds(tab)))
+
+  const recentHeader = (
+    <Show when={recentTabs().length > 0}>
+      <SidebarSectionLabel label={language.t("sidebar.recent.section.recent")} class="mb-px" />
+    </Show>
+  )
+
+  const sections = createMemo(() => [{ key: "recent", tabs: recentTabs(), header: recentHeader }])
+
+  const leading = createMemo(() => pinned.leading())
+
+  const grouping: SidebarStripGrouping = {
+    get sections() {
+      return sections()
+    },
+    get leading() {
+      return leading()
+    },
+    tabMenu: (tab) => <PinMuteMenuItems pins={pins} server={tab.server} sessionID={tab.sessionId} />,
+    tabMuted: (tab) => global.sessionPreferences.muted(tab.server, tab.sessionId),
+  }
+
   return (
     <div
       ref={(element) => setLocal("hoverTarget", element)}
@@ -144,22 +210,36 @@ export function SidebarOrganized(props: {
         }}
       />
       <ScrollView class="min-h-0 flex-1" thumbContainer={local.thumbTrack} thumbHoverTarget={local.hoverTarget}>
-        <div class="flex flex-col gap-3">
-          <section class="flex shrink-0 flex-col gap-2">
-            <button
-              type="button"
-              class="flex h-6 min-w-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-              aria-expanded={!state.projectsCollapsed}
-              onClick={() => setState("projectsCollapsed", (value) => !value)}
-            >
-              <span class="min-w-0 truncate">{language.t("sidebar.organize.projects")}</span>
-              <Icon
-                name="fill-triangle-down"
-                size="small"
-                class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
-                classList={{ "-rotate-90 rtl:rotate-90": state.projectsCollapsed }}
-              />
-            </button>
+        <div class="flex flex-col gap-2">
+          <section class="flex shrink-0 flex-col gap-1">
+            <div class="group/projects flex h-7 min-w-0 shrink-0 items-center rounded-[6px] pe-1 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover">
+              <button
+                type="button"
+                class="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted group-hover/projects:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                aria-expanded={!state.projectsCollapsed}
+                onClick={() => setState("projectsCollapsed", (value) => !value)}
+              >
+                <span class="min-w-0 truncate">{language.t("sidebar.organize.projects")}</span>
+                <Icon
+                  name="fill-triangle-down"
+                  class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+                  classList={{ "-rotate-90 rtl:rotate-90": state.projectsCollapsed }}
+                />
+              </button>
+              <Show when={addTarget()}>
+                {(conn) => (
+                  <span class="hover-reveal flex shrink-0 items-center group-hover/projects:opacity-100 focus-within:opacity-100">
+                    <IconButton
+                      icon={<Icon name="folder-add-left" />}
+                      variant="ghost-muted"
+                      size="small"
+                      aria-label={language.t("home.project.add")}
+                      onClick={() => addProject(conn())}
+                    />
+                  </span>
+                )}
+              </Show>
+            </div>
             <Show when={!state.projectsCollapsed}>
               <Key each={connections()} by={ServerConnection.key}>
                 {(conn) => {
@@ -182,7 +262,6 @@ export function SidebarOrganized(props: {
                         >
                           <Icon
                             name="fill-triangle-down"
-                            size="small"
                             class="shrink-0 text-v2-icon-icon-muted"
                             classList={{ "-rotate-90 rtl:rotate-90": !expanded() }}
                           />
@@ -200,6 +279,7 @@ export function SidebarOrganized(props: {
                             highlightActive={projectSelected()}
                             onSelect={(session) => setLocal("projectSession", session)}
                             state={state}
+                            pins={pins}
                             ready={ready()}
                             onExpand={(key) => setState("expanded", key, (value) => !value)}
                             onReorder={(server, ids) => setState("order", server, ids)}
@@ -212,12 +292,9 @@ export function SidebarOrganized(props: {
               </Key>
             </Show>
           </section>
-          <div class="flex shrink-0 flex-col gap-3" classList={{ hidden: tabs.store.length === 0 }}>
-            <Show when={!state.projectsCollapsed}>
-              <div role="separator" class="mx-2 h-px shrink-0 bg-v2-border-border-muted" />
-            </Show>
+          <div class="flex shrink-0 flex-col" classList={{ hidden: tabs.store.length === 0 && pinned.count() === 0 }}>
             {/* The empty strip still owns tab shortcuts; only its visual section is hidden. */}
-            {props.children(() => !projectSelected(), selectTabs)}
+            {props.children(() => !projectSelected(), selectTabs, grouping)}
           </div>
         </div>
       </ScrollView>
@@ -234,6 +311,7 @@ function ProjectList(props: {
   highlightActive: boolean
   onSelect: (session: { server: ServerConnection.Key; sessionId: string }) => void
   state: typeof SidebarState.Type
+  pins: SessionPins
   ready: boolean
   onExpand: (key: string) => void
   onReorder: (server: string, ids: string[]) => void
@@ -252,6 +330,8 @@ function ProjectList(props: {
   })
 
   const server = ServerConnection.key(props.connection)
+
+  const global = useGlobal()
 
   const ctx = useServerCtx(() => props.connection)
 
@@ -368,6 +448,10 @@ function ProjectList(props: {
                       server={server}
                       session={record().session}
                       openTab={props.isOpenTab(server, record().session.id)}
+                      muted={global.sessionPreferences.muted(server, record().session.id)}
+                      menuItems={() => (
+                        <PinMuteMenuItems pins={props.pins} server={server} sessionID={record().session.id} />
+                      )}
                       active={
                         props.highlightActive &&
                         props.currentTab?.type === "session" &&

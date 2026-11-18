@@ -406,7 +406,7 @@ export const SettingsProviders: Component<{
             aria-label={language.t("settings.providers.account.manage", { provider: name() })}
           >
             <span>{active()?.label}</span>
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -432,7 +432,7 @@ export const SettingsProviders: Component<{
               </Menu.Group>
               <Menu.Separator />
               <Menu.Item disabled={accountView().busy} onSelect={() => connect(menuProps.provider.id)}>
-                <Icon name="plus" size="small" class="shrink-0" />
+                <Icon name="plus" class="shrink-0" />
                 {language.t("settings.providers.account.add")}
               </Menu.Item>
             </Menu.Content>
@@ -574,7 +574,6 @@ export const SettingsProviders: Component<{
                                     </span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       classList={{
                                         "settings-provider-console-chevron": true,
                                         open: consoleExpanded(),
@@ -612,7 +611,6 @@ export const SettingsProviders: Component<{
                                     <span>{provider.name.slice(group().prefix.length)}</span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       class="settings-provider-console-item-chevron"
                                     />
                                   </button>

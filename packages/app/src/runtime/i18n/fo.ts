@@ -1220,11 +1220,6 @@ export const dict = {
   "sidebar.recent.unpin": "Loys",
   "sidebar.recent.moveUp": "Flyt upp",
   "sidebar.recent.moveDown": "Flyt niður",
-  "settings.experimental.row.newIcons.title": "Nýggj ikon",
-  "settings.experimental.row.newIcons.description": "Forskoða dagførda ikonsettið",
-  "settings.experimental.row.foldUserMessages.title": "Fald long boð saman",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fald tíni boð longri enn 12 linjur saman aftan fyri ein Les meira knøtt",
   "settings.experimental.row.newTimeline.title": "Nýggj tíðarlinja",
   "settings.experimental.row.newTimeline.description":
     "Ein umskipað setutíðarlinja, sum bólkar tað, agenturin gjørdi, við einari støðulinju undir umfarinum",
@@ -1354,6 +1349,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Vís undiragentar hvør sær. Bólka annað virksemi við samanfaldaðum smálutum.",
   "settings.timeline.description.quiet": "Vís undiragentar hvør sær og bólka rættingar. Fjal annað virksemi.",
+  "settings.timeline.row.foldUserMessages.title": "Fald long boð saman",
+  "settings.timeline.row.foldUserMessages.description":
+    "Fald tíni boð longri enn 12 linjur saman aftan fyri ein Les meira knøtt",
   "settings.timeline.row.turnDiffs.title": "Broyttar fílur",
   "settings.timeline.row.turnDiffs.description": "Lista fílurnar, sum hvørt umfar broytti, tá ið tað er liðugt",
   "settings.timeline.category.commentary": "Viðmerkingar",

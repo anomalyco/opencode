@@ -1266,11 +1266,6 @@ export const dict = {
   "sidebar.recent.unpin": "ޕިން ނަގާ",
   "sidebar.recent.moveUp": "މައްޗަށް ގެންދާ",
   "sidebar.recent.moveDown": "ތިރިއަށް ގެންދާ",
-  "settings.experimental.row.newIcons.title": "އާ އައިކޮންތައް",
-  "settings.experimental.row.newIcons.description": "އަޕްޑޭޓްކުރި އައިކޮން ސެޓް ޕްރިވިއު ކުރާ",
-  "settings.experimental.row.foldUserMessages.title": "ދިގު މެސެޖްތައް ފަތްޕާ",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 ލައިނަށްވުރެ ދިގު ތިބާގެ މެސެޖްތައް “އިތުރަށް ކިޔާ” ބަޓަނެއްގެ ފަހަތަށް ފަތްޕާ",
   "settings.experimental.row.newTimeline.title": "އާ ޓައިމްލައިން",
   "settings.experimental.row.newTimeline.description":
     "އޭޖެންޓް ކުރި ކަންތައްތައް ގްރޫޕްކޮށް، ޓަރނުގެ ތިރީގައި އެއް ސްޓޭޓަސް ލައިން ދައްކާ އަލުން ޑިޒައިންކުރި ސެޝަން ޓައިމްލައިން",
@@ -1402,6 +1397,9 @@ export const dict = {
     "ސަބްއޭޖެންޓުން ވަކިން ދައްކާ. އެހެން ހަރަކާތް ތަފްޞީލު ކޮލަޕްސްކޮށް ގްރޫޕްކުރާ.",
   "settings.timeline.description.quiet":
     "ސަބްއޭޖެންޓުން ވަކިން ދައްކައި އެޑިޓްތައް ގްރޫޕްކުރާ. އެހެން ހަރަކާތް ފޮރުވާ.",
+  "settings.timeline.row.foldUserMessages.title": "ދިގު މެސެޖްތައް ފަތްޕާ",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 ލައިނަށްވުރެ ދިގު ތިބާގެ މެސެޖްތައް “އިތުރަށް ކިޔާ” ބަޓަނެއްގެ ފަހަތަށް ފަތްޕާ",
   "settings.timeline.row.turnDiffs.title": "ބަދަލުވި ފައިލްތައް",
   "settings.timeline.row.turnDiffs.description": "ކޮންމެ ޓަރނެއް ނިމުމުން އޭގައި ބަދަލުކުރި ފައިލްތައް ލިސްޓްކުރާ",
   "settings.timeline.category.commentary": "ކޮމެންޓަރީ",

@@ -63,6 +63,21 @@ test("settings has its own route and returns through app history", async ({ page
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
   await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab")).toHaveText([
+    "Preferences",
+    "Appearance",
+    "Notifications",
+    "Shortcuts",
+    "Providers",
+    "Models",
+    "Extensions",
+    "Projects",
+    "Worktrees",
+    "Server",
+    "Experimental",
+    "About",
+  ])
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(home).toHaveAttribute("aria-pressed", "false")
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(page).toHaveURL("/")
