@@ -481,14 +481,20 @@ const CLOSE_RECORD: usize = 10;
 
 fn enter_helper(vm: &mut Vm, callee: Id, id: Id, phase: usize, back: bool, item: Value) -> Res {
     let slots = [
-        Value::Num(phase as f64),
-        item,
-        Value::Num(back as u8 as f64),
-        Value::Undef,
-        Value::Num(0.0),
-        Value::Num(0.0),
+        Slot::index(phase),
+        Slot::pack(item),
+        Slot::index(back as usize),
+        Slot::UNDEF,
+        Slot::index(0),
+        Slot::index(0),
     ];
-    let r = vm.enter_native_sub(NativeOp::Iterators, HELPER, callee, Value::Obj(id), &slots);
+    let r = vm.enter_native_slots(
+        NativeOp::Iterators,
+        HELPER,
+        Slot::pack(Value::Obj(callee)),
+        Slot::pack(Value::Obj(id)),
+        &slots,
+    );
     if r.is_err() {
         helper_mut(vm, id).state = HelperState::Done;
     }
@@ -769,6 +775,9 @@ fn step(
         return Err(not_callable(vm, site));
     }
     if native_step(vm, &iter, &next) {
+        if let Some(v) = step_builtin(vm, iter, next) {
+            return v.map(Stepped::Value);
+        }
         let r = vm.call(&next, iter, &[])?;
         return result_of(vm, r).map(Stepped::Value);
     }
@@ -786,6 +795,27 @@ fn step(
     let direct = stepped_directly(vm, &iter);
     fr.set_index(vm, PHASE, phase);
     call(vm, fr, Slot::pack(next), Slot::pack(iter), [], !direct).map(Stepped::Pending)
+}
+
+/// A built-in iterator stepped by the shared `next` (`iter_next`), as calling it from native code and reading its
+/// result does, without making the result: `None` when `next` is another function.
+#[inline(always)]
+fn step_builtin(vm: &mut Vm, iter: Value, next: Value) -> Option<Result<Option<Value>, Value>> {
+    let (Value::Obj(id), Value::Obj(n)) = (iter, next) else {
+        return None;
+    };
+    match vm.heap[n as usize].kind {
+        Kind::Native { f, .. } if std::ptr::fn_addr_eq(f, iter_next as crate::vm::NativeFn) => {}
+        _ => return None,
+    }
+    vm.host.meter.counted = false;
+    let r = if matches!(vm.heap[id as usize].kind, Kind::ExoticIter { .. }) {
+        Ok(exotic_step(vm, id))
+    } else {
+        vm.iter_step(&iter)
+    };
+    vm.host.meter.bytecode = false;
+    Some(r)
 }
 
 /// An iterator result: its value, or `None` when it is done.

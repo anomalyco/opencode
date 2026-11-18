@@ -1061,33 +1061,75 @@ impl<'rt> Vm<'rt> {
         if self.frames.len() >= 3 * MAX_DEPTH {
             return Err(self.range_error("Maximum call stack size exceeded"));
         }
-        let fpos = self.stack.len();
-        self.push(callee);
-        self.push(this);
+        let base = self.stack.len() + 2;
+        self.stack.reserve(2 + locals.len());
+        self.stack.push(Slot::pack(callee));
+        self.stack.push(Slot::pack(this));
         self.stack.extend(locals.iter().map(|v| Slot::pack(*v)));
-        let (func, upvals) = (self.native_proto.clone(), self.no_upvals.clone());
+        self.push_native_frame(op, sub, base);
+        Ok(Value::Undef)
+    }
+
+    /// `enter_native_with` with the callee, the receiver and the slots already packed.
+    pub(crate) fn enter_native_slots(
+        &mut self,
+        op: crate::native::NativeOp,
+        sub: u16,
+        callee: Slot,
+        this: Slot,
+        locals: &[Slot],
+    ) -> Res {
+        if self.frames.len() >= 3 * MAX_DEPTH {
+            return Err(self.range_error("Maximum call stack size exceeded"));
+        }
+        let base = self.stack.len() + 2;
+        self.stack.reserve(2 + locals.len());
+        self.stack.push(callee);
+        self.stack.push(this);
+        self.stack.extend_from_slice(locals);
+        self.push_native_frame(op, sub, base);
+        Ok(Value::Undef)
+    }
+
+    /// Pushes the frame of a native frame whose slots start at `base`, and flags it entered.
+    #[inline(always)]
+    fn push_native_frame(&mut self, op: crate::native::NativeOp, sub: u16, base: usize) {
         let hbase = self.handlers.len() as u32;
-        let frame = Frame {
-            func,
-            pc: crate::native::START,
-            base: fpos + 2,
-            upvals,
-            hbase,
-            extra: Box::default(),
-            argc: 0,
-            kind: FrameKind::Native(op, sub),
-            is_base: false,
-            yield_pc: NO_YIELD,
-        };
         match self.spare_frames.pop() {
-            Some(mut spare) => {
-                *spare = frame;
-                self.frames.push(spare);
+            // Reuse a retired frame in place; one that ran a native frame keeps the shared code and no upvalues.
+            Some(mut f) => {
+                if !Rc::ptr_eq(&f.func, &self.native_proto) {
+                    f.func = self.native_proto.clone();
+                }
+                if !f.upvals.is_empty() {
+                    f.upvals = self.no_upvals.clone();
+                }
+                if !f.extra.is_empty() {
+                    f.extra = Box::default();
+                }
+                f.pc = crate::native::START;
+                f.base = base;
+                f.hbase = hbase;
+                f.argc = 0;
+                f.kind = FrameKind::Native(op, sub);
+                f.is_base = false;
+                f.yield_pc = NO_YIELD;
+                self.frames.push(f);
             }
-            None => self.frames.push(Box::new(frame)),
+            None => self.frames.push(Box::new(Frame {
+                func: self.native_proto.clone(),
+                pc: crate::native::START,
+                base,
+                upvals: self.no_upvals.clone(),
+                hbase,
+                extra: Box::default(),
+                argc: 0,
+                kind: FrameKind::Native(op, sub),
+                is_base: false,
+                yield_pc: NO_YIELD,
+            })),
         }
         self.entered = true;
-        Ok(Value::Undef)
     }
 
     /// Makes the native frame a job pushed the base of the run that runs it.
@@ -1494,7 +1536,8 @@ impl<'rt> Vm<'rt> {
         match &self.heap[id as usize].kind {
             Kind::Native { f, .. } => {
                 let f = *f;
-                let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
+                let mut args = self.arg_pool.pop().unwrap_or_default();
+                args.extend(self.stack.drain(fpos + 2..).map(Slot::get));
                 let this = self.pop();
                 self.stack.pop();
                 self.host.meter.counted = false;
@@ -1502,9 +1545,14 @@ impl<'rt> Vm<'rt> {
                 let r = f(self, this, &args, id);
                 self.convert_ok = false;
                 if self.convert_req.is_some() {
-                    self.convert_native(id, this, &args, false, false)?;
+                    let c = self.convert_native(id, this, &args, false, false);
+                    args.clear();
+                    self.arg_pool.push(args);
+                    c?;
                     return Ok(true);
                 }
+                args.clear();
+                self.arg_pool.push(args);
                 if std::mem::take(&mut self.entered) {
                     return Ok(true);
                 }
