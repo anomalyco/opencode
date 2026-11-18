@@ -40,7 +40,7 @@ test("bundles app icons under a base path", async () => {
     logLevel: "silent",
     base: "/opencode/",
     plugins: [
-      icons("prod", "/opencode/"),
+      icons("prod"),
       {
         name: "icons-only-fixture",
         transformIndexHtml: {
