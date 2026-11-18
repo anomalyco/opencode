@@ -290,6 +290,31 @@ describe("search tools", () => {
     ),
   )
 
+  it.live("counts omitted grep matches toward a truncated search", () =>
+    withTempDir((tmp) =>
+      Effect.promise(() => fs.writeFile(path.join(tmp.path, ".env"), "ONE=needle\nTWO=needle\nTHREE=needle\n")).pipe(
+        Effect.andThen(
+          withTools(
+            tmp.path,
+            (registry) => executeTool(registry, call("grep", { path: ".env", pattern: "needle", limit: 2 })),
+            undefined,
+            Agent.Info.default(Agent.defaultID).permissions,
+          ),
+        ),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            expect(result).toMatchObject({ status: "completed", metadata: { matches: 0, truncated: true } })
+            if (result.status !== "completed") return
+            expect(JSON.stringify(result.content)).toContain(
+              "(Results are truncated: showing 0 of the first 2 results.",
+            )
+            expect(JSON.stringify(result.content)).toContain("(Matches in 1 file omitted")
+          }),
+        ),
+      ),
+    ),
+  )
+
   it.live("reports invalid grep regex details", () =>
     withTempDir((tmp) =>
       withTools(tmp.path, (registry) =>

@@ -45,7 +45,7 @@ export const Output = Schema.Array(FileSystem.Match)
 type EncodedOutput = typeof Output.Encoded
 
 /** Format raw search matches into concise model content. */
-export const toModelContent = (matches: EncodedOutput, truncated = false, omitted = 0) => {
+export const toModelContent = (matches: EncodedOutput, truncated = false, omitted = 0, searched = matches.length) => {
   const lines = matches.length === 0 ? ["No matches found"] : [`Found ${matches.length} matches`]
   let current = ""
   for (const match of matches) {
@@ -56,11 +56,11 @@ export const toModelContent = (matches: EncodedOutput, truncated = false, omitte
     }
     lines.push(`  Line ${match.line}: ${match.text}`)
   }
-  if (truncated)
-    lines.push(
-      "",
-      `(Results are truncated: showing first ${matches.length} results. Consider using a more specific path or pattern.)`,
-    )
+  if (truncated) {
+    // Unreadable files are left out after the limit applies, so fewer matches may be shown than were searched.
+    const shown = matches.length === searched ? `first ${searched}` : `${matches.length} of the first ${searched}`
+    lines.push("", `(Results are truncated: showing ${shown} results. Consider using a more specific path or pattern.)`)
+  }
   if (omitted > 0)
     lines.push(
       "",
@@ -154,6 +154,7 @@ export const Plugin = {
                   ),
                 truncated: result.truncated,
                 omitted: files.length - readable.size,
+                searched: result.items.length,
               }
             }).pipe(
               Effect.map((result) => ({
@@ -165,6 +166,7 @@ export const Plugin = {
                   })),
                   result.truncated,
                   result.omitted,
+                  result.searched,
                 ),
                 metadata: { matches: result.matches.length, truncated: result.truncated },
               })),
