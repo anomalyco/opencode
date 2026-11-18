@@ -1562,3 +1562,28 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
         }
     }
 }
+
+/// Whether a value holds what is not data, at any depth: a function, a promise, a namespace, an iterator, or a built-in
+/// object such as a Map or a Date. The reference's `containsRuntimeReference`, which keeps a thrown value's internals
+/// out of a run's failure.
+pub fn holds_runtime_reference(vm: &Vm, v: &Value) -> bool {
+    let mut seen = Vec::new();
+    let mut pending = vec![*v];
+    while let Some(v) = pending.pop() {
+        let Value::Obj(id) = v else {
+            continue;
+        };
+        if seen.contains(&id) {
+            continue;
+        }
+        seen.push(id);
+        let o = &vm.heap[id as usize];
+        match &o.kind {
+            Kind::Ordinary => {}
+            Kind::Array(items) | Kind::Arguments(items) => pending.extend(items.iter().copied()),
+            _ => return true,
+        }
+        pending.extend(o.props.items.iter().map(|p| p.value));
+    }
+    false
+}

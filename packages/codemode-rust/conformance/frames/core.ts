@@ -51,6 +51,13 @@ export default ({ after, text }: Helpers) => ({
     "await (async () => { const it = { [Symbol.asyncIterator]() { return this }, next: async () => ({ done: false, value: S(1) }), return: async (v) => ({ done: true, value: S(2) + v }), throw: async (e) => ({ done: false, value: S(3) + e }) }; async function* g() { yield* it } const gen = g(); return [await gen.next(), await gen.throw(10), await gen.return(5), await gen.next()] })()",
   ],
   programs: [
+    // An uncaught value that holds what is not data fails without showing it.
+    `throw [tools]`,
+    `throw { a: Promise.resolve(1) }`,
+    `throw new Map([[1, 2]])`,
+    `throw () => 1`,
+    `throw new Date(0)`,
+    `throw { a: [1, { b: "x" }] }`,
     // The call depth limit's RangeError uncaught, with its location: plain recursion, through a callback, and one
     // level over the exact limit.
     `const f = (n) => f(n + 1); f(1)`,

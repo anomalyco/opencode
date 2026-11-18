@@ -334,7 +334,12 @@ fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
         let message = convert::error_to_string(vm, id);
         return diagnostic(DiagnosticKind::ExecutionFailure, message);
     }
-    let text = convert::format_value(vm, e);
+    // As the reference does, a thrown value's internals never show through a failure.
+    let text = if convert::holds_runtime_reference(vm, e) {
+        "a non-data value".to_owned()
+    } else {
+        convert::format_value(vm, e)
+    };
     diagnostic(
         DiagnosticKind::ExecutionFailure,
         format!("Uncaught: {text}"),

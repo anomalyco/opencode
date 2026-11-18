@@ -952,7 +952,7 @@ impl<'rt> Vm<'rt> {
 
     /// A namespace path read with a number or a symbol, which the reference refuses.
     #[cold]
-    fn namespace_key_error(&mut self) -> Value {
+    pub(crate) fn namespace_key_error(&mut self) -> Value {
         self.type_error("tools paths must use string property names.")
     }
 

@@ -1003,6 +1003,7 @@ impl<'rt> Vm<'rt> {
                 all.extend_from_slice(args);
                 self.call(&target, bthis, &all)
             }
+            Kind::ToolRef(path) if path.is_empty() => Err(self.not_a_function()),
             Kind::ToolRef(path) => {
                 let path = path.clone();
                 let r = self.call_tool(&path, args);
@@ -1313,6 +1314,11 @@ impl<'rt> Vm<'rt> {
                 self.stack.extend(bargs.into_iter().map(Slot::pack));
                 self.stack.extend(tail);
                 self.call_op(argc + n)
+            }
+            // The namespace itself, `tools`, is not a function.
+            Kind::ToolRef(path) if path.is_empty() => {
+                self.stack.truncate(fpos);
+                Err(self.not_a_function())
             }
             Kind::ToolRef(path) => {
                 let path = path.clone();
@@ -2855,6 +2861,12 @@ impl<'rt> Vm<'rt> {
                         let o = self.pop();
                         if matches!(k, Value::Obj(_)) && self.operand_calls(&k) {
                             conv_op!(code::DEL_ELEM, o, k, Value::Undef, 0, 0);
+                        }
+                        // A namespace path takes only string names, as when it is read.
+                        if !matches!(k, Value::Str(_))
+                            && matches!(o, Value::Obj(id) if matches!(self.heap[id as usize].kind, Kind::ToolRef(_)))
+                        {
+                            throw!(self.namespace_key_error());
                         }
                         let a = tri!(self.key_of(&k));
                         let r = tri!(self.delete(&o, a));
