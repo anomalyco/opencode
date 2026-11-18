@@ -1,6 +1,6 @@
 export * as ConfigExperimental from "./experimental.js"
 
-import { Record, Schema } from "effect"
+import { Record, Schema, Struct } from "effect"
 import { NonNegativeInt, optional } from "../schema.js"
 import { ConfigFlag } from "./flag.js"
 import { ConfigModel } from "./model.js"
@@ -17,7 +17,7 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Enable all flags except opt-in-only flags on any build channel, like OPENCODE_FLAGS=all. Per-flag config settings take precedence over all_flags; false leaves the build defaults in effect.",
   }),
-  ...Record.map(ConfigFlag.registry, (description, key) =>
+  ...Record.map(Struct.omit(ConfigFlag.registry, ConfigFlag.envOnly), (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
       description: ConfigFlag.optInOnly.has(key)
         ? description
