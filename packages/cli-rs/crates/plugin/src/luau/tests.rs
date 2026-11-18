@@ -1513,7 +1513,7 @@ fn answers(dialog: &abi::Dialog) -> String {
     let action = match dialog {
         abi::Dialog::Confirm(confirm) => &confirm.action,
         abi::Dialog::Select(select) => &select.action,
-        abi::Dialog::Prompt { action, .. } => action,
+        abi::Dialog::Prompt(prompt) => &prompt.action,
         other => panic!("{other:?} has no answer"),
     };
     let abi::Action::Command { name, .. } = action;
@@ -1596,7 +1596,7 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     run(&host, &closed.0, closed.1.as_deref());
     assert_eq!(said(&host), ["confirm true"]);
     let (dialog, closed) = asked(&host);
-    assert!(matches!(dialog, abi::Dialog::Prompt { ref title, .. } if title == "Name"), "{dialog:?}");
+    assert!(matches!(dialog, abi::Dialog::Prompt(ref prompt) if prompt.title == "Name"), "{dialog:?}");
     run(&host, &closed.0, closed.1.as_deref());
     assert_eq!(said(&host)[1..], ["prompt nil"]);
     let (dialog, closed) = asked(&host);
