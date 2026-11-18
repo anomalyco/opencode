@@ -293,10 +293,14 @@ const layer = Layer.effect(
         (row) =>
           Effect.gen(function* () {
             const id = Option.getOrUndefined(decodeID(row.key.slice(PREFIX.length)))
-            const job = Option.getOrUndefined(decode(row.value))
-            if (!id || !job || (job.status !== "running" && job.status !== "submitting")) return
+            const seen = Option.getOrUndefined(decode(row.value))
+            if (!id || !seen || (seen.status !== "running" && seen.status !== "submitting")) return
             if (yield* FiberMap.has(fibers, id)) return
             if (!(yield* claim(id))) return
+            // Read again under the lease: the previous owner may have finished the job since the scan.
+            const stored = yield* kv.get(PREFIX + id)
+            const job = stored === undefined ? undefined : Option.getOrUndefined(decode(stored))
+            if (!job || (job.status !== "running" && job.status !== "submitting")) return yield* release(id)
             if (job.status === "running")
               return yield* FiberMap.run(fibers, id, hold(id, settle(id, job)).pipe(Effect.ignore))
             yield* finish(id, job, {
