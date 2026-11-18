@@ -499,7 +499,12 @@ function clearSubmission(
     const cleared = cancelled ? (clear?.cleared ?? held) : held
     const back = cleared ? afterHold(effect.draft, cleared) : clear
 
-    return !!back && restoreSubmission(input, effect, back)
+    if (!back) return false
+
+    // A cancelled send loses nothing: a comment added while it waited stays, though no text was typed with it.
+    const kept = cancelled && effect.draft.target.context.items().some(isCommentItem)
+
+    return restoreSubmission(input, effect, kept ? { ...back, edited: true } : back)
   }
 
   if (effect.prompt) return void effect.prompt.settled(restore)
@@ -861,8 +866,14 @@ function sendCommand(
           skills: request.skills,
           delivery: value.delivery,
         }),
-      // What the request waits for is not part of its place in the chain's order.
-      () => Promise.all([gate?.open, value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined]),
+      // What the request waits for is not part of its place in the chain's order. A send cancelled while it waits on
+      // the gate stops there, before the composer's selection is committed: nothing of it reaches the server.
+      async () => {
+        await gate?.open
+
+        // Like queued prompts, queued commands must not apply the composer's selection to active work.
+        if (value.delivery === "steer") await applySelection(session, value.selection, track)
+      },
     )
 
     turn.joined()
@@ -947,7 +958,13 @@ async function admitPrompt(
   // pending.
   const staged = !!session.current()?.revert
 
-  if (staged) await commit()
+  // A send cancelled while it waits on the gate stops before anything of it reaches the server: the staged revert
+  // stays staged, and the agent and model stay as they were.
+  if (staged) {
+    await gate?.open
+    await commit()
+  }
+
   // A retried admission reuses the first commit rather than switching again.
   let committed: Promise<unknown> | undefined
 
@@ -971,9 +988,9 @@ async function admitPrompt(
       agent: value.selection.agent,
       model: selectionModel(value.selection),
     },
-    // The data layer runs this in the prompt's turn of the send chain. What the plugins prepare runs beside the
-    // selection's commit, not after it, and a send cancelled meanwhile stops here: nothing of it reaches the server.
-    prepare: () => (committed ??= Promise.all([gate?.open, staged ? undefined : commit()])),
+    // The data layer runs this in the prompt's turn of the send chain. The selection's commit follows what the
+    // plugins prepare, so a send cancelled meanwhile stops here and nothing of it reaches the server.
+    prepare: () => (committed ??= (gate?.open ?? Promise.resolve()).then(() => (staged ? undefined : commit()))),
   }
 
   if (turn.before) await turn.before

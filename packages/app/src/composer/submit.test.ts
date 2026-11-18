@@ -357,6 +357,60 @@ describe("Composer submission", () => {
     expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
   })
 
+  test.each([
+    {
+      name: "a prompt into a staged revert, with another agent and model selected",
+      prompt: "Hello",
+      current: { agent: "plan", model: { id: "old", providerID: "old" }, revert: { messageID: "msg_reverted" } },
+    },
+    {
+      name: "a prompt with another agent and model selected",
+      prompt: "Hello",
+      current: { agent: "plan", model: { id: "old", providerID: "old" } },
+    },
+    {
+      name: "a server command with another agent and model selected",
+      prompt: "/review now",
+      current: { agent: "plan", model: { id: "old", providerID: "old" } },
+    },
+  ])("Stop while $name waits on the gate changes nothing on the server", async (row) => {
+    const calls: string[] = []
+    const gate = Promise.withResolvers<void>()
+    const target = session({ calls, current: () => row.current, command: async () => void calls.push("command") })
+    const composer = gated(target, () => gate.promise, { prompt: row.prompt, calls })
+    const submitted = composer.submission.submit(new Event("submit"))
+
+    await flush()
+    await composer.submission.stop()
+    await submitted
+    gate.resolve()
+    await flush()
+
+    // Only the prompt's local admission, which the cancelled send takes back: no revert commit, switch or request.
+    expect(calls.filter((call) => call !== "admit")).toEqual([])
+    expect(text(composer.state)).toBe(row.prompt)
+  })
+
+  test("Stop while a prompt waits on the gate keeps a comment added meanwhile, though no text was typed", async () => {
+    const gate = Promise.withResolvers<void>()
+    const composer = gated(session({ calls: [] }), () => gate.promise, { prompt: "Hello" })
+    composer.state.context.add({ type: "file", path: "src/sent.ts", comment: "Sent with it", commentID: "sent" })
+    const submitted = composer.submission.submit(new Event("submit"))
+
+    await flush()
+    expect(composer.state.context.items()).toEqual([])
+    composer.state.context.add({ type: "file", path: "src/later.ts", comment: "Added while it waited", commentID: "later" })
+    await composer.submission.stop()
+    await submitted
+    await flush()
+
+    expect(text(composer.state)).toBe("Hello")
+    expect(composer.state.context.items().map((item) => item.type === "file" && item.comment)).toEqual([
+      "Sent with it",
+      "Added while it waited",
+    ])
+  })
+
   // The composer the person presses Stop in is not always the one that made the send: a new session's composer
   // unmounts as soon as Enter is pressed, and a tab switch away and back mounts a session's composer anew.
   test.each([
