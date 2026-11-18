@@ -1,11 +1,10 @@
-import { isBuiltin } from "node:module"
 import type { HostBridge } from "../snapshot/codec.js"
 import { Vm } from "../vm.js"
 import { globals } from "./globals.js"
 import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import { type AstNode, type Binding, PendingThrow } from "./model.js"
-import { moduleName, resolveModule } from "./modules.js"
+import { isRuntimeModule, moduleName, resolveModule } from "./modules.js"
 import { define, entries, type HostNamespace, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
 import type { HostResult } from "../host.js"
 import { Prelude } from "../prelude/prelude.js"
@@ -136,7 +135,6 @@ export class Interpreter<R> {
 function cannotImport(specifier: string): string {
   if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("file:"))
     return `Cannot import "${specifier}": local files can't be imported.`
-  if (isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:"))
-    return `Cannot import "${specifier}": this runtime doesn't provide it.`
+  if (isRuntimeModule(specifier)) return `Cannot import "${specifier}": this runtime doesn't provide it.`
   return `Cannot import "${specifier}": packages can't be installed here.`
 }
