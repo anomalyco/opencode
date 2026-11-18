@@ -31,6 +31,7 @@ import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
 import { OpencodeArtifacts } from "./opencode-artifacts.js"
+import { OpencodeLibrary } from "./opencode-library.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -222,6 +223,7 @@ export const OpencodePlugin = define<
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
+    const library = yield* OpencodeLibrary.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -341,29 +343,48 @@ export const OpencodePlugin = define<
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)
       yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
+      // `OPENCODE_LIBRARY_URL` points at a library of its own, such as one in development, whether or not the Console
+      // advertises one.
+      const libraryServer = process.env.OPENCODE_LIBRARY_URL || next.remote?.library
+      const reading =
+        allowed && libraryServer !== undefined && (yield* flags.enabled("console_library"))
+          ? next.connection
+          : undefined
+      yield* member(reading, URL.canParse(libraryServer ?? "") ? libraryServer : undefined).pipe(
+        Effect.flatMap(library.sync),
+        Effect.catch((cause) => Effect.logWarning("failed to connect the organization's library", { cause })),
+      )
     })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.
-    const syncWatches = Effect.fnUntraced(
-      function* (connection: ActiveConnection) {
-        const credential = connection && (yield* ctx.integration.connection.resolve(connection))
-        if (!connection || !credential || credential.type === "external") return yield* watches.sync(undefined)
-        yield* watches.sync({
-          key: workspaceKey(connection, credential),
-          server: yield* normalizeServer(ConsoleAccess.server(credential)),
-          headers: ctx.integration.connection
-            .resolve(connection)
-            .pipe(
-              Effect.flatMap((current) =>
-                current && current.type !== "external"
-                  ? Effect.succeed(ConsoleAccess.headers(current))
-                  : Effect.fail(new Error("OpenCode Console is not connected")),
-              ),
+    const syncWatches = (connection: ActiveConnection) =>
+      member(connection).pipe(
+        Effect.flatMap(watches.sync),
+        Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
+      )
+    /** The connection's member at `server`, the Console it signed in to otherwise; none without a connection. */
+    const member = Effect.fnUntraced(function* (connection: ActiveConnection, server?: string) {
+      const credential = connection && (yield* ctx.integration.connection.resolve(connection))
+      if (!connection || !credential || credential.type === "external") return undefined
+      const base = yield* normalizeServer(server ?? ConsoleAccess.server(credential))
+      return {
+        // Another address is another connection.
+        key:
+          server === undefined
+            ? workspaceKey(connection, credential)
+            : `${workspaceKey(connection, credential)}${base}`,
+        server: base,
+        headers: ctx.integration.connection
+          .resolve(connection)
+          .pipe(
+            Effect.flatMap((current) =>
+              current && current.type !== "external"
+                ? Effect.succeed(ConsoleAccess.headers(current))
+                : Effect.fail(new Error("OpenCode Console is not connected")),
             ),
-        })
-      },
-      Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
-    )
+          ),
+      } satisfies OpencodeWatches.Console
+    })
     const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
       const remote = allowed ? next.remote : undefined
       instructions = (remote?.instructions ?? []).map(
@@ -611,8 +632,15 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
           const watches = response.headers[OpencodeWatches.header] !== undefined
           const lists = response.headers[listsHeader] !== undefined
           const artifacts = response.headers[OpencodeArtifacts.header] !== undefined
+          const library = response.headers[OpencodeLibrary.header]
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists, artifacts }
+          return {
+            ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)),
+            watches,
+            lists,
+            artifacts,
+            library,
+          }
         }),
       ),
       Effect.scoped,
