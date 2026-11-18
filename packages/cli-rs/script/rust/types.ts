@@ -387,9 +387,8 @@ export class Types {
     const name = this.name(seed)
     const variants = uniqueVariants(values.map((value) => pascal(value)))
     const doc = ref === undefined ? "" : `/// \`${ref}\`\n`
-    this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Eq, Hash)]\npub enum ${name} {\n${variants.map((variant) => `    ${variant},`).join("\n")}\n    Unknown(String),\n}\n\nimpl ${name} {\n    pub fn as_str(&self) -> &str {\n        match self {\n${variants.map((variant, i) => `            Self::${variant} => ${JSON.stringify(values[i])},`).join("\n")}\n            Self::Unknown(value) => value,\n        }\n    }\n}\n\nimpl From<&str> for ${name} {\n    fn from(value: &str) -> Self {\n        match value {\n${variants.map((variant, i) => `            ${JSON.stringify(values[i])} => Self::${variant},`).join("\n")}\n            _ => Self::Unknown(value.to_owned()),\n        }\n    }\n}\n\nimpl Serialize for ${name} {\n    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {\n        serializer.serialize_str(self.as_str())\n    }\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        let value = String::deserialize(deserializer)?;\n        Ok(Self::from(value.as_str()))\n    }\n}`,
-    )
+    const pairs = variants.map((variant, i) => `    ${variant} => ${JSON.stringify(values[i])},`)
+    this.items.push(`literal_enum! {\n${doc}${name} {\n${pairs.join("\n")}\n}\n}`)
     return name
   }
 
@@ -736,7 +735,7 @@ function literalType(literal: unknown) {
 }
 
 function newtype(name: string, ref: string) {
-  return `/// \`${ref}\`\n#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]\n#[serde(transparent)]\npub struct ${name}(pub String);\n\nimpl ${name} {\n    pub fn as_str(&self) -> &str {\n        &self.0\n    }\n}\n\nimpl std::borrow::Borrow<str> for ${name} {\n    fn borrow(&self) -> &str {\n        &self.0\n    }\n}\n\nimpl std::fmt::Display for ${name} {\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n        f.write_str(&self.0)\n    }\n}\n\nimpl From<String> for ${name} {\n    fn from(value: String) -> Self {\n        Self(value)\n    }\n}\n\nimpl From<&str> for ${name} {\n    fn from(value: &str) -> Self {\n        Self(value.to_owned())\n    }\n}`
+  return `string_type!(${name}, ${JSON.stringify("`" + ref + "`")});`
 }
 
 function uniqueVariants(names: Array<string>) {
