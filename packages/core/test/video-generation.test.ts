@@ -112,7 +112,12 @@ it.effect("keeps video jobs across restarts and forgets them a day after they fi
       const crab = (yield* records).entries
         .map((entry) => entry.key.slice("video:".length) as VideoID)
         .find((id) => id !== first.job.id && id !== first.slow)!
-      expect(yield* generations.get(crab)).toMatchObject({ status: "error", reason: "unknown" })
+      // Failed once it has gone unanswered for two minutes.
+      yield* TestClock.adjust("2 minutes")
+      expect(yield* eventually(generations.get(crab), (job) => job.status !== "running")).toMatchObject({
+        status: "error",
+        reason: "unknown",
+      })
 
       state.status.set("remote_2", { status: "completed" })
       expect(yield* settled(first.slow)).toMatchObject({ status: "completed" })
