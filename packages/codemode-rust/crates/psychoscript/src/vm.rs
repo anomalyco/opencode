@@ -1347,7 +1347,13 @@ impl<'rt> Vm<'rt> {
                 self.handlers.truncate(hbase);
                 crate::native::Input::Returned(self.stack.pop().unwrap_or_default())
             }
-            crate::native::THREW => crate::native::Input::Threw(self.pop()),
+            crate::native::THREW => {
+                // Handlers the frame pushed for the call that failed go with it.
+                let e = self.pop();
+                let hbase = self.frames[fi].hbase as usize;
+                self.handlers.truncate(hbase);
+                crate::native::Input::Threw(e)
+            }
             crate::native::FINISHED => {
                 let hbase = self.frames[fi].hbase as usize;
                 self.handlers.truncate(hbase);
@@ -1923,7 +1929,8 @@ impl<'rt> Vm<'rt> {
     }
 
     /// Resumes a generator for the native frame on top, as `resume_generator` does (`mode` 0 for `next`, 1 for
-    /// `return`, 2 for `throw`; for these two, what the generator throws comes back to the frame as `Input::Threw`): `Some` with its value and whether it is done when it does not run, `None` once its frame
+    /// `return`, 2 for `throw`; for these two the frame must have pushed a handler, as a throw delivered now unwinds at once
+    /// and must come back to it as `Input::Threw` rather than pass it while its step runs): `Some` with its value and whether it is done when it does not run, `None` once its frame
     /// is pushed, which hands the frame below its next yield as
     /// a call's result or its completion as `Input::Finished`.
     pub(crate) fn native_resume(
@@ -1954,17 +1961,6 @@ impl<'rt> Vm<'rt> {
             } else {
                 Err(v)
             };
-        }
-        // What the generator throws comes back to the frame as `Input::Threw`: a throw delivered now unwinds at once, and
-        // must not pass the frame while its step runs.
-        if mode != 0
-            && let Some(f) = self.frames.last()
-        {
-            let sp = (self.stack.len() - f.base) as u32;
-            self.handlers.push(Handler {
-                pc: crate::native::THREW as u32,
-                sp,
-            });
         }
         let wants = self.enter_generator(g, Resume::Native, false);
         if mode == 0 {

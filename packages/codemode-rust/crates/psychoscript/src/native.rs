@@ -641,15 +641,20 @@ fn close<C: ForOf>(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Res
     };
     use crate::object::{GenState, Kind};
     match &vm.heap[id as usize].kind {
-        Kind::Generator(GenState::Suspended(_)) => match vm.native_resume(id, 1, Value::Undef) {
-            Ok(None) => Ok(Step::Pushed),
-            Ok(Some(_)) => close_done::<C>(vm, fr, None),
-            Err(e) if throwing => {
-                let _ = e;
-                close_done::<C>(vm, fr, None)
+        Kind::Generator(GenState::Suspended(_)) => {
+            // What closing throws comes back to the frame (see `Vm::native_resume`).
+            let sp = (vm.stack.len() - fr.0) as u32;
+            vm.handlers_mut().push(crate::vm::Handler {
+                pc: THREW as u32,
+                sp,
+            });
+            match vm.native_resume(id, 1, Value::Undef) {
+                Ok(None) => Ok(Step::Pushed),
+                Ok(Some(_)) => close_done::<C>(vm, fr, None),
+                Err(_) if throwing => close_done::<C>(vm, fr, None),
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
-        },
+        }
         Kind::Generator(_)
         | Kind::ArrayIter { .. }
         | Kind::MapIter { .. }

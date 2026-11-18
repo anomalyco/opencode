@@ -447,6 +447,11 @@ fn close_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 return Ok(Step::DoneEmpty);
             };
             if matches!(vm.heap[id as usize].kind, Kind::Generator(_)) {
+                let sp = (vm.stack.len() - fr.base()) as u32;
+                vm.handlers_mut().push(crate::vm::Handler {
+                    pc: crate::native::THREW as u32,
+                    sp,
+                });
                 return match vm.native_resume(id, 1, Value::Undef) {
                     Ok(None) => Ok(Step::Pushed),
                     Ok(Some(_)) => close_done(vm, fr, Ok(()), quiet),

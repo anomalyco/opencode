@@ -529,18 +529,14 @@ fn helper_input(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
             INNER_CALL | INNER_GEN | CALLBACK | FLAT_OPEN => close_throw(vm, fr, e),
             _ => closed(vm, fr, Err(e)),
         },
-        Input::Finished(_) => {
-            // The handler `resume` pushed, which a finished generator leaves.
-            vm.handlers_mut().pop();
-            match phase {
-                OUTER_GEN => out(vm, fr, None),
-                INNER_GEN => {
-                    inner_done(vm, fr);
-                    next_loop(vm, fr)
-                }
-                _ => closed(vm, fr, Ok(())),
+        Input::Finished(_) => match phase {
+            OUTER_GEN => out(vm, fr, None),
+            INNER_GEN => {
+                inner_done(vm, fr);
+                next_loop(vm, fr)
             }
-        }
+            _ => closed(vm, fr, Ok(())),
+        },
         Input::Returned(r) => match phase {
             OUTER_CALL => match result_of(vm, r.get())? {
                 Some(item) => after_item(vm, fr, item),

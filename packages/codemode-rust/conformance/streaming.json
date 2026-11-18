@@ -207838,6 +207838,2443 @@
           }
         ]
       ]
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Uint8Array([1, 2]).map((x) => S(x) + x)]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const r = []; new Uint8Array([1, 2]).forEach((x, i) => r.push(S(x) + i)); return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Uint8Array([1, 2, 3]).filter((x) => S(x) >= 0 && x !== 2)]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).some((x) => S(x) < 0); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).every((x) => S(x) >= 0); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).find((x) => S(x) >= 0 && x === 2); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).findIndex((x) => S(x) >= 0 && x === 2); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).findLast((x) => S(x) >= 0 && x === 1); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "call 2",
+            "job",
+            "answer 2",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).findLastIndex((x) => S(x) >= 0 && x === 1); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          0,
+          [
+            "call 2",
+            "job",
+            "answer 2",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2]).reduce((a, x) => a + S(x) + x, 0); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          5,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Uint8Array([1, 2, 3]).reduceRight((a, x, i) => a + S(x) + i); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          6,
+          [
+            "call 2",
+            "job",
+            "answer 2",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...Uint8Array.from([1, 2], (x, i) => S(x) + x + i)]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            4
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...Uint8Array.from(new Uint8Array([1, 2]), function (x) { return S(x) + x + this.k }, { k: 10 })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            12,
+            13
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...Uint8Array.from({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...Uint8Array.from({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } }, (x) => S(x) + x)]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Uint8Array({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const u = new Uint8Array(4); u.set({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } }, 1); return [...u] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            0,
+            1,
+            1,
+            0
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const u = new Uint8Array([1, 2]); return [...u.map((x) => (x === 1 ? 300 : '7'))]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          44,
+          7
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new Uint8Array([]).reduce((a, x) => a + x) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Uint8Array.reduce of an empty array with no initial value."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { Uint8Array.from([1, 2], (x) => { if (x === 2) throw new Error('m' + x); return x }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Error",
+          "m2"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new Uint8Array(1).set({ [Symbol.iterator]: function* () { yield 1; yield 2 } }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "RangeError",
+          "Uint8Array.set: the source does not fit at that offset."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const it = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 2, value: ++n }) } } }; const u = new Uint8Array(5); u.set(it, 2); return [[...u], [...new Uint8Array(it)], [...Uint8Array.from(it, (x) => x * 3)]]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            0,
+            0,
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            3,
+            6,
+            9
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [[...new Uint8Array(new Set([1, 2]))], [...Uint8Array.from('12')], [...Uint8Array.from(new Map([[3, 4]]).keys())], [...new Uint8Array([1, 2].values())], [...new Uint8Array((function* () { yield 5; yield 6 })())]]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            5,
+            6
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const u = new Uint8Array([5, 6, 7]); const seen = []; u.forEach((x, i, a) => { seen.push([x, i, a === u]); if (i === 0) u[2] = 9 }); return seen",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            5,
+            0,
+            true
+          ],
+          [
+            6,
+            1,
+            true
+          ],
+          [
+            9,
+            2,
+            true
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const u = new Uint8Array([1, 2, 3, 4]); return [u.some((x) => x > 3), u.every((x) => x > 0), u.findLast((x) => x < 3), u.findIndex((x) => x > 9), u.reduceRight((a, x) => a + x, '')]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          true,
+          2,
+          -1,
+          "4321"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Iterator.from({ [Symbol.iterator]() { const n = S(1); return [n, 2].values() } }).toArray(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []\n   const src = (n, fail = {}) => ({ i: 0, next() { log.push('next ' + this.i); if (fail.next === this.i) throw new Error('next ' + this.i); return this.i < n ? { done: false, value: this.i++ } : { done: true } }, return() { log.push('return'); if (fail.ret) throw new Error('return'); return fail.bad ? 5 : {} } })\n   const H = Iterator.prototype\n   const attempt = (f) => { try { return f() } catch (e) { return e.name + ': ' + e.message } }\n     return [\n       attempt(() => H.map.call(src(3), (x) => { if (x === 1) throw new Error('map'); return x }).toArray()),\n       attempt(() => H.filter.call(src(3), (x) => { throw new TypeError('filter') }).next()),\n       attempt(() => H.map.call(src(3, { next: 1 }), (x) => x).toArray()),\n       attempt(() => H.map.call(src(3, { ret: true }), () => { throw new Error('kept') }).next()),\n       attempt(() => H.flatMap.call(src(3), (x) => x).next()),\n       attempt(() => H.flatMap.call(src(3), () => ({ [Symbol.iterator]: 5 })).next()),\n       attempt(() => H.flatMap.call(src(3), () => ({ [Symbol.iterator]() { throw new Error('open') } })).next()),\n       attempt(() => H.flatMap.call(src(3), () => ({ next: () => 5 })).next()),\n       attempt(() => H.flatMap.call(src(3), () => ({ next() { throw new Error('inner') } })).next()),\n       log,\n     ]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Error: map",
+          "TypeError: filter",
+          "Error: next 1",
+          "Error: kept",
+          "TypeError: Iterator.prototype.flatMap expects an iterable or iterator, received a number.",
+          "TypeError: H.flatMap.call is not a function.",
+          "Error: open",
+          "TypeError: Iterator next() result must be an object.",
+          "Error: inner",
+          [
+            "next 0",
+            "next 1",
+            "return",
+            "next 0",
+            "return",
+            "next 0",
+            "next 1",
+            "next 0",
+            "return",
+            "next 0",
+            "return",
+            "next 0",
+            "return",
+            "next 0",
+            "return",
+            "next 0",
+            "return",
+            "next 0",
+            "return"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []\n   const src = (n, fail = {}) => ({ i: 0, next() { log.push('next ' + this.i); if (fail.next === this.i) throw new Error('next ' + this.i); return this.i < n ? { done: false, value: this.i++ } : { done: true } }, return() { log.push('return'); if (fail.ret) throw new Error('return'); return fail.bad ? 5 : {} } })\n   const H = Iterator.prototype\n   const attempt = (f) => { try { return f() } catch (e) { return e.name + ': ' + e.message } }\n     const inner = () => ({ next: () => ({ done: false, value: 'i' }), return() { log.push('inner return'); throw new Error('inner') } })\n     const a = H.map.call(src(3), (x) => x); log.push(JSON.stringify(a.return()), JSON.stringify(a.next()))\n     const b = H.map.call(src(3), (x) => x); b.next(); log.push(JSON.stringify(b.return()), JSON.stringify(b.return()))\n     const c = H.flatMap.call(src(3), inner); c.next(); log.push(attempt(() => c.return()), JSON.stringify(c.next()))\n     const d = H.flatMap.call(src(3, { ret: true }), inner); d.next(); log.push(attempt(() => d.return()))\n     const e = H.drop.call(src(3, { bad: true }), 1); e.next(); log.push(attempt(() => e.return()))\n     const f = H.take.call(src(3, { bad: true }), 1); log.push(attempt(() => f.return()))\n     const t = H.take.call(src(3, { bad: true }), 1); t.next(); log.push(attempt(() => t.next()), attempt(() => t.next()))\n     const z = H.take.call(src(3), 0); log.push(JSON.stringify(z.next()))\n     const odd = { next: () => ({ done: false, value: 1 }), return: 5 }\n     const q = H.map.call(odd, (x) => x); q.next(); log.push(attempt(() => q.return()), attempt(() => H.map.call(odd, (x) => x).return()))\n     log.push(attempt(() => H.map.call(odd, () => { throw new Error('cb') }).next()))\n     return log",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "return",
+          "{\"done\":true}",
+          "{\"done\":true}",
+          "next 0",
+          "return",
+          "{\"done\":true}",
+          "{\"done\":true}",
+          "next 0",
+          "inner return",
+          "return",
+          "Error: inner",
+          "{\"done\":true}",
+          "next 0",
+          "inner return",
+          "return",
+          "Error: inner",
+          "next 0",
+          "next 1",
+          "return",
+          "TypeError: Iterator return() result must be an object.",
+          "return",
+          "TypeError: Iterator return() must return an object.",
+          "next 0",
+          "return",
+          "TypeError: Iterator return() result must be an object.",
+          {
+            "done": true
+          },
+          "return",
+          "{\"done\":true}",
+          "TypeError: Iterator return must be a function.",
+          "TypeError: H.map.call is not a function.",
+          "Error: cb"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []\n   const src = (n, fail = {}) => ({ i: 0, next() { log.push('next ' + this.i); if (fail.next === this.i) throw new Error('next ' + this.i); return this.i < n ? { done: false, value: this.i++ } : { done: true } }, return() { log.push('return'); if (fail.ret) throw new Error('return'); return fail.bad ? 5 : {} } })\n   const H = Iterator.prototype\n   const attempt = (f) => { try { return f() } catch (e) { return e.name + ': ' + e.message } }\n     let h; h = [1, 2].values().map((x) => attempt(() => h.next())); const r1 = h.next()\n     let k; k = Iterator.from({ next: () => ({ done: false, value: attempt(() => k.next()) }) }).map((x) => x); const r2 = k.next()\n     let m; m = [1, 2].values().map((x) => JSON.stringify(m.return())); const r3 = attempt(() => m.next())\n     const r4 = [r1, r2, r3, h.next(), k.next().value, attempt(() => h.return())]\n     return r4",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "value": "TypeError: Iterator helper is already running.",
+            "done": false
+          },
+          {
+            "value": "TypeError: Iterator helper is already running.",
+            "done": false
+          },
+          "TypeError: Iterator helper is already running.",
+          {
+            "value": "TypeError: Iterator helper is already running.",
+            "done": false
+          },
+          "TypeError: Iterator helper is already running.",
+          {
+            "done": true
+          }
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function* g(n) { for (let i = 0; i < n; i++) yield i }\n     const log = []\n     function* f() { try { yield 1; yield 2 } finally { log.push('finally') } }\n     const a = f().map((x) => x * 2); log.push(a.next().value); a.return()\n     const b = f().take(1); log.push(b.next().value, b.next().done)\n     const c = [1, 2].values().flatMap(f); log.push(c.next().value); c.return()\n     const d = f(); d.next = () => ({ done: false, value: 'own' }); log.push(d.map((x) => x).next().value)\n     function* thrower() { yield 1; throw new Error('gen') }\n     try { thrower().map((x) => x).toArray() } catch (e) { log.push(e.message) }\n     function* bad() { try { yield 1 } finally { throw new Error('finally') } }\n     try { bad().map((x) => { throw new Error('cb') }).next() } catch (e) { log.push(e.message) }\n     const e = bad().drop(0); e.next(); try { e.return() } catch (err) { log.push(err.message) }\n     log.push(g(6).drop(1).filter((x) => x % 2).flatMap((x) => g(x)).take(5).toArray().join())\n     return log",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          "finally",
+          "finally",
+          1,
+          true,
+          1,
+          "finally",
+          "own",
+          "gen",
+          "cb",
+          "finally",
+          "0,0,1,2,0"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []\n     const it = { [Symbol.iterator]() { log.push('open'); return { next: () => ({ done: true }) } } }\n     const a = Iterator.from(it); log.push(typeof a.next, JSON.stringify(a.next()))\n     log.push(Iterator.from('ab').toArray().join(), Iterator.from({ next: () => ({ done: true }) }).toArray().length)\n     for (const v of [5, { [Symbol.iterator]: 5 }, { [Symbol.iterator]: () => 5 }, { [Symbol.iterator]() { throw new RangeError('open') } }])\n       try { Iterator.from(v) } catch (e) { log.push(e.name + ': ' + e.message) }\n     return log",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "open",
+          "function",
+          "{\"done\":true}",
+          "a,b",
+          0,
+          "TypeError: Iterator.from expects an iterable or iterator, received a number.",
+          "TypeError: Iterator.from is not a function.",
+          "TypeError: An iterator must be an object.",
+          "RangeError: open"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }\n   const p = r.text(); for (let j = 0; j < 3000; j++) { const h = g(4).flatMap((x) => [x, x]); h.next(); h.return(); see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 22
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }\n   const p = r.text(); for (let j = 0; j < 3000; j++) { try { g(3).map(() => { throw 1 }).next() } catch {} try { [1].values().flatMap(() => 1).next() } catch {} see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const it = { [Symbol.iterator]: () => [1, 2].values() }\n   const p = r.text(); for (let j = 0; j < 3000; j++) { Iterator.from(it).toArray(); see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 28
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g(n) { for (let i = 0; i < n; i++) yield i }\n   for (let j = 0; j < 37; j++) { const h = g(3).take(1); h.next(); h.next(); g(2).take(0).next(); g(2).drop(5).next() }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2497
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Set([1, 2, 3]).intersection({ size: 5, has: (x) => S(x) > 0 && x !== 2, keys: () => [].values() })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Set([1, 2, 3]).difference({ size: 3, has: (x) => S(x) > 0 && x === 2, keys: () => [].values() })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Set([1, 2]).isSubsetOf({ size: 2, has: (x) => S(x) > 0, keys: () => [].values() }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Set([1, 2]).isDisjointFrom({ size: 9, has: (x) => S(x) > 0 && x === 2, keys: () => [].values() }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Set([1]).union({ size: 1, has: () => false, keys: () => { S(0); return [2, 3] } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            "call 0",
+            "job",
+            "answer 0"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Set([1, 2]).symmetricDifference({ size: 1, has: () => false, keys() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) + n }) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Set([1, 2]).union({ size: 1, has: () => false, keys() { const v = [S(5), 6]; let i = 0; return { next: () => (i < v.length ? { done: false, value: v[i++] } : { done: true })  } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2,
+            6
+          ],
+          [
+            "call 5",
+            "job",
+            "answer 5"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Set([1]).isDisjointFrom({ size: 0, has: () => true, keys() { const v = [1, 2]; let i = 0; return { next: () => (i < v.length ? { done: false, value: v[i++] } : { done: true }) , return: () => ({ r: S(9) }) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          [
+            "call 9",
+            "job",
+            "answer 9"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new Set([1, 2]).isSupersetOf({ size: 2, has: () => true, keys() { const v = [1, 7]; let i = 0; return { next: () => (i < v.length ? { done: false, value: v[i++] } : { done: true }) , return() { S(8); return {} } } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          [
+            "call 8",
+            "job",
+            "answer 8"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const m = new Map([[1, 'a']]); return [m.getOrInsertComputed('k', (k) => S(k) + k), m.getOrInsertComputed(1, () => S(2)), [...m]] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "1k",
+            "a",
+            [
+              [
+                1,
+                "a"
+              ],
+              [
+                "k",
+                "1k"
+              ]
+            ]
+          ],
+          [
+            "call k",
+            "job",
+            "answer k"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const w = new WeakMap(); const o = {}; return [w.getOrInsertComputed(o, () => S(1) + 1), w.get(o)] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = {}; const w = new WeakSet({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 0, value: (S(1), o) }) } } }); return w.has(o) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 1",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const o = {}; const w = new WeakMap({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 0, value: [o, S(n)] }) } } }); return w.get(o) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.all({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) + n }) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.allSettled({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 0, value: Promise.reject(S(++n)) }) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            {
+              "status": "rejected",
+              "reason": 1
+            }
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.race({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 0, value: S(++n) }) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.any({ [Symbol.iterator]() { S(1); return [Promise.reject(1), 2].values() } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.all({ [Symbol.iterator]() { return { next() { S(1); throw new Error('nx') } } } }).catch((e) => e.message); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "nx",
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.all({ [Symbol.iterator]() { return { next: () => S(1) } } }).catch((e) => e.message); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Iterator next() result must be an object.",
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { try { yield 1 } finally { log.push('finally') } } const it = g(); it.next(); return [1].map((x) => [it.return(S(x)), it.next()]) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              {
+                "value": 1,
+                "done": true
+              },
+              {
+                "done": true
+              }
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "finally"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { try { yield 1 } catch (e) { yield e + 1 } } const it = g(); it.next(); return [1].map((x) => [it.throw(S(x)), it.next()]) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              {
+                "value": 2,
+                "done": false
+              },
+              {
+                "done": true
+              }
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { try { yield 1 } catch (e) { return e } } const it = g(); it.next(); return [1].map((x) => it.throw.call(it, S(x) + x)) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            {
+              "value": 2,
+              "done": true
+            }
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Array.from({ [Symbol.iterator]() { const it = (function* () { yield 1; yield 2 })(); return { next: it.next.bind(it), [Symbol.iterator]() { return this } } } }, (x) => S(x) + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [new Set([1]).isDisjointFrom({ size: 0, has: () => true, keys: () => ({ next: () => ({ done: false, value: 1 }), return: () => 1 }) })]",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "TypeError: Iterator return() result must be an object. (line 1, col 9)"
+      },
+      "log": []
+    },
+    {
+      "code": "try { new Set([1]).union({ size: 1, has: () => true, keys: () => ({ next: 5 }) }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "The called value is not a function."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new Set([1]).union({ size: 1, has: () => true, keys: () => ({ next: () => 5 }) }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Iterator next() result must be an object."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; function* k() { try { yield 1; yield 2 } finally { log.push('closed') } } return [new Set([1]).isSupersetOf({ size: 1, has: () => true, keys: k }), new Set([1, 5]).isSupersetOf({ size: 2, has: () => true, keys: k }), log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          false,
+          [
+            "closed",
+            "closed"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const w = new WeakSet({ [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { log.push('closed'); return {} } } } }); return log",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "TypeError: Invalid value used in weak set: a number cannot be held weakly. (line 1, col 27)"
+      },
+      "log": []
+    },
+    {
+      "code": "try { new WeakSet({ [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { return {} } } } }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid value used in weak set: a number cannot be held weakly."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new WeakMap([[1, 2]]) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Invalid value used as weak map key: a number cannot be held weakly."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await Promise.race({ [Symbol.iterator]: 5 }).catch((e) => [e.name, e.message])",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Iterator method must be a function."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await Promise.all({ [Symbol.iterator]() { throw new RangeError('open') } }).catch((e) => [e.name, e.message])",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "RangeError",
+          "open"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await Promise.all((function* () { yield 1; yield Promise.resolve(2) })())",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          2
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function* g() { const x = yield 1; return x * 2 } const it = g(); it.next(); const r = it.next.call(it, 4); let t; try { it.throw.call(it, 1) } catch (e) { t = e } return [r, it.return(7), t]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "value": 8,
+            "done": true
+          },
+          {
+            "value": 7,
+            "done": true
+          },
+          1
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function* g() { try { yield 1 } finally { throw new Error('f') } } const it = g(); it.next(); const r = []; try { [1].map(() => it.return(2)) } catch (e) { r.push(e.message) } function* h() { yield 1 } const j = h(); j.next(); try { [1].forEach(() => j.throw(new Error('t'))) } catch (e) { r.push(e.message) } return [r, j.next()]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "f",
+            "t"
+          ],
+          {
+            "done": true
+          }
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function* g() { yield 42; throw new Error('x') } async function* a() { yield* g() } const it = a(); await it.next(); try { await it.throw(new Error('c')) } catch (e) { return [e.message, await it.next()] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "c",
+          {
+            "done": true
+          }
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function* k() { try { yield 1 } finally { throw new Error('fin') } } try { new Set([5]).isSupersetOf({ size: 1, has: () => true, keys: k }) } catch (e) { return e.message }",
+      "outcome": {
+        "ok": true,
+        "value": "fin"
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Object.fromEntries({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: ['k' + n, S(++n)] }), return: () => ({}) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "k0": 1,
+            "k1": 1
+          },
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = new AggregateError({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: S(++n) }), return: () => ({}) } } }, 'm').errors; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = AggregateError({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: S(++n) }), return: () => ({}) } } }).errors; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Math.sumPrecise({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: S(++n) + 0.5 }), return: () => ({}) } } }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          3,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new URLSearchParams({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: ['k' + n, S(++n)] }), return: () => ({}) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              "k0",
+              "1"
+            ],
+            [
+              "k1",
+              "1"
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Headers([{ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: 'v' + S(++n) }), return: () => ({}) } } }])]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              "v1",
+              "v1"
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...new Headers({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: ['x' + n, String(S(++n))] }), return: () => ({}) } } })]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            [
+              "x0",
+              "1"
+            ],
+            [
+              "x1",
+              "1"
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = ({ toString: () => 'x' + S(1) }).toLocaleString(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "x1",
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const r = (k, v) => { log.push([k, typeof v]); return k === 'skip' ? undefined : v }\n     const v = { a: 1, skip: 2, b: [1, , { toJSON(k) { log.push('toJSON ' + k); return { c: undefined, d: () => 1, e: 'x' } } }], f: undefined }\n     return [JSON.stringify(v, r), JSON.stringify(v, r, 2), JSON.stringify(v, r, '--'), log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{\"a\":1,\"b\":[1,null,{\"e\":\"x\"}]}",
+          "{\n  \"a\": 1,\n  \"b\": [\n    1,\n    null,\n    {\n      \"e\": \"x\"\n    }\n  ]\n}",
+          "{\n--\"a\": 1,\n--\"b\": [\n----1,\n----null,\n----{\n------\"e\": \"x\"\n----}\n--]\n}",
+          [
+            [
+              "",
+              "object"
+            ],
+            [
+              "a",
+              "number"
+            ],
+            [
+              "skip",
+              "number"
+            ],
+            [
+              "b",
+              "object"
+            ],
+            [
+              "0",
+              "number"
+            ],
+            [
+              "1",
+              "undefined"
+            ],
+            "toJSON 2",
+            [
+              "2",
+              "object"
+            ],
+            [
+              "c",
+              "undefined"
+            ],
+            [
+              "d",
+              "function"
+            ],
+            [
+              "e",
+              "string"
+            ],
+            [
+              "f",
+              "undefined"
+            ],
+            [
+              "",
+              "object"
+            ],
+            [
+              "a",
+              "number"
+            ],
+            [
+              "skip",
+              "number"
+            ],
+            [
+              "b",
+              "object"
+            ],
+            [
+              "0",
+              "number"
+            ],
+            [
+              "1",
+              "undefined"
+            ],
+            "toJSON 2",
+            [
+              "2",
+              "object"
+            ],
+            [
+              "c",
+              "undefined"
+            ],
+            [
+              "d",
+              "function"
+            ],
+            [
+              "e",
+              "string"
+            ],
+            [
+              "f",
+              "undefined"
+            ],
+            [
+              "",
+              "object"
+            ],
+            [
+              "a",
+              "number"
+            ],
+            [
+              "skip",
+              "number"
+            ],
+            [
+              "b",
+              "object"
+            ],
+            [
+              "0",
+              "number"
+            ],
+            [
+              "1",
+              "undefined"
+            ],
+            "toJSON 2",
+            [
+              "2",
+              "object"
+            ],
+            [
+              "c",
+              "undefined"
+            ],
+            [
+              "d",
+              "function"
+            ],
+            [
+              "e",
+              "string"
+            ],
+            [
+              "f",
+              "undefined"
+            ]
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const r = (k, v) => (k === '' ? v : undefined); return [JSON.stringify({ a: 1, b: 2 }, r, 2), JSON.stringify([1, 2], r, 2), JSON.stringify({}, r, 2), JSON.stringify([], r, 2)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{}",
+          "[\n  null,\n  null\n]",
+          "{}",
+          "[]"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [JSON.stringify(5, (k, v) => undefined), JSON.stringify({ a: 1 }, (k, v) => (k ? v + 1 : v)), JSON.stringify('s', (k, v) => [k, v])]",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "RangeError: Value exceeds the maximum depth of 100. (line 1, col 102)"
+      },
+      "log": []
+    },
+    {
+      "code": "const a = [1, 2, 3]; return JSON.stringify(a, (k, v) => { if (k === '0') a.length = 1; return v })",
+      "outcome": {
+        "ok": true,
+        "value": "[1,null,null]"
+      },
+      "log": []
+    },
+    {
+      "code": "const o = { a: 1, b: 2 }; return JSON.stringify(o, (k, v) => { if (k === 'a') { delete o.b; o.c = 3 } return v })",
+      "outcome": {
+        "ok": true,
+        "value": "{\"a\":1}"
+      },
+      "log": []
+    },
+    {
+      "code": "const o = { x: 1 }; return [JSON.stringify(o, ['x', 'y'], 1), JSON.stringify({ toJSON: () => ({ y: 2, x: 1 }) }, ['y', 'x']), JSON.stringify([{ x: 1, y: 2 }], ['y'])]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{\n \"x\": 1\n}",
+          "{\"y\":2,\"x\":1}",
+          "[{\"y\":2}]"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { JSON.stringify({ a: { toJSON() { throw new RangeError('tj') } } }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "RangeError",
+          "tj"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { JSON.stringify([1, [2]], (k, v) => { if (v === 2) throw new TypeError('r'); return v }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "r"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const o = { a: 1 }; try { JSON.stringify(o, (k, v) => (k === 'a' ? o : v)) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Converting circular structure to JSON."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return JSON.stringify({ p: 1, q: [2] }, (k, v) => (k === 'p' || k === '0' ? Promise.resolve(1) : v))",
+      "outcome": {
+        "ok": true,
+        "value": "{\"p\":{},\"q\":[{}]}"
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; try { JSON.stringify({ a: 1, p: Promise.resolve(1) }, (k, v) => { log.push(k); return v }) } catch (e) { return [e.name, e.message, log] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "JSON.stringify received an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.",
+          [
+            "",
+            "a"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { return JSON.stringify([Promise.resolve(1)]) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "JSON.stringify received an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const e = new Error('m'); e.name = undefined; const f = new TypeError('n'); f.name = 5; f.x = 1; return JSON.stringify({ e, f }, (k, v) => v, 1)",
+      "outcome": {
+        "ok": true,
+        "value": "{\n \"e\": {\n  \"message\": \"m\"\n },\n \"f\": {\n  \"name\": 5,\n  \"message\": \"n\",\n  \"x\": 1\n }\n}"
+      },
+      "log": []
+    },
+    {
+      "code": "return [JSON.stringify({ a: Symbol.iterator, b: [Symbol.iterator] }, (k, v) => v), JSON.stringify({ s: Symbol.iterator }, ['s'], 1)]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{\"a\":{},\"b\":[{}]}",
+          "{\n \"s\": {}\n}"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const p = Object.create({ inh: 1 }); p.own = 2; p.gone = 3; return JSON.stringify({ p }, (k, v) => { if (k === 'own') delete p.gone; return v })",
+      "outcome": {
+        "ok": true,
+        "value": "{\"p\":{\"own\":2}}"
+      },
+      "log": []
+    },
+    {
+      "code": "const a = [1, 2, 3]; return JSON.stringify(a, (k, v) => { if (k === '0') a[2] = 'changed'; return v })",
+      "outcome": {
+        "ok": true,
+        "value": "[1,2,\"changed\"]"
+      },
+      "log": []
+    },
+    {
+      "code": "let d = 1; for (let i = 0; i < 99; i++) d = [d]; return [JSON.stringify(d, (k, v) => v).length, JSON.stringify({ d }, (k, v) => v).length]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          199,
+          205
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const big = 'x'.repeat(1 << 20); const parts = Array(600).fill(big); try { JSON.stringify(parts, (k, v) => v) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "RangeError",
+          "Invalid string length"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const s = JSON.stringify({ e: new TypeError('m'), d: new Date(0), m: new Map([[1, 2]]), s: new Set([1]), u: new URL('https://a.b/c') }, (k, v) => { log.push(k); return v }, '\\t'); return [s, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "{\n\t\"e\": {\n\t\t\"name\": \"TypeError\",\n\t\t\"message\": \"m\"\n\t},\n\t\"d\": \"1970-01-01T00:00:00.000Z\",\n\t\"m\": {},\n\t\"s\": {},\n\t\"u\": \"https://a.b/c\"\n}",
+          [
+            "",
+            "e",
+            "name",
+            "message",
+            "d",
+            "m",
+            "s",
+            "u"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const seen = []; JSON.stringify({ a: [1, { b: 2 }] }, function (k, v) { seen.push([k, Array.isArray(this) ? 'array' : typeof this]); return v }); return seen",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "",
+            "object"
+          ],
+          [
+            "a",
+            "object"
+          ],
+          [
+            "0",
+            "array"
+          ],
+          [
+            "1",
+            "array"
+          ],
+          [
+            "b",
+            "object"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return JSON.stringify({ a: { b: 1 }, c: [2] }, (k, v) => (k === 'a' ? JSON.stringify(v, (k2, v2) => v2) : v))",
+      "outcome": {
+        "ok": true,
+        "value": "{\"a\":\"{\\\"b\\\":1}\",\"c\":[2]}"
+      },
+      "log": []
+    },
+    {
+      "code": "return JSON.stringify({ a: { toJSON: () => JSON.stringify({ x: { toJSON: () => 1 } }) } }, null, 1)",
+      "outcome": {
+        "ok": true,
+        "value": "{\n \"a\": \"{\\\"x\\\":1}\"\n}"
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const it = { [Symbol.iterator]() { let n = 0; return { next() { log.push('next'); return n < 2 ? { done: false, value: n++ === 0 ? ['a', 1] : 5 } : { done: true } }, return() { log.push('return'); return {} } } } }\n     try { Object.fromEntries(it) } catch (e) { log.push(e.message) } return log",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "next",
+          "next",
+          "return",
+          "Object.fromEntries expects [key, value] entry objects."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const it = { [Symbol.iterator]() { let n = 0; return { next() { log.push('next'); return n < 2 ? { done: false, value: n++ ? 'x' : 1 } : { done: true } }, return() { log.push('return'); return {} } } } }\n     try { Math.sumPrecise(it) } catch (e) { log.push(e.message) } return [log, Math.sumPrecise([0.1, 0.2, -0.3]), Math.sumPrecise([])]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "next",
+            "next",
+            "return",
+            "Math.sumPrecise expects an iterable of numbers."
+          ],
+          2.7755575615628914e-17,
+          0
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const pair = { [Symbol.iterator]() { let n = 0; return { next() { log.push('part'); return n < 2 ? { done: false, value: n++ ? { toString() { throw new Error('part') } } : 'k' } : { done: true } }, return() { log.push('close pair'); return {} } } } }\n     const outer = { [Symbol.iterator]() { let n = 0; return { next() { log.push('pair'); return n++ < 2 ? { done: false, value: pair } : { done: true } }, return() { log.push('close'); return {} } } } }\n     try { new URLSearchParams(outer) } catch (e) { log.push(e.message) } return log",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "pair",
+          "part",
+          "part",
+          "close pair",
+          "close",
+          "part"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const g = function* () { yield ['a', '1']; yield new Set(['b', 2]) }; return [String(new URLSearchParams(g())), [...new Headers(g())], [...new Headers(new Map([['x', 'y']]))]]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "a=1&b=2",
+          [
+            [
+              "a",
+              "1"
+            ],
+            [
+              "b",
+              "2"
+            ]
+          ],
+          [
+            [
+              "x",
+              "y"
+            ]
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new Headers([['a', 'b', 'c']]) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "new Headers(...) expects iterable [name, value] pairs."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new URLSearchParams([1]) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "new URLSearchParams(...) expects iterable [name, value] pairs."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const e = new AggregateError(new Set([1, new Error('x')]), 'all', { cause: 2 }); return [e.errors.length, e.message, e.cause, AggregateError([]).errors]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          "all",
+          2,
+          []
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { new AggregateError(5) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { Object.fromEntries(5) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { Math.sumPrecise(5) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { AggregateError({}) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "for...of requires an iterable value, received a data object."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [({}).toLocaleString(), Object.prototype.toLocaleString.call(5), Object.prototype.toLocaleString.call([1, [2]])]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "[object Object]",
+          "5",
+          "1,2"
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "try { return Object.prototype.toLocaleString.call({ toString: 7 }) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "TypeError",
+          "Object.prototype.toLocaleString.call is not a function."
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const t = Promise.prototype.then; const log = []; Promise.prototype.then = function (f, r) { log.push('then'); return t.call(this, f, r) }\n     const n = await search({ query: 'echo' }).then((r) => r.items.length); Promise.prototype.then = t; return [n > 0, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          []
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const r = search({ query: 'echo' }); return [await r.catch(() => 0) === r, await r.finally(5) !== r, (await r.finally(() => 1)).items.length > 0]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          false,
+          true,
+          true
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const doc = { a: [1, { b: 2 }], c: 'x', d: { toJSON: () => see(3) } }\n   const p = r.text(); for (let j = 0; j < 300; j++) { JSON.stringify(doc, (k, v) => see(v), 1); JSON.stringify(doc, ['a', 'b', 'c']); see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 48
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const it = () => ({ [Symbol.iterator]() { let n = 0; return { next: () => (n < 3 ? { done: false, value: ['k' + n, see(n++)] } : { done: true }) } } })\n   const p = r.text(); for (let j = 0; j < 300; j++) { Object.fromEntries(it()); new URLSearchParams(it()); new Headers(it()); Math.sumPrecise(new Set([1, 2])); new AggregateError(it()); see(j) }\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 71
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) Object.fromEntries([['a', j]]); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2069
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) new AggregateError([j]); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) Math.sumPrecise([j, 1]); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3900
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) ({}).toLocaleString(); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3031
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) { new URLSearchParams([['a', 'b']]); new Headers([['a', 'b']]) }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 496
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) JSON.stringify({ a: [j, { b: 2 }] }, (k, v) => v, 1); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1676
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const r = []; for (const x of ({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })) r.push(x); return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const r = []; for (const x of ({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })) { r.push(x); break } return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2
+          ],
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 9",
+            "answer 9"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const [a] = ({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } }); return a })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 9",
+            "answer 9"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const [a, ...rest] = ({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } }); return [a, rest] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            [
+              3
+            ]
+          ],
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [...({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } }), 7]; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3,
+            7
+          ],
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Math.max(...({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          3,
+          [
+            "call 0",
+            "job",
+            "answer 0",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const it = { i: 0, next() { return { done: this.i > 1, value: S(++this.i) } }, [Symbol.iterator]() { return this } }; const r = []; for (const x of it) r.push(x); return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; function* g() { try { yield 1; yield 2 } finally { log.push('finally'); throw new Error('close') } }\n     const r = []; try { for (const x of g()) { r.push(x); break } } catch (e) { r.push(e.message) }\n     try { const [a] = g(); r.push(a) } catch (e) { r.push(e.message) }\n     try { new Map([[1, 2]].values().map((x) => x)) } catch (e) { r.push(e.message) }\n     try { Array.from(g(), (x) => { if (x === 1) throw new Error('mapper') }) } catch (e) { r.push(e.message) }\n     return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            "close",
+            "close",
+            "mapper"
+          ],
+          [
+            "finally",
+            "finally",
+            "finally"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const it = { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return: () => 5 } } }\n     const r = []; try { for (const x of it) break } catch (e) { r.push(e.message) }\n     try { const [a] = it } catch (e) { r.push(e.message) }\n     try { for (const x of it) throw new Error('body') } catch (e) { r.push(e.message) }\n     try { for (const x of { [Symbol.iterator]: () => ({ next: () => 5 }) }) {} } catch (e) { r.push(e.message) }\n     try { [...{ [Symbol.iterator]: () => 5 }] } catch (e) { r.push(e.message) }\n     try { for (const x of { [Symbol.iterator]: () => ({}) }) {} } catch (e) { r.push(e.message) }\n     return r",
+      "outcome": {
+        "ok": true,
+        "value": [
+          "Iterator return() result must be an object.",
+          "Iterator return() result must be an object.",
+          "body",
+          "Iterator next() result must be an object.",
+          "Iterator method result must be an object.",
+          "Iterator next must be a function."
+        ]
+      },
+      "log": []
     }
   ],
   "suspensions": [
@@ -208161,6 +210598,276 @@
           }
         ]
       ]
+    },
+    {
+      "code": "return [...new Uint8Array([1, 2]).map((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          2,
+          3
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [...Uint8Array.from([1, 2], (x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          2,
+          3
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return new Uint8Array([1, 2]).reduce((a, x) => a + search({ query: tools.wait({}).then(() => 'echo') }).items.length + x, 0)",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": 5
+      },
+      "log": []
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const n = [1, 2].values().map((x) => { for (let i = 0; i < 200000000; i++) {} return x }).toArray(); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const n = [1, 2, 3].values().filter((x) => { if (x === 2) { for (let i = 0; i < 200000000; i++) {} } return x !== 2 }).toArray(); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let k = 0; const src = { next() { if (k === 1) { for (let i = 0; i < 200000000; i++) {} } return { done: k > 2, value: k++ } } }\n     const n = Iterator.prototype.map.call(src, (x) => x * 2).toArray(); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const inner = () => { let d = false; return { next() { if (!d) { for (let i = 0; i < 200000000; i++) {} } const r = { done: d, value: 7 }; d = true; return r } } }\n     const n = [1, 2].values().flatMap(inner).toArray(); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const log = []; const src = { next: () => ({ done: false, value: 1 }), return() { for (let i = 0; i < 200000000; i++) {} log.push('closed'); return {} } }\n     const h = Iterator.prototype.map.call(src, (x) => x); h.next(); const done = h.return(); const r = await p; return [r.status, done, log]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const it = { [Symbol.iterator]() { for (let i = 0; i < 200000000; i++) {} return [1, 2].values() } }\n     const n = Iterator.from(it).toArray(); const r = await p; return [r.status, n]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const m = new Map(); const v = m.getOrInsertComputed('k', () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1); return [v, m.get('k')]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          2,
+          2
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return [...new Set([1, 2]).intersection({ size: 3, has: (x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x > 2, keys: () => [].values() })]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          2
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await Promise.all({ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + n++ }) } } })",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          1,
+          2
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const s = JSON.stringify({ a: [1, { toJSON() { for (let i = 0; i < 200000000; i++) {} return 2 } }], b: 'x' }, null, 1); const r = await p; return [r.status, s]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const s = JSON.stringify({ a: [1, 2], b: { c: 3 } }, (k, v) => { if (k === 'c') { for (let i = 0; i < 200000000; i++) {} } return v }); const r = await p; return [r.status, s]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const o = Object.fromEntries({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: (n++ ? (() => { for (let i = 0; i < 200000000; i++) {} return ['b', n] })() : ['a', n]) }), return: () => ({}) } } }); const r = await p; return [r.status, o]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const h = new Headers([{ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: (n++ ? (() => { for (let i = 0; i < 200000000; i++) {} return 'v' })() : 'k') }), return: () => ({}) } } }]); const r = await p; return [r.status, [...h]]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const p = fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); const s = ({ toString() { for (let i = 0; i < 200000000; i++) {} return 's' } }).toLocaleString(); const r = await p; return [r.status, s]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": false,
+        "message": "Invalid snapshot: the accessor bodyUsed has no original."
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ]
+      ]
+    },
+    {
+      "code": "const r = []; for (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: search({ query: tools.wait({}).then(() => 'echo') }).items.length + ++n }) } } }) r.push(x); return r",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          2,
+          3
+        ]
+      },
+      "log": []
     }
   ]
 }
