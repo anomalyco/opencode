@@ -2655,6 +2655,25 @@ fn an_error_in_the_lazy_prelude_names_it_and_its_line() {
     assert!(named.is_some_and(|line| line.parse::<u32>().is_ok()), "{error}");
 }
 
+// Expected (luau-lean): `host` makes a binding at its first lookup and keeps it; a name it has none for is `nil`, and so
+// are `call`, `timer`, `owner` and `setOwner`, which the prelude takes off it, after their first lookup too.
+#[test]
+fn host_makes_a_binding_at_its_first_lookup_and_keeps_it() {
+    let host = host();
+    let body = r#"setup:command({ name = "look" }, function(host)
+        assert(rawget(host, "toast") == nil, "toast was made before its lookup")
+        local toast = host.toast
+        assert(type(toast) == "function" and rawget(host, "toast") == toast, "toast was not kept")
+        assert(host.nothing == nil and host.call == nil and host.timer == nil, "a name with no binding has one")
+        assert(host.owner == nil and host.setOwner == nil, "owner or setOwner came back")
+        error("looked")
+    end)"#;
+    let registry = tasking(&host, body);
+    run(&host, "look", None);
+    let error = failure(&registry, "test.luau").expect("the command ran to its end");
+    assert!(error.contains("looked"), "{error}");
+}
+
 // Expected (await-luau): a waiting call outside a task (a render, setup) fails the call, and says where tasks are.
 #[test]
 fn a_wait_outside_a_task_is_refused() {

@@ -461,32 +461,146 @@ struct SurfaceSpec {
 fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Function)> {
     let read = lua.create_table()?;
     let host = lua.create_table()?;
-    // A read, on both objects.
-    macro_rules! reads {
-        ($($name:literal => |$r:ident, $lua:ident $(, $arg:ident: $ty:ty)*| $body:expr;)*) => {$({
-            let current = current.clone();
-            let f = lua.create_function(move |$lua, (_this, $($arg,)*): (Value, $($ty,)*)| {
-                let now = current.get();
-                let $r = now.read()?;
-                let value = $body;
-                out($lua, &value)
-            })?;
-            read.raw_set($name, f.clone())?;
-            host.raw_set($name, f)?;
-        })*};
+    lazy(lua, &read, current, false)?;
+    lazy(lua, &host, current, true)?;
+    // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it. The prelude puts its
+    // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` and `setup:onCancelled` to itself.
+    for (name, foreground) in [("fetch", false), ("foreground", true)] {
+        let current = current.clone();
+        let f = lua.create_function(move |lua, (_this, request): (Value, Value)| {
+            let now = current.get();
+            let host = now.host()?;
+            let asked = match foreground {
+                false => host.try_fetch(input(lua, request)?),
+                true => host.try_foreground(input(lua, request)?),
+            };
+            Ok(match asked {
+                Ok(id) => (Some(id.0), None),
+                Err(error) => (None, Some(error)),
+            })
+        })?;
+        host.raw_set(name, f)?;
     }
-    // An effect, on `host` only.
-    macro_rules! verbs {
-        ($($name:literal => |$h:ident, $lua:ident $(, $arg:ident: $ty:ty)*| $body:expr;)*) => {$({
-            let current = current.clone();
-            let f = lua.create_function(move |$lua, (_this, $($arg,)*): (Value, $($ty,)*)| {
+    // `plugin.client`'s request: operation `name` with `input`, built from the operations table and sent as a fetch. It
+    // answers `id, nil, reply` (how the reply reads: `data` is unwrapped by the prelude), or `nil, why`.
+    {
+        let current = current.clone();
+        let f = lua.create_function(move |lua, (_this, name, request): (Value, String, Value)| {
+            let built = super::client::request(&name, &json(lua, &request)?);
+            let asked = built.and_then(|(fetch, reply)| {
                 let now = current.get();
-                let $h = now.host()?;
-                let value = $body;
-                out($lua, &value)
-            })?;
-            host.raw_set($name, f)?;
-        })*};
+                let host = now.host().map_err(|error| error.to_string())?;
+                host.try_fetch(fetch).map(|id| (id, reply))
+            });
+            Ok(match asked {
+                Ok((id, reply)) => (Some(id.0), None, Some(reply.name())),
+                Err(error) => (None, Some(error), None),
+            })
+        })?;
+        host.raw_set("call", f)?;
+    }
+    // A timer of `ms` milliseconds, which the prelude's `plugin.sleep` waits on, as a fetch.
+    let timer = {
+        let current = current.clone();
+        lua.create_function(move |_, (_this, ms): (Value, f64)| {
+            // The time asked for, a part of a millisecond kept; one too long to wait (`math.huge`) never fires.
+            let delay = match ms {
+                ms if ms.is_nan() || ms <= 0.0 => std::time::Duration::ZERO,
+                ms => std::time::Duration::try_from_secs_f64(ms / 1000.0).unwrap_or(std::time::Duration::MAX),
+            };
+            Ok(match current.get().host()?.try_timer(delay) {
+                Ok(id) => (Some(id.0), None),
+                Err(error) => (None, Some(error)),
+            })
+        })?
+    };
+    host.raw_set("timer", timer)?;
+    // A task's owner, which the prelude keeps for the task and gives back as it goes on (`abi::Host::set_owner`). The
+    // prelude takes both off `host`.
+    let owner = {
+        let current = current.clone();
+        lua.create_function(move |lua, _this: Value| out(lua, &current.get().host()?.owner()))?
+    };
+    host.raw_set("owner", owner)?;
+    let set_owner = {
+        let current = current.clone();
+        lua.create_function(move |lua, (_this, owner): (Value, Option<u64>)| {
+            out(lua, &current.get().host()?.set_owner(owner))
+        })?
+    };
+    host.raw_set("setOwner", set_owner)?;
+    let memo = {
+        let current = current.clone();
+        lua.create_function(move |lua, (this, key, value, build): (Value, String, Value, Function)| {
+            let value = json(lua, &value)?;
+            let view = current.get().view().ok_or_else(|| mlua::Error::runtime("view:memo runs only in a view"))?;
+            let mut failed = None;
+            let node = view.memo(key, value, |inner| {
+                let _enter = Enter::new(&current, Current::viewing(inner));
+                match build.call::<Value>(this).and_then(|node| input(lua, node)) {
+                    Ok(node) => node,
+                    Err(error) => {
+                        failed = Some(error);
+                        v2::Node::column(Vec::new())
+                    }
+                }
+            });
+            match failed {
+                Some(error) => Err(error),
+                None => out(lua, &node),
+            }
+        })?
+    };
+    Ok((read, host, memo))
+}
+
+/// Gives `object` (`read`, or `host` when `host`) an `__index` that makes a binding at its first lookup and keeps it in
+/// the object: a VM makes only the bindings its plugin uses, each an mlua function and its callback userdata. A key the
+/// plugin cleared or set is its own, as before.
+fn lazy(lua: &Lua, object: &Table, current: &Rc<Slot>, host: bool) -> mlua::Result<()> {
+    let current = current.clone();
+    let index = lua.create_function(move |lua, (object, name): (Table, Value)| {
+        let Value::String(name) = name else { return Ok(None) };
+        let Some(made) = binding(lua, &current, &name.to_str()?, host)? else { return Ok(None) };
+        // A plugin may freeze the object: each lookup then makes the binding anew.
+        if !object.is_readonly() {
+            object.raw_set(name, &made)?;
+        }
+        Ok(Some(made))
+    })?;
+    let meta = lua.create_table()?;
+    meta.raw_set("__index", index)?;
+    object.set_metatable(Some(meta))
+}
+
+/// The binding `name` of `read`, or of `host` when `host`, made anew; `None` when the object has none. A read is on
+/// both objects, an effect on `host` only.
+fn binding(lua: &Lua, current: &Rc<Slot>, name: &str, host: bool) -> mlua::Result<Option<Function>> {
+    macro_rules! reads {
+        ($($name:literal => |$r:ident, $lua:ident $(, $arg:ident: $ty:ty)*| $body:expr;)*) => {$(
+            if name == $name {
+                let current = current.clone();
+                return lua.create_function(move |$lua, (_this, $($arg,)*): (Value, $($ty,)*)| {
+                    let now = current.get();
+                    let $r = now.read()?;
+                    let value = $body;
+                    out($lua, &value)
+                }).map(Some);
+            }
+        )*};
+    }
+    macro_rules! verbs {
+        ($($name:literal => |$h:ident, $lua:ident $(, $arg:ident: $ty:ty)*| $body:expr;)*) => {$(
+            if host && name == $name {
+                let current = current.clone();
+                return lua.create_function(move |$lua, (_this, $($arg,)*): (Value, $($ty,)*)| {
+                    let now = current.get();
+                    let $h = now.host()?;
+                    let value = $body;
+                    out($lua, &value)
+                }).map(Some);
+            }
+        )*};
     }
     reads! {
         "themeMode" => |r, _lua| match r.theme_mode() { abi::ThemeMode::Dark => "dark", abi::ThemeMode::Light => "light" };
@@ -561,83 +675,6 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "blur" => |h, _lua| h.blur();
         "setMode" => |h, _lua, mode: Option<String>| h.set_mode(mode.as_deref());
         "releaseKeys" => |h, _lua| h.release_keys();
-        // A task's owner, which the prelude keeps for the task and gives back as it goes on (`abi::Host::set_owner`).
-        "owner" => |h, _lua| h.owner();
-        "setOwner" => |h, _lua, owner: Option<u64>| h.set_owner(owner);
     }
-    // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it. The prelude puts its
-    // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` and `setup:onCancelled` to itself.
-    for (name, foreground) in [("fetch", false), ("foreground", true)] {
-        let current = current.clone();
-        let f = lua.create_function(move |lua, (_this, request): (Value, Value)| {
-            let now = current.get();
-            let host = now.host()?;
-            let asked = match foreground {
-                false => host.try_fetch(input(lua, request)?),
-                true => host.try_foreground(input(lua, request)?),
-            };
-            Ok(match asked {
-                Ok(id) => (Some(id.0), None),
-                Err(error) => (None, Some(error)),
-            })
-        })?;
-        host.raw_set(name, f)?;
-    }
-    // `plugin.client`'s request: operation `name` with `input`, built from the operations table and sent as a fetch. It
-    // answers `id, nil, reply` (how the reply reads: `data` is unwrapped by the prelude), or `nil, why`.
-    {
-        let current = current.clone();
-        let f = lua.create_function(move |lua, (_this, name, request): (Value, String, Value)| {
-            let built = super::client::request(&name, &json(lua, &request)?);
-            let asked = built.and_then(|(fetch, reply)| {
-                let now = current.get();
-                let host = now.host().map_err(|error| error.to_string())?;
-                host.try_fetch(fetch).map(|id| (id, reply))
-            });
-            Ok(match asked {
-                Ok((id, reply)) => (Some(id.0), None, Some(reply.name())),
-                Err(error) => (None, Some(error), None),
-            })
-        })?;
-        host.raw_set("call", f)?;
-    }
-    // A timer of `ms` milliseconds, which the prelude's `plugin.sleep` waits on, as a fetch.
-    let timer = {
-        let current = current.clone();
-        lua.create_function(move |_, (_this, ms): (Value, f64)| {
-            // The time asked for, a part of a millisecond kept; one too long to wait (`math.huge`) never fires.
-            let delay = match ms {
-                ms if ms.is_nan() || ms <= 0.0 => std::time::Duration::ZERO,
-                ms => std::time::Duration::try_from_secs_f64(ms / 1000.0).unwrap_or(std::time::Duration::MAX),
-            };
-            Ok(match current.get().host()?.try_timer(delay) {
-                Ok(id) => (Some(id.0), None),
-                Err(error) => (None, Some(error)),
-            })
-        })?
-    };
-    host.raw_set("timer", timer)?;
-    let memo = {
-        let current = current.clone();
-        lua.create_function(move |lua, (this, key, value, build): (Value, String, Value, Function)| {
-            let value = json(lua, &value)?;
-            let view = current.get().view().ok_or_else(|| mlua::Error::runtime("view:memo runs only in a view"))?;
-            let mut failed = None;
-            let node = view.memo(key, value, |inner| {
-                let _enter = Enter::new(&current, Current::viewing(inner));
-                match build.call::<Value>(this).and_then(|node| input(lua, node)) {
-                    Ok(node) => node,
-                    Err(error) => {
-                        failed = Some(error);
-                        v2::Node::column(Vec::new())
-                    }
-                }
-            });
-            match failed {
-                Some(error) => Err(error),
-                None => out(lua, &node),
-            }
-        })?
-    };
-    Ok((read, host, memo))
+    Ok(None)
 }
