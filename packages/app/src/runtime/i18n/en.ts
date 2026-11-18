@@ -1109,6 +1109,9 @@ export const dict = {
   "settings.timeline.row.foldUserMessages.description": "Show the first few lines. Expand to read your full message.",
   "settings.timeline.row.turnDiffs.title": "Changed files",
   "settings.timeline.row.turnDiffs.description": "List the files each turn changed when it finishes",
+  "settings.timeline.row.wrapCodeBlocks.title": "Wrap code blocks",
+  "settings.timeline.row.wrapCodeBlocks.description":
+    "Wrap long lines in code blocks instead of scrolling. Each block can still switch on hover",
   "settings.timeline.advanced": "Advanced",
   "settings.timeline.advanced.description": "Set placement and details for each activity category.",
   "settings.timeline.group": "Group",

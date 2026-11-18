@@ -372,6 +372,17 @@ export const SettingsGeneral: Component = () => {
                 />
               </div>
             </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
+              description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
+            >
+              <div data-action="settings-wrap-code-blocks">
+                <Switch
+                  checked={settings.general.wrapCodeBlocks()}
+                  onChange={(checked) => settings.general.setWrapCodeBlocks(checked)}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </section>
 
