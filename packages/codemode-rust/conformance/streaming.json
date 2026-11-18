@@ -209342,6 +209342,62 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await tools.search({ query: { toJSON: () => 'echo' + S(1) } }).then((r) => r.items.length); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          0,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = search({ query: { toJSON: () => 'echo' + S(1) } }).items.length; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          0,
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await tools.t.echo({ a: { toJSON: () => S(1) }, p: Promise.resolve(2) }); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "a": 1,
+            "p": 2
+          },
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "a": 1,
+            "p": 2
+          }
+        ]
+      ]
+    },
+    {
       "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Object.fromEntries({ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: ['k' + n, S(++n)] }), return: () => ({}) } } }); return [r, log]",
       "outcome": {
         "ok": true,
@@ -209504,6 +209560,108 @@
             "answer 1"
           ]
         ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1) }).items.length; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "job"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = search({ p: Promise.resolve(1), query: { toJSON: () => 'echo' } }).items.length; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1,
+          [
+            "job"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [1, 2].map((x) => search({ query: { toJSON() { log.push('tj ' + x); return 'echo' } }, p: Promise.resolve(x) }).items.length + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "tj 1",
+            "job",
+            "tj 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { try { search({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }) } catch (e) { return [e.name, e.message] } })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "Error",
+            "no"
+          ],
+          [
+            "job"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { try { search({ p: Promise.resolve(1), query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] } })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            "Error",
+            "tj"
+          ],
+          [
+            "job"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await Promise.resolve(1).then((x) => search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(x) }).items.length + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          2,
+          [
+            "job"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; return { t: { toJSON: () => (log.push('call'), search({ query: Promise.resolve('echo') }).items.length) }, log }",
+      "outcome": {
+        "ok": true,
+        "value": {
+          "t": 1,
+          "log": [
+            "call"
+          ]
+        }
       },
       "log": []
     },
@@ -210258,6 +210416,264 @@
           2
         ]
       ]
+    },
+    {
+      "code": "const log = []; const p = tools.t.echo({ p: Promise.resolve(1), t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } } })\n     Promise.resolve().then(() => log.push('job')); log.push('after'); const r = await p; return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "p": 1,
+            "t": 1
+          },
+          [
+            "after",
+            "tj",
+            "job",
+            "then"
+          ]
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "p": 1,
+            "t": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "const log = []; Promise.resolve().then(() => log.push('job')); return { t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } }, p: Promise.resolve(1), log }",
+      "outcome": {
+        "ok": true,
+        "value": {
+          "t": 1,
+          "p": 1,
+          "log": [
+            "tj",
+            "job",
+            "then"
+          ]
+        }
+      },
+      "log": []
+    },
+    {
+      "code": "Date.prototype.toJSON = () => 'mine'; return [await tools.t.echo({ d: new Date(0) }), await tools.t.echo({ d: new Date(0), p: Promise.resolve(1) })]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "d": "1970-01-01T00:00:00.000Z"
+          },
+          {
+            "d": "mine",
+            "p": 1
+          }
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "d": "1970-01-01T00:00:00.000Z"
+          }
+        ],
+        [
+          "echo",
+          {
+            "d": "mine",
+            "p": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "URL.prototype.toJSON = () => 'mine'; return [await tools.t.echo({ u: new URL('https://a.b/c') }), await tools.t.echo({ u: new URL('https://a.b/c'), p: Promise.resolve(1) })]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "u": "https://a.b/c"
+          },
+          {
+            "u": "mine",
+            "p": 1
+          }
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "u": "https://a.b/c"
+          }
+        ],
+        [
+          "echo",
+          {
+            "u": "mine",
+            "p": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "return search({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }).items.length",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "Error: no"
+      },
+      "log": []
+    },
+    {
+      "code": "return search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(1), q: { toJSON() { null.x } } }).items.length",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "TypeError: Cannot read properties of null (reading 'x'). (line 1, col 89)"
+      },
+      "log": []
+    },
+    {
+      "code": "return [{ toJSON: () => 'echo' }].map((q) => search.call(null, { query: q }).items.length)",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "return await tools.t.echo({ a: { toJSON: Object.prototype.toString }, p: Promise.resolve(1) })",
+      "outcome": {
+        "ok": true,
+        "value": {
+          "a": "[object Object]",
+          "p": 1
+        }
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "a": "[object Object]",
+            "p": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "return await tools.t.echo({ a: { toJSON: () => tools.t.echo(1) } })",
+      "outcome": {
+        "ok": true,
+        "value": {
+          "a": {}
+        }
+      },
+      "log": [
+        [
+          "echo",
+          1
+        ],
+        [
+          "echo",
+          {
+            "a": {}
+          }
+        ]
+      ]
+    },
+    {
+      "code": "const t = { toJSON(k) { return { k, n: { toJSON: (k2) => k2 + '!' } } } }; return [await tools.t.echo({ t, u: [t] }), await tools.t.echo({ t, p: Promise.resolve(1) }), search({ query: 'echo', t }).items.length]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "t": {
+              "k": "t",
+              "n": "n!"
+            },
+            "u": [
+              {
+                "k": "0",
+                "n": "n!"
+              }
+            ]
+          },
+          {
+            "t": {
+              "k": "t",
+              "n": "n!"
+            },
+            "p": 1
+          },
+          1
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "t": {
+              "k": "t",
+              "n": "n!"
+            },
+            "u": [
+              {
+                "k": "0",
+                "n": "n!"
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": {
+              "k": "t",
+              "n": "n!"
+            },
+            "p": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "return [{ t: { toJSON() { return Promise.resolve(5) } } }, await tools.t.echo({ t: { toJSON() { return Promise.resolve(5) } } })]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "t": {}
+          },
+          {
+            "t": {}
+          }
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "t": {}
+          }
+        ]
+      ]
+    },
+    {
+      "code": "try { return [{ toJSON: () => 'echo' }].map((q) => search.call(null, { query: q, p: Promise.resolve(1) }).items.length) } catch (e) { return [e.name, e.message] }",
+      "outcome": {
+        "ok": true,
+        "value": [
+          1
+        ]
+      },
+      "log": []
     },
     {
       "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const r = []; for (const x of ({ [Symbol.iterator]() { S(0); let n = 0; return { next: () => ({ done: n >= 2, value: S(++n) + n }), return: () => (S(9), {}) } } })) r.push(x); return r })(); return [r, log]",
@@ -211939,6 +212355,129 @@
           0
         ]
       ]
+    },
+    {
+      "code": "const w = tools.wait({}); return await tools.t.echo({ a: { toJSON() { for (let i = 0; i < 200000000; i++) {} return 2 } }, w })",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": {
+          "a": 2,
+          "w": 1
+        }
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "a": 2,
+            "w": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "const w = tools.wait({}); return { a: { toJSON() { for (let i = 0; i < 200000000; i++) {} return 2 } }, w }",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": {
+          "a": 2,
+          "w": 1
+        }
+      },
+      "log": []
+    },
+    {
+      "code": "const w = tools.wait({}); const n = search({ query: { toJSON() { for (let i = 0; i < 200000000; i++) {} return 'echo' } } }).items.length; return [n, await w]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          1,
+          1
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "let w; const r = await tools.t.echo({ a: { toJSON() { w = tools.wait({}); return 1 } } }); return [r, await w]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          {
+            "a": 1
+          },
+          1
+        ]
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "a": 1
+          }
+        ]
+      ]
+    },
+    {
+      "code": "return await tools.t.echo({ w: tools.wait({}), a: { toJSON() { for (let i = 0; i < 2000000; i++) {} return 2 } } })",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": {
+          "w": 1,
+          "a": 2
+        }
+      },
+      "log": [
+        [
+          "echo",
+          {
+            "w": 1,
+            "a": 2
+          }
+        ]
+      ]
+    },
+    {
+      "code": "function f() { return search({ query: { toJSON: () => 'echo' }, w: tools.wait({}) }).items.length } return [f(), 1]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          1,
+          1
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "function f() { return search({ w: tools.wait({}), query: { toJSON: () => 'echo' } }).items.length } return [f(), 1]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          1,
+          1
+        ]
+      },
+      "log": []
     },
     {
       "code": "const o = { valueOf: () => search({ query: tools.wait({}).then(() => 'echo') }).items.length + 1 }; return [o + 1, 'a'.padStart(o)]",

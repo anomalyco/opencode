@@ -1805,8 +1805,8 @@ impl<'rt> Vm<'rt> {
     }
 
     /// The coroutine a `search(...)` called now from bytecode would park its frames with while its arguments' walk
-    /// awaits, as the reference parks every frame above its nearest async one, or a promise job's frames when there is
-    /// none: `None` when a native call or a generator stands in between, which cannot wait.
+    /// awaits, as the reference parks every frame above its nearest async one, or the frames of a promise job or of
+    /// the program result's crossing when there is none: `None` when a native call or a generator stands in between, which cannot wait.
     pub(crate) fn search_parkable(&mut self) -> Option<u32> {
         for (i, f) in self.frames.iter().enumerate().rev() {
             match f.kind {
@@ -1822,7 +1822,8 @@ impl<'rt> Vm<'rt> {
                     return Some(self.coroutines.len() as u32 - 1);
                 }
                 FrameKind::Generator(..) => return None,
-                FrameKind::Native(crate::native::NativeOp::Settle, _) if f.is_base && i == 0 => {
+                // A promise job's, or the program result's crossing, run as the base of a resumable run.
+                FrameKind::Native(..) if f.is_base && i == 0 => {
                     self.coroutines.push(Coroutine {
                         saved: None,
                         promise: None,

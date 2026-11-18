@@ -12,6 +12,10 @@ const busy = "for (let i = 0; i < 200000000; i++) {}"
 
 export default ({ after, during, text }: Helpers) => ({
   searches: [
+    // A search inside a toJSON while values cross: tool arguments, search input.
+    "await tools.search({ query: { toJSON: () => 'echo' + S(1) } }).then((r) => r.items.length)",
+    "search({ query: { toJSON: () => 'echo' + S(1) } }).items.length",
+    "await tools.t.echo({ a: { toJSON: () => S(1) }, p: Promise.resolve(2) })",
     `Object.fromEntries(${iterable("['k' + n, S(++n)]")})`,
     `new AggregateError(${iterable("S(++n)")}, 'm').errors`,
     `AggregateError(${iterable("S(++n)")}).errors`,
@@ -29,6 +33,8 @@ export default ({ after, during, text }: Helpers) => ({
     "await Promise.resolve(1).then((x) => search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(x) }).items.length + x)",
   ] as Array<string>,
   programs: [
+    // A search inside a toJSON of the program's result.
+    `const log = []; return { t: { toJSON: () => (log.push('call'), search({ query: Promise.resolve('echo') }).items.length) }, log }`,
     // The internal walk: order of toJSON and replacer calls, keys and holders, what is left out, and errors.
     `const log = []; const r = (k, v) => { log.push([k, typeof v]); return k === 'skip' ? undefined : v }
      const v = { a: 1, skip: 2, b: [1, , { toJSON(k) { log.push('toJSON ' + k); return { c: undefined, d: () => 1, e: 'x' } } }], f: undefined }
