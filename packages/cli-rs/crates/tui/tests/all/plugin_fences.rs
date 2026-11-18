@@ -146,6 +146,15 @@ fn drawn() -> usize {
     mounted().iter().filter(|shown| shown.shows).count()
 }
 
+/// Waits, drawing frames, until the tree a `Tamper::Hold` holds has come: it may come after the frames a row waits for,
+/// and a replay before it delivers nothing, which leaves the tree held for good (pipe-flakes).
+fn hold_came(fences: &Fences) {
+    fences.pipe.harness.wait("the tree is held", || {
+        fences.now();
+        fences.pipe.scripts().kept()
+    });
+}
+
 // Expected: a fence a JS renderer claims shows the host's own code view in the frame it first shows, and the plugin's
 // box (a label and that code view) once the JS host answered; as it streams, the code follows in the frame and the box
 // stays; the host's row never comes back.
@@ -161,6 +170,7 @@ fn a_js_fence_claim_draws_its_box_after_the_frame() {
         fences.now();
         false
     });
+    hold_came(&fences);
     let first = fences.now();
     assert!(first.contains("let a = 1;") && !first.contains("| probe"), "the first frame waited:\n{first}");
     assert_eq!(drawn(), 0, "{:?}", mounted());
@@ -289,6 +299,7 @@ fn a_tree_for_a_gone_part_is_dropped() {
         fences.now();
         false
     });
+    hold_came(&fences);
     assert_eq!((mounted().len(), drawn()), (1, 0));
     fences.pipe.harness.tui.navigate(Route::Home);
     for _ in 0..5 {
@@ -343,6 +354,7 @@ fn a_tree_of_an_ended_mount_is_dropped_after_a_rebuild_or_a_disable() {
     fences.pipe.scripts().tamper(Tamper::Hold);
     fences.answer("```probe\nlet a = 1;\n```\n\nAfter.\n");
     held();
+    hold_came(&fences);
     let first: Vec<_> = mounted().into_iter().map(|shown| shown.id).collect();
     tui.theme.borrow_mut().set("tokyonight");
     tui.theme_changed();
@@ -359,6 +371,7 @@ fn a_tree_of_an_ended_mount_is_dropped_after_a_rebuild_or_a_disable() {
     fences.pipe.scripts().tamper(Tamper::Hold);
     fences.answer("```probe\nlet b = 2;\n```\n\nAfter.\n");
     held();
+    hold_came(&fences);
     let host = opencode_tui::plugins::host::host(tui);
     assert_eq!(tui.plugins.toggle(&host, ID, false), Some(Ok(())));
     // As the manager does: the route mounts again without the plugin's renderers.

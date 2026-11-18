@@ -243,6 +243,12 @@ fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
         app.advance(Duration::from_millis(1));
         pipe.scripts().idle()
     });
+    // Its revision may come after the answer: a replay before it delivers nothing, and the revision is then held for
+    // good (pipe-flakes).
+    pipe.harness.wait("the revision is held", || {
+        app.advance(Duration::from_millis(1));
+        pipe.scripts().kept()
+    });
     for _ in 0..20 {
         app.advance(Duration::from_millis(1));
         app.render();
