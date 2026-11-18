@@ -437,6 +437,60 @@ fn a_pending_focus_goes_when_the_user_takes_the_focus_back() {
     }
 }
 
+// Expected (cf-3): a reload of the registrations that ends the home footer slot's mount and begins it again gives the
+// focus back to the field the plugin focused only if the field still held it as the mount ended, as TS's renderable
+// keeps or lost it. With the composer focused by the user meanwhile, the composer keeps it.
+#[test]
+fn a_reload_gives_the_focus_back_only_to_a_field_that_held_it() {
+    let Some(config) = config() else { return };
+    let pipe = raw(config, "refocus", REFOCUS);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    let focused = || {
+        opencode_plugin::behave::mounts(app.app(), "example.refocus", "slot#0").pop().and_then(|mount| mount.focused)
+    };
+    let reload = || {
+        tui.keymap.dispatch("rf.reload", None);
+        pipe.settle();
+        std::thread::sleep(Duration::from_millis(100));
+        pipe.settle();
+    };
+    pipe.harness.wait_for("refocus slot");
+    pipe.settle();
+    tui.keymap.dispatch("rf.focus", None);
+    pipe.settle();
+    assert!(focused().is_some(), "the field took no focus");
+    reload();
+    assert!(focused().is_some(), "the reload took the focus from the field that held it");
+    opencode_plugin::Host::focus_composer(&**tui);
+    app.render();
+    assert_eq!(focused(), None, "the composer took no focus");
+    reload();
+    assert_eq!(focused(), None, "the reload took the focus back from the composer");
+}
+
+/// The probe of the refocus row, on the TS API: a slot of the home footer with the field `search`; `rf.focus` focuses
+/// it, and `rf.reload` registers another layer, which reloads the plugin's registrations.
+const REFOCUS: &str = r#"import { createElement, insert, insertNode, setProp } from "@opentui/solid"
+let field
+let layers = 0
+export default { id: "example.refocus", setup(api) {
+  api.ui.slot({ append: "home.footer", render: () => {
+    const box = createElement("box")
+    const text = createElement("text")
+    insert(text, "refocus slot")
+    insertNode(box, text)
+    field = createElement("input")
+    setProp(field, "id", "search")
+    insertNode(box, field)
+    return box
+  } })
+  api.keymap.layer(() => ({ commands: [
+    { id: "rf.focus", run: () => field.focus() },
+    { id: "rf.reload", run: () => void api.keymap.layer(() => ({ commands: [{ id: `rf.more-${++layers}`, run() {} }] })) },
+  ] }))
+} }
+"#;
+
 /// The raw probe of the pending-focus row: a slot of the home footer with the field `other`, and `sp`, which `sp.show`
 /// shows and focuses in one call and `sp.hide` hides.
 const PENDING: &str = r#"export default { id: "example.pending", setup(api) {

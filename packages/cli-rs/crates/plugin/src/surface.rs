@@ -115,8 +115,8 @@ pub(crate) trait Viewer {
     ) -> Option<Option<canvas::Drawn>> {
         None
     }
-    /// The mount ended.
-    fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
+    /// The mount ended; `focused` names its node that had the focus then.
+    fn forget(&self, _host: &dyn Host, _mount: &v2::MountId, _focused: Option<String>) {}
     /// Frame `frame`'s geometry is final, and it laid the mount out: a carrier that pushes layout reads to its plugin
     /// pushes what changed now (contract 2.x, addition 1, R2).
     fn laid_out(&self, _mount: &v2::MountId, _frame: u64) {}
@@ -318,6 +318,9 @@ pub(crate) struct Surface {
     input: Rc<Input>,
     /// What the mount holds of the input; it ends with the mount.
     holder: RefCell<Option<Rc<Owner>>>,
+    /// The node that had the focus as a remount began ([`crate::behave::remount`]), which detaches the mount's tree
+    /// and so drops the focus before the mount ends.
+    remounted: RefCell<Option<String>>,
     /// Times the host's own work for the mount's nodes, as the plugin's host time.
     host_time: HostTime,
 }
@@ -651,6 +654,7 @@ impl Surface {
             pending: Cell::new(matches!(surface.at, v2::Place::Panel(_) | v2::Place::Overlay(_))),
             input: input.clone(),
             holder: RefCell::new(None),
+            remounted: RefCell::new(None),
             host_time,
         });
         book(&mounted.plugin, |ledger| ledger.mounts += 1);
@@ -1282,6 +1286,16 @@ impl Surface {
         &self.app
     }
 
+    /// The mount's node that has the focus now.
+    fn focused_node(&self) -> Option<String> {
+        self.holder.borrow().as_ref().and_then(|owner| owner.focused().node)
+    }
+
+    /// Notes the node that has the focus as a remount begins ([`crate::behave::remount`]), or forgets it.
+    pub(crate) fn note_focus(&self, begins: bool) {
+        *self.remounted.borrow_mut() = self.focused_node().filter(|_| begins);
+    }
+
     /// The page theme.
     pub(crate) fn theme(&self) -> Option<Theme> {
         self.owner.upgrade().map(|host| host.theme())
@@ -1310,8 +1324,9 @@ impl Drop for Surface {
     fn drop(&mut self) {
         // The plugin hears the mount end; a failed or disabled one's calls are refused and hear nothing.
         if let Some(host) = self.owner.upgrade() {
+            let focused = self.remounted.take().or_else(|| self.focused_node());
             self.tell_mount(&*host, false);
-            self.viewer.forget(&*host, &self.id);
+            self.viewer.forget(&*host, &self.id, focused);
         }
         behave::detach(&self.app, self);
         if let Some(owner) = self.holder.get_mut().take() {

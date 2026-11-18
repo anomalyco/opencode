@@ -641,7 +641,7 @@ impl Loader {
             }
         }
         if changed {
-            host.remount();
+            crate::behave::remount(&**host);
         }
         changed
     }
