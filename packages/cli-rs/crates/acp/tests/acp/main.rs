@@ -1,5 +1,3 @@
-//! The in-process ACP tests of `packages/cli/test/acp`, ported to the Rust agent.
-
 mod additional_directories;
 mod catalog;
 mod compaction;

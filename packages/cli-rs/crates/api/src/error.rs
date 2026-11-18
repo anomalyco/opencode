@@ -1,5 +1,4 @@
-//! Client errors, mirroring the reasons of the TypeScript `ClientError`
-//! (`packages/client/src/promise/generated/client-error.ts`), plus declared error bodies.
+//! Transport failures and declared server errors.
 
 use serde_json::Value;
 

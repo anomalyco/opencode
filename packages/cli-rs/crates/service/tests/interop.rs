@@ -1,13 +1,5 @@
-//! Interop with the real TypeScript CLI, run from source: Rust `ensure` starts
-//! `opencode serve --service`, and the TypeScript `opencode service status` in the same directories
-//! sees it.
-//!
-//! Everything runs in a temporary `HOME`, `XDG_*`, and `OPENCODE_CONFIG_DIR`, on a free port. The
-//! TypeScript CLI runs under `env -i`, so nothing of this machine's environment reaches it, and it
-//! never sees the user's state directories or service. Every process is killed at the end.
-//!
-//! Needs `bun` and a TypeScript checkout with `node_modules`: `OPENCODE_TS_ROOT`, else this
-//! repository. Without them the test passes with a note.
+//! Rust starts an isolated service and the TypeScript CLI discovers it. Both use a temporary home and clean
+//! environment.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};

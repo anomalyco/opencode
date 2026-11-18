@@ -1,5 +1,4 @@
-//! P-ORACLE: the generated client builds the same requests as the TypeScript Promise client.
-//! `parity/oracle/F.2-requests.ts` records the TypeScript side into `parity/fixtures/F.2/requests.json`.
+//! Compares generated requests with those of the TypeScript Promise client.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};

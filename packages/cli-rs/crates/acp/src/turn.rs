@@ -1,13 +1,5 @@
-//! Prompt turns: submission, event streaming, asks, cancellation, and child sessions that outlive a
-//! turn (`packages/cli/src/acp/turn.ts`).
-//!
-//! A turn runs as its own task, so a cancelled prompt request still settles and responds. Cancellation
-//! lands only while the turn waits on the server (`execute`) and in the last check of `settle`, as the
-//! TS turn's interruptible regions do.
-//!
-//! Children that are still open when a prompt responds are followed in the background, and so are the
-//! parent turns their reports start. The session's next prompt stops that follower and inherits its
-//! children.
+//! Each prompt runs in its own task so it can settle and respond after cancellation. A background follower tracks
+//! unfinished children and the parent turns their reports start. The next prompt inherits those children.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

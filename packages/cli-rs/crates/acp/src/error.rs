@@ -1,5 +1,3 @@
-//! ACP errors and their JSON-RPC form (`packages/cli/src/acp/error.ts`).
-
 use opencode_util::json_object;
 use serde_json::{Value, json};
 
@@ -61,8 +59,7 @@ pub enum NotReady {
     Agents,
 }
 
-/// Every failure a handler can end with: the tagged errors of `error.ts`, a JSON-RPC error from the
-/// client, the catalog errors, and defects.
+/// Errors a request handler can return.
 #[derive(Debug, Clone)]
 pub enum Failure {
     SessionNotFound {
@@ -140,7 +137,7 @@ impl Failure {
         }
     }
 
-    /// `toRequestError`, plus the handler's mapping of catalog errors and defects (`agent.ts`).
+    /// Maps a handler failure to a JSON-RPC error.
     pub fn to_rpc(&self) -> RpcError {
         match self {
             Self::SessionNotFound { session_id } => RpcError::invalid_params(

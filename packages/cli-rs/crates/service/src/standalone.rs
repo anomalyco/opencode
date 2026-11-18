@@ -1,8 +1,4 @@
-//! Standalone server (F.9).
-//!
-//! Ports `packages/cli/src/services/standalone.ts`: a private TypeScript server for this client
-//! alone, with a random password. Its stdin is the ownership lease: the server exits on EOF, which
-//! the OS delivers even when this client is killed.
+//! A private server holds a stdin lease: EOF ends the server even if its client is killed.
 
 use std::ffi::OsString;
 use std::path::Path;

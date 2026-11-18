@@ -1,5 +1,4 @@
-//! Models, modes, and commands per directory, kept fresh from server events
-//! (`packages/cli/src/acp/catalog.ts`).
+//! Per-directory catalogs update on server events.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

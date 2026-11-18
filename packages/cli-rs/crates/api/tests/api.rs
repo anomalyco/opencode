@@ -154,7 +154,6 @@ async fn content_type_and_empty_bodies_are_checked() {
     let error = client(&script).session_active().await.unwrap_err();
     assert!(matches!(error, Error::MalformedResponse(_)), "{error:?}");
 
-    // A schema mismatch names its position (parity/deviations/A01-decode-error-position.md).
     let script = Script::new(200, "application/json", r#"{"data":{"ses_1":{"type":7}}}"#);
     let error = client(&script).session_active().await.unwrap_err();
     assert_eq!(

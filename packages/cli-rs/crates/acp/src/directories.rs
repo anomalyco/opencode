@@ -1,5 +1,4 @@
-//! Additional directories: validation, permission grants, and their record in session metadata
-//! (`packages/cli/src/acp/directories.ts`).
+//! Additional directory grants are recorded in session metadata.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{PermissionEffect, PermissionRule, SessionInfo, SessionMetadata, SessionUpdateInput};

@@ -1,4 +1,4 @@
-//! `ui.capture` and `ui.matches` from captured cells, as `actions.ts` reads Core's render buffer.
+//! Reads capture and match results from rendered cells.
 
 use opentui::native::Capture;
 use serde_json::{Value, json};

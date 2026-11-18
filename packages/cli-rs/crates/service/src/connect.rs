@@ -1,12 +1,5 @@
-//! `--server`, standalone, registered service, or ensure (F.6).
-//!
-//! Ports `ServerConnection.resolve` (`packages/cli/src/services/server-connection.ts:25-64`) with
-//! two changes (plan 6.6, decision O-21): a service is found through [`discover`], which tries more
-//! than one registration, and a service of another version is used with a warning in the log. The
-//! exception is `mismatch: "replace"` ([`Options::replace`], O-167), which the TUI and `mini` ask for
-//! as TS's do: a service of another version registered in the client's own channel is restarted on
-//! the TypeScript binary the client resolved. When none is found, [`ensure`] starts the TypeScript
-//! service (`docs/architecture.md`).
+//! Resolves an explicit server, standalone process, or shared service. Only the client's own channel is eligible for
+//! version replacement.
 
 use opencode_api::error::Error as ApiError;
 use opencode_api::transport::Transport;
@@ -26,7 +19,6 @@ use crate::ts_command::TsCommand;
 
 pub use crate::ensure::Reason;
 
-/// How long `--server` waits for `/api/info` (`server-connection.ts:40`).
 pub const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What the command line asked for.
@@ -39,9 +31,8 @@ pub struct Options {
     /// Use a standalone server instead of starting the service when none runs (`autostart: false`,
     /// which `run` uses so a one-off run leaves no service behind).
     pub standalone_fallback: bool,
-    /// `mismatch: "replace"` (O-167): a service of another version than `client_version`, registered in the client's
-    /// own channel, is restarted on the resolved TypeScript binary, as TS's TUI and `mini` restart it. Otherwise any
-    /// version is used (`"ignore"`, the other commands').
+    /// Restart a mismatched service in the client's own channel using the resolved TypeScript binary. Otherwise
+    /// accept any version.
     pub replace: bool,
     /// Runs once before the service is started or restarted, for "Starting background server..." and "Restarting
     /// background server (version mismatch)...".
@@ -51,7 +42,7 @@ pub struct Options {
 /// The environment `resolve` reads.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Env {
-    /// `OPENCODE_PASSWORD`, else `OPENCODE_SERVER_PASSWORD` (`packages/cli/src/env.ts:10-13`).
+    /// Falls back to `OPENCODE_SERVER_PASSWORD` when `OPENCODE_PASSWORD` is unset.
     pub password: Option<String>,
     /// `OPENCODE_CHANNEL`.
     pub channel: Option<String>,
@@ -114,8 +105,7 @@ pub struct Connection {
     /// The version the server reported.
     pub version: String,
     pub source: Source,
-    /// The mismatch warning for `--server`, already written to stderr. A mismatch with a
-    /// discovered service is only logged (decision O-22), unless [`Options::replace`] restarted it (O-167).
+    /// A warning already printed for an explicit server. A discovered service's version mismatch is only logged.
     pub warning: Option<String>,
 }
 
@@ -226,9 +216,7 @@ pub async fn resolve(
     })
 }
 
-/// Finds the registered service again, for a client that lost it (`managedService.reconnect`,
-/// `packages/cli/src/services/server-connection.ts:66-75`): discovered, waited for, or started
-/// quietly when none is registered.
+/// Rediscovers the registered service after disconnecting, starting one quietly if necessary.
 pub async fn reconnect(transport: Arc<dyn Transport>, paths: &Paths, env: &Env) -> Result<discover::Found, Error> {
     match discover::discover_with(transport.as_ref(), paths, env.channel.as_deref(), &discover::Owner::new(env.ts()))
         .await
@@ -247,9 +235,7 @@ pub async fn reconnect(transport: Arc<dyn Transport>, paths: &Paths, env: &Env) 
     }
 }
 
-// `ensure` when discovery found no ready service: waits for a pending one, reports a failed one,
-// and starts the service in `file` only when no live service is registered. It never starts a
-// service beside one that is starting or not answering (O-21).
+// Never start a second service beside one that is starting or unresponsive.
 async fn ensure_missing(
     transport: Arc<dyn Transport>,
     paths: &Paths,
@@ -267,11 +253,8 @@ async fn ensure_missing(
     run_ensure(transport, paths, env, config, missing.pending.unwrap_or(file), None, on_start).await
 }
 
-// Whether a service is restarted (O-167): its version is not the client's, and the TypeScript binary the client
-// resolved would start another version than it runs. That second test is the Rust client's own: TS restarts on its own
-// binary, which is the client's version by construction, as the bundled one is. A binary that says nothing in time is
-// tried; one of the service's version (`OPENCODE_TS_BIN` or `opencode` on `PATH` behind a development build) would only
-// start the same version again, on every start.
+// A development client and its server binary can have different versions. Replacing a service with the same server
+// version would restart it on every launch. Try the binary if its version probe times out.
 async fn restarts(env: &Env, found: &discover::Found, client_version: &str) -> bool {
     let running = found.service.version.as_deref();
     if running == Some(client_version) {
@@ -332,7 +315,6 @@ async fn server_version(transport: Arc<dyn Transport>, endpoint: &Endpoint) -> R
     }
 }
 
-// `connectError` (`server-connection.ts:99-114`).
 fn connect_error(endpoint: &Endpoint, error: &ApiError) -> Error {
     let url = &endpoint.url;
     if error.reason() == "UnauthorizedError" {
@@ -414,7 +396,6 @@ mod tests {
     #[tokio::test]
     async fn server_flag_connects_with_the_password_and_warns_on_a_mismatch() {
         let env = Env::from_vars(|name| (name == "OPENCODE_SERVER_PASSWORD").then(|| "pw".to_owned()));
-        // Expected (O-167): `--server` only warns, also for a client that restarts a discovered service.
         let replacing = Options { replace: true, ..options(Some(URL)) };
         let (result, server) = run(Server::default().reply(INFO, Reply::json(200, HEALTH)), env, replacing).await;
         let connection = result.unwrap();
@@ -484,8 +465,6 @@ mod tests {
             connection.source,
             Source::Service { channel: "oc-x".to_owned(), file: paths.state.join("service-oc-x.json"), pid: 9 }
         );
-        // Versions differ (2.0.0 against 1.0.0), but a discovered service's mismatch is only
-        // logged (O-22).
         assert_eq!(connection.warning, None);
         let endpoint = Endpoint::new(URL, None);
         assert!(mismatch(&endpoint, "2.0.0", &options(None)).is_some());

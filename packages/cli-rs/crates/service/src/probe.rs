@@ -1,7 +1,4 @@
-//! `/api/info` probe and classification (F.6).
-//!
-//! Ports `packages/client/src/service-probe.ts`: ask a registered service for its health, classify
-//! the answer, and decide what a client does with it.
+//! Classifies a registered service by its response to `/api/info`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,8 +8,6 @@ use opencode_api::error::Error;
 use opencode_api::transport::{Request, Transport};
 use opencode_local::registration::Registration;
 
-/// How long one probe waits (`defaultEnsureTiming.requestTimeout`,
-/// `packages/client/src/service-timing.ts:18`).
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// A server URL and its credentials. `Debug` hides the password.
@@ -81,7 +76,6 @@ pub enum Decision {
 /// A version requirement: none, or a predicate on the service version (`DiscoverOptions.version`).
 pub type Requirement<'a> = Option<&'a dyn Fn(&str) -> bool>;
 
-/// Whether `version` meets `required` (`packages/client/src/service-version.ts`).
 pub fn matches_version(version: Option<&str>, required: Requirement<'_>) -> bool {
     match (required, version) {
         (None, _) => true,
@@ -93,7 +87,6 @@ pub fn matches_version(version: Option<&str>, required: Requirement<'_>) -> bool
 const INCOMPATIBLE: &str =
     "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.";
 
-/// Decides what to do with a service that answered (`packages/client/src/service-probe.ts:22-32`).
 pub fn decide(service: &LocalService, required: Requirement<'_>) -> Decision {
     if !matches_version(service.version.as_deref(), required) {
         return Decision::Replace { handoff: service.state == State::Ready };
@@ -108,9 +101,7 @@ pub fn decide(service: &LocalService, required: Requirement<'_>) -> Decision {
     }
 }
 
-/// Asks a registered service for its health and classifies the answer
-/// (`probeResult`, `packages/client/src/service-probe.ts:49-90`). Any failure to get a usable
-/// answer is "no service"; so is an answer from another process (pid) or version than registered.
+/// A missing response or a PID or version inconsistent with the registration counts as no service.
 pub async fn probe(transport: &dyn Transport, registration: &Registration, timeout: Duration) -> Probe {
     let endpoint = Endpoint::new(&registration.url, registration.password.clone());
     match tokio::time::timeout(timeout, answer(transport, &endpoint)).await {
@@ -179,7 +170,6 @@ mod tests {
     use super::*;
     use crate::testing::{Reply, Server};
 
-    // The cases of `packages/client/test/service-decision.test.ts`.
     fn service(version: Option<&str>, state: State, compatible: bool) -> LocalService {
         LocalService {
             registration: Registration {

@@ -1,9 +1,5 @@
-//! PTY handoff (F.9).
-//!
-//! Ports `packages/client/src/pty-handoff.ts`. Before a service stops for a restart, its persistent
-//! terminals are published in a sidecar, `<registration>.pty-handoff`, so the next service adopts
-//! them through `OPENCODE_PTY_HANDOFF`. Every step is best effort: a failure stops the service
-//! without a handoff.
+//! Before restart, persistent terminals are published in `<registration>.pty-handoff` for adoption with
+//! `OPENCODE_PTY_HANDOFF`. A failed handoff does not prevent shutdown.
 
 use opencode_api::transport::Transport;
 use opencode_local::registration::Registration;

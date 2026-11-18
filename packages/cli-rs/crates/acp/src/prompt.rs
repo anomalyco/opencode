@@ -1,5 +1,3 @@
-//! An ACP prompt as an OpenCode submission (`packages/cli/src/acp/prompt.ts`).
-
 use opencode_api::generated::CommandInfo;
 use serde_json::Value;
 

@@ -1,5 +1,3 @@
-//! Tool calls as ACP `tool_call` and `tool_call_update` (`packages/cli/src/acp/tool.ts`).
-
 pub mod patch;
 
 use std::sync::LazyLock;
@@ -235,8 +233,7 @@ fn tool_content(content: &Value) -> Vec<Value> {
         .collect()
 }
 
-/// `readDisplayText` (`packages/tui/src/mini/tool.ts`): the human-facing text of read's JSON page
-/// envelope.
+/// Extracts the human-readable text from a read tool's JSON page.
 fn read_display_text(text: &str) -> Option<String> {
     if !text.starts_with('{') {
         return None;

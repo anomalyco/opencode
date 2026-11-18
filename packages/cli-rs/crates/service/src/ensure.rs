@@ -1,10 +1,5 @@
-//! Ensure a background service runs (F.9).
-//!
-//! Ports `ensure` (`packages/client/src/effect/service.ts:45-127`) with the policy of
-//! `docs/architecture.md`: reuse a service that answers, whatever its version unless a version is required;
-//! wait for one that is starting; start TypeScript contenders only when none is registered or the
-//! registered process is gone; never stop a running service this call did not start, except one of
-//! another version than [`Options::version`] requires (O-167), which it replaces as TS does.
+//! Reuses a ready service and waits for a starting one. Start contenders only if no live process owns the
+//! registration.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -23,7 +18,6 @@ use crate::spawn::Contender;
 use crate::stop::{self, Poll};
 use crate::ts_command::TsCommand;
 
-/// `EnsureTiming` (`packages/client/src/service-timing.ts`).
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
     pub poll: Duration,
@@ -58,10 +52,8 @@ pub struct Options {
     pub command: Vec<OsString>,
     /// Added to the inherited environment (the service config's `env`).
     pub env: Vec<(String, String)>,
-    /// The version a service registered in `file` before this call must have (`EnsureOptions.version`, exact): one of
-    /// another version is stopped, handing its terminals over when it is ready, and replaced (O-167). A service this
-    /// call started is used whatever its version, so a TS binary of another version than required is not replaced in
-    /// a loop. `None` uses any version.
+    /// Required version of a pre-existing service. Accept any version started by this call to avoid a replacement
+    /// loop.
     pub version: Option<String>,
     pub timing: Timing,
 }
@@ -221,9 +213,7 @@ impl Run<'_> {
         Ok(())
     }
 
-    // A service of another version than required (`decision._tag === "replace"`, `service.ts:98-104`): announced,
-    // stopped with its terminals handed over when it is ready, and evicted, so the next round starts the replacement.
-    // A failed stop is ignored, as TS ignores it; the next round finds the service again and tries again.
+    // A ready service hands off terminals before replacement. If stopping fails, the next round discovers it again.
     async fn replace(&mut self, service: &LocalService, handoff: bool) {
         self.announce_reason(Reason::VersionMismatch { previous: service.version.clone() });
         if !handoff {

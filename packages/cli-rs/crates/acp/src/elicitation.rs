@@ -1,5 +1,3 @@
-//! Session forms as `elicitation/create` (`packages/cli/src/acp/elicitation.ts`).
-
 use std::collections::HashSet;
 use std::sync::LazyLock;
 

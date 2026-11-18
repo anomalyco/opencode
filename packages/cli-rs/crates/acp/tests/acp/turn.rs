@@ -1,5 +1,3 @@
-//! `turn.test.ts`.
-
 use std::sync::Arc;
 
 use serde_json::{Value, json};

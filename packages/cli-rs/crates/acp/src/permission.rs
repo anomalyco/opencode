@@ -1,5 +1,4 @@
-//! Permission asks as `session/request_permission`, and completed edits as diffs
-//! (`packages/cli/src/acp/permission.ts`).
+//! Permission requests and completed edit diffs for the ACP client.
 
 mod unified;
 

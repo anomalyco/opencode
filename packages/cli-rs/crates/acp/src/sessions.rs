@@ -1,5 +1,4 @@
-//! Sessions attached to this connection: their selection, MCP servers, and the commands and config
-//! options pushed to the client (`packages/cli/src/acp/sessions.ts`).
+//! Sessions attached to this connection and the selection, commands and configuration advertised to the client.
 
 use std::collections::HashMap;
 use std::future::Future;

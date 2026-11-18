@@ -1,9 +1,5 @@
-//! TypeScript binary resolution: `OPENCODE_TS_BIN`, else the bundled `opencode`, else `opencode` on `PATH` (F.9).
-//!
-//! The Rust client is not a server (user Q2). It starts the TypeScript `opencode` for the background
-//! service and the standalone server, as the TypeScript client runs `selfCommand()`
-//! (`packages/cli/src/services/service-config.ts:150`, `standalone.ts:18-20`). An install that bundles
-//! the server puts it beside the client (`opencode_util::bundle`, bundle-server).
+//! Resolves the server binary from `OPENCODE_TS_BIN`, the bundled `opencode` beside the client, or `PATH`, in that
+//! order.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

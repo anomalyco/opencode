@@ -1,6 +1,4 @@
-//! Request core: base URL, authentication, per-call headers, and declared errors. It follows the
-//! `make` function of the TypeScript Promise client (`packages/client/src/promise/generated/client.ts:354-473`).
-//! The generated methods (`generated/methods.rs`) build a [`Call`] and send it here.
+//! Sends generated calls with the client's base URL, credentials and per-call headers.
 
 use std::sync::Arc;
 
@@ -17,9 +15,7 @@ use crate::transport::{Request, Reqwest, Response, SseResponse, Transport};
 /// The query parameter the server reads credentials from when a request cannot carry headers.
 pub const AUTH_TOKEN_QUERY: &str = "auth_token";
 
-/// How the client authenticates. The server accepts `Basic` credentials in the `authorization` header or,
-/// base64-encoded the same way, in the `auth_token` query parameter
-/// (`packages/server/src/middleware/authorization.ts:33-40`).
+/// HTTP Basic credentials can travel in the `authorization` header or the `auth_token` query parameter.
 #[derive(Clone, PartialEq, Eq)]
 pub enum Auth {
     /// `authorization: Basic base64(username:password)`.
