@@ -39,11 +39,6 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
     Effect.provide(Flag.testLayer([], { overrides: input.flag ?? "mcp_events" })),
     Effect.provide(
       Layer.mock(Mcp.Service, {
-        servers: () =>
-          Effect.succeed([
-            { name: "jobs", status: { status: "connected" } },
-            { name: "offline", status: { status: "failed" } },
-          ] as never),
         events: (server) => Effect.succeed(server === "jobs" ? connection.events : undefined),
       }),
     ),
@@ -58,9 +53,13 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
           call: { type: "tool-call", id: "call_list", name: "opencode_list_mcp_events", input },
         }),
       ),
-      Effect.orDie,
     )
-  return { asserts, list, registry }
+  return {
+    asserts,
+    list: (input: Record<string, unknown>) => list(input).pipe(Effect.orDie),
+    fail: (input: Record<string, unknown>) => list(input).pipe(Effect.flip),
+    registry,
+  }
 })
 
 const jobFinished = {
@@ -79,20 +78,21 @@ describe("list_mcp_events", () => {
     }),
   )
 
-  it.live("lists the event types of connected servers after asking permission", () =>
+  it.live("lists one server's push events after asking permission", () =>
     Effect.gen(function* () {
       const { list, asserts, registry } = yield* setup()
       expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("opencode_watch_mcp_event")
-      expect((yield* list({})).output).toEqual({ events: [jobFinished] })
+      expect((yield* list({ server: "jobs" })).output).toEqual({ events: [jobFinished] })
       expect(asserts).toMatchObject([{ action: "opencode_list_mcp_events", resources: ["jobs"], save: ["jobs"] }])
     }),
   )
 
-  it.live("lists none for a named server that offers no events", () =>
+  it.live("fails for a server that sends no events", () =>
     Effect.gen(function* () {
-      const { list } = yield* setup()
-      expect((yield* list({ server: "offline" })).output).toEqual({ events: [] })
-      expect((yield* list({ server: "jobs" })).output).toEqual({ events: [jobFinished] })
+      const { fail } = yield* setup()
+      expect((yield* fail({ server: "offline" })).message).toBe(
+        'MCP server "offline" is not connected or sends no events',
+      )
     }),
   )
 })

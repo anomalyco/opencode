@@ -34,52 +34,38 @@ export const Plugin = {
         editor.add({
           name: "list_mcp_events",
           options: { namespace: "opencode", codemode: true },
-          description: "List the events MCP servers send. Use one as an automation's event trigger.",
+          description: "List the events an MCP server sends. Use one as an automation's event trigger.",
           input: Schema.Struct({
-            server: Schema.optionalKey(
-              Schema.String.annotate({ description: "MCP server name as configured. Omit to list every server." }),
-            ),
+            server: Schema.String.annotate({ description: "MCP server name as configured" }),
           }),
           output: Schema.Struct({ events: Schema.Array(EventType) }),
           execute: (input, context) =>
             Effect.gen(function* () {
-              const servers =
-                input.server === undefined
-                  ? (yield* mcp.servers()).flatMap((server) =>
-                      server.status.status === "connected" ? [server.name] : [],
-                    )
-                  : [input.server]
-              // Listing every server checks each server name so per-server rules still apply.
               yield* permission.assert({
                 action: "opencode_list_mcp_events",
-                resources: servers,
-                save: servers,
+                resources: [input.server],
+                save: [input.server],
                 metadata: {},
                 ...Permission.invocation(context),
               })
-              // A server that is unreachable or offers no events lists none.
-              const lists = yield* Effect.forEach(
-                servers,
-                (server) =>
-                  mcp.events(server).pipe(
-                    Effect.flatMap((events) => events?.list() ?? Effect.succeed([])),
-                    // Automations can only use events the server pushes.
-                    Effect.map((types) =>
-                      types
-                        .filter((type) => type.delivery?.includes("push"))
-                        .map((type) => ({
-                          server,
-                          event: type.name,
-                          description: type.description,
-                          args: type.inputSchema,
-                          data: type.payloadSchema,
-                        })),
-                    ),
-                    Effect.orElseSucceed(() => []),
-                  ),
-                { concurrency: "unbounded" },
-              )
-              return { output: { events: lists.flat() } }
+              const events = yield* mcp.events(input.server)
+              if (!events)
+                return yield* new ToolFailure({
+                  message: `MCP server "${input.server}" is not connected or sends no events`,
+                })
+              // Automations can only use events the server pushes.
+              const types = (yield* events.list()).filter((type) => type.delivery?.includes("push"))
+              return {
+                output: {
+                  events: types.map((type) => ({
+                    server: input.server,
+                    event: type.name,
+                    description: type.description,
+                    args: type.inputSchema,
+                    data: type.payloadSchema,
+                  })),
+                },
+              }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error }))),
         })
       })
