@@ -1,5 +1,5 @@
 ---
-description: Translate content for a specified locale while preserving technical terms
+description: Translate content for a specified locale while preserving technical terms 
 mode: subagent
 model: opencode/gpt-5.6-sol
 ---
