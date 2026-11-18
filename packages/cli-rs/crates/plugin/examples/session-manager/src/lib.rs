@@ -13,9 +13,7 @@ mod i18n;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use grouping::{Group, Mode, Row, Session};
 use i18n::{LOCALES, Locale, Messages};
@@ -28,7 +26,7 @@ use opencode_plugin_abi::types::{
 use opencode_plugin_abi::v2::{self, Scroll, ScrollAlign, Target};
 use opencode_plugin_abi::{
     Call, Click, Command, Confirm, Edges, Host, Layout, Prompt, Read, Route, Setup, Span, TabEdit, Toast, Variant,
-    Waker, Wrap, client, plugin,
+    Wrap, client, plugin,
 };
 use serde_json::{Value, json};
 
@@ -130,23 +128,14 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             });
     setup.surface(surface);
     let events = ["session.created", "session.deleted", "session.renamed", "session.archived"];
-    let changed = state.clone();
-    setup.on_event(&events, move |_, _| changed.borrow_mut().schedule_refresh());
-    // TS refreshes 300 ms after the last change it heard; a thread keeps that time and wakes the host.
-    if let Some(waker) = setup.waker() {
-        let timer = Timer::start(waker.clone());
-        state.borrow_mut().timer = Some(timer.clone());
-        setup.on_wake(move |host| {
-            {
-                let mut state = page.state.borrow_mut();
-                if state.timer.as_ref().is_some_and(Timer::take) {
-                    state.refresh();
-                }
-            }
-            page.start(host);
-        });
-        setup.on_dispose(move |_| timer.stop());
-    }
+    // TS refreshes 300 ms after the last change it heard.
+    let changed = page.clone();
+    setup.on_event(&events, move |host, _| {
+        if changed.state.borrow_mut().schedule_refresh() {
+            let state = changed.state.clone();
+            changed.tasks.spawn(host, move |cx| refresh_later(cx, state));
+        }
+    });
     Ok(())
 }
 
@@ -286,9 +275,9 @@ async fn remove(cx: Cx, state: Rc<RefCell<State>>, removal: Removal) {
                 _ => done.push(id),
             }
         }
-        let mut state = state.borrow_mut();
-        cx.with(|host| state.forget(host, &done));
-        let t = state.t();
+        let mut shown = state.borrow_mut();
+        cx.with(|host| shown.forget(host, &done));
+        let t = shown.t();
         match (&removal.group, failed) {
             (None, _) => cx.with(|host| host.toast(Toast::new(Variant::Success, (t.removed)(removal.total)))),
             (Some(_), failed) if failed > 0 => {
@@ -298,11 +287,29 @@ async fn remove(cx: Cx, state: Rc<RefCell<State>>, removal: Removal) {
                 cx.with(|host| host.toast(Toast::new(Variant::Success, (t.group_removed)(label, removal.total))))
             }
         }
-        if removal.group.is_some() {
-            state.schedule_refresh();
+        if removal.group.is_some() && shown.schedule_refresh() {
+            let state = state.clone();
+            cx.spawn(move |cx| refresh_later(cx, state));
         }
     }
     state.borrow_mut().busy = false;
+}
+
+/// TS `scheduleRefresh`'s timer: a refresh once 300 ms passed with no change heard. A change during the wait waits
+/// 300 ms more, so the refresh runs 300 to 600 ms after the last change.
+async fn refresh_later(cx: Cx, state: Rc<RefCell<State>>) {
+    loop {
+        let armed = state.borrow().armed;
+        let slept = cx.sleep(Duration::from_millis(300)).await;
+        if slept.is_ok() && state.borrow().armed != armed {
+            continue;
+        }
+        state.borrow_mut().debouncing = false;
+        if slept.is_ok() {
+            refresh(cx, state).await;
+        }
+        return;
+    }
 }
 
 /// TS `SessionManagerPage`'s signals.
@@ -327,7 +334,9 @@ struct State {
     refreshes: u64,
     /// The flow a handler asked for, which starts once it returns.
     start: Option<Flow>,
-    timer: Option<Timer>,
+    /// The changes heard ([`State::schedule_refresh`]), and whether a refresh waits for them to stop.
+    armed: u64,
+    debouncing: bool,
 }
 
 impl Default for State {
@@ -351,7 +360,8 @@ impl Default for State {
             locale: Locale::En,
             refreshes: 0,
             start: None,
-            timer: None,
+            armed: 0,
+            debouncing: false,
         }
     }
 }
@@ -374,7 +384,8 @@ impl State {
             from: self.origin.clone(),
             origin: self.origin.take(),
             refreshes: self.refreshes,
-            timer: self.timer.take(),
+            armed: self.armed,
+            debouncing: self.debouncing,
             mode: stored.get("mode").and_then(Value::as_str).and_then(Mode::parse).unwrap_or(Mode::Directory),
             children: stored.get("showChildren") == Some(&Value::Bool(true)),
             locale: stored.get("locale").and_then(Value::as_str).and_then(Locale::parse).unwrap_or(Locale::En),
@@ -388,10 +399,10 @@ impl State {
         self.start = Some(Flow::Refresh);
     }
 
-    fn schedule_refresh(&mut self) {
-        if let Some(timer) = &self.timer {
-            timer.arm(Duration::from_millis(300));
-        }
+    /// A change was heard: whether a refresh must start waiting for the changes to stop ([`refresh_later`]).
+    fn schedule_refresh(&mut self) -> bool {
+        self.armed += 1;
+        !std::mem::replace(&mut self.debouncing, true)
     }
 
     fn listed_now(&self, read: &dyn Read) -> Listed {
@@ -966,47 +977,6 @@ fn format_path(path: &str) -> String {
 /// `Date.now()`.
 fn now() -> f64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0.0, |since| since.as_millis() as f64)
-}
-
-/// TS's `setTimeout` of the refresh: a thread that wakes the host when the time armed last comes.
-#[derive(Clone)]
-struct Timer {
-    due: Arc<Mutex<Option<Instant>>>,
-    fired: Arc<AtomicBool>,
-    stopped: Arc<AtomicBool>,
-}
-
-impl Timer {
-    fn start(waker: Waker) -> Self {
-        let timer = Timer { due: Arc::default(), fired: Arc::default(), stopped: Arc::default() };
-        let thread = timer.clone();
-        std::thread::spawn(move || {
-            while !thread.stopped.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_millis(25));
-                let mut due = thread.due.lock().unwrap_or_else(PoisonError::into_inner);
-                if due.is_some_and(|due| Instant::now() >= due) {
-                    *due = None;
-                    thread.fired.store(true, Ordering::Release);
-                    waker.wake();
-                }
-            }
-        });
-        timer
-    }
-
-    /// Fires `after` from now, replacing the time armed before (TS `clearTimeout` and `setTimeout`).
-    fn arm(&self, after: Duration) {
-        *self.due.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now() + after);
-    }
-
-    /// Whether it fired since the last call.
-    fn take(&self) -> bool {
-        self.fired.swap(false, Ordering::AcqRel)
-    }
-
-    fn stop(&self) {
-        self.stopped.store(true, Ordering::Release);
-    }
 }
 
 plugin!(id = "session-manager", setup);

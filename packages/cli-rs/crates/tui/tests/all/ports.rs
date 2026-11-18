@@ -890,6 +890,55 @@ fn session_usage_ends_a_run_its_sidebar_closed_during() {
     }
 }
 
+// Expected (timers, contract-ergonomics 2.3): goal-plugin's sidebar counts an active goal's time on each second, on
+// the host's clock and with no thread, from when its result was sampled: after the clock passed a second, and a second
+// passed on the wall too, the time shown is later. On the Rust port over the C ABI and on the Luau port.
+#[test]
+fn goal_plugin_counts_an_active_goals_time_each_second() {
+    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    let mut carriers = vec![Carrier::Port("goal-plugin")];
+    #[cfg(feature = "luau")]
+    carriers.push(Carrier::Luau("goal-plugin"));
+    for carrier in carriers {
+        let sampled = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 10;
+        let goal = json!({
+            "sessionID": "ses_p", "objective": "Ship the parser rewrite", "status": "active", "tokenBudget": null,
+            "tokensUsed": 10, "timeUsedSeconds": 3725, "createdAt": 1, "updatedAt": 2, "continuationFailures": 0,
+            "maxAutoTurns": null, "maxDurationSeconds": null, "noProgressTokenThreshold": null,
+            "maxNoProgressTurns": null, "noProgressTurns": 0, "budgetWrapupSent": false, "stopReason": null,
+            "history": [], "checkpoints": [], "lastCheckpoint": null, "lastAssistantText": "",
+            "lastAssistantMessageID": "", "autoTurns": 0, "remainingTokens": null, "sampledAt": sampled,
+        });
+        let text = json!({ "goal": goal }).to_string();
+        let handler = move |seen: &Seen| match seen.path.as_str() {
+            "/api/session/ses_p/message" => {
+                let message = json!({
+                    "id": "msg_p", "type": "assistant", "agent": "build",
+                    "model": { "providerID": "provider", "id": "model" },
+                    "content": [{
+                        "type": "tool", "id": "call_p", "name": "get_goal",
+                        "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": text }] },
+                        "time": { "created": 20, "ran": 21, "completed": 22 },
+                    }],
+                    "finish": "stop", "time": { "created": 20, "completed": 23 },
+                });
+                Some((200, json!({ "data": [message], "cursor": {} })))
+            }
+            _ => None,
+        };
+        let h = open_as(&[carrier], 170, handler, false, None).unwrap();
+        h.wait_for("Ship the parser rewrite");
+        let shown = |h: &Port| {
+            let screen = h.app.text();
+            screen.lines().find_map(|line| line.split("Time: ").nth(1).map(|time| time.trim().to_owned()))
+        };
+        let before = shown(&h).unwrap_or_else(|| panic!("{carrier:?}: no time:\n{}", h.app.text()));
+        std::thread::sleep(Duration::from_millis(1100));
+        h.app.advance(Duration::from_millis(1000));
+        h.wait(&format!("{carrier:?}: the time moves on from {before}"), || shown(&h).is_some_and(|now| now != before));
+    }
+}
+
 fn closed_mid_run(carrier: Carrier<'_>) {
     let grown = Arc::new(Mutex::new(false));
     let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));

@@ -4,8 +4,10 @@
 //!
 //! The total covers every message, not the loaded transcript: the panel walks the tree with `session.list` and pages
 //! `message.list` for each session, through the host's `fetch`, in a task that awaits each reply as TS does. It reads
-//! the meters with `usage.limits`, at most once per `refreshMs` and at once after a turn. Its own thread ticks every 15
-//! seconds, which moves the countdowns and lets the throttled read run, and notices a change of the config file.
+//! the meters with `usage.limits`, at most once per `refreshMs` and at once after a turn. While a panel shows, it ticks
+//! every 15 seconds on the host's clock, which moves the countdowns, lets the throttled read run, and reads the config
+//! file again if it changed. TS watches that file and reads it 150 ms after a change; here a change shows at the next
+//! tick or mount.
 //!
 //! TS reads every page again after each turn in the tree, and so does the panel. A page holds a hundred messages with
 //! their content, so a thread of the plugin's reads each page from the reply's bytes (`call_on_thread`) and prices
@@ -17,13 +19,10 @@ mod usage;
 
 use std::cell::RefCell;
 use std::future::poll_fn;
-use std::path::PathBuf;
+use std::ops::ControlFlow;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
 use std::task::Poll;
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use config::{Config, Position};
 use opencode_plugin_abi::serde::{Deserialize, Deserializer, de::Error as _};
@@ -33,7 +32,7 @@ use opencode_plugin_abi::types::{
     SessionMessageInfo, UsageLimitsGo, UsageLimitsMeter, V2Event,
 };
 use opencode_plugin_abi::{
-    Changed, Host, LocationRef, Node, Placement, Read, Render, Setup, Span, Waker, Wrap, client, plugin,
+    Changed, Host, LocationRef, Node, Placement, Read, Render, Setup, Span, Wrap, client, plugin,
 };
 use serde_json::Value;
 use usage::js_round;
@@ -53,27 +52,16 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         Position::Bottom => Placement::prepend("sidebar.footer"),
     };
     let panel = Panel { state: Rc::new(RefCell::new(State::new(options, config))), tasks: setup.tasks() };
-    let flags = Flags::default();
-    if let Some(waker) = setup.waker() {
-        let clock = Clock::start(waker, flags.clone(), config::path());
-        setup.on_dispose(move |_| drop(clock));
-    }
     let shown = panel.state.clone();
     setup.slot(at.clone(), move |read, input, changed| match input.session_id.as_deref() {
         Some(_) => shown.borrow_mut().render(read, changed),
         None => Render::Hide,
     });
     let mounted = panel.clone();
-    let phase = flags.mounted.clone();
     setup.on_mount(at, move |host, input, mount| {
         let Some(session) = input.session_id.clone() else { return };
-        if mount {
-            *phase.lock().unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
-        }
         mounted.mount(host, session, mount);
     });
-    let woken = panel.clone();
-    setup.on_wake(move |host| woken.woken(host, &flags));
     let events = ["session.execution.succeeded", "session.usage.updated", "session.created", "session.deleted"];
     setup.on_event(&events, move |host, event| panel.event(host, event));
     Ok(())
@@ -103,6 +91,10 @@ struct State {
     last_forced: f64,
     /// TS `now`, which the tick moves.
     now: f64,
+    /// The tick runs: it ends at its first tick with no panel mounted.
+    ticking: bool,
+    /// The config file's time and size as last read.
+    stamp: Option<(Option<SystemTime>, u64)>,
     /// TS `costInFlight`.
     costing: bool,
     /// TS `costQueued` and `costReload`.
@@ -127,11 +119,22 @@ impl State {
             last_loaded: 0.0,
             last_forced: 0.0,
             now: now(),
+            ticking: false,
+            stamp: stamp(),
             costing: false,
             queued: None,
             pricing: None,
             total: None,
             skipped: 0,
+        }
+    }
+
+    /// Reads the config file again if it changed since it was last read; the position stays, as TS reads it once.
+    fn reconfigure(&mut self) {
+        let stamp = stamp();
+        if stamp != self.stamp {
+            self.stamp = stamp;
+            self.config = Config { position: self.config.position, ..config::load(&self.options) };
         }
     }
 
@@ -240,6 +243,14 @@ impl Panel {
             }
             state.mounts.push(session.clone());
             state.now = now();
+            state.reconfigure();
+            if !std::mem::replace(&mut state.ticking, true) {
+                let panel = self.clone();
+                self.tasks.every(host, Duration::from_millis(usage::TICK_MS), move |cx| {
+                    let flow = cx.with(|host| panel.tick(host));
+                    async move { flow }
+                });
+            }
             if state.session.as_ref() != Some(&session) {
                 state.session = Some(session);
                 state.tree.clear();
@@ -255,19 +266,21 @@ impl Panel {
         self.load(host, true);
     }
 
-    /// The tick or the config file woke the plugin.
-    fn woken(&self, host: &dyn Host, flags: &Flags) {
+    /// TS's tick, while a panel shows: the countdowns move, the config file is read again if it changed, and the
+    /// throttled read may run. The panel draws again after it.
+    fn tick(&self, host: &dyn Host) -> ControlFlow<()> {
         let mut state = self.state.borrow_mut();
-        if flags.config.swap(false, Ordering::AcqRel) {
-            state.config = Config { position: state.config.position, ..config::load(&state.options) };
+        if state.mounts.is_empty() {
+            state.ticking = false;
+            return ControlFlow::Break(());
         }
-        if flags.tick.swap(false, Ordering::AcqRel) && !state.mounts.is_empty() {
-            state.now = now();
-            if state.config.refresh_ms > 0 {
-                drop(state);
-                self.load(host, false);
-            }
+        state.now = now();
+        state.reconfigure();
+        if state.config.refresh_ms > 0 {
+            drop(state);
+            self.load(host, false);
         }
+        ControlFlow::Continue(())
     }
 
     fn event(&self, host: &dyn Host, event: &V2Event) {
@@ -523,92 +536,9 @@ fn now() -> f64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0.0, |since| since.as_millis() as f64)
 }
 
-/// When the clock ticks: a period after the latest mount, then every period, as TS's `setInterval` in a component.
-struct Phase {
-    due: Instant,
-    period: Duration,
-}
-
-impl Phase {
-    fn new(now: Instant, period: Duration) -> Self {
-        Self { due: now + period, period }
-    }
-
-    /// Whether the clock ticks at `now`, after a mount at `mounted` if one came since the last call.
-    fn tick(&mut self, now: Instant, mounted: Option<Instant>) -> bool {
-        if let Some(mounted) = mounted {
-            self.due = mounted + self.period;
-        }
-        if now < self.due {
-            return false;
-        }
-        while self.due <= now {
-            self.due += self.period;
-        }
-        true
-    }
-}
-
-/// What the clock's thread tells the UI thread.
-#[derive(Clone, Default)]
-struct Flags {
-    tick: Arc<AtomicBool>,
-    config: Arc<AtomicBool>,
-    /// When a claim mounted last, until the clock's thread starts its period there.
-    mounted: Arc<Mutex<Option<Instant>>>,
-}
-
-/// Ticks every [`usage::TICK_MS`] from the latest mount and watches the config file, on its own thread, and wakes the host for either. It
-/// stops and joins the thread when dropped, at dispose.
-struct Clock {
-    stop: Arc<AtomicBool>,
-    thread: Option<JoinHandle<()>>,
-}
-
-impl Clock {
-    fn start(waker: Waker, flags: Flags, path: PathBuf) -> Self {
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopped = stop.clone();
-        let stamp = |path: &PathBuf| std::fs::metadata(path).ok().map(|meta| (meta.modified().ok(), meta.len()));
-        let thread = std::thread::spawn(move || {
-            let mut phase = Phase::new(Instant::now(), Duration::from_millis(usage::TICK_MS));
-            let mut seen = stamp(&path);
-            loop {
-                // A mount only moves the tick later, so the thread may sleep until the tick it knows.
-                let poll = Duration::from_millis(500).min(phase.due.saturating_duration_since(Instant::now()));
-                std::thread::park_timeout(poll);
-                if stopped.load(Ordering::Acquire) {
-                    return;
-                }
-                let mut wake = false;
-                let mounted = flags.mounted.lock().unwrap_or_else(PoisonError::into_inner).take();
-                if phase.tick(Instant::now(), mounted) {
-                    flags.tick.store(true, Ordering::Release);
-                    wake = true;
-                }
-                let now = stamp(&path);
-                if now != seen {
-                    seen = now;
-                    flags.config.store(true, Ordering::Release);
-                    wake = true;
-                }
-                if wake {
-                    waker.wake();
-                }
-            }
-        });
-        Self { stop, thread: Some(thread) }
-    }
-}
-
-impl Drop for Clock {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
-            thread.thread().unpark();
-            let _ = thread.join();
-        }
-    }
+/// The config file's time and size, if it exists.
+fn stamp() -> Option<(Option<SystemTime>, u64)> {
+    std::fs::metadata(config::path()).ok().map(|meta| (meta.modified().ok(), meta.len()))
 }
 
 plugin!(id = "opencode.sidebar.limit", setup);
@@ -641,18 +571,5 @@ mod tests {
         let last = read_page(json!({ "data": [], "cursor": { "next": "" } })).unwrap();
         assert_eq!(last.cursor, None);
         assert!(read_page(json!({ "cursor": {} })).is_none(), "a page without data does not read");
-    }
-
-    // Expected: as TS's `setInterval` in a component, the first tick comes a period after the mount, then every
-    // period; a mount during the period starts it again.
-    #[test]
-    fn the_tick_starts_again_at_a_mount() {
-        let (start, second) = (Instant::now(), Duration::from_secs(1));
-        let mut phase = Phase::new(start, 15 * second);
-        let ticks: Vec<bool> = [(9, None), (15, Some(10)), (24, None), (25, None), (39, None), (40, None)]
-            .into_iter()
-            .map(|(at, mounted)| phase.tick(start + at * second, mounted.map(|at| start + at * second)))
-            .collect();
-        assert_eq!(ticks, [false, false, false, true, false, true]);
     }
 }
