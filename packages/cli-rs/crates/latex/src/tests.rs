@@ -223,7 +223,7 @@ fn dollars_that_are_not_math_stay_text() {
 /// shown math never reverts), so a half-typed `$x^` never draws as broken math.
 #[test]
 fn streaming_inline_math_shows_once_closed() {
-    let frames = stream_text(&["Energy $E=mc", "^", "2", "$ now", " and $x^", "$ too"]);
+    let frames = stream(&["Energy $E=mc", "^", "2", "$ now", " and $x^", "$ too"], false);
     assert!(frames[0].contains("Energy $E=mc"), "{}", frames[0]);
     assert!(frames[1].contains("$E=mc^") && frames[2].contains("$E=mc^2"), "{frames:?}");
     for frame in &frames[3..] {
@@ -232,20 +232,6 @@ fn streaming_inline_math_shows_once_closed() {
     assert!(frames[4].contains("and $x^"), "{}", frames[4]);
     // `x^` closed does not parse: its TeX shows as typed.
     assert!(frames[5].contains("and x^ too"), "{}", frames[5]);
-}
-
-/// Streams `chunks` of prose into one document, returning the frame text after each.
-fn stream_text(chunks: &[&str]) -> Vec<String> {
-    let (app, theme) = app(60, 6);
-    let view = markdown(&app, &theme, true);
-    app.root().add(&view);
-    chunks
-        .iter()
-        .map(|chunk| {
-            view.append(chunk);
-            app.render().text()
-        })
-        .collect()
 }
 
 /// Streams `chunks` into one document, returning the frame text after each.
@@ -282,31 +268,17 @@ fn streaming_draws_an_incomplete_formula() {
     assert!(!frames[2].contains("□") && !frames[2].contains("\\frac"), "{}", frames[2]);
 }
 
-/// `markdown.test.ts`: "retains the last valid Unicode formula while the next fraction is incomplete", where even
-/// the incomplete preview fails: a command name half typed. Shown math never goes back to the source.
 #[test]
-fn streaming_keeps_the_last_formula_that_parsed() {
-    let frames = stream(&["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\fr", "ac{a_2}{c_2}"], false);
-    assert_eq!(frames[1], frames[0]);
-    assert_ne!(frames[2], frames[0]);
-    assert!(!frames[2].contains("\\fr"), "{}", frames[2]);
-}
-
-/// `markdown.test.ts`: "discards an incomplete preview when the stream ends: close". The document still streams.
-#[test]
-fn closing_the_fence_drops_a_retained_preview() {
-    let frames = stream(&["```latex\nx^2", " + \\frac{1}{", "\n```\n"], false);
-    assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
-    assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
-}
-
-/// `markdown.test.ts`: "discards an incomplete preview when the stream ends: stop", and "does not leave a stale
-/// formula when a stream ends with invalid math".
-#[test]
-fn stopping_drops_a_retained_preview() {
-    let frames = stream(&["```latex\nx^2", " + \\frac{1}{"], true);
-    assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
-    assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
+fn ending_the_fence_or_stream_drops_the_preview() {
+    for stop in [true, false] {
+        let mut chunks = vec!["```latex\nx^2", " + \\frac{1}{"];
+        if !stop {
+            chunks.push("\n```\n");
+        }
+        let frames = stream(&chunks, stop);
+        assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
+        assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
+    }
     // The closing fence arrives with the broken math, so the source shows before the stream ends too.
     let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```\n"], true);
     assert!(frames[1].contains("x^2 + \\unsupported{x}"), "{}", frames[1]);

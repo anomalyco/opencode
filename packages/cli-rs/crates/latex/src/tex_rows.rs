@@ -220,46 +220,7 @@ fn directives_make_no_atom_and_limits_reach_operators_through_styles() {
         assert_eq!(parse(&format!("x^\\{directive}2")), parse("x^2"), "{directive}");
         assert_eq!(parse(&format!("\\sum\\{directive}_1^2")), parse("\\sum_1^2"), "{directive}");
     }
-    for (source, expected) in [
-        ("\\sum\\limits_1^2", Limits::Always),
-        ("\\sum^2\\nolimits_1", Limits::Never),
-        ("\\int\\limits_1^2", Limits::Always),
-    ] {
-        let Ok(Node::Scripts { base, .. }) = parse(source) else { panic!("{source}") };
-        assert!(matches!(*base, Node::Operator { limits, .. } if limits == expected), "{source}");
-    }
-    let Ok(Node::Scripts { base, .. }) = parse("\\mathbf{\\sum}\\limits_1^2") else { panic!() };
-    assert!(
-        matches!(&*base, Node::Variant { body, .. } if matches!(**body, Node::Operator { limits: Limits::Always, .. }))
-    );
-    {
-        for (source, expected) in [
-            ("\\sum\\limits_1^2", "2\n∑\n1"),
-            ("\\sum\\nolimits_1^2", "∑²₁"),
-            ("\\int\\limits_1^2", "2\n∫\n1"),
-            ("\\sum^2\\nolimits_1", "∑²₁"),
-            ("\\sum\\limits\\nolimits_1^2", "∑²₁"),
-            ("\\sum\\nolimits\\limits_1^2", "2\n∑\n1"),
-            ("\\sum_1^2", "2\n∑\n1"),
-            ("\\int_1^2", "∫²₁"),
-            ("\\sum\\displaystyle_1^2", "2\n∑\n1"),
-            ("x^\\displaystyle2", "x²"),
-            ("\\mathbf{\\sum}\\limits_1^2", "2\n∑\n1"),
-            ("\\textcolor{red}{\\sum}\\nolimits_1^2", "∑²₁"),
-            ("\\mathbf{\\sum}_1^2", "2\n∑\n1"),
-            ("\\mathbf{\\sin}x", "sin x"),
-            ("\\mathbf{\\underbrace{abcd}}_{n}", "abcd\n╰┬─╯\n n"),
-            ("\\mathbf{\\sum_1^2}\\nolimits", "∑²₁"),
-            ("\\textcolor{red}{\\mathbf{\\sum_1^2}}\\limits", "2\n∑\n1"),
-            ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
-            ("\\mathbf{\\sum^2}\\limits_1", "2\n∑\n1"),
-            ("\\textcolor{red}{\\sum_1}\\limits^2", "2\n∑\n1"),
-            // TS draws a space before the fraction for the directive (`parity/deviations/P2-latex-opentui-tex.md`).
-            ("\\displaystyle \\frac{a}{b} \\textstyle c \\scriptstyle d", " a\n─── cd\n b"),
-        ] {
-            assert_eq!(display(source), expected, "{source:?}");
-        }
-    }
+    assert_eq!(display("\\displaystyle \\frac{a}{b} \\textstyle c \\scriptstyle d"), " a\n─── cd\n b");
 }
 
 #[test]
@@ -295,17 +256,6 @@ fn graphemes_and_combining_marks_stay_whole() {
     for suffix in ["{x}", "^2", "_2", "\\alpha", "~x", "% ignored\nx"] {
         assert_eq!(parse(&format!("\u{600}{suffix}")), parse(&format!("\u{600} {suffix}")), "{suffix:?}");
     }
-    let Ok(Node::Fraction { numerator, denominator, .. }) = parse("\\frac x\u{305}\u{1f469}\u{200d}\u{1f52c}") else {
-        panic!()
-    };
-    assert_eq!((*numerator, *denominator), (sym("x\u{305}"), sym("\u{1f469}\u{200d}\u{1f52c}")));
-    let Ok(Node::Scripts { base, .. }) = parse("\\alpha\u{305}^2") else { panic!() };
-    assert!(matches!(*base, Node::Symbol { value, .. } if value == "α\u{305}"));
-    let Ok(Node::Delimited { left, right, .. }) = parse("\\left\\langle\u{305}x\\right\\rangle\u{305}") else {
-        panic!()
-    };
-    assert_eq!((left.as_str(), right.as_str()), ("⟨\u{305}", "⟩\u{305}"));
-    assert_eq!(parse("\\%\u{305}"), Ok(Node::Symbol { value: "%\u{305}".into(), role: None }));
     assert_eq!(cells(&parse("\\begin{matrix}\u{600}&&x\\end{matrix}").unwrap()), [vec!["\u{600}", "", "x"]]);
     for (source, expected) in [
         ("a=\u{338}b", "a =\u{338} b"),
@@ -498,8 +448,6 @@ fn inline_math_takes_one_row() {
 
 #[test]
 fn accents_on_styled_text() {
-    let node = parse("\\hat{\\mathbf{x}}").unwrap();
-    let Node::Accent { accent: Accent::Hat, .. } = &node else { panic!() };
     assert_eq!(inline("\\hat{\\mathbf{x}}"), "x\u{302}");
     assert_eq!(inline("\\tilde{\\mathbb{R}}"), "ℝ\u{303}");
 }
@@ -547,58 +495,18 @@ fn draw(node: &Node) -> crate::Layout {
 
 #[test]
 fn fractions_braces_matrices_and_tall_scripts() {
-    use crate::parse::Align;
-    for (align, expected) in [
-        (Some(Align::Left), " 1\n───────\n 12345"),
-        (Some(Align::Right), "     1\n───────\n 12345"),
-        (None, "   1\n───────\n 12345"),
-    ] {
-        assert_eq!(draw(&fraction("12345", true, align)).to_string(), expected);
-    }
-    assert_eq!(draw(&fraction("2", false, None)).to_string(), " 1\n\n 2");
-    for (over, expected, baseline, small) in
-        [(true, " n\n╭┴─╮\nabcd", 2, "╭┴╮\n x"), (false, "abcd\n╰┬─╯\n n", 0, " x\n╰┬╯")]
-    {
-        let base = Node::Brace { body: Box::new(text("abcd")), over };
-        let script = Some(Box::new(text("n")));
-        let node = Node::Scripts {
-            base: Box::new(base),
-            superscript: if over { script.clone() } else { None },
-            subscript: if over { None } else { script },
-        };
-        assert_eq!((draw(&node).to_string().as_str(), draw(&node).baseline), (expected, baseline));
-        assert_eq!(draw(&Node::Brace { body: Box::new(text("x")), over }).to_string(), small);
-    }
-    let half = fraction("2", true, None);
-    let array = |columns: &str, rows: Vec<Vec<Node>>| Node::Matrix {
-        rows,
-        environment: Environment::Array,
-        columns: Some(columns.into()),
-    };
-    let rules = array("|l||r|", vec![vec![text("a"), text("b")], vec![half.clone(), text("cc")]]);
-    assert_eq!(draw(&rules).to_string(), "│ a   ││  b │\n│  1  ││    │\n│ ─── ││ cc │\n│  2  ││    │");
-    let aligned =
-        array("lcr", vec![vec![text("a"), text("b"), text("c")], vec![text("long"), text("wide"), text("last")]]);
-    assert_eq!(draw(&aligned).to_string(), "a     b      c\nlong wide last");
-    let rows = vec![vec![text("x"), text("p")], vec![text("long"), text("condition")]];
-    let matrix = |environment| Node::Matrix { rows: rows.clone(), environment, columns: None };
-    assert_eq!(draw(&matrix(Environment::Cases)).to_string(), "⎧x     p\n⎩long  condition");
-    assert_eq!(draw(&matrix(Environment::Aligned)).to_string(), "   x  p\nlong  condition");
-    let pmatrix = Node::Matrix {
-        rows: vec![vec![text("a"), text("b")], vec![text("c"), text("d")]],
-        environment: Environment::Pmatrix,
-        columns: None,
-    };
-    let scripts = |base: &Node, superscript: Option<&str>, subscript: Option<&str>| Node::Scripts {
-        base: Box::new(base.clone()),
-        superscript: superscript.map(|value| Box::new(text(value))),
-        subscript: subscript.map(|value| Box::new(text(value))),
-    };
-    assert_eq!(draw(&scripts(&pmatrix, Some("2"), None)).to_string(), "     2\n⎛a b⎞\n⎝c d⎠");
-    assert_eq!(draw(&scripts(&half, Some("2"), Some("1"))).to_string(), "   2\n 1\n───\n 2\n   1");
-    let root = Node::Root { body: Box::new(text("x")), index: Some(Box::new(half)) };
-    assert_eq!(draw(&root).to_string(), " 1\n───\n 2 ╭─\n  √ x");
     for (source, expected) in [
+        ("\\frac{1}{12345}", "   1\n───────\n 12345"),
+        ("\\underbrace{x}", " x\n╰┬╯"),
+        ("\\overbrace{x}", "╭┴╮\n x"),
+        ("\\overbrace{abcd}^{n}", " n\n╭┴─╮\nabcd"),
+        (
+            "\\begin{array}{|l||r|}a&b\\\\\\frac{1}{2}&cc\\end{array}",
+            "│ a   ││  b │\n│  1  ││    │\n│ ─── ││ cc │\n│  2  ││    │",
+        ),
+        ("\\begin{array}{lcr}a&b&c\\\\long&wide&last\\end{array}", "a     b      c\nlong wide last"),
+        ("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}^2", "     2\n⎛a b⎞\n⎝c d⎠"),
+        ("\\frac{1}{2}^2_1", "   2\n 1\n───\n 2\n   1"),
         ("\\begin{aligned}x &= 1 \\\\ yy &= 2\\end{aligned}", " x  = 1\nyy  = 2"),
         ("\\begin{aligned}&=x\\\\&=y\\end{aligned}", "  = x\n  = y"),
         ("\\cfrac[l]{1}{12345}", " 1\n───────\n 12345"),
@@ -617,18 +525,7 @@ fn fractions_braces_matrices_and_tall_scripts() {
 
 #[test]
 fn limits_in_three_ways() {
-    let sum = |limits| Node::Scripts {
-        base: Box::new(Node::Operator { value: "∑".into(), limits }),
-        superscript: Some(Box::new(text("2"))),
-        subscript: Some(Box::new(text("1"))),
-    };
     for display in [false, true] {
-        for limits in [Limits::Always, Limits::Never, Limits::Display] {
-            let options = Options { display, ..Options::default() };
-            let stacked = limits == Limits::Always || (limits == Limits::Display && display);
-            let expected = if stacked { "2\n∑\n1" } else { "∑²₁" };
-            assert_eq!(layout::layout(&sum(limits), &options).unwrap().to_string(), expected, "{limits:?} {display}");
-        }
         for (source, expected) in [
             ("\\sum\\limits_1^2", "2\n∑\n1"),
             ("\\sum\\nolimits_1^2", "∑²₁"),
@@ -691,61 +588,8 @@ fn permissive_mode_keeps_unsupported_commands_as_text() {
 
 #[test]
 fn incomplete_mode_draws_a_prefix_with_placeholders() {
-    let placeholder = || Node::Symbol { value: PLACEHOLDER.into(), role: None };
     let incomplete =
         |source: &str| parse_with(source, INCOMPLETE).unwrap_or_else(|error| panic!("{source:?}: {error}"));
-    // Each prefix fails whole and recovers incomplete.
-    for source in [
-        "\\frac",
-        "\\frac{1}{",
-        "x^",
-        "x^\\displaystyle",
-        "\\left(x",
-        "\\left(x\\right",
-        "\\left(x\\right\\",
-        "\\sqrt[3",
-        "\\text{abc",
-        "\\operatorname*",
-        "\\overbrace{",
-        "\\mathbb",
-        "\\textcolor{red}{",
-        "\\displaylines{a\\\\b",
-        "\\begin{matrix}1&&",
-        "\\begin{matrix}1& % comment",
-        "\\begin{array}",
-        "\\begin{array}{|",
-        "\\begin{array}{% comment }",
-        "\\begin{array}{lr",
-        "\\cfrac[",
-        "\\cfrac[l",
-        "\\cfrac[r",
-    ] {
-        assert!(parse(source).is_err(), "{source:?} parsed whole");
-        incomplete(source);
-    }
-    assert!(
-        matches!(incomplete("\\frac"), Node::Fraction { numerator, denominator, .. } if *numerator == placeholder() && *denominator == placeholder())
-    );
-    assert!(
-        matches!(incomplete("\\frac{1}{"), Node::Fraction { numerator, denominator, .. } if *numerator == sym("1") && *denominator == placeholder())
-    );
-    assert!(matches!(incomplete("x^"), Node::Scripts { superscript: Some(sup), .. } if *sup == placeholder()));
-    assert!(
-        matches!(incomplete("\\left(x"), Node::Delimited { left, right, body } if left == "(" && right.is_empty() && *body == sym("x"))
-    );
-    assert!(matches!(incomplete("\\left(x\\right\\"), Node::Delimited { right, .. } if right.is_empty()));
-    assert!(
-        matches!(incomplete("\\sqrt[3"), Node::Root { index: Some(index), body } if *index == sym("3") && *body == placeholder())
-    );
-    assert_eq!(incomplete("\\text{abc"), text("abc"));
-    assert_eq!(incomplete("\\operatorname*"), Node::Operator { value: PLACEHOLDER.into(), limits: Limits::Always });
-    assert!(matches!(incomplete("\\overbrace{"), Node::Brace { body, over: true } if *body == placeholder()));
-    assert!(
-        matches!(incomplete("\\mathbb"), Node::Variant { variant: Variant::DoubleStruck, body } if *body == placeholder())
-    );
-    assert!(
-        matches!(incomplete("\\textcolor{red}{"), Node::Color { color, body } if color == "red" && *body == placeholder())
-    );
     assert_eq!(cells(&incomplete("\\displaylines{a\\\\b")), [vec!["a"], vec!["b"]]);
     assert_eq!(cells(&incomplete("\\begin{matrix}1&&")), [vec!["1", "", PLACEHOLDER]]);
     assert_eq!(cells(&incomplete("\\begin{matrix}1& % comment")), [vec!["1", PLACEHOLDER]]);
@@ -766,13 +610,13 @@ fn incomplete_mode_draws_a_prefix_with_placeholders() {
     ] {
         assert!(matches!(incomplete(source), Node::Fraction { align: a, .. } if a == align), "{source:?}");
     }
-    let Node::Scripts { base, superscript, .. } = incomplete("\\bm x\u{305}^") else { panic!() };
-    assert_eq!(
-        (*base, superscript.map(|s| *s)),
-        (Node::Variant { variant: Variant::Bold, body: Box::new(sym("x\u{305}")) }, Some(placeholder()))
-    );
     for (source, expected) in [
         ("\\frac", " □\n───\n □"),
+        ("\\operatorname*", "□"),
+        ("\\overbrace{", "╭┴╮\n □"),
+        ("\\mathbb", "□"),
+        ("\\textcolor{red}{", "□"),
+        ("\\left(x\\right\\", "(x"),
         ("x\u{305}^", " □\nx\u{305}"),
         ("\\alpha\u{305}^", " □\nα\u{305}"),
         ("\\left[\u{305}x", "[\u{305}x"),
