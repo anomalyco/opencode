@@ -1812,6 +1812,61 @@ fn a_plugin_with_eighty_stores_reads_each() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("160"));
 }
 
+// Expected (CT-36): a V2 plugin stores a value of about 1 MB, as opencodebar keeps its price list and prompt-search its
+// index of every prompt, and follows a value of that size another client stores. Its write goes to the host in pieces,
+// past a frame's 256 KiB, and is kept within the stored value's bound; the read comes back in parts. Before, the write's
+// frame over the cap ended the JS host, and a read over 256 KiB read as nothing.
+#[test]
+fn a_plugin_stores_and_follows_a_value_of_a_megabyte() {
+    let Some(config) = config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let dir = root.path().join("config/plugins/big");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = root.path().join("big.count");
+    let module = format!(
+        "const prices = (from, count) => Object.fromEntries(Array.from({{ length: count }}, (_, index) =>\n\
+         [`provider/model-${{from + index}}`, {{ input: index, output: index * 2, note: \"x\".repeat(80) }}]))\n\
+         export default {{ id: \"example.big\", setup(context) {{\n\
+         const [store, update] = context.storage.store(\"prices\", {{ initial: {{ entries: {{}} }} }})\n\
+         const count = () => require(\"node:fs\").writeFileSync({marker:?}, String(Object.keys(store.entries).length))\n\
+         context.keymap.layer(() => ({{ mode: \"global\", commands: [\n\
+         {{ id: \"big.save\", title: \"Save\", run: () => update((draft) => {{ draft.entries = prices(0, 10000) }}).then(count) }},\n\
+         {{ id: \"big.count\", title: \"Count\", run: count }},\n\
+         ] }}))\n\
+         }} }}\n"
+    );
+    std::fs::write(dir.join("tui.ts"), module).unwrap();
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let host = opencode_tui::plugins::host::host(&harness.tui);
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    let pipe = Pipe { harness, root };
+    pipe.active("example.big");
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("big.save", None);
+    let key = "plugin.example.big.prices";
+    pipe.harness.wait("the value was stored", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        std::fs::read_to_string(&marker).ok().as_deref() == Some("10000")
+    });
+    opencode_tui::plugins::host::flush_storage(&pipe.harness.tui);
+    let stored = opencode_plugin::Host::storage_read(&*host, key).unwrap_or_default();
+    assert!(stored.len() > 1_000_000, "the host keeps {} bytes", stored.len());
+    assert_eq!(pipe.status("example.big"), Some(Status::Active));
+    // Another client stores a list as large again: the plugin's store follows it.
+    let entries: serde_json::Map<String, Value> = (0..12_000)
+        .map(|index| (format!("other/model-{index}"), serde_json::json!({ "input": index, "note": "y".repeat(80) })))
+        .collect();
+    let theirs = serde_json::json!({ "entries": entries }).to_string();
+    opencode_plugin::Host::storage_write(&*host, key, &theirs).unwrap();
+    opencode_plugin::Host::storage_changed(&*host);
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("big.count", None);
+    pipe.settle();
+    assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("12000"));
+    assert_eq!(pipe.status("example.big"), Some(Status::Active));
+}
+
 /// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
 /// example plugins `globals` are the user's.
 fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {

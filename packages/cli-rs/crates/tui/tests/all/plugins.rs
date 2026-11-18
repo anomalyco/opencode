@@ -1438,15 +1438,18 @@ fn a_failed_dev_build_says_so() {
     harness.wait_for("plugin dev: the build passes again");
 }
 
+/// A field just over half a stored value's bound: one fits, two do not.
+const FIELD: usize = opencode_plugin::storage::VALUE_BYTES / 64 * 35;
+
 thread_local! {
     /// The field names and the first letter of each field's value `big` read back, in order.
     static BIG: RefCell<Vec<Vec<(String, char)>>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The plugin `big`, whose key `state` holds fields of 140 KiB.
+/// The plugin `big`, whose key `state` holds fields of [`FIELD`] bytes.
 fn big(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("state");
-    let field = |letter: char| json!(letter.to_string().repeat(140 << 10));
+    let field = |letter: char| json!(letter.to_string().repeat(FIELD));
     setup.command(named("big.set"), move |host, _| host.storage_set("state", json!({ "a": field('x') })));
     setup.command(named("big.replace"), move |host, _| {
         host.storage_merge("state", serde_json::Map::from_iter([("a".to_owned(), field('y'))]));
@@ -1466,8 +1469,8 @@ fn big(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 // Expected (final re-review big-boi, the storage medium): a merge is bounded by the value it makes, not by the old value
-// and the new fields together: replacing a field of 140 KiB with another keeps the value at 140 KiB and is kept; a
-// second such field would make 280 KiB, past 256 KiB, and is refused, leaving the value as it was. On both carriers.
+// and the new fields together: replacing a field of just over half the bound with another keeps the value at that size
+// and is kept; a second such field would pass the bound, and is refused, leaving the value as it was. On both carriers.
 #[test]
 fn a_merge_is_bounded_by_the_value_it_makes() {
     for carrier in crate::plugin_surface::CARRIERS {
@@ -1497,11 +1500,11 @@ thread_local! {
     static TWO: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The plugin `two`, which adds a field `a` of 140 KiB to its key `state`.
+/// The plugin `two`, which adds a field `a` of [`FIELD`] bytes to its key `state`.
 fn two(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("state");
     setup.command(named("two.add"), |host, _| {
-        host.storage_merge("state", serde_json::Map::from_iter([("a".to_owned(), json!("a".repeat(140 << 10)))]));
+        host.storage_merge("state", serde_json::Map::from_iter([("a".to_owned(), json!("a".repeat(FIELD)))]));
     });
     setup.command(named("two.read"), |host, _| {
         let fields = host.storage_get("state").and_then(|value| value.as_object().cloned()).unwrap_or_default();
@@ -1513,9 +1516,9 @@ fn two(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (re-review final pass, the storage bound): two clients each add a field of 140 KiB to a key that was empty
-// when each read it. The other client's write lands first; this client's merge fits what it read, but the value it
-// makes under the lock would be 280 KiB, past 256 KiB: it is refused there, the file keeps the other client's value
+// Expected (re-review final pass, the storage bound): two clients each add a field of [`FIELD`] bytes to a key that was
+// empty when each read it. The other client's write lands first; this client's merge fits what it read, but the value it
+// makes under the lock would pass the bound: it is refused there, the file keeps the other client's value
 // alone, and this client's plugin reads that value after, not its own merge. On both carriers.
 #[test]
 fn two_clients_merging_a_key_stay_within_its_bound_together() {
@@ -1538,7 +1541,7 @@ fn two_clients_merging_a_key_stay_within_its_bound_together() {
         };
         // This client reads the key empty; the other client then adds its field, through the same lock.
         run("two.read");
-        let theirs = json!({ "b": "b".repeat(140 << 10) });
+        let theirs = json!({ "b": "b".repeat(FIELD) });
         other
             .update_within("plugin.two.state", &json!({}), opencode_plugin::storage::VALUE_BYTES, |value| {
                 *value = theirs.clone();
@@ -1581,7 +1584,7 @@ fn a_refused_write_leaves_the_cache_equal_to_the_file_when_its_notice_is_lost() 
         };
         let harness = support::mount(80, 24, deps);
         harness.tui.keymap.dispatch("two.read", None);
-        let theirs = json!({ "b": "b".repeat(140 << 10) });
+        let theirs = json!({ "b": "b".repeat(FIELD) });
         other
             .update_within("plugin.two.state", &json!({}), opencode_plugin::storage::VALUE_BYTES, |value| {
                 *value = theirs.clone();
