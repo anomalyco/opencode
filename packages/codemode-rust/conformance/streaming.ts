@@ -608,6 +608,14 @@ programs.push(
     "JSON.parse('[1,[2,{}],3]', (k, v) => (typeof v === 'number' ? S(v) + v : v))",
     "(function (x) { return S(x) + x + this.y }).call({ y: 10 }, 1)",
     "((x, y) => S(x) + x + y).apply(null, [1, 2])",
+    // Inside a running sync generator the park takes the generator and the frames driving it.
+    "(() => { function* g() { const a = S(1); yield a; yield a + 1 } const it = g(); return [it.next(), it.next(), it.next()] })()",
+    "(() => { function* g() { yield S(1); yield S(2) + 1; return 9 } const out = []; for (const x of g()) out.push(x); return out })()",
+    "(() => { function* g() { yield S(1); yield 5; yield S(2) } return [...g()] })()",
+    "(() => { function* inner() { yield S(1); yield S(2) * 10 } const first = () => inner().next().value; function* outer() { yield* inner(); yield first() + 100; for (const x of inner()) yield x + 1000 } return [...outer()] })()",
+    "await (async () => { function* g() { yield S(1); yield S(2) + 1 } const it = g(); const a = it.next().value; await null; return [a, it.next().value, [...g()]] })()",
+    "(() => { function* g() { try { yield S(1) } finally { yield 'cleanup' } } const it = g(); return [it.next(), it.return(4), it.next(), it.next()] })()",
+    "Array.from((function* () { yield S(1); yield S(2) })(), (x) => x + 1)",
   ].map(searching),
 )
 
@@ -664,6 +672,10 @@ const suspensions: Array<string> = [
   `function f() { return search({ query: tools.wait({}).then(() => 'echo') }).items.length } return [f(), 1]`,
   `return [1, 2].map((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)`,
   `return await Promise.resolve(1).then((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)`,
+  `function* g() { yield search({ query: tools.wait({}).then(() => 'echo') }).items.length; yield 7 }
+   const caller = (it) => [it.next().value, it.next().value, it.next().done]; return [caller(g()), [...g()].length]`,
+  `async function f() { function* g() { yield search({ query: tools.wait({}).then(() => 'echo') }).items.length }
+   return [...g()] } return await f()`,
   `const t = { toJSON: () => 9 }; const r = tools.t.echo({ t, n: [1, { w: tools.wait({}) }], z: t }); return await r`,
 ]
 

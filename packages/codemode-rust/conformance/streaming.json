@@ -16669,6 +16669,182 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { const a = S(1); yield a; yield a + 1 } const it = g(); return [it.next(), it.next(), it.next()] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            {
+              "value": 1,
+              "done": false
+            },
+            {
+              "value": 2,
+              "done": false
+            },
+            {
+              "done": true
+            }
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { yield S(1); yield S(2) + 1; return 9 } const out = []; for (const x of g()) out.push(x); return out })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { yield S(1); yield 5; yield S(2) } return [...g()] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            5,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* inner() { yield S(1); yield S(2) * 10 } const first = () => inner().next().value; function* outer() { yield* inner(); yield first() + 100; for (const x of inner()) yield x + 1000 } return [...outer()] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            10,
+            101,
+            1001,
+            1010
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 1",
+            "answer 1",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { function* g() { yield S(1); yield S(2) + 1 } const it = g(); const a = it.next().value; await null; return [a, it.next().value, [...g()]] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            2,
+            [
+              1,
+              2
+            ]
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2",
+            "call 1",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { function* g() { try { yield S(1) } finally { yield 'cleanup' } } const it = g(); return [it.next(), it.return(4), it.next(), it.next()] })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            {
+              "value": 1,
+              "done": false
+            },
+            {
+              "value": "cleanup",
+              "done": false
+            },
+            {
+              "value": 4,
+              "done": true
+            },
+            {
+              "done": true
+            }
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Array.from((function* () { yield S(1); yield S(2) })(), (x) => x + 1); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            2
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' }); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
@@ -210796,6 +210972,37 @@
       "resume": {
         "ok": true,
         "value": 2
+      },
+      "log": []
+    },
+    {
+      "code": "function* g() { yield search({ query: tools.wait({}).then(() => 'echo') }).items.length; yield 7 }\n   const caller = (it) => [it.next().value, it.next().value, it.next().done]; return [caller(g()), [...g()].length]",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            7,
+            true
+          ],
+          2
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "async function f() { function* g() { yield search({ query: tools.wait({}).then(() => 'echo') }).items.length }\n   return [...g()] } return await f()",
+      "suspend": {
+        "ok": true
+      },
+      "resume": {
+        "ok": true,
+        "value": [
+          1
+        ]
       },
       "log": []
     },
