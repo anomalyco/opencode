@@ -354,8 +354,9 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::receiver_then_loop(vm);
     let other = arg(args, 0);
     fuel::native(vm);
-    let Value::Obj(oid) = other else {
-        return Err(vm.type_error(&format!("Set.{name} expects a Set-like object.")));
+    let oid = match other {
+        Value::Obj(oid) if !vm.is_namespace(oid) => oid,
+        _ => return Err(vm.type_error(&format!("Set.{name} expects a Set-like object."))),
     };
     let sk = vm.names.size;
     let raw = vm.get(&other, sk)?;

@@ -1334,10 +1334,12 @@ fn n_is_nan(_vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(num_arg(args).is_some_and(f64::is_nan)))
 }
 
-fn this_num(vm: &mut Vm, this: &Value) -> Result<f64, Value> {
+fn this_num(vm: &mut Vm, this: &Value, name: &str) -> Result<f64, Value> {
     match this {
         Value::Num(n) => Ok(*n),
-        _ => Err(vm.type_error("Number.prototype method called on an incompatible receiver")),
+        _ => Err(vm.type_error(&format!(
+            "Number.prototype.{name} requires that 'this' be a Number."
+        ))),
     }
 }
 
@@ -1349,7 +1351,7 @@ fn formatting(vm: &mut Vm, args: &[Value], body: impl FnOnce(&mut Vm, &[Value]) 
 }
 
 fn n_to_fixed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let x = this_num(vm, &this)?;
+    let x = this_num(vm, &this, "toFixed")?;
     formatting(vm, args, |vm, args| {
         let d = to_integer(vm.number_of(&arg(args, 0))?);
         if !(0.0..=100.0).contains(&d) {
@@ -1365,7 +1367,7 @@ fn n_to_fixed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn n_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let x = this_num(vm, &this)?;
+    let x = this_num(vm, &this, "toString")?;
     formatting(vm, args, |vm, args| {
         let radix = match arg(args, 0) {
             Value::Undef => 10.0,
@@ -1383,7 +1385,7 @@ fn n_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn n_to_exponential(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let x = this_num(vm, &this)?;
+    let x = this_num(vm, &this, "toExponential")?;
     formatting(vm, args, |vm, args| {
         let digits = match arg(args, 0) {
             Value::Undef => None,
@@ -1401,7 +1403,7 @@ fn n_to_exponential(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn n_to_precision(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let x = this_num(vm, &this)?;
+    let x = this_num(vm, &this, "toPrecision")?;
     formatting(vm, args, |vm, args| {
         if let Value::Undef = arg(args, 0) {
             return Ok(vm.string_val(num_to_string(x)));
@@ -1419,11 +1421,11 @@ fn n_to_precision(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn n_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    Ok(Value::Num(this_num(vm, &this)?))
+    Ok(Value::Num(this_num(vm, &this, "valueOf")?))
 }
 
 fn n_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let x = this_num(vm, &this)?;
+    let x = this_num(vm, &this, "toLocaleString")?;
     if !x.is_finite() {
         return Ok(vm.string_val(num_to_string(x)));
     }

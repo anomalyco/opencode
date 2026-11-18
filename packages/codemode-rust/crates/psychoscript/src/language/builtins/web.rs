@@ -664,8 +664,8 @@ fn this_params(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 }
 
 fn p_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "append")?;
     requires_args(vm, args, "URLSearchParams", "append", 2)?;
+    let id = this_params(vm, &this, "append")?;
     let (k, v) = (usv_arg(vm, args, 0)?, usv_arg(vm, args, 1)?);
     params_mut(vm, id).list.push((k, v));
     update(vm, id);
@@ -673,8 +673,8 @@ fn p_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn p_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "delete")?;
     requires_args(vm, args, "URLSearchParams", "delete", 1)?;
+    let id = this_params(vm, &this, "delete")?;
     let k = usv_arg(vm, args, 0)?;
     let v = match arg(args, 1) {
         Value::Undef => None,
@@ -688,8 +688,8 @@ fn p_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn p_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "get")?;
     requires_args(vm, args, "URLSearchParams", "get", 1)?;
+    let id = this_params(vm, &this, "get")?;
     let k = usv_arg(vm, args, 0)?;
     let found = params_mut(vm, id)
         .list
@@ -703,8 +703,8 @@ fn p_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn p_get_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "getAll")?;
     requires_args(vm, args, "URLSearchParams", "getAll", 1)?;
+    let id = this_params(vm, &this, "getAll")?;
     let k = usv_arg(vm, args, 0)?;
     let found: Vec<String> = params_mut(vm, id)
         .list
@@ -717,8 +717,8 @@ fn p_get_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn p_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "has")?;
     requires_args(vm, args, "URLSearchParams", "has", 1)?;
+    let id = this_params(vm, &this, "has")?;
     let k = usv_arg(vm, args, 0)?;
     let v = match arg(args, 1) {
         Value::Undef => None,
@@ -730,8 +730,8 @@ fn p_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn p_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_params(vm, &this, "set")?;
     requires_args(vm, args, "URLSearchParams", "set", 2)?;
+    let id = this_params(vm, &this, "set")?;
     let (k, v) = (usv_arg(vm, args, 0)?, usv_arg(vm, args, 1)?);
     let list = &mut params_mut(vm, id).list;
     match list.iter().position(|(n, _)| n == &k) {
@@ -782,8 +782,8 @@ fn pairs_for_each(
 }
 
 fn p_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let id = this_params(vm, &this, "forEach")?;
     requires_args(vm, args, "URLSearchParams", "forEach", 1)?;
+    let id = this_params(vm, &this, "forEach")?;
     let pairs = params_mut(vm, id).list.clone();
     pairs_for_each(vm, &this, args, pairs, "URLSearchParams.forEach", callee)
 }
@@ -947,8 +947,8 @@ fn this_headers(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
 }
 
 fn h_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_headers(vm, &this, "append")?;
     requires_args(vm, args, "Headers", "append", 2)?;
+    let id = this_headers(vm, &this, "append")?;
     let (k, v) = (str_arg(vm, args, 0)?, str_arg(vm, args, 1)?);
     let n = header_name(vm, &k)?;
     let v = header_value(vm, &k, &v)?;
@@ -957,8 +957,8 @@ fn h_append(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn h_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_headers(vm, &this, "delete")?;
     requires_args(vm, args, "Headers", "delete", 1)?;
+    let id = this_headers(vm, &this, "delete")?;
     let k = str_arg(vm, args, 0)?;
     let n = header_name(vm, &k)?;
     headers_mut(vm, id).list.retain(|(x, _)| x != &n);
@@ -966,8 +966,8 @@ fn h_delete(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn h_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_headers(vm, &this, "get")?;
     requires_args(vm, args, "Headers", "get", 1)?;
+    let id = this_headers(vm, &this, "get")?;
     let k = str_arg(vm, args, 0)?;
     let n = header_name(vm, &k)?;
     let values: Vec<String> = headers_mut(vm, id)
@@ -995,8 +995,8 @@ fn h_get_set_cookie(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn h_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_headers(vm, &this, "has")?;
     requires_args(vm, args, "Headers", "has", 1)?;
+    let id = this_headers(vm, &this, "has")?;
     let k = str_arg(vm, args, 0)?;
     let n = header_name(vm, &k)?;
     Ok(Value::Bool(
@@ -1005,8 +1005,8 @@ fn h_has(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn h_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = this_headers(vm, &this, "set")?;
     requires_args(vm, args, "Headers", "set", 2)?;
+    let id = this_headers(vm, &this, "set")?;
     let (k, v) = (str_arg(vm, args, 0)?, str_arg(vm, args, 1)?);
     let n = header_name(vm, &k)?;
     let v = header_value(vm, &k, &v)?;
@@ -1029,8 +1029,8 @@ fn h_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn h_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let id = this_headers(vm, &this, "forEach")?;
     requires_args(vm, args, "Headers", "forEach", 1)?;
+    let id = this_headers(vm, &this, "forEach")?;
     let pairs = header_entries(&headers_mut(vm, id).list);
     pairs_for_each(vm, &this, args, pairs, "Headers.forEach", callee)
 }

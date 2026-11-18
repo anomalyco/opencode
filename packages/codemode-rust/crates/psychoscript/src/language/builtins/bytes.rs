@@ -738,6 +738,10 @@ fn u_subarray(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn u_set(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = this_bytes(vm, &this, "set")?;
+    // The reference reads the offset as a number (which calls nothing) before the source, so its failure comes first.
+    if !matches!(arg(args, 1), Value::Undef) {
+        super::builtin_number(vm, &arg(args, 1))?;
+    }
     let into = Sink::Set {
         target: id,
         offset: arg(args, 1),

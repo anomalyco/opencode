@@ -522,7 +522,8 @@ fn proto_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
-    if this.is_nullish() || is_tool_ref(vm, &this) {
+    // A symbol has no prototype to find the method on, as null and undefined have none.
+    if this.is_nullish() || is_tool_ref(vm, &this) || matches!(this, Value::Sym(_)) {
         return Err(vm.type_error("Object.prototype.toLocaleString called on null or undefined."));
     }
     let k = vm.names.to_string;
@@ -580,7 +581,7 @@ fn function_ctor(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
 
 /// The receiver of `Function.prototype.call`, `apply` or `bind`, which must be callable.
 fn function_receiver(vm: &mut Vm, this: &Value, method: &str) -> Result<(), Value> {
-    if vm.is_callable(this) {
+    if vm.is_callable(this) && !matches!(this, Value::Obj(id) if vm.is_namespace(*id)) {
         return Ok(());
     }
     let d = vm.describe_data(this);
@@ -639,8 +640,12 @@ fn function_apply(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     function_receiver(vm, &this, "apply")?;
     let list = match arg(args, 1) {
         Value::Undef | Value::Null => Vec::new(),
-        v @ Value::Obj(_) => array_like(vm, &v)?,
-        _ => return Err(vm.type_error("CreateListFromArrayLike called on non-object")),
+        Value::Obj(id) if !vm.is_namespace(id) => array_like(vm, &Value::Obj(id))?,
+        _ => {
+            return Err(
+                vm.type_error("Function.prototype.apply expects an array-like argument list.")
+            );
+        }
     };
     invoke(vm, callee, this, arg(args, 0), &list)
 }

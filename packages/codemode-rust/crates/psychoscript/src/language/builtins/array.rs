@@ -1860,7 +1860,7 @@ fn a_with(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     integers(vm, args, &[0], |vm, args| {
         let n = len(vm, id);
         let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
-            return Err(vm.range_error("Invalid index"));
+            return Err(vm.range_error("Array.with index is out of range."));
         };
         let mut out = without_holes(items(vm, id));
         out[i] = arg(args, 1);
