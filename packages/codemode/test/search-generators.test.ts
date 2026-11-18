@@ -70,7 +70,7 @@ describe("search inside a running sync generator", () => {
     expect(outcome).toMatchObject({ ok: true, value: [1, 2, [1, 2]] })
   })
 
-  test("at top level, queued jobs run while it is parked, as they do around a search outside a generator", async () => {
+  test("at top level, queued jobs wait for the search, as they do around a search outside a generator", async () => {
     const runtime = CodeMode.make({ tools: { echo } })
     const outcome = await Effect.runPromise(
       runtime.execute(`
@@ -83,7 +83,7 @@ describe("search inside a running sync generator", () => {
         log.push("sync")
         return log`),
     )
-    expect(outcome).toMatchObject({ ok: true, value: ["before", "job", 1, "after", "sync"] })
+    expect(outcome).toMatchObject({ ok: true, value: ["before", 1, "after", "sync"] })
   })
 
   test("a throw from the search's input reaches the generator, then its caller", async () => {
