@@ -15,9 +15,10 @@ export default definePty({
     { keys: "hello", until: { screen: "hello" }, settle: 200 },
     // The tab reads "New session", the new tab's title, before the timestamped default.
     { keys: "\r", until: { screen: /New session +\+/ }, settle: 500, checkpoint: "untitled" },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    // Ctrl+C on the empty prompt exits. A second press is not needed: a screen that holds still cannot tell it from an
+    // exit that has not drawn yet, and once the terminal is restored the press is a SIGINT.
     {
+      keys: "\x03",
       until: { screen: "Continue" },
       settle: 300,
       checkpoint: "epilogue",

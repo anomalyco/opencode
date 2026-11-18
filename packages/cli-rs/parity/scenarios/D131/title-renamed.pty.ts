@@ -13,9 +13,8 @@ export default definePty({
     { until: { screen: "Demo Model" }, settle: 500, timeout: 30_000 },
     { keys: "hello", until: { screen: "hello" }, settle: 200 },
     { keys: "\r", until: { osc: "OC | README.md onboarding token" }, settle: 500, checkpoint: "renamed" },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
-    { until: { screen: "Continue" }, settle: 300, checkpoint: "epilogue", timeout: 10_000 },
+    // One Ctrl+C on the empty prompt exits, as in title-untitled.
+    { keys: "\x03", until: { screen: "Continue" }, settle: 300, checkpoint: "epilogue", timeout: 10_000 },
   ],
   // The `renamed` step waits for both to set the generated title. TS sets a title again on every change to the
   // session, the same one too; Rust sends only a change, so the logs are not compared.
