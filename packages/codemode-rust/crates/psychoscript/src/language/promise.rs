@@ -205,8 +205,14 @@ impl<'rt> Vm<'rt> {
                 self.reject(p, e);
                 return;
             }
+            // A namespace is no object to the reference, so never a thenable, though `then` names a path in it.
+            let namespace = matches!(self.heap[id as usize].kind, Kind::ToolRef(_));
             let then_key = self.names.then;
-            let then = self.get_obj(id, then_key);
+            let then = if namespace {
+                Value::Undef
+            } else {
+                self.get_obj(id, then_key)
+            };
             if self.is_callable(&then) {
                 self.jobs.push_back(Job::Thenable {
                     promise: p,

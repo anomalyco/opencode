@@ -141,7 +141,8 @@ impl<'rt> Vm<'rt> {
                     return Value::Num(m.live as f64);
                 }
                 Kind::ToolRef(path) if cur == id => {
-                    if key == self.names.then || key <= SYM_ASYNC_ITERATOR {
+                    // `then` is a path like any other; a namespace is never a thenable (`resolve_promise`).
+                    if key <= SYM_ASYNC_ITERATOR {
                         return Value::Undef;
                     }
                     let k = self.atoms.text(key);

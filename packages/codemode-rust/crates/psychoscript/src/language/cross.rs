@@ -376,8 +376,10 @@ pub fn program_result(vm: &mut Vm, v: Value) -> Result<(), Value> {
 /// Whether the reference's `$IsThenable` holds: a promise, or an object with a callable `then`.
 fn thenable(vm: &mut Vm, v: &Value) -> bool {
     let Value::Obj(id) = v else { return false };
-    if matches!(vm.heap[*id as usize].kind, Kind::Promise(_)) {
-        return true;
+    match vm.heap[*id as usize].kind {
+        Kind::Promise(_) => return true,
+        Kind::ToolRef(_) => return false,
+        _ => {}
     }
     let then = vm.names.then;
     let t = vm.get_obj(*id, then);
