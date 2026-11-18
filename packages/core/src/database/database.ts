@@ -6,7 +6,7 @@ import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/sql"
 import { Global } from "@opencode/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
-import { chmod } from "node:fs/promises"
+import { chmod, statfs } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -32,7 +32,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // cross-object I/O.
 // Only a database file the user opens imports their legacy auth.json; in-memory and injected databases belong to
 // embedders and tests, which must not pick up the user's credentials.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false) =>
+const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false, wal = true) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -41,11 +41,11 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
       const durableObject = EffectDrizzleSqlite.managesTransactionsNatively(db.$client)
 
       if (supportsTuningPragmas && !durableObject) {
-        yield* db.run("PRAGMA journal_mode = WAL")
-        yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
+        yield* db.run(wal ? "PRAGMA journal_mode = WAL" : "PRAGMA journal_mode = DELETE")
+        yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA cache_size = -64000")
-        yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+        if (wal) yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
@@ -71,17 +71,28 @@ function lockFor(filename: string) {
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const provide = (filename: string) =>
+      const provide = (filename: string, wal = true) =>
         (filename === ":memory:"
-          ? databaseLayer(Semaphore.make(1))
-          : databaseLayer(Effect.succeed(lockFor(filename)), true)
-        ).pipe(Layer.provide(sqliteLayer({ filename })))
+          ? databaseLayer(Semaphore.make(1), false, wal)
+          : databaseLayer(Effect.succeed(lockFor(filename)), true, wal)
+        ).pipe(Layer.provide(sqliteLayer({ filename, disableWAL: !wal })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
       yield* Effect.promise(() => restrictToOwner(file))
-      return provide(file)
+      return provide(file, yield* defaultWAL(file))
     }),
+  )
+}
+
+const defaultWAL = (filename: string) => {
+  // statfs filesystem identifiers are OS-specific. NFS and NFSv4 share this Linux magic.
+  if (process.platform !== "linux") return Effect.succeed(true)
+  return Effect.tryPromise(() => statfs(filename)).pipe(
+    Effect.map((stats) => stats.type !== 0x6969),
+    Effect.catch((cause) =>
+      Effect.logWarning("Could not detect database filesystem; retaining WAL", { cause }).pipe(Effect.as(true)),
+    ),
   )
 }
 
