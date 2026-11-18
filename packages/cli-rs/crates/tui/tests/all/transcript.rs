@@ -796,7 +796,8 @@ fn latex_fences_render_as_math() {
         assistant("msg_2", 1500, json!([{ "type": "text", "text": text }]), Some(4000)),
     ];
     let h = open(60, 20, "ses_l", messages, Info::default());
-    let screen = h.wait_for("╰╯b² - 4ac");
+    // opentui-tex's radical (`parity/deviations/P2-latex-opentui-tex.md`).
+    let screen = h.wait_for("√ b² - 4ac");
     assert!(!screen.contains("\\frac"), "{screen}");
     let rule = screen.lines().position(|line| line.contains("─────────────")).unwrap();
     assert!(screen.lines().nth(rule).unwrap().contains("x ="), "{screen}");
