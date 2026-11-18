@@ -566,7 +566,8 @@ async fn reports_overlapping_contender_failures_without_recruiting_replacements(
     fixture.release(starts[0], "fail").await;
     // Let ensure see the exit across two spawn windows before the survivor exits.
     tokio::time::sleep(Duration::from_millis(450)).await;
-    fixture.release(starts[1], "fail").await;
+    // Distinguish the second failure from the first, whose diagnostics must win.
+    signal(starts[1], Signal::KILL);
     let error = pending.await.unwrap().unwrap_err().to_string();
     assert!(started.elapsed() < Duration::from_secs(3));
     assert!(error.contains("Server process exited with code 23"), "{error}");

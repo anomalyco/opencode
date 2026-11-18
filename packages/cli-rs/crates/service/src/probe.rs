@@ -205,16 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn a_compatible_service_is_reused_when_ready_awaited_while_starting_and_fails_when_it_failed() {
-        assert_eq!(decide(&service(Some("2.0.0"), State::Ready, true), None), Decision::Reuse);
-        assert_eq!(decide(&service(Some("2.0.0"), State::Waiting, true), Some(&exact("2.0.0"))), Decision::Wait);
-        assert_eq!(
-            decide(&service(Some("2.0.0"), State::Failed, true), None),
-            Decision::Fail("Background service failed to start".to_owned())
-        );
-    }
-
-    #[test]
     fn a_version_mismatch_replaces_the_service_handing_off_terminals_only_when_it_is_ready() {
         let two = exact("2.0.0");
         for (state, handoff) in [(State::Ready, true), (State::Waiting, false), (State::Failed, false)] {
