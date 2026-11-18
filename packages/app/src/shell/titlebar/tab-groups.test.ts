@@ -189,6 +189,7 @@ describe("tab-groups", () => {
       state: DEFAULT_TAB_GROUPS_STATE,
       mode: "server",
       serverCount: 1,
+      query: "",
       labels,
     })
 
@@ -201,6 +202,7 @@ describe("tab-groups", () => {
       state: DEFAULT_TAB_GROUPS_STATE,
       mode: "server",
       serverCount: 2,
+      query: "",
       labels,
     })
 
@@ -221,6 +223,7 @@ describe("tab-groups", () => {
       state: DEFAULT_TAB_GROUPS_STATE,
       mode: "server",
       serverCount: 3,
+      query: "",
       labels,
     })!
 
@@ -229,6 +232,7 @@ describe("tab-groups", () => {
       state: { ...DEFAULT_TAB_GROUPS_STATE, groupOrder: [`server:${SERVER_C}`, `server:${SERVER_A}`, `server:${SERVER_B}`] },
       mode: "server",
       serverCount: 3,
+      query: "",
       labels,
     })!
 
@@ -246,6 +250,7 @@ describe("tab-groups", () => {
         },
         mode: "server",
         serverCount: 3,
+        query: "",
         labels,
       })!
 
@@ -282,6 +287,7 @@ describe("tab-groups", () => {
       state,
       mode: "none",
       serverCount: 2,
+      query: "",
       labels,
     })
 
@@ -395,6 +401,7 @@ describe("tab-groups", () => {
       state: DEFAULT_TAB_GROUPS_STATE,
       mode: "server",
       serverCount: 2,
+      query: "",
       labels,
     })!
 
@@ -545,6 +552,7 @@ describe("tab-groups", () => {
       state: initialState,
       mode: "none",
       serverCount: 1,
+      query: "",
       labels,
     })!
 
@@ -599,6 +607,7 @@ describe("tab-groups", () => {
       state,
       mode: "none",
       serverCount: 1,
+      query: "",
       labels,
     })!
 

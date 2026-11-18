@@ -2730,9 +2730,17 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
   const remoteTab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remoteOne.id, REMOTE_SERVER)}"])`)
 
-  await expect(sidebar.locator('[data-action="vertical-tabs-search"]')).toBeVisible()
   await expect(sidebar.locator("[data-tab-group]")).toHaveCount(2)
   await expect(remoteTab).toBeVisible()
+
+  // Inline search filters open tabs in place without showing closed/recent results underneath.
+  const filterInput = sidebar.getByRole("textbox", { name: "Search sessions", exact: true })
+  await filterInput.fill("Remote gamma")
+  await expect(remoteTab).toBeVisible()
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toHaveCount(0)
+  await filterInput.press("Escape")
+  await expect(filterInput).toHaveValue("")
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toBeVisible()
 
   const initialLocalColor = await localHeader.getAttribute("data-group-color")
   const initialRemoteColor = await remoteHeader.getAttribute("data-group-color")

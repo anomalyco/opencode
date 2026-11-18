@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { Icon } from "@opencode/ui/icon"
@@ -103,6 +103,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       DEFAULT_TAB_GROUPS_STATE,
     )
 
+    const [local, setLocal] = createStore({ query: "" })
     const [drag, setDrag] = createSignal(INITIAL_VERTICAL_DRAG_STATE)
 
     const mode = () => state.mode
@@ -203,6 +204,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         mode: mode(),
         serverCount: serverCount(),
         knownServers: global.servers.list().map(ServerConnection.key),
+        query: local.query,
         labels: {
           other: language.t("sidebar.view.other"),
         },
@@ -867,6 +869,8 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       dragBinding,
       isJoinTarget: (groupKey: string) => selectJoinGroupKey(drag()) === groupKey,
       headerShiftY: (groupKey: string) => selectHeaderShiftY(drag(), groupKey),
+      query: () => local.query,
+      setQuery: (value: string) => setLocal("query", value),
       setMode: (next: TabGroupMode) => setState("mode", next),
       groups,
       groupOfKey: (key: string) => groupByKey().get(key),
@@ -1104,14 +1108,15 @@ export function TabGroupingMenu() {
   return (
     <Menu gutter={4} modal={false} placement="bottom-end">
       <Menu.Trigger
-        as={IconButton}
-        variant="ghost-muted"
-        size="small"
+        as="button"
+        type="button"
         aria-label={language.t("tabs.groups.menu")}
         title={language.t("tabs.groups.menu")}
         data-action="tab-groups-menu"
-        icon={<Icon name="outline-sliders" size="small" />}
-      />
+        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
+      >
+        <Icon name="outline-sliders" size="small" />
+      </Menu.Trigger>
 
       <Menu.Portal>
         <Menu.Content class="min-w-[168px]">
@@ -1147,15 +1152,71 @@ export function TabGroupingMenu() {
   )
 }
 
-export function TabGroupsHeaderRow() {
+export function TabFilterInput(props: { trailing?: JSX.Element }) {
+  const tabGroups = useTabGroups()
   const language = useLanguage()
+  let inputRef: HTMLInputElement | undefined
 
   return (
-    <div class="flex h-7 shrink-0 items-center gap-1.5 ps-2 pe-1 [app-region:no-drag]">
-      <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted">
-        {language.t("sidebar.view.sessions")}
-      </span>
-      <TabGroupingMenu />
+    <div data-slot="sidebar-search-input" class="min-w-0 flex-1">
+      <TextInput
+        ref={(el) => {
+          inputRef = el
+        }}
+        type="text"
+        dir="auto"
+        appearance="base"
+        surface="layer-1"
+        class="!w-full min-w-0 [app-region:no-drag]"
+        leadingIcon={<Icon name="magnifying-glass" />}
+        showClearButton={tabGroups.query().length > 0}
+        clearIcon="circle-xmark"
+        onClearClick={() => {
+          tabGroups.setQuery("")
+          inputRef?.focus()
+        }}
+        trailing={props.trailing}
+        aria-label={language.t("tabs.groups.filter.placeholder")}
+        placeholder={language.t("tabs.groups.filter.placeholder")}
+        spellcheck={false}
+        autocomplete="off"
+        value={tabGroups.query()}
+        onInput={(event) => tabGroups.setQuery(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return
+
+          if (tabGroups.query()) {
+            event.preventDefault()
+            tabGroups.setQuery("")
+
+            return
+          }
+
+          inputRef?.blur()
+        }}
+      />
     </div>
+  )
+}
+
+export function VerticalTabGroupsControls(props: {
+  actionInHeader: boolean
+  firstAction: () => JSX.Element
+  newSessionButton: () => JSX.Element
+  projectNavigation: boolean
+  settingsButton: () => JSX.Element
+}) {
+  return (
+    <>
+      <div class="flex w-full shrink-0 flex-col gap-[3px]">
+        <Show when={!props.actionInHeader}>{props.firstAction()}</Show>
+        <Show when={props.projectNavigation} fallback={props.newSessionButton()}>
+          {props.settingsButton()}
+        </Show>
+      </div>
+      <div class="mt-2.5 mb-2.5 flex w-full shrink-0 items-center">
+        <TabFilterInput trailing={<TabGroupingMenu />} />
+      </div>
+    </>
   )
 }

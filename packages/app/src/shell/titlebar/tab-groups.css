@@ -92,6 +92,11 @@
   background: var(--tab-group-swatch);
 }
 
+/* Aligns Search leading icon (x = 8..24px) and placeholder (x = 32px) with Home & New session rows */
+[data-slot="sidebar-search-input"] [data-slot="text-input-v2-value"] {
+  gap: 8px;
+}
+
 /* ==========================================================================
    Vertical (Side) Tabs: Tonal Jewel Pill + Steady Saturated Vertical Rail
    ========================================================================== */
