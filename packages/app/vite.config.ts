@@ -22,11 +22,15 @@ const sentry =
       })
     : false
 
+// `VITE_BASE_URL=/opencode` builds the app to be served under that path; it is the root by default.
+const base = `/${(process.env.VITE_BASE_URL ?? "").replace(/^\/+|\/+$/g, "")}/`.replace(/^\/\/$/, "/")
+
 export default defineConfig({
+  base,
   plugins: [
     desktopPlugin,
-    icons(channel),
-    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
+    icons(channel, base),
+    serviceWorker(fileURLToPath(new URL("./dist", import.meta.url)), base),
     sentry,
   ] as any,
   server: {

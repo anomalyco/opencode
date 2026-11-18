@@ -13,7 +13,9 @@ export function onDemandAsset(path: string) {
   return officeAsset.test(path)
 }
 
-export function serviceWorker(directory: string) {
+export function serviceWorker(directory: string, base = "/") {
+  const prefix = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
   return VitePWA({
     strategies: "generateSW",
     registerType: "prompt",
@@ -27,9 +29,12 @@ export function serviceWorker(directory: string) {
       // Keep each open tab on its complete build until all old clients close.
       skipWaiting: false,
       inlineWorkboxRuntime: true,
-      navigateFallback: "/index.html",
+      navigateFallback: `${base}index.html`,
       // Pairing links must reach the server so it can set the session cookie.
-      navigateFallbackDenylist: [/^\/(?:api|auth)(?:\/|$)/, /^\/(?:_assets|assets)(?:\/|$)/],
+      navigateFallbackDenylist: [
+        new RegExp(`^${prefix}(?:api|auth)(?:/|$)`),
+        new RegExp(`^${prefix}(?:_assets|assets)(?:/|$)`),
+      ],
       // Include lazy chunks and non-JS dependencies, not just the startup bundle.
       globPatterns: ["**/*"],
       globIgnores: ["**/*.map", "_headers", "_redirects"],
