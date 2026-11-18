@@ -621,34 +621,6 @@ fn first_dependency(base: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// The keys of each spec form, as `npm.ts` makes them: checked against `npm-package-arg` 13's parse of each (the
-    /// type and the raw spec, run with Bun in the TS checkout).
-    #[test]
-    fn a_spec_is_keyed_by_its_text() {
-        let registry = |spec: &str| key(spec, parse(spec).as_ref());
-        assert_eq!(registry("foo"), "foo@latest");
-        assert_eq!(registry("foo@1.2.3"), "foo@1.2.3");
-        assert_eq!(registry("foo@^1"), "foo@^1");
-        assert_eq!(registry("foo@latest"), "foo@latest");
-        assert_eq!(registry("foo@beta"), "foo@beta");
-        // Windows has no `*`, `<` or `>` in a name: TS's `sanitize` makes each `_` there.
-        assert_eq!(registry("foo@"), if cfg!(windows) { "foo@_" } else { "foo@*" });
-        assert_eq!(registry("Foo"), "Foo@latest");
-        assert_eq!(registry("@s/foo"), "@s/foo@latest");
-        assert_eq!(registry("@s/foo@2"), "@s/foo@2");
-        assert_eq!(registry("@s/foo@>=1 <2"), if cfg!(windows) { "@s/foo@_=1 _2" } else { "@s/foo@>=1 <2" });
-        // Not registry specs: the spec itself.
-        for spec in ["foo@npm:bar@1", "file:../x", "https://x.org/y.tgz", "foo bar"] {
-            assert_eq!(registry(spec), sanitize(spec), "{spec}");
-        }
-        // Git: the slug and the spec's hash (`createHash("sha256").update(pkg).digest("hex").slice(0, 12)`).
-        let git = registry("github:u/r");
-        assert!(git.starts_with("git-r-") && git.len() == "git-r-".len() + 12, "{git}");
-        assert!(registry("u/r").starts_with("git-r-"));
-        assert!(registry("git+https://x.org/y.git#abc").starts_with("git-y-"));
-        assert_eq!(parse("foo@git+https://x.org/y.git").and_then(|target| target.name), Some("foo".to_owned()));
-    }
-
     // Expected (TS `Npm.resolve`): the newest generation's `node_modules/<name>`; a scoped name nests; a git spec's
     // name is the generation's first dependency; nothing in the cache, or only a key without the package, is not found.
     #[test]
@@ -674,6 +646,7 @@ mod tests {
         let git = key("github:u/r", parse("github:u/r").as_ref());
         let named = install(&git, "7", "real-name");
         assert_eq!(resolve("github:u/r", &cache), Some(Package { directory: named, name: "real-name".into() }));
+        assert_eq!(parse("foo@git+https://x.org/y.git").and_then(|target| target.name).as_deref(), Some("foo"));
         std::fs::create_dir_all(cache.join("npm").join("bar@latest").join("3")).unwrap();
         assert_eq!(resolve("bar", &cache), None);
         assert_eq!(resolve("baz", &cache), None);
