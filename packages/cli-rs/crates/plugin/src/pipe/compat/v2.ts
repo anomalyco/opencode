@@ -74,6 +74,10 @@ const SEQUENCES: Record<string, string> = { return: "\r", escape: "\x1b", tab: "
 // as the JS host keeps a command a component's end retired (`host.ts` `UNCOMMAND`).
 const REMOUNT = 250
 
+// The footer actions a select maps (TS `actions`); each is a command the plugin registers once, so a select with more
+// keeps the first and the rest are reported.
+const SELECT_ACTIONS = 4
+
 // A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
 interface Registration {
   retired: boolean
@@ -547,6 +551,11 @@ export function context(base: Base, carrier: Carrier) {
     pressed?.handler({ ...event, stopPropagation() {}, preventDefault() {} })
   })
   carrier.command({ name: QUERY, title: QUERY }, (input) => searching?.(input ?? ""))
+  // A select's footer actions (TS `actions`): the host runs an action's command with the selected row's value, so each
+  // action of the select on screen is a command of its own. `triggers` are their handlers, by slot.
+  let triggers: ((input: string | undefined) => void)[] = []
+  const ACTIONS = Array.from({ length: SELECT_ACTIONS }, (_, slot) => `${id}.compat.action.${slot}`)
+  ACTIONS.forEach((name, slot) => carrier.command({ name, title: name }, (input) => triggers[slot]?.(input)))
   carrier.command({ name: ANSWER, title: ANSWER }, (input) => {
     const resolve = answering
     answering = undefined
@@ -744,7 +753,7 @@ export function context(base: Base, carrier: Carrier) {
   }
   // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its
   // `onInput`, `onChange` and `onSubmit` hear, and a key while the plugin's focused field is in the surface is its
-  // `onKeyDown`, which cannot take the key: the host's field and its keys have it too.
+  // `onKeyDown`, which takes the key with `preventDefault` (contract gaps 2): else the host's field and keys have it.
   const fieldEvent = (surface: string, event: Json) => {
     const roots = [...rendered.entries()].filter(([at]) => at.startsWith(`${surface}\u0000`)).map(([, at]) => at.root)
     const find = (id: string) => {
@@ -754,8 +763,10 @@ export function context(base: Base, carrier: Carrier) {
     }
     if (event.type === "key") {
       const node = focusedNode && find(idOf(focusedNode))
-      if (node === focusedNode) node?.props.onKeyDown?.(keyEvent(event))
-      return
+      if (node !== focusedNode || !node?.props.onKeyDown) return "pass"
+      const key = keyEvent(event)
+      node.props.onKeyDown(key)
+      return key.defaultPrevented ? "consume" : "pass"
     }
     const node = (event.type === "change" || event.type === "submit") && find(event.node)
     if (!node) return
@@ -778,8 +789,8 @@ export function context(base: Base, carrier: Carrier) {
     node.props.onChange?.(event.text)
     node.props.onSubmit?.(event.text)
   }
-  // An OpenTUI key event of the host's key (`ctrl+shift+a`, `enter`, `space`): a listener's, so taking it does
-  // nothing, which the JS host's log says once.
+  // An OpenTUI key event of the host's key (`ctrl+shift+a`, `enter`, `space`). A listener takes the key with
+  // `preventDefault`, as OpenTUI's renderer then gives it to nothing else (contract gaps 2).
   const keyEvent = (event: Json) => {
     let rest = String(event.key ?? "")
     const held = { ctrl: false, shift: false, meta: false, super: false, hyper: false } as Record<string, boolean>
@@ -789,11 +800,6 @@ export function context(base: Base, carrier: Carrier) {
     }
     const name = rest === "enter" ? "return" : rest
     const sequence = event.text ?? SEQUENCES[name] ?? ""
-    const taken = () => {
-      if (keysTaken) return
-      keysTaken = true
-      console.warn(`plugin ${id}: a key a listener takes still reaches opencode-native`)
-    }
     let prevented = false
     let stopped = false
     return {
@@ -813,24 +819,24 @@ export function context(base: Base, carrier: Carrier) {
       },
       preventDefault() {
         prevented = true
-        taken()
       },
       stopPropagation() {
         stopped = true
-        taken()
       },
     }
   }
-  let keysTaken = false
   // OpenTUI's key handler (CT-11): an emitter whose `keypress` listeners hear each key, through a global listener layer
-  // the plugin registers with its first one, as most plugins never listen.
+  // the plugin registers with its first one, as most plugins never listen. A listener's `preventDefault` takes the key.
   const keyInput = new EventEmitter()
   let listening = false
   keyInput.on("newListener", (name) => {
     if (name !== "keypress" || listening || !carrier.layer) return
     listening = true
     carrier.layer({ scope: "global", any: true }, (event: Json) => {
-      if (event.type === "key") keyInput.emit("keypress", keyEvent(event))
+      if (event.type !== "key") return "pass"
+      const key = keyEvent(event)
+      keyInput.emit("keypress", key)
+      return key.defaultPrevented ? "consume" : "pass"
     })
     carrier.changed()
   })
@@ -1001,7 +1007,7 @@ export function context(base: Base, carrier: Carrier) {
       },
       on: (event: Json) => fieldEvent(name, event),
       // A route or a panel holds the focus, and a field in it: each key while it does comes to the field the plugin
-      // focused, as its `onKeyDown` (a listener: the key goes on).
+      // focused, as its `onKeyDown`, which takes it or lets it go on.
       ...(place.type === "route" || place.type === "panel" ? { layers: [{ scope: "surface", any: true }] } : {}),
     })
     return () => {
@@ -1623,7 +1629,7 @@ export function context(base: Base, carrier: Carrier) {
               : { description: String(options.description) }),
           }),
         async select(options: Json) {
-          if (options.actions?.length) unsupported("ui.dialog.select actions")
+          if ((options.actions?.length ?? 0) > SELECT_ACTIONS) unsupported(`ui.dialog.select over ${SELECT_ACTIONS} actions`)
           const search = options.search
           const enabled = options.options.filter((option: Json) => !option.disabled)
           // The rows listed now, which an answer's index names: a plugin's search lists its own, flat and in its order,
@@ -1647,6 +1653,23 @@ export function context(base: Base, carrier: Carrier) {
           const key = `search.${asked + 1}`
           // A new dialog is medium until the plugin's `dialog.set` says otherwise, as TS's.
           presentation = { size: "medium", centered: false }
+          // Its footer actions, in the footer with their keys: one on the selected row gets its value, one of
+          // `selection: "none"` none. Triggering one leaves the select open, as TS's.
+          const actions: Json[] = (options.actions ?? []).slice(0, SELECT_ACTIONS)
+          const mine = asked + 1
+          triggers = actions.map((action) => (input: string | undefined) => {
+            if (asked !== mine || !answering) return
+            if (action.selection === "none") return action.onTrigger()
+            const row = listed[Number(input)]
+            if (row) action.onTrigger(row.value)
+          })
+          const footer = actions.map((action, slot) => ({
+            title: String(action.title),
+            key: String(action.bind),
+            action: { type: "command", name: ACTIONS[slot] },
+            ...(action.side === "left" ? { primary: true } : action.side === "right" ? { primary: false } : {}),
+            ...(action.selection === "none" ? { rowless: true } : {}),
+          }))
           const dialog = () => ({
             type: "select",
             title: options.title,
@@ -1654,6 +1677,7 @@ export function context(base: Base, carrier: Carrier) {
             options: rows(),
             ...current(),
             ...(search ? { key, query: { type: "command", name: QUERY } } : {}),
+            ...(footer.length ? { actions: footer } : {}),
             ...presented(),
           })
           const run = search

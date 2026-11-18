@@ -31,6 +31,7 @@ export default Plugin.define({
     const [mode, setMode] = createSignal("ok")
     const [shown, setShown] = createSignal(0)
     let keyArm = "pass"
+    let [listening, taking] = [false, false]
     // Whether `^`, bound by `v2probe.caret`, is enabled: `v2probe.caretOn` sets it ("on" or anything else).
     const [caret, setCaret] = createSignal(false)
     const Commands = () => <text>{`v2probe commands ${context.keymap.commands().length > 0}`}</text>
@@ -76,6 +77,21 @@ export default Plugin.define({
           run: () => {
             context.storage.store("caret", { initial: {} })
             setTimeout(() => setCaret(true), 0)
+          },
+        },
+        // A key listener (contract gaps 2), registered with the first run: it takes `ctrl+p` with `preventDefault`
+        // while the run's input is "take", and lets it go on otherwise.
+        {
+          id: "v2probe.listen",
+          run: (input?: string) => {
+            if (!listening)
+              context.renderer.keyInput.on("keypress", (event: { ctrl: boolean; name: string; preventDefault(): void }) => {
+                if (!event.ctrl || event.name !== "p") return
+                log({ listened: taking })
+                if (taking) event.preventDefault()
+              })
+            listening = true
+            taking = input === "take"
           },
         },
         { id: "v2probe.throw", run: () => void setMode("throw") },

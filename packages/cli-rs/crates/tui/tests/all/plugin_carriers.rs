@@ -353,6 +353,100 @@ fn a_command_is_disabled_and_declines_alike_on_every_carrier() {
     }
 }
 
+// Expected (contract gaps 2): the board's listener of every key lets `ctrl+p` go on to the host's palette, and once
+// armed takes it, so no palette opens; the same linked, through the byte shims and as a real library.
+#[test]
+fn a_listener_takes_its_key_alike_on_every_carrier() {
+    let script = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        let mut seen = Vec::new();
+        for (step, arm) in [("passing", "off"), ("taking", "on"), ("passing again", "off")] {
+            tui.keymap.dispatch("board.listen", Some(arm));
+            settle(&board.harness);
+            app.press("ctrl+p");
+            settle(&board.harness);
+            let toasts: Vec<String> = std::iter::from_fn(|| {
+                let toast = tui.toasts.current()?;
+                tui.toasts.dismiss();
+                Some(toast.message)
+            })
+            .collect();
+            seen.push((step, tui.dialogs.is_open(), toasts));
+            if tui.dialogs.is_open() {
+                app.press("escape");
+                settle(&board.harness);
+            }
+        }
+        seen
+    };
+    let linked = script(Run::In(Carrier::Linked));
+    assert_eq!(
+        linked,
+        [
+            ("passing", true, Vec::new()),
+            ("taking", false, vec!["listener took ctrl+p".to_owned()]),
+            ("passing again", true, Vec::new()),
+        ]
+    );
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        assert_eq!(script(run), linked, "{run:?}");
+    }
+}
+
+// Expected (contract gaps 2): the board's select shows its footer actions with their keys; `ctrl+o` runs the row's
+// action with the selected row's value and `ctrl+a` the rowless one with its own input, and the select stays open
+// after each. The frames and toasts are the same linked, through the byte shims and as a real library.
+#[test]
+fn a_selects_actions_are_alike_on_every_carrier() {
+    let script = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        tui.keymap.dispatch("board.choose", None);
+        settle(&board.harness);
+        let mut seen = Vec::new();
+        for key in ["down", "ctrl+o", "ctrl+a"] {
+            app.press(key);
+            seen.push((key, tui.dialogs.is_open(), observe(&board.harness), app.text()));
+        }
+        seen
+    };
+    let linked = script(Run::In(Carrier::Linked));
+    let screen = &linked[0].3;
+    assert!(screen.contains("Open") && screen.contains("ctrl+o") && screen.contains("Close"), "{screen}");
+    let toasts: Vec<_> = linked.iter().map(|(key, open, (_, toasts, _), _)| (*key, *open, toasts.clone())).collect();
+    let toast = |text: &str| vec![format!("Info None chose {text}")];
+    assert_eq!(toasts, [("down", true, Vec::new()), ("ctrl+o", true, toast("1")), ("ctrl+a", true, toast("none"))]);
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        for ((key, _, linked, _), (_, _, seen, _)) in linked.iter().zip(script(run)) {
+            assert_eq!((&linked.1, &linked.2), (&seen.1, &seen.2), "{run:?} after {key}: toasts and status");
+            assert!(linked.0 == seen.0, "{run:?} after {key}: the frames differ");
+        }
+    }
+}
+
+// Expected (CT-26): a box's bottom border title draws on its last row, aligned right, below its top title; the frames
+// are the same linked, through the byte shims and as a real library.
+#[test]
+fn a_bottom_border_title_is_alike_on_every_carrier() {
+    let script = |run: Run| {
+        let board = open(run);
+        let tui = &board.harness.tui;
+        tui.navigate(Route::Plugin { id: ID.to_owned(), name: "board".to_owned() });
+        tui.keymap.dispatch("board.titled", None);
+        settle(&board.harness);
+        (observe(&board.harness), board.harness.app.text())
+    };
+    let (linked, screen) = script(Run::In(Carrier::Linked));
+    let top = screen.lines().position(|line| line.contains("┌─top─")).expect(&screen);
+    let bottom = screen.lines().nth(top + 2).unwrap_or_default();
+    assert!(bottom.trim_end().ends_with("bottom─┘"), "{screen}");
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        let (seen, _) = script(run);
+        assert!(linked == seen, "{run:?}: the frames, toasts or status differ");
+    }
+}
+
 // Expected (`carrier-equal` for a contained panic, P4c): a panic in a command of the board's route is caught where it
 // happens and fails the plugin once, naming the call, with the same frames, toasts and status linked, through the
 // byte shims, and as a real library; later frames add nothing.

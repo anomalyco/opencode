@@ -299,6 +299,7 @@ for (const name of [
   "attributes",
   "borderColor",
   "title",
+  "bottomTitle",
   "wrapMode",
   "truncate",
   // A renderable built with `new` takes its layout and look the same way (contract 2.x, step D).
@@ -926,6 +927,8 @@ function borderOf(props: Json) {
     color: color(props.borderColor),
     title: props.title === undefined ? undefined : String(props.title),
     title_align: ["center", "right"].includes(props.titleAlignment) ? props.titleAlignment : undefined,
+    bottom_title: props.bottomTitle === undefined ? undefined : String(props.bottomTitle),
+    bottom_title_align: ["center", "right"].includes(props.bottomTitleAlignment) ? props.bottomTitleAlignment : undefined,
   })
 }
 

@@ -52,7 +52,11 @@ export default {
         }
       },
     )
-    carrier.layer({ scope: "global", any: true }, said("any"))
+    // It hears each key and lets it go on: a listener that answered "consume" would take it (contract gaps 2).
+    carrier.layer({ scope: "global", any: true }, (event: any) => {
+      said("any")(event)
+      return "pass"
+    })
     carrier.watch("mode", { type: "input-mode" })
     carrier.watch("focused", { type: "focused" })
     carrier.surface(

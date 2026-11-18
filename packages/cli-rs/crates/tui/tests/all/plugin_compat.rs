@@ -1050,6 +1050,29 @@ fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
     assert_eq!((harness.text(), calls(&log)), (String::new(), vec![json!({ "caret": true })]));
 }
 
+// Expected (contract gaps 2): a JS plugin's key listener takes its key with `preventDefault`. Not taken, `ctrl+p` goes
+// on to the host's palette once the JS host answered; taken, no palette opens. The listener hears it once each time.
+#[test]
+fn a_js_listener_takes_its_key_with_prevent_default() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    let mut seen = Vec::new();
+    for step in ["pass", "take"] {
+        tui.keymap.dispatch("v2probe.listen", Some(step));
+        pipe.settle();
+        harness.app.press("ctrl+p");
+        pipe.settle();
+        seen.push((step, tui.dialogs.is_open()));
+        if tui.dialogs.is_open() {
+            harness.app.press("escape");
+            pipe.settle();
+        }
+    }
+    assert_eq!(seen, [("pass", true), ("take", false)]);
+    assert_eq!(calls(&log), [json!({ "listened": false }), json!({ "listened": true })]);
+}
+
 // Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
 // as declined, even under a hold limit far longer than the test; its command is not sent again.
 #[test]

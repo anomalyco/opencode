@@ -1050,7 +1050,8 @@ impl Node {
     }
 }
 
-/// A border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title` and `titleAlignment`).
+/// A border of a [`Node::Box`] (TS `border`, `borderStyle`, `borderColor`, `title`, `titleAlignment`, `bottomTitle` and
+/// `bottomTitleAlignment`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Border {
@@ -1067,6 +1068,11 @@ pub struct Border {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "TitleAlign::is_left")]
     pub title_align: TitleAlign,
+    /// A title on the bottom side, in the border's color (TS `bottomTitle`, CT-26).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bottom_title: Option<String>,
+    #[serde(default, skip_serializing_if = "TitleAlign::is_left")]
+    pub bottom_title_align: TitleAlign,
 }
 
 /// Which sides of a [`Border`] draw.

@@ -699,8 +699,9 @@ It is the second timing tier. No frame waits for the JS host:
   which apply then, in order (at most 256). A handler that throws has none and fails its plugin, as a panic does in
   process.
 - **Input** (P2): a key, a paste or a press cannot wait a round trip, so the host answers from what the plugin declared:
-  a bind's key, a paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed; a
-  key of a listener of every key goes on, and the handler only hears it. The handler's answer is advisory. A key that
+  a bind's key, a paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed, and
+  those handlers' answers are advisory. A key of a listener of every key is held, as a key command's is, until the
+  handler answers: `consume` takes it, anything else lets it go on, past that listener (contract gaps 2). A key that
   changes how the next ones route (a mode switch) declares `hold`: the keys after it wait until its `release-keys`
   effect applied, or 50 ms. A handler's effects are its mount's: the overlay it opens, the focus, its mode.
 - **Trees** are revisions of a mount, one in flight: the host adopts it in its next frame, or refuses it and gets a

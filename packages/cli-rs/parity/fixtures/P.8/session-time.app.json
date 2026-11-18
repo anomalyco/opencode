@@ -25,7 +25,7 @@
   {"type":"/time"},
   {"checkpoint":"slash","until":"Time: session timeline","masks":[{"x":100,"y":4,"width":38,"height":7,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"},{"x":50,"y":32,"width":13,"height":1,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"}],"fixture":"P.8/session-time/slash"},
   {"keys":["enter"]},
-  {"checkpoint":"timeline","until":"3 turns","masks":[{"x":100,"y":4,"width":38,"height":7,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"},{"x":50,"y":32,"width":13,"height":1,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"}],"deviation":[{"file":"F16-v2-compat-layer","cells":834}],"fixture":"P.8/session-time/timeline"},
+  {"checkpoint":"timeline","until":"3 turns","masks":[{"x":100,"y":4,"width":38,"height":7,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"},{"x":50,"y":32,"width":13,"height":1,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"}],"fixture":"P.8/session-time/timeline"},
   {"keys":["enter"]},
   {"checkpoint":"details","until":"Turn details","masks":[{"x":100,"y":4,"width":38,"height":7,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"},{"x":50,"y":32,"width":13,"height":1,"reason":"the plugin's live timings: TS recomputes them on a timer its recorder never fires"}],"fixture":"P.8/session-time/details"}
  ],

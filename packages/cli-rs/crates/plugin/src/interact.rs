@@ -157,6 +157,8 @@ pub struct Router {
     holds: Cell<u64>,
     /// After the reserved chord, the focus where the plugins' layers stop holding until it moves.
     suspended: Cell<Option<Option<u32>>>,
+    /// The key the listeners hear now ([`Router::listened`]).
+    listened: Cell<Option<KeyEvent>>,
 }
 
 /// What the input registrations hold now, read from the registries the host routes by (`ledger`, 4.14).
@@ -762,10 +764,20 @@ impl Router {
             .collect();
         listeners.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         let (key, text) = key_of(event);
-        let event = Event::Key(input::Key { bind: None, key, text });
-        listeners
+        let key = Event::Key(input::Key { bind: None, key, text });
+        let previous = self.listened.replace(Some(*event));
+        let taken = listeners
             .into_iter()
-            .any(|(_, _, owner, deliver)| delivered(&deliver, host, &owner, &event) == Handled::Consume)
+            .any(|(_, _, owner, deliver)| delivered(&deliver, host, &owner, &key) == Handled::Consume);
+        self.listened.set(previous);
+        taken
+    }
+
+    /// The key a listener of every key hears, while it hears it: a carrier whose handler answers later takes it and
+    /// puts it back if the handler did not (the JS host, contract gaps 2).
+    #[cfg(feature = "ts")]
+    pub(crate) fn listened(&self) -> Option<KeyEvent> {
+        self.listened.get()
     }
 
     /// The reserved chord (synthesis 3.8): every plugin mode ends, what a hold kept is dropped, as a terminal's interrupt

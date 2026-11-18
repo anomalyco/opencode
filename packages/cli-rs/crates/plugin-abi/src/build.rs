@@ -145,7 +145,15 @@ impl Border {
     }
 }
 
-builder!(Border [] { sides: Sides, style: BorderStyle, color?: impl Color, title?: impl String, title_align: TitleAlign });
+builder!(Border [] {
+    sides: Sides,
+    style: BorderStyle,
+    color?: impl Color,
+    title?: impl String,
+    title_align: TitleAlign,
+    bottom_title?: impl String,
+    bottom_title_align: TitleAlign,
+});
 
 impl Action {
     /// Runs command `name` with no input.

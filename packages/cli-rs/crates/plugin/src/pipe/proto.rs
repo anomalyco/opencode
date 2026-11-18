@@ -271,8 +271,8 @@ pub enum Up {
         mounts: Vec<Option<v2::MountId>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
-        /// A command declined (it returned `false`, or it is disabled or gone): the key that ran it goes on to the host
-        /// (CT-8, CT-19).
+        /// A command declined (it returned `false`, or it is disabled or gone), or a listener did not take its key
+        /// (it answered other than `consume`): the key that ran it goes on to the host (CT-8, CT-19, contract gaps 2).
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         declined: bool,
     },

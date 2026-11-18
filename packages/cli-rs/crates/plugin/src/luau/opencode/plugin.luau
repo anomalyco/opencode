@@ -88,6 +88,8 @@ export type Border = {
     color: Color?,
     title: string?,
     title_align: TitleAlign?,
+    bottom_title: string?,
+    bottom_title_align: TitleAlign?,
 }
 
 export type BorderStyle = ("single" | "double" | "rounded" | "heavy")

@@ -661,9 +661,11 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   })
   const footer = view(fake, 0, "a")
   footer.draw()
-  press("ctrl+,")
-  press("shift+enter")
-  press("a", "a")
+  // Contract gaps 2: a listener takes its key with `preventDefault`, else the key goes on.
+  const taking = (event: Json) => event.name === "a" && event.preventDefault()
+  ctx.renderer.keyInput.on("keypress", taking)
+  expect([press("ctrl+,"), press("shift+enter"), press("a", "a")]).toEqual(["pass", "pass", "consume"])
+  ctx.renderer.keyInput.off("keypress", taking)
   footer.unmount()
   press("ctrl+shift+meta++")
   expect(heard).toEqual([
@@ -687,7 +689,7 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
         onInput: (text: string) => events.push(`input ${text}`),
         onSubmit: (text: string) => events.push(`submit ${text}`),
         onKeyDown: (event: Json) => {
-          event.preventDefault()
+          if (event.name === "down") event.preventDefault()
           events.push(`key ${event.name}`)
         },
       }),
@@ -696,9 +698,11 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(route.options.layers).toEqual([{ scope: "surface", any: true }])
   route.view({ mount: { surface: "files", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
   const id = fake.effects.length
-  route.options.on({ type: "key", key: "down" })
+  // Unfocused, a key goes on; focused, `down` is taken and `up` goes on.
+  expect(route.options.on({ type: "key", key: "down" })).toBe("pass")
   field.ref.focus()
-  route.options.on({ type: "key", key: "down" })
+  expect(route.options.on({ type: "key", key: "down" })).toBe("consume")
+  expect(route.options.on({ type: "key", key: "up" })).toBe("pass")
   const node = fake.effects.slice(id).find((effect: Json) => effect.type === "focus").node
   // An edit in the host's field gives it the plugin's focus, as the field has the host's then.
   field.ref.blur()
@@ -709,7 +713,7 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(JSON.stringify(viewed)).toContain('"seen":7')
   route.options.on({ type: "submit", node, text: "ab" })
   route.options.on({ type: "change", node: "elsewhere", text: "x" })
-  expect(events).toEqual(["key down", "input ab", "submit ab"])
+  expect(events).toEqual(["key down", "key up", "input ab", "submit ab"])
   // The contract's focus of a field (`focus-input`) maps, with no notice.
   expect(node).toBe("opentui-input-" + node.split("-").at(-1))
   expect(fake.warnings()).toEqual([])
@@ -859,6 +863,8 @@ test("a border draws as OpenTUI's box draws it", () => {
     { border: false },
     { border: false, borderColor: "#ff0000" },
     { borderColor: "#ff0000", border: false },
+    // CT-26: the bottom title beside the top one (opencode-voice's CPU and memory line).
+    { border: true, title: "top", titleAlignment: "center", bottomTitle: "bottom", bottomTitleAlignment: "right" },
   ]
   ctx.ui.slot({ append: "home.footer", render: () => cases.map((props) => h("box", props)) })
   const tree = view(fake, 0, "a").draw()
@@ -873,6 +879,7 @@ test("a border draws as OpenTUI's box draws it", () => {
     undefined,
     { color: "#ff0000" },
     undefined,
+    { title: "top", title_align: "center", bottom_title: "bottom", bottom_title_align: "right" },
   ])
 })
 
@@ -1291,6 +1298,44 @@ test("each dialog settles once, and clear closes it", async () => {
   ctx.ui.dialog.show(() => h("text", { children: "small" }))
   const panel = fake.effects.filter((effect) => effect.dialog?.type === "panel").at(-1).dialog
   expect([panel.size, panel.centered]).toEqual(["medium", false])
+})
+
+// A select's footer actions are the contract's (session-time's "Close ctrl+a"): each with its key, side and selection,
+// a row's action told the row's value, a rowless one nothing, and the select stays open; a select past the commands it
+// maps keeps the first and says so.
+test("a select's actions are its footer's", async () => {
+  const fake = host()
+  const ctx = plugin("t.actions", fake)
+  const heard: unknown[] = []
+  const actions = [
+    { bind: "ctrl+o", title: "Open", onTrigger: (value: unknown) => heard.push(["open", value]) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => heard.push("close") },
+  ]
+  const options = [
+    { title: "A", value: { id: "a" } },
+    { title: "B", value: { id: "b" } },
+  ]
+  const picked = ctx.ui.dialog.select({ title: "Pick", options, actions })
+  await turn()
+  const select = fake.effects.at(-1).dialog.dialog
+  expect(select.actions.map(({ action, ...rest }: Json) => rest)).toEqual([
+    { title: "Open", key: "ctrl+o" },
+    { title: "Close", key: "ctrl+a", primary: false, rowless: true },
+  ])
+  fake.commands.get(select.actions[0].action.name)!("1")
+  fake.commands.get(select.actions[1].action.name)!()
+  expect(heard).toEqual([["open", { id: "b" }], "close"])
+  fake.commands.get(select.action.name)!("0")
+  expect(await picked).toEqual({ id: "a" })
+  // Answered: its actions do nothing.
+  fake.commands.get(select.actions[1].action.name)!()
+  expect(heard.length).toBe(2)
+  expect(fake.warnings()).toEqual([])
+  const many = Array.from({ length: 5 }, (_, at) => ({ bind: `f${at + 1}`, title: `F${at + 1}`, onTrigger() {} }))
+  void ctx.ui.dialog.select({ title: "Many", options, actions: many })
+  await turn()
+  expect(fake.effects.at(-1).dialog.dialog.actions.length).toBe(4)
+  expect(fake.warnings()).toEqual(["t.actions: ui.dialog.select over 4 actions is not supported by opencode-native yet"])
 })
 
 // Bigboi P8-8: the click handlers of mounts that ended are not kept.
