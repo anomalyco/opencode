@@ -22,7 +22,22 @@ export const register = Effect.fn("ClaudeIntegration.register")(function* (
     })
     editor.method.update({
       integrationID: ClaudeProvider.ID,
-      method: { id: METHOD_ID, type: "external", label: "Claude Code login (claude auth login)" },
+      method: {
+        id: METHOD_ID,
+        type: "external",
+        label: "Claude Code login (claude auth login)",
+        // opencode holds no token for Claude, so the folder is the only thing that tells two saved accounts apart.
+        form: [
+          {
+            key: ClaudeProvider.CONFIG_DIR_KEY,
+            type: "string",
+            title: "Claude config folder",
+            description:
+              "Folder this account is logged in to (its CLAUDE_CONFIG_DIR). Leave empty to use Claude Code's default login.",
+            placeholder: "~/.claude",
+          },
+        ],
+      },
     })
   })
 
