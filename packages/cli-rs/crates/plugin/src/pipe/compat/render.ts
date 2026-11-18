@@ -155,7 +155,9 @@ export class VNode {
 
   scrollTo(to: number | { y?: number }) {
     const offset = typeof to === "number" ? to : (to?.y ?? 0)
-    rootOf(this).owner?.scrolls?.to(this, Math.round(offset))
+    // OpenTUI clamps any offset to the content, and plugins scroll to the bottom with `Number.MAX_SAFE_INTEGER`. The
+    // host clamps too but reads an i32, so a number past it is the i32's edge.
+    rootOf(this).owner?.scrolls?.to(this, Math.max(-(2 ** 31), Math.min(2 ** 31 - 1, Math.round(offset))))
   }
 
   scrollBy(by: number | { y?: number }) {
