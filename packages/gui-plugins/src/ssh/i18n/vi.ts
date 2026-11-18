@@ -38,4 +38,5 @@ export default {
   "form.namePlaceholder": "Máy chủ cục bộ",
   "form.add": "Thêm máy chủ",
   "menu.delete": "Xóa",
+  "error.unavailable": "SSH không khả dụng",
 }

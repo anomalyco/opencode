@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Sesję zapisano jako {{filename}}",
   "export.failed.title": "Nie udało się wyeksportować sesji",
   "export.failed.description": "Wystąpił błąd podczas eksportowania sesji",
+  "usage.toggle": "Przełącz kontekst sesji",
 }

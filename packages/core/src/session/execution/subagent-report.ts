@@ -1,5 +1,6 @@
 export * as SubagentReport from "./subagent-report.js"
 
+import { Automation } from "@opencode/schema/automation"
 import { Effect, Result } from "effect"
 import type { Job } from "../../job.js"
 import { SessionBackground } from "../background.js"
@@ -98,7 +99,7 @@ export const make = (deps: Deps) => {
       report,
     ).pipe(
       Effect.as(true),
-      // Retain the formatted outbox row: the conflict proves the notification ID is already
+      // Retain the outbox row: the conflict proves the notification ID is already
       // owned elsewhere, so deleting it would lose the report without admitting anything.
       Effect.catchTag("SessionInbox.LifecycleConflict", (conflict) =>
         Effect.logWarning("Subagent report notification ID conflicted in parent inbox", {
@@ -135,7 +136,8 @@ export const make = (deps: Deps) => {
     periods.delete(sessionID)
     const jobState = yield* deps.jobs.prepareSubagentReport(sessionID, period?.boundGeneration)
     const initial = yield* deps.store.get(sessionID)
-    if (!initial?.parentID && jobState.mode === "none") {
+    // An automation run's child finishes quietly; only a follow-up the parent sent through a Job reports back.
+    if ((!initial?.parentID || Automation.isRunSession(sessionID)) && jobState.mode === "none") {
       return {
         commit: () => deps.store.release(sessionID),
         deliver: Effect.void,
@@ -164,7 +166,6 @@ export const make = (deps: Deps) => {
         }
         const resolved = yield* resolveBody(sessionID, outcome, period?.startedSeq, jobState.mode)
         if (!resolved) return
-        const formatted = SubagentCompletion.formatBody(resolved.body, child.id, running)
         const recovery =
           jobState.mode === "background"
             ? jobState.recovery
@@ -177,9 +178,9 @@ export const make = (deps: Deps) => {
               }
         const report: Job.SubagentOutboxReport = {
           notificationID: jobState.mode === "background" ? jobState.notificationID : SessionMessage.ID.create(),
-          recovery,
+          recovery: { ...recovery, outstanding: running },
           status: resolved.status,
-          ...(resolved.status === "completed" ? { output: formatted } : { error: formatted }),
+          ...(resolved.status === "completed" ? { output: resolved.body } : { error: resolved.body }),
           ...(jobState.mode === "background" ? { startedAt: jobState.startedAt } : {}),
         }
         yield* deps.jobs.recordSubagentReport(report)

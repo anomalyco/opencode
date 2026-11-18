@@ -72,7 +72,7 @@ export function SettingsNavigation(props: {
               like the session header, so the back button centers on the collapsed sidebar toggle's line. */}
           <CollapsedSidebarToggleSpace start={24} class="h-8" />
           <button type="button" class="settings-back" onClick={back}>
-            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <Icon name="arrow-left" class="settings-back-icon" />
             <span>{backLabel()}</span>
           </button>
         </div>
@@ -81,7 +81,7 @@ export function SettingsNavigation(props: {
           <Menu placement="bottom-end" gutter={8}>
             <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
               <span>{current()?.label}</span>
-              <Icon name="chevron-down" size="small" />
+              <Icon name="chevron-down" />
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content class="settings-mobile-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -121,7 +121,7 @@ export function SettingsNavigation(props: {
       <aside class="settings-sidebar" data-searchable={searchable()}>
         <div class="settings-nav">
           <button type="button" class="settings-back" onClick={back}>
-            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <Icon name="arrow-left" class="settings-back-icon" />
             <span>{backLabel()}</span>
           </button>
           <Show when={searchable()}>

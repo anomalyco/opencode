@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
@@ -504,12 +504,37 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await expectPath(page, sessionHref(c.id))
 })
 
-for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
-  test(`switching session tabs restores the caret and pastes into the destination draft (${navigation})`, async ({
+const clickTab = (_: Page, tab: Locator) => tab.click()
+
+const press = (key: string) => (page: Page) => page.keyboard.press(key)
+
+for (const row of [
+  { navigation: "horizontal", toB: clickTab, toA: press("Control+Alt+ArrowLeft"), backToB: clickTab },
+  { navigation: "vertical", toB: clickTab, toA: press("Control+Alt+ArrowLeft"), backToB: clickTab },
+  {
+    navigation: "keyboard",
+    toB: press("Control+Alt+ArrowRight"),
+    toA: press("Control+Alt+ArrowLeft"),
+    backToB: clickTab,
+  },
+  {
+    navigation: "numbered",
+    // Pressed in a titlebar control, which stays mounted and keeps focus while the destination composer mounts.
+    toB: async (page: Page) => {
+      const home = page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Home", exact: true })
+      await home.focus()
+      await expect(home).toBeFocused()
+      await page.keyboard.press("ControlOrMeta+2")
+    },
+    toA: press("ControlOrMeta+1"),
+    backToB: press("ControlOrMeta+2"),
+  },
+]) {
+  test(`switching session tabs restores the caret and pastes into the destination draft (${row.navigation})`, async ({
     page,
     context,
   }) => {
-    const tabLayout = navigation === "vertical" ? "vertical" : "horizontal"
+    const tabLayout = row.navigation === "vertical" ? "vertical" : "horizontal"
 
     const strip = page.locator(
       tabLayout === "vertical" ? '[data-slot="vertical-tabs-sidebar"]' : '[data-slot="titlebar-tabs"]',
@@ -525,14 +550,14 @@ for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
     const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
     await editor.fill("Draft A")
 
-    await (navigation === "keyboard" ? page.keyboard.press("Control+Alt+ArrowRight") : tabB.click())
+    await row.toB(page, tabB)
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft B")
 
-    await page.keyboard.press("Control+Alt+ArrowLeft")
+    await row.toA(page)
     await expectPath(page, sessionHref(a.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft A")
@@ -540,7 +565,7 @@ for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft A appended")
 
-    await tabB.click()
+    await row.backToB(page, tabB)
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft B")
@@ -812,6 +837,114 @@ test("Recent shows the last 7 days, and Show more reveals 30 more rows, fetching
   await expect(rows).toHaveCount(65)
   await expect(rows.last()).toContainText("Cap session 0")
   await expect(more).toBeHidden()
+})
+
+test("Recent keeps the server's order through renames, run ends and window focus, and reloads for a new session", async ({
+  page,
+}) => {
+  const t = Date.now() - 60_000
+
+  const workspace = await mockWorkspace(page, {
+    name: "RecentOrder",
+    sessions: [
+      { ...a, time: { created: t, updated: t, idle: t } },
+      { ...b, time: { created: t + 1, updated: t + 1, idle: t + 1 } },
+    ],
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "recent" } },
+    },
+  })
+
+  let pageOneLoads = 0
+  page.on("request", (request) => {
+    if (/\/api\/session\?.*archived=false/.test(request.url())) pageOneLoads++
+  })
+  await page.clock.install()
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, path: sessionHref(a.id, "sidecar") })}`,
+  )
+
+  const recent = page.locator('[data-slot="sidebar-recent"]').getByRole("group", { name: "Recent", exact: true })
+  const rows = recent.locator("[data-titlebar-tab-slot]")
+
+  // The mock serves these records, so changing one changes what the next list reload returns.
+  const advance = (id: string, time: { updated: number; idle?: number }, title?: string) => {
+    const session = workspace.sessions.find((item) => item.id === id)
+
+    if (!session) throw new Error(`Unknown session ${id}`)
+
+    Object.assign(session, { title: title ?? session.title, time: { ...session.time, ...time } })
+  }
+
+  await expect(rows).toHaveText([/Tab B session/, /Tab A session/])
+
+  // Renaming advances the server's time, but the row stays where the last reload put it.
+  advance(a.id, { updated: t + 2 }, "Renamed A session")
+  await workspace.push([
+    {
+      id: "evt_recent_order_rename",
+      created: t + 2,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 1, version: 1 },
+      data: { sessionID: a.id, title: "Renamed A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
+  ])
+  await expect(rows.first()).toContainText("Tab B session")
+  await expect(rows.last()).toContainText("Renamed A session")
+
+  // A run end and the window coming back leave the order alone; the rename after the run end shows it arrived.
+  advance(a.id, { updated: t + 3, idle: t + 3 }, "Finished A session")
+  await workspace.push([
+    {
+      id: "evt_recent_order_run_end",
+      created: t + 3,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 2, version: 1 },
+      data: { sessionID: a.id },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+    {
+      id: "evt_recent_order_rename_after_run",
+      created: t + 3,
+      type: "session.renamed",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: a.id, seq: 3, version: 1 },
+      data: { sessionID: a.id, title: "Finished A session" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.renamed" }>,
+  ])
+  await expect(rows).toHaveText([/Tab B session/, /Finished A session/])
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("focus"))
+    document.dispatchEvent(new Event("visibilitychange"))
+  })
+  // Past the reload debounce, so a reload either trigger had queued would have requested page one by now.
+  await page.clock.runFor(1_000)
+  await expect(rows).toHaveText([/Tab B session/, /Finished A session/])
+  expect(pageOneLoads).toBe(1)
+
+  // A new root session reloads page one, which brings in A's newer server time too.
+  const created = session({ id: "ses_tab_new", title: "Fresh session", directory: workspace.directory, created: t + 4 })
+  workspace.sessions.push(created)
+  await workspace.push([
+    {
+      id: "evt_recent_order_created",
+      created: t + 4,
+      type: "session.created",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: created.id, seq: 1, version: 1 },
+      data: {
+        sessionID: created.id,
+        projectID: workspace.projectID,
+        location: { directory: workspace.directory },
+        slug: created.slug,
+        version: created.version,
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "session.created" }>,
+  ])
+  await expect(rows).toHaveText([/Fresh session/, /Finished A session/, /Tab B session/])
+  expect(pageOneLoads).toBe(2)
 })
 
 test("an unfocused window preserves a restored manual unread reminder", async ({ page }) => {
@@ -1794,6 +1927,91 @@ test("the Windows titlebar menu pastes through the desktop edit action", async (
   await expect(page.getByRole("status", { name: "Desktop menu actions" })).toHaveText("edit.paste")
 })
 
+// #63095: hovering down the parent items left every submenu open, stacked on top of each other. Closing each one as
+// soon as the pointer left it then showed no submenu until the next opened, so the menu blinked on every item.
+test("the Windows titlebar menu swaps one submenu for the next as the pointer moves down its parent items", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const parents = ["File", "Edit", "View"].map((name) => page.getByRole("menuitem", { name, exact: true }))
+  const submenus = page.locator('[role="menu"].desktop-app-menu-sub')
+
+  // Keep the hover delay from elapsing while Playwright moves the pointer and checks the old submenu.
+  await holdClock(page)
+
+  for (const [index, parent] of parents.entries()) {
+    const box = (await parent.boundingBox())!
+    // Down and to the left, away from the open submenu, so the pointer isn't heading for it.
+    await page.mouse.move(box.x + box.width / 2 - index * 20, box.y + box.height / 2, { steps: 4 })
+    await expect(parent).toHaveAttribute("data-highlighted", "")
+
+    if (index > 0) await expect(parents[index - 1]).toHaveAttribute("aria-expanded", "true")
+    await expect(parent).toHaveAttribute("aria-expanded", "false")
+    // Kobalte's hover delay.
+    await page.clock.runFor(100)
+    await expect(parent).toHaveAttribute("aria-expanded", "true")
+    await expect(submenus).toHaveCount(1)
+  }
+})
+
+// #59613: crossing the other parent items on the way to a submenu's lower items closed it and opened theirs.
+test("the Windows titlebar menu keeps a submenu open while the pointer crosses other parent items to reach it", async ({
+  page,
+}) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const file = page.getByRole("menuitem", { name: "File", exact: true })
+  const fileBox = (await file.boundingBox())!
+  const from = { x: fileBox.x + fileBox.width / 2, y: fileBox.y + fileBox.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  const closeWindow = page.getByRole("menuitem", { name: /^Close Window/ })
+  const target = (await closeWindow.boundingBox())!
+  const to = { x: target.x + 20, y: target.y + target.height / 2 }
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 4)
+
+  // A slow, straight move at 125px a second: it stays longer than the hover delay on each item it crosses, and the
+  // whole trip takes longer than the 300ms that Kobalte keeps the way to a submenu open.
+  for (let step = 1; step <= steps; step++) {
+    await page.mouse.move(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps)
+    await page.clock.runFor(32)
+  }
+
+  await expect(closeWindow).toHaveAttribute("data-highlighted", "")
+  await expect(file).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator('[role="menu"].desktop-app-menu-sub')).toHaveCount(1)
+})
+
+// Moving down the parent items while drifting right kept the way to the open submenu alive, so the highlight stayed on
+// the item that opened it while the pointer crossed the next ones.
+test("the Windows titlebar menu highlights each parent item the pointer drifts down across", async ({ page }) => {
+  await page.clock.install()
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+  const view = page.getByRole("menuitem", { name: "View", exact: true })
+  const box = (await view.boundingBox())!
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(from.x, from.y, { steps: 4 })
+  await page.clock.runFor(100)
+  await expect(view).toHaveAttribute("aria-expanded", "true")
+  const go = page.getByRole("menuitem", { name: "Go", exact: true })
+  const target = (await go.boundingBox())!
+
+  // 1px right for every 4px down, a frame at a time, until the pointer is a few pixels inside Go.
+  for (let step = 1; from.y + step * 4 < target.y + 8; step++) {
+    await page.mouse.move(from.x + step, from.y + step * 4)
+    await page.clock.runFor(16)
+  }
+
+  await expect(go).toHaveAttribute("data-highlighted", "")
+})
+
 test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }) => {
   await mockWorkspace(page, {
     name: "WindowsMenu",
@@ -2530,3 +2748,149 @@ async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox
     attempts: () => attempts.count,
   }
 }
+
+test("tab groups reorder without color drift, collapse and auto-expand on navigation, and combine by dwelling into manual groups", async ({
+  page,
+}) => {
+  const dirA = "C:/OpenCode/TabGroupsA"
+  const dirB = "/srv/tab-groups-b"
+  const localOne = session({ id: "ses_tg_local_1", directory: dirA, title: "Local alpha" })
+  const localTwo = session({ id: "ses_tg_local_2", directory: dirA, title: "Local beta" })
+  const localThree = session({ id: "ses_tg_local_3", directory: dirA, title: "Local delta" })
+  const remoteOne = session({ id: "ses_tg_remote_1", directory: dirB, title: "Remote gamma" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      hostname: "local",
+      directory: dirA,
+      project: project({ id: "proj_tg_a", directory: dirA, name: "opencode" }),
+      provider: NO_PROVIDER,
+      sessions: [localOne, localTwo, localThree],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      hostname: "blade",
+      directory: dirB,
+      project: project({ id: "proj_tg_b", directory: dirB, name: "blade-repo" }),
+      provider: NO_PROVIDER,
+      sessions: [remoteOne],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "blade" }],
+    tabs: [localOne.id, localTwo.id, localThree.id, { session: remoteOne.id, server: REMOTE_SERVER }],
+    settings: {
+      appearance: { tabLayout: "vertical", sidebarOpen: true },
+      general: { tabGroups: true, sidebarOrganize: "list" },
+    },
+  })
+
+  await page.goto(sessionHref(localOne.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const localHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${SERVER}"]`)
+  const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
+  const remoteTab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remoteOne.id, REMOTE_SERVER)}"])`)
+
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(2)
+  await expect(remoteTab).toBeVisible()
+
+  // Inline search filters open tabs in place without showing closed/recent results underneath.
+  // The global Search sessions button stays above the inline open-tab filter.
+  await expect(sidebar.getByRole("button", { name: "Search sessions", exact: true })).toBeVisible()
+  const filterInput = sidebar.getByRole("textbox", { name: "Filter tabs", exact: true })
+  await filterInput.fill("Remote gamma")
+  await expect(remoteTab).toBeVisible()
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toHaveCount(0)
+  await filterInput.press("Escape")
+  await expect(filterInput).toHaveValue("")
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toBeVisible()
+
+  const initialLocalColor = await localHeader.getAttribute("data-group-color")
+  const initialRemoteColor = await remoteHeader.getAttribute("data-group-color")
+
+  // Dragging the 1-tab remote group above the larger local group reorders cleanly without mutating group hues.
+  const [localHdrBox, remoteHdrBox] = await Promise.all([localHeader.boundingBox(), remoteHeader.boundingBox()])
+
+  if (!localHdrBox || !remoteHdrBox) throw new Error("group headers have no bounding box")
+  await page.mouse.move(remoteHdrBox.x + 40, remoteHdrBox.y + 13)
+  await page.mouse.down()
+  await page.mouse.move(localHdrBox.x + 40, localHdrBox.y + 6, { steps: 6 })
+  await page.mouse.up()
+  await expect(sidebar.locator("[data-tab-group]").first()).toHaveAttribute("data-group-key", `server:${REMOTE_SERVER}`)
+  await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
+  await expect(remoteHeader).toHaveAttribute("data-group-color", initialRemoteColor!)
+
+  // Recoloring blade's swatch changes only blade and never shifts local's hue.
+  await remoteHeader.click({ button: "right" })
+  const nextRemoteHue = initialRemoteColor === "pink" ? "blue" : "pink"
+  const nextHueLabel = nextRemoteHue === "pink" ? "Rose" : "Steel"
+  await page.getByRole("radio", { name: nextHueLabel, exact: true }).click()
+  await page.keyboard.press("Escape")
+  await expect(remoteHeader).toHaveAttribute("data-group-color", nextRemoteHue)
+  await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
+
+  // Collapsing the remote group hides its tab; navigating into that session auto-expands the group.
+  await remoteHeader.locator("button").first().click()
+  await expect(remoteTab).toHaveCount(0)
+  await expect(remoteHeader).toContainText("1")
+  await page.evaluate((href) => window.history.pushState({}, "", href), sessionHref(remoteOne.id, REMOTE_SERVER))
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")))
+  await expect(remoteTab).toBeVisible()
+
+  // Turning off automatic grouping flattens the strip; dwelling a tab on another combines them into a manual group.
+  await sidebar.locator('[data-action="tab-groups-menu"]').click()
+  await expect(page.getByRole("menuitemradio")).toHaveText(["None", "Server", "Project"])
+  await page.getByRole("menuitemradio", { name: "None", exact: true }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(0)
+
+  const slotOne = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)
+  const slotTwo = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localTwo.id)}"])`)
+  const slotThree = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localThree.id)}"])`)
+  const [boxOne, boxTwo] = await Promise.all([slotOne.boundingBox(), slotTwo.boundingBox()])
+
+  if (!boxOne || !boxTwo) throw new Error("tab slots have no bounding box")
+  await page.mouse.move(boxTwo.x + 40, boxTwo.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(boxOne.x + 40, boxOne.y + 3, { steps: 6 })
+  await expect(slotOne).not.toHaveAttribute("data-combine-target", "true")
+  await page.mouse.move(boxOne.x + 40, boxOne.y + 14, { steps: 4 })
+  await expect(slotOne).toHaveAttribute("data-combine-target", "true")
+  await page.mouse.up()
+
+  const manualGroup = sidebar.locator("[data-tab-group]")
+  await expect(manualGroup).toHaveCount(1)
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+
+  // Dragging an ungrouped tab onto the manual group header adds it to the group, and dragging below extracts it back out.
+  const [boxThree, manualHdrBox] = await Promise.all([
+    slotThree.boundingBox(),
+    manualGroup.locator("[data-tab-group-header]").boundingBox(),
+  ])
+
+  if (!boxThree || !manualHdrBox) throw new Error("manual group targets have no bounding box")
+  await page.mouse.move(boxThree.x + 40, boxThree.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(manualHdrBox.x + 50, manualHdrBox.y + 15, { steps: 6 })
+  await expect(manualGroup.locator("[data-tab-group-header]")).toHaveAttribute("data-drop-over", "true")
+  await page.mouse.up()
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(3)
+
+  const [lastGroupedBox, groupFullBox] = await Promise.all([
+    manualGroup.locator("[data-titlebar-tab-slot]").last().boundingBox(),
+    manualGroup.boundingBox(),
+  ])
+
+  if (!lastGroupedBox || !groupFullBox) throw new Error("grouped slot has no bounding box")
+  const lastSlot = manualGroup.locator("[data-titlebar-tab-slot]").last()
+  await page.mouse.move(lastGroupedBox.x + 40, lastGroupedBox.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(lastGroupedBox.x + 40, groupFullBox.y + groupFullBox.height + 28, { steps: 6 })
+  await expect(lastSlot).toHaveAttribute("data-lane-shift", "out")
+  await page.mouse.up()
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+})

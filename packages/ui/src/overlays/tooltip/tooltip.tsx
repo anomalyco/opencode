@@ -1,4 +1,5 @@
-import { Content, Portal, Root, Trigger } from "@kobalte/core/tooltip"
+import { Content, Portal, Root, Trigger, useTooltipContext, type TooltipContextValue } from "@kobalte/core/tooltip"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createComputed, createSignal, onCleanup, onMount, Show, splitProps, untrack, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { spread } from "solid-js/web"
@@ -15,11 +16,10 @@ import {
   POINTER_OUTSIDE,
   POPUP_COLLAPSED,
   POPUP_EXPANDED,
-  PRESS_ENDED,
+  selectTooltipDismissed,
   selectTooltipForceOpen,
   selectTooltipMounted,
   selectTooltipOpen,
-  selectTooltipPressing,
   selectTooltipTracking,
   syncPropsEvent,
   transitionTooltip,
@@ -41,12 +41,45 @@ export interface TooltipProps extends ComponentProps<typeof Root> {
 }
 
 type TriggerHandlers = {
-  onPointerEnter?: (event: PointerEvent) => void
-  onFocus?: (event: FocusEvent) => void
+  onPointerEnter: (event: PointerEvent) => void
+  onFocus: (event: FocusEvent) => void
+  onBlur: (event: FocusEvent) => void
+  onClick: (event: MouseEvent) => void
 }
 
 // Expanded panels still need tooltips; only an open popup suppresses its trigger's tooltip.
 const POPUP = '[aria-haspopup]:not([aria-haspopup="false"]):is([aria-expanded="true"], [data-expanded])'
+
+// A closing popup can restore focus to its button. Only Tab should open the button's tooltip.
+let triggers = 0
+
+let tabbing = false
+
+function startTab(event: KeyboardEvent) {
+  tabbing = event.key === "Tab"
+}
+
+function endTab() {
+  tabbing = false
+}
+
+function listenForTab() {
+  if (++triggers === 1) {
+    window.addEventListener("keydown", startTab, true)
+    window.addEventListener("keyup", endTab, true)
+    window.addEventListener("pointerdown", endTab, true)
+    window.addEventListener("blur", endTab)
+  }
+
+  onCleanup(() => {
+    if (--triggers) return
+    window.removeEventListener("keydown", startTab, true)
+    window.removeEventListener("keyup", endTab, true)
+    window.removeEventListener("pointerdown", endTab, true)
+    window.removeEventListener("blur", endTab)
+    endTab()
+  })
+}
 
 export function Tooltip(props: TooltipProps) {
   return (
@@ -58,8 +91,12 @@ export function Tooltip(props: TooltipProps) {
 
 function ActiveTooltip(props: TooltipProps) {
   let ref: HTMLDivElement | undefined
+
   let handlers: TriggerHandlers | undefined
+
   let observer: MutationObserver | undefined
+
+  let kobalte: TooltipContextValue | undefined
 
   const [local, others] = splitProps(props, [
     "children",
@@ -79,7 +116,7 @@ function ActiveTooltip(props: TooltipProps) {
   // open it, or as soon as a caller controls it with forceOpen.
   const [tooltip, setTooltip] = createSignal(createTooltipState(local.forceOpen, !!others.disabled))
 
-  const dispatch = (event: TooltipEvent, source?: PointerEvent | FocusEvent) => {
+  const dispatch = (event: TooltipEvent, source?: PointerEvent) => {
     const previous = untrack(tooltip)
     const transition = transitionTooltip(previous, event)
 
@@ -91,10 +128,13 @@ function ActiveTooltip(props: TooltipProps) {
     for (const effect of transition.effects) {
       if (effect === "schedule-leave") queueMicrotask(settleLeave)
 
-      // Kobalte attached its listeners while this event was being dispatched, too late to receive it.
-      if (effect === "replay" && source instanceof PointerEvent) handlers?.onPointerEnter?.(source)
+      // hideTooltip starts the skip window; cancelling a pending hover shouldn't.
+      if (effect === "cancel-opening") kobalte?.cancelOpening()
 
-      if (effect === "replay" && source instanceof FocusEvent) handlers?.onFocus?.(source)
+      if (effect === "hide") kobalte?.hideTooltip(true)
+
+      // Kobalte attached its listeners while this event was being dispatched, too late to receive it.
+      if (effect === "replay" && source) handlers?.onPointerEnter(source)
     }
   }
 
@@ -102,8 +142,6 @@ function ActiveTooltip(props: TooltipProps) {
   // tooltips if it still sees this one open.
   const settleLeave = () => dispatch(LEAVE_SETTLED)
   const syncPopup = () => dispatch(ref?.querySelector(POPUP) ? POPUP_EXPANDED : POPUP_COLLAPSED)
-  // The press's click, if any, follows its pointerup in the same task.
-  const onPressEnd = () => setTimeout(dispatch, 0, PRESS_ENDED)
 
   const onPointerMove = (event: PointerEvent) => {
     if (!ref) return
@@ -117,18 +155,6 @@ function ActiveTooltip(props: TooltipProps) {
 
   // Attaches the listeners and observer the state needs and detaches the rest.
   const reconcile = (previous: TooltipState, state: TooltipState) => {
-    const pressing = selectTooltipPressing(state)
-
-    if (pressing && !selectTooltipPressing(previous)) {
-      window.addEventListener("pointerup", onPressEnd, true)
-      window.addEventListener("pointercancel", onPressEnd, true)
-    }
-
-    if (!pressing && selectTooltipPressing(previous)) {
-      window.removeEventListener("pointerup", onPressEnd, true)
-      window.removeEventListener("pointercancel", onPressEnd, true)
-    }
-
     const tracking = selectTooltipTracking(state)
 
     if (tracking && !selectTooltipTracking(previous)) {
@@ -155,6 +181,7 @@ function ActiveTooltip(props: TooltipProps) {
   }
 
   createComputed(() => dispatch(syncPropsEvent(local.forceOpen, !!others.disabled)))
+  onMount(listenForTab)
   onMount(() => reconcile(untrack(tooltip), untrack(tooltip)))
   onCleanup(() => dispatch(DISPOSED_EVENT))
 
@@ -162,19 +189,30 @@ function ActiveTooltip(props: TooltipProps) {
   // the trigger and its children in place, with their focus and hover.
   const adopt = (triggerProps: TriggerHandlers) => {
     handlers = triggerProps
+    kobalte = useTooltipContext()
 
     if (!ref) return null
+    // Tab-close buttons stop pointerdown propagation.
+    makeEventListener(
+      ref,
+      "pointerdown",
+      (event) => {
+        if (event.pointerType !== "touch") dispatch(TRIGGER_PRESSED)
+      },
+      true,
+    )
+
     // Kobalte owns the open state attributes from here, and spread never removes an attribute it did not set, so a
     // tooltip that mounts open would keep the closed marker.
     ref.removeAttribute("data-closed")
-    spread(ref, triggerProps, false, true)
+    const [, rest] = splitProps(triggerProps, ["onFocus", "onBlur", "onClick"])
+    spread(ref, rest, false, true)
 
     return null
   }
 
   return (
     <>
-      {/* These listeners are attached before Kobalte's, so the machine sees each hover and focus first. */}
       <div
         ref={(el) => {
           ref = el
@@ -188,14 +226,23 @@ function ActiveTooltip(props: TooltipProps) {
         onPointerEnter={(event) => {
           if (event.pointerType !== "touch") dispatch(POINTER_ENTERED, event)
         }}
-        onFocus={(event) => dispatch(FOCUSED, event)}
+        onFocusIn={(event) => {
+          if (!tabbing && (event.target !== ref || selectTooltipDismissed(untrack(tooltip)))) return
+          dispatch(FOCUSED)
+          handlers?.onFocus(event)
+        }}
+        onFocusOut={(event) => handlers?.onBlur(event)}
+        onClick={(event) => {
+          if (event instanceof PointerEvent && event.pointerType === "touch") return
+          handlers?.onClick(event)
+        }}
       >
         {local.children}
       </div>
       <Show when={selectTooltipMounted(tooltip())}>
         <Root
           gutter={4}
-          openDelay={400}
+          openDelay={600}
           skipDelayDuration={300}
           {...others}
           closeDelay={0}
@@ -207,7 +254,6 @@ function ActiveTooltip(props: TooltipProps) {
               tooltip before Kobalte's listener ran, which then skipped the skip-delay window. */}
           <Trigger
             as={adopt}
-            onPointerDown={() => dispatch(TRIGGER_PRESSED)}
             onPointerLeave={(event: PointerEvent) => {
               if (event.pointerType !== "touch") dispatch(POINTER_LEFT)
             }}

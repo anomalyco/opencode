@@ -72,7 +72,7 @@ const it = testEffect(
 )
 
 describe("PluginInternal flags", () => {
-  it.live("turns a flagged built-in tool on for a dev-channel server with no config", () =>
+  it.live("keeps the opt-in todo tool off for a dev-channel server with no config", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
       const locations = yield* LocationServiceMap.Service
@@ -84,7 +84,7 @@ describe("PluginInternal flags", () => {
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
 
-      expect(names).toContain(TodoTool.name)
+      expect(names).not.toContain(TodoTool.name)
     }),
   )
 })

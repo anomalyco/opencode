@@ -2,6 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import { AIError, TransportError } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
+import { Automation } from "@opencode/schema/automation"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -72,6 +73,49 @@ describe("SubagentReport settlement", () => {
           delivery: "steer",
         },
       ])
+    }),
+  )
+
+  it.effect("keeps an automation run's child quiet unless the parent followed up through a Job", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const parent = sessionID("ses_automation_parent")
+      const child = Automation.runSessionID(Automation.ID.make("aut_quiet"), 1)
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent, agent: "explore", title: "Morning triage" })
+      yield* seedAssistant(database, child, 100, "Triage done")
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(child)
+      yield* execution.awaitIdle(child)
+      yield* execution.awaitIdle(parent)
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+
+      // A follow-up the parent sends with the subagent tool runs as a Job, and that reports as usual.
+      yield* seedAssistant(database, child, 200, "Follow-up done")
+      const job = yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Morning triage",
+        },
+        background: true,
+        run: execution.resume(child).pipe(Effect.as("")),
+      })
+      yield* jobs.wait({ id: job.id })
+      const reports = yield* SessionInbox.list(database.db, parent)
+      expect(reports).toHaveLength(1)
+      expect(text(reports[0])).toContain("Follow-up done")
     }),
   )
 
@@ -153,7 +197,7 @@ describe("SubagentReport settlement", () => {
         {
           payload: {
             text: [
-              `<subagent sessionID="${child}" state="completed" description="Background audit">`,
+              `<subagent sessionID="${child}" state="running" description="Background audit">`,
               "Started tests",
               "",
               "Background work still running:",
@@ -162,6 +206,7 @@ describe("SubagentReport settlement", () => {
               `- subagent (subagent, sessionID: ${active}): ${active}`,
               "</subagent>",
             ].join("\n"),
+            metadata: { state: "completed" },
           },
         },
       ])
@@ -466,8 +511,10 @@ describe("SubagentReport outbox", () => {
       const inbox = yield* SessionInbox.Service
       const parent = sessionID("ses_outbox_parent")
       const child = sessionID("ses_outbox_child")
+      const grandchild = sessionID("ses_outbox_grandchild")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent, agent: "explore", title: "Outbox audit" })
+      yield* seedSessions(database, [grandchild], { parent_id: child, agent: "explore", title: "Check logs" })
       yield* seedAssistant(database, child, 100, "Outbox report")
       yield* store.claim(child)
 
@@ -476,7 +523,7 @@ describe("SubagentReport outbox", () => {
         store,
         jobs,
         inbox,
-        draining: Effect.succeed(new Set()),
+        draining: Effect.succeed(new Set([grandchild])),
         wake: (sessionID) => Effect.sync(() => void wakes.push(sessionID)),
       })
       const job = yield* jobs.start({
@@ -508,6 +555,11 @@ describe("SubagentReport outbox", () => {
           session_id: parent,
           status: "completed",
           output: "Outbox report",
+          recovery: {
+            outstanding: [
+              { kind: "subagent", sessionID: child, childSessionID: grandchild, agent: "explore", description: "Check logs" },
+            ],
+          },
         },
       ])
 

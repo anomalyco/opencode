@@ -1,6 +1,4 @@
-// @ts-nocheck
-import * as mod from "./progress"
-import { create } from "../storybook/scaffold"
+import { Progress, type ProgressProps } from "./progress"
 
 const docs = `### Overview
 Linear progress indicator with optional label and value display.
@@ -26,21 +24,27 @@ Use in forms, uploads, or background tasks.
 
 `
 
-const story = create({
-  title: "UI/Progress",
-  mod,
-  args: {
-    value: 60,
-    maxValue: 100,
-    children: "Progress",
-    showValueLabel: true,
-  },
-})
-
 export default {
   title: "UI/Progress",
   id: "components-progress",
-  component: story.meta.component,
+  component: Progress,
+  render: (args: ProgressProps) => (
+    <Progress {...args} class="min-w-48" aria-label={args.children ? undefined : "Progress"} />
+  ),
+  args: {
+    value: 60,
+    minValue: 0,
+    maxValue: 100,
+    children: "Progress",
+    indeterminate: false,
+    hideLabel: false,
+    showValueLabel: true,
+  },
+  argTypes: {
+    value: { control: { type: "range", min: 0, max: 100, step: 1 } },
+    minValue: { control: { type: "range", min: -100, max: 0, step: 1 } },
+    maxValue: { control: { type: "range", min: 1, max: 100, step: 1 } },
+  },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -51,7 +55,7 @@ export default {
   },
 }
 
-export const Basic = story.Basic
+export const Basic = {}
 
 export const NoLabel = {
   args: {
@@ -62,6 +66,4 @@ export const NoLabel = {
   },
 }
 
-export const Indeterminate = {
-  render: () => <mod.Progress>Loading</mod.Progress>,
-}
+export const Indeterminate = { args: { children: "Loading", indeterminate: true, showValueLabel: false } }

@@ -672,7 +672,8 @@ export function fromPromise(plugin: Plugin) {
 
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
-          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          // JavaScript plugins may return anything, such as a v1-style hooks object; only a function is a cleanup.
+          (cleanup) => (typeof cleanup === "function" ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
         )
       }),
   })

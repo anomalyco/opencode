@@ -94,53 +94,92 @@ story.describe("touch timeline", () => {
     const markdown = await mount("components-markdown--complete-response")
     const code = markdown.locator('[data-component="markdown-code"]').filter({ hasText: "export const value = 42" })
     await expect(code).toHaveCount(1)
-    await expect(code.locator('[data-slot="markdown-copy-button"]')).toHaveCSS("opacity", "1")
+    const footer = code.locator('[data-slot="markdown-code-toolbar"]')
+    await expect(footer.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
+    await expect(footer).toHaveCSS("opacity", "1")
+    await expect(footer).toHaveCSS("pointer-events", "auto")
   })
 })
 
-story("desktop message actions still appear on hover and keyboard focus", async ({ mount, page }) => {
+story("desktop user message actions still appear on hover and keyboard focus", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
-  for (const action of [
-    { slot: "user-message-menu", name: "More actions" },
-    { slot: "text-part-copy-wrapper", name: "Copy response" },
-  ]) {
-    const actions = timeline.locator(`[data-slot="${action.slot}"]`)
-    await expect(actions).toHaveCount(1)
-    await expect(actions).toHaveCSS("opacity", "0")
-    await expect(actions).toHaveCSS("pointer-events", "none")
-    await actions.locator("..").hover()
-    await expect(actions).toHaveCSS("opacity", "1")
-    await expect(actions).toHaveCSS("pointer-events", "auto")
+  const actions = timeline.locator('[data-slot="user-message-menu"]')
+  await expect(actions).toHaveCount(1)
+  await expect(actions).toHaveCSS("opacity", "0")
+  await expect(actions).toHaveCSS("pointer-events", "none")
+  await actions.locator("..").hover()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
+  await page.mouse.move(0, 0)
+  await expect(actions).toHaveCSS("opacity", "0")
+  await actions.getByRole("button", { name: "More actions", exact: true }).focus()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
+})
 
-    if (action.slot === "text-part-copy-wrapper") {
-      await expect(actions).toHaveCSS("height", "20px")
-      await expect(actions).toHaveCSS("margin-top", "8px")
-      await expect(actions).toHaveCSS("gap", "4px")
-      const meta = actions.locator('[data-slot="text-part-meta"]')
-      await expect(meta).toHaveCSS("font-size", "12px")
-      await expect(meta).toHaveCSS("line-height", "18px")
-      await expect(meta).toHaveCSS("gap", "4px")
-      await expect(meta.locator('[data-slot="text-part-meta-item"]')).toHaveText(["Build", "Claude Sonnet 4", "4s"])
-      const separators = meta.locator('[data-slot="text-part-meta-separator"]')
-      await expect(separators).toHaveCount(2)
+story("desktop keeps only the latest response copy visible at rest", async ({ mount, page }) => {
+  const timeline = await mount("current-session-timeline-rows--response-speed", { args: { steered: true } })
+  expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
-      for (const separator of await separators.all()) {
-        await expect(separator).toHaveText("\u00B7")
-      }
+  const latest = timeline.locator('[data-component="text-part"]').filter({ hasText: "The timeline checks passed." })
 
-      const copy = actions.getByRole("button", { name: action.name, exact: true })
-      await expect(copy).toHaveCSS("width", "20px")
-      await expect(copy).toHaveCSS("height", "20px")
-      await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
-    }
+  const latestActions = latest.locator('[data-slot="text-part-copy-wrapper"]')
 
-    await page.mouse.move(0, 0)
-    await expect(actions).toHaveCSS("opacity", "0")
-    await actions.getByRole("button", { name: action.name, exact: true }).focus()
-    await expect(actions).toHaveCSS("opacity", "1")
-    await expect(actions).toHaveCSS("pointer-events", "auto")
-    await page.getByRole("button", { name: "Reset", exact: true }).focus()
+  const latestMeta = latestActions.locator('[data-slot="text-part-meta"]')
+
+  await expect(latestActions).toHaveCSS("opacity", "1")
+  await expect(latestActions.getByRole("button", { name: "Copy response", exact: true })).toBeVisible()
+  await expect(latestMeta).toHaveCSS("opacity", "0")
+  await latest.locator('[data-slot="text-part-body"]').hover()
+  await expect(latestMeta).toHaveCSS("opacity", "1")
+
+  const earlier = timeline.locator('[data-component="text-part"]').filter({ hasText: "I'll inspect the timeline" })
+
+  const actions = earlier.locator('[data-slot="text-part-copy-wrapper"]')
+  await expect(actions).toHaveCount(1)
+  await expect(actions).toHaveCSS("height", "20px")
+  await expect(actions).toHaveCSS("margin-top", "8px")
+  await expect(actions).toHaveCSS("gap", "4px")
+  await expect(actions).toHaveCSS("opacity", "0")
+  await expect(actions).toHaveCSS("pointer-events", "none")
+
+  const copy = actions.getByRole("button", { name: "Copy response", exact: true })
+
+  await expect(copy).toHaveCSS("width", "20px")
+  await expect(copy).toHaveCSS("height", "20px")
+  await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
+  const rest = await copy.boundingBox()
+
+  const meta = actions.locator('[data-slot="text-part-meta"]')
+
+  await expect(meta).toHaveCSS("font-size", "12px")
+  await expect(meta).toHaveCSS("line-height", "18px")
+  await expect(meta).toHaveCSS("gap", "4px")
+  await expect(meta.locator('[data-slot="text-part-meta-item"]')).toHaveText([
+    "Build",
+    "Claude Sonnet 4",
+    "Balanced",
+    "4m 50s",
+  ])
+  const separators = meta.locator('[data-slot="text-part-meta-separator"]')
+  await expect(separators).toHaveCount(2)
+
+  for (const separator of await separators.all()) {
+    await expect(separator).toHaveText("\u00B7")
   }
+
+  await earlier.locator('[data-slot="text-part-body"]').hover()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
+  expect(await copy.boundingBox()).toEqual(rest)
+  await copy.hover()
+  await expect(actions).toHaveCSS("opacity", "1")
+
+  await page.mouse.move(0, 0)
+  await expect(actions).toHaveCSS("opacity", "0")
+  await copy.focus()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
 })

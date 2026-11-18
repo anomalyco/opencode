@@ -9,19 +9,8 @@ import {
   modelJson,
   modelMarkdown,
 } from "./lib/agent-formats"
-import {
-  basePath,
-  cookie,
-  fromPathname,
-  LOCALE_HEADER,
-  localeFromRequest,
-  pageUrl,
-  parseLocale,
-  prefersMarkdown,
-  route,
-  strip,
-} from "./lib/language"
-import { isDataBypassPath, parsePath, type Target, type TextFormat } from "./lib/data-path"
+import { fromPathname, LOCALE_HEADER, pageUrl, parseLocale, prefersMarkdown, route, strip } from "./lib/language"
+import { parsePath, type Target, type TextFormat } from "./lib/data-path"
 import { noindexOutsideProduction } from "./lib/noindex"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
 import { labOgCard, modelOgCard } from "./og/card-data"
@@ -47,8 +36,6 @@ const pageMiddleware = createMiddleware({
     const request = event.request
     if (request.method !== "GET" && request.method !== "HEAD") return
     const url = new URL(request.url)
-    const localized = localizedRedirect(request, url)
-    if (localized) return localized
     const path = strip(url.pathname)
     const parsed = parsePath(path)
     if (!parsed) return
@@ -87,28 +74,6 @@ const pageMiddleware = createMiddleware({
 
 // The noindex header outside production first (lib/noindex.ts), so every response carries it.
 export default [noindexOutsideProduction, ...pageMiddleware]
-
-// Unprefixed pages redirect to the visitor's language from their cookie or Accept-Language. /en/data stays put so
-// English remains reachable for visitors whose browser prefers another language.
-function localizedRedirect(request: Request, url: URL) {
-  if (fromPathname(url.pathname)) return undefined
-  if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) return undefined
-  if (isDataBypassPath(url.pathname)) return undefined
-  const accept = request.headers.get("accept")
-  // Agents asking for Markdown get the English page in place.
-  if (prefersMarkdown(accept)) return undefined
-  if (accept && !accept.includes("text/html") && !accept.includes("*/*")) return undefined
-  const locale = localeFromRequest(request)
-  if (locale === "en") return undefined
-  const headers = new Headers({
-    // route() normalizes /data to /data/, so keep the visitor's own trailing slash.
-    Location: `${url.pathname === basePath ? `/${locale}${basePath}` : route(locale, url.pathname)}${url.search}`,
-    "Cache-Control": "private, no-store",
-    Vary: "Accept, Accept-Language, Cookie",
-  })
-  headers.append("Set-Cookie", cookie(locale))
-  return new Response(null, { status: 308, headers })
-}
 
 async function canonicalPath(target: Target) {
   if (target.kind !== "lab" && target.kind !== "model") return undefined

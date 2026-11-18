@@ -3,6 +3,7 @@ export * as SessionBackground from "./background.js"
 import type { Kind, Status } from "@opencode/schema/job"
 import { Effect } from "effect"
 import type { Job } from "../job.js"
+import type { OutstandingItem } from "../job/recovery.js"
 import type { SessionSchema } from "./schema.js"
 
 export type Lookup = {
@@ -13,26 +14,7 @@ export type Lookup = {
   >
 }
 
-export type OutstandingItem =
-  | {
-      readonly kind: "shell"
-      readonly sessionID: SessionSchema.ID
-      readonly shellID: string
-      readonly command: string
-    }
-  | {
-      readonly kind: "image"
-      readonly sessionID: SessionSchema.ID
-      readonly model: string
-      readonly path: string
-    }
-  | {
-      readonly kind: "subagent"
-      readonly sessionID: SessionSchema.ID
-      readonly childSessionID: SessionSchema.ID
-      readonly agent: string
-      readonly description: string
-    }
+export type { OutstandingItem }
 
 export type ListFilter = {
   readonly sessionID?: SessionSchema.ID
@@ -61,6 +43,7 @@ export const outstanding = Effect.fnUntraced(function* (
     descends(store, parents, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
   const items: OutstandingItem[] = owned.map((recovery) => {
+    if (recovery.kind === "codemode") return recovery
     if (recovery.kind === "shell")
       return {
         kind: "shell" as const,

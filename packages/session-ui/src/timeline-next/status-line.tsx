@@ -12,6 +12,8 @@ export function StatusLane(props: {
   collapsed?: boolean
   /** The space above the next row of the turn, so the line sits where that row will. */
   spacing?: TimelineGap
+  /** The lane sits in a row of the timeline, which clips what reaches past it, rather than in its open tail. */
+  inRow?: boolean
   class?: string
   children?: JSX.Element
 }) {
@@ -21,6 +23,7 @@ export function StatusLane(props: {
       data-component="timeline-status-lane"
       data-collapsed={props.collapsed ? "" : undefined}
       data-spacing={props.spacing}
+      data-in-row={props.inRow ? "" : undefined}
       class={props.class}
     >
       <Show when={props.label}>

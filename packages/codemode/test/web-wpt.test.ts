@@ -13,7 +13,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 const base64Cases = (await Bun.file(new URL("./fixtures/wpt-base64.json", import.meta.url)).json()) as Array<
   [string, Array<number> | null]

@@ -9,19 +9,24 @@ import { Button } from "@opencode/ui/button"
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
+import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
+import { displayName } from "@opencode/ui/project-avatar"
 import { Schema } from "effect"
-import { batch, createEffect, createMemo, onCleanup, Show, startTransition, untrack } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, Show, startTransition, untrack, type JSX } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { arrayMove } from "@/runtime/array-move"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Persist, persisted } from "@/runtime/persistence/storage"
+import { rawTime } from "@/runtime/server/data"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { errorMessage } from "@/shell/layout/helpers"
-import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import { sessionStatus, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import { projectSettingsKey, useSettings } from "@/settings/model"
+import { pathKey } from "@/workspaces/path-key"
 import { showToast } from "@/shell/notifications/toast"
 import { setSidebarUnread } from "@/shell/sidebar-peek"
 import { useLayout } from "@/shell/state/layout"
@@ -31,12 +36,15 @@ import {
   dedupePins,
   INITIAL_RECENT_PAGE_STATE,
   RECENT_PAGE_LIMIT,
+  RECENT_RELOAD_DELAY_MS,
   RECENT_VISIBLE_LIMIT,
   mergeRecentSessions,
   partitionRecentSessions,
   recentPageFailed,
   recentPageHasMore,
   recentPageLoaded,
+  recentPageLoadingMore,
+  recentReloadsOn,
   recentRowUnread,
   recentSessionEndpoints,
   recentSessionKey,
@@ -50,6 +58,19 @@ import {
   type RecentPageState,
   type RecentSession,
 } from "./recent-sessions-model"
+import {
+  DEFAULT_RECENT_VIEW,
+  NO_PROJECT,
+  RECENT_DATES,
+  RECENT_STATUSES,
+  RecentViewState,
+  recentGroups,
+  type RecentGroup,
+  type RecentStatus,
+  type RecentView,
+  type RecentViewRow,
+} from "./recent-view"
+import { RecentViewMenu } from "./recent-view-menu"
 import { notifySessionTabsRemoved } from "./session-events"
 import { TabNavItem } from "./tab-nav"
 import { createSessionRowNavigation, syncInactiveSession } from "./tab-strip"
@@ -66,7 +87,22 @@ type Connection = { conn: ServerConnection.Any; ctx: ServerCtx; server: ServerCo
  * The experimental Recent sessions sidebar: pinned sessions first, then every server's root sessions from the last
  * 7 days in one recency list, at most 30 until Show more reveals older ones. The desktop titlebar renders it in place of the side tabs only while the setting is on and available.
  */
-export function RecentSessions() {
+export function RecentSessions(
+  input: {
+    /** The navigation prototype's pins and groups replace this list's own pins; their sessions leave the recent rows. */
+    pinned?: {
+      content: () => JSX.Element
+      keys: () => string[]
+      current: () => string | undefined
+      unread: (key: string) => boolean
+      navigate: (key: string) => void
+      holds: (server: string, sessionID: string) => boolean
+      toggle: (server: string, sessionID: string) => void
+    }
+    /** The navigation prototype's Group and sort menu on Recent's headings; View all opens the Sessions page. */
+    organize?: { viewAll: () => void }
+  } = {},
+) {
   const global = useGlobal()
   const servers = useServers()
   const language = useLanguage()
@@ -75,7 +111,17 @@ export function RecentSessions() {
   const dialog = useDialog()
   const queryClient = useQueryClient()
 
+  const settings = useSettings()
+
   const [state, setState, , ready] = persisted(Persist.global("sidebar.recent"), RecentSidebarState, { pins: [] })
+
+  const [arrangementState, setArrangement] = persisted(
+    Persist.global("navigation.recent-view"),
+    RecentViewState,
+    DEFAULT_RECENT_VIEW,
+  )
+
+  const arrangement = (): RecentView => (input.organize ? arrangementState : DEFAULT_RECENT_VIEW)
 
   const [pages, setPages] = createStore<Record<string, RecentPageState>>({})
 
@@ -92,6 +138,7 @@ export function RecentSessions() {
 
   const controllers = new Map<AbortController, string>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const reloads = new Map<string, ReturnType<typeof setTimeout>>()
   const hydrationControllers = new Map<string, AbortController>()
   const statuses = new Map<string, { ctx: ServerCtx; status: string }>()
   let attempt = 0
@@ -118,6 +165,26 @@ export function RecentSessions() {
 
     clearTimeout(timer)
     timers.delete(server)
+  }
+
+  const cancelReload = (server: string) => {
+    clearTimeout(reloads.get(server))
+    reloads.delete(server)
+  }
+
+  // Order follows each server's last snapshot, so only a new root session reloads page one. Bursts coalesce per server.
+  const reload = (item: Connection) => {
+    cancelReload(item.server)
+    reloads.set(
+      item.server,
+      setTimeout(() => {
+        reloads.delete(item.server)
+
+        if (disposed || !isCurrent(item) || item.ctx.sdk.connection.status() !== "connected") return
+
+        dispatch(item, { type: "reload", attempt: ++attempt })
+      }, RECENT_RELOAD_DELAY_MS),
+    )
   }
 
   const abortPages = (server: string) => {
@@ -197,6 +264,7 @@ export function RecentSessions() {
     abortPages(server)
     abortHydration(server)
     clearTimer(server)
+    cancelReload(server)
     setPages(produce((current) => void delete current[server]))
     clearHydration(server)
   }
@@ -245,7 +313,7 @@ export function RecentSessions() {
           if (page?.status !== "loading" || page.attempt !== effect.attempt) return
 
           batch(() => {
-            if (page.kind === "refresh") {
+            if (page.kind === "refresh" || page.kind === "reload") {
               const covered = new Map(response.data.map((info) => [info.id, info]))
 
               for (const key of state.pins) {
@@ -255,7 +323,8 @@ export function RecentSessions() {
                 const info = covered.get(pin.sessionID)
 
                 if (info) rememberPin(item, key, info)
-                else hydrate(item, key, pin.sessionID)
+                // Live events keep other pins current while connected; only a reconnect may have missed some.
+                else if (page.kind === "refresh") hydrate(item, key, pin.sessionID)
               }
             }
 
@@ -289,6 +358,9 @@ export function RecentSessions() {
   }
 
   function load(item: Connection, kind: "first" | "next" | "refresh") {
+    // A first page or reconnect refresh is already a fresh snapshot, so a pending reload would only repeat it.
+    if (kind !== "next") cancelReload(item.server)
+
     dispatch(item, { type: "load", kind, attempt: ++attempt })
   }
 
@@ -297,6 +369,7 @@ export function RecentSessions() {
     controllers.forEach((_, controller) => controller.abort())
     hydrationControllers.forEach((controller) => controller.abort())
     timers.forEach((timer) => clearTimeout(timer))
+    reloads.forEach((timer) => clearTimeout(timer))
   })
 
   // The store is local and long-lived; drop duplicates a previous version or a manual edit left behind.
@@ -324,7 +397,11 @@ export function RecentSessions() {
       // A replaced controller owns no old requests or pin snapshots, even before it reconnects.
       if (replaced) dropServer(item.server)
 
-      if (status !== "connected") return
+      if (status !== "connected") {
+        cancelReload(item.server)
+
+        return
+      }
 
       if (!untrack(() => pages[item.server])) {
         load(item, "first")
@@ -351,11 +428,8 @@ export function RecentSessions() {
     connections().flatMap((item) => {
       const fetched = pages[item.server]
 
-      return mergeRecentSessions(
-        item.server,
-        fetched?.sessions ?? [],
-        item.ctx.data.session.known(),
-        item.ctx.data.session.apply,
+      return mergeRecentSessions(item.server, fetched?.sessions ?? [], item.ctx.data.session.known(), (rows) =>
+        item.ctx.data.session.apply(rows, { reloads: true }),
       )
     }),
   )
@@ -373,7 +447,7 @@ export function RecentSessions() {
 
         if (!value) return
 
-        const session = item.ctx.data.session.apply([value])[0]
+        const session = item.ctx.data.session.apply([value], { reloads: true })[0]
 
         if (session) result.set(key, { key, server: item.server, session })
       })
@@ -422,6 +496,16 @@ export function RecentSessions() {
             forget(item.server, event.data.sessionID)
             setHydration(produce((cache) => void delete cache[key]))
           })
+        }),
+      )
+    })
+  })
+
+  createEffect(() => {
+    connections().forEach((item) => {
+      onCleanup(
+        item.ctx.data.listen(({ details }) => {
+          if (recentReloadsOn(details)) reload(item)
         }),
       )
     })
@@ -482,7 +566,7 @@ export function RecentSessions() {
   const partition = createMemo(() =>
     partitionRecentSessions({
       items: items(),
-      pins: state.pins,
+      pins: input.pinned ? [] : state.pins,
       endpoints: endpoints(),
       open: openSessions(),
       resolvePin: (key) => hydratedItems().get(key),
@@ -493,16 +577,150 @@ export function RecentSessions() {
 
   const pinned = () => partition().pinned
 
+  const recentSource = createMemo(() =>
+    input.pinned
+      ? partition().recent.filter((item) => !input.pinned?.holds(item.server, item.session.id))
+      : partition().recent,
+  )
+
   const windowed = createMemo(() =>
     windowRecentSessions({
-      items: partition().recent,
+      items: recentSource(),
       now: view.now,
       revealed: view.revealed,
       serversHaveMore: connections().some((item) => recentPageHasMore(pages[item.server])),
     }),
   )
 
-  const recent = () => windowed().visible
+  // The same status the row's avatar shows; muted sessions never count as unread.
+  const statusOf = (item: RecentSession): RecentStatus => {
+    const ctx = ctxOf(item)
+
+    if (!ctx) return "read"
+    const project = projectSettingsKey(ctx.sdk.scope, item.session.projectID)
+
+    const value = sessionStatus(ctx, item.session.id, {
+      root: true,
+      autoApprove: settings.permissions.autoApproves(project),
+      snapshot: item.session,
+    })
+
+    if (value === "input") return "attention"
+
+    if (value === "running") return "working"
+
+    if (value === "unread" && !global.sessionPreferences.muted(item.server, item.session.id)) return "unread"
+
+    return "read"
+  }
+
+  // Status grouping is the old Inbox: whatever needs you or is running shows even when it is older than the window.
+  const candidates = createMemo(() => {
+    const visible = windowed().visible
+
+    if (arrangement().groupBy !== "status") return visible
+    const shown = new Set(visible.map((item) => item.key))
+
+    return [
+      ...visible,
+      ...recentSource().filter((item) => {
+        if (shown.has(item.key)) return false
+        const status = statusOf(item)
+
+        return status === "attention" || status === "working"
+      }),
+    ]
+  })
+
+  const groups = createMemo(() =>
+    recentGroups(
+      candidates().map((item): RecentViewRow & { item: RecentSession } => {
+        const project = ctxOf(item)?.projects.forSession(item.session)
+
+        return {
+          key: item.key,
+          item,
+          title: sessionTabTitle(item.session.title, language.t("command.session.new")) ?? "",
+          updated: item.session.time.updated ?? item.session.time.created,
+          created: item.session.time.created,
+          status: statusOf(item),
+          project: project
+            ? { key: `${item.server}\u0000${pathKey(project.worktree)}`, label: displayName(project) }
+            : undefined,
+          server: item.server,
+        }
+      }),
+      arrangement(),
+      {
+        now: view.now,
+        servers: connections().map((entry) => ({ key: entry.server, label: servers.label(entry.conn) })),
+      },
+    ),
+  )
+
+  const collapsed = (group: RecentGroup<RecentViewRow>) =>
+    arrangement().groupBy !== "none" && arrangement().collapsed.includes(group.key)
+
+  // A collapsed group still shows the session you're on, as a collapsed pinned group does.
+  const shownRows = (group: RecentGroup<RecentViewRow & { item: RecentSession }>) =>
+    group.rows.flatMap((entry) => (!collapsed(group) || selected(entry.item) ? [entry.item] : []))
+
+  // A collapsed group marks what its hidden rows need from you: an answer outranks unread work.
+  const hiddenMark = (group: RecentGroup<RecentViewRow & { item: RecentSession }>) => {
+    if (!collapsed(group)) return
+    const statuses = group.rows.filter((entry) => !selected(entry.item)).map((entry) => entry.status)
+
+    if (statuses.includes("attention")) return "attention"
+
+    if (statuses.includes("unread")) return "unread"
+  }
+
+  const toggleGroup = (key: string) =>
+    setArrangement("collapsed", (current) =>
+      current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
+    )
+
+  const groupLabel = (group: RecentGroup<RecentViewRow>) => {
+    const by = arrangement().groupBy
+    const date = RECENT_DATES.find((value) => value === group.id)
+    const status = RECENT_STATUSES.find((value) => value === group.id)
+
+    if (by === "none") return language.t("sidebar.recent.section.recent")
+
+    if (by === "date" && date) return language.t(`sidebar.recent.group.date.${date}`)
+
+    if (by === "status" && status) return language.t(`sidebar.recent.group.status.${status}`)
+
+    if (by === "project" && group.id === NO_PROJECT) return language.t("sidebar.recent.group.project.none")
+
+    return group.label ?? group.id
+  }
+
+  const meta = (item: RecentSession) => {
+    if (!arrangement().metadata) return
+    const status = statusOf(item)
+
+    if (status === "attention") return language.t("sidebar.recent.meta.attention")
+
+    if (status === "working") return language.t("sidebar.recent.meta.working")
+
+    const time =
+      arrangement().sortBy === "created"
+        ? item.session.time.created
+        : (item.session.time.updated ?? item.session.time.created)
+
+    const seconds = Math.max(0, Math.floor((view.now - time) / 1000))
+
+    if (seconds < 60) return language.t("sidebar.inbox.time.now")
+
+    if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
+
+    if (seconds < 86_400) return language.plural("sidebar.inbox.elapsed.hours", Math.floor(seconds / 3600))
+
+    return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
+  }
+
+  const recent = () => (input.organize ? groups().flatMap(shownRows) : windowed().visible)
   const rows = createMemo(() => [...pinned(), ...recent()])
 
   const firstPageLoading = createMemo(() => {
@@ -520,13 +738,7 @@ export function RecentSessions() {
     })
   })
 
-  const loadingMore = createMemo(() =>
-    connections().some((item) => {
-      const value = pages[item.server]
-
-      return value?.status === "loading" && value.kind !== "first" && value.sessions.length > 0
-    }),
-  )
+  const loadingMore = createMemo(() => connections().some((item) => recentPageLoadingMore(pages[item.server])))
 
   const failed = createMemo(() => connections().some((item) => recentPageFailed(pages[item.server])))
 
@@ -653,11 +865,15 @@ export function RecentSessions() {
   // Rows take the side tabs' shortcuts, numbered and stepped through in the order shown.
   const rowRefs = new Map<string, HTMLDivElement>()
 
+  // The prototype's pinned rows are numbered first, so ⌘1–9 continue from them into these rows.
+  const pinnedKeys = () => input.pinned?.keys() ?? []
+
   const hints = createSessionRowNavigation({
-    keys: () => rows().map((item) => item.key),
-    current: () => rows().find(selected)?.key,
-    unread: (key) => !!unread[key],
+    keys: () => [...pinnedKeys(), ...rows().map((item) => item.key)],
+    current: () => rows().find(selected)?.key ?? input.pinned?.current(),
+    unread: (key) => (pinnedKeys().includes(key) ? !!input.pinned?.unread(key) : !!unread[key]),
     navigate: (key, reveal) => {
+      if (pinnedKeys().includes(key)) return input.pinned?.navigate(key)
       const item = rows().find((entry) => entry.key === key)
 
       if (!item) return
@@ -700,7 +916,12 @@ export function RecentSessions() {
         if (state.pins.includes(item.key)) {
           setHydration(item.key, {
             ...item.session,
-            time: { ...item.session.time, archived: item.session.time.archived ?? Date.now() },
+            // The row's time may be a send bump; the snapshot goes back through `apply` and must stay raw.
+            time: {
+              ...item.session.time,
+              updated: rawTime(item.session),
+              archived: item.session.time.archived ?? Date.now(),
+            },
           })
         }
 
@@ -751,14 +972,23 @@ export function RecentSessions() {
     const props = {
       item,
       selected: () => selected(item()),
-      shortcut: () => (position() >= 0 && position() < 9 ? position() + 1 : undefined),
+      shortcut: () => {
+        const index = position() + pinnedKeys().length
+
+        return position() >= 0 && index < 9 ? index + 1 : undefined
+      },
       ref: (element: HTMLDivElement) => rowRefs.set(key, element),
       onUnreadChange: (value: boolean) => setUnread(item().key, value),
+      meta: () => meta(item()),
+      hideAvatar: () => arrangement().groupBy === "project",
       pinned: index !== undefined,
       canMoveUp: () => index !== undefined && index() > 0,
       canMoveDown: () => index !== undefined && index() < pinned().length - 1,
       onOpen: () => open(item()),
-      onPin: () => setState("pins", (current) => addPin(current, item().key)),
+      onPin: () =>
+        input.pinned
+          ? input.pinned.toggle(item().server, item().session.id)
+          : setState("pins", (current) => addPin(current, item().key)),
       onUnpin: () => removePinKey(item().key),
       onMoveUp: () => movePin(item().key, -1),
       onMoveDown: () => movePin(item().key, 1),
@@ -793,7 +1023,8 @@ export function RecentSessions() {
             </div>
           }
         >
-          <Show when={pinned().length > 0}>
+          {input.pinned?.content()}
+          <Show when={!input.pinned && pinned().length > 0}>
             <div role="group" aria-labelledby="sidebar-recent-pinned" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-pinned" label={language.t("sidebar.recent.pinned")} />
               <DragDropProvider
@@ -824,7 +1055,56 @@ export function RecentSessions() {
               </DragDropProvider>
             </div>
           </Show>
-          <Show when={recent().length > 0 || windowed().hasMore}>
+          <Show
+            when={
+              input.organize &&
+              (groups().some((group) => group.rows.length > 0 || arrangement().emptyGroups) || windowed().hasMore)
+            }
+          >
+            <div data-slot="sidebar-recent-groups" class="flex shrink-0 flex-col gap-2.5 pb-2.5">
+              <Key each={groups()} by={(group) => group.key}>
+                {(group) => (
+                  <div
+                    role="group"
+                    aria-labelledby={`sidebar-recent-${group().key}`}
+                    class="flex shrink-0 flex-col gap-2"
+                  >
+                    <GroupHeader
+                      id={`sidebar-recent-${group().key}`}
+                      label={groupLabel(group())}
+                      count={
+                        arrangement().metadata && arrangement().groupBy !== "none" ? group().rows.length : undefined
+                      }
+                      collapsible={arrangement().groupBy !== "none"}
+                      collapsed={collapsed(group())}
+                      mark={hiddenMark(group())}
+                      onToggle={() => toggleGroup(group().key)}
+                      menu={
+                        <RecentViewMenu
+                          view={arrangement()}
+                          onChange={(next) => setArrangement((current) => ({ ...current, ...next }))}
+                          onViewAll={() => input.organize?.viewAll()}
+                        />
+                      }
+                    />
+                    <Show when={shownRows(group()).length > 0}>
+                      <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+                        <Key each={shownRows(group())} by={(item) => item.key}>
+                          {(item) => row(item)}
+                        </Key>
+                      </div>
+                    </Show>
+                  </div>
+                )}
+              </Key>
+              <Show when={windowed().hasMore && !loadingMore()}>
+                <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={showMore}>
+                  {language.t("sidebar.inbox.showMore")}
+                </Button>
+              </Show>
+            </div>
+          </Show>
+          <Show when={!input.organize && (recent().length > 0 || windowed().hasMore)}>
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
               <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
@@ -862,6 +1142,67 @@ export function RecentSessions() {
   )
 }
 
+/** A Recent heading. Grouped headings collapse their group; the Group and sort menu shows on hover. */
+function GroupHeader(props: {
+  id: string
+  label: string
+  count: number | undefined
+  collapsible: boolean
+  collapsed: boolean
+  mark: "attention" | "unread" | undefined
+  onToggle: () => void
+  menu: JSX.Element
+}) {
+  return (
+    <div class="group/header relative flex h-6 shrink-0 items-center">
+      <Show
+        when={props.collapsible}
+        fallback={
+          <div
+            id={props.id}
+            class="flex h-6 min-w-0 flex-1 items-center px-2 text-[13px] leading-4 font-medium text-v2-text-text-muted"
+          >
+            <span class="min-w-0 truncate">{props.label}</span>
+          </div>
+        }
+      >
+        <button
+          type="button"
+          id={props.id}
+          aria-expanded={!props.collapsed}
+          class="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+          onClick={props.onToggle}
+        >
+          <span class="min-w-0 truncate">{props.label}</span>
+          <Show when={props.count !== undefined}>
+            <span class="shrink-0 font-normal text-v2-text-text-faint tabular-nums">{props.count}</span>
+          </Show>
+          <Show when={props.mark}>
+            {(value) => (
+              <span
+                aria-hidden="true"
+                class="size-1.5 shrink-0 rounded-full"
+                classList={{
+                  "bg-v2-background-bg-accent": value() === "unread",
+                  "bg-v2-state-fg-warning": value() === "attention",
+                }}
+              />
+            )}
+          </Show>
+          <Icon
+            name="fill-triangle-down"
+            class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+            classList={{ "-rotate-90 rtl:rotate-90": props.collapsed }}
+          />
+        </button>
+      </Show>
+      <div class="absolute inset-y-0 end-1 my-auto flex h-5 items-center opacity-0 group-hover/header:opacity-100 focus-within:opacity-100 [&:has([data-expanded])]:opacity-100">
+        {props.menu}
+      </div>
+    </div>
+  )
+}
+
 function SectionHeader(props: { id: string; label: string }) {
   return (
     <div
@@ -879,6 +1220,8 @@ type RecentSessionTabProps = {
   shortcut: () => number | undefined
   ref: (element: HTMLDivElement) => void
   onUnreadChange: (unread: boolean) => void
+  meta: () => string | undefined
+  hideAvatar: () => boolean
   pinned: boolean
   canMoveUp: () => boolean
   canMoveDown: () => boolean
@@ -989,7 +1332,8 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
       server={server()}
       session={item().session}
       preparing={false}
-      label={muted() ? language.t("sidebar.recent.muted") : undefined}
+      label={muted() ? language.t("sidebar.recent.muted") : props.meta()}
+      hideAvatar={props.hideAvatar()}
       unread={unread()}
       attention={status.attention()}
       loading={status.loading()}
@@ -1003,7 +1347,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
   )
 }
 
-function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
+export function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
   const language = useLanguage()
   const dialog = useDialog()
   const layer = useDialogLayer()

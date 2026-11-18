@@ -320,7 +320,7 @@ export function PaneTabs(props: {
                       event.stopPropagation()
                       props.region.dismissNewTab(id)
                     }}
-                    icon={<Icon name="xmark-small" />}
+                    icon={<Icon name="close" />}
                     aria-label={language.t("common.closeTab")}
                   />
                 }
@@ -554,7 +554,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
                         }
                       >
                         <div class="flex items-center gap-2">
-                          <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
+                          <Show when={item().icon}>{(icon) => <Icon name={icon()} />}</Show>
                           <span>{item().title}</span>
                         </div>
                       </Menu.Item>
@@ -611,7 +611,7 @@ function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }
     >
       <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
         <Show when={props.item.icon}>
-          {(icon) => <Icon name={icon()} size="small" class="text-v2-icon-icon-muted" />}
+          {(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}
         </Show>
         <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
         <Show when={props.item.description}>

@@ -1,10 +1,26 @@
 import type { JSX } from "solid-js"
-import type { IconName } from "./icon-name.js"
-import { Registry } from "./core.js"
+import type { AppIconName } from "./icon-name.js"
+import { Registry, type PluginIconName } from "./core.js"
 import type { SessionRef, MountedSession, SessionScreen } from "./host-apis.js"
 
-/** The name of a shared icon; derived from the dependency-free UI artwork catalog, not a component's props. */
-export type { IconName }
+/**
+ * The name of one of the app's own icons; derived from the dependency-free UI artwork catalog, not a component's
+ * props.
+ */
+export type { AppIconName }
+
+/**
+ * The icon an SDK field or `ctx.ui.Icon` shows, by name: one of the app's own icons, or one the plugin declared in
+ * `Plugin.define({ icons })`, from its `ctx.icons`. Any other string fails to compile.
+ * - `AppIconName`: the app's artwork, such as `"folder"`.
+ * - `PluginIconName`: a plugin's artwork, such as `ctx.icons.logo`.
+ *
+ * @example
+ * ```ts
+ * const icon: IconName = connected() ? ctx.icons.logo : "circle-exclamation"
+ * ```
+ */
+export type IconName = AppIconName | PluginIconName
 
 /**
  * A command in the palette, with an optional keybind and slash command. The host publishes it as
@@ -645,8 +661,8 @@ export interface ComposerPillView {
   /** Colors the capsule's icon. */
   readonly tone?: ComposerPillTone
   /**
-   * Accessible name, and the heading of the menu or popover the pill opens, when it differs from `label`. The heading
-   * wraps to at most three lines, then truncates.
+   * Accessible name, and the heading of the menu of `rows`, when it differs from `label`. The heading wraps to at most
+   * three lines, then truncates. A pill's own popover (`menu`) has no heading; it takes this as its accessible name.
    */
   readonly title?: string
   /** The menu the pill opens. Omit it for a pill that runs `run` instead. Unused when the pill has a `menu`. */
@@ -674,9 +690,10 @@ export interface ComposerPill {
   show(input: ComposerPillProps): ComposerPillView | undefined
   /**
    * Your content for the popover the pill opens, for a pill that needs more than `rows`, such as status text and
-   * buttons. The host owns the capsule and the popover around this content: its placement, focus, dismissal, and the
-   * heading (`title`, else `label`). When set, clicking the pill opens the popover, and the view's `rows` and `run` are
-   * unused. Renders each time the popover opens; its own reactivity updates it while open, also when another session is
+   * buttons. The host owns the capsule and the popover's frame: its width, a 4px inset, placement, focus and dismissal.
+   * Everything inside is yours, including any heading; the view's `title`, else `label`, names the popover for
+   * assistive technology. When set, clicking the pill opens the popover, and the view's `rows` and `run` are unused.
+   * Renders each time the popover opens; its own reactivity updates it while open, also when another session is
    * routed. A render that throws renders nothing and records the error.
    *
    * @param input - The session, its screen, and `close`. Do not destructure.

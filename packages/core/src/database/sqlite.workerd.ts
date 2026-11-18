@@ -11,8 +11,8 @@ const TypeId = "~@opencode/core/database/SqliteWorkerd" as const
 type TypeId = typeof TypeId
 
 // Durable Object SQLite only allowlists introspection pragmas; journal_mode,
-// synchronous, busy_timeout, cache_size, and wal_checkpoint all throw, and
-// foreign keys are already enforced by default (SQLITE_DEFAULT_FOREIGN_KEYS=1).
+// synchronous, busy_timeout and cache_size all throw, and foreign keys are
+// already enforced by default (SQLITE_DEFAULT_FOREIGN_KEYS=1).
 export const supportsTuningPragmas = false
 
 // Durable Object SQLite rejects `PRAGMA foreign_keys`: enforcement is always
@@ -221,3 +221,6 @@ export const sqliteLayer = (config: Config): Layer.Layer<SqlClient.SqlClient> =>
           ),
         ),
       )
+
+// Durable Object SQLite throws a plain Error without SQLite result codes.
+export const resultCode = (_cause: unknown): number | undefined => undefined

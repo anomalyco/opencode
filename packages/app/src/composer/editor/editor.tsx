@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSelector,
   createSignal,
   createUniqueId,
   For,
@@ -16,6 +17,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -816,7 +818,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -845,7 +847,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -860,7 +862,7 @@ function ComposerAttachments(props: {
               const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
               return (
-                <div class="relative group shrink-0">
+                <div class="relative group shrink-0 self-start">
                   <Tooltip
                     value={attachment.type === "path" ? attachment.path : attachment.filename}
                     placement="top"
@@ -874,12 +876,12 @@ function ComposerAttachments(props: {
                         </AttachmentCard>
                       }
                     >
-                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
+                      <Show when={src()} fallback={<div class="w-[78px] h-[52px]" />}>
                         {(value) => (
                           <img
                             src={value()}
                             alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            class="w-[78px] h-[52px] rounded-[6px] object-cover"
                             onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
                           />
                         )}
@@ -893,7 +895,7 @@ function ComposerAttachments(props: {
                     class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                     aria-label={props.removeLabel}
                   >
-                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                    <Icon name="close" class="text-v2-icon-icon-contrast" />
                   </button>
                 </div>
               )
@@ -916,7 +918,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -1254,6 +1256,7 @@ function ComposerEditorPopover(props: {
 }) {
   const i18n = useI18n()
   const listID = props.id ?? createUniqueId()
+  const active = createSelector(() => props.activeID)
   let container: HTMLDivElement | undefined
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
 
@@ -1367,7 +1370,7 @@ function ComposerEditorPopover(props: {
                       {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
                     </bdi>
                     <Show when={item.description}>
-                      <Icon name="file-document" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                      <Icon name="file-document" class="shrink-0 text-v2-icon-icon-muted" />
                     </Show>
                   </button>
                 )}
@@ -1397,34 +1400,34 @@ function ComposerEditorPopover(props: {
           when={props.items.length > 0}
           fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
         >
-          <For each={props.items}>
+          <Key each={props.items} by="id">
             {(item) => (
               <button
                 type="button"
-                data-suggestion-id={item.id}
-                data-active={props.activeID === item.id ? "" : undefined}
+                data-suggestion-id={item().id}
+                data-active={active(item().id) ? "" : undefined}
                 class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
-                classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
+                classList={{ "bg-v2-overlay-simple-overlay-hover": active(item().id) }}
                 onPointerMove={(event) => {
-                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                  if (event.movementX || event.movementY) props.onActiveChange(item())
                 }}
-                onClick={() => props.onSelect(item)}
+                onClick={() => props.onSelect(item())}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <ComposerSuggestionIcon item={item} />
+                  <ComposerSuggestionIcon item={item()} />
                   <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
-                    {item.label}
+                    {item().label}
                   </bdi>
-                  <Show when={item.description}>
-                    <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
+                  <Show when={item().description}>
+                    <span class="min-w-0 truncate text-v2-text-text-muted">{item().description}</span>
                   </Show>
                 </div>
-                <Show when={item.keybind?.length}>
-                  <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
+                <Show when={item().keybind?.length}>
+                  <span class="shrink-0 text-v2-text-text-muted">{item().keybind?.join("+")}</span>
                 </Show>
               </button>
             )}
-          </For>
+          </Key>
         </Show>
       </Show>
     </div>
@@ -1536,7 +1539,7 @@ function ComposerEditorSubmitButton(props: {
           props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
-            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "enter" : "arrow-up"} />
           )
         }
         aria-busy={props.busy && !props.stopping}
@@ -1675,7 +1678,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             onMouseDown={keep}
             onClick={props.controller.stop}
           >
-            <Icon name="stop" size="small" />
+            <Icon name="stop" />
             {i18n.t("ui.promptInput.stop")}
           </Button>
         }
@@ -1705,7 +1708,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           {label()}
           <Show
             when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
           >
             <Loader class="size-4" />
           </Show>
@@ -1716,11 +1719,11 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
 }
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
-  if (props.item.kind === "session") return <Icon name="speech-bubble" size="small" class="shrink-0" />
+  if (props.item.kind === "session") return <Icon name="comment" class="shrink-0" />
 
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
-  if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+  if (props.item.kind === "skill") return <Icon name="post-skill" class="shrink-0" />
 
   if (props.item.kind === "command") return null
 

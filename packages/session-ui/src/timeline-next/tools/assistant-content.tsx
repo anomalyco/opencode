@@ -18,6 +18,7 @@ export function AssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   sources?: TurnSources
@@ -37,6 +38,7 @@ export function AssistantContent(props: {
             text={content().text}
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
+            keepCopyVisible={props.keepCopyVisible}
             turnDurationMs={props.turnDurationMs}
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}

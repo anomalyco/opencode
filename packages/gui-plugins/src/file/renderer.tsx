@@ -382,7 +382,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     label: () => (
       <div class="flex items-center gap-1.5">
-        <Icon name="file-tree" size="small" />
+        <Icon name="folder" />
         <span>{ctx.t("command.open")}</span>
       </div>
     ),
@@ -515,7 +515,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       menu: "session.panel",
       id: "open",
       title: ctx.t("command.open"),
-      icon: "file-tree",
+      icon: "folder",
       keybind: "file.browse",
       order: 30,
       run: () => {

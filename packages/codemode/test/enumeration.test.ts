@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool } from "./lib/index.js"
+import { CodeMode, Tool } from "../src/index.js"
 
 // Key enumeration: Object.keys and for...in share one surface over plain objects, arrays
 // (index strings), and tool references (namespace/tool names from the supplied tools), so a
@@ -67,11 +67,11 @@ describe("Object.keys over tool references", () => {
       const failure = await error(`return Object.${method}(tools)`)
       expect(failure.kind).toBe("InvalidDataValue")
       expect(failure.message).toContain(
-        `Object.${method}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
+        `Object.${method}(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names.`,
       )
     }
     const nested = await error(`return Object.entries(tools.github)`)
-    expect(nested.message).toContain("Use Object.keys(tools) for names")
+    expect(nested.message).toContain("Use Object.keys(tools) for its names")
   })
 })
 

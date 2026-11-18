@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Lokalni gostitelj",
   "form.add": "Dodaj strežnik",
   "menu.delete": "Izbriši",
+  "error.unavailable": "SSH ni na voljo",
 }

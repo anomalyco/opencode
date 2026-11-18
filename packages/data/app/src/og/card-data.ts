@@ -7,7 +7,7 @@ import { formatCatalogLabName, isKnownCatalogLab } from "../routes/model-catalog
 import type { OgCard } from "./card"
 
 // Bump to change every card's URL, so unfurlers fetch the new image after a design change.
-const cardVersion = "1"
+const cardVersion = "2"
 
 type Usage = { date: string; tokens: number }
 

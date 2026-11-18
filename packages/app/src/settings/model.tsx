@@ -3,7 +3,6 @@ import { createEffect, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
-import { setNewIcons } from "@opencode/ui/icon"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -130,15 +129,15 @@ const generalSchema = Persistence.struct({
   showTurnDiffs: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
-  // The "New icons" design experiment, off until it ships.
-  newIcons: Schema.Boolean,
-  // The "Fold long messages" experiment, off until it ships.
   foldUserMessages: Schema.Boolean,
+  wrapCodeBlocks: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
   // The redesigned session timeline, off until it ships.
   newTimeline: Persistence.optional(Schema.Boolean),
-  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
+  // Browser-style session tab grouping across vertical and horizontal tabs.
+  tabGroups: Persistence.optional(Schema.Boolean),
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -152,6 +151,8 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  // Prototype (local/dev desktop builds): tabs at `tabLayout`'s position, or one list of every session.
+  navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -309,8 +310,8 @@ export const defaultSettings: Settings = {
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
-    newIcons: false,
     foldUserMessages: false,
+    wrapCodeBlocks: false,
     newQuestionUI: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
@@ -349,11 +350,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
-      usePlatform().platform,
-      import.meta.env.VITE_OPENCODE_CHANNEL,
-    )
-      ? ["list", "projects", "customize", "recent"]
+    const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+
+    const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
+      ? ["list", "projects", "customize", "recent", "consolidated"]
       : ["list", "projects", "customize"]
 
     const showCustomAgents = withFallback(
@@ -371,9 +371,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       // face with the shell so that font discovery does not resize that mount.
       void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)
     })
-
-    const newIcons = withFallback(() => store.general?.newIcons, defaultSettings.general.newIcons)
-    createEffect(() => setNewIcons(newIcons()))
 
     const reduceMotion = withFallback(() => store.appearance?.reduceMotion, defaultSettings.appearance.reduceMotion)
     const systemReducedMotion = createMediaQuery("(prefers-reduced-motion: reduce)")
@@ -431,17 +428,24 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTimelineWidth(value: TimelineWidth) {
           setStore("general", "timelineWidth", value)
         },
-        newIcons,
-        setNewIcons(value: boolean) {
-          setStore("general", "newIcons", value)
-        },
         foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
         },
+        wrapCodeBlocks: withFallback(() => store.general?.wrapCodeBlocks, defaultSettings.general.wrapCodeBlocks),
+        setWrapCodeBlocks(value: boolean) {
+          setStore("general", "wrapCodeBlocks", value)
+        },
         newTimeline: withFallback(() => store.general?.newTimeline, false),
         setNewTimeline(value: boolean) {
           setStore("general", "newTimeline", value)
+        },
+        tabGroups: withFallback(
+          () => store.general?.tabGroups,
+          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setTabGroups(value: boolean) {
+          setStore("general", "tabGroups", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
@@ -488,9 +492,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
-        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        // The List layout always uses the sidebar, and the prototype has no Inbox, so both read as side tabs.
+        tabLayout: createMemo((): TabLayout => {
+          const stored = store.appearance?.tabLayout ?? defaultSettings.appearance.tabLayout
+          const prototype = prototypes && store.general?.sidebarOrganize === "consolidated"
+
+          if (prototype && (store.appearance?.navigation === "list" || stored === "inbox")) return "vertical"
+
+          return stored
+        }),
+        /** Where tabs go when the prototype's Tabs layout is chosen, whatever the List layout forces meanwhile. */
+        tabPosition: createMemo(() => (store.appearance?.tabLayout === "horizontal" ? "horizontal" : "vertical")),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
+        navigationPrototype: createMemo(() => prototypes && store.general?.sidebarOrganize === "consolidated"),
+        navigation: createMemo(() =>
+          prototypes && store.general?.sidebarOrganize === "consolidated" && store.appearance?.navigation === "list"
+            ? "list"
+            : "tabs",
+        ),
+        setNavigation(value: "tabs" | "list") {
+          setStore("appearance", "navigation", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {

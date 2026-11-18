@@ -15,6 +15,7 @@ const removedSelector = [
   '[aria-hidden="true"]',
   ".sr-only",
   '[data-slot="markdown-copy-button"]',
+  '[data-slot="markdown-code-toolbar"]',
 ].join(", ")
 
 // Ancestors that give a partial selection its meaning, such as a phrase inside bold text or a line inside a code block.

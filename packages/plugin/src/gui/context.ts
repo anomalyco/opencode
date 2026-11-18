@@ -4,12 +4,14 @@ import type {
   App,
   Cleanup,
   Contract,
+  DeclaredIcons,
   DeclaredStores,
   Ipc,
   IpcClient,
   IpcSpec,
   Live,
   Persisted,
+  PluginIconName,
   StoreDeclaration,
   Token,
   TokenValue,
@@ -296,7 +298,10 @@ type Handle<S> =
       : (session: SessionRef) => Persisted<Schema["Type"]>
     : never
 
-/** The context `Plugin.Setup<typeof definition>` receives: the host's members, and the definition's declared stores. */
+/**
+ * The context `Plugin.Setup<typeof definition>` receives: the host's members, and the definition's declared stores and
+ * icons.
+ */
 export interface SetupContext<D> extends Context {
   /**
    * Each declared store, by its name in `stores`. A global store is a `Persisted` that has loaded before setup; a
@@ -309,4 +314,15 @@ export interface SetupContext<D> extends Context {
    * ```
    */
   readonly stores: { readonly [K in keyof DeclaredStores<D>]: Handle<DeclaredStores<D>[K]> }
+  /**
+   * The name of each declared icon, by its name in `icons`, for every SDK icon field and for `ctx.ui.Icon`. A name the
+   * definition does not declare fails to compile. See `PluginIconName`.
+   *
+   * @example
+   * ```tsx
+   * ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: ctx.icons.logo, run: sync }))
+   * const mark = <ctx.ui.Icon name={ctx.icons.logo} size="small" />
+   * ```
+   */
+  readonly icons: { readonly [K in keyof DeclaredIcons<D>]: PluginIconName }
 }

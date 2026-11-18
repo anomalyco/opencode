@@ -1,6 +1,7 @@
 export default {
   "status.label": "Update",
   "action.checkNow": "Check now",
+  "action.unavailable": "Updates unavailable",
   "action.checking": "Checking…",
   "action.downloading": "Downloading…",
   "action.installRestart": "Install and restart",
@@ -18,6 +19,7 @@ export default {
   "releaseNotes.description": "Show What's New popups after updates",
   "check.title": "Check for updates",
   "check.description": "Manually check for updates and install if available",
+  "check.unavailable": "This build is updated outside OpenCode, for example by your package manager.",
   "menu.check": "Check for Updates…",
   "dialog.checkFailed.message": "Update check failed.",
   "dialog.checkFailed.title": "Update Error",

@@ -417,6 +417,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   return {
     actions: {
       navigateMessage,
+      jumpToMessage: (id: string) => cursor.jump(id, "auto"),
       page: (direction: 1 | -1) => page(direction),
       // Find and tool reveals move the view like a scroll, so the chosen prompt is no longer where navigation starts.
       revealMessage: (id: string, partID?: string) => {
