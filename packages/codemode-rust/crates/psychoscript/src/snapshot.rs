@@ -775,8 +775,9 @@ impl Enc<'_, '_> {
                 let (kind, message, suggestions) = f.parts();
                 json!([p, "fail", kind.name(), message, suggestions])
             }
+            Settlement::Lost(message, site) => json!([p, "lost", message, site]),
             Settlement::Host(h) => {
-                let (result, label, extension, carrier) = h.as_ref();
+                let (result, label, extension, carrier, site) = h.as_ref();
                 let (ok, v) = match result {
                     Ok(v) => (true, v),
                     Err(v) => (false, v),
@@ -813,7 +814,8 @@ impl Enc<'_, '_> {
                     extension,
                     hooked,
                     host_value(&data),
-                    carrier
+                    carrier,
+                    site
                 ])
             }
             Settlement::Interrupted => json!([p, "interrupted"]),
@@ -1020,6 +1022,29 @@ fn host_value(v: &HostValue) -> J {
     }
 }
 
+/// Where a saved host value holds a live response, named as the reference names what crosses: `label.key` in an
+/// object, `label[i]` in an array, `label` in a Map or Set.
+fn lost_path(j: &J, label: &str) -> Option<String> {
+    let J::Array(a) = j else {
+        return None;
+    };
+    let items = || a.get(1).and_then(J::as_array).into_iter().flatten();
+    match a.first().and_then(J::as_str)? {
+        "resp" => Some(label.to_owned()),
+        "a" => items()
+            .enumerate()
+            .find_map(|(i, item)| lost_path(item, &format!("{label}[{i}]"))),
+        "o" => items().find_map(|p| {
+            let key = p.get(0).and_then(J::as_str).unwrap_or("");
+            lost_path(p.get(1)?, &format!("{label}.{key}"))
+        }),
+        "m" => items()
+            .find_map(|p| lost_path(p.get(0)?, label).or_else(|| lost_path(p.get(1)?, label))),
+        "set" => items().find_map(|item| lost_path(item, label)),
+        _ => None,
+    }
+}
+
 fn host_value_from(j: &J) -> R<HostValue> {
     Ok(match j {
         J::Null => HostValue::Null,
@@ -1068,7 +1093,8 @@ fn host_value_from(j: &J) -> R<HostValue> {
             Some("hd") => HostValue::Headers(pairs(at(j, 1)?)?),
             Some("u8") => HostValue::Bytes(hex_bytes(&string(at(j, 1)?)?)?),
             Some("buf") => HostValue::Buffer(hex_bytes(&string(at(j, 1)?)?)?),
-            Some("resp") => return Err(invalid("the accessor bodyUsed has no original.")),
+            // A live response has no data form; a settlement holding one is restored as `lost_path` says.
+            Some("resp") => HostValue::Undefined,
             Some("e") => HostValue::Error(Box::new(HostError {
                 name: string(at(j, 1)?)?,
                 message: string(at(j, 2)?)?,
@@ -2029,7 +2055,15 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
             let label = string(at(j, 3)?)?;
             let extension = string(at(j, 4)?)?;
             let hooked = boolean(at(j, 5)?)?;
-            let mut v = host_value_from(at(j, 6)?)?;
+            let saved = at(j, 6)?;
+            // The reference saves a value with no data form (a live response) as a `Lost`, which can't cross into the
+            // program once the run resumes: the call fails there, at the place that names it.
+            let site = j.get(8).and_then(J::as_u64).map(|s| s as u32);
+            if ok && let Some(at_label) = lost_path(saved, &label) {
+                let message = format!("{at_label} produced a Lost, which the program cannot hold.");
+                return Ok((p, Settlement::Lost(message, site)));
+            }
+            let mut v = host_value_from(saved)?;
             if hooked {
                 let hooks = hooks_of(&vm.host.extensions, &extension)?;
                 v = (hooks.decode)(v);
@@ -2040,8 +2074,13 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
                 label,
                 extension,
                 carrier,
+                site,
             )))
         }
+        Some("lost") => Settlement::Lost(
+            string(at(j, 2)?)?,
+            j.get(3).and_then(J::as_u64).map(|s| s as u32),
+        ),
         Some("interrupted") => Settlement::Interrupted,
         _ => return Err(invalid("a settlement is unknown.")),
     };

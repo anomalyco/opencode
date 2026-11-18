@@ -84,8 +84,12 @@ pub enum Settlement {
     Undefined,
     Failure(Box<Failed>),
     /// An extension call's value, or what it threw, with the label that names it in conversion errors, the
-    /// extension it came from, and whether its strings are run text already (`HostFunction::carrier`).
-    Host(Box<(HostResult, String, String, bool)>),
+    /// extension it came from, whether its strings are run text already (`HostFunction::carrier`), and the source
+    /// offset of the call, where an error converting its value points.
+    Host(Box<(HostResult, String, String, bool, Option<u32>)>),
+    /// A value a snapshot couldn't keep (a live response, the reference's `Lost`): the call fails with this message
+    /// once the run resumes, at the call's source offset.
+    Lost(String, Option<u32>),
     /// The call interrupts the whole run.
     Interrupted,
 }
@@ -647,7 +651,7 @@ impl AfterGuard<'_> {
             Settlement::Undefined => after(&call, CallResult::Success(&null)),
             Settlement::Failure(f) => after(&call, CallResult::Failure(&f.message)),
             Settlement::Interrupted => after(&call, CallResult::Interrupted),
-            Settlement::Host(_) => {}
+            Settlement::Host(_) | Settlement::Lost(..) => {}
         }
     }
 }
@@ -849,21 +853,40 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
             let e = failure_value(vm, f.kind, f.message, f.suggestions);
             vm.reject(p, e);
         }
+        Settlement::Lost(message, site) => {
+            let e = vm.type_error(&message);
+            locate_at(vm, &e, site);
+            vm.reject(p, e);
+        }
         Settlement::Host(host) => match *host {
-            (Ok(v), label, extension, carrier) => {
+            (Ok(v), label, extension, carrier, site) => {
                 vm.host.carrier = carrier;
                 let v = result_from_host(vm, v, &label, &extension);
                 vm.host.carrier = false;
                 match v {
                     Ok(v) => vm.fulfill(p, v),
-                    Err(e) => vm.reject(p, e),
+                    Err(e) => {
+                        // The reference converts the value at the call, so its errors point there.
+                        locate_at(vm, &e, site);
+                        vm.reject(p, e)
+                    }
                 }
             }
-            (Err(thrown), label, _, _) => {
+            (Err(thrown), label, _, _, _) => {
                 let e = from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e);
                 vm.reject(p, e);
             }
         },
+    }
+}
+
+/// Points an error the VM made, not yet located, at a host call's source offset.
+fn locate_at(vm: &mut Vm, e: &Value, site: Option<u32>) {
+    if let Value::Obj(id) = e
+        && let Kind::Error(Some(f)) = &mut vm.heap[*id as usize].kind
+        && f.offset.is_none()
+    {
+        f.offset = site;
     }
 }
 
@@ -1599,12 +1622,17 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                 report(after.as_ref(), call, &result);
             }
             match result {
-                Ok(v) => result_from_host(vm, v, &label, &extension_name),
+                Ok(v) => {
+                    let site = vm.call_offset();
+                    result_from_host(vm, v, &label, &extension_name)
+                        .inspect_err(|e| locate_at(vm, e, site))
+                }
                 Err(thrown) => Err(from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e)),
             }
         }
         Body::Lost(_) => unreachable!("refused above"),
         Body::Async(body) => {
+            let site = vm.call_offset();
             let p = vm.new_promise();
             let body = body.clone();
             let carrier = f.carrier;
@@ -1619,6 +1647,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                         label,
                         extension_name,
                         false,
+                        site,
                     )));
                 }
                 let guard = ExtensionGuard {
@@ -1627,7 +1656,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
                 };
                 let result = body(host_args).await;
                 guard.end(&result);
-                Settlement::Host(Box::new((result, label, extension_name, carrier)))
+                Settlement::Host(Box::new((result, label, extension_name, carrier, site)))
             });
             match vm.host.tasks.spawn(p, future) {
                 Poll::Ready(s) => vm.inbox.push_back((p, s)),

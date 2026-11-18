@@ -1354,6 +1354,15 @@ impl<'rt> Vm<'rt> {
             .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)))
     }
 
+    /// The source offset of that call, where an error about what it returns points.
+    pub(crate) fn call_offset(&self) -> Option<u32> {
+        self.frames
+            .iter()
+            .rev()
+            .find(|f| !matches!(f.kind, FrameKind::Native(..)))
+            .and_then(|f| f.func.pos.get(f.pc.wrapping_sub(1)).copied())
+    }
+
     #[cold]
     #[inline(never)]
     fn not_a_function(&mut self) -> Value {
