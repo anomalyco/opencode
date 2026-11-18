@@ -123,7 +123,7 @@ describe("Composer store", () => {
       },
       { start: 0, end: 0 },
     )
-    expect(prompt.state.prompt).toMatchObject([
+    expect(JSON.parse(JSON.stringify(prompt.state.prompt))).toMatchObject([
       { type: "skill", id: "show-me", content: "@show-me", start: 0, end: 8 },
       { type: "text", content: " ", start: 8, end: 9 },
       { type: "file", path: "one", content: "@one", start: 9, end: 13 },
