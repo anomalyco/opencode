@@ -568,12 +568,12 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         let commands: Vec<(abi::Scope, TuiCommand)> = api
             .commands()
             .map(|(command, run)| {
-                let (run, scope) = (run.clone(), scope.clone());
+                let (run, scope, plugin) = (run.clone(), scope.clone(), scope.id.clone());
                 let enabled = command_enabled(&activation, &command.name);
                 let run = move |input: Option<&str>| {
                     scope.run("run-command", |host| run(host, input)).unwrap_or(abi::interact::Handled::Consume)
                 };
-                (command.scope.clone(), tui_command(command, enabled, run))
+                (command.scope.clone(), tui_command(&plugin, command, enabled, run))
             })
             .collect();
         let (layers, scoped) = route::split(commands);
@@ -661,7 +661,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                     .map(|(command, run)| {
                         let (run, scope, alive) = (run.clone(), owning.clone(), alive.clone());
                         let enabled = command_enabled(&scope.activation, &command.name);
-                        tui_command(command, enabled, move |input| {
+                        tui_command(&owning.id, command, enabled, move |input| {
                             scope
                                 .run_owned(&alive, "run-command", |host| run(host, input))
                                 .unwrap_or(abi::interact::Handled::Consume)
@@ -702,17 +702,21 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
 /// The keymap command of a plugin's `command`, which calls `run` with its input. It runs for the user's input unless
 /// a plugin effect dispatched it ([`flush`]): a command the plugin runs itself, or one a reply or a result runs.
 pub(crate) fn tui_command(
+    plugin: &str,
     command: &abi::Command,
     enabled: Condition,
     run: impl Fn(Option<&str>) -> abi::interact::Handled + 'static,
 ) -> TuiCommand {
-    keyed_command(command, enabled, move |input, _| run(input))
+    keyed_command(plugin, command, enabled, move |input, _| run(input))
 }
 
 /// [`tui_command`] whose `run` also gets the key that ran it, if a key did. It holds while `enabled` does: else it binds
 /// no key and is in neither the palette nor the slash list. A run that answers [`abi::interact::Handled::Pass`]
 /// declines its key, which goes on to the next binding as if the command were not there (contract ergonomics 2.5).
+/// A slash name or alias the prompt could not complete (empty, or with whitespace, `/` or a control character) is left
+/// out, and `plugin` logs it.
 pub(crate) fn keyed_command(
+    plugin: &str,
     command: &abi::Command,
     enabled: Condition,
     run: impl Fn(Option<&str>, Option<&KeyEvent>) -> abi::interact::Handled + 'static,
@@ -735,9 +739,19 @@ pub(crate) fn keyed_command(
     if let Some(description) = &command.description {
         entry = entry.description(description.clone());
     }
-    if let Some(slash) = &command.slash {
-        entry =
-            entry.slash(Slash { name: slash.clone(), aliases: command.aliases.clone(), arguments: command.arguments });
+    let mut names = command.slash.iter().chain(&command.aliases).filter(|name| {
+        let typed = !name.is_empty() && !name.chars().any(|c| c.is_whitespace() || c.is_control() || c == '/');
+        if !typed {
+            log::warn!("plugin {plugin}: the slash name {name:?} of {} is left out", command.name);
+        }
+        typed
+    });
+    // Aliases alone make no slash command: they name another.
+    if command.slash.is_some()
+        && let Some(name) = names.next()
+    {
+        let (aliases, arguments, plugin) = (names.cloned().collect(), command.arguments, Some(plugin.to_owned()));
+        entry = entry.slash(Slash { name: name.clone(), aliases, arguments, plugin });
     }
     entry
 }

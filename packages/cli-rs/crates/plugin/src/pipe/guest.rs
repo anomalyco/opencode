@@ -1009,7 +1009,7 @@ fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: 
     // palette reads too (ce-4).
     let enabled = crate::command_enabled(&guest.activation, &name);
     // A key it declines goes on once the JS host answers, as the hold routes it again; the command took it until then.
-    keyed_command(command, enabled, move |input, key| {
+    keyed_command(guest.id(), command, enabled, move |input, key| {
         let Some(scripts) = scripts.upgrade() else { return opencode_plugin_abi::interact::Handled::Pass };
         if key.is_some() && scripts.stepped_aside(&entry) {
             return opencode_plugin_abi::interact::Handled::Pass;

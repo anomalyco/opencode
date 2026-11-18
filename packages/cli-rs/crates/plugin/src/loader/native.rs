@@ -1882,7 +1882,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
             let guest = guest.clone();
             let name = command.name.clone();
             let enabled = crate::command_enabled(&guest.activation, &name);
-            let run = tui_command(command, enabled, move |input| {
+            let run = tui_command(&manifest.id, command, enabled, move |input| {
                 guest.command(&Request::Command { name: name.clone(), input: input.map(str::to_owned) })
             });
             (command.scope.clone(), run)
@@ -1998,9 +1998,10 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 let guest = guest.clone();
                 Rc::new(move |alive: &Weak<()>| {
                     let command = |command: &abi::Command| {
-                        let (guest, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
+                        let (plugin, alive, name) = (guest.id.clone(), alive.clone(), command.name.clone());
+                        let guest = guest.clone();
                         let enabled = crate::command_enabled(&guest.activation, &name);
-                        tui_command(command, enabled, move |input| {
+                        tui_command(&plugin, command, enabled, move |input| {
                             let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
                             guest.owners.owned_by(&alive, || guest.command(&request))
                         })
