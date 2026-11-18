@@ -17335,7 +17335,44 @@
                 "type": "boolean"
               },
               "video_generate": {
-                "type": "boolean"
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               },
               "console_watches": {
                 "type": "boolean"
@@ -19913,7 +19950,7 @@
       "Generate.VideoErrorReason": {
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
-        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job"
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
       },
       "Generate.VideoID": {
         "type": "string",
@@ -20879,13 +20916,16 @@
             "$ref": "#/components/schemas/Job.Image"
           },
           {
+            "$ref": "#/components/schemas/Job.Video"
+          },
+          {
             "$ref": "#/components/schemas/Job.CodeMode"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image", "codemode"]
+        "enum": ["shell", "subagent", "image", "video", "codemode"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20970,6 +21010,35 @@
           }
         },
         "required": ["started"],
+        "additionalProperties": false
+      },
+      "Job.Video": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {

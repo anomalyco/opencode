@@ -13,7 +13,8 @@ export const registry = {
   automations:
     "Run a prompt or Code Mode action on a timer, or on a connected MCP server's push event when mcp_events is enabled.",
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
-  video_generate: "Enable the experimental video generation API.",
+  video_generate:
+    "Enable experimental video generation: the HTTP API that starts a video job and stores the result, and the agent tool that saves the videos into the workspace.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
