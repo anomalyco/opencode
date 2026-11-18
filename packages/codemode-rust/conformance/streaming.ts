@@ -556,6 +556,22 @@ programs.push(
   `try { search({ query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] }`,
   `async function f() { return search({ query: Promise.resolve('echo') }).remaining } const p = f(); const t = typeof p.then; return [t, await p]`,
   `const g = (q) => search(q).items.length; return [g({ query: { toJSON: () => 'echo' } }), g({ query: Promise.resolve('echo') })]`,
+  // A search that parks inside a built-in's callback parks the built-in's frame with it.
+  ...[
+    "[1, 2].map((x) => S(x))",
+    "(() => { const r = []; [1, 2].forEach((x) => r.push(S(x))); return r })()",
+    "[1, 2].filter((x) => S(x) >= 0)",
+    "[1, 2].some((x) => S(x) < 0)",
+    "[1, 2].every((x) => S(x) >= 0)",
+    "[1, 2].find((x) => S(x) >= 0 && x === 2)",
+    "[1, 2].findLastIndex((x) => S(x) >= 0 && x === 1)",
+    "[1, 2].reduce((a, x) => a + S(x) + x, 0)",
+    "[1, , 3].reduceRight((a, x) => a + S(x) + x)",
+    "[1, 2].map((x) => [3].map((y) => S(y) + x))",
+  ].map(
+    (expr) => `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
+     Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`,
+  ),
 )
 
 // Busy loops through the walk: its fuel decides when the reference starts the queued read.
@@ -602,10 +618,13 @@ const suspensions: Array<string> = [
    const text = await get(); await tools.wait({}); return await text()`,
   // Suspended while a response has arrived but the run has not taken it yet: a busy loop holds the run.
   `const p = fetch(${JSON.stringify(text)}); for (let i = 0; i < 200000000; i++) {} const r = await p; return r.status`,
+  // The same inside a built-in's callback, whose frame the snapshot saves.
+  `const p = fetch(${JSON.stringify(text)}); const n = [1, 2].map((x) => { for (let i = 0; i < 200000000; i++) {} return x }); const r = await p; return [r.status, n]`,
   // Suspended while a crossing awaits: a tool call's arguments, the result, and a search that parked its frames.
   `const r = tools.t.echo({ a: 1, w: tools.wait({}) }); return await r`,
   `return { a: 1, w: tools.wait({}), b: [Promise.resolve(2)] }`,
   `function f() { return search({ query: tools.wait({}).then(() => 'echo') }).items.length } return [f(), 1]`,
+  `return [1, 2].map((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)`,
   `const t = { toJSON: () => 9 }; const r = tools.t.echo({ t, n: [1, { w: tools.wait({}) }], z: t }); return await r`,
 ]
 

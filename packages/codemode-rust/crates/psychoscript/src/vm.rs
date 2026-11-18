@@ -39,6 +39,8 @@ pub enum FrameKind {
     Normal,
     Async(u32),
     Generator(Id, Resume),
+    /// A built-in that calls back into the program (see `native.rs`), by its step function.
+    Native(crate::native::NativeOp),
 }
 
 /// How a generator resumed from bytecode hands its yields and its completion back to the frame below it. A
@@ -274,6 +276,11 @@ pub struct Vm<'rt> {
     /// nested in it keeps a set instead.
     pub(crate) json_walk: u32,
     json_walks: u32,
+    /// The code of every native frame (see `native.rs`).
+    pub(crate) native_proto: Rc<FuncProto>,
+    no_upvals: Rc<[u32]>,
+    /// Set by a built-in that pushed a native frame instead of returning its result (`enter_native`).
+    entered: bool,
 }
 
 impl<'rt> Vm<'rt> {
@@ -353,6 +360,9 @@ impl<'rt> Vm<'rt> {
             resumable_run: false,
             snapshot_base: crate::snapshot::Base::default(),
             resumed: false,
+            native_proto: Rc::new(crate::native::proto()),
+            no_upvals: Rc::from([]),
+            entered: false,
         }
     }
 
@@ -648,6 +658,11 @@ impl<'rt> Vm<'rt> {
                     self.native_depth += 1;
                     self.host.meter.counted = true;
                     let r = f(self, this, args, id);
+                    if self.entered {
+                        let r = self.drive_entered(true);
+                        self.native_depth -= 1;
+                        return r;
+                    }
                     self.native_depth -= 1;
                     let r = r?;
                     self.native_spent();
@@ -930,6 +945,11 @@ impl<'rt> Vm<'rt> {
                 self.native_depth += 1;
                 self.host.meter.counted = false;
                 let r = f(self, this, args, id);
+                if self.entered {
+                    let r = self.drive_entered(false);
+                    self.native_depth -= 1;
+                    return r;
+                }
                 self.native_depth -= 1;
                 // Only a call from bytecode stands for the reference's own call of the built-in.
                 self.host.meter.bytecode = false;
@@ -980,6 +1000,73 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// The frames that count toward the call-stack limit: the reference runs its built-ins as internal code, which
+    /// does not count, so native frames do not either.
+    #[cold]
+    #[inline(never)]
+    fn program_depth(&self) -> usize {
+        self.frames
+            .iter()
+            .filter(|f| !matches!(f.kind, FrameKind::Native(_)))
+            .count()
+    }
+
+    /// Pushes a native frame for the built-in `callee` called on `this`, with `locals` as its first slots, and has
+    /// its caller run it: the frame starts at its step function's start (see `native.rs`). The built-in returns what
+    /// this returns.
+    pub(crate) fn enter_native(
+        &mut self,
+        op: crate::native::NativeOp,
+        callee: Id,
+        this: Value,
+        locals: &[Value],
+    ) -> Res {
+        if self.frames.len() >= 3 * MAX_DEPTH {
+            return Err(self.range_error("Maximum call stack size exceeded"));
+        }
+        let fpos = self.stack.len();
+        self.push(Value::Obj(callee));
+        self.push(this);
+        self.stack.extend(locals.iter().map(|v| Slot::pack(*v)));
+        let (func, upvals) = (self.native_proto.clone(), self.no_upvals.clone());
+        let hbase = self.handlers.len() as u32;
+        let frame = Frame {
+            func,
+            pc: crate::native::START,
+            base: fpos + 2,
+            upvals,
+            hbase,
+            extra: Box::default(),
+            argc: 0,
+            kind: FrameKind::Native(op),
+            is_base: false,
+            yield_pc: NO_YIELD,
+        };
+        match self.spare_frames.pop() {
+            Some(mut spare) => {
+                *spare = frame;
+                self.frames.push(spare);
+            }
+            None => self.frames.push(Box::new(frame)),
+        }
+        self.entered = true;
+        Ok(Value::Undef)
+    }
+
+    /// Runs the native frame a built-in called from native code pushed, to its result.
+    fn drive_entered(&mut self, counted: bool) -> Res {
+        self.entered = false;
+        if let Some(f) = self.frames.last_mut() {
+            f.is_base = true;
+            f.argc = counted as u32;
+        }
+        match self.run_callback() {
+            Ok(Exit::Return(v)) | Ok(Exit::Yield(v)) => Ok(v.get()),
+            Ok(Exit::Suspend) => Ok(Value::Undef),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Pushes a frame for the closure at `stack[fpos]`, with receiver and `argc` arguments above it.
     fn push_closure_frame(
         &mut self,
@@ -988,7 +1075,7 @@ impl<'rt> Vm<'rt> {
         argc: usize,
         is_base: bool,
     ) -> Result<(), Value> {
-        if self.frames.len() >= MAX_DEPTH {
+        if self.frames.len() >= MAX_DEPTH && self.program_depth() >= MAX_DEPTH {
             self.stack.truncate(fpos);
             return Err(self.range_error("Maximum call stack size exceeded"));
         }
@@ -1103,6 +1190,13 @@ impl<'rt> Vm<'rt> {
                 let r = f(self, this, &args, id);
                 args.clear();
                 self.arg_pool.push(args);
+                if self.entered {
+                    self.entered = false;
+                    if let Some(f) = self.frames.last_mut() {
+                        f.argc = 1;
+                    }
+                    return Ok(true);
+                }
                 self.push(r?);
                 self.native_spent();
                 Ok(false)
@@ -1153,7 +1247,7 @@ impl<'rt> Vm<'rt> {
     }
 
     #[inline(never)]
-    fn construct_op(&mut self, argc: usize) -> Result<(), Value> {
+    fn construct_op(&mut self, argc: usize) -> Result<bool, Value> {
         let fpos = self.stack.len() - argc - 2;
         let callee = self.stack[fpos].get();
         let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
@@ -1164,9 +1258,12 @@ impl<'rt> Vm<'rt> {
             let f = *f;
             self.host.meter.counted = false;
             let r = f(self, Value::Uninit, &args, id);
+            if std::mem::take(&mut self.entered) {
+                return Ok(true);
+            }
             self.host.meter.bytecode = false;
             self.push(r?);
-            return Ok(());
+            return Ok(false);
         }
         Err(self.not_a_constructor(callee))
     }
@@ -1218,6 +1315,87 @@ impl<'rt> Vm<'rt> {
         {
             f.offset = func.pos.get(pc.saturating_sub(1)).copied();
         }
+    }
+
+    /// Runs a step of the native frame `fi` (see `native.rs`): `Some` with the frame's result when it was this run's
+    /// base, else `None` once the loop can go on with the top frame.
+    #[inline(never)]
+    fn native_op(
+        &mut self,
+        fi: usize,
+        op: crate::native::NativeOp,
+        base: usize,
+        mode: usize,
+    ) -> Result<Option<Slot>, Value> {
+        let input = match mode {
+            crate::native::RETURNED => {
+                let hbase = self.frames[fi].hbase as usize;
+                self.handlers.truncate(hbase);
+                crate::native::Input::Returned(self.stack.pop().unwrap_or_default())
+            }
+            crate::native::THREW => crate::native::Input::Threw(self.pop()),
+            _ => crate::native::Input::Start,
+        };
+        self.frames[fi].pc = crate::native::RETURNED;
+        match crate::native::step(self, op, base, input)? {
+            crate::native::Step::Call(argc) => {
+                self.call_op(argc)?;
+                if self.park
+                    && let Some(result) = self.parked()
+                {
+                    return Ok(Some(Slot::pack(result)));
+                }
+                Ok(None)
+            }
+            crate::native::Step::Pushed => Ok(None),
+            crate::native::Step::Done(v) => {
+                let frame = self.frames.pop().expect("frame");
+                self.stack.truncate(frame.base - 2);
+                self.handlers.truncate(frame.hbase as usize);
+                if frame.argc & 1 != 0 {
+                    self.native_spent();
+                } else {
+                    self.host.meter.bytecode = false;
+                }
+                let is_base = frame.is_base;
+                self.spare_frames.push(frame);
+                if is_base {
+                    return Ok(Some(Slot::pack(v)));
+                }
+                self.push(v);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Calls `f` from a native frame's step: a closure's frame is pushed here, anything else is called as a call
+    /// instruction calls it (`call_op`).
+    #[inline(always)]
+    pub(crate) fn native_call(&mut self, argc: usize) -> Result<crate::native::Step, Value> {
+        let fpos = self.stack.len() - argc - 2;
+        if let Some(id) = self.stack[fpos].obj()
+            && matches!(self.heap[id as usize].kind, Kind::Closure(_))
+        {
+            self.push_closure_frame(id, fpos, argc, false)?;
+            return Ok(crate::native::Step::Pushed);
+        }
+        Ok(crate::native::Step::Call(argc))
+    }
+
+    /// Fills in the location of a failure a native frame raised: the call of the built-in in the nearest bytecode
+    /// frame below, as a built-in that returned the failure would have it.
+    #[cold]
+    #[inline(never)]
+    fn locate_native(&mut self, e: &Value, fi: usize) {
+        let Some(caller) = self.frames[..fi]
+            .iter()
+            .rev()
+            .find(|f| !matches!(f.kind, FrameKind::Native(_)))
+        else {
+            return;
+        };
+        let (func, pc) = (caller.func.clone(), caller.pc);
+        self.locate(e, &func, pc);
     }
 
     /// Unwinds to the nearest handler. `Err` carries what `run` must return when the base frame is left.
@@ -1344,8 +1522,8 @@ impl<'rt> Vm<'rt> {
             match f.kind {
                 FrameKind::Async(c) => return Some(c),
                 FrameKind::Generator(..) => return None,
-                FrameKind::Normal if f.is_base => return None,
-                FrameKind::Normal => {}
+                FrameKind::Normal | FrameKind::Native(_) if f.is_base => return None,
+                FrameKind::Normal | FrameKind::Native(_) => {}
             }
         }
         None
@@ -1844,6 +2022,21 @@ impl<'rt> Vm<'rt> {
     fn run_frames(&mut self, resumable: bool) -> Result<Exit, Value> {
         'outer: loop {
             let fi = self.frames.len() - 1;
+            if let FrameKind::Native(op) = self.frames[fi].kind {
+                // A native frame runs its step function, not code: where it is to continue is its `pc`.
+                let (base, mode) = (self.frames[fi].base, self.frames[fi].pc);
+                match self.native_op(fi, op, base, mode) {
+                    Ok(None) => continue 'outer,
+                    Ok(Some(v)) => return Ok(Exit::Return(v)),
+                    Err(e) => {
+                        self.locate_native(&e, fi);
+                        match self.handle_throw(e) {
+                            Ok(()) => continue 'outer,
+                            Err(r) => return r,
+                        }
+                    }
+                }
+            }
             let func = self.frames[fi].func.clone();
             let code: &[Op] = &func.code;
             let base = self.frames[fi].base;
@@ -2649,7 +2842,9 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::New(argc) => {
                         self.frames[fi].pc = pc;
-                        tri!(self.construct_op(argc as usize));
+                        if tri!(self.construct_op(argc as usize)) {
+                            continue 'outer;
+                        }
                     }
                     Op::NewSpread => {
                         self.frames[fi].pc = pc;
@@ -2663,7 +2858,9 @@ impl<'rt> Vm<'rt> {
                         };
                         let argc = args.len();
                         self.stack.extend(args.into_iter().map(Slot::pack));
-                        tri!(self.construct_op(argc));
+                        if tri!(self.construct_op(argc)) {
+                            continue 'outer;
+                        }
                     }
                     Op::Return => {
                         let v = self.pop();
@@ -2671,7 +2868,7 @@ impl<'rt> Vm<'rt> {
                         self.stack.truncate(frame.base - 2);
                         self.handlers.truncate(frame.hbase as usize);
                         let result = match frame.kind {
-                            FrameKind::Normal => v,
+                            FrameKind::Normal | FrameKind::Native(_) => v,
                             FrameKind::Async(c) => match self.coroutines[c as usize].promise {
                                 Some(p) => {
                                     self.resolve_promise(p, v);

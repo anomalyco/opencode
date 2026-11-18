@@ -1,6 +1,6 @@
 //! Native built-ins: prototypes, constructors and global functions, created fresh for every run.
 
-mod array;
+pub(crate) mod array;
 mod buffer;
 pub mod bytes;
 mod collections;

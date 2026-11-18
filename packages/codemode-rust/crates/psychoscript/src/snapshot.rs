@@ -719,6 +719,7 @@ impl Enc<'_, '_> {
     fn frame(&self, f: &Frame) -> R<J> {
         let kind = match f.kind {
             FrameKind::Normal => json!(["n"]),
+            FrameKind::Native(op) => json!(["x", op.code()]),
             FrameKind::Async(c) => json!(["a", c]),
             FrameKind::Generator(g, r) => {
                 let r = match r {
@@ -730,8 +731,13 @@ impl Enc<'_, '_> {
                 json!(["g", g, r])
             }
         };
+        // A native frame's code is not the program's: its step function is in its mode.
+        let proto = match f.kind {
+            FrameKind::Native(_) => 0,
+            _ => self.proto(&f.func)?,
+        };
         Ok(json!([
-            self.proto(&f.func)?,
+            proto,
             f.pc,
             f.base,
             f.upvals.to_vec(),
@@ -1318,18 +1324,30 @@ impl Dec<'_> {
     }
 
     fn frame(&self, vm: &Vm, j: &J) -> R<Box<Frame>> {
+        let kind = at(j, 7)?;
+        let native = at(kind, 0)?.as_str() == Some("x");
         let proto = usize_(at(j, 0)?)?;
-        if proto >= self.protos {
+        if !native && proto >= self.protos {
             return Err(invalid("a frame's function is not in the program."));
         }
-        let func = vm.protos[proto].clone();
+        let func = match native {
+            true => vm.native_proto.clone(),
+            false => vm.protos[proto].clone(),
+        };
         let pc = usize_(at(j, 1)?)?;
         if pc >= func.code.len() {
             return Err(invalid(format!("a frame's pc {pc} is out of range.")));
         }
-        let kind = at(j, 7)?;
         let kind = match at(kind, 0)?.as_str() {
             Some("n") => FrameKind::Normal,
+            Some("x") => {
+                let code = u32_(at(kind, 1)?)?;
+                let op = u16::try_from(code)
+                    .ok()
+                    .and_then(crate::native::NativeOp::from_code)
+                    .ok_or_else(|| invalid("a native frame's step is unknown."))?;
+                FrameKind::Native(op)
+            }
             Some("a") => FrameKind::Async(u32_(at(kind, 1)?)?),
             Some("g") => {
                 let g = self.id(at(kind, 1)?)?;

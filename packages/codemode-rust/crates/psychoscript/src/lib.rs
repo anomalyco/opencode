@@ -16,6 +16,7 @@ mod exec;
 mod extension;
 mod hooks;
 mod host;
+mod native;
 mod object;
 pub mod openapi;
 mod ops;

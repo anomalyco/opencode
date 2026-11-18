@@ -29,6 +29,15 @@ impl Value {
         matches!(self, Value::Undef | Value::Null)
     }
 
+    /// The number this holds, or NaN.
+    #[inline]
+    pub fn as_num(&self) -> f64 {
+        match self {
+            Value::Num(n) => *n,
+            _ => f64::NAN,
+        }
+    }
+
     pub fn as_obj(&self) -> Option<Id> {
         match self {
             Value::Obj(id) => Some(*id),
@@ -452,6 +461,18 @@ impl Slot {
     #[inline(always)]
     pub fn is_str(self) -> bool {
         self.0 >> 48 == T_STR
+    }
+
+    /// The object this holds.
+    #[inline(always)]
+    pub fn obj(self) -> Option<Id> {
+        (self.0 >> 48 == T_OBJ).then_some(self.0 as u32)
+    }
+
+    /// A count or an index, which is never NaN.
+    #[inline(always)]
+    pub fn index(i: usize) -> Slot {
+        Slot((i as f64).to_bits())
     }
 
     #[inline(always)]

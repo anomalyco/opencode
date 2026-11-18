@@ -1,10 +1,11 @@
 //! Array and Array.prototype.
 
 use super::{arg, fuel, to_index};
+use crate::native::{Frame, Input, Step};
 use crate::object::*;
 use crate::ops::{Hint, MAX_ARRAY_LEN, without_holes};
 use crate::strings::StrId;
-use crate::value::{Id, Value, to_integer};
+use crate::value::{Id, Slot, Value, to_integer};
 use crate::vm::{Res, Vm};
 
 pub fn setup(vm: &mut Vm) {
@@ -762,183 +763,286 @@ fn holes(vm: &mut Vm, walked: &mut usize, to: usize) {
     }
 }
 
-/// Calls `f(value, index, array)` for each index below the starting length while `visit` returns `None`, reading
-/// each element live, holes included; returns what stopped it. The find methods visit this way. Spends the fuel
-/// of the reference's `findItem` (see `fuel.rs`).
-fn each<T>(
-    vm: &mut Vm,
-    this: &Value,
-    args: &[Value],
-    name: &str,
-    reverse: bool,
-    mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
-) -> Result<Option<T>, Value> {
-    fuel::method(vm);
-    let id = arr_id(vm, this)?;
-    fuel::receiver_then_loop(vm);
-    let f = callback(vm, args, name)?;
-    fuel::native(vm);
-    let this_arg = arg(args, 1);
-    let n = len(vm, id);
-    for k in 0..n {
-        let i = if reverse { n - 1 - k } else { k };
-        let v = read(vm, id, i);
-        let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
-        if let Some(t) = visit(vm, i, v, r) {
-            vm.bytecode_builtin();
-            return Ok(Some(t));
-        }
-        fuel::step(vm);
-    }
-    vm.bytecode_builtin();
-    Ok(None)
-}
+// The callback methods run as native frames (see `native.rs`): each checks its receiver and callback as the reference's
+// prelude function does, then its frame calls the callback once per index. The slots of an `each` frame:
+const EACH_F: usize = 0;
+const EACH_THIS: usize = 1;
+const EACH_N: usize = 2;
+/// The position in the walk: an index, or for a sparse array a position in `EACH_ORDER`.
+const EACH_K: usize = 3;
+/// A sparse array's visit order (see `visit_order`) as an array of indexes, or `undefined`.
+const EACH_ORDER: usize = 4;
+/// The positions the reference's loop has passed, holes included (see `holes`).
+const EACH_WALKED: usize = 5;
+/// `map`'s and `filter`'s result.
+const EACH_OUT: usize = 6;
+const EACH_MODE: usize = 7;
+/// The element and index of the call that is running.
+const EACH_V: usize = 8;
+const EACH_I: usize = 9;
 
-/// Like `each`, but skips the indexes not in the array when they come up, as the other callback methods do, with
-/// the fuel of the reference's `forEachItem`, `mapItems`, `filterItems` and `testItems`.
-fn each_present<T>(
-    vm: &mut Vm,
-    this: &Value,
-    args: &[Value],
-    name: &str,
-    visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
-) -> Result<Option<T>, Value> {
-    fuel::method(vm);
-    let id = arr_id(vm, this)?;
-    each_present_in(vm, id, this, args, name, visit)
-}
+const FOR_EACH: usize = 0;
+const MAP: usize = 1;
+const FILTER: usize = 2;
+const SOME: usize = 3;
+const EVERY: usize = 4;
+/// The find methods visit every index below the starting length, holes included, reading each element live.
+const FIND: usize = 5;
+const FIND_INDEX: usize = 6;
+const FIND_LAST: usize = 7;
+const FIND_LAST_INDEX: usize = 8;
 
-/// `each_present` once the receiver is known to be the array `id`.
-fn each_present_in<T>(
+/// Starts a callback method on the array `id`, once `fuel::method` and the receiver check are spent: the rest of the
+/// prologue of the reference's `findItem`, `forEachItem`, `mapItems`, `filterItems` or `testItems` (see `fuel.rs`).
+fn each_start(
     vm: &mut Vm,
     id: Id,
-    this: &Value,
+    callee: Id,
     args: &[Value],
+    mode: usize,
     name: &str,
-    mut visit: impl FnMut(&mut Vm, usize, Value, Value) -> Option<T>,
-) -> Result<Option<T>, Value> {
+    out: Value,
+) -> Res {
     fuel::receiver_then_loop(vm);
     let f = callback(vm, args, name)?;
     fuel::native(vm);
-    let this_arg = arg(args, 1);
     let n = len(vm, id);
-    if let Some(order) = visit_order(vm, id, n) {
-        let mut walked = 0;
-        for i in order {
-            holes(vm, &mut walked, i);
-            if let Some(v) = present(vm, id, i) {
-                let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
-                if let Some(t) = visit(vm, i, v, r) {
-                    vm.bytecode_builtin();
-                    return Ok(Some(t));
-                }
-            }
-            fuel::step(vm);
-            walked = i + 1;
-        }
-        holes(vm, &mut walked, n);
-        vm.bytecode_builtin();
-        return Ok(None);
-    }
-    for i in 0..n {
-        if let Some(v) = present(vm, id, i) {
-            let r = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), *this])?;
-            if let Some(t) = visit(vm, i, v, r) {
-                vm.bytecode_builtin();
-                return Ok(Some(t));
-            }
-        }
-        fuel::step(vm);
-    }
-    vm.bytecode_builtin();
-    Ok(None)
-}
-
-fn a_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(each(vm, &this, args, "Array.find", false, |vm, _, v, r| {
-        vm.truthy(&r).then_some(v)
-    })?
-    .unwrap_or_default())
-}
-
-fn a_find_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(vm, &this, args, "Array.findIndex", false, |vm, i, _, r| {
-        vm.truthy(&r).then_some(i)
-    })?;
-    Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
-}
-
-fn a_find_last(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(
-        each(vm, &this, args, "Array.findLast", true, |vm, _, v, r| {
-            vm.truthy(&r).then_some(v)
-        })?
-        .unwrap_or_default(),
+    let order = match mode >= FIND {
+        true => None,
+        false => visit_order(vm, id, n),
+    };
+    let order = match order {
+        Some(o) => vm.new_array(o.into_iter().map(|i| Value::Num(i as f64)).collect()),
+        None => Value::Undef,
+    };
+    let zero = Value::Num(0.0);
+    vm.enter_native(
+        crate::native::NativeOp::ArrayEach,
+        callee,
+        Value::Obj(id),
+        &[
+            f,
+            arg(args, 1),
+            Value::Num(n as f64),
+            zero,
+            order,
+            zero,
+            out,
+            Value::Num(mode as f64),
+            Value::Undef,
+            zero,
+        ],
     )
 }
 
-fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = each(
-        vm,
-        &this,
-        args,
-        "Array.findLastIndex",
-        true,
-        |vm, i, _, r| vm.truthy(&r).then_some(i),
-    )?;
-    Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
-}
-
-fn a_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(Value::Bool(
-        each_present(vm, &this, args, "Array.some", |vm, _, _, r| {
-            vm.truthy(&r).then_some(())
-        })?
-        .is_some(),
-    ))
-}
-
-fn a_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    Ok(Value::Bool(
-        each_present(vm, &this, args, "Array.every", |vm, _, _, r| {
-            (!vm.truthy(&r)).then_some(())
-        })?
-        .is_none(),
-    ))
-}
-
-fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    each_present(vm, &this, args, "Array.forEach", |_, _, _, _| None::<()>)?;
-    Ok(Value::Undef)
-}
-
-fn a_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let mut out = Vec::new();
-    each_present(vm, &this, args, "Array.filter", |vm, _, v, r| {
-        if vm.truthy(&r) {
-            out.push(v);
+/// The step of an `each` frame. Its slots stay packed: a callback runs per step, so this is the callback methods'
+/// loop.
+pub(crate) fn each_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let mode = fr.index(vm, EACH_MODE);
+    let order = fr.slot(vm, EACH_ORDER).obj();
+    let mut k = fr.index(vm, EACH_K);
+    match input {
+        Input::Start => {}
+        Input::Returned(r) => {
+            let i = fr.index(vm, EACH_I);
+            if mode != FOR_EACH
+                && let Some(done) = each_visit(vm, fr, mode, i, r)
+            {
+                vm.bytecode_builtin();
+                return Ok(Step::Done(done));
+            }
+            fuel::step(vm);
+            if order.is_some() {
+                fr.set_index(vm, EACH_WALKED, i + 1);
+            }
+            k += 1;
         }
-        None::<()>
-    })?;
-    Ok(vm.new_array(out))
+        Input::Threw(e) => return Err(e),
+    }
+    let this = fr.this_slot(vm);
+    let Some(id) = this.obj() else {
+        return Ok(Step::Done(Value::Undef));
+    };
+    let n = fr.index(vm, EACH_N);
+    if mode >= FIND {
+        if k >= n {
+            vm.bytecode_builtin();
+            return Ok(Step::Done(each_end(vm, fr, mode)));
+        }
+        let i = if mode >= FIND_LAST { n - 1 - k } else { k };
+        let v = read(vm, id, i);
+        return each_call(vm, fr, this, k, i, v);
+    }
+    let Some(order) = order else {
+        while k < n {
+            if let Some(v) = present(vm, id, k) {
+                return each_call(vm, fr, this, k, k, v);
+            }
+            fuel::step(vm);
+            k += 1;
+        }
+        vm.bytecode_builtin();
+        return Ok(Step::Done(each_end(vm, fr, mode)));
+    };
+    let mut walked = fr.index(vm, EACH_WALKED);
+    while let Some(i) = items(vm, order).get(k).map(|v| v.as_num() as usize) {
+        holes(vm, &mut walked, i);
+        if let Some(v) = present(vm, id, i) {
+            fr.set_index(vm, EACH_WALKED, walked);
+            return each_call(vm, fr, this, k, i, v);
+        }
+        fuel::step(vm);
+        walked = i + 1;
+        k += 1;
+    }
+    holes(vm, &mut walked, n);
+    vm.bytecode_builtin();
+    Ok(Step::Done(each_end(vm, fr, mode)))
 }
 
-fn a_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// Calls the callback of an `each` frame at position `k` on element `i`.
+#[inline(always)]
+fn each_call(
+    vm: &mut Vm,
+    fr: Frame,
+    this: Slot,
+    k: usize,
+    i: usize,
+    v: Value,
+) -> Result<Step, Value> {
+    let v = Slot::pack(v);
+    fr.set_index(vm, EACH_K, k);
+    fr.set_slot(vm, EACH_V, v);
+    fr.set_index(vm, EACH_I, i);
+    let (f, this_arg) = (fr.slot(vm, EACH_F), fr.slot(vm, EACH_THIS));
+    fr.call_slots(vm, f, this_arg, [v, Slot::index(i), this])
+}
+
+/// What the callback's result `r` on element `i` does: the method's result when it stops the walk.
+#[inline]
+fn each_visit(vm: &mut Vm, fr: Frame, mode: usize, i: usize, r: Slot) -> Option<Value> {
+    let r = r.get();
+    match mode {
+        MAP => {
+            if let Some(Kind::Array(out)) = fr
+                .slot(vm, EACH_OUT)
+                .obj()
+                .map(|o| &mut vm.heap[o as usize].kind)
+            {
+                out[i] = r;
+            }
+            None
+        }
+        FILTER => {
+            let v = fr.get(vm, EACH_V);
+            if vm.truthy(&r)
+                && let Some(Kind::Array(out)) = fr
+                    .slot(vm, EACH_OUT)
+                    .obj()
+                    .map(|o| &mut vm.heap[o as usize].kind)
+            {
+                out.push(v);
+            }
+            None
+        }
+        SOME => vm.truthy(&r).then_some(Value::Bool(true)),
+        EVERY => (!vm.truthy(&r)).then_some(Value::Bool(false)),
+        FIND | FIND_LAST => vm.truthy(&r).then(|| fr.get(vm, EACH_V)),
+        FIND_INDEX | FIND_LAST_INDEX => vm.truthy(&r).then_some(Value::Num(i as f64)),
+        _ => None,
+    }
+}
+
+/// The result of an `each` frame that visited every index.
+fn each_end(vm: &Vm, fr: Frame, mode: usize) -> Value {
+    match mode {
+        MAP | FILTER => fr.get(vm, EACH_OUT),
+        SOME => Value::Bool(false),
+        EVERY => Value::Bool(true),
+        FIND_INDEX | FIND_LAST_INDEX => Value::Num(-1.0),
+        _ => Value::Undef,
+    }
+}
+
+fn each_method(
+    vm: &mut Vm,
+    this: Value,
+    args: &[Value],
+    callee: Id,
+    mode: usize,
+    name: &str,
+) -> Res {
+    fuel::method(vm);
+    let id = arr_id(vm, &this)?;
+    each_start(vm, id, callee, args, mode, name, Value::Undef)
+}
+
+fn a_find(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, FIND, "Array.find")
+}
+
+fn a_find_index(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, FIND_INDEX, "Array.findIndex")
+}
+
+fn a_find_last(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, FIND_LAST, "Array.findLast")
+}
+
+fn a_find_last_index(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(
+        vm,
+        this,
+        args,
+        callee,
+        FIND_LAST_INDEX,
+        "Array.findLastIndex",
+    )
+}
+
+fn a_some(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, SOME, "Array.some")
+}
+
+fn a_every(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, EVERY, "Array.every")
+}
+
+fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    each_method(vm, this, args, callee, FOR_EACH, "Array.forEach")
+}
+
+fn a_filter(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    fuel::method(vm);
+    let id = arr_id(vm, &this)?;
+    let out = vm.new_array(Vec::new());
+    each_start(vm, id, callee, args, FILTER, "Array.filter", out)
+}
+
+fn a_map(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
     let id = arr_id(vm, &this)?;
     if len(vm, id) > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
     }
     // Skipped indexes stay holes.
-    let mut out = vec![Value::Uninit; len(vm, id)];
-    each_present_in(vm, id, &this, args, "Array.map", |_, i, _, r| {
-        out[i] = r;
-        None::<()>
-    })?;
-    Ok(vm.new_array(out))
+    let out = vm.new_array(vec![Value::Uninit; len(vm, id)]);
+    each_start(vm, id, callee, args, MAP, "Array.map", out)
 }
 
-fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
+// The slots of a `reduce` frame.
+const RED_F: usize = 0;
+/// How many positions the walk visits: every index, or a sparse array's visit order.
+const RED_N: usize = 1;
+const RED_K: usize = 2;
+const RED_ORDER: usize = 3;
+const RED_WALKED: usize = 4;
+const RED_ACC: usize = 5;
+const RED_REVERSE: usize = 6;
+/// The array's length.
+const RED_FULL: usize = 7;
+
+fn reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id, reverse: bool) -> Res {
     fuel::method(vm);
     let id = arr_id(vm, &this)?;
     fuel::receiver_then_loop(vm);
@@ -955,20 +1059,12 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
     let full = len(vm, id);
     let order = visit_order(vm, id, full);
     let n = order.as_ref().map_or(full, Vec::len);
-    let index = |k: usize| {
-        let k = if reverse { n - 1 - k } else { k };
-        match &order {
-            None => k,
-            Some(o) => o[k],
-        }
-    };
     // The reference's loops walk every index, holes a sparse array skips here included: `walked` counts the
     // positions its loops have passed, from the end for `reduceRight`.
     let sparse = order.is_some();
-    let at = |i: usize| if reverse { full - 1 - i } else { i };
     let mut walked = 0;
     let mut k = 0;
-    let mut acc = if args.len() >= 2 {
+    let acc = if args.len() >= 2 {
         args[1]
     } else {
         loop {
@@ -982,10 +1078,11 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
                 )));
             }
             k += 1;
-            let i = index(k - 1);
+            let i = reduce_index(&order, n, reverse, k - 1);
             if sparse {
-                holes(vm, &mut walked, at(i));
-                walked = at(i) + 1;
+                let at = if reverse { full - 1 - i } else { i };
+                holes(vm, &mut walked, at);
+                walked = at + 1;
             }
             if let Some(v) = present(vm, id, i) {
                 break v;
@@ -993,31 +1090,94 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], reverse: bool) -> Res {
             fuel::step(vm);
         }
     };
+    let order = match order {
+        Some(o) => vm.new_array(o.into_iter().map(|i| Value::Num(i as f64)).collect()),
+        None => Value::Undef,
+    };
+    vm.enter_native(
+        crate::native::NativeOp::ArrayReduce,
+        callee,
+        this,
+        &[
+            f,
+            Value::Num(n as f64),
+            Value::Num(k as f64),
+            order,
+            Value::Num(walked as f64),
+            acc,
+            Value::Num(reverse as u8 as f64),
+            Value::Num(full as f64),
+        ],
+    )
+}
+
+/// The index at position `k` of a reduce's walk.
+fn reduce_index(order: &Option<Vec<usize>>, n: usize, reverse: bool, k: usize) -> usize {
+    let k = if reverse { n - 1 - k } else { k };
+    match order {
+        None => k,
+        Some(o) => o[k],
+    }
+}
+
+/// The step of a `reduce` frame, on packed slots as `each_step`.
+pub(crate) fn reduce_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start => {}
+        Input::Returned(r) => {
+            fr.set_slot(vm, RED_ACC, r);
+            fuel::step(vm);
+        }
+        Input::Threw(e) => return Err(e),
+    }
+    let this = fr.this_slot(vm);
+    let Some(id) = this.obj() else {
+        return Ok(Step::Done(Value::Undef));
+    };
+    let n = fr.index(vm, RED_N);
+    let reverse = fr.index(vm, RED_REVERSE) != 0;
+    let order = fr.slot(vm, RED_ORDER).obj();
+    let mut k = fr.index(vm, RED_K);
     while k < n {
-        let i = index(k);
+        let p = if reverse { n - 1 - k } else { k };
+        let i = match order {
+            None => p,
+            Some(o) => items(vm, o).get(p).map_or(0, |v| v.as_num() as usize),
+        };
         k += 1;
-        if sparse {
-            holes(vm, &mut walked, at(i));
-            walked = at(i) + 1;
+        if order.is_some() {
+            let full = fr.index(vm, RED_FULL);
+            let mut walked = fr.index(vm, RED_WALKED);
+            let at = if reverse { full - 1 - i } else { i };
+            holes(vm, &mut walked, at);
+            fr.set_index(vm, RED_WALKED, at + 1);
         }
         if let Some(v) = present(vm, id, i) {
-            acc = vm.call_counted(&f, Value::Undef, &[acc, v, Value::Num(i as f64), this])?;
+            fr.set_index(vm, RED_K, k);
+            let (f, acc) = (fr.slot(vm, RED_F), fr.slot(vm, RED_ACC));
+            return fr.call_slots(
+                vm,
+                f,
+                Slot::UNDEF,
+                [acc, Slot::pack(v), Slot::index(i), this],
+            );
         }
         fuel::step(vm);
     }
-    if sparse {
+    if order.is_some() {
+        let (full, mut walked) = (fr.index(vm, RED_FULL), fr.index(vm, RED_WALKED));
         holes(vm, &mut walked, full);
     }
     vm.bytecode_builtin();
-    Ok(acc)
+    Ok(Step::Done(fr.get(vm, RED_ACC)))
 }
 
-fn a_reduce(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    reduce(vm, this, args, false)
+fn a_reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    reduce(vm, this, args, callee, false)
 }
 
-fn a_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    reduce(vm, this, args, true)
+fn a_reduce_right(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    reduce(vm, this, args, callee, true)
 }
 
 /// Checks a sort's comparator as the reference does, naming the method (`Array.sort`) in the error.
