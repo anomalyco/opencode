@@ -141,6 +141,26 @@ luau0-src = { git = "https://github.com/simonklee/luau-src-rs", rev = "96e828680
 [profile.dev]
 debug = "line-tables-only"
 
+# Dependencies optimised a little, which the workspace's tests run on: a workspace test run took 166 s instead of 185 s,
+# for 8 to 14 s more in a cold build and 3% more in target/. The workspace's own crates stay at 0, so an edit rebuilds
+# as fast as before (opt-level 1 for them took an edit in tui from 5 s to 9-25 s). Full optimisation for the ones that
+# do the most work in the tests: OpenTUI's Rust side, JSON, tree-sitter's runtime, and Luau's C++ (mlua-sys's build
+# script compiles it, with mlua-sys's level).
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.dev.package.opentui]
+opt-level = 3
+
+[profile.dev.package.serde_json]
+opt-level = 3
+
+[profile.dev.package.tree-sitter]
+opt-level = 3
+
+[profile.dev.package.mlua-sys]
+opt-level = 3
+
 # The idna_adapter stub debug-asserts that an ASCII host character is lowercase, and `idna` instantiates it.
 # tower-http resolves a redirect's `Location` with `Url::join` before reqwest consults its redirect policy, so
 # with `Policy::none()` a `Location` such as `https://B%C3%BCcher.example` still reaches the stub
