@@ -3,7 +3,7 @@
 // turn succeeded (`noninteractive.test.ts`, "waits for a subagent's report and the parent turn it triggers").
 import { defineCli } from "../../cli/run"
 import { event, nowMask, server, textStep } from "./fixture"
-import { jobs } from "./background.cli"
+import { jobs, waitingJson } from "./background.cli"
 
 const child = {
   kind: "subagent",
@@ -21,12 +21,18 @@ export default defineCli({
   server: server({
     events: () => textStep("Started the subagent."),
     // The wait reads the child's inbox too.
-    routes: [jobs((count) => (count === 1 ? [child] : [])), { path: "/api/session/ses_child/inbox", json: { data: [] } }],
-    late: [
+    routes: [
+      jobs((count) => (count === 1 ? [child] : [])),
+      { path: "/api/session/ses_child/inbox", json: { data: [] } },
+    ],
+  }),
+  late: {
+    after: waitingJson,
+    events: [
       event("session.text.started", { assistantMessageID: "msg_b", ordinal: 0 }, 30),
       event("session.text.ended", { assistantMessageID: "msg_b", ordinal: 0, text: "Report handled." }, 31),
       event("session.execution.failed", { error: { type: "unknown", message: "report turn failed" } }, 32),
     ],
-  }),
+  },
   masks: [nowMask],
 })

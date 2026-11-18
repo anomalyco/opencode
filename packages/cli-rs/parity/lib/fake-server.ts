@@ -61,6 +61,12 @@ export async function startFakeServer(options: Options = {}) {
   const events = options.fallback === "tui" ? createEventStream() : undefined
   const fallback = events ? createFetch(undefined, events).fetch : undefined
   const streams = new Set<ReadableStreamDefaultController<Uint8Array>>()
+  const push = (events: unknown[]) =>
+    events.forEach((event) => {
+      if (event !== DROP) return streams.forEach((controller) => controller.enqueue(encode(event)))
+      streams.forEach((controller) => controller.close())
+      streams.clear()
+    })
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -80,15 +86,7 @@ export async function startFakeServer(options: Options = {}) {
         const response = respond(route, streams, entry, requests)
         if (route.then) {
           const events = route.then(entry, requests)
-          setTimeout(
-            () =>
-              events.forEach((event) => {
-                if (event !== DROP) return streams.forEach((controller) => controller.enqueue(encode(event)))
-                streams.forEach((controller) => controller.close())
-                streams.clear()
-              }),
-            route.thenDelay ?? 0,
-          )
+          setTimeout(() => push(events), route.thenDelay ?? 0)
         }
         return response
       }
@@ -104,6 +102,8 @@ export async function startFakeServer(options: Options = {}) {
   return {
     url: `http://127.0.0.1:${server.port}`,
     requests,
+    // Pushes events to every open `events` stream, as a route's `then` does.
+    push,
     // Pushes an event to the open `fallback: "tui"` stream.
     emit: (event: Parameters<NonNullable<typeof events>["emit"]>[0]) => events?.emit(event),
     async stop() {

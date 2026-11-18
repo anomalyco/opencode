@@ -30,11 +30,15 @@ export const woken = [
   succeeded(),
 ]
 
+// The wake arrives once the run has said it waits, so the wait notice comes first on both sides. Timed from
+// the wait's answer instead, a client slow to list the jobs under load printed the woken reply first.
+export const waitingJson = '"type":"background_wait"'
+
 export default defineCli({
   args: ["run", "hello"],
   server: server({
     events: () => textStep("Started the job."),
     routes: [jobs((count) => (count === 1 ? [old, job] : [old]))],
-    late: woken,
   }),
+  late: { after: "waiting for 1 background job", events: woken },
 })

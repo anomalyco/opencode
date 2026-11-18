@@ -48,6 +48,9 @@ export type CliCase = {
   masks?: { pattern: RegExp; replacement: string }[]
   // Sends `name` to the client once a request for `after` (a path) has reached the fake server.
   signal?: { after: string; name: NodeJS.Signals }
+  // Pushes `events` to the fake server's event stream once the client's stdout or stderr shows `after`, for
+  // events the client must see only after it has printed something (that it waits for a background job).
+  late?: { after: string; events: unknown[] }
   // P-FILE: files read back after the run into the record (`null` when missing), by path under the sandbox
   // root (`work/...` is the working directory, `home/.config/...` the XDG config).
   collect?: string[]
@@ -87,11 +90,19 @@ export async function runCli(side: Side, value: CliCase) {
       proc.kill(signal.name)
     })()
   }
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
+  let late = value.late
+  const read = async (stream: ReadableStream<Uint8Array>) => {
+    const decoder = new TextDecoder()
+    let text = ""
+    for await (const chunk of stream) {
+      text += decoder.decode(chunk, { stream: true })
+      if (!late || !text.includes(late.after)) continue
+      server?.push(late.events)
+      late = undefined
+    }
+    return text + decoder.decode()
+  }
+  const [stdout, stderr, exit] = await Promise.all([read(proc.stdout), read(proc.stderr), proc.exited])
   await server?.stop()
   const files = value.collect
     ? Object.fromEntries(
