@@ -419,7 +419,8 @@ fn an_armed_interrupt_stays_with_its_call_and_its_vm() {
 
 // Expected (luau-spike 1.3): a VM's heap is capped; an allocation past it fails the call and the plugin, and the
 // process's memory is not touched. A task holds what it allocated on its stack or in the plugin's own state: either
-// way the failure names the memory (await-luau).
+// way the failure names the memory (await-luau), with the cap (luau-oom: mlua's "memory error: not enough memory"
+// told `/plugins` neither).
 #[test]
 fn a_plugin_that_allocates_past_its_cap_fails() {
     let host = host();
@@ -440,7 +441,7 @@ fn a_plugin_that_allocates_past_its_cap_fails() {
         keymap(&host).dispatch("hog", None);
         host.app.advance(Duration::from_millis(1));
         let error = failure(&registry, "test.luau").expect("the hog failed");
-        assert!(error.contains("memory"), "{keep}: {error}");
+        assert_eq!(error, "test.luau: out of memory: an allocation went past its 4 MiB Luau heap cap", "{keep}");
     }
 }
 
