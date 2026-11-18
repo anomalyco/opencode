@@ -17,7 +17,7 @@ The data site (opencode.ai/data) is separate from the console. Runtime, database
 - `bun run --cwd packages/data/core typecheck` typechecks the Effect/database package.
 - `bun run --cwd packages/data/server typecheck` typechecks the sync Workers.
 
-## Data sync
+## Data sync 
 
 The sync reads aggregates from R2 SQL and writes them to the `opencode-stats` PlanetScale database. It runs on the `dev` and `production` stages as a Cloudflare Workflow, `DataSyncWorkflow`, in the `opencode-data-sync-<stage>` Worker that `services/data` deploys.
 
