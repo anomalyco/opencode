@@ -3,9 +3,10 @@
 //! The public API below is shared with the benchmark and conformance harnesses, so change it only together with them.
 //!
 //! The pieces mirror the reference's (`packages/codemode`) in Rust form: [`Tool`] is `Tool.make`, [`Runtime`] is
-//! `CodeMode.make`, [`Extension`] is `Extension.make`, [`Hooks`] are the call hooks, and [`Program`] is
-//! `runtime.program`. Host work is a [`Future`](std::future::Future) instead of an Effect; [`Runtime::execute_async`]
-//! runs on any executor, and [`Runtime::execute`] drives it on the calling thread.
+//! `CodeMode.make`, [`Extension`] is `Extension.make`, [`Hooks`] are the call hooks, [`Program`] is
+//! `runtime.program`, and [`RunOptions`] are a run's options, such as which of the runtime's extensions it gets.
+//! Host work is a [`Future`](std::future::Future) instead of an Effect; [`Runtime::execute_async`] runs on any
+//! executor, and [`Runtime::execute`] drives it on the calling thread.
 
 mod builtins;
 mod bytecode;
