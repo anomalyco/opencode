@@ -121,6 +121,7 @@ struct Listener {
 }
 
 /// How long after a plugin's dialog surface opens the input waits for its field to take the focus, at most.
+#[cfg(feature = "ts")]
 pub(crate) const OPENING: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// How many events a hold keeps; at the limit it is released, and what it kept goes on in order.
@@ -352,6 +353,7 @@ impl Owner {
 
     /// Runs `then` once a node of the mount takes the focus, a view of the plugin's tree settled the focus it asked
     /// for, or the mount ends.
+    #[cfg(feature = "ts")]
     pub(crate) fn when_focused(&self, then: Box<dyn FnOnce()>) {
         self.focus_waiters.borrow_mut().push(then);
     }
@@ -1154,6 +1156,7 @@ impl Router {
 
     /// The mount of a plugin's dialog surface on top, opened less than [`OPENING`] ago, that has shown no tree of the
     /// plugin's yet: its tree and the focus it asks for come with the JS host's next revisions.
+    #[cfg(feature = "ts")]
     pub(crate) fn opening(&self, host: &dyn Host) -> Option<Rc<Owner>> {
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
         owners.into_iter().rev().find(|owner| {
