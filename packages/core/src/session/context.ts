@@ -91,7 +91,6 @@ const layer = Layer.effect(
     const entries = yield* InstructionEntry.Service
     const flags = yield* Flag.Service
     const location = yield* Location.Service
-    const selectedModels = new WeakMap<Selection, Effect.Success<ReturnType<SessionRunnerModel.Interface["select"]>>>()
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
@@ -181,7 +180,7 @@ const layer = Layer.effect(
         },
         { concurrency: "unbounded" },
       )
-      const selection: Selection = {
+      return {
         session,
         agent: { ...agent, info: agent.info },
         // Ordered from most to least shared across sessions so the baseline stays a reusable
@@ -198,27 +197,20 @@ const layer = Layer.effect(
         ]),
         tools,
       }
-      if (selected) selectedModels.set(selection, selected)
-      return selection
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const resolved = yield* models.resolve(
-        selection.session,
-        model.available,
-        { kind: "primary", agent: selection.agent.id },
-        selectedModels.get(selection),
-      )
+      const model = yield* resolveModel(selection.session, { kind: "primary", agent: selection.agent.id })
       const history = yield* SessionHistory.entriesForRunner(
         db,
         selection.session.id,
         selection.instructions,
-        resolved.ref,
+        model.ref,
       )
       return {
         session: selection.session,
         agent: selection.agent,
-        model: resolved,
+        model,
         initial: history.initial,
         messages: history.entries.map((entry) => entry.message),
         tools: selection.tools,

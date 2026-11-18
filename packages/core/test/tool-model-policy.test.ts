@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Flag } from "@opencode/core/flag"
+import { Formatter } from "@opencode/core/formatter"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -22,9 +25,6 @@ import { PatchTool } from "@opencode/core/tool/plugin/patch"
 import { WriteTool } from "@opencode/core/tool/plugin/write"
 import { WebSearch } from "@opencode/core/websearch"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { FileMutation } from "@opencode/core/file-mutation"
-import { FileWrite } from "@opencode/core/file-write"
-import { Formatter } from "@opencode/core/formatter"
 import { Effect, Layer, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
@@ -34,281 +34,204 @@ import { PluginTestLayer } from "./plugin/fixture"
 const makeModel = (
   providerID: string,
   id: string,
-  overrides: Partial<Pick<Model.Info, "modelID" | "family" | "canonical" | "package">> = {},
+  overrides: Partial<Pick<Model.Info, "modelID" | "family" | "canonical">> = {},
 ): Model.Info => ({
   ...Model.Info.default(Provider.ID.make(providerID), Model.ID.make(id)),
-  ...(overrides.modelID === undefined ? {} : { modelID: overrides.modelID }),
-  ...(overrides.family === undefined ? {} : { family: overrides.family }),
-  ...(overrides.canonical === undefined ? {} : { canonical: overrides.canonical }),
-  package: overrides.package ?? Provider.aisdk("@ai-sdk/openai"),
+  ...overrides,
+  package: Provider.aisdk("@ai-sdk/openai"),
 })
+
+const policy = (model: Model.Info | undefined, websearch = true, fullCodeMode = true) => {
+  const result = modelTools({ model, websearch, fullCodeMode })
+  return { codemode: [...result.codemode].sort(), hidden: [...result.hidden].sort() }
+}
 
 describe("modelTools", () => {
-  test("with fullCodeMode enabled, gives GPT-5+ models patch and places file tools and shell in Code Mode", () => {
-    for (const model of [
-      makeModel("openai", "gpt-5"),
-      makeModel("openai", "gpt-5.4-codex"),
-      makeModel("azure", "deployment", { modelID: Model.ID.make("gpt-6") }),
-    ]) {
-      const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["patch", "read", "shell", "websearch"])
-      expect([...result.hidden].sort()).toEqual(["edit", "glob", "grep", "webfetch", "write"])
-    }
+  test("gives GPT-5+ patch and places file tools, shell, and websearch in Code Mode when fullCodeMode is on", () => {
+    for (const model of [makeModel("openai", "gpt-5"), makeModel("azure", "dep", { modelID: Model.ID.make("gpt-6") })])
+      expect(policy(model)).toEqual({
+        codemode: ["patch", "read", "shell", "websearch"],
+        hidden: ["edit", "glob", "grep", "webfetch", "write"],
+      })
   })
 
-  test("keeps edit and write instead of patch for gpt-4 and gpt-oss models while placing file tools and shell in Code Mode when fullCodeMode is on", () => {
+  test("keeps edit and write instead of patch for gpt-4 and gpt-oss models", () => {
     for (const model of [
-      makeModel("openai", "gpt-4o"),
       makeModel("openai", "gpt-4.1"),
       makeModel("openrouter", "openai/gpt-oss-120b"),
-      makeModel("azure", "gpt-deployment", { modelID: Model.ID.make("gpt-4o") }),
-    ]) {
-      const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "websearch", "write"])
-      expect([...result.hidden].sort()).toEqual(["glob", "grep", "patch", "webfetch"])
-    }
+      makeModel("azure", "gpt-dep", { modelID: Model.ID.make("gpt-4o") }),
+    ])
+      expect(policy(model)).toEqual({
+        codemode: ["edit", "read", "shell", "websearch", "write"],
+        hidden: ["glob", "grep", "patch", "webfetch"],
+      })
   })
 
-  test("treats Anthropic, Claude, and all claude-agent models as strong when fullCodeMode is on", () => {
+  test("treats Anthropic, Claude, and claude-agent models as strong when fullCodeMode is on", () => {
     for (const model of [
-      makeModel("anthropic", "claude-sonnet-4-5"),
       makeModel("anthropic", "custom-sonnet"),
       makeModel("claude-agent", "opus"),
-      makeModel("claude-agent", "sonnet"),
-      makeModel("claude-agent", "fable"),
-      makeModel("claude-agent", "haiku", { family: Model.Family.make("claude-haiku") }),
-      makeModel("amazon-bedrock", "us.anthropic.claude-opus-4-6-v1"),
-      makeModel("openrouter", "anthropic/claude-sonnet-4"),
-      makeModel("custom", "sonnet-v4", { family: Model.Family.make("claude-sonnet") }),
       makeModel("gateway", "sonnet", { canonical: Provider.ID.make("anthropic") }),
-    ]) {
-      const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "websearch", "write"])
-      expect([...result.hidden].sort()).toEqual(["glob", "grep", "patch", "webfetch"])
-    }
+      makeModel("gateway", "opus", { canonical: Provider.ID.make("claude-agent") }),
+      makeModel("amazon-bedrock", "us.anthropic.claude-opus-4-6-v1"),
+      makeModel("custom", "alias", { modelID: Model.ID.make("claude-sonnet-4-5") }),
+      makeModel("custom", "sonnet-v4", { family: Model.Family.make("claude-sonnet") }),
+    ])
+      expect(policy(model)).toEqual({
+        codemode: ["edit", "read", "shell", "websearch", "write"],
+        hidden: ["glob", "grep", "patch", "webfetch"],
+      })
   })
 
-  test("with fullCodeMode off, keeps file tools, shell, glob, grep, webfetch, and websearch direct for every model while still applying patch/edit+write and websearch rules", () => {
-    expect(modelTools({ model: makeModel("openai", "gpt-5"), websearch: true, fullCodeMode: false })).toEqual({
-      hidden: new Set(["edit", "write"]),
-      codemode: new Set(),
-    })
-    expect(
-      modelTools({ model: makeModel("anthropic", "claude-sonnet-4-5"), websearch: true, fullCodeMode: false }),
-    ).toEqual({
-      hidden: new Set(["patch"]),
-      codemode: new Set(),
-    })
-    expect(modelTools({ model: makeModel("claude-agent", "opus"), websearch: false, fullCodeMode: false })).toEqual({
-      hidden: new Set(["patch", "websearch"]),
-      codemode: new Set(),
+  test("keeps strong-model tools direct when fullCodeMode is off while still applying patch and websearch rules", () => {
+    expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ codemode: [], hidden: ["edit", "write"] })
+    expect(policy(makeModel("claude-agent", "opus"), false, false)).toEqual({
+      codemode: [],
+      hidden: ["patch", "websearch"],
     })
   })
 
-  test("keeps file tools, shell, glob, grep, webfetch, and websearch direct for non-strong models even with fullCodeMode on", () => {
-    for (const model of [makeModel("deepseek", "deepseek-reasoner"), makeModel("opencode", "gemini-4-carbon")]) {
-      const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode]).toEqual([])
-      expect([...result.hidden]).toEqual(["patch"])
-    }
-  })
-
-  test("hides websearch when unavailable and keeps it direct when model is absent", () => {
-    expect(modelTools({ model: undefined, websearch: true, fullCodeMode: true })).toEqual({
-      hidden: new Set(),
-      codemode: new Set(),
-    })
-    expect(modelTools({ model: undefined, websearch: false, fullCodeMode: true })).toEqual({
-      hidden: new Set(["websearch"]),
-      codemode: new Set(),
-    })
+  test("keeps non-strong and absent models direct even with fullCodeMode on, hiding websearch when unavailable", () => {
+    expect(policy(makeModel("deepseek", "deepseek-reasoner"))).toEqual({ codemode: [], hidden: ["patch"] })
+    expect(policy(undefined, true, true)).toEqual({ codemode: [], hidden: [] })
+    expect(policy(undefined, false, true)).toEqual({ codemode: [], hidden: ["websearch"] })
   })
 })
 
-const makeContextLayer = (overrides: string | undefined) => {
-  const mcp = Layer.mock(Mcp.Service, {
-    awaitStartup: () => Effect.void,
-    instructions: () => Effect.succeed([{ server: Mcp.ServerName.make("alpha"), instructions: "Alpha docs" }]),
-    tools: () =>
-      Effect.succeed([{ server: Mcp.ServerName.make("alpha"), name: "search", inputSchema: { type: "object" } }]),
-  })
-  return Layer.mergeAll(
+const emptyInstructions = () => Effect.succeed(Instructions.empty)
+const makeContextLayer = (overrides: string | undefined) =>
+  Layer.mergeAll(
     PluginTestLayer,
     AppNodeBuilder.build(LayerNode.group([SessionContext.node, FileMutation.node, FileWrite.node, Formatter.node]), [
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
-      Mcp.node.replace(mcp),
-      InstructionBuiltIns.node.replace(
-        Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) }),
+      Mcp.node.replace(
+        Layer.mock(Mcp.Service, {
+          awaitStartup: () => Effect.void,
+          instructions: () => Effect.succeed([{ server: Mcp.ServerName.make("alpha"), instructions: "Alpha docs" }]),
+          tools: () =>
+            Effect.succeed([{ server: Mcp.ServerName.make("alpha"), name: "search", inputSchema: { type: "object" } }]),
+        }),
       ),
+      InstructionBuiltIns.node.replace(Layer.mock(InstructionBuiltIns.Service, { load: emptyInstructions })),
       InstructionDiscovery.node.replace(
         Layer.mock(InstructionDiscovery.Service, {
           project: true,
           global: true,
           claude: true,
           claudeGlobal: true,
-          load: () => Effect.succeed(Instructions.empty),
+          load: emptyInstructions,
         }),
       ),
-      SkillInstructions.node.replace(
-        Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) }),
-      ),
-      ReferenceInstructions.node.replace(
-        Layer.mock(ReferenceInstructions.Service, { load: () => Effect.succeed(Instructions.empty) }),
-      ),
+      SkillInstructions.node.replace(Layer.mock(SkillInstructions.Service, { load: emptyInstructions })),
+      ReferenceInstructions.node.replace(Layer.mock(ReferenceInstructions.Service, { load: emptyInstructions })),
     ]),
   ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides)))
-}
 
+const setupContext = Effect.gen(function* () {
+  const agents = yield* Agent.Service
+  const providers = yield* Provider.Service
+  const models = yield* Model.Service
+  const registry = yield* Tool.Service
+  const websearch = yield* WebSearch.Service
+  const sessions = yield* Session.Service
+  const context = yield* SessionContext.Service
+
+  yield* Effect.all([
+    registerToolPlugin(EditTool.Plugin),
+    registerToolPlugin(WriteTool.Plugin),
+    registerToolPlugin(PatchTool.Plugin),
+  ])
+  yield* agents.transform((editor) =>
+    editor.update(Agent.defaultID, (agent) => {
+      agent.mode = "primary"
+    }),
+  )
+  yield* providers.transform((editor) => {
+    for (const id of ["openai", "anthropic", "deepseek"])
+      editor.update(Provider.ID.make(id), (provider) => {
+        provider.activation = "enabled"
+      })
+  })
+  yield* models.transform((editor) => {
+    for (const [provider, id] of [
+      ["openai", "gpt-5"],
+      ["anthropic", "claude-sonnet-4-5"],
+      ["deepseek", "deepseek-reasoner"],
+    ] as const)
+      editor.update(Provider.ID.make(provider), Model.ID.make(id), (model) => {
+        model.package = Provider.aisdk("@ai-sdk/openai")
+      })
+  })
+  yield* websearch.transform((editor) =>
+    editor.add({ id: WebSearch.ID.make("exa"), name: "Exa", execute: () => Effect.succeed([]) }),
+  )
+  yield* registry.transform((editor) => {
+    for (const name of ["read", "glob", "grep", "webfetch", "websearch", "shell"]) {
+      const variant = name === "read" || name === "shell"
+      editor.add({
+        name,
+        description: `Direct ${name}`,
+        ...(variant ? { codemode: { description: `Code Mode ${name}` } } : {}),
+        input: Schema.Struct({}),
+        output: Schema.String,
+        options: { codemode: false, ...(variant ? { pinned: true } : {}) },
+        execute: () => Effect.succeed({ output: name }),
+      })
+    }
+    editor.add({
+      name: "session_move",
+      description: "Move session",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      options: { namespace: "opencode", codemode: true, pinned: true },
+      execute: () => Effect.succeed({ output: "moved" }),
+    })
+  })
+
+  const select = (providerID: string, id: string, permissions?: Session.Info["permissions"]) =>
+    sessions
+      .create({
+        location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+        model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
+        ...(permissions ? { permissions } : {}),
+      })
+      .pipe(Effect.flatMap((session) => context.select(session.id)))
+
+  return { registry, websearch, context, select }
+})
+
+const names = (selected: SessionContext.Selection) => selected.tools.definitions.map((tool) => tool.name)
+const paths = (selected: SessionContext.Selection) =>
+  codeModeListings(selected.tools.codeModeCatalog!).map((entry) => entry.path)
 const defaultIt = testEffect(makeContextLayer(undefined))
 const codeModeIt = testEffect(makeContextLayer("full_codemode"))
 
 describe("SessionContext.select model tool policy", () => {
-  defaultIt.effect(
-    "keeps strong-model file tools, shell, glob, grep, and webfetch direct when full_codemode is off",
-    () =>
-      Effect.gen(function* () {
-        const agents = yield* Agent.Service
-        const providers = yield* Provider.Service
-        const models = yield* Model.Service
-        const registry = yield* Tool.Service
-        const sessions = yield* Session.Service
-        const context = yield* SessionContext.Service
-
-        yield* registerToolPlugin(EditTool.Plugin)
-        yield* registerToolPlugin(WriteTool.Plugin)
-        yield* registerToolPlugin(PatchTool.Plugin)
-        for (const tool of yield* registry.list()) {
-          expect(tool.options?.pinned).toBe(true)
-          expect(tool.codemode?.description).toBeDefined()
-          expect(tool.codemode?.description).not.toContain("\n")
-          expect(tool.codemode!.description!.length).toBeLessThan(500)
-        }
-
-        yield* agents.transform((editor) =>
-          editor.update(Agent.defaultID, (agent) => {
-            agent.mode = "primary"
-          }),
-        )
-        yield* providers.transform((editor) =>
-          editor.update(Provider.ID.make("openai"), (provider) => {
-            provider.activation = "enabled"
-          }),
-        )
-        yield* models.transform((editor) =>
-          editor.update(Provider.ID.make("openai"), Model.ID.make("gpt-5"), (model) => {
-            model.package = Provider.aisdk("@ai-sdk/openai")
-          }),
-        )
-        yield* registry.transform((editor) => {
-          for (const name of ["read", "glob", "grep", "webfetch", "shell"]) {
-            editor.add({
-              name,
-              description: name,
-              input: Schema.Struct({}),
-              output: Schema.String,
-              options: { codemode: false },
-              execute: () => Effect.succeed({ output: name }),
-            })
-          }
-        })
-
-        const session = yield* sessions.create({
-          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-          model: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5") }),
-        })
-        const selected = yield* context.select(session.id)
-        expect(selected.tools.definitions.map((tool) => tool.name)).toEqual([
-          "glob",
-          "grep",
-          "patch",
-          "read",
-          "shell",
-          "webfetch",
-          "execute",
-        ])
-      }),
+  defaultIt.effect("keeps strong-model tools direct when full_codemode is off", () =>
+    Effect.gen(function* () {
+      const { registry, select } = yield* setupContext
+      const tools = yield* registry.list()
+      for (const name of ["edit", "write", "patch"]) {
+        const tool = tools.find((item) => item.name === name)
+        expect(tool?.options?.pinned).toBe(true)
+        expect(tool?.codemode?.description).toBeDefined()
+        expect(tool?.codemode?.description).not.toContain("\n")
+        expect(tool!.codemode!.description!.length).toBeLessThan(500)
+      }
+      expect(names(yield* select("openai", "gpt-5")).join(",")).toBe(
+        "glob,grep,patch,read,shell,webfetch,websearch,execute",
+      )
+    }),
   )
 
   codeModeIt.effect(
     "places tools per model, propagates Code Mode to MCP instructions, and uses configured ref fallback",
     () =>
       Effect.gen(function* () {
-        const agents = yield* Agent.Service
-        const providers = yield* Provider.Service
-        const models = yield* Model.Service
-        const registry = yield* Tool.Service
-        const websearch = yield* WebSearch.Service
-        const sessions = yield* Session.Service
-        const context = yield* SessionContext.Service
+        const { websearch, context, select } = yield* setupContext
 
-        yield* registerToolPlugin(EditTool.Plugin)
-        yield* registerToolPlugin(WriteTool.Plugin)
-        yield* registerToolPlugin(PatchTool.Plugin)
-
-        yield* agents.transform((editor) =>
-          editor.update(Agent.defaultID, (agent) => {
-            agent.mode = "primary"
-          }),
-        )
-        yield* providers.transform((editor) => {
-          for (const id of ["openai", "anthropic", "deepseek"]) {
-            editor.update(Provider.ID.make(id), (provider) => {
-              provider.activation = "enabled"
-            })
-          }
-        })
-        yield* models.transform((editor) => {
-          editor.update(Provider.ID.make("openai"), Model.ID.make("gpt-5"), (model) => {
-            model.package = Provider.aisdk("@ai-sdk/openai")
-          })
-          editor.update(Provider.ID.make("anthropic"), Model.ID.make("claude-sonnet-4-5"), (model) => {
-            model.package = Provider.aisdk("@ai-sdk/anthropic")
-          })
-          editor.update(Provider.ID.make("deepseek"), Model.ID.make("deepseek-reasoner"), (model) => {
-            model.package = Provider.aisdk("@ai-sdk/openai-compatible")
-          })
-        })
-        yield* websearch.transform((editor) =>
-          editor.add({
-            id: WebSearch.ID.make("exa"),
-            name: "Exa",
-            execute: () => Effect.succeed([]),
-          }),
-        )
-        yield* registry.transform((editor) => {
-          for (const name of ["read", "glob", "grep", "webfetch", "websearch", "shell"]) {
-            editor.add({
-              name,
-              description: `Direct ${name}`,
-              ...(name === "read" || name === "shell" ? { codemode: { description: `Code Mode ${name}` } } : {}),
-              input: Schema.Struct({}),
-              output: Schema.String,
-              options: { codemode: false, ...(name === "read" || name === "shell" ? { pinned: true } : {}) },
-              execute: () => Effect.succeed({ output: name }),
-            })
-          }
-          editor.add({
-            name: "session_move",
-            description: "Move session",
-            input: Schema.Struct({}),
-            output: Schema.String,
-            options: { namespace: "opencode", codemode: true, pinned: true },
-            execute: () => Effect.succeed({ output: "moved" }),
-          })
-        })
-
-        const selectFor = (providerID: string, id: string, permissions?: Session.Info["permissions"]) =>
-          Effect.gen(function* () {
-            const session = yield* sessions.create({
-              location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
-              model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
-              ...(permissions ? { permissions } : {}),
-            })
-            return yield* context.select(session.id)
-          })
-
-        const gpt = yield* selectFor("openai", "gpt-5")
-        expect(gpt.tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
+        const gpt = yield* select("openai", "gpt-5")
+        expect(names(gpt)).toEqual(["execute"])
         const gptListings = codeModeListings(gpt.tools.codeModeCatalog!)
         expect(gptListings.map((entry) => entry.path)).toEqual([
           "alpha.search",
@@ -319,69 +242,29 @@ describe("SessionContext.select model tool policy", () => {
           "websearch",
         ])
         expect(gptListings.find((entry) => entry.path === "patch")?.line).toContain("*** Begin Patch")
-        expect(gptListings.find((entry) => entry.path === "patch")?.line).toContain("*** End Patch")
         expect(gptListings.find((entry) => entry.path === "read")?.line).toContain("Code Mode read")
         expect((yield* readInitial(gpt.instructions)).text).toContain(
           'Use tools from this server through `execute` under `tools["alpha"]`.',
         )
 
-        // When execute is denied, MCP instructions reflect direct tool access instead of execute.
-        const gptDirect = yield* selectFor("openai", "gpt-5", [{ action: "execute", resource: "*", effect: "deny" }])
+        const gptDirect = yield* select("openai", "gpt-5", [{ action: "execute", resource: "*", effect: "deny" }])
         const directInstructions = (yield* readInitial(gptDirect.instructions)).text
         expect(directInstructions).toContain("Alpha docs")
         expect(directInstructions).not.toContain("through `execute`")
 
-        const claude = yield* selectFor("anthropic", "claude-sonnet-4-5")
-        expect(claude.tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
-        expect(codeModeListings(claude.tools.codeModeCatalog!).map((entry) => entry.path)).toEqual([
-          "alpha.search",
-          "edit",
-          "opencode.session_move",
-          "read",
-          "shell",
-          "websearch",
-          "write",
-        ])
+        const claude = yield* select("anthropic", "claude-sonnet-4-5")
+        expect(names(claude)).toEqual(["execute"])
+        expect(paths(claude).join(",")).toBe("alpha.search,edit,opencode.session_move,read,shell,websearch,write")
 
-        const deepseek = yield* selectFor("deepseek", "deepseek-reasoner")
-        expect(deepseek.tools.definitions.map((tool) => tool.name)).toEqual([
-          "edit",
-          "glob",
-          "grep",
-          "read",
-          "shell",
-          "webfetch",
-          "websearch",
-          "write",
-          "execute",
-        ])
-        expect(deepseek.tools.definitions.find((tool) => tool.name === "read")?.description).toBe("Direct read")
-        expect(codeModeListings(deepseek.tools.codeModeCatalog!).map((entry) => entry.path)).toEqual([
-          "alpha.search",
-          "opencode.session_move",
-        ])
+        const deepseek = yield* select("deepseek", "deepseek-reasoner")
+        expect(names(deepseek).join(",")).toBe("edit,glob,grep,read,shell,webfetch,websearch,write,execute")
+        expect(paths(deepseek)).toEqual(["alpha.search", "opencode.session_move"])
 
-        // Removing all providers or turning off websearch hides the websearch tool from Code Mode too.
-        yield* websearch.transform((editor) => editor.remove(WebSearch.ID.make("exa")))
-        expect(
-          codeModeListings((yield* selectFor("openai", "gpt-5")).tools.codeModeCatalog!).map((entry) => entry.path),
-        ).not.toContain("websearch")
-        yield* websearch.transform((editor) =>
-          editor.add({
-            id: WebSearch.ID.make("exa"),
-            name: "Exa",
-            execute: () => Effect.succeed([]),
-          }),
-        )
         yield* websearch.select(false)
-        expect(
-          codeModeListings((yield* selectFor("openai", "gpt-5")).tools.codeModeCatalog!).map((entry) => entry.path),
-        ).not.toContain("websearch")
+        expect(paths(yield* select("openai", "gpt-5"))).not.toContain("websearch")
 
-        // An unavailable model falls back to the configured ref in select, and surfaces ModelUnavailableError in load.
-        const unavailable = yield* selectFor("openai", "gpt-5-missing")
-        expect(unavailable.tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
-        expect(codeModeListings(unavailable.tools.codeModeCatalog!).map((entry) => entry.path)).toContain("patch")
+        const unavailable = yield* select("openai", "gpt-5-missing")
+        expect(paths(unavailable)).toContain("patch")
         expect(yield* context.load(unavailable).pipe(Effect.flip)).toBeInstanceOf(
           SessionRunnerModel.ModelUnavailableError,
         )

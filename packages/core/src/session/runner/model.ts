@@ -34,22 +34,20 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
 }
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
-type Selected = {
-  readonly info: Model.Info
-  readonly variant: Model.VariantID | undefined
-}
 
 export interface Interface {
   readonly select: (
     session: SessionSchema.Info,
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
-  ) => Effect.Effect<Selected, ModelNotSelectedError | ModelUnavailableError>
+  ) => Effect.Effect<
+    { readonly info: Model.Info; readonly variant: Model.VariantID | undefined },
+    ModelNotSelectedError | ModelUnavailableError
+  >
   /** Availability is sampled lazily for each explicitly selected model resolution. */
   readonly resolve: (
     session: SessionSchema.Info,
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
     request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
-    selected?: Selected,
   ) => Effect.Effect<Resolved, Error>
 }
 
@@ -109,8 +107,8 @@ const layer = Layer.effect(
     })
     return Service.of({
       select,
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request, preselected) {
-        const selected = preselected ?? (yield* select(session, available))
+      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
+        const selected = yield* select(session, available)
         const ref = Model.Ref.make({
           providerID: selected.info.providerID,
           id: selected.info.id,
