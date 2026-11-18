@@ -691,6 +691,7 @@ pub const EFFECTS: &[&str] = &[
     "clear-selection",
     "foreground",
     "timer",
+    "cancel-timer",
     "title",
     "set-theme",
     "install-theme",

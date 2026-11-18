@@ -167,9 +167,11 @@ impl Cx {
 
     /// Waits `delay` on the host's clock ([`Host::try_timer`]), at least [`crate::MIN_TIMER`]: `Ok` once it passed, or
     /// why the host took no timer ([`crate::MAX_TIMERS`] wait) or cancelled it ([`CANCELLED`]).
-    pub fn sleep(&self, delay: Duration) -> impl Future<Output = Result<(), String>> + 'static {
-        let wait = self.request(|host| host.try_timer(delay));
-        async move { wait.await.map(drop) }
+    /// A sleep dropped before its time (the loser of a race with a fetch) lets its timer go ([`Host::cancel_timer`]),
+    /// so it holds no place among [`crate::MAX_TIMERS`] and wakes nothing.
+    pub fn sleep(&self, delay: Duration) -> Sleep {
+        let (wait, id) = self.asked(|host| host.try_timer(delay));
+        Sleep { wait, id, shared: self.shared.clone() }
     }
 
     /// Gives the terminal to `program` and waits until it exits ([`Host::try_foreground`]): `{ "code": … }`, or the
@@ -239,18 +241,27 @@ impl Cx {
     }
 
     fn request(&self, send: impl FnOnce(&dyn Host) -> Result<RequestId, String>) -> Wait<Result<Value, String>> {
+        self.asked(send).0
+    }
+
+    /// [`Cx::request`], and the ID the host gave it, if it took it.
+    fn asked(
+        &self,
+        send: impl FnOnce(&dyn Host) -> Result<RequestId, String>,
+    ) -> (Wait<Result<Value, String>>, Option<RequestId>) {
         let slot = Slot::new();
-        match self.with(send) {
+        let asked = self.with(send);
+        match &asked {
             Ok(id) => {
                 // The table holds what a wait still waits for: a wait dropped before its reply leaves no entry.
                 let shared = self.shared();
                 let mut replies = shared.replies.borrow_mut();
                 replies.retain(|_, waiting| waiting.strong_count() > 0);
-                replies.insert(id, Rc::downgrade(&slot));
+                replies.insert(*id, Rc::downgrade(&slot));
             }
-            Err(error) => slot.fill(Err(error)),
+            Err(error) => slot.fill(Err(error.clone())),
         }
-        Wait { slot }
+        (Wait { slot }, asked.ok())
     }
 
     fn shared(&self) -> Rc<Shared> {
@@ -335,6 +346,39 @@ impl<T> Future for Wait<T> {
                 state.waker = Some(cx.waker().clone());
                 Poll::Pending
             }
+        }
+    }
+}
+
+/// The future of [`Cx::sleep`].
+pub struct Sleep {
+    wait: Wait<Result<Value, String>>,
+    /// The timer, until its reply came.
+    id: Option<RequestId>,
+    shared: Weak<Shared>,
+}
+
+impl Future for Sleep {
+    type Output = Result<(), String>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let slept = Pin::new(&mut self.wait).poll(cx);
+        if slept.is_ready() {
+            self.id = None;
+        }
+        slept.map(|slept| slept.map(drop))
+    }
+}
+
+impl Drop for Sleep {
+    /// A sleep dropped before its reply lets its timer go, through the host of the call that polls (the drop of a task
+    /// at the plugin's disposal has none, and needs none: the disposal ends every timer).
+    fn drop(&mut self) {
+        let Some(id) = self.id else { return };
+        let Some(shared) = self.shared.upgrade() else { return };
+        if let Some(host) = shared.host.get() {
+            // SAFETY: as in `Cx::with`: the pointer is set only while the call that lent it polls.
+            unsafe { &*host }.cancel_timer(id);
         }
     }
 }
@@ -742,6 +786,8 @@ mod tests {
         /// The delays of the timers asked for, which share the fetches' numbers; none is taken while `full`.
         timers: RefCell<Vec<Duration>>,
         full: Cell<bool>,
+        /// The timers let go of.
+        cancelled: RefCell<Vec<RequestId>>,
         /// The owner of the call ([`Host::owner`]), the one a task set for the rest of it, and the owner each fetch and
         /// timer was asked under.
         call: u64,
@@ -790,6 +836,9 @@ mod tests {
             }
             self.timers.borrow_mut().push(delay);
             self.try_fetch(Fetch::new("GET", "/"))
+        }
+        fn cancel_timer(&self, id: RequestId) {
+            self.cancelled.borrow_mut().push(id);
         }
         fn owner(&self) -> u64 {
             self.forced.get().unwrap_or(self.call)
@@ -1264,6 +1313,21 @@ mod tests {
         assert_eq!(asked, ["/mount", "/global"]);
         assert_eq!(*mount.owners.borrow(), [7, 0], "the activation's task asked under the mount");
         assert_eq!(mount.forced.get(), None);
+    }
+
+    // Expected (carbon tm2-3): a sleep dropped before its time, as the loser of a race, lets its timer go, so it holds
+    // no place among the plugin's timers; one that slept its time lets nothing go.
+    #[test]
+    fn a_dropped_sleep_lets_its_timer_go() {
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        tasks.spawn(&host, |cx| async move {
+            drop(cx.sleep(Duration::from_secs(60)));
+            let _ = cx.sleep(Duration::from_millis(20)).await;
+        });
+        assert_eq!(*host.cancelled.borrow(), [RequestId(1)]);
+        reply(&registered, &host, 2, Ok(Value::Null));
+        assert_eq!(*host.cancelled.borrow(), [RequestId(1)], "a sleep that slept let its timer go");
     }
 
     // Expected (big-boi acf-1): an answer that comes after eight more dialogs replaced its own reaches its own dialog,

@@ -2121,6 +2121,10 @@ pub enum HostRequest {
     Timer {
         ms: u64,
     },
+    /// [`Host::cancel_timer`], once the effects asked for before it apply.
+    CancelTimer {
+        id: RequestId,
+    },
     /// [`Host::owner`]: answers the number.
     Owner,
     /// [`Host::set_owner`].
@@ -3264,6 +3268,10 @@ pub trait Host: Read {
     fn try_timer(&self, _delay: std::time::Duration) -> Result<RequestId, String> {
         Err("the host has no timers".to_owned())
     }
+    /// Lets go of timer `id` ([`Host::try_timer`]), once what the running call asked for before applies: it fires no
+    /// more, its reply never comes, and its place among [`MAX_TIMERS`] is free. Another request's ID, or a timer that
+    /// fired, is ignored.
+    fn cancel_timer(&self, _id: RequestId) {}
     /// The owner of what the running call asks for now ([`Host::try_fetch`]), as a number of the host's: `0` for the
     /// activation, another for a mount. A plugin that goes on with work in a later call (a task) keeps it, and gives it
     /// back with [`Host::set_owner`], so the work stays its starting mount's.
@@ -3761,6 +3769,10 @@ impl Host for HostHandle {
 
     fn try_timer(&self, delay: std::time::Duration) -> Result<RequestId, String> {
         self.requested(&HostRequest::Timer { ms: timer_ms(delay) })
+    }
+
+    fn cancel_timer(&self, id: RequestId) {
+        let _ = self.request(&HostRequest::CancelTimer { id });
     }
 
     fn owner(&self) -> u64 {

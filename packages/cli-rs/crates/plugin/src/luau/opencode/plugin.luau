@@ -508,6 +508,9 @@ export type HostRequest = ({
     ms: number,
     type: "timer",
 } | {
+    id: RequestId,
+    type: "cancel-timer",
+} | {
     type: "owner",
 } | {
     owner: number?,
