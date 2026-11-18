@@ -1373,7 +1373,7 @@ impl surface::Viewer for Viewer {
             let mut mounts = self.mounts.borrow_mut();
             let mount = mounts.get_mut(id)?;
             mount.shown = true;
-            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
+            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(0);
             return Some(Viewed { node: Some(placeholder(height)), memo: Some(0), stand_in: true });
         }
         // The height it was laid out at, not the input's, which stands in the screen's before a solve (review carbon-7).
@@ -1451,7 +1451,7 @@ impl surface::Viewer for Viewer {
         }
         if !mount.shown {
             mount.shown = true;
-            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
+            let height = self.heights.borrow().get(&id.key).copied().unwrap_or(u16::from(viewing.input.slot.is_none()));
             let _ = host;
             return Some(Viewed { node: Some(placeholder(height)), memo: Some(0), stand_in: true });
         }
@@ -1731,7 +1731,9 @@ fn digest(part: &opencode_plugin_abi::claim::Part) -> u64 {
     hashing.0.finish()
 }
 
-/// What a mount shows before the JS host's first tree: the rows its key had, or one (review F1).
+/// What a mount shows before the JS host's first tree: the rows its key had, else one for a transcript part (review F1)
+/// and none for a slot. TS draws a slot's claim in the frame that mounts it, and a claim that draws nothing there, such
+/// as one that only adds key bindings, would otherwise push the slot's neighbours by a row until its tree arrives.
 fn placeholder(height: u16) -> v2::Node {
     let layout = opencode_plugin_abi::Layout {
         height: Some(opencode_plugin_abi::Width::Cells(height)),

@@ -1055,7 +1055,8 @@ impl Surface {
             release: &mut release,
             kept: &kept,
             held: 0,
-            laid: self.laid.get().then(|| self.root.rect().height as u16),
+            // A hidden root takes no rows; its rect keeps the height of the last solve that showed it.
+            laid: self.laid.get().then(|| if self.root.is_visible() { self.root.rect().height as u16 } else { 0 }),
         };
         let viewed = self.viewer.view(host, viewing);
         *self.viewed.borrow_mut() = input;

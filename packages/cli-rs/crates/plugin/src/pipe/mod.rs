@@ -7,8 +7,8 @@
 //!   plugin, as on the other carriers.
 //! - **Trees** are revisions of a mount ([`proto::Revision`]): a generation (the mount's), a base, a new revision and a
 //!   layout epoch. A mount has at most one tree in flight: the host adopts or refuses it, says so, and the JS host
-//!   sends the next. A surface shows a whole adopted revision, a placeholder that keeps the room its key had, or the
-//!   fallback; never part of one.
+//!   sends the next. A surface shows a whole adopted revision, a placeholder that keeps the room its key had (none for
+//!   a slot's first mount), or the fallback; never part of one.
 //! - **Reads** are snapshots the host pushes for what the plugin watches, before the event that may read them.
 //! - **Hold:** a command that declares it holds the keys typed after it until its handler returned, or 50 ms.
 //! - **Supervision** ([`child`]): bounded queues, a hang rule on acknowledgements, a memory budget, cleanup of the
