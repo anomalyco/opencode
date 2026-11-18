@@ -1,16 +1,17 @@
-import { Duration, Effect, Equal, Schema, Semaphore, Stream } from "effect"
+import { Duration, Effect, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
-import type { ConnectionInfo } from "@opencode/client"
-import { define } from "@opencode/plugin/effect/plugin"
+import { define, type Context } from "@opencode/plugin/effect/plugin"
 import { Money } from "@opencode/schema/money"
-import { Bus } from "../../bus.js"
-import { Credential } from "../../credential.js"
+import { Config } from "../../config.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
+import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
-import { configuredSettings } from "./configured.js"
+import { foldSettings } from "./configured.js"
+import { activeCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const defaultBaseURL = "https://api.hostlinku.com/v1"
 const providerID = Provider.ID.make("hostlinku")
@@ -39,12 +40,18 @@ const RemoteResponse = Schema.Struct({
   data: Schema.Array(RemoteModel),
 })
 
-class UnauthorizedError extends Error {
-  constructor() {
-    super(unauthorizedMessage)
-    this.name = "Hostlinku.Unauthorized"
-  }
+type RemoteModelInfo = typeof RemoteModel.Type
+type Connection = Effect.Success<ReturnType<Context["integration"]["connection"]["active"]>>
+
+type Snapshot = {
+  readonly connection?: Connection
+  readonly baseURL?: string
+  readonly models?: readonly RemoteModelInfo[]
 }
+
+type CacheResult =
+  | { readonly kind: "ok"; readonly models: readonly RemoteModelInfo[] }
+  | { readonly kind: "unauthorized" }
 
 function normalizeBaseURL(input: unknown) {
   if (typeof input !== "string" || !input.trim()) return defaultBaseURL
@@ -55,35 +62,14 @@ function normalizeBaseURL(input: unknown) {
   return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
 }
 
-function inferModelPackage(id: string): string | undefined {
-  if (id.startsWith("claude-")) return "@opencode/ai/providers/anthropic-compatible"
-  if (id.startsWith("gpt-")) return "@opencode/ai/providers/openai-compatible/responses"
-  return undefined
+function modelsKey(connection: Connection, apiKey: string, baseURL: string) {
+  const access = IntegrationConnection.key(connection) ?? "env:HOSTLINKU_API_KEY"
+  return `hostlinku:${access}:${SharedCache.fingerprint(apiKey)}:${baseURL.replace(/\/+$/, "")}`
 }
 
-function inferCompatibility(id: string): Model.Compatibility | undefined {
-  if (id.startsWith("claude-") || id.startsWith("gpt-") || id.startsWith("gemini-")) return undefined
-  return { reasoningField: "reasoning_content" }
-}
-
-function toModelInfo(item: typeof RemoteModel.Type, base: Model.Info | undefined): Model.Info {
-  const modelID = Model.ID.make(item.id)
-  const fallback = base ? structuredClone(base) : Model.Info.default(providerID, modelID)
-  const caps = new Set(item.capabilities ?? [])
-  const hasVision = caps.has("vision") || caps.has("image-input") || caps.has("multimodal")
-  const hasPdf = caps.has("pdf-input") || caps.has("file-input")
-
-  const context =
-    typeof item.context_window === "number" && item.context_window > 0
-      ? item.context_window
-      : fallback.limit.context
-  const output =
-    typeof item.max_output_tokens === "number" && item.max_output_tokens > 0
-      ? Math.min(item.max_output_tokens, context)
-      : Math.min(fallback.limit.output, context)
-
-  const pricing = item.pricing
-  const cost: Model.Cost[] =
+function toModelInfo(id: Model.ID, remote: RemoteModelInfo, baseURL: string, previous?: Model.Info): Model.Info {
+  const pricing = remote.pricing
+  const cost =
     pricing && typeof pricing.input === "number" && typeof pricing.output === "number"
       ? [
           {
@@ -95,43 +81,61 @@ function toModelInfo(item: typeof RemoteModel.Type, base: Model.Info | undefined
             },
           },
         ]
-      : fallback.cost
+      : previous?.cost
 
-  const pkg = fallback.package ?? inferModelPackage(item.id)
-  const compatibility = fallback.compatibility ?? inferCompatibility(item.id)
+  const caps = new Set(remote.capabilities ?? [])
+  const hasVision = caps.has("vision") || caps.has("image-input") || caps.has("multimodal")
+  const hasPdf = caps.has("pdf-input") || caps.has("file-input")
+  const explicitInputs = ["text", ...(hasVision ? ["image"] : []), ...(hasPdf ? ["pdf"] : [])]
 
-  return {
-    ...fallback,
-    id: modelID,
-    modelID,
+  const context =
+    typeof remote.context_window === "number" && remote.context_window > 0
+      ? remote.context_window
+      : (previous?.limit.context ?? 0)
+  const rawOutput =
+    typeof remote.max_output_tokens === "number" && remote.max_output_tokens > 0
+      ? remote.max_output_tokens
+      : (previous?.limit.output ?? 0)
+  const output = context > 0 ? Math.min(rawOutput, context) : rawOutput
+  const inputLimit =
+    previous?.limit.input !== undefined && context > 0 ? Math.min(previous.limit.input, context) : previous?.limit.input
+
+  return Model.Info.make({
+    ...Model.Info.default(providerID, id),
+    id,
+    modelID: Model.ID.make(remote.id),
     providerID,
-    name: item.display_name || fallback.name || item.id,
-    ...(pkg ? { package: pkg } : {}),
-    ...(compatibility ? { compatibility } : {}),
+    name: remote.display_name || previous?.name || remote.id,
+    family: previous?.family,
+    compatibility: previous?.compatibility,
+    package: previous?.package,
+    settings: Provider.mergeOverlay(previous?.settings, { baseURL, provider: providerID }),
+    headers: previous?.headers,
+    body: previous?.body,
     capabilities: {
       tools:
         caps.size > 0
-          ? caps.has("tool-calling") || caps.has("function-calling")
-          : fallback.capabilities.tools,
-      input: Array.from(
-        new Set([
-          ...fallback.capabilities.input,
-          "text",
-          ...(hasVision ? ["image"] : []),
-          ...(hasPdf ? ["pdf"] : []),
-        ]),
-      ),
-      output: fallback.capabilities.output,
+          ? caps.has("tools") || caps.has("tool-calling") || caps.has("function-calling")
+          : (previous?.capabilities.tools ?? true),
+      input:
+        caps.size > 0
+          ? Array.from(new Set([...(previous?.capabilities.input ?? []), ...explicitInputs]))
+          : (previous?.capabilities.input ?? ["text"]),
+      output: previous?.capabilities.output ?? ["text"],
+      ...(previous?.capabilities.temperature !== undefined ? { temperature: previous.capabilities.temperature } : {}),
+      ...(previous?.capabilities.freeform !== undefined ? { freeform: previous.capabilities.freeform } : {}),
     },
-    cost,
+    variants: previous?.variants ?? [],
+    time: previous?.time ?? { released: 0 },
+    ...(cost ? { cost } : {}),
+    status: previous?.status ?? "active",
     enabled: true,
-    status: "active",
     limit: {
-      ...(fallback.limit.input !== undefined ? { input: Math.min(fallback.limit.input, context) } : {}),
       context,
+      ...(inputLimit === undefined ? {} : { input: inputLimit }),
       output,
     },
-  }
+  })
 }
 
 function fetchInventory(http: HttpClient.HttpClient, baseURL: string, apiKey: string) {
@@ -146,9 +150,10 @@ function fetchInventory(http: HttpClient.HttpClient, baseURL: string, apiKey: st
       Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
       Effect.flatMap((response) =>
         response.status === 401 || response.status === 403
-          ? Effect.fail(new UnauthorizedError())
+          ? Effect.succeed<CacheResult>({ kind: "unauthorized" })
           : HttpClientResponse.filterStatusOk(response).pipe(
               Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
+              Effect.map((body): CacheResult => ({ kind: "ok", models: body.data })),
             ),
       ),
       Effect.scoped,
@@ -159,97 +164,79 @@ function fetchInventory(http: HttpClient.HttpClient, baseURL: string, apiKey: st
 export const HostlinkuPlugin = define({
   id: "opencode.provider.hostlinku",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
+    const providers = yield* Provider.Service
+    const config = yield* Effect.serviceOption(Config.Service)
+    const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
-    const loading = Semaphore.makeUnsafe(1)
 
-    type Snapshot = {
-      connection: ConnectionInfo | undefined
-      baseURL: string
-      models: readonly (typeof RemoteModel.Type)[] | undefined
-      serviceMode: string | undefined
-    }
+    const discovered = yield* ProviderRefresh.start({
+      integrationID,
+      initial: {} as Snapshot,
+      active: ctx.integration.connection.active(integrationID),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("HostlinkuPlugin.load")(function* (current, options) {
+        const { connection, credential } = yield* activeCredential(ctx, integrationID)
+        const catalogProvider = yield* providers.get(providerID)
+        const entries = Option.isSome(config)
+          ? yield* config.value.entries().pipe(Effect.orElseSucceed(() => [] as const))
+          : ([] as const)
+        const configured = foldSettings(entries, providerID, catalogProvider?.settings)
+        const catalogBaseURL =
+          typeof catalogProvider?.settings?.baseURL === "string" ? catalogProvider.settings.baseURL : undefined
+        const credBaseURL = credential?.type === "key" ? credential.metadata?.baseURL : undefined
+        const baseURL = normalizeBaseURL(credBaseURL ?? configured?.baseURL ?? catalogBaseURL)
+        const settingsKey = typeof configured?.apiKey === "string" ? configured.apiKey : undefined
+        const apiKey =
+          credential?.type === "key" ? credential.key : settingsKey || process.env.HOSTLINKU_API_KEY || undefined
+        if (!apiKey) return { connection, value: {} as Snapshot }
 
-    let snapshot: Snapshot = {
-      connection: undefined,
-      baseURL: defaultBaseURL,
-      models: undefined,
-      serviceMode: undefined,
-    }
+        const result = yield* cache
+          .get({
+            key: modelsKey(connection, apiKey, baseURL),
+            ...options,
+            load: (connection ? ctx.integration.connection.resolve(connection) : Effect.undefined).pipe(
+              Effect.map((resolved) =>
+                resolved?.type === "key"
+                  ? {
+                      key: resolved.key,
+                      url: normalizeBaseURL(resolved.metadata?.baseURL ?? configured?.baseURL ?? catalogBaseURL),
+                    }
+                  : connection?.type === "credential"
+                    ? undefined
+                    : { key: settingsKey || process.env.HOSTLINKU_API_KEY, url: baseURL },
+              ),
+              Effect.flatMap((resolved) =>
+                resolved?.key
+                  ? fetchInventory(http, resolved.url, resolved.key)
+                  : Effect.fail(new Error("Hostlinku connection has no API key")),
+              ),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
 
-    const resolveApiKey = Effect.fn("HostlinkuPlugin.resolveApiKey")(function* (
-      connection: ConnectionInfo | undefined,
-    ) {
-      const configured = yield* configuredSettings(providerID).pipe(Effect.orElseSucceed(() => undefined))
-      const baseURL = normalizeBaseURL(configured?.baseURL)
-      if (connection?.type === "env") {
-        return { baseURL, apiKey: process.env[connection.name] }
-      }
-      if (connection) {
-        const credential = yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        if (credential?.type === "key" && credential.key) {
+        if (connection && result) {
+          yield* ctx.integration.connection.status({
+            integrationID,
+            connection,
+            status: result.kind === "unauthorized" ? { status: "needs_auth", message: unauthorizedMessage } : undefined,
+          })
+        }
+
+        if (result === undefined) {
+          const sameConnection = IntegrationConnection.key(connection) === IntegrationConnection.key(current.connection)
           return {
-            baseURL: normalizeBaseURL(credential.metadata?.baseURL ?? configured?.baseURL),
-            apiKey: credential.key,
+            connection,
+            value: {
+              connection,
+              baseURL,
+              ...(sameConnection && current.models !== undefined ? { models: current.models } : {}),
+            } as Snapshot,
           }
         }
-      }
-      const settingsKey = typeof configured?.apiKey === "string" ? configured.apiKey : undefined
-      return {
-        baseURL,
-        apiKey: settingsKey || process.env.HOSTLINKU_API_KEY || undefined,
-      }
-    })
 
-    const load = Effect.fn("HostlinkuPlugin.load")(function* (): Effect.Effect<Snapshot> {
-      const connection = yield* ctx.integration.connection.active(integrationID)
-      const { baseURL, apiKey } = yield* resolveApiKey(connection)
-      if (!apiKey) {
-        return { connection, baseURL, models: undefined, serviceMode: undefined }
-      }
-
-      const clearStatus = () =>
-        connection
-          ? ctx.integration.connection.status({ integrationID, connection, status: undefined })
-          : Effect.void
-
-      const reportUnauthorized = () =>
-        connection
-          ? ctx.integration.connection.status({
-              integrationID,
-              connection,
-              status: { status: "needs_auth", message: unauthorizedMessage },
-            })
-          : Effect.void
-
-      return yield* fetchInventory(http, baseURL, apiKey).pipe(
-        Effect.tap(clearStatus),
-        Effect.map((response) => ({
-          connection,
-          baseURL,
-          models: response.data,
-          serviceMode: response.service_mode,
-        })),
-        Effect.catch((cause) =>
-          Effect.gen(function* () {
-            if (cause instanceof UnauthorizedError) {
-              yield* reportUnauthorized()
-              return { connection, baseURL, models: [], serviceMode: undefined }
-            }
-            yield* Effect.logWarning("failed to discover Hostlinku models from GET /v1/models", { cause })
-            // Keep the last successful inventory for the same connection across transient outages.
-            if (IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)) {
-              return {
-                connection,
-                baseURL,
-                models: snapshot.models,
-                serviceMode: snapshot.serviceMode,
-              }
-            }
-            return { connection, baseURL, models: undefined, serviceMode: undefined }
-          }),
-        ),
-      )
+        const models = result.kind === "ok" ? result.models : ([] as readonly RemoteModelInfo[])
+        return { connection, value: { connection, baseURL, models } as Snapshot }
+      }),
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -266,12 +253,11 @@ export const HostlinkuPlugin = define({
       })
     })
 
-    snapshot = yield* load()
+    yield* ctx.provider.transform((evt) => {
+      const loaded = discovered.current
+      if (loaded.models === undefined || !loaded.baseURL) return
 
-    yield* ctx.provider.transform((providers) => {
-      if (snapshot.models === undefined) return
-
-      const existing = providers.get(providerID)
+      const existing = evt.get(providerID)
       const info: Provider.Info = {
         ...(existing?.provider ?? Provider.Info.empty(providerID)),
         id: providerID,
@@ -279,31 +265,19 @@ export const HostlinkuPlugin = define({
         integrationID,
         activation: existing?.provider.activation === "disabled" ? "disabled" : "enabled",
         package: existing?.provider.package || "@opencode/ai/providers/openai-compatible",
-        settings: {
-          ...existing?.provider.settings,
-          baseURL: snapshot.baseURL,
-        },
+        settings: Provider.mergeOverlay(existing?.provider.settings, { baseURL: loaded.baseURL }),
       }
 
-      const mapped = snapshot.models.map((remote) => toModelInfo(remote, existing?.models.get(remote.id)))
-      providers.add({
+      const mapped = loaded.models.map((remote) => {
+        const modelID = Model.ID.make(remote.id)
+        return toModelInfo(modelID, remote, loaded.baseURL!, existing?.models.get(modelID))
+      })
+
+      evt.add({
         info,
         models: mapped,
-        sourceConnection: snapshot.connection,
+        sourceConnection: loaded.connection,
       })
     })
-
-    const refresh = Effect.fn("HostlinkuPlugin.refresh")(function* () {
-      const next = yield* load()
-      if (Equal.equals(snapshot, next)) return
-      snapshot = next
-      yield* ctx.provider.reload()
-    })
-
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => loading.withPermit(refresh())),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
-}) satisfies PluginInternal.InternalPlugin
+} satisfies PluginInternal.InternalPlugin)
