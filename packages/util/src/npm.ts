@@ -95,7 +95,8 @@ async function parse(pkg: string): Promise<Target | undefined> {
 }
 
 function key(pkg: string, target: Target | undefined) {
-  if (target?.type === "git") return `git-${target.slug}-${createHash("sha256").update(pkg).digest("hex").slice(0, 12)}`
+  if (target?.type === "git")
+    return `git-${target.slug}-${createHash("sha256").update(pkg).digest("hex").slice(0, 12)}`
   if (target?.type === "registry") return sanitize(`${target.name}@${target.spec}`)
   return sanitize(pkg)
 }
@@ -165,13 +166,13 @@ const layer = Layer.effect(
       return latest ? path.join(dir, latest) : undefined
     })
     const mkdir = (dir: string) =>
-      fs
-        .makeDirectory(dir, { recursive: true })
-        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
+      fs.makeDirectory(dir, { recursive: true }).pipe(
+        Effect.mapError((cause) => new InstallFailedError({ dir, cause })),
+      )
     const remove = (target: string, dir: string) =>
-      fs
-        .remove(target, { recursive: true, force: true })
-        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
+      fs.remove(target, { recursive: true, force: true }).pipe(
+        Effect.mapError((cause) => new InstallFailedError({ dir, cause })),
+      )
     const rename = (from: string, to: string, dir: string) =>
       fs.rename(from, to).pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
     const installedName = Effect.fnUntraced(function* (pkg: string, dir: string, target?: Target) {
@@ -193,10 +194,7 @@ const layer = Layer.effect(
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
         return Option.isSome(manifest) ? manifest.value.version : undefined
       }
-      for (const file of [
-        path.join(root, "package-lock.json"),
-        path.join(root, "node_modules", ".package-lock.json"),
-      ]) {
+      for (const file of [path.join(root, "package-lock.json"), path.join(root, "node_modules", ".package-lock.json")]) {
         const lock = yield* afs
           .readJson(file)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageLock)), Effect.option)
@@ -211,7 +209,7 @@ const layer = Layer.effect(
         .readJson(path.join(dir, "package.json"))
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
       const manifestVersion = Option.isSome(manifest) ? manifest.value.version : undefined
-      const revision = target ? ((yield* installedRevision(root, name, target)) ?? manifestVersion) : undefined
+      const revision = target ? (yield* installedRevision(root, name, target)) ?? manifestVersion : undefined
       const version = target?.type === "git" ? revision : manifestVersion
       return {
         directory: dir,
@@ -349,9 +347,7 @@ const layer = Layer.effect(
           const maximumAge = name.startsWith(".staging-") ? stagingRetention : retention
           if (!Number.isFinite(timestamp) || keep.has(name) || now - timestamp <= maximumAge) return Effect.void
           return remove(path.join(dir, name), dir).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("failed to remove stale npm generation", { dir, name, cause }),
-            ),
+            Effect.catchCause((cause) => Effect.logWarning("failed to remove stale npm generation", { dir, name, cause })),
           )
         },
         { concurrency: "unbounded", discard: true },
@@ -452,9 +448,7 @@ const layer = Layer.effect(
         if (files.length === 1) return Option.some(path.join(binDir, files[0]))
 
         const packageName = target?.name ?? pkg
-        const pkgJson = yield* afs
-          .readJson(path.join(dir, "node_modules", packageName, "package.json"))
-          .pipe(Effect.option)
+        const pkgJson = yield* afs.readJson(path.join(dir, "node_modules", packageName, "package.json")).pipe(Effect.option)
 
         if (Option.isSome(pkgJson)) {
           const parsed = pkgJson.value as { bin?: string | Record<string, string> }
