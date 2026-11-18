@@ -173,3 +173,26 @@ fn a_spinning_luau_plugin_is_failed_and_the_tui_keeps_drawing() {
     h.app.type_text("still here");
     h.wait_for("still here");
 }
+
+// Expected (await-luau, carbon `al-2`): a Luau task's dialog that the host keeps out, while its own approval dialog is
+// open, still closes: the task goes on with `nil` instead of waiting for the rest of the activation.
+#[test]
+fn a_dialog_the_host_keeps_out_answers_its_task_nil() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "ask" }, function(host)
+                local answer = host:confirm({ title = "Kept out?", message = "asked under the host's dialog" })
+                host:toast({ variant = "info", message = "answer=" .. tostring(answer) })
+            end)
+        end)
+    "#;
+    let sources = Sources::from_files([("plugin.toml", "id = \"test.ask\""), ("init.luau", init)]);
+    let h = home(define(&sources, None).unwrap().0);
+    frames(&h);
+    let options = opencode_ui::dialog::DialogOptions::new(opencode_ui::dialog::DialogSize::Medium).key("host.approval");
+    h.tui.dialogs.replace(|cx| opentui::prelude::View::new(&cx.app), None, options);
+    _ = h.tui.keymap.dispatch("ask", None);
+    h.wait_for("answer=nil");
+    assert!(!h.app.text().contains("Kept out?"));
+}
