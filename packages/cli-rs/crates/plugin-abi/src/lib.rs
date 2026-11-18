@@ -412,6 +412,9 @@ pub struct Manifest {
     /// The plugin has [`Setup::on_fence_gone`] handlers, which [`Request::FenceGone`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fence_gone: bool,
+    /// The plugin has [`Setup::on_cancelled`] handlers, which [`Request::Cancelled`] runs.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cancelled: bool,
     /// The plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deltas: bool,
@@ -1578,6 +1581,12 @@ pub enum Request {
     /// it only when [`Manifest::fence_gone`] is set.
     FenceGone {
         key: u64,
+    },
+    /// Runs the [`Setup::on_cancelled`] handlers: the host cancelled request `id`, as the mount that owned it closed
+    /// ([`Host::try_fetch`]), and no reply comes for it. It comes at most once, and never after the request's reply.
+    /// The host sends it only when [`Manifest::cancelled`] is set.
+    Cancelled {
+        id: RequestId,
     },
     /// Runs the [`Setup::on_deltas`] handlers with the streaming deltas that arrived since the last time, oldest
     /// first. The host sends it only when [`Manifest::deltas`] is set.
@@ -3089,7 +3098,8 @@ pub trait Host: Read {
     ///
     /// - A fetch a mount's call asks for (a command of the route it shows, or a handler of the mount's input) is that
     ///   mount's. Once the mount closes, it is not sent, and its reply is dropped, also when the surface opens again
-    ///   under the same key: a reply never reaches another mount.
+    ///   under the same key: a reply never reaches another mount. [`Setup::on_cancelled`] hears of it in place of the
+    ///   reply.
     /// - Any other (setup, a global command, an event, a wake, a message, a layer of setup, and the mount's begin and
     ///   end, [`interact::Event::Mount`], which the plugin hears, not the mount) is the activation's: its reply comes
     ///   unless the plugin is disposed first.
@@ -3760,6 +3770,8 @@ pub type RouteMountFn = Rc<dyn Fn(&dyn Host, bool)>;
 pub type WakeFn = Rc<dyn Fn(&dyn Host)>;
 /// A handler of [`Setup::on_fence_gone`].
 pub type FenceGoneFn = Rc<dyn Fn(u64)>;
+/// A handler of [`Setup::on_cancelled`].
+pub type CancelledFn = Rc<dyn Fn(&dyn Host, RequestId)>;
 /// A handler of [`Setup::on_deltas`].
 pub type DeltasFn = Rc<dyn Fn(&dyn Host, &[V2Event])>;
 /// A registered dispose callback.
@@ -3955,6 +3967,14 @@ impl Setup<'_> {
         self.registered.replies.push(Rc::new(run));
     }
 
+    /// Calls `run` once with the ID of each of the plugin's requests ([`Host::try_fetch`], [`Host::try_foreground`])
+    /// that the host cancelled as the mount that owned it closed, on the UI thread: no reply comes for it, and the
+    /// [`Setup::on_reply`] handlers never hear of it. A request cancelled after the plugin was disposed is not told.
+    pub fn on_cancelled(&mut self, run: impl Fn(&dyn Host, RequestId) + 'static) {
+        self.registered.manifest.cancelled = true;
+        self.registered.cancelled.push(Rc::new(run));
+    }
+
     /// Calls `run` with the streaming deltas (`session.text.delta`, `session.reasoning.delta`,
     /// `session.tool.input.delta`, `session.compaction.delta`), which [`Setup::on_event`] never gets: the deltas the
     /// host applied since the last call, or since setup, oldest first, at most once a frame and before it, never
@@ -4076,6 +4096,7 @@ pub struct Registered {
     commands: Vec<CommandFn>,
     events: Vec<EventFn>,
     replies: Vec<ReplyFn>,
+    cancelled: Vec<CancelledFn>,
     /// The mount handlers, with the index of their claim in [`Manifest::slots`].
     mounts: Vec<(usize, MountFn)>,
     route_mounts: Vec<(String, RouteMountFn)>,
@@ -4230,6 +4251,11 @@ impl Registered {
         &self.replies
     }
 
+    /// The handlers of [`Setup::on_cancelled`].
+    pub fn cancelled(&self) -> &[CancelledFn] {
+        &self.cancelled
+    }
+
     /// The handlers of [`Setup::on_deltas`].
     pub fn deltas(&self) -> &[DeltasFn] {
         &self.deltas
@@ -4352,6 +4378,10 @@ impl Registered {
             }
             Request::FenceGone { key } => {
                 self.fence_gone.iter().for_each(|run| run(key));
+                Ok(serde_json::Value::Null)
+            }
+            Request::Cancelled { id } => {
+                self.cancelled.iter().for_each(|run| run(&self.host, id));
                 Ok(serde_json::Value::Null)
             }
             Request::Deltas { events } => {

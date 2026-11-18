@@ -514,8 +514,9 @@ again, charged its bytes. One too large for a frame the JS host takes (the queue
 reduced: a fetch's reply as a failed one, the answers of a call's effects with their request IDs and verbs' answers
 kept and the values of its reads dropped, so an accepted request is never read as refused. A JS host that reads
 nothing past the reserve, or whose work cannot be settled in a frame even so, is ended once, which settles everything
-it held. A Rust or C plugin hears nothing of a
-cancelled request, as it has no promise that waits.
+it held. A Rust or C plugin whose manifest has `cancelled` (`Setup::on_cancelled`, which the SDK's tasks register)
+gets the request `{"type": "cancelled", "id": N}` once for a request its mount's close cancelled; one without it hears
+nothing of it.
 
 ### Events
 

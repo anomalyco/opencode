@@ -42,9 +42,8 @@
 //! - A task's requests are owned as any request of the call that sent it ([`Host::try_fetch`]): what it sends before
 //!   its first wait is its starting call's, what it sends after is the activation's, as the call that resumed it is
 //!   a reply's, an answer's or a wake's.
-//! - **Until the host tells a plugin of a cancelled request:** a task a mount's handler started, which waits on a
-//!   fetch that mount sent, stays parked if the mount closes first, as its reply never comes. Start such a flow from
-//!   a command or an event, or keep the wait out of it.
+//! - A request a mount owns is cancelled when that mount closes before its reply: its wait goes on once, with the
+//!   error [`CANCELLED`], and no reply comes after, also when the mount opens again.
 //! - The plugin's disposal (it is disabled, fails, is replaced by a new build, or the client exits) drops every task:
 //!   their destructors run, and none is polled again. A plugin has at most [`MAX_TASKS`] tasks at once; one more
 //!   fails the call that spawns it.
@@ -72,6 +71,10 @@ use crate::{
 
 /// The most tasks a plugin has at once.
 pub const MAX_TASKS: usize = 256;
+
+/// The error of a [`Cx::fetch`] or [`Cx::foreground`] whose mount closed before its reply came: the host cancelled the
+/// request ([`crate::Setup::on_cancelled`]).
+pub const CANCELLED: &str = "cancelled";
 
 /// Starts the plugin's tasks; from [`crate::Setup::tasks`].
 #[derive(Clone)]
@@ -130,7 +133,7 @@ impl Cx {
     }
 
     /// Sends `fetch` and waits for its reply ([`Host::try_fetch`]): its body, or the error. A fetch the host did not
-    /// take is that error at once.
+    /// take is that error at once; one its mount's close cancelled is [`CANCELLED`].
     pub fn fetch(&self, fetch: Fetch) -> Wait<Result<Value, String>> {
         self.request(|host| host.try_fetch(fetch))
     }
@@ -489,8 +492,8 @@ impl Wake for TaskWake {
     }
 }
 
-/// Registers the plugin's tasks on `setup`: the hidden commands, a reply handler, a wake handler and a dispose
-/// callback.
+/// Registers the plugin's tasks on `setup`: the hidden commands, a reply and a cancel handler, a wake handler and a
+/// dispose callback.
 pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
     let id = setup.id().to_owned();
     let queue = Queue { ready: Mutex::new(VecDeque::new()), polling: Mutex::new(None), host: setup.waker() };
@@ -539,6 +542,16 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
             let slot = shared.replies.borrow_mut().remove(&id).and_then(|slot| slot.upgrade());
             if let Some(slot) = slot {
                 slot.fill(reply);
+            }
+        });
+    });
+    // A request its mount's close cancelled gets no reply: its wait gets [`CANCELLED`] in its place, once.
+    let cancelled = shared.clone();
+    setup.on_cancelled(move |host, id| {
+        cancelled.enter(host, |shared| {
+            let slot = shared.replies.borrow_mut().remove(&id).and_then(|slot| slot.upgrade());
+            if let Some(slot) = slot {
+                slot.fill(Err(CANCELLED.to_owned()));
             }
         });
     });
@@ -788,6 +801,35 @@ mod tests {
         assert_eq!(counts(), [2, 2]);
         // A wake on the thread that polls is seen by that poll: the host was not woken for one.
         assert_eq!(woken.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_cancelled_request_gives_its_wait_the_cancel_once() {
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let log = Log::default();
+        for name in ["a", "b"] {
+            let log = log.clone();
+            tasks.spawn(&host, move |cx| async move {
+                let reply = cx.fetch(Fetch::new("GET", "/x")).await;
+                log.borrow_mut().push(format!("{name} {reply:?}"));
+            });
+        }
+        let cancel = |id| registered.cancelled().iter().for_each(|run| run(&host, RequestId(id)));
+        assert!(registered.manifest().cancelled, "the tasks did not ask to hear of a cancel");
+        cancel(1);
+        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")"]);
+        // Neither a second cancel nor the reply reaches it after; the other task waits on.
+        cancel(1);
+        reply(&registered, &host, 1, Ok(Value::Null));
+        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")"]);
+        reply(&registered, &host, 2, Ok(Value::from(2)));
+        assert_eq!(*log.borrow(), ["a Err(\"cancelled\")", "b Ok(Number(2))"]);
+        // A cancel after the reply reaches nothing.
+        cancel(2);
+        assert_eq!(log.borrow().len(), 2);
+        // The plain reply handlers never hear a cancel: the plugin's own `on_reply` sees only replies.
+        assert_eq!(registered.replies().len(), 1);
     }
 
     #[test]

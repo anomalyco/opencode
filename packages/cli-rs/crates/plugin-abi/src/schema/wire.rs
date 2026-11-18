@@ -50,7 +50,8 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 id: string(), commands: array(reference("Command")), fences: array(string()),
                 slots: array(reference("SlotClaim")), routes: array(string()), storage: array(string()),
             } {
-                events: array(array(string())), wake: boolean(), route_mounts: array(string()), fence_gone: boolean(), deltas: boolean(), plugins: boolean(),
+                events: array(array(string())), wake: boolean(), route_mounts: array(string()), fence_gone: boolean(),
+                cancelled: boolean(), deltas: boolean(), plugins: boolean(),
                 surfaces: array(reference("SurfaceClaim")), claims: array(reference("ClaimEntry")), messages: boolean(),
                 layers: array(reference("Layer")), searches: array(string()),
             }),
@@ -148,6 +149,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Wake { } { },
                 RouteMount { name: string(), mounted: boolean() } { },
                 FenceGone { key: uint64() } { },
+                Cancelled { id: reference("RequestId") } { },
                 Deltas { events: array(api("V2Event")) } { },
                 View {
                     surface: uint64(), mount: reference("MountId"), input: reference("SurfaceInput"), next: uint64(),

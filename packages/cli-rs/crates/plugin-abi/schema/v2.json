@@ -2455,6 +2455,9 @@
         "fence_gone": {
           "type": "boolean"
         },
+        "cancelled": {
+          "type": "boolean"
+        },
         "deltas": {
           "type": "boolean"
         },
@@ -2993,6 +2996,18 @@
             }
           },
           "required": ["type", "key"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "type": {
+              "const": "cancelled"
+            }
+          },
+          "required": ["type", "id"]
         },
         {
           "type": "object",

@@ -92,6 +92,8 @@ pub const KINDS: &[&str] = &[
     "search",
     // P6b: the handlers of a change of the plugins the host lists.
     "on-plugins",
+    // await-cancel: the handlers of a request its mount's close cancelled.
+    "on-cancelled",
 ];
 
 /// The index of `kind` in [`KINDS`], or the last index past it for a kind it does not list.

@@ -386,9 +386,8 @@ const header = `--!strict
 -- by Luau's rules: \`@self/x\` in \`init.luau\`, \`./x\` in the other modules.
 --
 -- A handler that acts is a task: \`local ok = host:confirm({ ... })\` and \`local body, err = host:fetch({ ... })\` wait in
--- a straight line, and the plugin goes on with other calls meanwhile. A task parked on a fetch its mount asked for,
--- when that mount closes, is not resumed yet (the request is cancelled): start a flow that waits from a command or an
--- event rather than from \`onMount\`.
+-- a straight line, and the plugin goes on with other calls meanwhile. A fetch its mount asked for, when that mount
+-- closes before the reply, returns \`nil, "cancelled"\` once: the host cancelled the request.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 `

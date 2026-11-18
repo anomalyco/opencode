@@ -140,8 +140,8 @@ activation's, and its reply comes unless the plugin is disposed first.
 
 A handler that waits for a dialog's answer or a reply can do it in a straight line: `Setup::tasks` starts tasks,
 `async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground` and `blocking` (module
-`task`). Until the host tells a plugin of a request a closed mount cancelled, a task that a mount's call started and
-that waits on that mount's fetch stays parked once the mount closes.
+`task`). A request whose mount closes before its reply is cancelled: its wait gets the error `task::CANCELLED`, once
+(`Setup::on_cancelled` hears it in a plain handler).
 
 ### The source promise of 2.x
 

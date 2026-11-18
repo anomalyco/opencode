@@ -296,6 +296,14 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         });
         Ok(())
     })?;
+    register("onCancelled", |plugin, setup, lua, args| {
+        let run: Function = lua.unpack_multi(args)?;
+        let plugin = plugin.clone();
+        setup.on_cancelled(move |host, id| {
+            plugin.run(Current::acting(host), |_| run.call::<()>((plugin.host.clone(), id.0)));
+        });
+        Ok(())
+    })?;
     register("onDispose", |plugin, setup, lua, args| {
         let run: Function = lua.unpack_multi(args)?;
         let plugin = plugin.clone();
@@ -486,7 +494,7 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "releaseKeys" => |h, _lua| h.release_keys();
     }
     // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it. The prelude puts its
-    // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` to itself.
+    // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` and `setup:onCancelled` to itself.
     for (name, foreground) in [("fetch", false), ("foreground", true)] {
         let current = current.clone();
         let f = lua.create_function(move |lua, (_this, request): (Value, Value)| {
