@@ -107,6 +107,11 @@ pub fn setup(vm: &mut Vm) {
 
     let sp = vm.realm.symbol_proto;
     let symbol = vm.ctor("Symbol", 0, symbol_ctor, sp, Value::Undef);
+    // `Symbol` is neither a callback nor a constructor: `new Symbol()` asks for a call instead, as the reference does.
+    vm.heap[symbol as usize].flags |= NOT_CALLBACK;
+    if let Kind::Native { ctor, .. } = &mut vm.heap[symbol as usize].kind {
+        *ctor = false;
+    }
     vm.constant(symbol, "iterator", Value::Sym(0));
     vm.constant(symbol, "asyncIterator", Value::Sym(1));
     vm.methods(sp, &[("toString", 0, symbol_to_string)]);
@@ -787,7 +792,9 @@ fn boolean_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 }
 
 fn symbol_ctor(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
-    Err(vm.type_error("Custom symbols are not supported"))
+    Err(vm.type_error(
+        "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
+    ))
 }
 
 fn symbol_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -811,9 +818,10 @@ fn parse(vm: &mut Vm, c: &mut fuel::Conversions, args: &[Value], callee: Id) -> 
     let text = vm.text(text).to_owned();
     let v = convert::parse(vm, &text)?;
     let reviver = arg(args, 1);
-    if !vm.is_callable(&reviver) {
+    if vm.type_of(&reviver) != "function" {
         return Ok(v);
     }
+    let reviver = super::require_callback(vm, &reviver, "JSON.parse")?;
     let holder = vm.new_object();
     let empty = vm.atoms.intern_static("");
     vm.define(holder, empty, v);
@@ -943,8 +951,8 @@ fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res 
         replacer_fn: None,
         allow: None,
     };
-    if vm.is_callable(&replacer) {
-        opts.replacer_fn = Some(replacer);
+    if vm.type_of(&replacer) == "function" {
+        opts.replacer_fn = Some(super::require_callback(vm, &replacer, "JSON.stringify")?);
     } else if let Value::Obj(id) = replacer
         && matches!(vm.heap[id as usize].kind, Kind::Array(_))
         && vm.densify(id).is_ok()

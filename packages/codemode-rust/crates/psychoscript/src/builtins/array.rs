@@ -65,13 +65,22 @@ pub fn setup(vm: &mut Vm) {
     vm.define_hidden(ap, SYM_ITERATOR, values);
 }
 
-fn arr_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
+/// `this` as the array an `Array.prototype` method needs, or the reference's error naming `callee`, the method.
+fn arr_id(vm: &mut Vm, this: &Value, callee: Id) -> Result<Id, Value> {
     if let Value::Obj(id) = this
         && let Kind::Array(_) = vm.heap[*id as usize].kind
     {
         return Ok(*id);
     }
-    Err(vm.type_error("Array.prototype method called on a value that is not an array"))
+    let name = match vm.heap[callee as usize].kind {
+        Kind::Native { name, .. } => vm.atoms.text(name).to_owned(),
+        _ => String::new(),
+    };
+    Err(super::incompatible(
+        vm,
+        &format!("Array.prototype.{name}"),
+        this,
+    ))
 }
 
 fn items<'a>(vm: &'a Vm, id: Id) -> &'a [Value] {
@@ -133,8 +142,8 @@ fn visit_at(order: &Option<Vec<usize>>, n: usize, k: usize) -> Option<usize> {
 }
 
 /// Makes `this` array dense for a method that walks its items.
-fn dense_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
-    let id = arr_id(vm, this)?;
+fn dense_id(vm: &mut Vm, this: &Value, callee: Id) -> Result<Id, Value> {
+    let id = arr_id(vm, this, callee)?;
     vm.densify(id)?;
     Ok(id)
 }
@@ -380,8 +389,8 @@ pub(crate) fn from_like_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
     fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::index(i)])
 }
 
-fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_push(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     check_mutable(vm, id, Some(args.len() as i64))?;
     for a in args {
         vm.reject_circular(id, a, "Array.push result")?;
@@ -415,8 +424,8 @@ fn push_sparse(vm: &mut Vm, id: Id, args: &[Value]) -> Res {
     Ok(Value::Num((n + args.len()) as f64))
 }
 
-fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     if is_sparse(vm, id) {
         check_mutable(vm, id, Some(-1))?;
         let n = len(vm, id);
@@ -433,8 +442,8 @@ fn a_pop(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     ))
 }
 
-fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     let items = items_mut(vm, id, Some(-1))?;
     if items.is_empty() {
         return Ok(Value::Undef);
@@ -442,8 +451,8 @@ fn a_shift(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(undef(items.remove(0)))
 }
 
-fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     check_mutable(vm, id, Some(args.len() as i64))?;
     for a in args {
         vm.reject_circular(id, a, "Array.unshift result")?;
@@ -453,8 +462,8 @@ fn a_unshift(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Num(items.len() as f64))
 }
 
-fn a_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_slice(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     integers(vm, args, &[0, 1], |vm, args| {
         let n = len(vm, id);
         let s = to_index(vm, &arg(args, 0), n, 0)?;
@@ -498,8 +507,8 @@ fn splice_args(vm: &mut Vm, args: &[Value], n: usize) -> Result<(usize, usize), 
     Ok((start, count))
 }
 
-fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_splice(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     integers(vm, args, &[0, 1], |vm, args| {
         let n = len(vm, id);
         let (start, count) = splice_args(vm, args, n)?;
@@ -513,8 +522,8 @@ fn a_splice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     integers(vm, args, &[0, 1], |vm, args| {
         let n = len(vm, id);
         let (start, count) = splice_args(vm, args, n)?;
@@ -524,8 +533,8 @@ fn a_to_spliced(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_concat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_concat(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     let mut out = items(vm, id).to_vec();
     for a in args {
         match a {
@@ -575,8 +584,8 @@ pub fn join(vm: &mut Vm, id: Id, sep: &str, seen: &mut Vec<Id>) -> Result<String
     Ok(out)
 }
 
-fn a_join(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_join(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     let sep = match arg(args, 0) {
         Value::Undef => vm.static_str(","),
         v => v,
@@ -584,8 +593,8 @@ fn a_join(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     joined(vm, id, Some(sep))
 }
 
-fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_to_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     joined(vm, id, None)
 }
 
@@ -666,7 +675,7 @@ fn integers(
 
 fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
-    let id = dense_id(vm, &this)?;
+    let id = dense_id(vm, &this, callee)?;
     fuel::native(vm);
     let empty = vm.static_str("");
     let op = crate::native::NativeOp::ToLocaleString;
@@ -731,8 +740,8 @@ pub(crate) fn to_locale_string_step(vm: &mut Vm, fr: Frame, input: Input) -> Res
     Ok(Step::Done(fr.get(vm, 0)))
 }
 
-fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     // Fewer than two items means no writes at all, so a frozen one-item array reverses fine.
     if len(vm, id) > 1 {
         items_mut(vm, id, None)?.reverse();
@@ -740,15 +749,15 @@ fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(this)
 }
 
-fn a_to_reversed(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_to_reversed(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     let mut out = without_holes(items(vm, id));
     out.reverse();
     Ok(vm.new_array(out))
 }
 
-fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     let x = arg(args, 0);
     let n = len(vm, id);
     // An empty array answers before fromIndex converts.
@@ -775,8 +784,8 @@ fn a_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     let x = arg(args, 0);
     let n = len(vm, id);
     if n == 0 {
@@ -818,8 +827,8 @@ fn a_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_includes(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     let x = arg(args, 0);
     let n = len(vm, id);
     if n == 0 {
@@ -1084,7 +1093,7 @@ fn each_method(
     name: &str,
 ) -> Res {
     fuel::method(vm);
-    let id = arr_id(vm, &this)?;
+    let id = arr_id(vm, &this, callee)?;
     each_start(vm, id, callee, args, mode, name, Value::Undef)
 }
 
@@ -1125,14 +1134,14 @@ fn a_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
 
 fn a_filter(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
-    let id = arr_id(vm, &this)?;
+    let id = arr_id(vm, &this, callee)?;
     let out = vm.new_array(Vec::new());
     each_start(vm, id, callee, args, FILTER, "Array.filter", out)
 }
 
 fn a_map(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
-    let id = arr_id(vm, &this)?;
+    let id = arr_id(vm, &this, callee)?;
     if len(vm, id) > MAX_ARRAY_LEN {
         return Err(vm.range_error("Invalid array length."));
     }
@@ -1155,7 +1164,7 @@ const RED_FULL: usize = 7;
 
 fn reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id, reverse: bool) -> Res {
     fuel::method(vm);
-    let id = arr_id(vm, &this)?;
+    let id = arr_id(vm, &this, callee)?;
     fuel::receiver_then_loop(vm);
     let f = callback(
         vm,
@@ -1603,8 +1612,8 @@ fn merge_sort<T: Clone>(
 }
 
 /// Makes `this` dense for a sort, which fails as the reference's host does when it cannot copy the elements.
-fn sort_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
-    let id = arr_id(vm, this)?;
+fn sort_id(vm: &mut Vm, this: &Value, callee: Id) -> Result<Id, Value> {
+    let id = arr_id(vm, this, callee)?;
     if len(vm, id) > MAX_ARRAY_LEN {
         return Err(vm.range_error("Out of memory"));
     }
@@ -1613,7 +1622,7 @@ fn sort_id(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
 }
 
 fn a_sort(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let id = sort_id(vm, &this)?;
+    let id = sort_id(vm, &this, callee)?;
     // Holes sort last, after undefined, and stay holes; a comparator that throws leaves the array as it was.
     let cmp = arg(args, 0);
     let list = items_mut(vm, id, None)?.clone();
@@ -1635,7 +1644,7 @@ fn a_sort(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
 }
 
 fn a_to_sorted(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let id = sort_id(vm, &this)?;
+    let id = sort_id(vm, &this, callee)?;
     let cmp = arg(args, 0);
     sort_comparator(vm, &cmp, "Array.toSorted")?;
     let list = without_holes(items(vm, id));
@@ -1666,8 +1675,8 @@ fn flatten(vm: &Vm, out: &mut Vec<Value>, list: &[Value], depth: f64) {
     }
 }
 
-fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_flat(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     integers(vm, args, &[0], |vm, args| {
         let depth = match arg(args, 0) {
             Value::Undef => 1.0,
@@ -1684,7 +1693,7 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     // A returned array is read like the callback methods read theirs: live, skipping indexes not in it. The fuel is
     // the reference's `Array$prototype$flatMap`, which runs its loops itself.
     fuel::method(vm);
-    let id = arr_id(vm, &this)?;
+    let id = arr_id(vm, &this, callee)?;
     fuel::native(vm);
     let f = callback(vm, args, "Array.flatMap")?;
     fuel::native(vm);
@@ -1777,8 +1786,8 @@ pub(crate) fn flat_map_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step
     Ok(Step::Done(Value::Obj(out)))
 }
 
-fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_fill(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     integers(vm, args, &[1, 2], |vm, args| {
         let n = len(vm, id);
         let s = to_index(vm, &arg(args, 1), n, 0)?;
@@ -1797,8 +1806,8 @@ fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_copy_within(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     integers(vm, args, &[0, 1, 2], |vm, args| {
         let n = len(vm, id);
         let target = to_index(vm, &arg(args, 0), n, 0)?;
@@ -1826,8 +1835,8 @@ fn rel_index(vm: &mut Vm, v: &Value, n: usize) -> Result<Option<usize>, Value> {
     })
 }
 
-fn a_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = arr_id(vm, &this)?;
+fn a_at(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = arr_id(vm, &this, callee)?;
     integers(vm, args, &[0], |vm, args| {
         let n = len(vm, id);
         Ok(match rel_index(vm, &arg(args, 0), n)? {
@@ -1837,8 +1846,8 @@ fn a_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let id = dense_id(vm, &this)?;
+fn a_with(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    let id = dense_id(vm, &this, callee)?;
     integers(vm, args, &[0], |vm, args| {
         let n = len(vm, id);
         let Some(i) = rel_index(vm, &arg(args, 0), n)? else {
@@ -1850,8 +1859,8 @@ fn a_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn array_iter(vm: &mut Vm, this: &Value, kind: IterKind) -> Res {
-    let id = arr_id(vm, this)?;
+fn array_iter(vm: &mut Vm, this: &Value, kind: IterKind, callee: Id) -> Res {
+    let id = arr_id(vm, this, callee)?;
     let proto = vm.realm.iter_proto;
     Ok(Value::Obj(vm.alloc(Obj::new(
         Some(proto),
@@ -1863,14 +1872,14 @@ fn array_iter(vm: &mut Vm, this: &Value, kind: IterKind) -> Res {
     ))))
 }
 
-fn a_keys(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    array_iter(vm, &this, IterKind::Keys)
+fn a_keys(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    array_iter(vm, &this, IterKind::Keys, callee)
 }
 
-fn a_values(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    array_iter(vm, &this, IterKind::Values)
+fn a_values(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    array_iter(vm, &this, IterKind::Values, callee)
 }
 
-fn a_entries(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    array_iter(vm, &this, IterKind::Entries)
+fn a_entries(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    array_iter(vm, &this, IterKind::Entries, callee)
 }

@@ -76,6 +76,22 @@ pub fn setup(vm: &mut Vm) {
             ("try", 1, promise_try),
         ],
     );
+    // Combinators are not callbacks: `[p].map(Promise.resolve)` must ask for an arrow function.
+    for name in [
+        "all",
+        "allSettled",
+        "race",
+        "any",
+        "resolve",
+        "reject",
+        "withResolvers",
+        "try",
+    ] {
+        let key = vm.atoms.intern(name);
+        if let Value::Obj(f) = vm.get_obj(promise, key) {
+            vm.heap[f as usize].flags |= NOT_CALLBACK;
+        }
+    }
     let then = vm.method(pp, "then", 2, promise_then);
     vm.realm.promise_then = then.as_obj().unwrap_or(0);
     vm.methods(
@@ -627,12 +643,14 @@ fn this_promise(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
 
 fn promise_then(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let p = this_promise(vm, &this)?;
+    let on_ful = reaction_handler(vm, arg(args, 0), "then")?;
+    let on_rej = reaction_handler(vm, arg(args, 1), "then")?;
     let derived = vm.new_promise();
     vm.perform_then(
         p,
         Reaction::Then {
-            on_ful: arg(args, 0),
-            on_rej: arg(args, 1),
+            on_ful,
+            on_rej,
             derived,
         },
     );
@@ -641,22 +659,41 @@ fn promise_then(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 
 fn promise_catch(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let p = this_promise(vm, &this)?;
+    let on_rej = reaction_handler(vm, arg(args, 0), "catch")?;
     let derived = vm.new_promise();
     vm.perform_then(
         p,
         Reaction::Then {
             on_ful: Value::Undef,
-            on_rej: arg(args, 0),
+            on_rej,
             derived,
         },
     );
     Ok(Value::Obj(derived))
 }
 
+/// A reaction's handler as the reference's `reactionHandler` takes it: a function a callback site admits, nothing
+/// for anything that isn't a function, and a TypeError for a function it doesn't admit.
+fn reaction_handler(vm: &mut Vm, f: Value, method: &str) -> Res {
+    if super::supported_callback(vm, &f) {
+        return Ok(f);
+    }
+    if vm.type_of(&f) == "function" {
+        let name = format!("Promise.prototype.{method}");
+        return Err(super::unsupported_callable(
+            vm,
+            &name,
+            "handler",
+            "(value) => fn(value)",
+        ));
+    }
+    Ok(Value::Undef)
+}
+
 fn promise_finally(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let p = this_promise(vm, &this)?;
+    let cleanup = reaction_handler(vm, arg(args, 0), "finally")?;
     let derived = vm.new_promise();
-    let cleanup = arg(args, 0);
     if vm.is_callable(&cleanup) {
         vm.perform_then(p, Reaction::Finally { cleanup, derived });
     } else {

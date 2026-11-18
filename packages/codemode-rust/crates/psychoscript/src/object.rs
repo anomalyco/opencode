@@ -370,6 +370,8 @@ pub const LENGTH_DELETED: u8 = 16;
 /// An array too long for its items: they hold a dense prefix, and its other elements and its length are own
 /// properties (see `Vm::array_len`).
 pub const SPARSE: u8 = 32;
+/// A built-in callback sites don't admit (the reference's `callback: false`): the `Promise` statics and `Symbol`.
+pub const NOT_CALLBACK: u8 = 64;
 
 pub struct Obj {
     pub proto: Option<Id>,

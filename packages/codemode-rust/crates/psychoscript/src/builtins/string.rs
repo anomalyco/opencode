@@ -761,16 +761,35 @@ fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
 fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: bool) -> Res {
     let re = regexp::as_regexp(vm, &arg(args, 0));
     let rep = arg(args, 1);
-    let callable = vm.is_callable(&rep);
+    let callable = super::supported_callback(vm, &rep);
+    // A function callback sites don't admit fails once the pattern converted; a namespace reference is no object to
+    // convert.
+    let refused = !callable && vm.type_of(&rep) == "function";
     let mut listed = [
         if re.is_some() {
             Value::Undef
         } else {
             arg(args, 0)
         },
-        if callable { Value::Undef } else { rep },
+        if callable
+            || (refused
+                && matches!(rep, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::ToolRef(_))))
+        {
+            Value::Undef
+        } else {
+            rep
+        },
     ];
     c.convert(vm, &[Hint::String], &mut listed, false)?;
+    if refused {
+        let name = format!("String.{}", if all { "replaceAll" } else { "replace" });
+        return Err(super::unsupported_callable(
+            vm,
+            &name,
+            "replacer",
+            "(match) => fn(match)",
+        ));
+    }
     if let Some(re) = re {
         let rep = if callable { rep } else { listed[1] };
         return regexp::string_replace(vm, c, s, re, &rep, all);

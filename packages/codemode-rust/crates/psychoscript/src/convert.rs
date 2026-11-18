@@ -748,7 +748,7 @@ fn stringify_walk(
                 {
                     return Err(vm.invalid_data(
                         "JSON.stringify received an un-awaited Promise; await it first - e.g. `const result = await \
-                         tools.ns.tool(...)`.",
+                         load(...)`.",
                     ));
                 }
                 fr.set(vm, J_VAL, v);
@@ -1243,17 +1243,10 @@ impl<'s> Parser<'s> {
         }
     }
 
+    /// The reference's `JSON.parse` passes on its host runtime's message.
     fn error(&self, vm: &mut Vm) -> Value {
-        let msg = if self.i >= self.s.len() {
-            "Unexpected end of JSON input".to_owned()
-        } else {
-            let c = self.text[self.i..].chars().next().unwrap_or(' ');
-            format!(
-                "Unexpected token '{c}', \"{}\" is not valid JSON",
-                truncate(self.text, 30)
-            )
-        };
-        vm.syntax_error(&msg)
+        let why = crate::streaming::json_parse_error(self.text);
+        vm.syntax_error(&format!("JSON.parse received invalid JSON: {why}"))
     }
 
     fn value(&mut self, vm: &mut Vm) -> Res {
@@ -1454,14 +1447,6 @@ impl<'s> Parser<'s> {
             }
             None => Err(self.error(vm)),
         }
-    }
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_owned()
-    } else {
-        format!("{}...", s.chars().take(n).collect::<String>())
     }
 }
 

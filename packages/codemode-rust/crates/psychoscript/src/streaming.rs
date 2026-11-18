@@ -648,6 +648,14 @@ fn reader_object(stream: &Arc<Mutex<Stream>>, epoch: &Epoch, reader: u64) -> Hos
 
 // ---------- `json()` ----------
 
+/// Why the reference's host runtime can't parse `text` as JSON, as its `JSON.parse` says it (`JSON Parse error: ...`).
+pub(crate) fn json_parse_error(text: &str) -> String {
+    match parse_json(text) {
+        Err(HostValue::Error(e)) => e.message,
+        _ => "JSON Parse error: Unable to parse JSON string".into(),
+    }
+}
+
 /// Parses a body as the reference's host runtime does for `Response.json`, with its error messages.
 fn parse_json(text: &str) -> HostResult {
     let mut p = Json {

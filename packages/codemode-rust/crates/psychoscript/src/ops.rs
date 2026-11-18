@@ -9,7 +9,8 @@ use crate::value::{Id, Value, num_to_string, str_to_num};
 use crate::vm::{NATIVE_FUEL, REQ_NEXT, REQ_RETURN, Res, Vm};
 
 pub const MAX_STRING_LEN: usize = 1 << 24;
-const UNAWAITED: &str = "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.";
+const UNAWAITED: &str =
+    "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`.";
 pub const MAX_ARRAY_LEN: usize = 10_000_000;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -428,7 +429,7 @@ impl<'rt> Vm<'rt> {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) if is_name_or_length => {
                 return Err(self.read_only(key));
             }
-            Kind::ToolRef(_) => return Err(self.type_error("Cannot assign to a tool reference")),
+            Kind::ToolRef(_) => return Err(self.type_error("Only data fields may be assigned.")),
             k if exotic::is_exotic(k) => {
                 if let Some(r) = exotic::set(self, id, key, val) {
                     return r;
@@ -1390,7 +1391,7 @@ impl<'rt> Vm<'rt> {
                 Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
                 Kind::Promise(_) => "an un-awaited Promise",
                 Kind::Error(_) => "an Error",
-                Kind::ToolRef(_) => "a tool reference",
+                Kind::ToolRef(_) => "a namespace reference",
                 Kind::Generator(_) | Kind::AsyncGenerator(_) => "a generator",
                 _ => "an object",
             },

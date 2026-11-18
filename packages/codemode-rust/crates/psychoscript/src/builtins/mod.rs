@@ -446,7 +446,7 @@ pub fn describe_value(vm: &Vm, v: &Value) -> String {
         Value::Null => return "null".into(),
         Value::Obj(id) => match &vm.heap[*id as usize].kind {
             Kind::Array(_) => return "an array".into(),
-            Kind::ToolRef(_) => return "a tool reference".into(),
+            Kind::ToolRef(_) => return "a namespace reference".into(),
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => return "a function".into(),
             Kind::Promise(_) => return "an un-awaited Promise".into(),
             Kind::Generator(_) => return "a generator".into(),
@@ -477,18 +477,39 @@ pub fn incompatible(vm: &mut Vm, method: &str, this: &Value) -> Value {
 
 /// Checks a callback argument, as the reference's `requireCallback` does.
 pub fn require_callback(vm: &mut Vm, f: &Value, name: &str) -> Result<Value, Value> {
-    if let Value::Obj(id) = f {
-        match &vm.heap[*id as usize].kind {
-            Kind::ToolRef(p) if !p.is_empty() => {
-                return Err(vm.type_error(&format!(
-                    "{name} cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value)."
-                )));
-            }
-            _ if vm.is_callable(f) => return Ok(*f),
-            _ => {}
-        }
+    if supported_callback(vm, f) {
+        return Ok(*f);
+    }
+    if vm.type_of(f) == "function" {
+        return Err(unsupported_callable(
+            vm,
+            name,
+            "callback",
+            "(value) => fn(value)",
+        ));
     }
     Err(vm.type_error(&format!("{name} expects a function callback.")))
+}
+
+/// Whether callback sites (array methods, replacers, promise reactions) admit `f`, as the reference's
+/// `isSupportedCallback`: any function but a namespace reference and the built-ins marked `NOT_CALLBACK`.
+pub fn supported_callback(vm: &Vm, f: &Value) -> bool {
+    let Value::Obj(id) = f else {
+        return false;
+    };
+    let o = &vm.heap[*id as usize];
+    match o.kind {
+        Kind::ToolRef(_) => false,
+        Kind::Native { .. } => o.flags & NOT_CALLBACK == 0,
+        _ => o.is_callable(),
+    }
+}
+
+/// The error for a function a callback site doesn't admit, with the arrow function to wrap it in.
+pub fn unsupported_callable(vm: &mut Vm, name: &str, role: &str, example: &str) -> Value {
+    vm.type_error(&format!(
+        "{name} cannot use this callable as a {role}; wrap it in an arrow function, e.g. {example}."
+    ))
 }
 
 /// Declares getter-only accessor properties on a built-in prototype. Instances answer them through their exotic
