@@ -1236,7 +1236,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "აირჩიეთ, როგორ ჩამოითვალოს სესიები გვერდით ზოლში. ეხება მხოლოდ გვერდით ჩანართებს.",
   "settings.experimental.sidebarOrganize.recent": "ბოლოდროინდელი",
-  "settings.experimental.sidebarOrganize.projects": "პროექტები",
   "settings.experimental.sidebarOrganize.list": "ერთი სია",
   "settings.experimental.sidebarOrganize.customize": "მორგება",
   "sidebar.organize.projects": "პროექტები",

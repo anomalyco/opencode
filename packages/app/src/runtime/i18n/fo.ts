@@ -1230,7 +1230,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Vel hvussu setur verða listaðar í síðulinjuni. Er bert galdandi fyri síðuflipar.",
   "settings.experimental.sidebarOrganize.recent": "Seinast",
-  "settings.experimental.sidebarOrganize.projects": "Verkætlanir",
   "settings.experimental.sidebarOrganize.list": "Ein listi",
   "settings.experimental.sidebarOrganize.customize": "Tillaga",
   "sidebar.organize.projects": "Verkætlanir",

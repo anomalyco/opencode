@@ -1233,7 +1233,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "사이드바에 세션을 나열하는 방식을 선택하세요. 사이드 탭에만 적용됩니다.",
   "settings.experimental.sidebarOrganize.recent": "최근",
-  "settings.experimental.sidebarOrganize.projects": "프로젝트",
   "settings.experimental.sidebarOrganize.list": "단일 목록",
   "settings.experimental.sidebarOrganize.customize": "사용자 지정",
   "sidebar.organize.projects": "프로젝트",

@@ -1298,7 +1298,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Velg hvordan økter listes i sidepanelet. Gjelder bare sidefaner.",
   "settings.experimental.sidebarOrganize.recent": "Nylige",
-  "settings.experimental.sidebarOrganize.projects": "Prosjekter",
   "settings.experimental.sidebarOrganize.list": "Én liste",
   "settings.experimental.sidebarOrganize.customize": "Tilpass",
   "sidebar.organize.projects": "Prosjekter",

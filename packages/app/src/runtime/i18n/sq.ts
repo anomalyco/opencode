@@ -1240,7 +1240,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Zgjidhni si renditen sesionet në shiritin anësor. Vlen vetëm për skedat anësore.",
   "settings.experimental.sidebarOrganize.recent": "Së fundmi",
-  "settings.experimental.sidebarOrganize.projects": "Projektet",
   "settings.experimental.sidebarOrganize.list": "Një listë",
   "settings.experimental.sidebarOrganize.customize": "Personalizo",
   "sidebar.organize.projects": "Projektet",

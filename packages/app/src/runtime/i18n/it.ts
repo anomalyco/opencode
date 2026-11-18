@@ -1262,7 +1262,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Scegli come elencare le sessioni nella barra laterale. Si applica solo alle schede laterali.",
   "settings.experimental.sidebarOrganize.recent": "Recenti",
-  "settings.experimental.sidebarOrganize.projects": "Progetti",
   "settings.experimental.sidebarOrganize.list": "Elenco unico",
   "settings.experimental.sidebarOrganize.customize": "Personalizza",
   "sidebar.organize.projects": "Progetti",

@@ -1345,7 +1345,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Выберите, как сессии отображаются на боковой панели. Применяется только к боковым вкладкам.",
   "settings.experimental.sidebarOrganize.recent": "Недавние",
-  "settings.experimental.sidebarOrganize.projects": "Проекты",
   "settings.experimental.sidebarOrganize.list": "Один список",
   "settings.experimental.sidebarOrganize.customize": "Настроить",
   "sidebar.organize.projects": "Проекты",

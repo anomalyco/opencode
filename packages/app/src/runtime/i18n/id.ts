@@ -1300,7 +1300,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Pilih cara sesi dicantumkan di bilah sisi. Hanya berlaku untuk tab samping.",
   "settings.experimental.sidebarOrganize.recent": "Terbaru",
-  "settings.experimental.sidebarOrganize.projects": "Proyek",
   "settings.experimental.sidebarOrganize.list": "Satu daftar",
   "settings.experimental.sidebarOrganize.customize": "Sesuaikan",
   "sidebar.organize.projects": "Proyek",

@@ -1346,7 +1346,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Виберіть, як показувати сесії на бічній панелі. Застосовується лише до бічних вкладок.",
   "settings.experimental.sidebarOrganize.recent": "Нещодавні",
-  "settings.experimental.sidebarOrganize.projects": "Проєкти",
   "settings.experimental.sidebarOrganize.list": "Один список",
   "settings.experimental.sidebarOrganize.customize": "Налаштувати",
   "sidebar.organize.projects": "Проєкти",

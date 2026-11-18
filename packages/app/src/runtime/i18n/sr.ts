@@ -1258,7 +1258,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Изаберите како се сесије приказују на бочној траци. Важи само за бочне картице.",
   "settings.experimental.sidebarOrganize.recent": "Недавно",
-  "settings.experimental.sidebarOrganize.projects": "Пројекти",
   "settings.experimental.sidebarOrganize.list": "Једна листа",
   "settings.experimental.sidebarOrganize.customize": "Прилагоди",
   "sidebar.organize.projects": "Пројекти",

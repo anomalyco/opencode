@@ -1305,7 +1305,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "اختر طريقة عرض الجلسات في الشريط الجانبي. ينطبق على علامات التبويب الجانبية فقط.",
   "settings.experimental.sidebarOrganize.recent": "الأخيرة",
-  "settings.experimental.sidebarOrganize.projects": "المشاريع",
   "settings.experimental.sidebarOrganize.list": "قائمة واحدة",
   "settings.experimental.sidebarOrganize.customize": "تخصيص",
   "sidebar.organize.projects": "المشاريع",

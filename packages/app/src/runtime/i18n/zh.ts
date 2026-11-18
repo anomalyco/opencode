@@ -1244,7 +1244,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.title": "整理垂直侧边栏",
   "settings.experimental.row.sidebarOrganize.description": "选择会话在侧边栏中的列出方式。仅适用于侧边标签页。",
   "settings.experimental.sidebarOrganize.recent": "最近",
-  "settings.experimental.sidebarOrganize.projects": "项目",
   "settings.experimental.sidebarOrganize.list": "单一列表",
   "settings.experimental.sidebarOrganize.customize": "自定义",
   "sidebar.organize.projects": "项目",

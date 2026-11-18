@@ -21,7 +21,7 @@ export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
 
-export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
+export type SidebarOrganize = Exclude<Settings["general"]["sidebarOrganize"], "projects">
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
@@ -137,6 +137,7 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
+  // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -344,6 +345,16 @@ export function recentSessionsAvailable(platform: "web" | "desktop", channel: Im
   return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
+/** Projects moved to Consolidated where this build offers it (local/dev desktop), and to Customize elsewhere. */
+export function resolveSidebarOrganize(
+  value: Settings["general"]["sidebarOrganize"] | undefined,
+  options: readonly SidebarOrganize[],
+): SidebarOrganize {
+  if (value === "projects") return options.includes("consolidated") ? "consolidated" : "customize"
+
+  return value && options.includes(value) ? value : "list"
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
@@ -353,8 +364,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
 
     const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
-      ? ["list", "projects", "customize", "recent", "consolidated"]
-      : ["list", "projects", "customize"]
+      ? ["list", "customize", "recent", "consolidated"]
+      : ["list", "customize"]
+
+    const sidebarOrganize = createMemo(() =>
+      resolveSidebarOrganize(store.general?.sidebarOrganize, sidebarOrganizeOptions),
+    )
 
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
@@ -452,11 +467,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("general", "newQuestionUI", value)
         },
         sidebarOrganizeOptions,
-        sidebarOrganize: createMemo(() => {
-          const value = store.general?.sidebarOrganize
-
-          return sidebarOrganizeOptions.includes(value) ? value : defaultSettings.general.sidebarOrganize
-        }),
+        sidebarOrganize,
         setSidebarOrganize(value: SidebarOrganize) {
           setStore("general", "sidebarOrganize", value)
         },
@@ -495,7 +506,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         // The List layout always uses the sidebar, and the prototype has no Inbox, so both read as side tabs.
         tabLayout: createMemo((): TabLayout => {
           const stored = store.appearance?.tabLayout ?? defaultSettings.appearance.tabLayout
-          const prototype = prototypes && store.general?.sidebarOrganize === "consolidated"
+          const prototype = sidebarOrganize() === "consolidated"
 
           if (prototype && (store.appearance?.navigation === "list" || stored === "inbox")) return "vertical"
 
@@ -507,9 +518,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("appearance", "tabLayout", value)
         },
         /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
-        navigationPrototype: createMemo(() => prototypes && store.general?.sidebarOrganize === "consolidated"),
+        navigationPrototype: createMemo(() => sidebarOrganize() === "consolidated"),
         navigation: createMemo(() =>
-          prototypes && store.general?.sidebarOrganize === "consolidated" && store.appearance?.navigation === "list"
+          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list"
             ? "list"
             : "tabs",
         ),

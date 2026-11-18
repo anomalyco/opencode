@@ -1224,7 +1224,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ជ្រើសរបៀបរាយបញ្ជីសម័យក្នុងរបារចំហៀង។ អនុវត្តចំពោះផ្ទាំងចំហៀងតែប៉ុណ្ណោះ។",
   "settings.experimental.sidebarOrganize.recent": "ថ្មីៗ",
-  "settings.experimental.sidebarOrganize.projects": "គម្រោង",
   "settings.experimental.sidebarOrganize.list": "បញ្ជីតែមួយ",
   "settings.experimental.sidebarOrganize.customize": "ប្ដូរតាមបំណង",
   "sidebar.organize.projects": "គម្រោង",

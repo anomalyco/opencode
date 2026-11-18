@@ -1234,7 +1234,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Chọn cách liệt kê phiên trong thanh bên. Chỉ áp dụng cho tab bên.",
   "settings.experimental.sidebarOrganize.recent": "Gần đây",
-  "settings.experimental.sidebarOrganize.projects": "Dự án",
   "settings.experimental.sidebarOrganize.list": "Một danh sách",
   "settings.experimental.sidebarOrganize.customize": "Tùy chỉnh",
   "sidebar.organize.projects": "Dự án",

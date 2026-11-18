@@ -1265,7 +1265,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Izvēlieties, kā sesijas tiek uzskaitītas sānjoslā. Attiecas tikai uz sānu cilnēm.",
   "settings.experimental.sidebarOrganize.recent": "Nesenās",
-  "settings.experimental.sidebarOrganize.projects": "Projekti",
   "settings.experimental.sidebarOrganize.list": "Viens saraksts",
   "settings.experimental.sidebarOrganize.customize": "Pielāgot",
   "sidebar.organize.projects": "Projekti",

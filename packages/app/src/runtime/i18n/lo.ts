@@ -1217,7 +1217,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ເລືອກວິທີສະແດງລາຍການເຊດຊັນໃນແຖບດ້ານຂ້າງ. ໃຊ້ກັບແຖບດ້ານຂ້າງເທົ່ານັ້ນ.",
   "settings.experimental.sidebarOrganize.recent": "ຫຼ້າສຸດ",
-  "settings.experimental.sidebarOrganize.projects": "ໂຄງການ",
   "settings.experimental.sidebarOrganize.list": "ລາຍການດຽວ",
   "settings.experimental.sidebarOrganize.customize": "ປັບແຕ່ງ",
   "sidebar.organize.projects": "ໂຄງການ",

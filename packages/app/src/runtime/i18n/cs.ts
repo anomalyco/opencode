@@ -1273,7 +1273,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Zvolte, jak se relace zobrazují v postranním panelu. Platí pouze pro boční karty.",
   "settings.experimental.sidebarOrganize.recent": "Nedávné",
-  "settings.experimental.sidebarOrganize.projects": "Projekty",
   "settings.experimental.sidebarOrganize.list": "Jeden seznam",
   "settings.experimental.sidebarOrganize.customize": "Přizpůsobit",
   "sidebar.organize.projects": "Projekty",

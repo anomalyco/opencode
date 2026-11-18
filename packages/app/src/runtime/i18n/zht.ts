@@ -1240,7 +1240,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.title": "整理垂直側邊欄",
   "settings.experimental.row.sidebarOrganize.description": "選擇工作階段在側邊欄中的列出方式。僅適用於側邊分頁。",
   "settings.experimental.sidebarOrganize.recent": "最近",
-  "settings.experimental.sidebarOrganize.projects": "專案",
   "settings.experimental.sidebarOrganize.list": "單一清單",
   "settings.experimental.sidebarOrganize.customize": "自訂",
   "sidebar.organize.projects": "專案",

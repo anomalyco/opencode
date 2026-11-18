@@ -1245,7 +1245,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Хажуугийн самбарт сессүүд хэрхэн жагсахыг сонгоно уу. Зөвхөн хажуугийн табуудад хамаарна.",
   "settings.experimental.sidebarOrganize.recent": "Сүүлийн",
-  "settings.experimental.sidebarOrganize.projects": "Төслүүд",
   "settings.experimental.sidebarOrganize.list": "Нэг жагсаалт",
   "settings.experimental.sidebarOrganize.customize": "Өөрчлөх",
   "sidebar.organize.projects": "Төслүүд",

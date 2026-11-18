@@ -1251,7 +1251,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Интихоб кунед, ки сессияҳо дар панели паҳлӯ чӣ тавр нишон дода шаванд. Танҳо ба варақаҳои паҳлӯ дахл дорад.",
   "settings.experimental.sidebarOrganize.recent": "Охирин",
-  "settings.experimental.sidebarOrganize.projects": "Лоиҳаҳо",
   "settings.experimental.sidebarOrganize.list": "Як рӯйхат",
   "settings.experimental.sidebarOrganize.customize": "Танзим кардан",
   "sidebar.organize.projects": "Лоиҳаҳо",

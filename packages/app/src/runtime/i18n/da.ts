@@ -1289,7 +1289,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Vælg, hvordan sessioner vises i sidepanelet. Gælder kun sidefaner.",
   "settings.experimental.sidebarOrganize.recent": "Seneste",
-  "settings.experimental.sidebarOrganize.projects": "Projekter",
   "settings.experimental.sidebarOrganize.list": "Én liste",
   "settings.experimental.sidebarOrganize.customize": "Tilpas",
   "sidebar.organize.projects": "Projekter",

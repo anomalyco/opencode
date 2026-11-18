@@ -1275,7 +1275,6 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ސައިޑްބާރުގައި ސެޝަންތައް ލިސްޓްކުރާނެ ގޮތް ހޮވާށެވެ. ފަރާތުގެ ޓެބްތަކަށް އެކަނި ފުދޭ.",
   "settings.experimental.sidebarOrganize.recent": "ފަހުގެ",
-  "settings.experimental.sidebarOrganize.projects": "ޕްރޮޖެކްޓްތައް",
   "settings.experimental.sidebarOrganize.list": "އެއް ލިސްޓް",
   "settings.experimental.sidebarOrganize.customize": "ކަސްޓަމައިޒް",
   "sidebar.organize.projects": "ޕްރޮޖެކްޓްތައް",
