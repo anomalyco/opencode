@@ -189,9 +189,14 @@ fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<Valu
     vm.get(v, SYM_ITERATOR)
 }
 
-/// The error of a call of a value that is not callable, as a call from native code makes it.
-fn not_callable(vm: &mut Vm) -> Value {
-    vm.type_error("The called value is not a function.")
+/// The error of a call of a value that is not callable, naming `site` (a helper's kept name or the running call's), as
+/// the reference names the call its prelude makes.
+fn not_callable(vm: &mut Vm, site: Value) -> Value {
+    let name = match site {
+        Value::Str(s) => vm.text(s).to_owned(),
+        _ => "The called value".to_owned(),
+    };
+    vm.type_error(&format!("{name} is not a function."))
 }
 
 /// A helper made: its prelude generator called, `prime` entered, and its first `next` run to the first `yield`.
@@ -253,7 +258,11 @@ fn iterator_from(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
         return Ok(primed(vm, iter, next, HelperOp::Wrap));
     }
     if !vm.is_callable(&method) {
-        return Err(not_callable(vm));
+        let site = match vm.call_site().map(str::to_owned) {
+            Some(name) => vm.string_val(name),
+            None => Value::Undef,
+        };
+        return Err(not_callable(vm, site));
     }
     vm.enter_native_sub(
         NativeOp::Iterators,
@@ -343,7 +352,7 @@ fn helper_next(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
     let state = helper_mut(vm, id).state;
     match state {
         HelperState::Done => return Ok(vm.iter_result(Value::Undef, true)),
-        HelperState::Running => return Err(vm.type_error("Generator is already running")),
+        HelperState::Running => return Err(vm.type_error("Iterator helper is already running.")),
         _ => {}
     }
     helper_mut(vm, id).state = HelperState::Running;
@@ -356,7 +365,7 @@ fn helper_return(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
     let h = helper_mut(vm, id);
     match h.state {
         HelperState::Done => return Ok(vm.iter_result(Value::Undef, true)),
-        HelperState::Running => return Err(vm.type_error("Generator is already running")),
+        HelperState::Running => return Err(vm.type_error("Iterator helper is already running.")),
         _ => {}
     }
     // Before its first value the prelude generator's `finally` closes the source with `closeIterator`; at a `yield`
@@ -494,7 +503,8 @@ fn helper_input(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 Err(e) => close_throw(vm, fr, e),
             },
             _ => {
-                // A close: a `return` method's result must be an object; a generator's close returns no result.
+                // A close: a `return` method's result must be an object, as `closeIterator` checks it with its own
+                // message; a generator's close returns no result.
                 let it = if phase == CLOSE_INNER {
                     fr.get(vm, ITEM)
                 } else {
@@ -503,6 +513,8 @@ fn helper_input(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
                 let generator = matches!(it, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Generator(_)));
                 let outcome = if generator || r.obj().is_some() {
                     Ok(())
+                } else if phase == CLOSE_SOURCE {
+                    Err(vm.type_error("Iterator return() must return an object."))
                 } else {
                     Err(vm.type_error("Iterator return() result must be an object."))
                 };
@@ -657,7 +669,8 @@ fn callback_returned(vm: &mut Vm, fr: Frame, r: Value) -> Result<Step, Value> {
                 };
             }
             if !vm.is_callable(&method) {
-                let e = not_callable(vm);
+                let site = helper_mut(vm, id).site;
+                let e = not_callable(vm, site);
                 return close_throw(vm, fr, e);
             }
             fr.set_index(vm, PHASE, FLAT_OPEN);
@@ -695,11 +708,7 @@ fn step(
     phase: usize,
 ) -> Result<Stepped, Value> {
     if !vm.is_callable(&next) {
-        let name = match site {
-            Value::Str(s) => vm.text(s).to_owned(),
-            _ => "The called value".to_owned(),
-        };
-        return Err(vm.type_error(&format!("{name} is not a function.")));
+        return Err(not_callable(vm, site));
     }
     let direct = stepped_directly(vm, &iter);
     if let Value::Obj(id) = iter {
@@ -837,7 +846,13 @@ fn close(vm: &mut Vm, fr: Frame, it: Value) -> Result<Step, Value> {
                 return closed(vm, fr, Ok(()));
             }
             if !vm.is_callable(&f) {
-                let e = vm.type_error("Iterator return must be a function.");
+                // `closeIterator` calls it, which fails as a call of the helper's prelude generator does.
+                let e = if fr.index(vm, PHASE) == CLOSE_SOURCE {
+                    let site = helper_mut(vm, helper_of(vm, fr)).site;
+                    not_callable(vm, site)
+                } else {
+                    vm.type_error("Iterator return must be a function.")
+                };
                 return closed(vm, fr, Err(e));
             }
             call(vm, fr, Slot::pack(f), Slot::pack(it), [], false)
