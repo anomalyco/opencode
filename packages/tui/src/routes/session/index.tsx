@@ -1685,7 +1685,7 @@ type SessionRowViewProps = {
   boundaryID?: string
 }
 
-function SessionRowView(props: SessionRowViewProps) {
+export function SessionRowView(props: SessionRowViewProps) {
   const [target, setTarget] = createSignal<BoxRenderable>()
   useEntryAnchor({
     entry: () => (props.row.type === "group" ? undefined : props.row),
@@ -1712,7 +1712,7 @@ function SessionRowView(props: SessionRowViewProps) {
   )
 }
 
-function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewProps["message"]; images?: boolean }) {
+export function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewProps["message"]; images?: boolean }) {
   return (
     <Switch>
       <Match when={props.row.type === "message" ? props.row : undefined}>
@@ -2165,7 +2165,9 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         onMouseUp={() => {
           if (renderer.getSelection()?.getSelectedText()) return
           const id = childID()
-          if (id) navigate({ type: "session", sessionID: id })
+          if (!id) return
+          if (ctx.openSession) return ctx.openSession(id)
+          navigate({ type: "session", sessionID: id })
         }}
       >
         <text wrapMode="none">
@@ -2668,7 +2670,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
   ]
 }
 
-function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
+export function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
   const images = createMemo(() => props.parts.flatMap(inlineToolImages))
   return <SessionImages images={images()} />
 }
@@ -3321,6 +3323,7 @@ function WebSearch(props: ToolProps) {
 }
 
 function Subagent(props: ToolProps) {
+  const ctx = use()
   const { navigate } = useRoute()
   const data = useData()
   const sessionID = createMemo(
@@ -3348,7 +3351,9 @@ function Subagent(props: ToolProps) {
       part={props.part}
       onClick={() => {
         const id = sessionID()
-        if (id) navigate({ type: "session", sessionID: id })
+        if (!id) return
+        if (ctx.openSession) return ctx.openSession(id)
+        navigate({ type: "session", sessionID: id })
       }}
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}

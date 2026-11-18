@@ -9,7 +9,7 @@ import type { GroupKind } from "./grouping/session"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
-export const context = createContext<{
+export type RenderContext = {
   /** Content width: terminal width minus vertical tabs, sidebar, and padding. */
   width: number
   /**
@@ -35,7 +35,10 @@ export const context = createContext<{
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
   pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
-}>()
+  openSession?: (sessionID: string) => void
+}
+
+export const context = createContext<RenderContext>()
 
 export function use() {
   const ctx = useContext(context)

@@ -492,6 +492,16 @@ export interface Keymap {
   }
 }
 
+export interface SessionTranscriptInput {
+  readonly sessionID: string
+  /** Available width in terminal columns. */
+  readonly width?: number
+  /** Handles subagent cards and completion notices without navigating the main route. */
+  readonly onOpenSession?: (sessionID: string) => void
+  /** Activates the containing pane before the transcript takes focus on click. */
+  readonly onActivate?: () => void
+}
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -510,6 +520,10 @@ export interface UI {
     close(): void
     /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
     current(): { readonly name: string; readonly sessionID: string } | undefined
+  }
+  readonly session: {
+    /** Renders a native, scrollable transcript without mounting a composer. Call during Solid rendering. */
+    transcript(input: SessionTranscriptInput): JSX.Element
   }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */
