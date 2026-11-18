@@ -1,4 +1,4 @@
-name: Process daemon
+name: Process daemon 
 
 on:
   pull_request:
