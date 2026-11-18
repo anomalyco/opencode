@@ -2,7 +2,7 @@ import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
-import { registersProtocol } from "../deep-links/registration"
+import { protocolClient, registersProtocol } from "../deep-links/registration"
 import { DesktopPaths } from "../paths"
 import { stateHome, testRootDirectories } from "../service/registration"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
@@ -75,8 +75,18 @@ export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
 
-  if (registersProtocol({ packaged: app.isPackaged }, process.env.OPENCODE_DESKTOP_REGISTER_PROTOCOL))
-    app.setAsDefaultProtocolClient("opencode")
+  if (
+    registersProtocol({ packaged: app.isPackaged }, process.env.OPENCODE_DESKTOP_REGISTER_PROTOCOL) &&
+    !app.setAsDefaultProtocolClient(
+      ...protocolClient({
+        packaged: app.isPackaged,
+        platform: process.platform,
+        execPath: process.execPath,
+        appPath: app.getAppPath(),
+      }),
+    )
+  )
+    yield* Effect.logWarning("failed to register as the opencode:// handler")
   const runFork = Effect.runForkWith(yield* Effect.context())
   setProtocolReporter((level, message, data) =>
     runFork(scoped("protocol", level === "error" ? Effect.logError(message, data) : Effect.logWarning(message, data))),

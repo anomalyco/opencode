@@ -48,6 +48,12 @@ that lock, `bun dev` prints why it cannot start and exits with code 1. To run se
 | `OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT` | Chromium debugging port. `9222` by default; `0` picks a free port.                                                                  |
 | `OPENCODE_DESKTOP_REGISTER_PROTOCOL`     | `1` makes this build the handler of `opencode://` links. Off by default, so links keep opening the installed app.                   |
 
+With `OPENCODE_DESKTOP_REGISTER_PROTOCOL=1`, Windows registers the Electron binary followed by this checkout's
+`packages/desktop` folder, so a link reaches the running dev app. The next start of an installed app takes the
+registration back. On macOS the handler is a bundle identifier: the dev bundle has the installed OpenCode Dev app's
+(`ai.opencode.desktop.dev`) and declares no URL scheme, so links do not reach a source build. On Linux the handler is
+a desktop file, which a source build does not install, so links do not reach it there either.
+
 ## Beta channel
 
 Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
