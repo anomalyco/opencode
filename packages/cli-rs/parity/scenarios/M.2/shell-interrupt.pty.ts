@@ -26,8 +26,10 @@ export default definePty({
     opened,
     { keys: "!sleep 5", settle: 300 },
     { keys: "\r", settle: 500, checkpoint: "running" },
-    { keys: "\x1b", settle: 200 },
-    { keys: "\x1b", settle: 600, checkpoint: "interrupted" },
+    // The interrupt's first Escape shows no text to wait for, so each goes as the Kitty keyboard sends it (Mini turned it
+    // on): a lone ESC the program had not yet timed out would join the next key.
+    { keys: "\x1b[27u", settle: 200 },
+    { keys: "\x1b[27u", until: { gone: "esc interrupt" }, settle: 600, checkpoint: "interrupted" },
     ...leave,
   ],
   exits: true,

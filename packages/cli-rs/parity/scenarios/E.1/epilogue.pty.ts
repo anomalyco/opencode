@@ -27,9 +27,8 @@ export default definePty({
   },
   steps: [
     { until: { screen: "Fix the parser" }, settle: 500, timeout: 30_000 },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
-    { until: { screen: "opencode -s ses_b" }, settle: 300, checkpoint: "epilogue", timeout: 10_000 },
+    // One Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { screen: "opencode -s ses_b" }, settle: 300, checkpoint: "epilogue", timeout: 10_000 },
   ],
   osc: [],
   exits: true,

@@ -14,7 +14,8 @@ export default definePty({
     { keys: "/", settle: 400, checkpoint: "slash" },
     { keys: "\x1b[B\x1b[B", settle: 300, checkpoint: "moved" },
     { keys: "re", settle: 400, checkpoint: "filtered" },
-    { keys: "\x1b", settle: 300, checkpoint: "hidden" },
+    // Escape waits for the list to close: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "Review the working tree" }, settle: 300, checkpoint: "hidden" },
     { keys: "/rev", settle: 300 },
     { keys: "\r", settle: 800, checkpoint: "sent" },
     { keys: "/compact ", settle: 300 },

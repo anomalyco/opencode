@@ -21,7 +21,7 @@ export default definePty({
     ...run("sleep 1; exit 4", 3),
     { keys: "\x1a", until: { osc: 'p0b exit {"code":4}' }, settle: 300, timeout: 15_000 },
     { keys: "still here", until: { screen: "still here" }, settle: 300 },
-    { keys: "\x15", settle: 200 },
+    { keys: "\x15", until: { gone: "still here" }, settle: 200 },
     ...leave,
   ],
   osc: ["title"],

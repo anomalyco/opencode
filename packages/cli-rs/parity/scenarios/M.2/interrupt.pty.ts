@@ -29,8 +29,10 @@ export default definePty({
     opened,
     { keys: "first", settle: 200 },
     { keys: "\r", settle: 600 },
-    { keys: "\x1b", settle: 200 },
-    { keys: "\x1b", settle: 600 },
+    // The interrupt's first Escape shows no text to wait for, so each goes as the Kitty keyboard sends it (Mini turned it
+    // on): a lone ESC the program had not yet timed out would join the next key.
+    { keys: "\x1b[27u", settle: 200 },
+    { keys: "\x1b[27u", settle: 600 },
     ...leave,
   ],
   exits: true,

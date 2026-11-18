@@ -16,8 +16,8 @@ export default definePty({
   terminal: "kitty",
   steps: [
     { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000, checkpoint: "home" },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03", settle: 800, checkpoint: "exit", deviation },
+    // One Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true }, settle: 800, checkpoint: "exit", deviation },
   ],
   exits: true,
   masks: homeMasks,

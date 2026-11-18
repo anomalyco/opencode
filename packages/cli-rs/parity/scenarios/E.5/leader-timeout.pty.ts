@@ -15,7 +15,8 @@ export default definePty({
     { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
     { keys: "\x18", settle: 1000 },
     { keys: "l", until: { screen: "Search sessions" }, settle: 300, checkpoint: "completed" },
-    { keys: "\x1b", settle: 300 },
+    // Escape waits for the list to close: a lone ESC not yet read would join the leader key.
+    { keys: "\x1b", until: { gone: "Search sessions" }, settle: 300 },
     { keys: "\x18", settle: 2600 },
     { keys: "l", settle: 300, absent: "Search sessions", checkpoint: "expired" },
   ],

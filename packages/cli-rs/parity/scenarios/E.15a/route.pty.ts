@@ -48,8 +48,8 @@ export default definePty({
     { keys: release(10, 5).replace("<0;", "<2;"), settle: 300, checkpoint: "menu" },
     { keys: "\r", until: { screen: "1/2" }, settle: 500, checkpoint: "complete" },
     { keys: "q", until: { screen: "█▀▀█" }, settle: 500, checkpoint: "home" },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   masks: homeMasks,
   exits: true,

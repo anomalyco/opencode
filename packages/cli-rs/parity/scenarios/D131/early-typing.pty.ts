@@ -19,9 +19,9 @@ export default definePty({
     // Well inside the model list's delay, with no settle: the keys show while it loads.
     { keys: "typed early", until: { screen: "typed early" }, timeout: 1500, absent: "Demo Model" },
     { until: { screen: "Demo Model" }, settle: 300, checkpoint: "loaded", timeout: 10_000 },
-    { keys: "\x15", settle: 300 },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    { keys: "\x15", until: { gone: "typed early" }, settle: 300 },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   exits: true,
 })

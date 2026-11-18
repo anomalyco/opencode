@@ -46,10 +46,11 @@ export default definePty({
   steps: [
     { until: { screen: "Third answer" }, settle: 800, timeout: 30_000, checkpoint: "cold" },
     { keys: "/rev", settle: 400, checkpoint: "cold-slash" },
-    { keys: "\x1b", settle: 300 },
+    // Each Escape waits for the list to close: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "No matching items" }, settle: 300 },
     { keys: "hello\r", until: { screen: "Demo Model" }, settle: 800, checkpoint: "warm" },
     { keys: "/rev", settle: 400, checkpoint: "warm-slash" },
-    { keys: "\x1b", settle: 300 },
+    { keys: "\x1b", until: { gone: "Review the working tree" }, settle: 300 },
     ...leave,
   ],
   exits: true,

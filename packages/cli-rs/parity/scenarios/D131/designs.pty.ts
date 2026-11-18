@@ -18,7 +18,8 @@ export default definePty({
       checkpoint: "palette",
       deviation: { file: "X02-new-designs-graduated", lines: 12 },
     },
-    { keys: "\x1b", settle: 300 },
+    // Each Escape waits for its dialog to close: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "Suggested" }, settle: 300 },
     { keys: "/debug", until: { screen: "/debug" }, settle: 300 },
     {
       keys: "\r",
@@ -27,9 +28,9 @@ export default definePty({
       checkpoint: "debug",
       deviation: { file: "X02-new-designs-graduated", lines: 12 },
     },
-    { keys: "\x1b", settle: 300 },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    { keys: "\x1b", until: { gone: "Share this when reporting an issue" }, settle: 300 },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   masks: [
     { pattern: /Date\s+\S+/, reason: "the time the dialog opened" },

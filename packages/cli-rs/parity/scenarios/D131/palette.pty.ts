@@ -20,13 +20,14 @@ export default definePty({
       checkpoint: "update",
       deviation: { file: "D131-update-command", lines: 2 },
     },
-    { keys: "\x1b", settle: 300 },
+    // Each Escape waits for its dialog to close: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "update" }, settle: 300 },
     // `/debug` copies with `c` under the new designs, as the footer says.
     { keys: "/debug", until: { screen: "/debug" }, settle: 300 },
     { keys: "\r", until: { screen: "copy c" }, settle: 300, checkpoint: "debug" },
-    { keys: "\x1b", settle: 300 },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    { keys: "\x1b", until: { gone: "copy c" }, settle: 300 },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   masks: [
     { pattern: /Date\s+\S+/, reason: "the time the dialog opened" },

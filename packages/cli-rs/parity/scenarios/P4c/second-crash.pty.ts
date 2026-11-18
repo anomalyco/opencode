@@ -20,7 +20,8 @@ export default definePty({
       checkpoint: "first",
       timeout: 20_000,
     },
-    { keys: "\x1b", settle: 300 },
+    // Escape waits for the toast to close: a lone ESC not yet read would join the palette's Ctrl+P.
+    { keys: "\x1b", until: { gone: "restarted" }, settle: 300 },
     ...palette("Fault on a thread: segv"),
     {
       until: { screen: /^(?![\s\S]*fault plugin)[\s\S]*opencode-native crashed twice/ },

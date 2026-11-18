@@ -16,7 +16,9 @@ export default definePty({
     ...Array.from({ length: 7 }, () => ({ keys: "\x1b[B", settle: 150 })),
     // TS's open panel animates its spinner preview once mono is on, so the screen does not settle.
     { keys: "\x1b[C", until: { screen: /Monochrome UI +on/ } },
-    { keys: "\x1b", settle: 600, checkpoint: "mono" },
+    // Escape waits for the settings to close: with mono the Kitty keyboard is off, and a lone ESC not yet read would
+    // join the next key.
+    { keys: "\x1b", until: { gone: "Monochrome UI" }, settle: 600, checkpoint: "mono" },
     ...leave,
   ],
   exits: true,
