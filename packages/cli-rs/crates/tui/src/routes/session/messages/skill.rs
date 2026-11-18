@@ -159,13 +159,17 @@ fn line(message: &SessionMessageInfo, models: &[ModelInfo], width: usize) -> Lin
                     .map(str::to_owned)
             };
             let source = meta("source");
-            if !matches!(source.as_deref(), Some("subagent" | "shell")) {
+            if !matches!(source.as_deref(), Some("subagent" | "shell" | "codemode")) {
                 return Line::Inline { icon: if source.as_deref() == Some("goal") { "◎" } else { "◈" }, text };
             }
             let shell = source.as_deref() == Some("shell");
+            let script = source.as_deref() == Some("codemode");
             let state = meta("state");
-            let actor =
-                if shell { "Shell".to_owned() } else { titlecase(meta("agent").as_deref().unwrap_or("Subagent")) };
+            let actor = match source.as_deref() {
+                Some("shell") => "Shell".to_owned(),
+                Some("codemode") => "Script".to_owned(),
+                _ => titlecase(meta("agent").as_deref().unwrap_or("Subagent")),
+            };
             let status = match state.as_deref() {
                 Some("completed") | None => "finished",
                 Some("error") => "failed",
@@ -173,9 +177,16 @@ fn line(message: &SessionMessageInfo, models: &[ModelInfo], width: usize) -> Lin
             };
             let mark = if state.as_deref() == Some("completed") { "↳" } else { "!" };
             let heading = format!("{mark} {actor} {status}");
-            let description = if shell { text.split_whitespace().collect::<Vec<_>>().join(" ") } else { text };
+            let description = if script {
+                meta("jobID").unwrap_or_default()
+            } else if shell {
+                text.split_whitespace().collect::<Vec<_>>().join(" ")
+            } else {
+                text
+            };
             let suffix = truncate_width(&format!(" · {description}"), width.saturating_sub(3 + heading.width()));
-            Line::Completion { heading, suffix, state, child: if shell { None } else { meta("childID") } }
+            let child = if source.as_deref() == Some("subagent") { meta("childID") } else { None };
+            Line::Completion { heading, suffix, state, child }
         }
         _ => Line::Plain(String::new()),
     }
@@ -261,6 +272,20 @@ mod tests {
                 heading: "↳ Shell finished".into(),
                 suffix: " · ran the tests".into(),
                 state: Some("completed".into()),
+                child: None,
+            }
+        );
+        let script = message(json!({
+            "id": "m", "type": "synthetic", "text": "", "time": time,
+            "description": "Script",
+            "metadata": { "source": "codemode", "jobID": "job_1", "state": "error" },
+        }));
+        assert_eq!(
+            line(&script, &[], 40),
+            Line::Completion {
+                heading: "! Script failed".into(),
+                suffix: " · job_1".into(),
+                state: Some("error".into()),
                 child: None,
             }
         );
