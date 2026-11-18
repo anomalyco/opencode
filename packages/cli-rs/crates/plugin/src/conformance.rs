@@ -738,6 +738,8 @@ pub const READS: &[&str] = &[
     "keymap-commands",
     "shortcuts",
     "selection",
+    "owner",
+    "set-owner",
     "theme",
     "themes",
     "scroll-state",

@@ -160,7 +160,7 @@ thread_local! {
     static MOUNT_TICKS: Cell<u32> = const { Cell::new(0) };
 }
 
-/// A route whose key starts a 50 ms `every`: the mount's, as its handler started it.
+/// A route whose key starts a 50 ms `every` whose tick awaits a fetch: the mount's, as its handler started it.
 fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
     let tasks = setup.tasks();
     let layer = abi::interact::Layer::default()
@@ -171,8 +171,9 @@ fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
             .layers(vec![layer])
             .on(move |host, event| match event {
                 abi::interact::Event::Key(key) if key.bind.as_deref() == Some("tick") => {
-                    tasks.every(host, Duration::from_millis(50), |_| async {
+                    tasks.every(host, Duration::from_millis(50), |cx| async move {
                         MOUNT_TICKS.set(MOUNT_TICKS.get() + 1);
+                        drop(cx.fetch(abi::Fetch::new("GET", "/api/tick")).await);
                         ControlFlow::Continue(())
                     });
                     abi::interact::Handled::Consume
@@ -196,6 +197,7 @@ return plugin.define(function(setup)
                 plugin.every(50, function(host)
                     local ticks = host:storageGet("ticks") or { n = 0 }
                     host:storageSet("ticks", { n = ticks.n + 1 })
+                    host:fetch({ method = "GET", path = "/api/tick" })
                     return true
                 end)
                 return "consume"
@@ -205,9 +207,9 @@ return plugin.define(function(setup)
 end)
 "#;
 
-// Expected (timers, big-boi's note on `every`): an `every` a mount's handler started is that mount's: each tick's call is
-// the mount's, so each next sleep is too, and the loop ends when the mount closes, also after its first tick. In
-// process, through the C ABI and in Luau.
+// Expected (timers, big-boi's note on `every`; carbon tm2-1): an `every` a mount's handler started is that mount's task:
+// each next sleep is the mount's, also after a tick that awaited a fetch, whose reply comes in a call of the
+// activation; so the loop ends when the mount closes. In process, through the C ABI and in Luau.
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
     #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
@@ -246,17 +248,19 @@ fn an_every_a_mount_started_ends_with_that_mount() {
             h.app.render();
         }
         h.app.press("x");
-        for _ in 0..4 {
-            h.app.advance(Duration::from_millis(50));
-        }
-        let open = ticks();
-        assert!(open >= 3, "{carrier:?}: it did not tick while the route showed: {open}");
+        // Each tick's fetch is answered on the server's thread.
+        let open = h.app.wait_until(support::WAIT, || {
+            h.app.advance(Duration::from_millis(5));
+            ticks() >= 3
+        });
+        assert!(open, "{carrier:?}: it did not tick while the route showed: {}", ticks());
         h.tui.navigate(Route::Home);
         h.app.advance(Duration::from_millis(10));
         let closed = ticks();
-        for _ in 0..10 {
-            h.app.advance(Duration::from_millis(50));
-        }
+        h.app.wait_until(Duration::from_millis(300), || {
+            h.app.advance(Duration::from_millis(10));
+            false
+        });
         assert_eq!(ticks(), closed, "{carrier:?}: the mount's every ticked on after the mount closed");
     }
 }

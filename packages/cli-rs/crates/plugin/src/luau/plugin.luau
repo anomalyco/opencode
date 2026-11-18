@@ -31,9 +31,12 @@ plugin.HIDE = table.freeze({ type = "hide" })
 -- surface's) runs as a task: a coroutine this module drives. A waiting call (`host:fetch`, `host:foreground`,
 -- `host:select`, `host:prompt`, `host:confirm`, `host:alert`, `plugin.all`, `plugin.sleep`) parks its task and returns once its answer
 -- comes, in the host call that carries the answer: a reply's, or the dialog's answer or close. So what a task asks for
--- after a wait is the effects of that call, timed and limited as that call is: the CPU budget holds for each stretch
+-- after a wait is among the effects of that call, timed and limited as that call is: the CPU budget holds for each stretch
 -- between two waits, and a parked task costs no time. A render, a view, a search, `onDispose` and setup are not tasks,
 -- and a waiting call there fails; setup may start one with `plugin.spawn`.
+--
+-- A task keeps the owner of the handler that started it: what it asks for, after a wait as before, is that mount's, or
+-- the activation's, whichever call goes on with it; a task `plugin.spawn` starts has its starter's owner.
 --
 -- A task parked when its plugin is disabled, fails or reloads is dropped with the VM and never goes on. A task parked on
 -- a request whose mount closes before the reply goes on once with `nil, "cancelled"`: the host cancelled the request.
@@ -88,9 +91,18 @@ local function traceback(co: thread, message: any): string
     return table.concat(lines, "\n")
 end
 
+-- Each parked task's owner (`host:owner` of the stretch that parked): it goes on under that owner, whichever call
+-- wakes it, so what it asks for is its starting mount's (carbon tm2-1). And the plugin's raw calls to read and set the
+-- call's owner, once its setup started, and the owner a wake set for the call now.
+local owners: { [thread]: number } = {}
+local ownerOf: (() -> number)? = nil
+local setOwner: ((number?) -> ())? = nil
+local forced: number? = nil
+
 -- Lets go of what task `co` waited on, if anything: it ended or failed without its answer.
 local function release(co: thread)
     local let = held[co]
+    owners[co] = nil
     if let then
         held[co] = nil
         parked -= 1
@@ -146,11 +158,24 @@ local function run(f, a, b, c): (boolean, any)
     return settle(co, ok, mark, result)
 end
 
--- Goes on with parked task `co`, whose entry its waker removed, its waiting call returning `...`.
+-- Goes on with parked task `co`, whose entry its waker removed, its waiting call returning `...`, under its own owner;
+-- the call gets the owner it had back after, also when the task fails.
 local function wake(co: thread, ...)
     held[co] = nil
     parked -= 1
-    settle(co, resume(co, ...))
+    local owner, outer, set = owners[co], forced, setOwner
+    owners[co] = nil
+    local switch = set ~= nil and owner ~= nil and owner ~= outer
+    if switch then
+        forced = owner;
+        (set :: (number?) -> ())(owner)
+    end
+    local ok, mark, result = resume(co, ...)
+    if switch then
+        forced = outer;
+        (set :: (number?) -> ())(outer)
+    end
+    settle(co, ok, mark, result)
 end
 
 -- The running task, or an error naming waiting call `name` at the plugin's line `level` frames up: outside a task,
@@ -180,6 +205,9 @@ end
 local function park(co: thread, let: () -> ()): ...any
     parked += 1
     held[co] = let
+    if ownerOf then
+        owners[co] = (ownerOf :: () -> number)()
+    end
     return yield(PARK)
 end
 
@@ -286,7 +314,7 @@ end
 
 -- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails. A tick that
 -- runs long delays the next: a late period is one tick, not one for each it missed. Started from a mount's handler, it
--- is that mount's (a mount's timer's reply is a call of the mount) and ends when the mount closes.
+-- is that mount's task, as what its ticks ask for is, and ends when the mount closes.
 function plugin.every(ms: number, f: (any) -> boolean?)
     plugin.spawn(function()
         while plugin.sleep(ms) do
@@ -364,9 +392,17 @@ local function tasked(raw)
         end
         return body.data, nil
     end
-    -- The timer is `plugin.sleep`'s alone.
+    -- The timer is `plugin.sleep`'s alone, and the owner calls the tasks' own.
     local timer = host.timer
     host.timer = nil
+    local owner, setOwnerOf = host.owner, host.setOwner
+    host.owner, host.setOwner = nil, nil
+    ownerOf = function(): number
+        return owner(host)
+    end
+    setOwner = function(id: number?)
+        setOwnerOf(host, id)
+    end
     sleeper = function(ms: number)
         return request("plugin.sleep", timer, host, ms, 5)
     end

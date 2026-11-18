@@ -361,6 +361,90 @@ end)
     )
 }
 
+// Expected (carbon tm2-1): a task of the activation's that a mount's task wakes goes on in the mount's call (here the
+// reply of the mount's sleep) under the activation, not the mount: the fetch it sends then is the activation's, and its
+// reply comes after the mount closed. In process and through the C ABI (a Luau task wakes only on its own answer).
+#[test]
+fn a_task_a_mount_wakes_keeps_the_activations_owner() {
+    for loopback in [false, true] {
+        let (fake, gate, served, asked) = held();
+        PARKED.with_borrow_mut(Vec::clear);
+        WOKEN.with_borrow_mut(|woken| *woken = (false, None));
+        let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        let definition = match loopback {
+            true => {
+                let entries = abi::export_plugin!(@loopback "test.woken", woken_plugin);
+                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            }
+            false => abi::Plugin { id: "test.woken", setup: woken_plugin }.into(),
+        };
+        opencode_tui::plugins::host::add(&h.tui, definition);
+        h.tui.navigate(Route::Plugin { id: "test.woken".into(), name: "probe".into() });
+        turns(&h, 3);
+        h.app.press("x");
+        let sent = h.app.wait_until(support::WAIT, || {
+            h.app.advance(Duration::from_millis(1));
+            asked.load(Ordering::SeqCst) == 1
+        });
+        assert!(sent, "loopback {loopback}: the woken task sent nothing");
+        h.tui.navigate(Route::Home);
+        turns(&h, 3);
+        *gate.0.lock().unwrap() = true;
+        gate.1.notify_all();
+        assert!(h.app.wait_until(support::WAIT, || served.load(Ordering::SeqCst) == 1), "never served");
+        h.app.wait_until(support::WAIT, || {
+            h.app.advance(Duration::from_millis(1));
+            !PARKED.with_borrow(Vec::is_empty)
+        });
+        assert_eq!(PARKED.with_borrow(Vec::clone), ["ok"], "loopback {loopback}: the mount's close took its fetch");
+    }
+}
+
+thread_local! {
+    /// Whether [`woken_plugin`]'s mount ended the activation's task's wait, and that task's waker.
+    static WOKEN: RefCell<(bool, Option<std::task::Waker>)> = const { RefCell::new((false, None)) };
+}
+
+/// A task of the activation's that waits until a route's key starts a task that sleeps, then wakes it; it then fetches.
+fn woken_plugin(setup: &mut abi::Setup) -> Result<(), String> {
+    let tasks = setup.tasks();
+    tasks.spawn(setup.host(), |cx| async move {
+        std::future::poll_fn(|context| {
+            WOKEN.with_borrow_mut(|woken| match woken.0 {
+                true => std::task::Poll::Ready(()),
+                false => {
+                    woken.1 = Some(context.waker().clone());
+                    std::task::Poll::Pending
+                }
+            })
+        })
+        .await;
+        let reply = cx.fetch(abi::Fetch::new("GET", "/api/hold")).await;
+        PARKED.with_borrow_mut(|seen| seen.push(reply.err().unwrap_or_else(|| "ok".to_owned())));
+    });
+    let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("x", "probe")]);
+    let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page()).layers(vec![layer]).on(
+        move |host, event| match event {
+            Event::Key(key) if key.bind.as_deref() == Some("probe") => {
+                tasks.spawn(host, |cx| async move {
+                    if cx.sleep(Duration::from_millis(20)).await.is_ok() {
+                        let waker = WOKEN.with_borrow_mut(|woken| {
+                            woken.0 = true;
+                            woken.1.take()
+                        });
+                        waker.into_iter().for_each(std::task::Waker::wake);
+                    }
+                });
+                Handled::Consume
+            }
+            _ => Handled::Pass,
+        },
+    );
+    setup.surface(surface);
+    Ok(())
+}
+
 /// The program that witnesses its launch in `mark`, and its arguments: a tiny program of this crate's, on every
 /// platform, with no shell.
 fn witness(mark: &Path) -> (String, Vec<String>) {

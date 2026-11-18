@@ -39,11 +39,10 @@
 //!   included, or the host's refusal to open it. A [`Confirm`] answers `Some(false)` on escape, as the host's confirm
 //!   runs its action with `false`. An answer reaches only the dialog it answers: each dialog's answer comes through the
 //!   hidden command it holds alone, `<id>.task.answer.<n>`, until its answer or its close runs.
-//! - A task's requests are owned as any request of the call that sent it ([`Host::try_fetch`]): what it sends before
-//!   its first wait is its starting call's, what it sends after is the activation's, as the call that resumed it is
-//!   a reply's, an answer's, a close's, a timer's or a wake's. A task goes on only in such a call: a waiting task that
-//!   becomes ready while a handler starts another (a dialog replaced, a waker of the plugin's) goes on in the host's
-//!   wake.
+//! - A task keeps the owner of the call that started it ([`Host::owner`]): what it asks for, before a wait and after
+//!   it, is that owner's ([`Host::try_fetch`]), whichever call goes on with it ([`Host::set_owner`]). A task a mount's
+//!   handler started is that mount's: its requests and timers end when the mount closes ([`CANCELLED`]), and so does
+//!   an [`Tasks::every`] it is. A task [`Cx::spawn`] starts has its starter's owner.
 //! - [`Cx::sleep`] waits on the host's clock and [`Tasks::every`] ticks on it, with no thread of the plugin's; a timer
 //!   is a request as a fetch is, so the rules below hold for it too.
 //! - A request a mount owns is cancelled when that mount closes before its reply: its wait goes on once, with the
@@ -94,14 +93,14 @@ impl Tasks {
     pub fn spawn<F: Future<Output = ()> + 'static>(&self, host: &dyn Host, task: impl FnOnce(Cx) -> F) {
         let Some(shared) = self.shared.upgrade() else { return };
         let cx = Cx { shared: self.shared.clone() };
-        shared.start(host, |shared| shared.spawn(Box::pin(task(cx))));
+        let owner = host.owner();
+        shared.enter(host, |shared| shared.spawn(Box::pin(task(cx)), owner));
     }
 
     /// Starts a task that runs `tick` every `period` ([`Cx::sleep`] between two), until `tick` breaks or a sleep
     /// fails: its mount closed ([`CANCELLED`]), or the host took no more timers. A tick that runs long delays the next:
-    /// a late period is one tick, not one for each it missed. Started from a mount's call, it is that mount's: each
-    /// tick runs as a call of the mount (a mount's timer's reply is), so each next sleep is the mount's, and the loop
-    /// ends when the mount closes. Started from the activation's call, it is the activation's.
+    /// a late period is one tick, not one for each it missed. Started from a mount's call, it is that mount's task, so
+    /// its sleeps and what its ticks ask for are the mount's, and the loop ends when the mount closes.
     pub fn every<F: Future<Output = ControlFlow<()>> + 'static>(
         &self,
         host: &dyn Host,
@@ -209,9 +208,9 @@ impl Cx {
 
     /// Starts another task, which runs once this one waits.
     pub fn spawn<F: Future<Output = ()> + 'static>(&self, task: impl FnOnce(Cx) -> F) {
-        self.with(|_| ());
+        let owner = self.with(|host| host.owner());
         let future = task(self.clone());
-        self.shared().spawn(Box::pin(future));
+        self.shared().spawn(Box::pin(future), owner);
     }
 
     /// Opens the dialog `dialog` builds around the task's answer action, so that its answer or its close goes to the
@@ -502,6 +501,8 @@ type Reply = Result<Value, String>;
 struct Task {
     future: Pin<Box<dyn Future<Output = ()>>>,
     wake: Arc<TaskWake>,
+    /// The owner of the call that started it ([`Host::owner`]), under which every poll of it runs.
+    owner: u64,
 }
 
 /// The tasks that are ready, which a waker on any thread adds to.
@@ -622,7 +623,7 @@ pub(crate) fn tasks(shared: &Rc<Shared>) -> Tasks {
 }
 
 impl Shared {
-    fn spawn(&self, future: Pin<Box<dyn Future<Output = ()>>>) {
+    fn spawn(&self, future: Pin<Box<dyn Future<Output = ()>>>, owner: u64) {
         if self.disposed.get() {
             return;
         }
@@ -633,61 +634,39 @@ impl Shared {
         self.next.set(id + 1);
         self.live.set(self.live.get() + 1);
         let wake = Arc::new(TaskWake { id, queued: AtomicBool::new(true), queue: self.queue.clone() });
-        self.tasks.borrow_mut().insert(id, Task { future, wake });
+        self.tasks.borrow_mut().insert(id, Task { future, wake, owner });
         lock(&self.queue.ready).push_back(id);
     }
 
-    /// Runs `deliver` and polls the tasks that are ready until none is, with `host` as their host: the call of an
-    /// answer, a reply, a cancel or a wake, which is the activation's. Inside a poll (a task that spawns), it only
-    /// delivers: the poll that runs goes on with what is ready.
+    /// Runs `deliver` and polls the tasks that are ready until none is, with `host` as their host, each under its own
+    /// owner ([`Host::set_owner`]): what a task asks for is its starting call's owner's, whichever call goes on with it
+    /// (carbon `tm2-1`). Inside a poll (a task that spawns), it only delivers: the poll that runs goes on with what is
+    /// ready.
     fn enter(&self, host: &dyn Host, deliver: impl FnOnce(&Self)) {
         if self.host.get().is_some() {
             return deliver(self);
         }
         let _polling = Polling::new(self, host);
         deliver(self);
-        self.poll(None);
-    }
-
-    /// [`Shared::enter`] for a handler that starts tasks, whose call may be a mount's: it polls each task `deliver`
-    /// started (and each those start) once, up to its first wait, which is all of a task that is this call's. Any task
-    /// ready after that, one of them that woke itself or one that was waiting already, goes on in a call of the
-    /// activation's, as a resumed task is the activation's (carbon and big-boi `ac-2`): the host's wake, or on a host
-    /// that offers no waker, the plugin's next reply, answer, close, cancel or wake.
-    fn start(&self, host: &dyn Host, deliver: impl FnOnce(&Self)) {
-        if self.host.get().is_some() {
-            return deliver(self);
-        }
-        let _polling = Polling::new(self, host);
-        let floor = self.next.get();
-        deliver(self);
-        self.poll(Some(floor));
-        let waiting = !lock(&self.queue.ready).is_empty();
-        if let Some(waker) = self.queue.host.as_ref().filter(|_| waiting && !self.disposed.get()) {
-            waker.wake();
-        }
-    }
-
-    /// Polls the ready tasks until none is ready. With `first`, only the first poll of each task numbered `first` or
-    /// later; the others stay ready, in their order.
-    fn poll(&self, first: Option<u64>) {
-        let (mut later, mut polled) = (VecDeque::new(), std::collections::HashSet::new());
+        let mut call = None;
         while !self.disposed.get() {
             let Some(id) = lock(&self.queue.ready).pop_front() else { break };
-            if first.is_some_and(|floor| id < floor || !polled.insert(id)) {
-                later.push_back(id);
-                continue;
-            }
             let Some(mut task) = self.tasks.borrow_mut().remove(&id) else { continue };
             task.wake.queued.store(false, Ordering::SeqCst);
             let waker = std::task::Waker::from(task.wake.clone());
-            match task.future.as_mut().poll(&mut Context::from_waker(&waker)) {
+            let other = *call.get_or_insert_with(|| host.owner()) != task.owner;
+            if other {
+                host.set_owner(Some(task.owner));
+            }
+            let polled = task.future.as_mut().poll(&mut Context::from_waker(&waker));
+            if other {
+                host.set_owner(None);
+            }
+            match polled {
                 Poll::Ready(()) => self.live.set(self.live.get() - 1),
                 Poll::Pending => drop(self.tasks.borrow_mut().insert(id, task)),
             }
         }
-        let mut ready = lock(&self.queue.ready);
-        later.into_iter().rev().for_each(|id| ready.push_front(id));
     }
 
     /// Drops every task, with `host` as the host of their destructors, and takes no more.
@@ -763,6 +742,18 @@ mod tests {
         /// The delays of the timers asked for, which share the fetches' numbers; none is taken while `full`.
         timers: RefCell<Vec<Duration>>,
         full: Cell<bool>,
+        /// The owner of the call ([`Host::owner`]), the one a task set for the rest of it, and the owner each fetch and
+        /// timer was asked under.
+        call: u64,
+        forced: Cell<Option<u64>>,
+        owners: RefCell<Vec<u64>>,
+    }
+
+    impl Fake {
+        /// A host whose call is owner `call`'s.
+        fn of(call: u64) -> Self {
+            Self { call, ..Self::default() }
+        }
     }
 
     impl Read for Fake {
@@ -784,6 +775,7 @@ mod tests {
         fn open_route(&self, _: &str) {}
         fn navigate(&self, _: Route) {}
         fn try_fetch(&self, fetch: Fetch) -> Result<RequestId, String> {
+            self.owners.borrow_mut().push(self.owner());
             self.sent.borrow_mut().push(fetch);
             self.fetches.set(self.fetches.get() + 1);
             Ok(RequestId(self.fetches.get()))
@@ -798,6 +790,12 @@ mod tests {
             }
             self.timers.borrow_mut().push(delay);
             self.try_fetch(Fetch::new("GET", "/"))
+        }
+        fn owner(&self) -> u64 {
+            self.forced.get().unwrap_or(self.call)
+        }
+        fn set_owner(&self, owner: Option<u64>) {
+            self.forced.set(owner);
         }
     }
 
@@ -1212,37 +1210,32 @@ mod tests {
         assert_eq!((mount.fetches.get(), closing.fetches.get()), (0, 1));
     }
 
-    // Expected (big-boi ac-2): a task polled in the call that starts it goes only to its first wait there. One that woke
-    // itself and is ready again goes on in the host's wake, so what it asks for after is the activation's, not the
-    // starting mount's.
+    // Expected (carbon tm2-1): a task keeps the owner of the call that started it. A mount's task resumed by a reply,
+    // which is the activation's call, asks for its next fetch and its next sleep under the mount, as an `every` whose
+    // tick awaits a fetch does; so they end with the mount.
     #[test]
-    fn a_new_task_that_wakes_itself_goes_on_in_the_hosts_wake() {
-        let (registered, tasks, woken) = plugin();
-        let (mount, wake) = (Fake::default(), Fake::default());
-        tasks.spawn(&mount, |cx| async move {
-            let mut yielded = false;
-            std::future::poll_fn(|context| {
-                if std::mem::replace(&mut yielded, true) {
-                    return Poll::Ready(());
-                }
-                context.waker().wake_by_ref();
-                Poll::Pending
-            })
-            .await;
-            drop(cx.fetch(Fetch::new("GET", "/after")).await);
+    fn a_task_asks_under_the_owner_of_the_call_that_started_it() {
+        let (registered, tasks, _) = plugin();
+        let (mount, activation) = (Fake::of(7), Fake::of(0));
+        tasks.every(&mount, Duration::from_millis(50), |cx| async move {
+            drop(cx.fetch(Fetch::new("GET", "/poll")).await);
+            ControlFlow::Continue(())
         });
-        assert_eq!((mount.fetches.get(), woken.load(Ordering::SeqCst)), (0, 1), "it went on with the mount's host");
-        registered.wakes().iter().for_each(|run| run(&wake));
-        assert_eq!(wake.fetches.get(), 1);
+        assert_eq!(*mount.owners.borrow(), [7], "the first sleep was not the mount's");
+        // The sleep's reply (the mount host's request 1), then the tick's fetch's (the activation host's request 1),
+        // come in the activation's calls.
+        reply(&registered, &activation, 1, Ok(Value::Null));
+        reply(&registered, &activation, 1, Ok(Value::Null));
+        assert_eq!(*activation.owners.borrow(), [7, 7], "the tick's fetch or the next sleep escaped the mount");
+        assert_eq!(activation.forced.get(), None, "the call did not get its own owner back");
     }
 
-    // Expected (big-boi ac-2): on a host with no waker, a waiting task that becomes ready while another starts is not
-    // polled with the starting call's host either: it goes on at the plugin's next call of the activation's.
+    // Expected (carbon tm2-1): a task of the activation's that goes on in a mount's call (here another task wakes it)
+    // asks under the activation, not the mount, so the mount's close cancels none of its work.
     #[test]
-    fn without_a_waker_a_ready_task_waits_for_a_call_of_the_activation() {
-        let mut registered = Registered::new("t", None);
-        let tasks = registered.setup().tasks();
-        let (first, mount, later) = (Fake::default(), Fake::default(), Fake::default());
+    fn a_task_woken_in_a_mounts_call_keeps_the_activations_owner() {
+        let (_registered, tasks, _) = plugin();
+        let (first, mount) = (Fake::of(0), Fake::of(7));
         let signal: Rc<RefCell<(bool, Option<std::task::Waker>)>> = Rc::default();
         let waiting = signal.clone();
         tasks.spawn(&first, move |cx| async move {
@@ -1255,20 +1248,22 @@ mod tests {
                 Poll::Pending
             })
             .await;
-            drop(cx.fetch(Fetch::new("GET", "/after")).await);
+            drop(cx.fetch(Fetch::new("GET", "/global")).await);
         });
         let firing = signal.clone();
-        tasks.spawn(&mount, move |_| async move {
+        tasks.spawn(&mount, move |cx| async move {
             let waker = {
                 let mut signal = firing.borrow_mut();
                 signal.0 = true;
                 signal.1.take()
             };
             waker.into_iter().for_each(std::task::Waker::wake);
+            drop(cx.fetch(Fetch::new("GET", "/mount")).await);
         });
-        assert_eq!(mount.fetches.get(), 0, "the older task went on with the mount's host");
-        reply(&registered, &later, 99, Ok(Value::Null));
-        assert_eq!(later.fetches.get(), 1);
+        let asked: Vec<_> = mount.sent.borrow().iter().map(|fetch| fetch.path.clone()).collect();
+        assert_eq!(asked, ["/mount", "/global"]);
+        assert_eq!(*mount.owners.borrow(), [7, 0], "the activation's task asked under the mount");
+        assert_eq!(mount.forced.get(), None);
     }
 
     // Expected (big-boi acf-1): an answer that comes after eight more dialogs replaced its own reaches its own dialog,
@@ -1290,40 +1285,6 @@ mod tests {
         assert_eq!(*log.borrow(), ["1 Some(\"first\")"], "the answer reached another prompt");
         answer(&registered, &host, 8, "ninth");
         assert_eq!(*log.borrow(), ["1 Some(\"first\")", "9 Some(\"ninth\")"]);
-    }
-
-    // Expected (carbon ac-2): a waiting task that becomes ready while another task starts (here the new one wakes it)
-    // goes on in the host's wake, an activation call, not with the starting call's host.
-    #[test]
-    fn a_task_woken_while_another_starts_goes_on_in_the_hosts_wake() {
-        let (registered, tasks, woken) = plugin();
-        let (first, mount, wake) = (Fake::default(), Fake::default(), Fake::default());
-        let signal: Rc<RefCell<(bool, Option<std::task::Waker>)>> = Rc::default();
-        let waiting = signal.clone();
-        tasks.spawn(&first, move |cx| async move {
-            std::future::poll_fn(|context| {
-                let mut signal = waiting.borrow_mut();
-                if signal.0 {
-                    return Poll::Ready(());
-                }
-                signal.1 = Some(context.waker().clone());
-                Poll::Pending
-            })
-            .await;
-            drop(cx.fetch(Fetch::new("GET", "/after")).await);
-        });
-        let firing = signal.clone();
-        tasks.spawn(&mount, move |_| async move {
-            let waker = {
-                let mut signal = firing.borrow_mut();
-                signal.0 = true;
-                signal.1.take()
-            };
-            waker.into_iter().for_each(std::task::Waker::wake);
-        });
-        assert_eq!((mount.fetches.get(), woken.load(Ordering::SeqCst)), (0, 1), "it went on with the mount's host");
-        registered.wakes().iter().for_each(|run| run(&wake));
-        assert_eq!(wake.fetches.get(), 1);
     }
 
     // Expected (carbon ar-1, ac-2): an answer still on its way from a dialog that a later one replaced reaches that
