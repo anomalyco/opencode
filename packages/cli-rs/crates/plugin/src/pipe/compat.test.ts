@@ -924,8 +924,17 @@ test("a border draws as OpenTUI's box draws it", () => {
     // CT-26: the bottom title beside the top one (opencode-voice's CPU and memory line).
     { border: true, title: "top", titleAlignment: "center", bottomTitle: "bottom", bottomTitleAlignment: "right" },
   ]
-  ctx.ui.slot({ append: "home.footer", render: () => cases.map((props) => h("box", props)) })
-  const tree = view(fake, 0, "a").draw()
+  const refs: Json = {}
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () => [...cases.map((props) => h("box", props)), h("box", { border: true, ref: (el: Json) => (refs.box = el) })],
+  })
+  const mount = view(fake, 0, "a")
+  mount.draw()
+  // Bigboi cg2-9: a ref's alignments are props as its titles are.
+  Object.assign(refs.box, { title: "T", titleAlignment: "center", bottomTitle: "B", bottomTitleAlignment: "right" })
+  const tree = mount.draw()
+  expect(tree.children.pop().border).toEqual({ title: "T", title_align: "center", bottom_title: "B", bottom_title_align: "right" })
   expect(tree.children.map((child: Json) => child.border)).toEqual([
     undefined,
     {},
@@ -1380,10 +1389,11 @@ test("a select's actions are its footer's", async () => {
     { title: "Open", key: "ctrl+o" },
     { title: "Close", key: "ctrl+a", primary: false, rowless: true },
   ])
-  fake.commands.get(select.actions[0].action.name)!("1")
-  fake.commands.get(select.actions[1].action.name)!()
+  const run = (action: Json, input = action.input) => fake.commands.get(action.name)!(input)
+  run(select.actions[0].action, select.options[1].value)
+  run(select.actions[1].action)
   expect(heard).toEqual([["open", { id: "b" }], "close"])
-  fake.commands.get(select.action.name)!("0")
+  run(select.action, select.options[0].value)
   expect(await picked).toEqual({ id: "a" })
   // Answered: its actions do nothing.
   fake.commands.get(select.actions[1].action.name)!()
@@ -1394,6 +1404,63 @@ test("a select's actions are its footer's", async () => {
   await turn()
   expect(fake.effects.at(-1).dialog.dialog.actions.length).toBe(4)
   expect(fake.warnings()).toEqual(["t.actions: ui.dialog.select over 4 actions is not supported by opencode-native yet"])
+})
+
+// Selects of plugin `t.stale` whose actions record what they hear, each searching by reversing its rows.
+function stale() {
+  const fake = host()
+  const ctx = plugin("t.stale", fake)
+  const heard: unknown[] = []
+  const open = (name: string) => {
+    const options = [
+      { title: "A", value: `${name}a` },
+      { title: "B", value: `${name}b` },
+    ]
+    const actions = [
+      { bind: "ctrl+o", title: "Open", onTrigger: (value: unknown) => heard.push(value) },
+      { bind: "ctrl+a", title: "All", selection: "none", onTrigger: () => heard.push(`${name} all`) },
+    ]
+    const search = (query: string, rows: Json[]) => (query ? [...rows].reverse() : rows)
+    return ctx.ui.dialog.select({ title: name, options, actions, search })
+  }
+  const shown = () => fake.effects.at(-1).dialog.dialog
+  const action = (select: Json, slot: number, input = select.actions[slot].action.input) =>
+    fake.commands.get(select.actions[slot].action.name)!(input)
+  return { fake, heard, open, shown, action }
+}
+
+// Bigboi cg2-7: an action of a select that a newer one replaced reaches nothing, neither on a row nor rowless.
+test("a replaced select's actions reach nothing", async () => {
+  const t = stale()
+  const first = t.open("x")
+  await turn()
+  const a = t.shown()
+  const second = t.open("y")
+  await turn()
+  expect(await first).toBeUndefined()
+  const b = t.shown()
+  t.action(a, 0, a.options[0].value)
+  t.action(a, 1)
+  expect(t.heard).toEqual([])
+  t.action(b, 0, b.options[0].value)
+  t.action(b, 1)
+  expect(t.heard).toEqual(["ya", "y all"])
+  t.fake.commands.get(b.action.name)!(b.options[1].value)
+  expect(await second).toBe("yb")
+})
+
+// Bigboi cg2-8: a search lists the rows anew while the select stays open; an action and an answer still reach the row
+// they were given.
+test("a select's action reaches its row through a search", async () => {
+  const t = stale()
+  const picked = t.open("x")
+  await turn()
+  const a = t.shown()
+  t.fake.commands.get(a.query.name)!("z")
+  t.action(a, 0, a.options[0].value)
+  expect(t.heard).toEqual(["xa"])
+  t.fake.commands.get(a.action.name)!(a.options[0].value)
+  expect(await picked).toBe("xa")
 })
 
 // Bigboi P8-8: the click handlers of mounts that ended are not kept.

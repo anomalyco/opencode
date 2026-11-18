@@ -299,7 +299,9 @@ for (const name of [
   "attributes",
   "borderColor",
   "title",
+  "titleAlignment",
   "bottomTitle",
+  "bottomTitleAlignment",
   "wrapMode",
   "truncate",
   // A renderable built with `new` takes its layout and look the same way (contract 2.x, step D).
