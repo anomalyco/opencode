@@ -1,16 +1,6 @@
-//! Event subscription and the connection loop (F.3).
-//!
-//! Both are generic over the event type, so the generated event union plugs in through [`Event`].
-//!
-//! - [`SharedEvents`] ports `packages/client/src/shared-events.ts`: subscribers share one upstream
-//!   stream, filter by type (`server.connected` always passes), a late subscriber gets the latest
-//!   `server.connected`, and a subscriber that falls 4,096 events behind fails alone.
-//! - [`connect`] ports `createClientConnection` (`packages/client/src/solid/connection.ts`): the stream
-//!   must start with `server.connected` within 2 s, any received bytes count as activity, 45 s of
-//!   silence and 1 s of grace replace the stream (deviation `parity/deviations/A09-stall-grace.md`), a disconnect reconnects after 1 s, and events reach the consumer in
-//!   10 ms batches with adjacent deltas merged. The batch queue is bounded: when it is full the loop
-//!   drops the stream and reconnects, and the consumer resynchronizes on the next `server.connected`
-//!   (deviation `parity/deviations/A09-bounded-queue.md`).
+//! Subscribers share one upstream and receive the latest `server.connected` even when filtered. A lagging subscriber
+//! fails independently. On overflow the connection drops the stream rather than silently losing deltas; consumers
+//! resynchronize on the next `server.connected`.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -806,8 +796,6 @@ mod tests {
         item.expect("an event").expect("not an error")
     }
 
-    // Ports of packages/client/test/shared-events.test.ts.
-
     #[tokio::test]
     async fn creation_subscription_and_idle_subscriptions_are_lazy() {
         let fake = Fake::default();
@@ -1090,8 +1078,6 @@ mod tests {
         assert_eq!(count.load(Ordering::SeqCst), 2);
     }
 
-    // Ports of packages/client/test/solid-connection.test.ts, plus the A09 batching and queue rules.
-
     fn options(idle: u64) -> Options {
         Options { flush_interval: Duration::ZERO, idle_timeout: Duration::from_millis(idle), ..Options::default() }
     }
@@ -1151,8 +1137,7 @@ mod tests {
         assert_eq!(events.len(), 1);
     }
 
-    // R4-1: after a Ctrl+Z the idle deadline has passed when the process resumes, and the runtime can
-    // see the timer before the socket's buffered events. Those events must not be dropped.
+    // A process resuming from suspension may have both an expired idle timer and buffered socket events.
     #[tokio::test(start_paused = true)]
     async fn events_buffered_while_stopped_survive_an_elapsed_idle_deadline() {
         let fake = Fake::default();
@@ -1222,7 +1207,6 @@ mod tests {
         }
     }
 
-    // rs-ms1-accept problem 1: a reader panic ended the loop, and with it every later event.
     #[tokio::test(start_paused = true)]
     async fn a_reader_that_fails_or_panics_once_reconnects_and_keeps_delivering() {
         #[derive(Clone)]

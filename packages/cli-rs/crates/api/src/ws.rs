@@ -1,9 +1,5 @@
-//! WebSocket helper with tickets (F.3).
-//!
-//! Builds socket URLs the way the TypeScript clients do (`packages/client/src/solid/pty.ts:69-77`,
-//! `packages/client/src/mcp.ts:166-174`) and opens them with tokio-tungstenite. A ticket socket, such as
-//! the persistent PTY, authenticates with a `ticket` query parameter that the caller first requests over
-//! HTTP with `x-opencode-ticket: 1`; other sockets send the `authorization` header in the handshake.
+//! A ticket socket authenticates with a query parameter obtained over HTTP with `x-opencode-ticket: 1`. Other sockets
+//! use `authorization` in the handshake.
 
 use std::future::Future;
 use std::pin::Pin;

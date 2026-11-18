@@ -1,10 +1,5 @@
-//! Server-sent events reader (F.3).
-//!
-//! A port of the SSE reader of the generated TypeScript client
-//! (`packages/client/src/promise/generated/client.ts:417-473`): blocks end at a blank line, `data:` lines
-//! join with newlines, CRLF and CR normalize to LF, comments and other fields are ignored, and the
-//! buffered text may not exceed 16 MiB (counted in UTF-16 code units, as JavaScript counts
-//! `string.length`). Each received chunk, keepalive comments included, reports activity.
+//! SSE `data:` lines join with newlines; blank lines end a block. The 16 MiB buffer limit counts UTF-16 code units.
+//! Every chunk, including a keepalive, signals activity.
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -28,12 +23,7 @@ pub enum Error {
     EventTooLarge,
 }
 
-/// Decodes a stream of body chunks into `data:` payloads.
-///
-/// It buffers raw bytes and splits lines on the LF, CRLF and CR bytes, which never occur inside a
-/// UTF-8 sequence, so only complete lines are decoded and a code point split across chunks waits for
-/// the rest of its line. Decoding a complete line with replacement gives the same text as the
-/// TypeScript streaming `TextDecoder`.
+/// Buffers bytes until a complete line is available, so a UTF-8 code point split across chunks is decoded only once.
 #[derive(Default)]
 pub struct Decoder {
     /// Bytes of the unterminated last line.
@@ -323,8 +313,7 @@ mod tests {
         payloads.into()
     }
 
-    // solid-connection.test.ts "a reconnect does not ask the volatile event stream to replay": the reader
-    // keeps no `id:` field, so nothing can send a Last-Event-ID.
+    // Volatile streams must not request replay via Last-Event-ID.
     #[test]
     fn ignores_fields_other_than_data() {
         let mut decoder = Decoder::new();
@@ -348,7 +337,6 @@ mod tests {
         assert_eq!(payloads, vec!["a\nb"]);
     }
 
-    // rs-ms1-accept problem 1: a chunk that ended in a multibyte character panicked on the next chunk.
     #[test]
     fn a_buffer_ending_in_a_multibyte_character_takes_the_next_chunk() {
         let mut decoder = Decoder::new();

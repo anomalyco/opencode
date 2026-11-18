@@ -1,5 +1,3 @@
-//! `translate.test.ts`: the rows for the turn fold, the compaction rows, and the replay rows.
-
 use opencode_acp::paths::resolve_from;
 use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
 use serde_json::{Value, json};

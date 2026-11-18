@@ -1,17 +1,6 @@
-//! Registration discovery (F.6).
-//!
-//! The TypeScript client reads the registration of its build channel and probes it
-//! (`discover`, `packages/client/src/effect/service.ts:25-31`). The Rust client has no build
-//! channel, and the installed `opencode` may be a preview channel with its own file, so it tries
-//! several registrations in order (decision O-21):
-//!
-//! 1. the registration of `OPENCODE_CHANNEL`, when set;
-//! 2. the registration of the client's own channel ([`channel::DEFAULT`]);
-//! 3. every other `service*.json` in the state directory: the one whose server runs the TypeScript
-//!    binary this client delegates to ([`Owner`], decision O-51), else the newest.
-//!
-//! The first ready, compatible service wins. Discovery only reads: it never migrates, replaces, or
-//! stops a service.
+//! Looks first in `OPENCODE_CHANNEL`, then the client's default channel, then other registrations. Among scanned
+//! services, prefer one owned by the resolved `opencode` binary; otherwise prefer the newest. Discovery never
+//! modifies a registration or stops a service.
 
 use std::path::{Path, PathBuf};
 
@@ -83,10 +72,7 @@ pub async fn discover_with(
     Ok(owner.pick(ready).await)
 }
 
-/// The TypeScript binary this client delegates to (D.1). When several scanned services answer,
-/// discovery takes the newest that this binary runs, so the Rust client uses the same server as
-/// the user's `opencode` (O-51). The process executable decides (Linux `/proc/<pid>/exe`); when no
-/// service runs it, the version the binary prints does.
+/// Identifies the server binary by executable path, falling back to its reported version when no process matches.
 pub struct Owner {
     command: TsCommand,
     process_executable: Box<dyn Fn(u32) -> Option<PathBuf> + Send + Sync>,

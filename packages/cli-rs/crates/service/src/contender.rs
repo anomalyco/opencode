@@ -1,9 +1,5 @@
-//! Contender pool (F.9).
-//!
-//! Ports `contenderPool` (`packages/client/src/service-contender.ts:57-136`): the startup attempts of
-//! one `ensure` call. It keeps at most two alive, remembers the first startup failure, and backs off
-//! when attempts exit cleanly because another one won. The clock is an argument, so tests need
-//! neither processes nor sleeps.
+//! Limits concurrent service startup attempts to two. A clean exit means another contender won; back off but retain
+//! the first startup error.
 
 use std::time::{Duration, Instant};
 
@@ -172,7 +168,6 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    // The cases of `packages/client/test/service-contender-pool.test.ts`, on fake attempts.
     #[derive(Clone)]
     struct Fake {
         pid: u32,

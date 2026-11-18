@@ -1,11 +1,5 @@
-//! Delegation of commands to the TypeScript binary (D.1).
-//!
-//! `serve`, `uninstall`, and `plugin *` depend on the server, the installer, npm, and `Host.resolve`, which
-//! exist only in TypeScript (user Q4). `upgrade` is not delegated: it upgrades nothing (deviation D01-upgrade).
-//! The Rust client runs the TypeScript `opencode` ([`TsCommand`]) with the same arguments, stdio, and exit
-//! code. Remote access (`service set remote true`, `pair --remote`) needs the OpenTunnel SDK, so
-//! [`enable_remote`] runs the TypeScript command that creates the tunnel, and [`tunnel_hostname`] reads what the
-//! SDK stored.
+//! Commands delegated to `opencode` inherit the arguments, stdio and exit status. Remote access uses the TypeScript
+//! command because it owns the OpenTunnel SDK.
 
 use std::ffi::OsString;
 use std::io;
@@ -64,19 +58,13 @@ pub fn spawn(command: &TsCommand, args: impl IntoIterator<Item = OsString>) -> R
     build(command, args).spawn().map_err(|source| start_error(command, source))
 }
 
-/// Turns remote access on through `opencode service set remote true`: it creates the device's
-/// OpenTunnel tunnel in the foreground (printing "Setting up remote access; this can take a
-/// minute..." the first time), stops the service, and writes the route to the service config
-/// (`packages/cli/src/services/service-config.ts:261-270`). Returns the started child; on failure it
-/// prints its own error before it exits.
+/// Starts `opencode service set remote true` in the foreground. The child creates the tunnel, stops the service and
+/// saves the route.
 pub fn enable_remote(command: &TsCommand) -> Result<Child, StartError> {
     spawn(command, ["service", "set", "remote", "true"].map(OsString::from))
 }
 
-/// The remote hostname of `route`, `<route>.<tunnel hostname>`, or `None` until the tunnel's
-/// certificate is ready. Ports `RemoteTunnel.hostname` (`services/remote-tunnel.ts:67-71`) over the
-/// SDK's XDG storage: `<XDG_DATA_HOME>/opentunnel/default/tunnel.json`, valid only with the token,
-/// key, certificate, and chain beside it.
+/// Returns the route hostname once the OpenTunnel token, key, certificate and chain are present.
 pub fn tunnel_hostname(paths: &Paths, route: &str) -> io::Result<Option<String>> {
     let data_home = paths.data.parent().unwrap_or(&paths.data);
     let root = data_home.join("opentunnel").join("default");

@@ -172,8 +172,6 @@ async fn live_reads_decode() {
         report.check("session.context", client.session_context(&input).await, |_| String::new());
     }
 
-    // The session log of the newest sessions from the start, without following: durable events and the
-    // `log.synced` marker, none of them unknown (carbon-1).
     let (mut durable, mut synced, mut unknown) = (0, 0, 0);
     for session in sessions.iter().take(sessions_wanted) {
         let input = ExperimentalSessionLogInput { session_id: session.id.clone(), after: Some(0), follow: Some(false) };

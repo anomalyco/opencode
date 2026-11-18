@@ -1,9 +1,4 @@
-//! The ACP agent (C.11): `opencode acp`, the Agent Client Protocol over stdio JSON-RPC
-//! (`packages/cli/src/acp`, `packages/cli/src/commands/handlers/acp.ts`).
-//!
-//! The agent starts a private TypeScript server, as TS `Standalone.start()` does, and talks to it over
-//! HTTP. C.12 (`rs-acp-rest`) owns `tools`, `permission`, `elicitation`, `config_option`, `replay`,
-//! `compaction`, and `directories`. `acp --login` runs `auth login` in the CLI crate.
+//! `opencode acp` serves the Agent Client Protocol over stdio and starts a private HTTP server for the session.
 
 pub mod agent;
 pub mod capabilities;

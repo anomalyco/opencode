@@ -1,13 +1,7 @@
-//! Regression tests for the `carbon` review of F.2 (`reviews/rs-api-codegen.review-carbon.md`). Each failed
-//! before `rs-api-fixes`: carbon-1 and 2 did not compile against the old types (or decoded into the wrong
-//! variant), and carbon-4 and 5 failed their assertions. carbon-3 (one type for the event and REST twins of a
-//! schema) is a property of the generated types, not of behavior, and has no test.
-
 use opencode_api::error::{DeclaredError, TaggedError};
 use opencode_api::generated::*;
 use serde_json::json;
 
-/// carbon-1: `log.synced` in the session log is its own variant, not a durable event of unknown type.
 #[test]
 fn session_log_routes_log_synced_and_durable_events() {
     let synced: SessionLogItem =
@@ -20,7 +14,6 @@ fn session_log_routes_log_synced_and_durable_events() {
     assert!(matches!(unknown, SessionLogItem::Unknown(_)), "{unknown:?}");
 }
 
-/// carbon-2: `Schema.NonEmptyArray(T)` is `Vec<T>`, so form fields and tool content are typed.
 #[test]
 fn non_empty_arrays_keep_their_item_type() {
     let form: FormInfo = serde_json::from_value(json!({
@@ -40,7 +33,6 @@ fn non_empty_arrays_keep_their_item_type() {
     assert!(matches!(&content[1], ToolContent::File(file) if file.mime == "image/png"));
 }
 
-/// carbon-4: an LSP server entry that sets `disabled` decodes as a server, with its command.
 #[test]
 fn lsp_server_entry_with_disabled_keeps_its_command() {
     let entry: ConfigEntryDocumentInfoLspObjectValue =
@@ -54,7 +46,6 @@ fn lsp_server_entry_with_disabled_keeps_its_command() {
     assert!(matches!(disabled, ConfigEntryDocumentInfoLspObjectValue::Object(_)), "{disabled:?}");
 }
 
-/// carbon-5: `DeclaredError::decode` checks the tag, as the TypeScript `is<Error>` guards do.
 #[test]
 fn declared_error_decode_checks_the_tag() {
     let error = DeclaredError::new(

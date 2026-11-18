@@ -1,6 +1,3 @@
-//! `permission.test.ts`. The log assertion of "withdraws permission requests settled elsewhere" is not
-//! ported: logs go to the `log` facade.
-
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

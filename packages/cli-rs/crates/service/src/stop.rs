@@ -1,8 +1,4 @@
-//! Stopping the service (F.9).
-//!
-//! Ports `stop` and `terminate` (`packages/client/src/effect/service.ts:129-197`). Only the explicit
-//! `service stop`, `restart`, and `set` commands stop a service; `ensure` never stops one it did not
-//! start (plan 6.6), except one of another version than it requires (O-167).
+//! Stops the registered service and waits for its process to exit.
 
 use opencode_api::transport::Transport;
 use opencode_local::registration::{self, Registration};

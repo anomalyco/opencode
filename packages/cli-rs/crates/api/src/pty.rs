@@ -1,9 +1,5 @@
-//! Persistent PTY socket (E.13a, row A04): a port of `packages/client/src/solid/pty.ts`.
-//!
-//! The server sends JSON control messages as text and terminal output as binary messages. The client sends binary
-//! interaction frames: a type byte (0 for a size-only frame that claims control, 1 for input), the columns and rows as
-//! big-endian `u16`, then the input bytes. [`connect`] asks for a ticket over HTTP and opens the socket through a
-//! [`Connector`], so tests can serve a fake socket.
+//! Persistent PTY control messages are text; output is binary. Interaction frames start with a type byte (0 claims
+//! control, 1 sends input), big-endian `u16` columns and rows, then input bytes.
 
 use serde_json::Value;
 use url::Url;

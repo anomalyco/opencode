@@ -1,4 +1,4 @@
-//! The drive manifest, as `packages/simulation/src/manifest.ts` resolves it from `OPENCODE_DRIVE`.
+//! Resolves the drive manifest from `OPENCODE_DRIVE`.
 
 use opencode_util::path::Flavor;
 use serde::Deserialize;
@@ -19,7 +19,7 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    /// The defaults for `OPENCODE_DRIVE=1` (`manifest.ts` `defaults`).
+    /// Endpoints for `OPENCODE_DRIVE=1`.
     pub fn defaults() -> Self {
         Self {
             ui: "ws://127.0.0.1:40900".into(),
@@ -138,7 +138,7 @@ fn decode(contents: &str) -> Result<Manifest, String> {
     Ok(Manifest { ui: raw.endpoints.ui, backend: raw.endpoints.backend, viewport, recording })
 }
 
-/// A `ws://127.0.0.1:<port>` endpoint's address, as `manifest.ts` `Endpoint` accepts it.
+/// Accepts only a loopback WebSocket endpoint.
 fn endpoint(value: &str) -> Option<SocketAddr> {
     let url = opencode_api_types::js::parse_url(value).ok()?;
     let port = url.port().filter(|port| *port >= 1)?;

@@ -1,5 +1,3 @@
-//! `additional-directories.test.ts`.
-
 use opencode_acp::paths::resolve_lexical;
 use opencode_util::path::Flavor;
 use serde_json::{Value, json};

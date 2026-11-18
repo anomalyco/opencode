@@ -1,5 +1,3 @@
-//! Child-session updates (`packages/cli/src/acp/child.ts`).
-
 use opencode_util::json_object;
 use serde_json::{Value, json};
 

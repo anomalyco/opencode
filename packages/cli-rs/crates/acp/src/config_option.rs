@@ -1,5 +1,3 @@
-//! Session config options: model, effort, and mode (`packages/cli/src/acp/config-option.ts`).
-
 use opencode_api::generated::{ModelInfo, ModelRef, ProviderID};
 use opencode_api::js::locale_compare;
 use opencode_util::json_object;

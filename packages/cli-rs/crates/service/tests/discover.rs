@@ -1,6 +1,5 @@
-//! Discovery prefers the service the TypeScript binary runs (O-51), proven with real processes:
-//! two copies of `sleep` stand for `opencode` and an older `opencode2`, and a local server answers
-//! `/api/info` for each with its pid. The `opencode2` registration is the newest.
+//! Two executables stand in for separate service installations. The newest registration belongs to the other
+//! installation.
 #![cfg(target_os = "linux")]
 
 use std::ffi::OsString;

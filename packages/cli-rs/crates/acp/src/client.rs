@@ -1,5 +1,3 @@
-//! Server errors as ACP errors, session IDs, and event subscriptions (`packages/cli/src/acp/client.ts`).
-
 use futures_util::stream::BoxStream;
 use opencode_api::client::Client;
 use opencode_api::error::Error;

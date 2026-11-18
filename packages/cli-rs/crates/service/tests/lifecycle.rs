@@ -1,8 +1,4 @@
-//! The cases of `packages/client/test/service.test.ts`, run against the same fake service
-//! (`packages/client/test/fixture/service.ts` under `bun`) with the same accelerated timing. Cases
-//! where TS replaces a service assert the Rust policy instead (docs/architecture.md): the service is used,
-//! or left running. Every file lives in a temporary directory, and every process a test starts is
-//! killed when its fixture drops. Without `bun` the tests pass with a note.
+//! Service lifecycle tests share the TypeScript client's fake service and accelerated clock.
 #![cfg(unix)]
 
 use opencode_api::transport::{Reqwest, Transport};
@@ -37,7 +33,6 @@ fn bun() -> bool {
     found
 }
 
-// `accelerate` (`packages/client/test/fixture/service-timing.ts`).
 fn fast() -> Timing {
     Timing {
         poll: Duration::from_millis(20),
@@ -300,8 +295,6 @@ async fn reuses_a_registered_service() {
     assert!(fixture.running(existing));
 }
 
-// Expected (O-167): with a version required, as TS's `replaces an incompatible registered service`: the service of
-// another version is stopped and replaced, announced once as a version mismatch from its version.
 #[tokio::test(flavor = "multi_thread")]
 async fn replaces_a_service_of_another_version_when_a_version_is_required() {
     needs_bun!();
@@ -319,8 +312,6 @@ async fn replaces_a_service_of_another_version_when_a_version_is_required() {
     assert_eq!(reasons, [ensure::Reason::VersionMismatch { previous: Some("1.9.0".to_owned()) }]);
 }
 
-// Expected (O-167): a service of the required version is reused; one this call started is used whatever its version,
-// so a TS binary of another version than required is not replaced in a loop.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_required_version_reuses_its_service_and_takes_what_it_started() {
     needs_bun!();
@@ -512,7 +503,7 @@ async fn stop_waits_for_the_original_process_while_preserving_a_newly_registered
     assert!(fixture.running(successor));
 }
 
-// A stale registration whose pid now belongs to another process: `stop` must not signal it.
+// A stale registration can point at an unrelated process. Never signal it.
 #[tokio::test(flavor = "multi_thread")]
 async fn stop_refuses_a_registered_pid_that_another_process_reused() {
     let fixture = Fixture::new();
@@ -696,8 +687,7 @@ async fn finds_a_started_service_registered_under_another_channel() {
     assert_eq!(status(&ensured.service.endpoint.url).await["pid"], ensured.service.registration.pid);
 }
 
-// A fake `OPENCODE_TS_BIN` of the channel `oc-y`: it logs its pid to `spawns` and serves `mode`
-// under `service-oc-y.json`, beside the client's `service.json` (review carbon-2).
+// This fake binary registers in `oc-y`, beside the client's default channel.
 fn channel_build(fixture: &Fixture, mode: &str) -> (Options, PathBuf, PathBuf) {
     let root = fixture.dir.path();
     let other = root.join("service-oc-y.json");
@@ -840,8 +830,7 @@ impl Channel {
     }
 }
 
-// A client of the channel `oc-x` whose TS binary prints `opencode v<binary>` for `--version` and serves `mode` (the
-// fixture's) under `service-oc-x.json`, logging each start to `spawns`: the bundled binary of O-167.
+// Records each start in `spawns` so the test can detect a replacement loop.
 fn restarting(channel: &Channel, binary: &str, mode: &str) -> (Env, PathBuf) {
     let root = channel.fixture.dir.path();
     let spawns = root.join("spawns");
@@ -869,8 +858,6 @@ async fn resolve_replacing(channel: &Channel, env: &Env) -> Result<Connection, c
     connect::resolve(transport(), &channel.paths, env, &options).await
 }
 
-// Expected (O-167, TS `default.ts` with `mismatch: "replace"`): the TUI's client restarts a service of another version
-// in its channel on the TS binary it resolved, and attaches to the new one.
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_restarts_a_service_of_another_version_and_attaches_to_the_new_one() {
     needs_bun!();
@@ -887,9 +874,6 @@ async fn connect_restarts_a_service_of_another_version_and_attaches_to_the_new_o
     assert_eq!(spawned(&spawns), 1);
 }
 
-// Expected (O-167): a service of the client's version is not touched; one of another version is used as before when
-// the client does not ask to replace (`mismatch: "ignore"`, every command but the TUI and `mini`), when it is
-// registered in another channel than the client's, or when the resolved binary would start its version again.
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_restarts_nothing_else() {
     needs_bun!();
@@ -914,8 +898,6 @@ async fn connect_restarts_nothing_else() {
     assert_eq!(spawned(&spawns), 0);
 }
 
-// Expected (O-167, TS `ensure`): when the replacement fails to start, the old service is already stopped and the
-// command fails with the start's error, as TS's does; the client attaches to nothing.
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_fails_with_the_start_error_when_the_restart_fails() {
     needs_bun!();

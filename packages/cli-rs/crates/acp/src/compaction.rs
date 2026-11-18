@@ -1,5 +1,3 @@
-//! Compaction progress as ACP updates (`packages/cli/src/acp/compaction.ts`).
-
 use std::collections::HashMap;
 
 use opencode_util::json_object;

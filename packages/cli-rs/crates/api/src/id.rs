@@ -1,8 +1,5 @@
-//! Identifiers, ported from `packages/schema/src/identifier.ts` (F.3).
-//!
-//! An identifier is 12 hex digits of `timestamp * 0x1000 + counter` (bitwise inverted for descending
-//! order) followed by 14 random base-62 characters. The counter restarts whenever the millisecond
-//! changes, so identifiers minted in one process sort by creation within a millisecond too.
+//! Identifiers start with 12 hex digits of `timestamp * 0x1000 + counter`, inverted for descending order, followed by
+//! 14 random base-62 characters. The counter orders IDs minted within one millisecond.
 
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -73,9 +70,7 @@ mod tests {
         prefix: String,
     }
 
-    /// P-ORACLE: `parity/oracle/F.3-identifier.ts` records the time prefixes TypeScript mints for a
-    /// call sequence; the same sequence must give the same prefixes here. One test owns the global
-    /// counter so parallel tests cannot interleave with the sequence.
+    /// One test owns the global counter so parallel calls cannot interleave with the recorded sequence.
     #[test]
     fn matches_the_typescript_identifier_oracle() {
         let cases: Vec<Case> =

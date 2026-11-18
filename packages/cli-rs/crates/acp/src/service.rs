@@ -1,5 +1,3 @@
-//! The ACP methods (`packages/cli/src/acp/service.ts`).
-
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 

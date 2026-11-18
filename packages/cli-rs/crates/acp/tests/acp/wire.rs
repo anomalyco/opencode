@@ -1,6 +1,4 @@
-//! A fake OpenCode server and an in-process ACP client, ported from
-//! `packages/cli/test/acp/wire-fixture.ts`. The server is a transport, so no socket is opened; the agent
-//! runs over in-memory pipes.
+//! In-process ACP client and server connected by in-memory pipes.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

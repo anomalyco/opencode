@@ -1,6 +1,3 @@
-//! `error.test.ts`. The log lines the TS case also checks ("ACP catalog event stream failed",
-//! "ACP selection event stream failed") go to the `log` facade here and are not captured.
-
 use serde_json::json;
 
 use crate::wire::{Server, WireOptions, delivered, events, start_session, text_delta};

@@ -86,8 +86,7 @@ pub trait Transport: Send + Sync {
     }
 }
 
-/// The checked response of a server-sent events endpoint: status and content type are verified, and
-/// the body has not been read. F.3 parses it into events of type `T`.
+/// An unread event stream whose status and content type have been checked.
 pub struct SseResponse<T> {
     pub response: Response,
     event: PhantomData<fn() -> T>,
@@ -107,7 +106,6 @@ impl<T: DeserializeOwned + Send> SseResponse<T> {
     }
 }
 
-/// Lets F.3's connection loop and shared subscription carry the generated event type.
 impl crate::events::Event for V2Event {
     fn kind(&self) -> &str {
         self.tag()

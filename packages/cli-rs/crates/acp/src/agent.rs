@@ -1,9 +1,5 @@
-//! The method table: parameter checks, dispatch to the service, and error mapping
-//! (`packages/cli/src/acp/agent.ts`, and the ACP SDK's parameter parsing).
-//!
-//! Parameters are checked the way the SDK's generated schemas parse them: required fields must have
-//! their type, and malformed MCP servers and additional directories are skipped. A failed check answers
-//! `Invalid params` with zod's `format()` shape for the first failing field.
+//! Invalid parameters report the first failing field in the ACP SDK's `format()` shape. Malformed MCP servers and
+//! additional directories are skipped.
 
 use std::future::{Future, ready};
 use std::sync::Arc;

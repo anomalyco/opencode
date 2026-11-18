@@ -628,7 +628,6 @@ mod tests {
 
     #[test]
     fn structured_ranges_match_jsdiff() {
-        // Written by script/gen/structured-patch.ts from jsdiff itself.
         let cases: Vec<[String; 3]> = serde_json::from_str(include_str!("structured_patch.json")).unwrap();
         for [old, new, ranges] in cases {
             assert_eq!(structured_ranges(&old, &new), ranges, "{old:?} -> {new:?}");

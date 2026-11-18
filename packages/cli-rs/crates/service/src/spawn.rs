@@ -1,7 +1,4 @@
-//! Spawning the TypeScript `opencode` (F.9).
-//!
-//! Ports `spawnServiceContender` (`packages/client/src/service-contender.ts:14-55`): a detached
-//! process with stdin and stdout closed and a bounded tail of its stderr, which outlives this client.
+//! Starts a detached `opencode` service with closed stdin and stdout and a bounded stderr tail.
 
 use std::ffi::OsString;
 use std::io::Read;

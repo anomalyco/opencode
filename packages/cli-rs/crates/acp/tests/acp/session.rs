@@ -1,5 +1,3 @@
-//! `session.test.ts`.
-
 use serde_json::{Value, json};
 
 use crate::wire::{RpcError, Wire, WireOptions, assert_matches, lock, make_session, start_wire};

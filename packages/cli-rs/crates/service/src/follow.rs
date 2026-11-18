@@ -1,14 +1,5 @@
-//! A client that follows a managed service across restarts.
-//!
-//! A restarted background service may register a new port or password. The TypeScript TUI then
-//! runs `service.reconnect` (an ensure) after each event-stream disconnect and swaps its client's
-//! URL and headers (`packages/tui/src/context/client.tsx:33-41`). Every part of the Rust TUI holds
-//! a clone of one [`Client`], so the swap happens below it, in the transport: requests to the
-//! origin the client was built for go to the current service with its current password. A request
-//! that fails to connect or is refused with 401 finds the service again, through
-//! [`connect::reconnect`], before it returns its error. The request is not retried, so a request
-//! that may have reached the old service is never sent twice. The event stream retries itself and
-//! finds the service through [`Transport::reconnect`], between attempts.
+//! Follows a managed service across port and password changes. A failed connection or 401 triggers rediscovery for
+//! future requests; replaying the failed request could duplicate a write.
 
 use std::sync::{Arc, RwLock};
 
@@ -54,7 +45,6 @@ struct Follow {
     env: Env,
 }
 
-/// Where requests go now.
 struct Route {
     url: url::Url,
     auth: Option<Auth>,
@@ -131,7 +121,7 @@ impl Follow {
         route.generation
     }
 
-    // Finds the service again, unless another request did since `generation`. True when it is found.
+    // Rediscovers the service unless another request has already advanced `generation`.
     async fn resolve(&self, generation: u64) -> bool {
         let _resolving = self.resolving.lock().await;
         if self.route.read().expect("route lock").generation != generation {

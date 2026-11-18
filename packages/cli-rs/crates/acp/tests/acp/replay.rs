@@ -1,5 +1,3 @@
-//! `replay.test.ts`.
-
 use serde_json::{Value, json};
 
 use crate::wire::{WireOptions, assert_matches, assistant_message, file_diff, make_session, start_wire};

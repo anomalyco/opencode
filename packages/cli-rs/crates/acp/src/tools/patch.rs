@@ -1,5 +1,4 @@
-//! The patch tool's format: `parse` and `derive` of `packages/util/src/patch.ts`. Parse errors carry no
-//! detail here; the agent only needs to know that a patch did not parse.
+//! Parse errors are opaque: the agent only needs to know whether the patch is valid.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hunk {

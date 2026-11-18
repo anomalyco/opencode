@@ -1,9 +1,5 @@
-//! JSON-RPC over newline-delimited JSON (`packages/cli/src/acp/connection.ts`, and the parts of the ACP
-//! SDK's `ndJsonStream` and `Connection` the agent relies on).
-//!
-//! The reader runs each message's synchronous part inline, so a `session/cancel` that follows a
-//! `session/prompt` always finds the turn the prompt registered. Responses and notifications go through
-//! one writer queue, so they reach the client in the order they were sent.
+//! Newline-delimited JSON-RPC. The reader registers a prompt before dispatching the next cancellation. One writer
+//! preserves response and notification order.
 
 use std::collections::HashMap;
 use std::ops::ControlFlow;

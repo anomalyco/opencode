@@ -1,10 +1,7 @@
-//! The terminal bytes Core's mock input sends for each action (`@opentui/core/testing` `createMockKeys` with
-//! `kittyKeyboard: true`, as the TS simulation renderer sets it, and `createMockMouse`). The endpoint feeds them to
-//! the app's input parser, so both clients parse the same bytes.
+//! Encodes simulated keyboard and mouse input as terminal bytes so actions exercise the real input parser.
 
 use serde::Deserialize;
 
-/// `KeyCodes` in `mock-keys.ts`.
 const KEY_CODES: &[(&str, &str)] = &[
     ("RETURN", "\r"),
     ("LINEFEED", "\n"),
@@ -32,7 +29,6 @@ const KEY_CODES: &[(&str, &str)] = &[
     ("F12", "\x1b[24~"),
 ];
 
-/// `kittyKeyCodeMap` in `mock-keys.ts`.
 const KITTY_CODES: &[(&str, u32)] = &[
     ("escape", 27),
     ("tab", 9),

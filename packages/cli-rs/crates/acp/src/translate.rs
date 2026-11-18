@@ -1,5 +1,4 @@
-//! Server events of one turn as ACP updates, asks, and the prompt response
-//! (`packages/cli/src/acp/translate.ts`). Events stay JSON, as the server sends them.
+//! Translates server events into ACP updates and the final prompt response.
 
 use std::collections::{HashMap, HashSet};
 

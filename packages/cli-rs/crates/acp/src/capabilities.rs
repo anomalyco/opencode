@@ -1,5 +1,3 @@
-//! The client capabilities the agent acts on (`packages/cli/src/acp/capabilities.ts`).
-
 use serde_json::Value;
 
 pub const CHILD_SESSION_UPDATES: &str = "opencode/child-session-updates";

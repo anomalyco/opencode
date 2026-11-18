@@ -1,5 +1,4 @@
-//! `session/load` history replay (`packages/cli/src/acp/replay.ts`). Messages stay JSON, as the server
-//! sends them.
+//! Replays stored messages on `session/load`.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{MessageListInput, MessageListInputOrder};

@@ -1,14 +1,11 @@
-//! The UI half of the simulation protocol (`packages/protocol/src/simulation.ts`): JSON-RPC 2.0 requests over a
-//! WebSocket, decoded as `Frontend.Request` decodes them, and the handshake.
+//! Simulation handshake and JSON-RPC requests over WebSocket.
 
 use crate::keys::{Direction, KeyModifiers, Mouse};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-/// The capabilities this endpoint implements, in `Frontend.Capabilities` order. `ui.focus`, `ui.click`,
-/// `ui.state`, and `ui.snapshot` name renderable numbers, which the Rust TUI has none of (plan 7.3), and the endpoint
-/// does not record (`ui.recording.*`).
+/// Capabilities are advertised in protocol order. Renderable IDs and recording are unsupported.
 pub const CAPABILITIES: &[&str] =
     &["ui.type", "ui.press", "ui.enter", "ui.arrow", "ui.mouse", "ui.resize", "ui.matches", "ui.capture"];
 

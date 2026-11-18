@@ -1,5 +1,3 @@
-//! ACP content blocks to prompt parts and back (`packages/cli/src/acp/content.ts`).
-
 use base64::Engine as _;
 use opencode_util::json_object;
 use serde_json::{Value, json};
@@ -288,7 +286,6 @@ mod tests {
 
     #[test]
     fn a_windows_file_resource_shows_forward_slashes() {
-        // `fileURLToPath` gives `C:\src\a.ts` on Windows, which `content.ts` turns to `/`; POSIX keeps the URL path.
         let block = json!({ "type": "resource", "resource": { "uri": "file:///C:/src/a.ts#L12", "text": "body" } });
         let label = if cfg!(windows) { "[C:/src/a.ts:12]\nbody" } else { "[/C:/src/a.ts:12]\nbody" };
         assert_eq!(prompt_content_to_parts(&[block]), vec![text(label)]);

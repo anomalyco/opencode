@@ -1,8 +1,4 @@
-//! In-memory transport that serves recorded responses and events (`docs/testing.md`).
-//!
-//! [`Memory`] answers each request from the first [`Route`] that matches, streams `/api/event` from
-//! [`Memory::emit`], and logs every request. P-APP builds it from a recording; other tests can use it as a
-//! small fixture server.
+//! In-memory HTTP transport. The first matching route answers; `/api/event` streams events from [`Memory::emit`].
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};

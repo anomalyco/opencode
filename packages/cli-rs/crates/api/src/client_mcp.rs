@@ -1,8 +1,5 @@
-//! Client MCP socket (E.13b, row A05): a port of `packages/client/src/mcp.ts`.
-//!
-//! The client serves tools to the opencode server: it opens a WebSocket to `/api/experimental/client-mcp` and
-//! answers MCP JSON-RPC over it, one message per text frame, so the server is the MCP client. [`connect`] keeps the
-//! socket open and reconnects with backoff until the [`Connection`] closes or drops.
+//! Serves MCP tools to the OpenCode server, one JSON-RPC message per WebSocket text frame. [`connect`] reconnects
+//! with backoff until the connection closes or drops.
 
 use std::sync::Arc;
 use std::time::Duration;
