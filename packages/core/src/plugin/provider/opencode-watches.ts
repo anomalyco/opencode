@@ -282,7 +282,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
           ),
         }),
         output: Watch,
-        options: { namespace, codemode: true, pinned: true },
+        options: { namespace, codemode: { pinned: true } },
         execute: (input, context) =>
           Effect.gen(function* () {
             // A link or shorthand, or one event type of a server with its arguments; never both.

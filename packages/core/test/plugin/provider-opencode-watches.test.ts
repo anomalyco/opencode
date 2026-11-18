@@ -912,6 +912,7 @@ describe("OpencodePlugin event watches", () => {
         const shell = (command: string, output: string) =>
           hooks.trigger("tool", "execute.after", {
             tool: "shell",
+            codemode: false,
             sessionID: session.id,
             agent: Agent.ID.make("build"),
             messageID: SessionMessage.ID.create(),
@@ -952,6 +953,7 @@ describe("OpencodePlugin event watches", () => {
             console.state.refuse = refuse
             yield* hooks.trigger("tool", "execute.after", {
               tool: "shell",
+              codemode: false,
               sessionID: session.id,
               agent: Agent.ID.make("build"),
               messageID: SessionMessage.ID.create(),

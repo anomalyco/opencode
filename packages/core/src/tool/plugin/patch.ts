@@ -1,7 +1,6 @@
 export * as PatchTool from "./patch.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
@@ -69,7 +68,14 @@ export const Plugin = {
         editor.add({
           name,
           options: flags.resolve(loaded.entries).full_codemode.enabled
-            ? { codemode: true, pinned: true, permission: "edit" }
+            ? {
+                codemode: {
+                  pinned: true,
+                  description:
+                    "Apply multi-file edits inside `*** Begin Patch` ... `*** End Patch`. Start each operation with `*** Add File: <path>` (every content line prefixed with `+`), `*** Delete File: <path>`, or `*** Update File: <path>` (optional `*** Move to: <path>`, then `@@ [context]` hunks with space/`-`/`+` line prefixes).",
+                },
+                permission: "edit",
+              }
             : { codemode: false, permission: "edit" },
           description: DESCRIPTION,
           input: Input,
@@ -296,21 +302,6 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
-
-    const hook = (event: SessionHooks["context"]) =>
-      Effect.sync(() => {
-        const usePatch =
-          event.model.id.includes("gpt-") && !event.model.id.includes("oss") && !event.model.id.includes("gpt-4")
-        if (usePatch) {
-          delete event.tools.edit
-          delete event.tools.write
-          return
-        }
-        delete event.tools.patch
-      })
-    yield* ctx.session.hook("context", hook)
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
   }),
 }
 

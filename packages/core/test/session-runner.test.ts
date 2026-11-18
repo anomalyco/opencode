@@ -348,6 +348,14 @@ const layer = Layer.unwrap(
     )
     const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [Tool.node] })
     const models = Layer.mock(SessionRunnerModel.Service)({
+      select: (session) =>
+        Effect.sync(() => {
+          const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
+          return {
+            info: Model.Info.default(Provider.ID.make(selected.provider), Model.ID.make(selected.id)),
+            variant: session.model?.variant,
+          }
+        }),
       resolve: (session) =>
         state.modelResolveHook.pipe(
           Effect.map(() => {
