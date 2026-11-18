@@ -719,7 +719,7 @@ impl Enc<'_, '_> {
     fn frame(&self, f: &Frame) -> R<J> {
         let kind = match f.kind {
             FrameKind::Normal => json!(["n"]),
-            FrameKind::Native(op) => json!(["x", op.code()]),
+            FrameKind::Native(op, sub) => json!(["x", op.code(), sub]),
             FrameKind::Async(c) => json!(["a", c]),
             FrameKind::Generator(g, r) => {
                 let r = match r {
@@ -734,7 +734,7 @@ impl Enc<'_, '_> {
         };
         // A native frame's code is not the program's: its step function is in its mode.
         let proto = match f.kind {
-            FrameKind::Native(_) => 0,
+            FrameKind::Native(..) => 0,
             _ => self.proto(&f.func)?,
         };
         Ok(json!([
@@ -1347,7 +1347,12 @@ impl Dec<'_> {
                     .ok()
                     .and_then(crate::native::NativeOp::from_code)
                     .ok_or_else(|| invalid("a native frame's step is unknown."))?;
-                FrameKind::Native(op)
+                let sub = match kind.get(2) {
+                    Some(s) => u16::try_from(u32_(s)?)
+                        .map_err(|_| invalid("a native frame's step is unknown."))?,
+                    None => 0,
+                };
+                FrameKind::Native(op, sub)
             }
             Some("a") => FrameKind::Async(u32_(at(kind, 1)?)?),
             Some("g") => {

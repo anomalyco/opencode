@@ -643,3 +643,13 @@ fn weak_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], _: Id) 
     weak_key(vm, &arg(args, 0), "as weak map key")?;
     get_or_insert_computed(vm, id, args, "WeakMap.getOrInsertComputed")
 }
+
+/// The steps of this family's native frames (`native::NativeOp::Collections`), by sub-op; see `native.rs`.
+pub(crate) fn family_step(
+    _vm: &mut Vm,
+    _sub: u16,
+    _fr: crate::native::Frame,
+    _input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    Ok(crate::native::Step::Done(Value::Undef))
+}

@@ -1186,3 +1186,13 @@ fn global_is_finite(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         Ok(Value::Bool(vm.number_of(&v)?.is_finite()))
     })
 }
+
+/// The steps of this family's native frames (`native::NativeOp::Callbacks`), by sub-op; see `native.rs`.
+pub(crate) fn family_step(
+    _vm: &mut Vm,
+    _sub: u16,
+    _fr: crate::native::Frame,
+    _input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    Ok(crate::native::Step::Done(Value::Undef))
+}

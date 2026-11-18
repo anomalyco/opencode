@@ -1185,3 +1185,13 @@ fn global_btoa(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let out = base64_encode(&data, false, true);
     Ok(vm.string_val(out))
 }
+
+/// The steps of this family's native frames (`native::NativeOp::Arrays`), by sub-op; see `native.rs`.
+pub(crate) fn family_step(
+    _vm: &mut Vm,
+    _sub: u16,
+    _fr: crate::native::Frame,
+    _input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    Ok(crate::native::Step::Done(Value::Undef))
+}

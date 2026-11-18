@@ -60,9 +60,18 @@ pub enum NativeOp {
     Revive,
     /// `Function.prototype.call` and `apply`.
     Invoke,
+    /// The steps of a family of built-ins, by the frame's sub-op, each in the family's own file: `Uint8Array` and
+    /// arrays (`builtins::bytes::family_step`), iterators (`builtins::iterator::family_step`), collections
+    /// (`builtins::sets::family_step`), and other callbacks: JSON, crossings, strings, web
+    /// (`builtins::object::family_step`). A family numbers its own steps and keeps each number once a snapshot may
+    /// hold it. Push one with `Vm::enter_native_sub`.
+    Arrays,
+    Iterators,
+    Collections,
+    Callbacks,
 }
 
-const OPS: [NativeOp; 16] = [
+const OPS: [NativeOp; 20] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
@@ -79,6 +88,10 @@ const OPS: [NativeOp; 16] = [
     NativeOp::IterConsume,
     NativeOp::Revive,
     NativeOp::Invoke,
+    NativeOp::Arrays,
+    NativeOp::Iterators,
+    NativeOp::Collections,
+    NativeOp::Callbacks,
 ];
 
 impl NativeOp {
@@ -137,7 +150,7 @@ pub fn proto() -> FuncProto {
     }
 }
 
-pub fn step(vm: &mut Vm, op: NativeOp, base: usize, input: Input) -> Result<Step, Value> {
+pub fn step(vm: &mut Vm, op: NativeOp, sub: u16, base: usize, input: Input) -> Result<Step, Value> {
     let frame = Frame(base);
     match op {
         NativeOp::ArrayEach => crate::builtins::array::each_step(vm, frame, input),
@@ -162,6 +175,10 @@ pub fn step(vm: &mut Vm, op: NativeOp, base: usize, input: Input) -> Result<Step
         }
         NativeOp::Revive => crate::builtins::object::revive_step(vm, frame, input),
         NativeOp::Invoke => crate::builtins::object::invoke_step(vm, frame, input),
+        NativeOp::Arrays => crate::builtins::bytes::family_step(vm, sub, frame, input),
+        NativeOp::Iterators => crate::builtins::iterator::family_step(vm, sub, frame, input),
+        NativeOp::Collections => crate::builtins::sets::family_step(vm, sub, frame, input),
+        NativeOp::Callbacks => crate::builtins::object::family_step(vm, sub, frame, input),
     }
 }
 
@@ -329,6 +346,19 @@ pub fn enter_for_of(
     source: Value,
     own: &[Value],
 ) -> Res {
+    enter_for_of_sub(vm, op, 0, callee, this, source, own)
+}
+
+/// `enter_for_of` for one of a family's steps (see `NativeOp::Arrays`).
+pub fn enter_for_of_sub(
+    vm: &mut Vm,
+    op: NativeOp,
+    sub: u16,
+    callee: crate::value::Id,
+    this: Value,
+    source: Value,
+    own: &[Value],
+) -> Res {
     let mut slots = vec![
         source,
         Value::Undef,
@@ -337,7 +367,7 @@ pub fn enter_for_of(
         Value::Undef,
     ];
     slots.extend_from_slice(own);
-    vm.enter_native(op, callee, this, &slots)
+    vm.enter_native_sub(op, sub, callee, this, &slots)
 }
 
 /// Pushes a `ForOf` frame over an iterator record already open: `next` is the method to call, or undefined to step
@@ -352,6 +382,21 @@ pub fn enter_for_of_record(
     next: Value,
     own: &[Value],
 ) -> Res {
+    enter_for_of_record_sub(vm, op, 0, callee, this, it, next, own)
+}
+
+/// `enter_for_of_record` for one of a family's steps (see `NativeOp::Arrays`).
+#[allow(clippy::too_many_arguments)]
+pub fn enter_for_of_record_sub(
+    vm: &mut Vm,
+    op: NativeOp,
+    sub: u16,
+    callee: crate::value::Id,
+    this: Value,
+    it: Value,
+    next: Value,
+    own: &[Value],
+) -> Res {
     let mut slots = vec![
         Value::Undef,
         it,
@@ -360,7 +405,7 @@ pub fn enter_for_of_record(
         Value::Undef,
     ];
     slots.extend_from_slice(own);
-    vm.enter_native(op, callee, this, &slots)
+    vm.enter_native_sub(op, sub, callee, this, &slots)
 }
 
 /// The step of a `ForOf` frame.

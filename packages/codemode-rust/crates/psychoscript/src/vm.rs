@@ -39,8 +39,9 @@ pub enum FrameKind {
     Normal,
     Async(u32),
     Generator(Id, Resume),
-    /// A built-in that calls back into the program (see `native.rs`), by its step function.
-    Native(crate::native::NativeOp),
+    /// A built-in that calls back into the program (see `native.rs`), by its step function, and for a family's op
+    /// (`NativeOp::Arrays`, ...) which of the family's steps.
+    Native(crate::native::NativeOp, u16),
 }
 
 /// How a generator resumed from bytecode hands its yields and its completion back to the frame below it. A
@@ -981,7 +982,7 @@ impl<'rt> Vm<'rt> {
     fn program_depth(&self) -> usize {
         self.frames
             .iter()
-            .filter(|f| !matches!(f.kind, FrameKind::Native(_)))
+            .filter(|f| !matches!(f.kind, FrameKind::Native(..)))
             .count()
     }
 
@@ -995,13 +996,26 @@ impl<'rt> Vm<'rt> {
         this: Value,
         locals: &[Value],
     ) -> Res {
-        self.enter_native_with(op, Value::Obj(callee), this, locals)
+        self.enter_native_with(op, 0, Value::Obj(callee), this, locals)
+    }
+
+    /// `enter_native` for one of a family's steps (see `native::NativeOp::Arrays`).
+    pub(crate) fn enter_native_sub(
+        &mut self,
+        op: crate::native::NativeOp,
+        sub: u16,
+        callee: Id,
+        this: Value,
+        locals: &[Value],
+    ) -> Res {
+        self.enter_native_with(op, sub, Value::Obj(callee), this, locals)
     }
 
     /// `enter_native` for a frame no built-in's call made (a job's), or whose callee is not at hand.
     pub(crate) fn enter_native_with(
         &mut self,
         op: crate::native::NativeOp,
+        sub: u16,
         callee: Value,
         this: Value,
         locals: &[Value],
@@ -1023,7 +1037,7 @@ impl<'rt> Vm<'rt> {
             hbase,
             extra: Box::default(),
             argc: 0,
-            kind: FrameKind::Native(op),
+            kind: FrameKind::Native(op, sub),
             is_base: false,
             yield_pc: NO_YIELD,
         };
@@ -1234,7 +1248,7 @@ impl<'rt> Vm<'rt> {
         self.frames
             .iter()
             .rev()
-            .find(|f| !matches!(f.kind, FrameKind::Native(_)))
+            .find(|f| !matches!(f.kind, FrameKind::Native(..)))
             .and_then(|f| f.func.callee(f.pc.wrapping_sub(1)))
     }
 
@@ -1323,6 +1337,7 @@ impl<'rt> Vm<'rt> {
         &mut self,
         fi: usize,
         op: crate::native::NativeOp,
+        sub: u16,
         base: usize,
         mode: usize,
     ) -> Result<Option<Slot>, Value> {
@@ -1340,7 +1355,7 @@ impl<'rt> Vm<'rt> {
             _ => crate::native::Input::Start,
         };
         self.frames[fi].pc = crate::native::RETURNED;
-        match crate::native::step(self, op, base, input)? {
+        match crate::native::step(self, op, sub, base, input)? {
             crate::native::Step::Call(argc) => {
                 self.call_op(argc)?;
                 if self.park
@@ -1475,7 +1490,7 @@ impl<'rt> Vm<'rt> {
         let Some(caller) = self.frames[..fi]
             .iter()
             .rev()
-            .find(|f| !matches!(f.kind, FrameKind::Native(_)))
+            .find(|f| !matches!(f.kind, FrameKind::Native(..)))
         else {
             return;
         };
@@ -1607,15 +1622,15 @@ impl<'rt> Vm<'rt> {
             match f.kind {
                 FrameKind::Async(c) => return Some(c),
                 FrameKind::Generator(..) => return None,
-                FrameKind::Native(crate::native::NativeOp::Settle) if f.is_base && i == 0 => {
+                FrameKind::Native(crate::native::NativeOp::Settle, _) if f.is_base && i == 0 => {
                     self.coroutines.push(Coroutine {
                         saved: None,
                         promise: None,
                     });
                     return Some(self.coroutines.len() as u32 - 1);
                 }
-                FrameKind::Normal | FrameKind::Native(_) if f.is_base => return None,
-                FrameKind::Normal | FrameKind::Native(_) => {}
+                FrameKind::Normal | FrameKind::Native(..) if f.is_base => return None,
+                FrameKind::Normal | FrameKind::Native(..) => {}
             }
         }
         None
@@ -2160,10 +2175,10 @@ impl<'rt> Vm<'rt> {
     fn run_frames(&mut self, resumable: bool) -> Result<Exit, Value> {
         'outer: loop {
             let fi = self.frames.len() - 1;
-            if let FrameKind::Native(op) = self.frames[fi].kind {
+            if let FrameKind::Native(op, sub) = self.frames[fi].kind {
                 // A native frame runs its step function, not code: where it is to continue is its `pc`.
                 let (base, mode) = (self.frames[fi].base, self.frames[fi].pc);
-                match self.native_op(fi, op, base, mode) {
+                match self.native_op(fi, op, sub, base, mode) {
                     Ok(None) => continue 'outer,
                     Ok(Some(v)) => return Ok(Exit::Return(v)),
                     Err(e) => {
@@ -3006,7 +3021,7 @@ impl<'rt> Vm<'rt> {
                         self.stack.truncate(frame.base - 2);
                         self.handlers.truncate(frame.hbase as usize);
                         let result = match frame.kind {
-                            FrameKind::Normal | FrameKind::Native(_) => v,
+                            FrameKind::Normal | FrameKind::Native(..) => v,
                             FrameKind::Async(c) => match self.coroutines[c as usize].promise {
                                 Some(p) => {
                                     self.resolve_promise(p, v);

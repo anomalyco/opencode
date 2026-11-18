@@ -51,6 +51,7 @@ pub(crate) fn enter_settle(
     slots.extend_from_slice(args);
     vm.enter_native_with(
         crate::native::NativeOp::Settle,
+        0,
         callee,
         Value::Undef,
         &slots,

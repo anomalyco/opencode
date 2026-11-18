@@ -751,3 +751,13 @@ fn it_reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         [Value::Num(REDUCE as f64), f, acc, Value::Num(has)],
     )
 }
+
+/// The steps of this family's native frames (`native::NativeOp::Iterators`), by sub-op; see `native.rs`.
+pub(crate) fn family_step(
+    _vm: &mut Vm,
+    _sub: u16,
+    _fr: crate::native::Frame,
+    _input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    Ok(crate::native::Step::Done(Value::Undef))
+}

@@ -525,6 +525,11 @@ programs.push(
 // Crossing to the host: a tool's or search's arguments, and the result, cross as JSON; a promise inside is awaited by
 // the reference's internal walk, a toJSON of the program's is called there, and the call starts once they crossed.
 const later = (v: string) => `new Promise((done) => setTimeout(() => done(${v}), 0))`
+// `S(x)` runs a search whose input holds a promise, which parks the frames it is called from, and logs around it.
+const searching = (expr: string) =>
+  `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
+     Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`
+
 programs.push(
   `return await tools.t.echo({ a: Promise.resolve(5), b: { toJSON: () => 7 }, c: [Promise.resolve(1), { d: Promise.resolve('x') }] })`,
   `return [await tools.t.echo(Promise.resolve({ x: 1 })), await tools.t.echo(), await tools.t.echo(undefined), await tools.t.echo(null)]`,
@@ -603,10 +608,7 @@ programs.push(
     "JSON.parse('[1,[2,{}],3]', (k, v) => (typeof v === 'number' ? S(v) + v : v))",
     "(function (x) { return S(x) + x + this.y }).call({ y: 10 }, 1)",
     "((x, y) => S(x) + x + y).apply(null, [1, 2])",
-  ].map(
-    (expr) => `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
-     Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`,
-  ),
+  ].map(searching),
 )
 
 // Busy loops through the walk: its fuel decides when the reference starts the queued read.
@@ -664,6 +666,15 @@ const suspensions: Array<string> = [
   `return await Promise.resolve(1).then((x) => search({ query: tools.wait({}).then(() => 'echo') }).items.length + x)`,
   `const t = { toJSON: () => 9 }; const r = tools.t.echo({ t, n: [1, { w: tools.wait({}) }], z: t }); return await r`,
 ]
+
+// Each family of built-ins that run in native frames keeps its own cases in conformance/frames/: expressions to run with
+// `S` (see `searching`), other programs, and suspensions.
+for (const family of ["arrays", "iterators", "collections", "callbacks", "core"]) {
+  const { default: cases } = await import(join(import.meta.dir, "frames", `${family}.ts`))
+  const own = cases({ after, during, text })
+  programs.push(...own.searches.map(searching), ...own.programs)
+  suspensions.push(...own.suspensions)
+}
 
 const suspend = async (code: string) => {
   const log: Array<unknown> = []
