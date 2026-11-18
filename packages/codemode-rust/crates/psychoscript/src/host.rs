@@ -955,10 +955,29 @@ fn promise_like_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> 
     let Value::Str(name) = vm.native_data(callee) else {
         return Ok(Value::Undef);
     };
-    let name = vm.text(name).to_owned();
-    let key = vm.atoms.intern(&name);
-    let method = vm.get(&Value::Obj(p), key)?;
-    vm.call(&method, Value::Obj(p), args)
+    // As the reference does, the promise's own `then`, `catch` or `finally` runs, whatever the program put on
+    // `Promise.prototype`: it only registers its reactions.
+    let derived = vm.new_promise();
+    let (first, second) = (crate::builtins::arg(args, 0), crate::builtins::arg(args, 1));
+    let reaction = match vm.text(name) {
+        "then" => crate::vm::Reaction::Then {
+            on_ful: first,
+            on_rej: second,
+            derived,
+        },
+        "catch" => crate::vm::Reaction::Then {
+            on_ful: Value::Undef,
+            on_rej: first,
+            derived,
+        },
+        _ if vm.is_callable(&first) => crate::vm::Reaction::Finally {
+            cleanup: first,
+            derived,
+        },
+        _ => crate::vm::Reaction::Resolve(derived),
+    };
+    vm.perform_then(p, reaction);
+    Ok(Value::Obj(derived))
 }
 
 // ---------- extensions ----------
