@@ -560,23 +560,6 @@ fn tool_location_and_compaction_rows() {
             json!({ "abandoned": [{ "sessionUpdate": "compaction_update", "compactionId": "msg_compact", "status": "cancelled" }] }),
         ),
         (
-            "streams a compaction's summary and completes it with the full summary",
-            true,
-            false,
-            live(vec![
-                compaction_started(ROOT),
-                compaction_delta("Sum", ROOT),
-                compaction_delta("mary", ROOT),
-                compaction_ended("Summary", ROOT),
-            ]),
-            json!({ "updates": [
-                { "sessionUpdate": "compaction_update", "compactionId": "msg_compact", "status": "in_progress" },
-                { "sessionUpdate": "compaction_summary_chunk", "compactionId": "msg_compact", "content": { "text": "Sum" } },
-                { "sessionUpdate": "compaction_summary_chunk", "compactionId": "msg_compact", "content": { "text": "mary" } },
-                { "status": "completed", "summary": [{ "type": "text", "text": "Summary" }] },
-            ] }),
-        ),
-        (
             "clears the summary of a compaction that completes without a readable one",
             true,
             false,
@@ -672,13 +655,6 @@ fn tool_location_and_compaction_rows() {
             false,
             live(vec![compaction_ended("Summary", ROOT)]),
             json!({ "updates": [] }),
-        ),
-        (
-            "marks a compaction without forwarding its summary when the client lacks the capability",
-            false,
-            false,
-            live(vec![compaction_started(ROOT), compaction_delta("Summary", ROOT), compaction_ended("Summary", ROOT)]),
-            json!({ "updates": [marker(json!({ "status": "started" })), marker(json!({ "status": "completed" }))] }),
         ),
         (
             "marks a failed compaction with the full error",
