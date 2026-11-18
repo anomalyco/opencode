@@ -8,8 +8,7 @@ use opencode_tui::{Deps, Route};
 use crate::plugin_pipe::{Pipe, config};
 use crate::support::{self, Fake};
 
-/// Installs the pinned tarball of `name` in the cache under `home` as TS's `Npm.add` of `spec` leaves it: the key's
-/// directory, a generation, its `package.json` naming the package, and the package in its `node_modules`.
+/// Install the pinned package in the temporary cache using the JS client's cache layout.
 pub(crate) fn install(home: &Path, spec: &str, name: &str, generation: &str) {
     let root = support::home_paths(home).cache.join("npm").join(spec).join(generation);
     let manifest =

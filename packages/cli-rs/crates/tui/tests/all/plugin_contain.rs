@@ -1,22 +1,5 @@
-//! The containment model (O-124, phase P4c): the real TUI in a `TestApp` with two external plugins, `model.a` and
-//! `model.b`, loaded by the real `Loader` through the C ABI's byte shims, a run record attached as a client under a
-//! parent has it, and the budget's clock injected. `model.a` replaces the home footer, and can be made to panic, to
-//! overrun (a call of 101 ms on the injected clock) or to lag (2 ms a call); `model.b` appends to it and is the
-//! witness. Four properties are checked after every command, each with an oracle that shares no code with the host:
-//!
-//! - `isolation`: after a fault of `model.a`, every cell outside the failure count, `model.b`'s call log and the
-//!   composer equal a twin where the user disabled `model.a` at that step. A failed `Replace` claim that kept the
-//!   footer would differ.
-//! - `reported-once`: a fault makes one toast, one count in the home footer and one failed row in `/plugins`, and no
-//!   slow toast; slow makes one toast a session, when [`Slow`], the rule of 4.4 as code over the plugin's own log and
-//!   the painted frames, says it became slow.
-//! - `record-balanced`: inside each call the plugin reads the mapped record and finds its own ID and call; after each
-//!   command the record names nobody.
-//! - `draft-exact`: after each command the record's snapshot holds the composer's text as the composer has it, through
-//!   typing, clear, history, stash and a remount.
-//!
-//! `budget` at its boundaries is the table of `opencode_plugin::contain::tests`; `restart`, with real processes, is the
-//! P-PTY scenarios `P4c/crash` and `P4c/hang`.
+//! Model containment on two real external plugins. A fault in one must leave the other usable and release the failed
+//! activation's state.
 
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
@@ -112,9 +95,9 @@ thread_local! {
     static LAG: Cell<bool> = const { Cell::new(false) };
     /// `model.a`'s next budgeted call in world 0 is its first after setup, which no overrun fails.
     static COLD: Cell<bool> = const { Cell::new(false) };
-    /// A fault that fails `model.a` fired in world 0 since this was last taken: the oracle of a failure.
+    /// Whether the probe injected a failure in the primary world.
     static FIRED: Cell<bool> = const { Cell::new(false) };
-    /// What the last run saw: whether `model.a` failed, and whether it was told slow.
+    /// Failure and slow-notice observations from the last run.
     static OUTCOME: Cell<(bool, bool)> = const { Cell::new((false, false)) };
 }
 
@@ -370,7 +353,7 @@ impl Slow {
         }
     }
 
-    /// The frames before `frame`, the one now open, have ended; returns whether that made the plugin slow first.
+    /// Close completed frames and report the transition to slow.
     fn close(&mut self, frame: u64) -> bool {
         let open = self.open.split_off(&frame);
         let mut became = false;
@@ -888,11 +871,6 @@ fn surfaces(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P4c on P1): every call into a 2.0 surface goes through the budget and containment. Inside a slot view, a
-// route view and a route command the record names the call (`view`, `run-command`) and a panic would unwind to the
-// host's catch. The plugin is a built-in, so an overrun in a view or a route command is a host bug, counted, and fails
-// nothing. A panic in a route command and in a slot view fails the plugin: its mounts show nothing and hold nothing,
-// and the census is empty once they unmount; enabled again, its route mounts under a new generation.
 #[test]
 fn a_2_0_surface_is_contained() {
     let root = opencode_util::temp::tempdir().unwrap();

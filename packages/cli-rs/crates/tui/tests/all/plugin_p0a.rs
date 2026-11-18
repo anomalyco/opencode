@@ -1,11 +1,4 @@
-//! ABI 1.5 (P0a) in the real TUI: a plugin's confirm and alert, its composer read and edits, and its styled box. One
-//! plugin source (`crates/plugin/examples/sample/src/p0a.rs`) runs on every carrier: linked, through the C ABI's byte
-//! shims (`Loopback`), and in the sample library. Each table runs on the first two and compares what they draw; the
-//! library runs the dialogs and the composer once more.
-//!
-//! The rows are named by the properties of the rich-plugins design (4.14) so they can move onto the model harness:
-//! `no-effects` (a call that panics after queueing every 1.5 effect leaves none of them) and `ledger` (a dialog of a
-//! plugin that left `active` calls nothing of it).
+//! Compare composer edits, dialogs, and styled nodes on linked and native ABI carriers.
 
 use crate::prompt::{Setup, session_route};
 use crate::support::{self, Harness};
@@ -48,8 +41,7 @@ fn home(carrier: Carrier) -> Harness {
     h
 }
 
-/// The cells on screen without the composer's placeholder example, which is random on each mount: its row from the
-/// example's column on, while no dialog covers it (`parity/scenarios/P.1/p0a-dialogs.app.ts` masks the same).
+/// Mask the random composer placeholder before comparing cells.
 fn cells(h: &Harness) -> Vec<opentui::testing::Cell> {
     let capture = h.app.render();
     let row = h.app.text().lines().position(|line| line.contains("Ask anything")).filter(|_| !h.tui.dialogs.is_open());

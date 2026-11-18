@@ -1,6 +1,4 @@
-//! `/stats` and `/btw` on the one plugin API (O-67): their requests go through the plugin's `fetch` and come back to
-//! `on_reply`; the stats route and its escape, the `/btw` prompt, live answer panel and pending spinner, a reply after a
-//! disable, a moved service, and the stats route through the C ABI's byte shims (`Loopback`).
+//! Check built-in plugin fetches through rendered results, errors, and mount cancellation.
 
 use crate::support::{self, DIRECTORY, Harness, Seen};
 

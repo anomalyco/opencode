@@ -1,16 +1,4 @@
-//! A plugin's threads and its mailbox (P4, synthesis 4.2 "When a queue is full", 4.14 `backlog`), in the real TUI,
-//! linked and through the C ABI's byte shims.
-//!
-//! The test plugin `test.mail` registers a message handler that writes what arrives to its own log, and keeps its
-//! sender where the test reaches it. The model's threads send from outside the UI thread, each joined before the
-//! next command, so a `send` that blocks is a test that never ends; each writes what every send returned. The oracle
-//! is those two logs and a reference written here, a list with the mailbox's rules: an entry per ordered message and
-//! one per key, at most [`abi::BOUND`], nothing once the plugin left `active`. It shares no code with the host.
-//!
-//! What it checks after every command: each send returned what the reference allows (`Full` only when the reference
-//! holds the bound and no entry of its key, `Closed` only after the plugin left); at a frame, exactly the messages the
-//! reference holds arrive, once, in its order, with the last value under each key; and the host's high-water count
-//! never passes the bound.
+//! Drive plugin worker threads and mailbox delivery through the TUI.
 
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
@@ -82,8 +70,7 @@ fn open(carrier: Carrier) -> Harness {
     harness
 }
 
-/// Runs the UI thread until everything that waits is handed over: the updates past a frame's budget wait for the
-/// frames after it (Pl), which it paints.
+/// Advance frames until all work drains, including updates beyond a single frame's budget.
 fn frame(harness: &Harness) {
     harness.app.advance(Duration::from_millis(1));
     harness.app.advance(Duration::from_millis(1));
@@ -361,8 +348,6 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
         assert!(done.recv_timeout(Duration::from_secs(10)).is_ok(), "{carrier:?}: a thread ran on after the failure");
         let sender = mail(|mail| mail.sender.clone()).unwrap();
         assert_eq!(sender.send((3, 1)), Err(SendError::Closed((3, 1))), "{carrier:?}");
-        // A failure ends the activation, so a failed plugin has no mailbox, as a disabled one has none, on every
-        // carrier (review carbon-7).
         assert_eq!(opencode_plugin::mailbox::stats(ID), None, "{carrier:?}");
         tui.plugins.toggle(&host(tui), ID, false);
         assert_eq!(opencode_plugin::mailbox::stats(ID), None, "{carrier:?}");
@@ -445,8 +430,6 @@ fn disabling_does_not_wait_for_a_serializer() {
     }
 }
 
-// Expected (reviews bigboi-5, carbon-4): an integer past 64 bits, which JSON text carries but a JSON number of the host
-// would not, arrives as itself on both carriers.
 #[test]
 fn a_wide_integer_arrives_as_itself_on_both_carriers() {
     for carrier in CARRIERS {
@@ -518,8 +501,7 @@ fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
             })
             .unwrap();
         done.recv_timeout(Duration::from_secs(10)).unwrap();
-        // The report counts from when it is put in, not from when the thread began to panic: under load the refills
-        // the frames drain in between were counted as coming before it (compat-harness). Nothing drains until then.
+        // Start the interval when the report enters the queue; a panicking thread can be descheduled before posting it.
         let before = {
             let begun = std::time::Instant::now();
             while !opencode_plugin::mailbox::stats(ID).is_some_and(|stats| stats.reported) {

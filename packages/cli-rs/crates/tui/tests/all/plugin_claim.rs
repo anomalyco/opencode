@@ -1,16 +1,5 @@
-//! Renderer claims (phase Pr, synthesis 4.11 and 4.14): the real TUI in a `TestApp` on a session whose assistant message
-//! streams tool calls and a text with a fence, with two built-ins. `claim.a` claims the `probe` tool and the `probe`
-//! fence, and can be made to panic, to overrun (a view of 101 ms on the injected clock) or to return a tree with an id
-//! twice; `claim.b` claims the `witness` tool and is the witness. A `read` call is the host's own row. Two properties
-//! are checked after every command, each with an oracle that shares no code with the host:
-//!
-//! - `stream-whole`: every part a claim shows equals, cell for cell, the claim's own tree for the part's content as
-//!   the model says it is now, mounted fresh in an app of its own (`node::add`, no reconcile), and every part the model
-//!   says a claim draws shows. The model keeps the part's content from the events it sent, not from the host.
-//! - `isolation`: a second TUI runs the same commands where `claim.a` never faults. Where the fault fails the plugin
-//!   (a panic), the user disables it at that step instead; where it fails one part (an overrun, a refused tree), the
-//!   view declines that part from that step on. Every cell outside the composer, and `claim.b`'s own log of its views,
-//!   must equal that twin's. The fault comes from `claim.a`'s own log of what it did.
+//! Exercise renderer claims on a streaming transcript. Compare claimed rows with a fresh mount and a second carrier; a
+//! failed claim must hand the row back to the host.
 
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::model::{self, Failure, Model, Rng};
@@ -66,10 +55,10 @@ thread_local! {
     static ARMED: RefCell<Option<(String, Fault)>> = const { RefCell::new(None) };
     /// The parts `claim.a` declines.
     static DECLINE: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
-    /// The faults that fired since this was last taken, as `claim.a` logs them.
+    /// Injected faults observed by the claim.
     static FIRED: RefCell<Vec<(String, Fault)>> = const { RefCell::new(Vec::new()) };
     static CLOCK: RefCell<Option<Rc<Cell<Duration>>>> = const { RefCell::new(None) };
-    /// `claim.a`'s next call is its first since setup, which no overrun fails (P4c).
+    /// The first call after setup is exempt from overrun failure.
     static COLD: Cell<bool> = const { Cell::new(false) };
     /// The parts `claim.a` returns a refused tree for unless the host asks for a whole tree, and the `full` of each
     /// of its views.
@@ -106,8 +95,7 @@ fn lines(part: &Part) -> Vec<String> {
             lines.extend(error.map(|error| format!("error {error}")));
             lines
         }
-        // Not whether it closed: Markdown hands a fence over again only when its code changes, and the closing line
-        // changes none (a finding of this phase).
+        // A closing delimiter need not change the fence's code.
         Part::Fence(fence) => fence.code.lines().map(|line| format!("| {line}")).collect(),
     }
 }
@@ -243,8 +231,7 @@ impl Expected {
 
     /// The fence's lines, once it opened.
     fn fence(&self) -> Option<Vec<String>> {
-        // The transcript gives Markdown the text trimmed (`message-parts.tsx:191`), so an open fence's last line ends
-        // without the spaces that end the text so far.
+        // Trim the open fence's last line the same way the transcript trims Markdown input.
         let text: String = CHUNKS[..self.chunks].concat();
         let (_, body) = text.trim().split_once("```probe\n")?;
         let code = body.split_once("```").map_or(body, |(code, _)| code);
@@ -252,7 +239,7 @@ impl Expected {
         (!code.is_empty()).then(|| code.lines().map(|line| format!("| {line}")).collect())
     }
 
-    /// The tree each part a claim draws now shows, by its key.
+    /// Visible part trees by claim key.
     fn shown(&self) -> Vec<(String, v2::Node)> {
         let mut shown = Vec::new();
         for (index, (id, name)) in SLOTS.iter().enumerate() {
@@ -300,7 +287,7 @@ impl World {
         ])
     }
 
-    /// A TUI on the session with `builtins`. Each call in its own row: grouping folds rows, and is E.8's.
+    /// Disable grouping so each tool call occupies its own transcript row.
     fn with(builtins: Vec<opencode_plugin::Builtin>) -> Self {
         Self::configured(builtins, ungrouped(), false)
     }
@@ -683,8 +670,7 @@ struct Step {
 /// Views as a plugin logs them: the plugin, the part, and the lines it drew.
 type Views = Vec<(char, String, Vec<String>)>;
 
-/// The views logged since the last call, and those of `claim.b` with runs of one view as one: a remount views every
-/// part again.
+/// Collapse adjacent identical witness views: a remount revisits every part.
 fn witness() -> (Vec<(String, Vec<String>)>, Views) {
     let views = VIEWS.with_borrow_mut(std::mem::take);
     let seen = views.iter().filter(|(plugin, _, _)| *plugin == 'b').map(|(_, key, lines)| (key.clone(), lines.clone()));
@@ -798,8 +784,7 @@ impl ClaimModel {
             .collect()
     }
 
-    /// Whether `fault` fails the plugin, rather than the part: a panic on every carrier, and an overrun of a library,
-    /// which P4c fails as an external plugin's (an overrun in process is a counted host bug).
+    /// Panics fail the plugin on both carriers. A time overrun fails a library but falls back for a linked claim.
     fn fails(&self, fault: Fault) -> bool {
         fault == Fault::Panic || (fault == Fault::Overrun && self.carrier == Carrier::Abi)
     }
@@ -895,9 +880,7 @@ fn claimed_parts_stream_into_what_a_fresh_mount_draws() {
     }
 }
 
-/// `carrier-equal` for claims (P4, synthesis 4.14): one plugin source, linked and through the byte shims of the C ABI,
-/// given the same commands, shows equal frames, and each plugin logs the same views and the same faults. An overrun
-/// fails a library and only the part in process (P4c), so these commands arm no overrun.
+/// Compare frame cells, fault reports, and view delivery for one trace on both native carriers.
 pub struct ClaimCarriers;
 
 impl Model for ClaimCarriers {
@@ -1021,7 +1004,6 @@ fn a_streaming_part_gets_one_view_a_frame() {
         world.harness.app.render();
         assert_eq!(views(), 1, "the paint after views nothing");
         assert_eq!(stream_whole(&world, &expected), Ok(1));
-        // A revision that changes the phase is viewed at once, also in a frame that viewed the part already.
         world.send(&Command::Delta(0, 0), &mut expected);
         world.emit("session.tool.input.delta", json!({ "id": "call_1", "delta": TOKENS[1] }));
         let before = views();
@@ -1115,7 +1097,6 @@ fn a_tree_refused_once_is_asked_again_whole() {
 }
 
 thread_local! {
-    /// What the probes of the rows below saw: the plugin that viewed, and the width it was given.
     static SEEN: RefCell<Vec<(char, u16)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -1215,8 +1196,6 @@ fn each_claim_draws_with_its_own_view_and_releases_hold() {
         drop(world);
     }
 }
-
-// Claims among the transcript's other rules (O-115): groups, a theme change, a permission, images.
 
 thread_local! {
     /// What the views of the rows below drew, in order.
@@ -1956,10 +1935,6 @@ fn plugin_closed(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review policy on fence closure): a claimed fence learns that it closed once Markdown decides the closing
-// line. The transcript gives Markdown the text trimmed (`message-parts.tsx:191`), so a closing line at the end of the
-// text so far is pending: the fence is open until more text follows it, and closed, no longer streaming, once the
-// message completes.
 #[test]
 fn a_claimed_fence_learns_it_closed_once_markdown_decides_it() {
     for carrier in CARRIERS {
@@ -1983,8 +1958,7 @@ fn a_claimed_fence_learns_it_closed_once_markdown_decides_it() {
     }
 }
 
-/// Claims `probe` fences with Markdown that holds the fence's code in another `probe` fence: unbounded, were a fence
-/// in a claimed part's Markdown claimed again.
+/// A plugin that renders its own fence syntax must not recursively reclaim it.
 fn plugin_nested(setup: &mut abi::Setup) -> Result<(), String> {
     setup.claim(Claim::fence("probe", |_, part| {
         let Part::Fence(fence) = part else { return None };
@@ -2263,7 +2237,6 @@ fn an_overrun_at_a_theme_change_falls_the_fence_back() {
     }
 }
 
-/// Claims `probe` fences with P3's `Code` of the fence's code, as Rust, with line numbers.
 fn plugin_code(setup: &mut abi::Setup) -> Result<(), String> {
     setup.claim(Claim::fence("probe", |_, part| {
         let Part::Fence(fence) = part else { return None };
@@ -2300,8 +2273,6 @@ fn a_fence_claim_draws_its_code_in_p3s_code_view() {
 }
 
 thread_local! {
-    /// What `claim.fenced` returns for a fence: the fence node alone, a card around it, the code in P3's `Code`, nothing
-    /// (the host's row), two fence nodes; and the views it ran.
     static FENCED: Cell<Fenced> = const { Cell::new(Fenced::Card) };
     static FENCED_VIEWS: Cell<u32> = const { Cell::new(0) };
 }
@@ -2452,8 +2423,6 @@ fn a_fence_node_where_it_may_not_be_shows_the_host_row() {
         assert_eq!(status.map(|entry| entry.status), Some(opencode_plugin::Status::Active), "{carrier:?}");
     }
 }
-
-// What a claimed part holds is its plugin's (review bigboi 1, carbon-3).
 
 const SHARE: &str = "claim.share";
 const RIVAL: &str = "claim.rival";

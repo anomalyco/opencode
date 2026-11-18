@@ -1,7 +1,4 @@
-//! The V2 compatibility layer (P8): today's `{ id, setup }` TUI plugins, with JSX over OpenTUI's intrinsics, on the JS
-//! host. The probe is `crates/plugin/examples/pipe/v2probe/tui.tsx`, written against `@opencode/plugin/tui` as an npm
-//! plugin is; the published packages run in `plugin_published.rs`, and are compared with TS cell for cell in P-APP
-//! (`parity/scenarios/P.8`). Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+//! Run V2 JSX plugins on the real JS host. Drive input and inspect both plugin callbacks and the TUI they produce.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -64,7 +61,6 @@ fn logged(pipe: &Pipe, log: &Path, count: usize) -> Vec<Value> {
     calls(log)
 }
 
-/// The toasts shown since the last call, oldest first, as `title: message`.
 fn toasts(pipe: &Pipe) -> Vec<String> {
     let mut shown = Vec::new();
     while let Some(toast) = pipe.harness.tui.toasts.current() {
@@ -122,8 +118,7 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
         }
         pipe.settle();
     }
-    // The swap ends the JS host, and its round runs again on the next, which a settle while none runs does not wait for
-    // (pipe-flakes: under load the last round was not logged yet).
+    // Wait for the restarted host before checking the next round; settling with no host returns immediately.
     assert_eq!(logged(&pipe, &log, sent.len()), sent);
     // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host. The restarted
     // footer's first render waits for its reads, which a settle does not (`drawn`).
@@ -273,10 +268,6 @@ fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     assert_eq!(focus("pf.new").as_deref(), Some("same"), "the new mount's own focus did not apply");
 }
 
-// Expected (open-jump): a slot claim that draws nothing, here one that only adds a key binding as the `anomaly.internal`
-// plugin's `app` claim does, moves no row while the JS host loads it, on Home and on a session: TS draws it in the
-// frame that mounts it. The placeholder of a slot mount whose key had shown nothing took a row until the first tree
-// came, which lifted the prompt and its footer a row for each such claim for some frames, then dropped them back.
 #[test]
 fn a_slot_claim_that_draws_nothing_moves_no_row_while_it_loads() {
     let Some(config) = config() else { return };
@@ -351,10 +342,6 @@ fn a_calls_effects_keep_their_order() {
     assert_eq!((tui.dialogs.is_open(), focused.as_deref()), (false, Some("same")), "{}", app.text());
 }
 
-// Expected (carbon c2b-1): a call that throws asks for nothing, also what it asked for as a mount's: a command that
-// opens the command palette as its route's and then throws fails the plugin, and the palette stays closed. What the JS
-// host sends is handed over one message at a time, the host running between: an effect sent ahead of the call's throw
-// would apply before the throw failed the plugin.
 #[test]
 fn a_thrown_calls_mount_effects_go_with_it() {
     let Some(config) = config() else { return };
@@ -615,8 +602,7 @@ fn a_render_draws_by_the_reconcilers_rules() {
     let (pipe, _log) = probe(config);
     let screen = pipe.harness.app.text();
     assert!(!screen.contains("hidden text"), "{screen}");
-    // A `replace` of a path the host does not publish never degrades (TS `structure.ts`, carbon-4): it shows nowhere,
-    // and the footer's own version is still there.
+    // Replacing an unpublished slot must not fall back to another slot.
     assert_eq!(line(&pipe, "v2probe missing"), None, "{screen}");
     assert!(screen.lines().any(|line| line.trim() == "local"), "{screen}");
     assert_eq!(line(&pipe, "v2probe commands").as_deref(), Some("v2probe commands true"), "{screen}");
@@ -677,7 +663,6 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     pipe.settle();
     let screen = pipe.harness.app.text();
     assert!(screen.contains("Own dialog") && screen.contains("shown 0"), "{screen}");
-    // A command of the base mode runs nothing while the dialog has the keyboard (bigboi P8-4).
     tui.keymap.dispatch("v2probe.base", None);
     pipe.settle();
     let (x, y) = pipe.harness.find("bump it");
@@ -726,7 +711,7 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(screen.contains("v2probe route plugin"), "the route read did not follow after the reload:\n{screen}");
     tui.keymap.dispatch("v2probe.home", None);
     pipe.settle();
-    // Right after the page left, its command runs nothing (bigboi P8-4), though the host lists it 250 ms longer.
+    // Registration cleanup can lag route exit; a lingering command must already be inert.
     tui.keymap.dispatch("v2probe.onpage", None);
     pipe.settle();
     assert_eq!(calls(&log), [json!({ "onpage": true })], "the page's command ran after the page left");
@@ -771,8 +756,6 @@ fn a_page_that_names_its_commands_anew_each_mount_settles() {
     assert!(pipe.harness.app.text().contains("churn page"), "{}", pipe.harness.app.text());
 }
 
-// Expected (CT-1, containment): a plugin whose registrations change without end (its page registers a new command every
-// 20 ms) fails, named, rather than reload without end; the client goes on.
 #[test]
 fn a_plugin_whose_registrations_never_settle_fails() {
     let Some(config) = config() else { return };
@@ -783,10 +766,6 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
-// Expected (session-manager's port lost a letter of its search): a change of a plugin's commands alone, here the layer of
-// a component the first letter typed mounts, replaces their keys in place, as TS's keymap follows a layer: the plugin's
-// route keeps its mount, so its field keeps the focus and every key typed into it. Each change reloaded the plugin and
-// mounted the route again, whose new field took the focus a round trip later; the keys between went nowhere.
 #[test]
 fn a_change_of_commands_alone_keeps_the_route_and_its_field() {
     let Some(config) = config() else { return };
@@ -948,10 +927,6 @@ fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
     assert_eq!(harness.text(), "%ab%c%x");
 }
 
-// Expected (contract ergonomics 2.5; CT-8, the key hold): a key whose JS command is disabled is bound by nothing on the
-// host, so it reaches the composer in the frame it is typed, with no round trip to the JS host held for it. Enabled,
-// the command takes it; disabled again, the key goes on at once. Neither change reloads the plugin: its activation
-// stays the one it was.
 #[test]
 fn a_disabled_commands_key_is_not_held() {
     let Some(config) = config() else { return };
@@ -974,9 +949,6 @@ fn a_disabled_commands_key_is_not_held() {
     assert_eq!(live(), before, "a change of the command's state reloaded the plugin");
 }
 
-// Expected (carbon ce-5): a JS host that started again sets the plugin up afresh, and its commands take the states that
-// setup gives them: `^`'s command, enabled before, is disabled again, so the palette lists it nowhere, where the host
-// kept it enabled because the restarted setup's manifest was the first one's.
 #[test]
 fn a_restarted_js_hosts_commands_take_its_setups_states() {
     let Some(config) = config() else { return };
@@ -1193,8 +1165,6 @@ fn a_late_rejection_of_a_reloaded_plugin_fails_nothing() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (carbon-2): a store a plugin makes after its setup takes its first write, which the host stores, rather than
-// refusing it as a key the plugin's manifest does not list yet.
 #[test]
 fn a_store_made_after_setup_takes_its_first_write() {
     let Some(config) = config() else { return };
@@ -1269,12 +1239,7 @@ fn a_project_v2_plugin_waits_for_approval() {
     assert_eq!(footer(&pipe), "v2probe 0: |");
 }
 
-// Expected (bigboi P8-1): what runs is what was approved. A save between the approval and the JS host's import (here
-// while the JS host is busy with another plugin's command) runs neither the saved module nor its setup: the approved
-// files run, and the saved ones wait for a decision of their own. The approval stages the approved copy off the UI
-// thread and only then sends its load (js-followups), so the save waits for that load: one that came before it would
-// change the files before they were copied, and the approved build would never load (the saved one is held instead).
-// Without this wait the race lost 7 of 40 runs under load with jsnpm-3 and 6 of 40 without it.
+// Edit the source while the JS host is busy to exercise the interval between approval and import.
 #[test]
 fn a_save_after_approval_runs_nothing_unapproved() {
     let Some(config) = config() else { return };
@@ -1303,11 +1268,7 @@ fn a_save_after_approval_runs_nothing_unapproved() {
     assert_eq!(listed(&pipe, &dir, PROBE), Some(Status::Pending));
 }
 
-// Expected (bigboi P8-1, js-followups): a save after the approval but before the approved files are copied, which
-// happens off the UI thread, runs nothing: the copy is refused as the files changed since they were approved, the
-// approved module never runs, and the saved build waits for a decision of its own; approved, it runs. This is the race
-// `a_save_after_approval_runs_nothing_unapproved` lost under load before it waited for the load, made certain by
-// holding the copy until the save is made.
+// Hold the staged copy to exercise an edit between approval and copying.
 #[test]
 fn a_save_before_the_approved_copy_runs_nothing() {
     let Some(config) = config() else { return };
@@ -1333,8 +1294,7 @@ fn a_save_before_the_approved_copy_runs_nothing() {
     assert_eq!(ran.lines().collect::<Vec<_>>(), [r#"{"module":"saved"}"#]);
 }
 
-/// The status of the project plugin `dir`: its entry by its directory until it loads (named by its package, if it has
-/// one, CT-6), then by `id`.
+/// Look up the project plugin by directory until its package ID is known.
 fn listed(pipe: &Pipe, dir: &Path, id: &str) -> Option<Status> {
     let target = dir.to_string_lossy();
     let entries = pipe.harness.tui.plugins.entries().into_iter();
@@ -1342,8 +1302,6 @@ fn listed(pipe: &Pipe, dir: &Path, id: &str) -> Option<Status> {
     entries.filter(|entry| entry.id == target || unloaded(entry) || entry.id == id).map(|entry| entry.status).next()
 }
 
-// Expected (bigboi P8-1): a project plugin's approved files import only from among themselves, the layer's modules and
-// the runtime's: a module outside them is refused before it runs, and the plugin fails, saying why.
 #[test]
 fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     let Some(config) = config() else { return };
@@ -1374,10 +1332,6 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     assert!(refused, "{status:?}");
 }
 
-// Expected (carbon jsnpm-3): an approved project plugin's `package.json` `name` cannot lead its TUI module out of the
-// approved files: a name that climbs out of its staged copy with `../`, or an absolute one, names a module the user
-// never approved, which runs nowhere, and the plugin fails saying why; a direct relative import out of it is still
-// refused.
 #[cfg(unix)]
 #[test]
 fn a_project_plugins_package_name_cannot_lead_out_of_its_approved_files() {
@@ -1777,8 +1731,7 @@ fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
     assert_eq!(lengths, [110_000, 4]);
 }
 
-/// A project with the V2 probe as its plugin, unapproved, whose module writes to the file returned last; the pipe's
-/// example plugins `globals` are the user's.
+/// Unapproved project fixture with a marker written at module evaluation.
 fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
     let root = opencode_util::temp::tempdir().unwrap();
     let work = root.path().join("work");
@@ -1863,8 +1816,7 @@ fn missing_package(config: Config) -> (Option<Status>, Option<String>, usize) {
     (listed(&pipe, &dir, "example.needs"), toast, registry.asked())
 }
 
-/// What [`missing_package`] must find: the plugin failed, saying which package is missing and that nothing is
-/// installed, the user was told, and no registry was asked.
+/// A failed import must identify the absent package without installing it.
 fn assert_installs_nothing((status, toast, asked): (Option<Status>, Option<String>, usize)) {
     let Some(Status::Failed(error)) = &status else { panic!("{status:?}") };
     assert!(
@@ -1911,9 +1863,6 @@ fn the_bundled_opencode_as_bun_installs_nothing_either() {
     assert_installs_nothing(missing_package(config));
 }
 
-// Expected (big-boi ds-2): a registration after setup reloads the plugin's registrations while its own dialog shows, with
-// an uncontrolled field in it: the dialog stays, and what the user typed stays with its caret, so a key after the reload
-// edits the text where the caret was (`abXcd`), not a field emptied by the reload.
 #[test]
 fn a_dialog_field_keeps_its_draft_across_a_reload() {
     let Some(config) = config() else { return };
@@ -1950,9 +1899,6 @@ fn a_dialog_field_keeps_its_draft_across_a_reload() {
     assert_eq!(drafts().last(), Some(&json!("abXcd")), "{:?}", drafts());
 }
 
-// Expected (big-boi ds-3): keys typed right after the key that opens a JS plugin's dialog with a focused field go to that
-// field once it has the focus, in order, not to the composer under it and not lost. A dialog with nothing to focus
-// holds them only until its first view.
 #[test]
 fn keys_typed_as_a_dialog_opens_go_to_its_field() {
     let Some(config) = config() else { return };

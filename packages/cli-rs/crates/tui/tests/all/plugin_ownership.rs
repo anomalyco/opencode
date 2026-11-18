@@ -1,8 +1,5 @@
-//! Who owns what a plugin asks for (bigboi's freeze and ownership passes, carbon own-1): one table of request and
-//! effect ownership, run on every carrier. A row is a request or an effect, the call that asks for it, when a mount
-//! closes, and where the mount shows: a route, or the body of a dialog (contract ergonomics 2.7), which opens and closes
-//! where a route is navigated to and away from. Its expected outcome comes from the one written rule ([`expected`]),
-//! not from the row.
+//! Exercise request and effect ownership across carriers. The expected result depends on which call owns the operation
+//! and when its mount closes.
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -96,9 +93,8 @@ enum Carrier {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Outcome {
     Delivered,
-    /// No reply comes; a fetch the mount closed before is not sent, a program does not start, and a TypeScript fetch
-    /// rejects with an `AbortError` and is freed, while the server still holds it. A Rust or C plugin hears the cancel
-    /// once in its reply's place (`Setup::on_cancelled`), and a Luau task's wait returns `nil, "cancelled"`.
+    /// Cancel a mount-owned request at close. A JS fetch rejects with `AbortError`; native plugins receive cancellation
+    /// and Luau resumes with `nil, "cancelled"`.
     Cancelled,
     /// The program ran once, and no reply comes: the cancel comes in its place, as for [`Outcome::Cancelled`].
     Unanswered,
@@ -439,7 +435,7 @@ fn table(carrier: Carrier) {
 
 struct Seen {
     asked: Vec<Option<u64>>,
-    /// The replies the plugin got, each with its ID, or how the TypeScript fetch settled with what stayed pending.
+    /// Replies with request IDs, or promise outcomes and pending counts for the JS carrier.
     replies: Vec<(Option<u64>, String)>,
     sent: usize,
     launched: usize,
@@ -479,9 +475,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         close();
     }
     turns(h, 3);
-    // A key or command of the mount's needs the mount, whose layers it brings, and the probe's `x`, a printable key of
-    // a global layer, reaches it only once the composer let the focus go (FT-14): a dialog takes it a turn or more after
-    // it opens, which under load three turns did not always see (ownership-harness: `asked []`).
+    // Give the mount focus before dispatching its layer's printable key.
     if !matches!(row.origin, Origin::Setup | Origin::MountBegin) {
         let mounts = || opencode_plugin::behave::mounts(h.app.app(), probe.id(), "probe");
         let typing = || row.origin == Origin::Input && opencode_plugin::Host::composer_focused(&*h.tui);
@@ -603,8 +597,7 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         Outcome::Unanswered => told && seen.launched == 1,
         Outcome::Applied | Outcome::Dropped => unreachable!("an effect's row runs in run_effect"),
     };
-    // The control closed another mount, which began and ended, or it would be told from no close at all (bigboi's
-    // verification).
+    // Verify that the control actually opened and closed the other mount.
     let other = match row.close {
         Close::Other => seen.other == [true, false],
         _ => seen.other.is_empty(),
@@ -903,7 +896,7 @@ impl Probe {
         }
     }
 
-    /// Waits until the TypeScript fetch settled, or long enough to say it did not: how it settled.
+    /// Wait for the JS fetch outcome.
     fn wait_settled(&self, h: &Harness) -> Vec<String> {
         h.app.wait_until(support::WAIT, || {
             self.turn();
@@ -912,7 +905,7 @@ impl Probe {
         self.replies().into_iter().map(|(_, settled)| settled).collect()
     }
 
-    /// Waits until the request was answered: the reply came, or the program ran.
+    /// Wait for a request reply or program launch.
     fn wait_replied(&self, h: &Harness, kind: Kind, launched: &dyn Fn() -> usize) {
         h.app.wait_until(support::WAIT, || {
             self.turn();
@@ -934,8 +927,7 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
     if SEEN.with_borrow(|seen| !seen.0.is_empty()) {
         return;
     }
-    // A mount's end asks as it closes: the route is going already. Navigating home again would race the driver's
-    // reopening over the pipe, where it lands after it (bigboi's review of contract 2.x).
+    // A mount-end callback already runs during close; navigating again can close the replacement route.
     if row.close == Close::BeforeDispatch && origin != Origin::MountEnd {
         leave(host, row.place);
     }
@@ -1053,8 +1045,7 @@ fn page() -> v2::Node {
     ])
 }
 
-/// The probe in TypeScript, on the raw carrier: the same calls, which log what the fetch settled with and what stayed
-/// pending; its program is the Rust one's.
+/// Raw JS probe that logs callback delivery and pending fetches.
 fn script(row: Row, log: &Path, mark: &Path) -> String {
     let (command, args) = witness(mark);
     let params = serde_json::json!([

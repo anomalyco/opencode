@@ -1,28 +1,5 @@
-//! The plugin model (O-124, phase Pt): the real TUI in a `TestApp` with one external plugin, `model.probe`, loaded by
-//! the real `Loader` and driven through the C ABI's byte shims. The commands are what a user and a build can do to a
-//! plugin today: toggle it in the plugin manager, run its commands, open, confirm and close its dialogs, navigate to
-//! home and to its route, reload it with another build, arm a fault in its next `setup`, command or render, run a
-//! command and a reload in one batch, and exit. The probe also acts after it registered: build 9 shows a toast and
-//! asks for a prompt before its `setup` fails, build 3 asks for a prompt as it sets up, and every dispose callback asks
-//! for one.
-//!
-//! The machines are in `steps/plugins-pt.md` (opendocs). After every command the host is checked against
-//! [`Reference`], the plugin machine as code, which predicts from the commands alone what the probe gets, what the
-//! host shows of it and what it reports; no expectation is read from the host:
-//!
-//! - `lifecycle`: the probe's own call log holds exactly the calls the reference expects, each with its command or
-//!   surface; a command of the probe runs from the keymap exactly while it is active; after the run, dropping the TUI
-//!   destroys an active instance once and a failed one not at all.
-//! - `ledger`: the dialog on screen is the one the reference says is open, the manager lists the status it says, and
-//!   no ended activation is held. While the probe is not active, the host equals a twin TUI that ran the same commands
-//!   without it: commands, dialogs, focus and route, and the frame, which may differ only in the failure count.
-//! - `reload-fresh`: after a reload that passed, the host is on the route the user chose and equals a fresh TUI that
-//!   loaded the new build there, with the call log from `setup` on; after one that failed, it equals itself before.
-//! - `reported-once`: the toasts are exactly the ones the reference expects: one per failure the manager did not list
-//!   before, and the toasts the plugin asked for that may show.
-//!
-//! [`OPEN`] holds the shrunk traces of what the model found that is not fixed: each must still fail with its
-//! property, so a fix fails the test until its row moves to [`FIXED`].
+//! Compare the external plugin's lifecycle, visible state, and reported failures against a reference driven only by
+//! user actions. Reload and fault traces run against fresh TUI instances.
 
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
@@ -718,7 +695,6 @@ impl Reference {
                     if passed && build == PROMPTING {
                         self.dialog = Some((Dialog::Prompt, call.activation, build));
                     }
-                    // A load tells a failure the manager did not list before it (TS `context.tsx`).
                     let load = matches!(command, None | Some(Command::Reload(_)));
                     if load && self.listed.is_some() && self.listed != listed {
                         self.report(FAILED);
@@ -1011,8 +987,8 @@ fn ledger(world: &World, twin: &World, reference: &Reference) -> Vec<(&'static s
     if !differences.is_empty() || reference.active().is_some() {
         return differences;
     }
-    // A failure the manager lists shows as a count in the home footer, and on the plugin's route in place of the
-    // twin's unknown route (PL-8), so the widgets differ and the frame may differ in those rows only.
+    // A listed failure changes the footer count and the failed plugin's route; mask only those differences when
+    // comparing with the control.
     let listed = reference.listed.is_some();
     if let Some(difference) = world.observe(!listed).diff(&twin.observe(!listed), !listed) {
         differences.push(("twin", format!("the plugin is {:?}; host and twin: {difference}", reference.life)));
@@ -1117,9 +1093,8 @@ fn collapse<'a>(calls: impl Iterator<Item = &'a Call>) -> Vec<Kind> {
 /// fail, so a fix fails the test until its row moves to [`FIXED`].
 const OPEN: &[(&str, &str, &[Command])] = &[];
 
-/// Shrunk traces that failed once and pass now.
+/// Fixed lifecycle traces.
 const FIXED: &[(&str, &[Command])] = &[
-    // Seed 34 of the first search: a second reload that fails with the same error is not told again, as in TS.
     (
         "a-repeated-reload-failure-is-told-once",
         &[Command::Arm(Fault::Setup), Command::Reload(3), Command::Arm(Fault::Setup), Command::Reload(2)],
@@ -1153,29 +1128,22 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-failed-plugin-is-not-disposed-on-reload", &[Command::Arm(Fault::Render), Command::Run, Command::Reload(2)]),
     ("a-failed-plugin-is-not-disposed-on-exit", &[Command::Arm(Fault::Command), Command::Run, Command::Exit]),
     ("a-reload-keeps-the-plugin-route", &[Command::Route, Command::Reload(2)]),
-    // Reviews bigboi-2 and carbon-pt-1: a dialog an activation that ended or a setup that failed asks for shows nowhere,
-    // and the failure of a candidate is reported after the toast its setup asked for.
     ("a-dispose-opens-no-dialog-on-a-reload", &[Command::Reload(2)]),
     ("a-dispose-opens-no-dialog-on-a-disable", &[Command::Toggle]),
     ("a-failed-candidate-keeps-the-running-dialog", &[Command::Dialog(Dialog::Panel), Command::Reload(BAD)]),
     ("a-failed-setup-opens-no-dialog", &[Command::Toggle, Command::Reload(BAD), Command::Toggle]),
     ("a-dialog-asked-for-before-a-reload-opens-no-dialog", &[Command::DialogThenReload(Dialog::Prompt, 2)]),
-    // Review carbon-pt-1: the action of a prompt confirmed as a reload is queued reaches no new build.
     ("a-confirm-before-a-reload-reaches-no-new-build", &[Command::Dialog(Dialog::Prompt), Command::EnterThenReload(2)]),
-    // Review carbon-pt-3: a reload that fails after a panic does not wedge the plugin, and enabling it sets it up.
     (
         "a-failed-reload-of-a-failed-plugin-can-be-enabled",
         &[Command::Arm(Fault::Command), Command::Run, Command::Reload(BAD), Command::Toggle],
     ),
     ("a-failed-slot-replacement-gives-the-slot-back", &[Command::Arm(Fault::Command), Command::Run]),
-    // Review bigboi-6: dropping the TUI does not destroy a failed instance, which would run its dispose callback.
     ("a-failed-plugin-is-not-disposed-when-dropped", &[Command::Route, Command::Arm(Fault::Command), Command::Run]),
-    // Review carbon-pt-2: an enable that failed leaves the plugin disabled, so a reload starts nothing.
     (
         "a-failed-enable-leaves-the-plugin-disabled",
         &[Command::Toggle, Command::Arm(Fault::Setup), Command::Toggle, Command::Reload(2)],
     ),
-    // Review bigboi-5: a failure is told again once the manager stopped listing it, as TS compares listed failures.
     (
         "a-failure-is-told-again-after-the-row-cleared",
         &[
@@ -1199,8 +1167,6 @@ const FIXED: &[(&str, &[Command])] = &[
         ],
     ),
     ("a-passed-candidates-prompt-shows", &[Command::Dialog(Dialog::Panel), Command::Reload(PROMPTING)]),
-    // P0a (bigboi 2, carbon-p0a-7): a confirm or an alert ends with its activation, and its answer reaches no other.
-    // An alert answers as it closes, so a reload that closes it must not reach the new build.
     ("a-confirm-ends-with-a-disable", &[Command::Dialog(Dialog::Confirm), Command::Toggle]),
     ("an-alert-ends-with-a-failure", &[Command::Dialog(Dialog::Alert), Command::Arm(Fault::Command), Command::Run]),
     ("a-stale-confirm-reaches-no-new-build", &[Command::Dialog(Dialog::Confirm), Command::Reload(2), Command::Escape]),

@@ -1,17 +1,5 @@
-//! Canvases (P5; synthesis 4.2, 4.4, 4.11 and 4.14) on linked test plugins in the real TUI.
-//!
-//! The model's plugin, `test.pad`, shows one canvas on a route and draws it from shapes of its own, which it logs with
-//! each draw: the generation, the frame, and what it returned. The properties:
-//!
-//! - **a replayed frame equals a drawn one**: on every frame, the canvas's cells equal a twin that paints the last
-//!   list the plugin returned straight onto OpenTUI's `Painter`, from the plugin's own shapes, with none of the list's
-//!   format, its check or the host's replay;
-//! - **`work`**: a frame with no animation and no change makes no plugin call (no view, no draw) and checks no list,
-//!   and replays the one it keeps; an animating canvas that shows gets one draw a frame;
-//! - **`ledger`** for lists: the host holds one canvas while it shows, the list it was last given (its bytes, which
-//!   the model computes), and an animation only while it runs; nothing once the canvas or its mount goes.
-//!
-//! The chart also drives animation through route keys.
+//! Compare replayed canvas lists with an independently painted frame. Track which draws and lists are live across
+//! animation, clipping, and teardown.
 
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
@@ -591,7 +579,6 @@ impl Reference {
         self.drawable() && self.animate && self.motion
     }
 
-    /// What a canvas laid out now asks for: nothing when it has a list for its size and version.
     fn laid_out(&self) -> Option<v2::Cause> {
         match self.asked {
             _ if !self.drawable() => None,
@@ -697,7 +684,6 @@ impl Model for Canvases {
                 _ => {}
             }
             let first = frame(&harness, Duration::from_millis(1));
-            // A route's first view runs in the turn's deferred work (P4), so a mount's generation is known after it.
             if matches!(command, Command::Open | Command::Home)
                 && let Some(mounted) = reference.mounted.as_mut()
             {
@@ -820,8 +806,7 @@ fn canvases_hold_their_properties() {
     model::check(&Canvases, 64, 24);
 }
 
-/// One cell as the rasterizer computes it: its character, its foreground (`None` for the terminal's), background and
-/// style bits, and whether a glyph was written there (a fill writes a blank, whose foreground does not show).
+/// Expected cell; a fill's blank foreground is not observable.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Raster {
     char: char,
@@ -1372,11 +1357,6 @@ fn paint_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P4c on P5, `isolation`, `reported-once`, `record-balanced` for a draw): a canvas's draw is a plugin call
-// like any other. Inside it the record names `draw` and a panic would unwind to the host's catch. The plugin is a
-// built-in, so a draw over the budget is a counted host bug and fails nothing. A draw that panics fails the plugin
-// once, named "draw panicked": its route shows nothing, its canvas, list and animation go (no draw, no frame after),
-// and the record names nobody.
 #[test]
 fn a_canvas_draw_is_contained() {
     use opencode_plugin::contain::{Crash, Record};
@@ -1658,7 +1638,7 @@ fn a_covered_canvas_rests() {
 
 #[test]
 fn the_time_the_terminal_is_away_is_not_counted() {
-    // Windows has no suspend: the command is never enabled there, as TS's is not, so only the stall half runs.
+    // Windows has no suspend command; only test the ordinary stall there.
     for suspend in [false, true].into_iter().filter(|suspend| !(cfg!(windows) && *suspend)) {
         CHART.with(|cell| *cell.borrow_mut() = Chart::default());
         let harness = open_tui(80, 24, vec![abi::Plugin { id: "test.chart", setup: chart_setup }.into()]);
@@ -1943,9 +1923,6 @@ fn pair_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon 4): a draw the host refuses because the plugin failed earlier in the frame is not counted: of two
-// canvases whose first draws a list the host cannot read, one draw is counted, as the plugin made one call, and one
-// list is refused.
 #[test]
 fn a_draw_the_plugin_did_not_make_is_not_counted() {
     PAIR_CALLS.set(0);

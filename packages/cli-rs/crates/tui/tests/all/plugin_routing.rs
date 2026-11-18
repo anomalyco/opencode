@@ -1,18 +1,4 @@
-//! P2's properties of routing (synthesis 4.14): `delivery`, and `ledger` for layers, modes, capture, holds and
-//! overlays, on the test plugin of `plugin_input` in the real TUI.
-//!
-//! `delivery`: an active plugin gets each key, paste and pointer event it is entitled to once, in the order of the
-//! input, and no other; inside a batch, the effects of event n (a mode, a focus) apply before event n + 1 is routed.
-//! The oracle is a reference router written here, a pure function of the event list over focus, layers, priorities,
-//! modes, the overlay, a host dialog and the host's selection, which shares no code with the host. The events are
-//! chosen from the reference alone, never from the screen; a target the reference expects and the screen lacks fails
-//! the run. It is compared with the plugin's own log and with what the host shows: the composer's text and cursor,
-//! whether the composer has the focus, and whether a selection holds.
-//!
-//! `ledger`: when a mount ends, nothing it owned of the input is left, and when the plugin leaves `active`, by a
-//! disable or a failure, nothing of it is left and the focus is at the composer. The expected counts come from the
-//! twin, the same TUI with the plugin before any mount (or without it), and the plugin's mode from the trace; a hold,
-//! a capture, a mode and an overlay are armed before the exits, and time passes beyond a hold's deadline.
+//! Model key and pointer delivery and check that held input state ends with its owner.
 
 use std::time::Duration;
 
@@ -582,7 +568,7 @@ struct Shown {
     route: bool,
     at: At,
     normal: bool,
-    /// A press on `a` that the plugin took holds the pointer, until a release or a move of the focus (carbon-9).
+    /// A consumed press captures the pointer until release or focus transfer.
     captured: bool,
     menu: bool,
 }

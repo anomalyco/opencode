@@ -1,8 +1,4 @@
-//! A field's echo (contract ergonomics, step 8). A tree that gives a field the text of the edit its plugin last heard
-//! (`Node::Input::seen`, every edit when it does not say) is the plugin catching up with the user, and leaves what they
-//! typed since; any other value replaces the text. Over the pipe, a tree made before the user's later keys came took
-//! their letters back: `P.8/session-manager`'s search showed "tee" for "theme". Matched by text alone, a clear to `""`
-//! after the user had backspaced to `""` was taken for an echo and left their next letters (carbon cf-2).
+//! Verify that a delayed field echo does not overwrite a more recent edit.
 
 use crate::support::{self, Harness};
 

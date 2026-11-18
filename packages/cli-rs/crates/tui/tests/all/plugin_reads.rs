@@ -1,7 +1,4 @@
-//! The small reads and verbs of ABI 1.6 (P0b) on the real TUI, each on both paths: in process and through the C
-//! ABI's byte shims (`Loopback`). A test plugin shows what it reads in a sized `app` claim, under every route, and
-//! toasts what each verb answers. The loader's tests compare the two paths on a test host
-//! (`the_1_6_reads_and_verbs_are_the_same_in_process_and_through_the_library`).
+//! Validate host reads and actions from both native carriers.
 
 use crate::support::{self, Harness};
 
@@ -246,7 +243,6 @@ fn a_claim_reads_its_width_the_theme_and_the_keymap() {
         let link = opencode_tui::features::links::link_at(h.app.app(), column as u16, row as u16);
         assert_eq!(link.as_deref(), Some("https://opencode.ai/p0b"), "loopback {loopback}");
         h.app.resize(90, 30);
-        // The first frame at the new size shows the claim's new width (reviews bigboi-3, carbon-2).
         let first = h.app.render().text();
         assert!(first.contains("p0b w90 "), "loopback {loopback}:\n{first}");
         h.tui.keymap.dispatch("p0b.variant", None);
@@ -254,9 +250,7 @@ fn a_claim_reads_its_width_the_theme_and_the_keymap() {
     }
 }
 
-// Expected (review carbon-6): a link with a control character, which would end the terminal's OSC 8 sequence early,
-// is dropped and its text shows alone; one without links. OpenTUI drops it (`link.zig` `isWritableUrl`), so the host
-// passes a plugin's URL on as it is. On both paths.
+// Control characters can terminate OSC 8 hyperlinks and must not reach the terminal.
 #[test]
 fn a_link_with_a_control_character_is_dropped() {
     for loopback in [false, true] {

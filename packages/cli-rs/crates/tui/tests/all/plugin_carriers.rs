@@ -1,16 +1,4 @@
-//! `carrier-equal` (P4, synthesis 4.14) with a real library: one plugin source, `crates/plugin/examples/board`, runs
-//! linked (its `board.rs` is this module's `board`), through the C ABI's byte shims in this process, and as the
-//! `cdylib` that crate builds, with its own std and allocator, loaded from a `plugins` directory. At every checkpoint
-//! the three give equal frames (cells with their styles), and the same toasts and plugin status. The board's header
-//! is its own call log: views run, cards built, messages arrived.
-//!
-//! The script covers a mount, revisions with memoized cards and the meter canvas they draw again, an animation of the
-//! meter, whose time crosses with each frame, a theme change, an effect, bursts of messages from the plugin's thread, a
-//! remount, and a panic on the plugin's own thread, which is reported once. The script is the same
-//! input on every carrier: each burst is all in the mailbox before the UI thread runs again, so the drains, and the
-//! views they cause, do not depend on how the threads are scheduled (review bigboi-6: comparing a flood that raced
-//! the UI failed in 12 of 24 runs). A flood that waits on `Full` races by design; its own test compares only what does
-//! not depend on the schedule.
+//! Drive one plugin linked, through the ABI shims, and as a loaded library. Compare cells, events, and request effects.
 
 #[path = "../../../plugin/examples/board/src/board.rs"]
 mod board;
@@ -102,7 +90,7 @@ fn settle(harness: &Harness) {
     crate::plugin_mail::drain(harness);
 }
 
-/// What a checkpoint compares: the frame's cells, the toasts shown since the last one, and the plugin's status.
+/// Cells, newly shown toasts, and plugin status at a checkpoint.
 type Seen = (Vec<opentui::testing::Cell>, Vec<String>, String);
 
 fn observe(harness: &Harness) -> Seen {
@@ -642,8 +630,7 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         let session = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
         let board = open_on(run, 120, support::deps(Arc::new(session)));
         let (app, tui) = (&board.harness.app, &board.harness.tui);
-        // The session's catalog first: its model shows on the composer's row once `/api/model` answers, which is no
-        // plugin's work, so the first checkpoint would otherwise race it (bigboi's review of contract 2.x).
+        // Wait for the host's catalog first so its redraw is not attributed to plugin work.
         board.harness.wait_for("Model M");
         settle(&board.harness);
         let mut seen = Vec::new();

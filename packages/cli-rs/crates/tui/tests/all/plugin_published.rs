@@ -1,7 +1,4 @@
-//! Published TypeScript TUI plugins (P8: `parity/plugins/npm`), unmodified on the JS host, in the real TUI over a fake
-//! server. The expected rows follow each original's TS rendering logic for the same data. Their Rust and Luau ports
-//! live outside this repository (`plugins`). `Dialog::Select` is proven on both paths here too, and the SDK's author
-//! fixture loads.
+//! Run pinned, published JavaScript plugins unmodified against the TUI and a fake server.
 
 use crate::support::{self, DIRECTORY, Harness, Log, Reply, Seen, deref_harness};
 
@@ -100,8 +97,7 @@ pub(crate) struct Port {
 
 deref_harness!(Port);
 
-/// What a row loads: an example's library (`crates/plugin/examples/<name>`), or a published package, unmodified, on
-/// the JS host through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
+/// Example library or pinned package to load into the test TUI.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Carrier<'a> {
     Example(&'a str),
@@ -120,8 +116,7 @@ pub(crate) fn unpack(name: &str, into: &Path) {
     assert!(status.success(), "cannot unpack {}", tarball.display());
 }
 
-/// Panics unless `tarball`'s SHA-512 is the one `integrity.json` beside it pins (carbon-6): what runs is what was
-/// checked against the registry.
+/// Verify the package tarball against its pinned SHA-512 before extraction.
 pub(crate) fn pinned(tarball: &Path) {
     use base64::Engine;
     let pins: Value =
@@ -282,8 +277,7 @@ pub(crate) fn subagents(seen: &Seen) -> Option<Reply> {
     }
 }
 
-/// What the TS plugin lists for [`family`]: the direct children by `time.updated`, newest first, as ID, title and
-/// state.
+/// Direct children sorted by descending update time.
 pub(crate) fn by_update() -> Vec<(String, String, &'static str)> {
     let mut children: Vec<(u64, String, String, &str)> = (1..=12u64)
         .map(|index| {
@@ -296,10 +290,6 @@ pub(crate) fn by_update() -> Vec<(String, String, &'static str)> {
     children.into_iter().map(|(_, id, title, state)| (id, title, state)).collect()
 }
 
-// Expected (P8): as TS draws it, the published package, unmodified on the JS host, lists the direct children of the
-// session in view, newest activity first, ten of them, with a dot, a title (`Subagent` without one) and running or
-// done, then `+2 more`, once the host has the session's family and statuses as the sidebar mounts (an installed
-// package reads them once, as it mounts, in TS too); its `/subagents` picks from all twelve and opens the pick.
 #[test]
 fn the_published_subagents_sidebar_lists_and_picks() {
     let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, false, None) else { return };
@@ -320,7 +310,6 @@ fn the_published_subagents_sidebar_lists_and_picks() {
         by_update().into_iter().take(10).map(|(_, title, state)| (format!("• {title}"), state.to_owned())).collect();
     assert_eq!(listed, expected, "{rows:#?}");
     assert_eq!(rows[start + 11], "+2 more");
-    // A running dot is green, as TS's `text.feedback.success.base`; a done one muted.
     let theme = h.tui.page();
     assert_eq!(h.fg("• Child 03", 0), theme.text.feedback.success.base);
     assert_eq!(h.fg("• Child 04", 0), theme.text.muted);
@@ -334,8 +323,6 @@ fn the_published_subagents_sidebar_lists_and_picks() {
     h.wait("the pick opens its child", || h.tui.route() == session);
 }
 
-// Expected (P8): the published package's clicks run on the JS host as its port's do: a click on a row opens its child,
-// and a click on the header stores the fold (`storage.store`'s update), where the port's toggle stores it.
 #[test]
 fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
     let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
@@ -355,8 +342,6 @@ fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
     h.wait("the fold reaches the disk", || stored() == json!({ "open": false }));
 }
 
-// Expected (bigboi P8-3): two clicks on the header before the first fold is written store both folds,
-// each made from what the other stored (TS updates under a file lock), and a field another client wrote stays.
 #[test]
 fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
     let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
@@ -380,10 +365,6 @@ fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
 
 // --- opencode-sidebar-prompt
 
-// Expected (bigboi P8-6): the published package shows the newest prompt, delivered or still in the session's inbox:
-// with a queued prompt newer than the delivered one, it shows the queued one, as TS's frame for the same inbox reads
-// ("Last prompt", "Then tag the release and announce it", "in the changelog channel."; TS records no checkpoint of
-// it, as the busy session's spinner never settles).
 #[test]
 fn the_published_sidebar_prompt_shows_a_queued_prompt() {
     let queued = json!({
@@ -433,9 +414,6 @@ pub(crate) fn running(seen: &Seen) -> Option<Reply> {
     }
 }
 
-// Expected (`delivery` for the V2 layer, P8): the published package, unmodified on the JS host, sends one interrupt
-// and then the prompt for ctrl+enter on a running session, in that order: its four dispatches are one call's effects, applied in
-// the order it made them. Its hint is a static render of the package's JSX, as TS draws it from `node_modules`.
 #[test]
 fn the_published_force_input_interrupts_then_sends() {
     let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else {
@@ -453,8 +431,6 @@ fn the_published_force_input_interrupts_then_sends() {
     assert_eq!(prompts[0]["text"], "hello", "ctrl+enter added no newline");
 }
 
-// Expected (bigboi-fixes-1): a prompt reaches the server after every interrupt sent before it, so a late interrupt
-// cannot cancel its reply: ctrl+enter while armed sends two interrupts, and the prompt waits for the first too.
 #[test]
 fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
     let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
@@ -472,8 +448,6 @@ fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
     assert_eq!(h.wire(), [interrupt, interrupt, "POST /api/session/ses_p/prompt"]);
 }
 
-// Expected (bigboi-fixes-1): an interrupt still waits for its answer when its composer is gone; the next composer of
-// the same session sends its prompt after it.
 #[test]
 fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
     let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
@@ -647,10 +621,6 @@ pub(crate) fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> O
     }
 }
 
-// Expected (P8): the published package, unmodified on the JS host, totals every message of the session and its child,
-// over both pages of the parent's history: $1.50 reported plus $1.00 at catalog prices; `session.usage.updated` of the
-// child reads it again, and the total follows. The meters draw as TS draws them: label, percentage and countdown, then
-// a bar in the severity's color.
 #[test]
 fn the_published_session_usage_totals_the_paged_history_and_follows_usage_events() {
     let grown = Arc::new(Mutex::new(false));
@@ -661,7 +631,6 @@ fn the_published_session_usage_totals_the_paged_history_and_follows_usage_events
     h.wait_for("≈ $2.50 session total");
     let pages = h.sent("/api/session/ses_p/message");
     assert!(pages.contains(&"GET /api/session/ses_p/message?limit=100&cursor=page100".to_owned()), "{pages:#?}");
-    // With the blank rows of TS's `paddingTop={1}` and `gap={1}`.
     let rows: Vec<String> =
         h.app.text().lines().map(|line| line.chars().skip(120).collect::<String>().trim().to_owned()).collect();
     let start = rows.iter().position(|row| row == "Usage").unwrap_or_else(|| panic!("{rows:#?}"));
@@ -700,9 +669,6 @@ fn the_published_session_usage_totals_the_paged_history_and_follows_usage_events
     h.wait_for("≈ $3.50 session total");
 }
 
-// Expected (bigboi P8-5): the published package's setup reads the route and the session's location at once, as TS's
-// does: its first limits request names the session's directory, which is neither the default location nor the JS
-// host's working directory, and on a session's route it prefetches that session's cost before its panel mounts.
 #[test]
 fn the_published_session_usage_asks_for_the_sessions_location_first() {
     let base = usage(Arc::new(Mutex::new(false)), false);
@@ -720,9 +686,6 @@ fn the_published_session_usage_asks_for_the_sessions_location_first() {
     assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
 }
 
-// Expected (win11-runs D1): the published session-usage and sidebar-tokens draw their sidebar blocks again once the JS
-// host was killed and a new one set them up again: session-usage's async setup, which registers its slot only after
-// its host calls answered, as much as sidebar-tokens' plain one.
 #[test]
 fn published_slots_draw_again_after_the_js_host_restarts() {
     let carriers = [Carrier::Npm("opencode-session-usage"), Carrier::Npm("opencode-sidebar-tokens")];
@@ -739,8 +702,6 @@ fn published_slots_draw_again_after_the_js_host_restarts() {
     h.wait_for_all(&["≈ $2.50 session total", "Session tokens"]);
 }
 
-// Expected (FT-7): the published `opencode-sidebar-tokens`, unmodified on the JS host, shows the session's token totals
-// from `data.session.get(id).tokens` as TS's sidebar does, and follows a `session.usage.updated` at once.
 #[test]
 fn the_published_sidebar_tokens_follows_the_sessions_totals() {
     let Some(h) = open_as(&[Carrier::Npm("opencode-sidebar-tokens")], 170, |_| None, false, None) else { return };
@@ -753,7 +714,7 @@ fn the_published_sidebar_tokens_follows_the_sessions_totals() {
     h.wait_for("22,870");
     let rows = h.sidebar(120);
     let start = rows.iter().position(|row| row == "Session tokens").unwrap_or_else(|| panic!("{rows:#?}"));
-    // TS's rows in the field test's capture: label and value at the ends of the sidebar's 37 columns.
+    // The values align at the far edge of the 37-column sidebar.
     let spaced = |label: &str, value: &str| format!("{label}{}{value}", " ".repeat(37 - label.len() - value.len()));
     assert_eq!(
         rows[start..start + 5],
@@ -768,9 +729,6 @@ fn the_published_sidebar_tokens_follows_the_sessions_totals() {
     );
 }
 
-// Expected (P8): as TS `childIDs`, the published package's panel reads a parent's next page of children only after the page before, and lists
-// the next parent only after the last page: `ses_p`'s children are asked for once per page, and the child found on the
-// second page is in the total.
 #[test]
 fn the_published_session_usage_pages_the_children_one_parent_at_a_time() {
     let handler = usage(Arc::new(Mutex::new(false)), true);

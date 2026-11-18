@@ -1,21 +1,5 @@
-//! The approval model (O-124, phase Pa; rich-plugins 3.9 and 4.14): the plugin model's probe, found in the project's
-//! `.opencode/plugins` instead of the global directory, so it runs only once the user approved its build. The
-//! commands are what a user and a build can do to it: open the question in the real plugin manager and answer it
-//! (approve, decline, or close it) as separate steps, so the library can be replaced while it is open; replace the
-//! library, also with a build whose setup fails; toggle it, run its command, navigate, and start the client again on the
-//! same state.
-//!
-//! Checked after every command, each with an oracle that shares no code with the host:
-//!
-//! - `pending` ("a `pending` plugin equals no plugin", 4.14's row Pa): while the probe is not approved, or does not
-//!   run, the host equals a twin TUI that never had it: the reachable commands, the dialogs, focus, the widgets, the
-//!   route and the frame. While it is not approved, the backend opened no build since the run began or the probe last
-//!   ran, no registry holds its ID, and no activation's token is held.
-//! - `lifecycle`: the probe's own call log holds exactly the setups, disposes and commands that [`Gate`], the approval
-//!   machine as code, expects.
-//! - `asked`: the manager lists the probe as [`Gate`] does, and the reports of the step are exactly the ones `Gate`
-//!   expects: a question for each build held back, a failure for a failing build that loads, a setup error and the
-//!   setup's toast for an enable that fails, and a notice when an answer named a build that changed.
+//! Model project-plugin approval by artifact identity. Compare a pending plugin's effects with a TUI that never loaded
+//! it.
 
 use crate::plugin_model::{BAD_TOAST, Call, Kind, LOADS, LOG, PROMPTING, TOKENS, Which, World, frame_diff, take_calls};
 use crate::support::model::{self, Failure, Model, Rng};
@@ -135,8 +119,7 @@ impl Gate {
             Command::Reload(build) => {
                 let changed = build != self.file;
                 self.file = build;
-                // An approved build that starts at once and opens a prompt as it sets up leaves the question: no
-                // plugin's dialog replaces the host's (review carbon-9).
+                // Plugin setup cannot replace the host's approval dialog.
                 self.reconcile(changed)
             }
             Command::Toggle if self.approved() && self.file == BAD => {
@@ -413,7 +396,7 @@ fn pending(world: &World, twin: &World) -> Option<String> {
     frame_diff(&twin.frame(), &world.frame(), world.mask(), |_| false).map(|row| format!("the frames differ at {row}"))
 }
 
-/// Shrunk traces that failed once and pass now, and the faults of 4.14's row Pa and of the reviews.
+/// Fixed approval traces.
 const FIXED: &[(&str, &[Command])] = &[
     ("a-replaced-library-is-pending-again", &[Command::Open, Command::Answer(Answer::Approve), Command::Reload(2)]),
     ("an-approval-lasts-across-clients", &[Command::Open, Command::Answer(Answer::Approve), Command::Restart]),
@@ -440,7 +423,7 @@ const FIXED: &[(&str, &[Command])] = &[
             Command::Answer(Answer::Approve),
         ],
     ),
-    // bigboi-1, carbon-1: the library is replaced while the question is open; the answer records nothing.
+    // The user's answer belongs to the artifact displayed in the question.
     (
         "an-approval-of-a-replaced-build-records-nothing",
         &[Command::Open, Command::Reload(2), Command::Answer(Answer::Approve)],
@@ -458,8 +441,7 @@ const FIXED: &[(&str, &[Command])] = &[
         "a-closed-question-leaves-the-plugin-pending",
         &[Command::Open, Command::Answer(Answer::Dismiss), Command::Restart],
     ),
-    // Deep run, seed 33: an approved build that comes back while the question is open starts at once, and the prompt
-    // its setup opens leaves the question, which names a build no longer held (review carbon-9).
+    // An approved artifact can return while the question is open; its startup prompt must leave that question intact.
     (
         "a-prompt-of-an-approved-build-leaves-the-question",
         &[
@@ -522,9 +504,6 @@ fn manager(world: &World) {
     world.settle();
 }
 
-// Expected (3.9, carbon-6, bigboi-1): the toast names the plugin and opens the manager; the manager lists it pending,
-// and Enter asks before it runs: the directory, the library that would run and its hash, without suggesting a sandbox,
-// with Decline active. Approving runs it at once.
 #[test]
 fn the_manager_asks_before_a_project_plugin_runs() {
     LOG.take();
@@ -692,7 +671,6 @@ fn no_plugin_replaces_the_question() {
     }
 }
 
-// Expected (carbon-5): a project plugin whose library cannot be read offers nothing to approve, and says why.
 #[cfg(unix)]
 #[test]
 fn a_plugin_that_cannot_be_read_cannot_be_approved() {
@@ -716,8 +694,6 @@ fn a_plugin_that_cannot_be_read_cannot_be_approved() {
     assert!(!world.harness.app.text().contains("Run project plugin?"));
 }
 
-// Expected (bigboi-1): the build is replaced while the question is open, and the watcher reconciles before the answer:
-// Approve records nothing, says why, and the new build is asked about.
 #[test]
 fn an_answer_on_a_replaced_build_records_nothing_and_says_so() {
     LOG.take();

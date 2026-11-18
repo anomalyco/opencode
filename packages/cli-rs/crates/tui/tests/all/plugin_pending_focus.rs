@@ -1,8 +1,4 @@
-//! A focus of a field the mount's tree does not hold yet (contract 2.x, step B) on the carriers that view as the call
-//! returns: linked Rust, the C ABI and Luau. It waits for the mount's next view and no longer: the view after the call
-//! that asked. If that view shows the field, the field takes the focus (session-manager's `/`, which shows its search
-//! field and focuses it in one call); if not, the focus is dropped, and a resize that shows the field later does not
-//! focus it (big-boi's G2 of step B). The pipe's rows are in `plugin_compat`.
+//! Verify focus requested before a plugin field's first view.
 
 use crate::support::{self, Harness};
 
@@ -16,7 +12,6 @@ use opencode_tui::{Deps, Route};
 const ID: &str = "test.focus";
 
 thread_local! {
-    /// Whether the linked and C ABI probe's page shows its field `now`.
     static SHOW: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -106,9 +101,7 @@ fn turns(h: &Harness, count: usize) {
     }
 }
 
-/// The probe: a route `pf` whose page shows the field `later` at 100 columns or more, and the field `now` once its
-/// command `pf.show` ran; `pf.later` focuses `later` and changes nothing. The page is a memo of both, so a view that
-/// changes neither keeps it.
+/// The width threshold and command expose different fields so a stale focus cannot pass accidentally.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("pf".into()));
     setup.command(command("pf.later"), |host, _| host.focus("later"));

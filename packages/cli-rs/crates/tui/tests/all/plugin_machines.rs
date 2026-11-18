@@ -1,11 +1,5 @@
-//! The shared fixture of the plugin work (O-124, phase Pt), Rust reader: `parity/machines/plugins.json` holds the
-//! life of a plugin as the user sees it, of the same plugin found in a project (phase Pa), and the plugin manager's keys
-//! (P2) and views (P6b), and the diff viewer's route (P6c), as states with an expected observation and named actions. The TS reader is
-//! `parity/machines/plugins.test.tsx`. This drives the real TUI through every legal path to the file's depth and its
-//! seeded walks, each on a fresh mount, observing after every action, in OpenTUI's shape
-//! (`packages/rust/crates/opentui/tests/interaction_machines.rs`). Then it drops, repeats or swaps one action inside
-//! two normal cycles; an action a state has no edge for does nothing. A known difference is an exact row of the
-//! file's `xfail`, and a row that stops failing fails the test.
+//! Drive the plugin lifecycle, manager, and viewer against the shared state-machine fixture. Compare each observed
+//! state with the recorded expectation.
 
 use crate::support::{self, Harness};
 
@@ -28,7 +22,7 @@ const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
 
 thread_local! {
     static ARMED: Cell<bool> = const { Cell::new(false) };
-    /// The built-ins run across the C ABI's byte shims (review bigboi-7: the manager on both carriers).
+    /// Run built-ins through the C ABI when enabled.
     static ABI: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -57,8 +51,7 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
         let action = abi::Action::command("life.prompted");
         host.dialog(abi::Dialog::Prompt(abi::Prompt::new("Life prompt", action)));
     });
-    // TS's confirm and alert resolve a promise that flips the line; here they name a command that does. A build that
-    // replaced this one registers the same names, so an answer that reached it would flip its line.
+    // A reply belongs to the activation that opened the prompt.
     let answer = |name: &str| abi::Action::command(name);
     setup.command(command("life.confirm", "Life confirm"), move |host, _| {
         host.dialog(abi::Dialog::Confirm(abi::Confirm {
@@ -136,7 +129,6 @@ impl Life {
         // The project root, so the loader looks for plugins in this directory and none above it.
         std::fs::create_dir(root.path().join(".git")).unwrap();
         let config = root.path().join("config");
-        // The manager labels an external plugin by its directory, so the reader finds its row as in TS.
         let plugins = if project { root.path().join(".opencode/plugins") } else { config.join("plugins") };
         let dir = plugins.join("parity.life");
         std::fs::create_dir_all(&dir).unwrap();

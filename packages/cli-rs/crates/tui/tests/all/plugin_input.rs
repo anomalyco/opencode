@@ -1,9 +1,4 @@
-//! Contract 2.0's input and surfaces (P2, synthesis 3.8 and 4.2) on a linked test plugin in the real TUI: a docked
-//! panel, focus, key layers with `Pass`, modes, the `Any` listener, pointer and hover, an overlay, the hold, and the
-//! composer's layers with the burst rules.
-//!
-//! The plugin `test.input` writes its own call log: which owner a call came to (`side`, its panel; `menu`, its
-//! overlay; `setup`, its layers of setup), the event, and the mode the call read.
+//! Exercise input ownership across plugin panels, fields, modes, holds, and overlays.
 
 use crate::support::{self, Harness};
 
@@ -137,7 +132,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let anchor = Anchor::Edge(input::Edge::Bottom);
         host.overlay(Overlay { surface: "menu".into(), anchor, width: 24, height: 2 });
     });
-    // Changes nothing: the plugin's surfaces draw again after it, with what the probe says now.
     setup.command(command("input.redraw"), |_, _| {});
     // The geometry and focus reads, as a command makes them: of the plugin's mount that holds the node.
     setup.command(command("input.where"), |host, input| {
@@ -177,7 +171,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             plugin: None,
         }));
     });
-    // Lists, last first, the rows whose value holds the query, and logs what it was given.
     setup.search("probe", |_, query, options| {
         probe(|probe| probe.log.push(format!("search {query:?} {}", options.len())));
         options.iter().rev().filter(|option| option.value.contains(query)).map(|option| option.value.clone()).collect()
@@ -262,7 +255,7 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
                 Bind::new("v,ctrl+t", "v"),
             ]),
             Layer::default().scope(LayerScope::Node("a".into())).keys(vec![Bind::new("y", "y")]),
-            // A layer of the composer too: the panel's mode still holds where it was set.
+            // The same binding in another scope must not acquire the panel's mode.
             Layer::default().scope(LayerScope::Composer).keys(vec![Bind::new("z", "z")]),
             Layer::default().scope(LayerScope::Surface).mode("menu").keys(vec![Bind::new("j", "down")]),
         ])
@@ -1817,8 +1810,6 @@ fn a_taken_press_owns_its_gesture() {
 fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     let harness = open();
     run(&harness, "input.panel", None);
-    // Its first view already sees how it shows, and no view since saw anything else or another mount. A view drawn
-    // again for the same input is no second opening (preview 44312154568 saw eight on Windows, all alike).
     let (panels, heard) = probe(|probe| (probe.panels.clone(), probe.log.clone()));
     assert!(panels[0].0.is_some_and(|panel| panel.focused && panel.width > 0), "{panels:?}");
     assert!(panels.iter().all(|view| *view == panels[0]), "{panels:?}\nthe panel heard: {heard:?}");

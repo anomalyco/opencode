@@ -1,12 +1,4 @@
-//! Mounts of contract 2.0 surfaces (P1, synthesis 4.2 and 4.14): `lifecycle` and `ledger` for mounts, `no-effects`
-//! for a refused tree, `keep-full` for a second refusal, and `work` for a theme change, on a linked test plugin in
-//! the real TUI. Every test runs on both carriers of contract 2.0 (P4): linked, and through the byte shims of the C ABI
-//! as a library runs; `carrier-equal` compares the two step by step.
-//!
-//! The plugin `test.board` shows a route of cards, one a value, each memoized on its value with its body a `Diff`
-//! by content handle. Its view writes its own call log: the mount's generation, whether the host asked for a whole
-//! tree, and whether it returned a bad one. The reference is the model's own: which generation is mounted, and what a
-//! refusal does.
+//! Exercise plugin surface lifecycle and compare visible frames, callback logs, and retained resources across carriers.
 
 use crate::support::model::{self, Failure, Model, Rng};
 use crate::support::{self, Harness};
@@ -233,7 +225,7 @@ impl Model for Surfaces {
                     if first.generation <= highest || !first.full || first.built != ITEMS && !first.bad {
                         return fail("lifecycle", format!("a new mount's first view was {first:?} after {highest}"));
                     }
-                    // One view opens a surface, and one more only when the first tree was refused (review bigboi-7).
+                    // Only a refused first tree merits a second view during mount.
                     if calls.len() != 1 + usize::from(first.bad) {
                         return fail("work", format!("opening a surface ran {} views: {calls:?}", calls.len()));
                     }
@@ -270,9 +262,6 @@ impl Model for Surfaces {
             if status(&harness) != opencode_plugin::Status::Active {
                 return fail("keep-full", "one refusal failed the plugin".into());
             }
-            // The ledger, read from the host's counts: a mount holds its memo table and one content handle a card,
-            // the card's patch as it shows now, since the plugin releases the one before. Counted from this run's
-            // start: the counts are the thread's, and a run before may have failed.
             let ledger = surface::ledger_of(ID);
             let bytes: usize =
                 board(|board| board.values.iter().enumerate().map(|(index, value)| patch(index, *value).len()).sum());
@@ -762,7 +751,7 @@ fn owned(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// A server whose `/api/hold` answers once the gate opens, counting what it served, and what it was asked.
+/// Server gate for holding fetches until a test releases them.
 pub(crate) type Gate = Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>;
 
 type Count = Arc<std::sync::atomic::AtomicUsize>;
@@ -1572,8 +1561,7 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
         host.focus("outside");
     });
     setup.command(abi::Command::new("dlg.blur"), |host, _| host.blur());
-    // Big-boi's ds-4, ds-8 and ds-9: a dialog whose field has the id of the route's field, one whose field is below a
-    // scroll's rows, and one taller than the screen, each shown and focused in one call.
+    // Route and dialog fields deliberately share an ID to distinguish focus ownership.
     for (name, field) in [("same", "outside"), ("tall", "deep"), ("long", "end")] {
         setup.command(abi::Command::new(format!("dlg.{name}")), move |host, _| {
             host.dialog(abi::Dialog::Surface(abi::DialogSurface::new(name)));
@@ -1592,7 +1580,7 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
             abi::interact::Event::Change { node, text, .. } if node == "name" => format!("change {text}"),
             abi::interact::Event::Change { node, text, .. } => format!("change {node} {text}"),
             abi::interact::Event::Closed { surface } => format!("closed {surface}"),
-            // Big-boi's ds-7: a bind of escape that would take it.
+            // Register an Escape handler that would consume Escape if installed.
             abi::interact::Event::Key(key) if key.bind.as_deref() == Some("esc") => {
                 DIALOG_SEEN.with_borrow_mut(|seen| seen.push("esc".to_owned()));
                 return abi::interact::Handled::Consume;
@@ -1720,12 +1708,6 @@ fn dialog_focus(harness: &Harness, surface: &str) -> (Option<String>, usize) {
     (mounts.pop().and_then(|mount| mount.focused), count)
 }
 
-// Expected (contract ergonomics 2.7, CT-37): the command that shows the dialog focuses its field, which takes what the
-// user types and tells the handler; the route's own command cannot move the focus out of the dialog to its field under
-// it. Ctrl+C empties the focused field first, as in the host's own dialogs, then closes the dialog, whose handler hears
-// it closed and whose mount ends. Opened again, the dialog is a new mount whose field the command focuses again; a blur
-// leaves the focus in the dialog, on its body, not on what is under it; escape closes it as one level, leaving the
-// route.
 #[test]
 fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
     for carrier in dialog_carriers() {
@@ -1773,7 +1755,7 @@ fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
     }
 }
 
-/// The native carriers of the dialog rows big-boi's hunt found (the host's behavior, not a carrier's).
+/// Native carriers used for dialog-surface assertions.
 const DIALOG_NATIVE: [DialogCarrier; 2] = [DialogCarrier::Native(Carrier::Linked), DialogCarrier::Native(Carrier::Abi)];
 
 /// The probe's running activation, as the host names it.
@@ -1781,7 +1763,6 @@ fn dialog_generation(h: &Harness) -> u64 {
     (0..100_000).find(|generation| h.tui.plugins.live("test.dlg", *generation)).expect("a running activation")
 }
 
-// Expected (big-boi ds-6): a theme change keeps the focus on the dialog's field, which takes what the user types.
 #[test]
 fn a_dialog_surface_keeps_its_field_focused_in_a_new_theme() {
     for carrier in DIALOG_NATIVE {
@@ -1799,8 +1780,6 @@ fn a_dialog_surface_keeps_its_field_focused_in_a_new_theme() {
     }
 }
 
-// Expected (big-boi ds-7): a bind of the dialog's that takes escape is left out, so escape closes the dialog as it
-// closes the host's own.
 #[test]
 fn escape_closes_a_dialog_surface_whose_bind_would_take_it() {
     for carrier in DIALOG_NATIVE {
@@ -1815,8 +1794,6 @@ fn escape_closes_a_dialog_surface_whose_bind_would_take_it() {
     }
 }
 
-// Expected (big-boi ds-4): a command that shows a dialog and focuses its field, whose id the route under it has too,
-// focuses the dialog's field: the user's first key is the dialog's.
 #[test]
 fn a_dialog_shown_and_focused_takes_the_focus_from_a_field_with_its_id_under_it() {
     for carrier in DIALOG_NATIVE {
@@ -1831,7 +1808,6 @@ fn a_dialog_shown_and_focused_takes_the_focus_from_a_field_with_its_id_under_it(
     }
 }
 
-// Expected (big-boi ds-8): a focused field below a scroll's rows shows: the scroll scrolls to it.
 #[test]
 fn a_focused_field_of_a_dialog_below_a_scroll_shows() {
     for carrier in DIALOG_NATIVE {
@@ -1847,7 +1823,6 @@ fn a_focused_field_of_a_dialog_below_a_scroll_shows() {
     }
 }
 
-// Expected (big-boi ds-9): a focused field below the screen, in a body taller than it, shows: the body scrolls to it.
 #[test]
 fn a_focused_field_of_a_dialog_taller_than_the_screen_shows() {
     for carrier in DIALOG_NATIVE {
@@ -1872,7 +1847,6 @@ fn dialog_changed_in_place(h: &Harness, change: impl FnOnce(abi::Dialog) -> abi:
     generation
 }
 
-// Expected (big-boi ds-10): a request that changes a dialog surface in place and waits for its close hears it.
 #[test]
 fn a_dialog_changed_in_place_by_a_waiting_request_tells_it_closed() {
     for carrier in DIALOG_NATIVE {
@@ -1892,8 +1866,6 @@ fn a_dialog_changed_in_place_by_a_waiting_request_tells_it_closed() {
     }
 }
 
-// Expected (big-boi ds-1): a dialog surface changed in place by a later activation (a JS plugin's reload) leaves no
-// owner once it closes, so the plugin's close of whatever it shows does not close the host's own dialog shown after.
 #[test]
 fn a_dialog_changed_in_place_by_a_later_activation_leaves_no_owner() {
     for carrier in DIALOG_NATIVE {
@@ -1910,8 +1882,6 @@ fn a_dialog_changed_in_place_by_a_later_activation_leaves_no_owner() {
     }
 }
 
-// Expected (big-boi ds-5): over the raw pipe, a handler that shows a dialog surface and focuses its only field gives the
-// field the focus once the JS host's first revision of the dialog came: what the user types is the field's.
 #[cfg(feature = "ts")]
 #[test]
 fn a_dialog_shown_and_focused_over_the_pipe_takes_the_typing() {

@@ -1,10 +1,4 @@
-//! The pipe carrier (P7, synthesis 3.7, 4.3, 4.14): TypeScript plugins on the JS host, a real Bun process. The plugins
-//! are `crates/plugin/examples/pipe`: `twin/tui.ts` and `kept/tui.ts` (P6a), whose linked twins are `twin.rs` and
-//! `kept.rs`, and `probe/tui.ts`, which writes its own call log. Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
-//!
-//! A frame of the pipe is compared once the JS host has settled: everything sent was handled, and no tree waits for
-//! the host ([`settle`]). Before that, a surface shows what the second tier allows: its last whole revision or a
-//! placeholder.
+//! Exercise plugin requests, rendered frames, reloads, faults, and backpressure against a real JS host.
 
 #[path = "../../../plugin/examples/pipe/kept.rs"]
 mod kept;
@@ -94,7 +88,7 @@ pub fn open(plugins: &[(&str, Option<serde_json::Value>)], config: Config, size:
     open_with(plugins, config, size, Vec::new())
 }
 
-/// [`open`] with built-ins beside the TypeScript plugins.
+/// Open the JS plugin fixture with additional linked built-ins.
 pub fn open_with(
     plugins: &[(&str, Option<serde_json::Value>)],
     config: Config,
@@ -180,8 +174,7 @@ pub fn until(harness: &Harness, what: &str, done: impl Fn() -> bool) {
     });
 }
 
-/// One turn of the UI thread that moves no clock: what came from the JS host, the loader's threads and the deferred
-/// work runs, and a frame paints if one is wanted, but no timer comes due that was not due already.
+/// Drain ready UI work without advancing the test clock.
 pub(crate) fn still(app: &TestApp) {
     app.advance(Duration::ZERO);
     if app.needs_frame() {
@@ -241,7 +234,7 @@ pub(crate) fn settle_app(app: &TestApp, tui: &Tui, scripts: &Scripts) {
     }
 }
 
-/// Waits until no walk of a plugin's tree runs (FT-2), and the loader took the last: then a few turns.
+/// Wait for the loader to finish the current directory walk and process its result.
 pub fn walked(harness: &Harness, scripts: &Scripts) {
     walked_app(&harness.app, scripts);
 }
@@ -258,8 +251,7 @@ fn walked_app(app: &TestApp, scripts: &Scripts) {
     }
 }
 
-/// The user's `decision` on `artifact`, the build of `target` held back, as the manager's question gives it: what was
-/// recorded once the tree was hashed again, off the UI thread (FT-2).
+/// Recheck the artifact before recording the decision. Wait for the off-thread hash to finish.
 pub fn decide(
     harness: &Harness,
     target: &str,
@@ -278,8 +270,7 @@ pub fn decide(
     recorded.take().unwrap()
 }
 
-/// One turn of the UI thread, and its frame when it wants one, as the run loop paints: a revision past a frame's rows
-/// waits for the next paint (Pl).
+/// Run one UI turn and paint if requested. Revisions over the frame budget need another turn.
 pub(crate) fn turn(harness: &Harness) {
     turn_app(&harness.app);
 }
@@ -291,7 +282,7 @@ fn turn_app(app: &TestApp) {
     }
 }
 
-/// What a checkpoint compares: the frame's cells, the toasts shown since the last one, and the plugin's status.
+/// Cells, new toasts, and plugin status at one checkpoint.
 type Seen = (Vec<opentui::testing::Cell>, Vec<String>, String);
 
 fn observe(harness: &Harness, id: &str) -> Seen {
@@ -383,7 +374,6 @@ fn the_twin_is_equal_linked_and_on_the_pipe() {
                 settle();
             }
             checkpoint("bumped");
-            // A burst: the JS host views after each, and sends the next tree once the last was adopted.
             for card in ["0", "1", "3", "4"] {
                 tui.keymap.dispatch("twin.bump", Some(card));
                 harness.app.advance(Duration::from_millis(1));
@@ -433,7 +423,6 @@ fn the_kept_twin_is_equal_linked_and_on_the_pipe() {
             tui.keymap.dispatch("kept.bump", None);
             settle();
             checkpoint("bumped");
-            // A view that keeps the root keeps the memo values under it, in whichever table holds them (review carbon-2).
             tui.keymap.dispatch("kept.same", None);
             settle();
             assert_eq!(opencode_plugin::surface::ledger_of(kept::ID).memo_entries, 1, "the kept root lost its memo");
@@ -459,8 +448,6 @@ fn the_kept_twin_is_equal_linked_and_on_the_pipe() {
     assert!(remount.contains("kept 1 · begun 2 · ended 1"), "{remount}");
     assert!(!hidden.contains("extra") && hidden.contains("below"), "{hidden}");
 }
-
-// Containment, hold, placeholders and delivery over the pipe (P7).
 
 use opencode_plugin::Status;
 use opencode_plugin::pipe::Fault;
@@ -525,7 +512,6 @@ fn failed(pipe: &Pipe, id: &str) -> Option<String> {
     }
 }
 
-/// Toasts shown since the last call, oldest first: only the newest of a burst shows, the way the TUI's stack works.
 fn toasts(harness: &Harness) -> Vec<String> {
     let mut shown = Vec::new();
     while let Some(toast) = harness.tui.toasts.current() {
@@ -634,7 +620,6 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
         whole_or_placeholder(&pipe.harness.app.text());
         pipe.scripts().pid().is_some_and(|now| now != pid) || failed(&pipe, PROBE).is_some()
     });
-    // Judged by the handler's limit: nothing the setups answered is still owed (a load answered with its ID was).
     assert!(begun.elapsed() < setup, "the end took the setup's limit");
     // The failure's toast stays, and any after it waits, until read, as when the user holds it: the new JS host's start
     // may take longer than a toast shows.
@@ -648,7 +633,6 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
     assert!(error.contains(cause), "{error}");
     assert!(gone(pid), "the old JS host {pid} is still running");
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
-    // The twin was set up again: its state is new, and it answers.
     assert!(pipe.harness.app.text().contains("twin 0"), "{}", pipe.harness.app.text());
     pipe.harness.tui.keymap.dispatch("twin.bump", Some("1"));
     pipe.settle();
@@ -879,9 +863,8 @@ enum Act {
     Fault(Fault),
 }
 
-/// `delivery` over the pipe, in its weaker form (3.7): the probe's own log holds each event once, in the order of the
-/// input; the effects apply in that order too. With a fault on the pipe, what the JS host received before it ended, and
-/// after it started again, is still once and in order; what was in flight when it ended is lost.
+/// Dropped or reordered messages can end a host and lose in-flight work. Delivered calls and effects must remain unique
+/// and ordered.
 struct Delivery {
     faults: bool,
 }
@@ -948,9 +931,7 @@ impl Model for Delivery {
             }
             return None;
         }
-        // A drop or a swap ends the JS host before it starts the message after the gap, and a repeat is dropped: no
-        // handler was running, so every call it did not start is sent again to the next one. The logs are exact
-        // (review bigboi-2: an oracle of subsequences passed with every call after a restart discarded).
+        // A gap ends the host before the next handler starts; a repeated sequence is discarded.
         let _ = faults;
         if seen != expected {
             return fail("log-after-faults", format!("expected {expected:?}\nseen {seen:?}"));
@@ -992,7 +973,6 @@ fn scroll_verbs_reads_and_events_cross_the_pipe() {
     let harness = &pipe.harness;
     harness.tui.navigate(Route::Plugin { id: PROBE.to_owned(), name: "pane".to_owned() });
     pipe.settle();
-    // No call ran since the scroll was laid out: the plugin has not been told of it.
     assert!(harness.app.text().contains("offset -"), "{}", harness.app.text());
     harness.tui.keymap.dispatch("probe.bottom", None);
     pipe.settle();
@@ -1058,8 +1038,6 @@ fn twin_alone(config: Config) -> Pipe {
     pipe
 }
 
-// Expected (the pipe's fault operator "repeat one message", from the JS host): a revision delivered again once a newer
-// one was adopted builds on what the host no longer shows; it is dropped, and the newer one stays on screen.
 #[test]
 fn a_stale_revision_is_dropped() {
     let Some(config) = config() else { return };
@@ -1174,7 +1152,7 @@ fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
     assert_eq!(pipe.status("example.printer"), Some(Status::Active));
 }
 
-// The approval of a project's TypeScript plugin (O-125 (1), Pa's rules), over the pipe.
+// Project-plugin approval over the pipe.
 
 /// A client in project `work` whose `.opencode/plugins/probe` is the probe at build `build`, with the JS host.
 struct Project {
@@ -1265,8 +1243,7 @@ enum Ask {
     Frame,
 }
 
-/// Pa's machine on the pipe: the build in the directory, the last decision with the build it named, and how often the
-/// probe was started and stopped.
+/// Expected decision, active build, and setup and cleanup counts.
 #[derive(Clone, Copy, Debug, Default)]
 struct Asked {
     build: u8,
@@ -1361,7 +1338,7 @@ impl Model for PendingModel {
                     format!("listed {:?}, expected {:?} ({asked:?})", project.listed(), asked.listed()),
                 );
             }
-            // Each setup imports the module afresh, and nothing of it runs before (review bigboi-1).
+            // Importing a module counts as running it; even module-level side effects require approval.
             if project.log() != (asked.setups, asked.cleanups, asked.setups) {
                 return fail("log", format!("the probe logged {:?}, expected {asked:?}", project.log()));
             }
@@ -1413,7 +1390,6 @@ fn the_fixed_typescript_approval_rows_pass() {
         ("a-new-build-is-pending-again", &[Ask::Approve, Ask::Change(2), Ask::Run]),
         ("a-decline-names-its-build", &[Ask::Decline, Ask::Change(2), Ask::Change(0), Ask::Run]),
         ("an-approval-of-an-older-build-holds", &[Ask::Approve, Ask::Change(2), Ask::Change(0), Ask::Run]),
-        // Seed 1: a save that changes nothing loads nothing again, as TS compares a module's content.
         ("a-save-that-changes-nothing-reloads-nothing", &[Ask::Change(2), Ask::Approve, Ask::Change(2)]),
     ];
     for (name, asks) in rows {
@@ -1464,7 +1440,7 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
     external_with(&harness.tui, external, Some(config));
     let (app, tui) = (&harness.app, &harness.tui);
-    // Its files are hashed off the UI thread (FT-2): the question comes once they are.
+    // Wait for off-thread hashing before inspecting the question.
     walked(&harness, &tui.plugins.scripts.borrow().clone().unwrap());
     let toast = tui.toasts.current().unwrap();
     assert_eq!(toast.title.as_deref(), Some(&*format!("Plugin needs approval: {}", dir.display())));
@@ -1510,8 +1486,6 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
         tui.plugins.entries().iter().any(|entry| entry.id == PROBE && entry.status == Status::Active)
     });
 }
-
-// Review bigboi: rows that fail without each fix.
 
 /// Waits, painting frames and sending nothing else to the JS host, until `done` holds. It moves no clock ([`still`]):
 /// a key hold's deadline must not see how long the JS host takes.
@@ -1666,7 +1640,6 @@ fn a_full_queue_is_back_pressure_and_ends_nothing() {
     assert_eq!((pipe.scripts().pid(), pipe::crossed().started), (pid, started), "a full queue ended the JS host");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
-    // Every bump that was not refused ran, once, in order.
     assert!(header(&pipe).starts_with(&format!("twin {} ", 9 + 30 - refused)), "{}", header(&pipe));
     assert_eq!(calls(&log), vec![serde_json::json!({ "hold": 400 }), serde_json::json!({ "hold": 700 })]);
 }
@@ -1761,8 +1734,6 @@ fn what_is_only_acknowledged_leaves_nothing_behind() {
     assert_eq!(pipe.scripts().waiting(), 0);
 }
 
-// P2's input over the pipe.
-
 const KEYS: &str = "example.keys";
 
 /// The keys example on the JS host, on a session (a panel docks beside one), and the file it logs to.
@@ -1779,7 +1750,7 @@ fn keys(config: Config) -> (Pipe, PathBuf) {
     (pipe, log)
 }
 
-/// What the keys example's handlers got since the last call, one `owner: what` line each.
+/// Read and drain the input probe's event log.
 fn heard(log: &Path) -> Vec<String> {
     let text = std::fs::read_to_string(log).unwrap_or_default();
     let _ = std::fs::remove_file(log);
@@ -1881,8 +1852,6 @@ fn a_mode_ends_with_the_js_host_that_set_it() {
     assert_eq!(pipe.harness.text(), "X:");
     assert_eq!(heard(&log), ["any: any d", "any: any x", "setup: hold"]);
 }
-
-// Review carbon: rows that fail without each fix.
 
 const LAB: &str = "example.lab";
 
@@ -2259,7 +2228,7 @@ fn a_handlers_watch_ends_with_its_js_host() {
     tui.keymap.dispatch("lab.lateread", None);
     assert_eq!(toasted(&pipe, "late"), "late true");
     toasts(&pipe.harness);
-    // The JS host ran all it was sent: the kill ends no plugin's code, which would fail that plugin.
+    // Settle before killing the host so the failure cannot be attributed to a running handler.
     pipe.settle();
     let pid = pipe.scripts().pid().unwrap();
     pipe.scripts().kill();
@@ -2347,9 +2316,6 @@ fn a_client_killed_outright_leaves_nothing_its_plugins_started() {
     assert!(left.is_empty(), "{left:?} outlived the client (JS host {host})");
 }
 
-// Expected (review: bound each read): a watched read more than the JS host takes now (here a stored value the host
-// wrote, past an overflow of 256 KiB) is not pushed: the plugin reads nothing, can ask why, and goes on; a small read
-// after it is pushed again.
 #[test]
 fn a_read_over_its_bound_fails_alone() {
     let Some(mut config) = config() else { return };
@@ -2373,8 +2339,6 @@ fn a_read_over_its_bound_fails_alone() {
     assert_eq!(toasted(&pipe, "read error"), "read error none");
 }
 
-// Expected (CT-36): a watched read whose snapshot is past a frame's cap comes in parts: the plugin reads the value, with
-// no error. Before, it failed (bigboi's pipe sign-off made it a failed read rather than the value before).
 #[test]
 fn a_read_past_the_frame_comes_in_parts() {
     let Some(config) = config() else { return };
@@ -2607,7 +2571,6 @@ export default {{ id: "example.quota", setup(api) {{
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
     assert_eq!(limits::held(id).content, null + bytes as u64, "the refused read was not pushed again");
-    // The neighbour needs the room the read holds now.
     opencode_plugin::Host::storage_write(&*host, "plugin.example.quota.b", &value).unwrap();
     opencode_plugin::Host::storage_changed(&*host);
     pipe.settle();
@@ -2619,9 +2582,6 @@ export default {{ id: "example.quota", setup(api) {{
     assert!(b.starts_with("b 0 the read is ") && b.ends_with("past what the plugin may hold"), "{b}");
 }
 
-// Expected (bigboi's pipe sign-off): a load the JS host's queue refuses (here its options are past the frame's cap)
-// fails with why, as nothing else answers it; its neighbour on the same JS host is active, and once the JS host
-// answered a ping, nothing waits.
 #[test]
 fn a_load_past_the_frame_fails_and_its_neighbour_runs() {
     let Some(config) = config() else { return };
@@ -2660,11 +2620,6 @@ fn the_tui_ending_leaves_nothing_its_plugins_started() {
     assert!(left.is_empty(), "{left:?} outlived the TUI");
 }
 
-// Expected (Pl on the pipe): a JS plugin's trees, content and watched reads are charged like the others'. The lab's
-// slot holds its nodes and its content, and a read it watches is charged while it watches it; with no room left in its
-// content share, a watched read that grows is not pushed (the plugin reads nothing and can ask why) and goes on; an
-// unwatch gives the read's bytes back; with no share at all its diff's new content shows the placeholder; disabled, it
-// holds nothing.
 #[test]
 fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
     use opencode_plugin::limits::{self, Limits};
@@ -2813,9 +2768,7 @@ fn an_approval_does_not_wait_on_a_plugins_files() {
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
 }
 
-// Expected (FT-2, js-followups): a project plugin's file rewritten after its approval with its size and time kept, so
-// the walk's stamp cannot tell, fails the stage of the approved copy; the plugin is held back, its tree is hashed again
-// off the UI thread, and the new build is asked about. Nothing of it runs, and the UI thread reads none of its files.
+// Preserve file size and timestamps when replacing the contents so metadata alone cannot detect the edit.
 #[test]
 fn a_stage_that_finds_other_bytes_hashes_off_the_ui_thread() {
     let Some(config) = config() else { return };
@@ -3019,7 +2972,7 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.huge\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"huge.fetch\", title: \"huge.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/huge\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
-    // Past the 8 MiB the overflow holds: one within it goes in parts (CT-5).
+    // The payload exceeds the entire overflow, not just one frame.
     let big = "x".repeat(9 << 20);
     let server = support::Fake::new(move |seen| match seen.path.as_str() {
         "/api/huge" => (200, serde_json::json!({ "data": big })),
@@ -3144,12 +3097,7 @@ fn a_new_builds_command_and_fetch_after_its_adoption_reach_it() {
     new_build_registers_and_fetches(false, 0, false);
 }
 
-// Expected (big-boi's catalog review, 2), his four arrival orders before the host registers a new build, which keeps
-// 256 messages of it: when all fit (254 notices, the fetch, the manifest) the fetch settles with its reply and the late
-// command runs; when one does not, whichever it is (the manifest after 255 notices and the fetch; the fetch after 256
-// or 300 notices; the fetch after the manifest and 255 notices), the build fails as a whole, saying why, before anything
-// it sent is applied: its fetch settles once, refused, without reaching the server, and its late command is not there.
-// With the manifest spilled the fetch waited for good; with the fetch spilled after the manifest the build stayed active.
+// Vary the order of manifest, adoption, and early messages; the bound is per staged build.
 #[test]
 fn a_new_build_past_the_early_bound_fails_whatever_spills() {
     new_build_registers_and_fetches(true, 254, false);
@@ -3220,7 +3168,6 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     let host = opencode_tui::plugins::host::host(&h.tui);
     let stored = || opencode_plugin::Host::storage_read(&*host, "plugin.example.build.kept");
     if notices + 2 > 256 {
-        // Its batch was answered as refused, nothing of it reached the server, and the build failed as a whole.
         let case = format!("{notices} notices, manifest first {manifest_first}");
         // Refused at once, while the setup's write may still wait to be refused as the activation ends.
         let fetch = fetch();
@@ -3232,7 +3179,6 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         assert!(error.contains("more than 256 messages"), "{case}: {error}");
         assert!(!runs("build.late"), "{case}: the late command of the build that failed is there");
         assert_eq!(fetched(), 0, "{case}: a fetch of the build that failed left");
-        // Nor did the storage write its setup asked for in its load persist (big-boi's catalog review).
         assert_eq!(stored(), None, "{case}: the setup's write of the build that failed persisted");
         return;
     }
