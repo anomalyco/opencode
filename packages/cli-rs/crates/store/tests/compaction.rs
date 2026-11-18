@@ -209,13 +209,10 @@ async fn adopts_echo(kind: &str) {
 }
 
 #[tokio::test]
-async fn adopts_the_proposed_echo_before_the_response_without_duplicating_it() {
-    adopts_echo("proposed").await;
-}
-
-#[tokio::test]
-async fn adopts_the_canonical_echo_before_the_response_without_duplicating_it() {
-    adopts_echo("canonical").await;
+async fn echoes_resolve_without_duplicate_compactions() {
+    for case in ["proposed", "canonical"] {
+        adopts_echo(case).await;
+    }
 }
 
 async fn does_not_resurrect(kind: &str) {
@@ -270,18 +267,10 @@ async fn does_not_resurrect(kind: &str) {
 }
 
 #[tokio::test]
-async fn does_not_resurrect_a_canonical_item_already_started_before_the_response() {
-    does_not_resurrect("started").await;
-}
-
-#[tokio::test]
-async fn does_not_resurrect_a_canonical_item_already_cancelled_before_the_response() {
-    does_not_resurrect("cancelled").await;
-}
-
-#[tokio::test]
-async fn does_not_resurrect_a_canonical_item_already_failed_before_the_response() {
-    does_not_resurrect("failed").await;
+async fn settled_compactions_stay_settled_after_the_response() {
+    for case in ["started", "cancelled", "failed"] {
+        does_not_resurrect(case).await;
+    }
 }
 
 async fn rolls_back(rpc: &str) {
@@ -305,13 +294,10 @@ async fn rolls_back(rpc: &str) {
 }
 
 #[tokio::test]
-async fn rolls_back_a_rejected_model_rpc_and_releases_the_following_prompt() {
-    rolls_back("model").await;
-}
-
-#[tokio::test]
-async fn rolls_back_a_rejected_compact_rpc_and_releases_the_following_prompt() {
-    rolls_back("compact").await;
+async fn rejected_rpcs_release_the_next_prompt() {
+    for case in ["model", "compact"] {
+        rolls_back(case).await;
+    }
 }
 
 async fn preserves_acknowledged(kind: &str) {
@@ -335,18 +321,10 @@ async fn preserves_acknowledged(kind: &str) {
 }
 
 #[tokio::test]
-async fn preserves_acknowledged_proposed_compaction_after_an_http_error() {
-    preserves_acknowledged("proposed").await;
-}
-
-#[tokio::test]
-async fn preserves_acknowledged_canonical_compaction_after_an_http_error() {
-    preserves_acknowledged("canonical").await;
-}
-
-#[tokio::test]
-async fn preserves_acknowledged_existing_compaction_after_an_http_error() {
-    preserves_acknowledged("existing").await;
+async fn acknowledged_compactions_survive_http_errors() {
+    for case in ["proposed", "canonical", "existing"] {
+        preserves_acknowledged(case).await;
+    }
 }
 
 #[tokio::test]
@@ -430,18 +408,10 @@ async fn preserves_fetched_durable(kind: &str) {
 }
 
 #[tokio::test]
-async fn preserves_a_fetched_durable_compaction_when_sse_is_delayed_and_http_fails() {
-    preserves_fetched_durable("compaction").await;
-}
-
-#[tokio::test]
-async fn preserves_a_fetched_durable_canonical_compaction_when_sse_is_delayed_and_http_fails() {
-    preserves_fetched_durable("canonical compaction").await;
-}
-
-#[tokio::test]
-async fn preserves_a_fetched_durable_user_when_sse_is_delayed_and_http_fails() {
-    preserves_fetched_durable("user").await;
+async fn durable_items_survive_delayed_sse_and_http_failure() {
+    for case in ["compaction", "canonical compaction", "user"] {
+        preserves_fetched_durable(case).await;
+    }
 }
 
 #[tokio::test]
@@ -576,13 +546,10 @@ async fn failed_preparation(kind: &str) {
 }
 
 #[tokio::test]
-async fn a_preceding_prompts_failed_gate_does_not_block_compaction_or_following_model_preparation() {
-    failed_preparation("gate").await;
-}
-
-#[tokio::test]
-async fn a_preceding_prompts_failed_prepare_does_not_block_compaction_or_following_model_preparation() {
-    failed_preparation("prepare").await;
+async fn failed_preparation_releases_following_work() {
+    for case in ["gate", "prepare"] {
+        failed_preparation(case).await;
+    }
 }
 
 #[tokio::test]

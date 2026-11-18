@@ -76,13 +76,10 @@ async fn consumed(action: &str) {
 }
 
 #[tokio::test]
-async fn a_delayed_inbox_snapshot_cannot_resurrect_a_delivered_prompt() {
-    consumed("delivered").await;
-}
-
-#[tokio::test]
-async fn a_delayed_inbox_snapshot_cannot_resurrect_a_cancelled_prompt() {
-    consumed("cancelled").await;
+async fn late_snapshots_cannot_resurrect_consumed_items() {
+    for case in ["delivered", "cancelled"] {
+        consumed(case).await;
+    }
 }
 
 async fn retains(action: &str) {
@@ -114,13 +111,10 @@ async fn retains(action: &str) {
 }
 
 #[tokio::test]
-async fn inbox_hydration_retains_a_concurrent_enqueue_event() {
-    retains("enqueue").await;
-}
-
-#[tokio::test]
-async fn inbox_hydration_retains_a_concurrent_delivery_event() {
-    retains("delivery").await;
+async fn hydration_retains_concurrent_inbox_events() {
+    for case in ["enqueue", "delivery"] {
+        retains(case).await;
+    }
 }
 
 #[tokio::test]
