@@ -394,10 +394,11 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
 
   // cmd strips the first and last quote of the payload unless `/s` is passed, which mangles commands
   // that start with a quoted program path. Use the same `/d /s /c "<command>"` shape as cross-spawn.
-  const shellArgs = (file: string, args: string[]) => {
-    if (!isCmdShell(file) || args.length !== 2 || args[0] !== "/c") return args
-    return ["/d", "/s", "/c", `"${args[1] ?? ""}"`]
-  }
+  const rewritesCmdArgs = (file: string, args: readonly string[]) =>
+    isCmdShell(file) && args.length === 2 && args[0] === "/c"
+
+  const shellArgs = (file: string, args: string[]) =>
+    rewritesCmdArgs(file, args) ? ["/d", "/s", "/c", `"${args[1] ?? ""}"`] : args
 
   const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
@@ -579,7 +580,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
-              windowsVerbatimArguments: isCmdShell(command.command),
+              windowsVerbatimArguments: rewritesCmdArgs(command.command, command.args),
             }),
             Effect.fnUntraced(
               function* ([proc, closed, exited, stopOutput]) {
