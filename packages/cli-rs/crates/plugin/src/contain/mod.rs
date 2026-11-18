@@ -1,25 +1,5 @@
-//! Containment of plugin calls (synthesis 4.4 and 4.5, phase P4c). Every call into a plugin, on either path, runs
-//! through [`Monitor::call`]: it reads the clock before and after, so the plugin cannot opt out and does not report its
-//! own time, and while a run record is attached it names the call in the record for the watchdog and a restart. On
-//! Linux the time the thread waited on a run queue meanwhile is not the plugin's: a loaded machine's, it is not charged.
-//! The overrun is judged by the CPU time the thread used in the call ([`thread_cpu`]), where the OS can say: a page
-//! fault served from swap or disk, a wait on a lock or a sleep is the machine's, not the plugin's work (FT-13). Wall
-//! time stays the hang watchdog's.
-//!
-//! The budget acts after a call returns, because a call on the UI thread cannot be stopped:
-//!
-//! - **frame budget**: [`Limits::frame`] per plugin per frame, summed over its calls; [`Limits::all`] for all plugins
-//!   together. A frame is what runs from one paint to the next: the host closes the open frames at the start of each
-//!   paint ([`Monitor::close`]), and a call in a later frame closes its plugin's frame too.
-//! - **slow**: over the frame budget in more than [`Limits::slow`] of the last [`Limits::window`] frames the plugin ran
-//!   in. It informs only, once a session, because wall time on a loaded machine is noisy.
-//! - **overrun**: one call that used more CPU than [`Limits::overrun`] (wall time less the run-queue wait where the OS
-//!   tells no CPU time). The caller fails an external plugin; for a built-in it is a host
-//!   bug, logged and counted ([`Monitor::host_overruns`]). A plugin's first call after `setup` is exempt, because its
-//!   pages are cold. Loading a library, `setup` and `dispose` are timed and do not count: they are its load.
-//!
-//! Each build of a plugin has its own slot and statistics: a reload starts afresh.
-//! - **hang**: a call not returned after [`Limits::hang`]; the watchdog acts ([`watchdog`]).
+//! Measures plugin calls using the host clock. The monitor tracks slow calls, frame budgets and mailbox pressure;
+//! the parent uses the run record to attribute a crash to the active build.
 
 pub mod record;
 pub mod watchdog;
@@ -73,8 +53,7 @@ pub fn filter_panics() {
     });
 }
 
-/// The limits of the budget. These are starting values (synthesis 7, decision 5); `OPENCODE_PLUGIN_LIMITS` changes
-/// them ([`Limits::parse`]).
+/// Plugin call budgets. Override the defaults with `OPENCODE_PLUGIN_LIMITS`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     /// Per plugin per frame.
@@ -220,9 +199,7 @@ pub struct Monitor {
     record: OnceCell<(Arc<Record>, Instant)>,
     /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
     on_notice: RefCell<Option<Rc<OnNotice>>>,
-    /// The plugins whose slow news the user was told this session, by ID: once a plugin and session, whatever the
-    /// cause and however often it is enabled again or rebuilt (4.14 `reported-once`; final review big-boi 10). Each
-    /// build's state, counters and causes stay its own.
+    /// Report a slow plugin once per plugin ID per session, even after reload.
     told: RefCell<std::collections::HashSet<String>>,
 }
 
@@ -250,15 +227,13 @@ struct Stats {
     host_total: Duration,
     /// All its calls since its setup, but the setup's.
     calls_total: Duration,
-    /// Its calls in a frame of the host's count, whatever closed P4c's window: what the scheduler's budget reads.
+    /// Host frame counter used by the scheduler's budget.
     counted: Option<(u64, Duration)>,
-    /// The frames at the end of which its mailbox was full, the last [`Limits::window`] (synthesis 4.2, reviews
-    /// bigboi 10 and carbon 5.4); whether that was told; and the sends its mailbox refused so far.
+    /// Full-mailbox frames within the reporting window, notification status and refused sends.
     backlog: VecDeque<u64>,
     told_backlog: bool,
     refused: u64,
-    /// Whether the backlog made it slow when the monitor last looked: a change of it is a change of slow too (review
-    /// carbon-12).
+    /// Whether the backlog made it slow when the monitor last looked: a change of it is a change of slow too.
     backlog_slow: bool,
 }
 
@@ -392,8 +367,7 @@ impl Monitor {
 
     /// The frame calls count in now. OpenTUI counts a paint's frame up after its animations and deferred work and
     /// before its layout and draws; a call inside the frame ([`in_frame`]: `layout`, a canvas's draw) counts in the
-    /// frame the paint started in. So a frame is a paint's calls and the calls since the paint before it (review
-    /// carbon 4.1).
+    /// frame the paint started in. So a frame is a paint's calls and the calls since the paint before it.
     pub fn frame(&self) -> u64 {
         self.painted().saturating_sub(u64::from(IN_FRAME.with(Cell::get)))
     }
@@ -407,7 +381,7 @@ impl Monitor {
     /// closes as [`Monitor::close`] does: the calls of a timer's tick with nothing to paint count as one frame, not
     /// summed with every later tick until a paint comes. `None`, and nothing ends, when a call that is no timer's runs
     /// in the frame open now: its time stays the scheduler's ([`Monitor::spent`]) until a paint ends the frame, as for
-    /// any call (big-boi tm-1).
+    /// any call.
     pub fn close_idle(&self, painted: u64) -> Option<Vec<(String, String)>> {
         if self.plain.get() == Some(self.frame()) {
             return None;
@@ -431,7 +405,7 @@ impl Monitor {
         let limits = self.limits();
         self.all.get().is_some_and(|(_, sum)| sum > limits.all)
             || self.plugins.borrow().iter().any(|stats| {
-                // A backlog that makes it slow ends with frames, which the closes must see (review carbon-12).
+                // A backlog that makes it slow ends with frames, which the closes must see.
                 stats.window.is_some_and(|(_, sum)| sum > limits.frame) || stats.backlog_slow
             })
     }
@@ -471,7 +445,7 @@ impl Monitor {
 
     /// The slot of `artifact`, made on first use: each build has its own. A library is opened (and its load timed)
     /// before its ID is known: its build keeps that one slot once it is named, so a crash in its load and in its
-    /// activation names the same artifact (final review big-boi 11).
+    /// activation names the same artifact.
     pub fn slot(&self, artifact: &Artifact) -> Slot {
         let mut plugins = self.plugins.borrow_mut();
         if let Some(index) = plugins.iter().position(|stats| stats.artifact == *artifact) {
@@ -504,9 +478,8 @@ impl Monitor {
     }
 
     /// Whether a crash in a call of `slot` names its artifact: always without a record, as no parent restarts the
-    /// client then. An external build is named by its build, its target and digest, whatever ID the record could hold
-    /// beside them; a built-in by its ID. An external build the record cannot name is not admitted (final review
-    /// big-boi 11; re-review: the same build loaded again after its ID was too long to hold).
+    /// client then. An external build is named by its build, its target and digest, whatever ID the record could
+    /// hold beside them; a built-in by its ID. An external build the record cannot name is not admitted.
     pub fn attributed(&self, slot: Slot) -> bool {
         let Some((record, _)) = self.record.get() else { return true };
         let plugins = self.plugins.borrow();
@@ -552,12 +525,8 @@ impl Monitor {
         (value, self.account(slot, kind, charged, cpu))
     }
 
-    /// Runs `work`, the host's own work for the plugin in `slot`'s nodes (building them, laying out a list's window,
-    /// copying a decoded image in), timed apart from the plugin's calls: it is not in the plugin's frame budget, the
-    /// limits of 4.2 bound it, and a slow plugin's details show it beside its calls (synthesis 4.4, "host time for
-    /// plugin X").
-    /// Work of another plugin nested in it (a nested slot's view and the host's work for its nodes) is that plugin's,
-    /// and not this one's (review carbon 5.2).
+    /// Times host-side work separately from plugin calls. Rendering widgets, laying out a list and copying an image
+    /// must not consume the plugin's call budget.
     pub fn host(&self, slot: Slot, work: &mut dyn FnMut()) {
         let clock = self.clock.borrow().clone();
         self.nested.borrow_mut().push(Duration::ZERO);
@@ -654,8 +623,8 @@ impl Monitor {
     }
 
     /// A paint starts: every frame before the one now open ends; the open one goes on through the paint, so a paint
-    /// does not cut one frame's calls in two, and ends at a later paint (review carbon 4.1). Returns the plugins that
-    /// became slow, with what a slow frame costs.
+    /// does not cut one frame's calls in two, and ends at a later paint. Returns the plugins that became slow, with
+    /// what a slow frame costs.
     pub fn close(&self) -> Vec<(String, String)> {
         self.closing.set(false);
         let (limits, frame) = (self.limits(), self.frame());
@@ -677,7 +646,7 @@ impl Monitor {
         news
     }
 
-    /// Whether a plugin became slow or stopped being slow since the last call, which the plugin list shows (P6b).
+    /// Whether a plugin became slow or stopped being slow since the last call, which the plugin list shows.
     pub fn take_flipped(&self) -> bool {
         // Every plugin's flag is taken, not only up to the first that is set.
         let mut flipped = false;

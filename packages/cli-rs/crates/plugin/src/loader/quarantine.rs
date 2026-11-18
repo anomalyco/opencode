@@ -1,8 +1,5 @@
-//! The quarantine macOS gives a download (`com.apple.quarantine`), which the private copy of a library carries so the
-//! system checks the copy as it would the file (review carbon-6). It is read through the descriptor the library's
-//! bytes were read through, as its raw bytes, so the copy carries the attribute of the very file that was hashed and
-//! loaded, not of whatever the name leads to later (final review big-boi 3). An attribute that is not there is told
-//! from one that cannot be read, which refuses the library. Elsewhere there is no quarantine.
+//! Preserves macOS quarantine on the private copy the loader opens. Read the raw attribute from the same file
+//! descriptor as the library bytes. A missing attribute is allowed; an unreadable one is an error.
 
 use std::fs::File;
 
@@ -26,8 +23,7 @@ thread_local! {
     static FAIL: std::cell::Cell<Option<std::io::Error>> = const { std::cell::Cell::new(None) };
 }
 
-/// Makes the next [`read`] on this thread fail with `error`, as an attribute the system cannot read does on macOS:
-/// what the loader does then runs on every platform (final re-review big-boi 3).
+/// Forces the next quarantine read on this thread to fail.
 #[cfg(test)]
 pub(crate) fn fail_next_read(error: std::io::Error) {
     FAIL.set(Some(error));
@@ -110,9 +106,6 @@ mod tests {
 
     use super::*;
 
-    // Expected (final review big-boi 3; runs on macOS only): the quarantine is read through the descriptor as its raw
-    // bytes, absent is `None`, and once the name leads to another file the descriptor still reads the file that was
-    // opened; a copy given the value carries the same bytes.
     #[test]
     fn the_quarantine_is_read_through_the_descriptor() {
         let dir = opencode_util::temp::TempDir::new().unwrap();
@@ -134,8 +127,6 @@ mod tests {
         assert_eq!(read(&copy), Ok(Some(value)));
     }
 
-    // Expected (final re-review big-boi 3; macOS only): an attribute that is not there, or a file system that holds
-    // none, is no quarantine; every other error is one the library is refused for.
     #[test]
     fn only_absence_is_no_quarantine() {
         for (errno, absent) in [(libc::ENOATTR, true), (libc::ENOTSUP, true), (libc::EACCES, false), (libc::EIO, false)]

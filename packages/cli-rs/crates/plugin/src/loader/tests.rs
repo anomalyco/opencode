@@ -49,7 +49,7 @@ pub(crate) struct TestHost {
     pub deltas: Rc<RefCell<Vec<crate::Deltas>>>,
     /// The replies of the programs run in the foreground, which [`TestHost::exit`] delivers.
     pub programs: RefCell<Vec<(Alive, Reply)>>,
-    /// The plugins' input (P2): their layers, listeners, pointer capture and pastes.
+    /// The plugins' input: their layers, listeners, pointer capture and pastes.
     pub router: crate::interact::Router,
 }
 
@@ -502,7 +502,6 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     assert_eq!(local_source("@acme/opencode-tui", dir), None);
     // `\` is no separator here: `..\x` names a package, which the cache refuses.
     assert_eq!(local_source(r"..\x", dir), None);
-    // Expected (r2 review, bigboi-ui-8 and carbon-ui-8): a file URL means what `fileURLToPath(new URL(spec))` says.
     assert_eq!(local_source("file:///a/My%20Plugin", dir), Some("/a/My Plugin".into()));
     assert_eq!(local_source("file://localhost/a/b", dir), Some("/a/b".into()));
     assert_eq!(local_source("file:///a/b/../c", dir), Some("/a/c".into()));
@@ -516,7 +515,7 @@ fn local_source_resolves_paths_and_urls_but_not_packages() {
     let dir = Path::new(r"C:\Users\me\.config\opencode");
     assert_eq!(local_source("./plugins/x", dir), Some(r"C:\Users\me\.config\opencode\plugins\x".into()));
     assert_eq!(local_source("../x.wasm", dir), Some(r"C:\Users\me\.config\x.wasm".into()));
-    // Windows' own relative forms (carbon jsnpm-4), which climb no further than a `/` form does.
+    // Windows' own relative forms, which climb no further than a `/` form does.
     assert_eq!(local_source(r".\plugins\x", dir), Some(r"C:\Users\me\.config\opencode\plugins\x".into()));
     assert_eq!(local_source(r"..\..\..\x", dir), Some(r"C:\Users\x".into()));
     assert_eq!(local_source("/abs/x", dir), Some(r"C:\abs\x".into()));
@@ -570,7 +569,6 @@ fn reconcile_loads_reloads_keeps_and_unloads() {
     assert_eq!(entry(&entries, &lib_target).source, Source::External);
     assert_eq!(entry(&entries, &lib_target).status, Status::Active);
     assert_eq!(entry(&entries, &file_target).id, "extra");
-    // Skipped with why and how to load it, and named by its package rather than its path (FT-10, FT-15).
     assert_eq!(entry(&entries, &ts_target).status, Status::Skipped(SKIPPED_OFF.to_owned()));
     assert_eq!(entry(&entries, &ts_target).id, "@acme/typescript-tui");
     assert_eq!(entry(&entries, "@acme/tui").status, Status::Skipped(SKIPPED_OFF.to_owned()));
@@ -1843,7 +1841,7 @@ fn a_typescript_plugins_artifact_is_its_files() {
     assert_eq!(artifact.path, std::fs::canonicalize(&dir).unwrap());
     std::fs::write(dir.join("tui.ts"), "export default {}\n").unwrap();
     assert_eq!(hash(), first, "a save that changed nothing changed the hash");
-    // A hidden file is a module the plugin may import (review carbon-1).
+    // A hidden file is a module the plugin may import.
     std::fs::write(dir.join(".payload.ts"), "export const a = 1\n").unwrap();
     assert_ne!(hash(), first, "a hidden file kept the hash");
     std::fs::remove_file(dir.join(".payload.ts")).unwrap();
@@ -2121,7 +2119,6 @@ fn a_removal_in_the_users_configuration_withdraws_its_vouch() {
         "byglob@1.0.0",
         "again@1.0.0",
         "enabled@1.0.0",
-        // carbon's probe: the spec, removed by the spec.
         "-revoked@1.0.0",
         "-acme.byid",
         "-acme.*",
@@ -2283,8 +2280,6 @@ fn a_build_without_ts_says_it_has_no_typescript_plugin_support() {
     assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
 }
 
-// Expected (win-x64-link): a build without Luau, by feature or on x86_64 Windows MSVC, lists a Luau plugin directory as
-// skipped, saying it has no Luau support, not a TypeScript reason; a native build beside it loads.
 #[cfg(not(luau))]
 #[test]
 fn a_build_without_luau_says_it_has_no_luau_plugin_support() {

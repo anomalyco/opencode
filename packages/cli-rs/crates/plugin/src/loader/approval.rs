@@ -1,15 +1,7 @@
-//! Approval of project plugins (rich-plugins 3.9, decision O-125): a native build found in a project's
-//! `.opencode/plugins` runs only once the user approved it, and so does a TypeScript plugin there that the JS host
-//! would run (P7). A decision names an [`Artifact`]: the directory it was found as, the real path of its library, and
-//! the SHA-256 of the bytes that are loaded; for a TypeScript plugin, the real path of the directory and the SHA-256 of
-//! its files ([`Artifact::tree`]). A changed library, another
-//! path to it, or the same library found as another plugin directory (another project's) is pending again. The global
-//! `plugins` directory and `cli.json` entries need none: a project cannot write them.
-//!
-//! The decisions are kept in one file of the client's state directory, read at each lookup, so another client's
-//! decision applies at the next reconcile. An update is one read, change and replace under a lock, so concurrent
-//! clients never lose or bring back each other's decisions. The file is private to the user; a store the project could
-//! reach, or that others can write, is not used, and decisions then last as long as the client.
+//! Project plugins require approval for the discovered directory, resolved path and SHA-256 of the loaded bytes.
+//! Script approvals hash the directory tree. A changed build or path needs a new decision. Clients share decisions
+//! through a locked, user-private state file; if the project can reach the file or others can write it, decisions
+//! stay in memory.
 
 use std::cell::RefCell;
 use std::fs::File;
@@ -23,7 +15,7 @@ use serde_json::Value;
 /// The file of the decisions in the client's state directory.
 pub const FILE: &str = "plugin-approvals.json";
 
-/// The largest library the loader reads (carbon-5): a bigger file is refused before anything is allocated for it.
+/// The largest library the loader reads: a bigger file is refused before anything is allocated for it.
 pub const LIMIT: u64 = 512 * 1024 * 1024;
 
 /// What an approval names: the plugin directory it was found as, the real path of its library, and the SHA-256 of the
@@ -38,9 +30,9 @@ pub struct Artifact {
 }
 
 impl Artifact {
-    /// Opens the library `file` of plugin directory `target` once and hashes what it reads (bigboi-5). The returned
-    /// handle is the file that was hashed, for [`Artifact::bytes`]. An error when the file is not a regular file, is
-    /// over [`LIMIT`], or its name led to another file by the time it was read.
+    /// Opens the library `file` of plugin directory `target` once and hashes what it reads. The returned handle is the
+    /// file that was hashed, for [`Artifact::bytes`]. An error when the file is not a regular file, is over [`LIMIT`],
+    /// or its name led to another file by the time it was read.
     pub fn open(target: &Path, file: &Path) -> Result<(Self, File), String> {
         let error = |error: std::io::Error| format!("{}: {error}", file.display());
         let path = std::fs::canonicalize(file).map_err(error)?;
@@ -78,20 +70,20 @@ impl Artifact {
         Ok((Self { target: target.to_path_buf(), path, sha256, script: false }, handle))
     }
 
-    /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what it
-    /// holds. Each file's path and bytes count, in name order, hidden ones and its dependencies in `node_modules` too:
-    /// whatever the JS host may import from it (review carbon-1). The JS host reads the files itself, so a change after
-    /// the hash is what the next reconcile sees: the watcher's, which holds the new files back. A file outside the
-    /// directory that the plugin imports is not part of it.
+    /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what
+    /// it holds. Each file's path and bytes count, in name order, hidden ones and its dependencies in `node_modules`
+    /// too: whatever the JS host may import from it. The JS host reads the files itself, so a change after the hash is
+    /// what the next reconcile sees: the watcher's, which holds the new files back. A file outside the directory that
+    /// the plugin imports is not part of it.
     pub fn tree(target: &Path) -> Result<Self, String> {
         let error = |error: std::io::Error| format!("{}: {error}", target.display());
         let path = std::fs::canonicalize(target).map_err(error)?;
         if !path.is_dir() {
             return Err(format!("{}: not a directory", path.display()));
         }
-        // A tree whose entries did not change since its last hash is not read again (bigboi P8-9): every reconcile asks
-        // for it, and the JS host's answers each start one. What runs is still what was approved: [`Artifact::stage`]
-        // hashes the bytes it copies.
+        // A tree whose entries did not change since its last hash is not read again: every reconcile asks for it, and
+        // the JS host's answers each start one. What runs is still what was approved: [`Artifact::stage`] hashes the
+        // bytes it copies.
         let print = fingerprint(&path)?;
         let known =
             TREES.with(|trees| trees.borrow().get(&path).filter(|(at, _)| *at == print).map(|(_, sha)| sha.clone()));
@@ -111,9 +103,9 @@ impl Artifact {
     }
 
     /// The tree [`Artifact::tree`] hashed, as a copy under `root` named by its hash, which the JS host imports instead
-    /// of the directory (bigboi P8-1): a save between the approval and the import changes the directory, not the copy.
-    /// The copy is written from the bytes its hash is taken of as they are copied, and kept only if that hash is the
-    /// one approved; else the directory changed since, and nothing of it runs. A copy made before is used again.
+    /// of the directory: a save between the approval and the import changes the directory, not the copy. The copy is
+    /// written from the bytes its hash is taken of as they are copied, and kept only if that hash is the one approved;
+    /// else the directory changed since, and nothing of it runs. A copy made before is used again.
     pub fn stage(&self, root: &Path) -> Result<PathBuf, String> {
         let staged = root.join(&self.sha256);
         if staged.is_dir() {
@@ -145,7 +137,7 @@ impl Artifact {
     }
 
     /// The bytes of `handle`, the file [`Artifact::open`] hashed, once they are checked to be the ones it hashed: what
-    /// is loaded is what was approved (bigboi-1).
+    /// is loaded is what was approved.
     pub fn bytes(&self, handle: &mut File) -> Result<Vec<u8>, String> {
         let error = |error: std::io::Error| format!("{}: {error}", self.path.display());
         handle.rewind().map_err(error)?;
@@ -166,7 +158,7 @@ impl Artifact {
 thread_local! {
     /// The last hash of each plugin tree, with the fingerprint of its entries then.
     static TREES: RefCell<std::collections::HashMap<PathBuf, (u64, String)>> = RefCell::default();
-    /// The bytes of plugin files this thread read to hash them, for the rows that count the work (bigboi P8-9).
+    /// The bytes of plugin files this thread read to hash them, for the rows that count the work.
     static HASHED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
@@ -233,7 +225,7 @@ pub(crate) fn install_root(dir: &Path) -> Option<PathBuf> {
     (!generation.is_empty() && generation.bytes().all(|byte| byte.is_ascii_digit())).then(|| root.to_path_buf())
 }
 
-/// The approval hash of a package of the npm cache (O-162): its own tree's, and its dependencies by the install's
+/// The approval hash of a package of the npm cache: its own tree's, and its dependencies by the install's
 /// `package.json` and lockfile.
 fn install_sha256(tree: &str, root: &Path) -> Result<String, String> {
     let mut context = ring::digest::Context::new(&ring::digest::SHA256);
@@ -362,8 +354,8 @@ pub enum Decision {
     Declined,
 }
 
-/// One decision as it is stored. Paths are kept losslessly (bigboi-7): as text when they are Unicode, else as `hex:`
-/// and the platform's encoded bytes, which no absolute path starts with.
+/// One decision as it is stored. Paths are kept losslessly: as text when they are Unicode, else as `hex:` and the
+/// platform's encoded bytes, which no absolute path starts with.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Stored {
     target: String,
@@ -423,7 +415,7 @@ impl Default for Approvals {
 
 impl Approvals {
     /// The decisions kept in `file`, unless the project at `project` could reach it or other users can write its
-    /// directory (bigboi-2): then they last as long as the client, and [`Approvals::unsaved`] says why.
+    /// directory: then they last as long as the client, and [`Approvals::unsaved`] says why.
     pub fn open(file: PathBuf, project: &Path) -> Self {
         match trusted(&file, project) {
             Ok(()) => Self { store: Store::File(file), scratch: RefCell::default() },
@@ -557,9 +549,9 @@ fn load(file: &Path) -> Result<Vec<Value>, String> {
     serde_json::from_slice(&bytes).map_err(|error| format!("not a list of decisions: {error}"))
 }
 
-/// Reads, changes and replaces the entries of `file` while holding its lock (bigboi-4, carbon-3). The new file is
-/// written to a temporary file of its own, private to the user, and renamed over the old one; on any error the old
-/// file stays and the temporary file goes.
+/// Reads, changes and replaces the entries of `file` while holding its lock. The new file is written to a temporary
+/// file of its own, private to the user, and renamed over the old one; on any error the old file stays and the
+/// temporary file goes.
 fn update(file: &Path, change: impl FnOnce(&mut Vec<Value>) -> Result<(), String>) -> Result<(), String> {
     let _lock = lock(file)?;
     let mut entries = load(file)?;

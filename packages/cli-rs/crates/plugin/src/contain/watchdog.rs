@@ -1,5 +1,4 @@
-//! The watchdog (synthesis 4.5). A plugin call holds the UI thread and cannot be stopped, so two threads watch the run
-//! record instead:
+//! The watchdog. A plugin call holds the UI thread and cannot be stopped, so two threads watch the run record instead:
 //!
 //! - **The deadline thread** reads the running call every 20 ms. It allocates nothing, logs nothing and does no I/O
 //!   that can block: at [`Limits::notice`] it hands the call to the notice thread without waiting, and at

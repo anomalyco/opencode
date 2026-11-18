@@ -1,28 +1,9 @@
-//! The run record (synthesis 4.5): one private mapped file per client, which the parent creates and keeps. Around
-//! every plugin call the host stores which plugin and which call runs. It also holds what a restart needs: the session
-//! on screen and the composer's draft, written as one snapshot whenever either changes. After a crash or a hang the
-//! parent reads what it says, and hands it to the next client in that client's own record.
+//! Shared crash record for the client, its parent and watchdog. Each atomic word has one access type.
+//! Plugin identity slots publish their checksum between calls; a checksum mismatch identifies no plugin.
+//! The session and draft use two slots: commit the new slot only after writing the complete snapshot.
 //!
-//! Every field has one access type and fields never overlap, so the UI thread, the watchdog and the parent may use the
-//! record at once:
-//!
-//! - **Words** (`AtomicU64`): the call state with its generation, the running call, its start, the call the
-//!   watchdog claimed, the call whose notice it painted, the committed snapshot, whether the terminal was taken.
-//! - **Names** (bytes, published by a checksum word): each plugin slot's identity, written before the slot's first
-//!   call, and once more when an external build that loaded before its ID was known is named with it (final review
-//!   big-boi 11): between calls, so no crash names a slot while it is written. An identity is the plugin's ID and, for
-//!   an external plugin, its target and build, so a crash names the artifact and not only an ID another plugin may
-//!   share. A build whose identity the record cannot hold is not admitted ([`Record::holds`]).
-//! - **Snapshots** (bytes, two slots): the session and the draft. A writer fills the slot that is not committed, then
-//!   commits it with one word, so a crash in the middle leaves the previous whole snapshot.
-//! - **Handoff** (bytes): what the parent tells the next client: the crash it restarts after, and safe mode.
-//!
-//! A call's life: `enter` stores the call and its start, then the state `running(g)`; `leave` swaps `running(g)` for
-//! `idle(g)`. The watchdog ends a client only after it swapped `running(g)` for `hung(g)`: a call that returned first
-//! keeps it from killing the client, and once it won, the call it claimed is the one the record names.
-//!
-//! A plugin can still write the page (a wild write): checksums make garbage name nobody. A valid wrong name cannot be
-//! told from a right one, and a crash names the last call, not the cause.
+//! The watchdog may terminate the client only after claiming the same running call generation. A successful
+//! return wins that race by marking the generation idle. The record identifies the last call, not the cause.
 
 // The record views its mapping as atomics: each view below says why it is sound.
 #![allow(unsafe_code)]
@@ -84,13 +65,13 @@ pub const KINDS: &[&str] = &[
     "update",
     "unmount",
     "draw",
-    // P3: a surface's `layout` and its scroll handler.
+    // a surface's `layout` and its scroll handler.
     "layout",
     "on-scroll",
-    // P2: a key, paste, pointer, hover or close event to a surface's or a layer's handler, and a select's search.
+    // a key, paste, pointer, hover or close event to a surface's or a layer's handler, and a select's search.
     "handle",
     "search",
-    // P6b: the handlers of a change of the plugins the host lists.
+    // the handlers of a change of the plugins the host lists.
     "on-plugins",
     // await-cancel: the handlers of a request its mount's close cancelled.
     "on-cancelled",

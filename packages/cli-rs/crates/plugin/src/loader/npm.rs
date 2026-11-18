@@ -1,26 +1,6 @@
-//! Where a plugin named by npm package lies in the package cache TS installs into, found as TS's `Npm.resolve` finds
-//! it (`packages/util/src/npm.ts:358-366`), which the TS client asks for a server plugin's TUI part, and after its
-//! install for a `cli.json` entry (`packages/cli/src/commands/handlers/default.ts:143`). Nothing is installed or
-//! fetched here: a package the cache does not hold is not found.
-//!
-//! The cache is `<cache>/npm/<key>` (`npm.ts:148`), `<cache>` the global cache directory (`~/.cache/opencode`). The
-//! key is the spec as written, not a version it resolves to (`npm.ts:92-97`):
-//!
-//! - a registry spec (a version, a range or a tag of a named package, as `npm-package-arg` parses it) is
-//!   `<name>@<spec>`, the spec being `latest` for a bare name (`foo@latest`; `foo@^1` is `foo@^1`, `foo@` is `foo@*`);
-//! - a git spec (a git URL, an SCP `user@host:path`, or a spec on a known host, as `hosted-git-info` reads it: GitHub's
-//!   `user/repo`, a `github:`, `gitlab:`, `bitbucket:`, `gist:` or `sourcehut:` shortcut, or an HTTPS or SSH URL of
-//!   those hosts) is `git-<slug>-<the first 12 hex digits of the spec's SHA-256>`;
-//! - anything else (an alias, a directory, a tarball, a URL, a spec `npm-package-arg` refuses) is the spec itself.
-//!
-//! [`cache_key`] gives that key for every spec, as `Npm.cacheKey` does. [`resolve`] looks up only the first two: the
-//! others name no package TS's `parse` classifies, and keyed by their text they can lead out of the cache (carbon
-//! jsnpm-4).
-//!
-//! On Windows the characters a file name cannot hold become `_` (`sanitize`). Each install is a generation, a
-//! numbered directory; the newest, the largest number, is the one used (`npm.ts:149-162`), else the key's directory
-//! itself. The package is that directory's `node_modules/<name>`: the spec's name, else the first dependency of the
-//! generation's `package.json`, else the spec (`installedName`, `npm.ts:173-183`).
+//! Resolves installed plugins without fetching anything. The package cache keys a registry spec by its requested
+//! version or tag, and a git spec by its slug and a hash of the literal spec. Use the highest numbered generation.
+//! Unclassified specs can have cache keys but must never be joined to the cache path.
 
 use std::path::{Path, PathBuf};
 
@@ -39,10 +19,8 @@ pub fn missing(spec: &str) -> String {
     )
 }
 
-/// The package `spec` names in the cache under `cache`, if the cache holds it. Only a spec TS's `parse` classifies (a
-/// version, range or tag of a named package, or a git spec) is looked up, by its key, and only a package name `name`
-/// or `@scope/name` is joined to the path; the package found must lie under `<cache>/npm` once links are followed
-/// (carbon jsnpm-4). It is returned by its real path.
+/// Resolves a registry or git spec to a package inside the cache. Only valid package names may be joined to the
+/// generation directory.
 pub fn resolve(spec: &str, cache: &Path) -> Option<Package> {
     let target = parse(spec)?;
     let root = cache.join("npm");
@@ -52,7 +30,7 @@ pub fn resolve(spec: &str, cache: &Path) -> Option<Package> {
     if !valid_name(&name) {
         return None;
     }
-    // Real paths, without Windows' verbatim prefix: the JS host is handed this one (carbon recheck-3).
+    // Real paths, without Windows' verbatim prefix: the JS host is handed this one.
     let directory = super::real(&base.join("node_modules").join(&name))?;
     let inside = super::real(&root).is_some_and(|root| directory.starts_with(root));
     (inside && directory.is_dir()).then_some(Package { directory, name })
@@ -79,12 +57,12 @@ enum Kind {
     Git,
 }
 
-/// The directory under `<cache>/npm` that holds the installs of `spec` (TS `Npm.cacheKey`).
+/// The directory under `<cache>/npm` that holds the installs of `spec`.
 pub fn cache_key(spec: &str) -> String {
     key(spec, parse(spec).as_ref())
 }
 
-/// The cache key of `spec` (`key`, `npm.ts:92-97`).
+/// Computes the key used by the shared npm cache.
 fn key(spec: &str, target: Option<&Target>) -> String {
     match target {
         Some(Target { kind: Kind::Registry(range), name: Some(name) }) => sanitize(&format!("{name}@{range}")),
@@ -97,8 +75,7 @@ fn key(spec: &str, target: Option<&Target>) -> String {
     }
 }
 
-/// `parse` (`npm.ts:68-90`): a registry target for a version, range or tag of a named package, a git target, or none
-/// for any other spec and for one `npm-package-arg` refuses.
+/// Classifies installable registry and git specs.
 fn parse(spec: &str) -> Option<Target> {
     match npa(spec).ok()? {
         Npa::Git(name) => Some(Target { kind: Kind::Git, name }),
@@ -531,7 +508,6 @@ fn correct_url(mut giturl: String) -> String {
     giturl
 }
 
-/// `gitSlug` (`npm.ts:99-115`).
 fn git_slug(spec: &str) -> String {
     let target = spec.split('#').next().unwrap_or_default();
     let target = percent_decode(target).unwrap_or_else(|| target.to_owned());
@@ -585,7 +561,7 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// `sanitize` (`npm.ts:45-50`): on Windows, `<>:"|?*` and control characters become `_`.
+/// Windows filenames cannot contain control characters or `<>:"|?*`.
 fn sanitize(key: &str) -> String {
     match cfg!(windows) {
         true => {
@@ -621,8 +597,6 @@ fn first_dependency(base: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
-    // Expected (TS `Npm.resolve`): the newest generation's `node_modules/<name>`; a scoped name nests; a git spec's
-    // name is the generation's first dependency; nothing in the cache, or only a key without the package, is not found.
     #[test]
     fn a_package_resolves_in_the_newest_generation() {
         let temp = opencode_util::temp::tempdir().unwrap();
@@ -652,10 +626,6 @@ mod tests {
         assert_eq!(resolve("baz", &cache), None);
     }
 
-    // Expected (carbon jsnpm-4): nothing outside `<cache>/npm` is found. A spec TS's `parse` does not classify (one
-    // that climbs with `..`, a tarball, a URL) is not looked up, even where its key's directory holds a package; a
-    // `dependencies` key that is not a package name (absolute, `..`) is not joined; a package that is a link out of the
-    // cache is refused. A registry spec and a git spec still are found, by their real paths.
     #[cfg(unix)]
     #[test]
     fn nothing_outside_the_cache_is_found() {
@@ -679,7 +649,6 @@ mod tests {
                 .unwrap();
             assert_eq!(resolve(spec, &cache), None, "{key}");
         }
-        // Keyed by the spec itself, as TS keys it, and holding a package: still not looked up.
         let tarball = generation("plugin.tgz");
         std::fs::create_dir_all(tarball.join("node_modules").join("plugin.tgz")).unwrap();
         assert_eq!(resolve("plugin.tgz", &cache), None);
@@ -697,7 +666,6 @@ mod tests {
         assert_eq!(resolve("github:u/r", &cache).map(|package| package.name), Some("@s/real".to_owned()));
     }
 
-    // Expected (`validate-npm-package-name` 7, `validForOldPackages`): the names npm-package-arg takes.
     #[test]
     fn a_package_name_is_validated_as_npm_does() {
         for name in ["foo", "Foo", "fs", "foo.bar", "foo~", "@s/foo", "@s/Foo", "@../x", "a!"] {

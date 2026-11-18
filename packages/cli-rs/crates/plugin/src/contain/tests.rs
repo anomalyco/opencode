@@ -1,5 +1,5 @@
-//! `budget` (synthesis 4.14): the slow state, the overrun and the hang follow the rule of 4.4 exactly at each
-//! boundary. The clock and the frame counter are injected, so nothing sleeps.
+//! `budget`: the slow state, the overrun and the hang follow the rule of 4.4 exactly at each boundary. The clock and
+//! the frame counter are injected, so nothing sleeps.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -55,8 +55,6 @@ impl Bench {
     }
 }
 
-// Expected (4.4): slow is over the frame budget in more than 12 of the last 120 frames the plugin ran in. 12 is not
-// slow and 13 is; the news comes once, as the frame that makes it slow ends, and says what a slow frame costs.
 #[test]
 fn twelve_slow_frames_of_120_are_not_slow_and_thirteen_are() {
     for (over, slow) in [(12, false), (13, true)] {
@@ -70,8 +68,6 @@ fn twelve_slow_frames_of_120_are_not_slow_and_thirteen_are() {
     }
 }
 
-// Expected: the frame budget is per frame, summed over the calls: exactly 1 ms is in it, 1 ms and 1 ns is over it,
-// and two calls of 0.6 ms in one frame are over it.
 #[test]
 fn the_frame_budget_is_a_sum_and_its_limit_is_inside() {
     for (calls, over) in [
@@ -90,8 +86,6 @@ fn the_frame_budget_is_a_sum_and_its_limit_is_inside() {
     }
 }
 
-// Expected: the window is the last 120 frames the plugin ran in. Frames without a call of it do not count, old ones
-// fall out and the flag clears, and a plugin that is slow again is not told twice in a session.
 #[test]
 fn the_window_rolls_and_the_news_comes_once_a_session() {
     let bench = Bench::new();
@@ -121,8 +115,6 @@ fn the_window_rolls_and_the_news_comes_once_a_session() {
     assert!(!bench.monitor.is_slow("p"));
 }
 
-// Expected: the record stamps a call with the monotonic clock, which the watchdog reads, also while a test injects the
-// budget's clock: a call that started now has run for no time, however far the injected clock is.
 #[test]
 fn the_record_keeps_the_watchdogs_clock() {
     let bench = Bench::new();
@@ -135,8 +127,6 @@ fn the_record_keeps_the_watchdogs_clock() {
     assert!(started.is_some_and(|started| started < 60_000), "{started:?}");
 }
 
-// Expected (4.4): one call over 100 ms is an overrun, 100 ms is not. The first call after `setup` is exempt, as its
-// pages are cold, and only that one; `setup` and `dispose` never are overruns and count for no frame.
 #[test]
 fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     let bench = Bench::new();
@@ -166,9 +156,6 @@ fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     assert!(!fresh.monitor.is_slow("p"));
 }
 
-// Expected: the time the thread waited on a run queue during a call is the machine's load, not the plugin's, so it is
-// not charged: 150 ms with 50 ms of it queued is 100 ms and no overrun, with 50 ms less a nanosecond it is one. Time
-// queued before the call is not the call's.
 #[test]
 fn time_on_a_run_queue_is_not_charged() {
     for (waited, overrun) in [(Duration::from_millis(50), false), (Duration::from_millis(50) - NS, true)] {
@@ -187,10 +174,6 @@ fn time_on_a_run_queue_is_not_charged() {
     }
 }
 
-// Expected (FT-13): the overrun judges the CPU time the call used, where the OS tells it. A call that blocks for 250 ms
-// without the CPU (a sleep, as a page fault served from swap, a lock or a slow disk is) is no overrun, though its wall
-// time is over the limit; that wall time stays in what the frame budget and the slow report count. One that keeps the
-// CPU for 150 ms is an overrun. On the real clocks.
 #[cfg(any(unix, windows))]
 #[test]
 fn an_overrun_is_judged_by_cpu_time_not_wall_time() {
@@ -211,8 +194,6 @@ fn an_overrun_is_judged_by_cpu_time_not_wall_time() {
     assert!(busy.cpu.is_some_and(|cpu| cpu >= Duration::from_millis(150)) && busy.overrun, "{busy:?}");
 }
 
-// Expected (Linux): what the kernel says this thread waited on a run queue grows while another thread holds its only
-// CPU, and the call that waited is charged less than its wall time by about that much.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_kernel_tells_the_time_on_a_run_queue() {
@@ -254,7 +235,6 @@ fn pin(cpu: usize) {
     }
 }
 
-// Expected: a call within a call is part of the outer one: it is not timed apart, and the outer one counts all.
 #[test]
 fn a_nested_call_is_part_of_the_outer_one() {
     let bench = Bench::new();
@@ -270,7 +250,6 @@ fn a_nested_call_is_part_of_the_outer_one() {
     assert!(outer.overrun);
 }
 
-// Expected (4.4): 4 ms for all plugins together in a frame; exactly 4 ms is in it.
 #[test]
 fn all_plugins_share_four_ms_a_frame() {
     for (each, over) in [(Duration::from_millis(1), 0), (Duration::from_millis(1) + US, 1)] {
@@ -289,7 +268,6 @@ fn all_plugins_share_four_ms_a_frame() {
     }
 }
 
-// Expected (4.5): the watchdog paints its notice at 0.5 s, once a call, and ends the client at 2 s.
 #[test]
 fn the_watchdog_notices_at_half_a_second_and_acts_at_two() {
     let limits = Limits::default();
@@ -306,7 +284,6 @@ fn the_watchdog_notices_at_half_a_second_and_acts_at_two() {
     }
 }
 
-// Expected: the limits are starting values the environment can change, entry by entry.
 #[test]
 fn the_limits_parse_from_text() {
     let limits = Limits::parse("frame=2ms, overrun=250ms,hang=3s,notice=750000us,window=60,slow=6,all=8ms").unwrap();
@@ -328,8 +305,6 @@ fn the_limits_parse_from_text() {
     }
 }
 
-// Expected (bigboi, carbon 7): a frame ends at the paint, not at the plugin's next call. Thirteen expensive frames and
-// then silence make the plugin slow when the next paint closes the last one, with the news once.
 #[test]
 fn the_last_expensive_frame_closes_at_the_paint() {
     let bench = Bench::new();
@@ -342,7 +317,7 @@ fn the_last_expensive_frame_closes_at_the_paint() {
         }
     }
     assert!(!bench.monitor.is_slow("p"));
-    // A paint starting in the frame open does not end it; the next paint, a frame on, does (review carbon 4.1).
+    // A paint starting in the frame open does not end it; the next paint, a frame on, does.
     assert!(bench.monitor.close().is_empty());
     bench.frame.set(bench.frame.get() + 1);
     assert_eq!(bench.monitor.close(), [("p".to_owned(), "99.0 ms a frame".to_owned())]);
@@ -358,8 +333,6 @@ fn the_last_expensive_frame_closes_at_the_paint() {
     assert!(bench.monitor.wants_close());
 }
 
-// Expected: the report is the plugin's p50, p99 and worst per call kind, and the news names the median of its slow
-// frames, not the first or the worst.
 #[test]
 fn the_report_says_the_percentiles_and_the_news_the_median() {
     let bench = Bench::new();
@@ -374,8 +347,6 @@ fn the_report_says_the_percentiles_and_the_news_the_median() {
     assert_eq!(bench.monitor.report("p").as_deref(), Some("slow (p50/p99/worst): render-slot 14.0/26.0/26.0 ms"));
 }
 
-// Expected (carbon 7): each build has its own statistics. A new build of a slow plugin starts fresh, and the report of
-// an ID is its newest build's.
 #[test]
 fn a_new_build_starts_with_fresh_statistics() {
     let bench = Bench::new();
@@ -389,8 +360,6 @@ fn a_new_build_starts_with_fresh_statistics() {
     assert_eq!(bench.monitor.report("p"), None);
 }
 
-// Expected (carbon 1): a call that unwinds still leaves the record and the nesting, so the next call is timed and the
-// watchdog sees no call running.
 #[test]
 fn a_call_that_unwinds_leaves_the_record() {
     let bench = Bench::new();
@@ -406,8 +375,6 @@ fn a_call_that_unwinds_leaves_the_record() {
     assert!(bench.call(slot, "run-command", Duration::from_millis(150)).overrun);
 }
 
-// Expected (bigboi 6): a call whose notice the watchdog painted tells the host as it returns, with the plugin and its
-// time, so the host can repaint the line; another call does not.
 #[test]
 fn a_call_that_was_noticed_tells_the_host() {
     let bench = Bench::new();
@@ -429,8 +396,6 @@ fn a_call_that_was_noticed_tells_the_host() {
     assert_eq!(*told.borrow(), [(Artifact::builtin("p"), Duration::from_millis(700))]);
 }
 
-// Expected (bigboi 6): the watchdog's decision reads the record: no call, no action; a call that returned is not the
-// running one; a running call over the limit is to be claimed.
 #[test]
 fn the_watchdog_decides_from_the_record() {
     let dir = opencode_util::temp::tempdir().unwrap();
@@ -447,8 +412,6 @@ fn the_watchdog_decides_from_the_record() {
     assert_eq!(decide(&limits, &record, s(3), generation).0, Action::Wait);
 }
 
-// Expected (reload-fresh): a build set up again (disabled and enabled) starts with fresh statistics, as a new build
-// does.
 #[test]
 fn a_build_set_up_again_starts_fresh() {
     let bench = Bench::new();
@@ -460,8 +423,6 @@ fn a_build_set_up_again_starts_fresh() {
     assert_eq!(bench.monitor.report("p"), None);
 }
 
-// Expected (bigboi 6): the notice thread paints only a call that still runs: one that returned before its turn is not
-// marked noticed, so the host does not say it responded.
 #[test]
 fn the_notice_is_only_for_a_running_call() {
     let dir = opencode_util::temp::tempdir().unwrap();
@@ -484,8 +445,6 @@ fn the_notice_is_only_for_a_running_call() {
     assert!(record.leave(live));
 }
 
-// Expected (review carbon-4): the monitor says each time a plugin becomes slow or stops being slow, also after the one
-// news a session the toast tells, and nothing while it stays as it was.
 #[test]
 fn every_change_of_slow_is_said_once() {
     let bench = Bench::new();
@@ -504,9 +463,6 @@ fn every_change_of_slow_is_said_once() {
     assert!(!bench.monitor.take_flipped());
 }
 
-// Expected (4.4, Pl: "host time for plugin X"): the host's own work for a plugin's nodes is timed apart from the
-// plugin's calls. It is the plugin's host time, beside its calls in a slow plugin's details, and it is not in the
-// plugin's frame budget: a frame whose host work is 5 ms and whose calls are 0.5 ms is under the budget.
 #[test]
 fn host_time_is_counted_beside_the_calls_and_not_in_the_budget() {
     let bench = Bench::new();
@@ -531,8 +487,6 @@ fn host_time_is_counted_beside_the_calls_and_not_in_the_budget() {
     assert!(report.contains("render-slot"), "{report}");
 }
 
-// Expected (fixed row; review carbon 5.2): host work for plugin p that runs a nested slot of plugin q, whose view and
-// host work run inside it, counts p's own 1 ms; q's view is q's call and its host work q's 2 ms.
 #[test]
 fn nested_host_work_is_its_own_plugins() {
     let bench = Bench::new();
@@ -557,10 +511,6 @@ fn backlogged(bench: &Bench, slot: Slot, frames: usize) -> Vec<(String, String)>
         .collect()
 }
 
-// Expected (4.14 `reported-once`; final review big-boi 10): the user is told a plugin is slow once a plugin and session,
-// whichever cause comes first: slow by its calls and then by its backlog is one news; so is the backlog first and its
-// calls after; and a plugin set up again, or rebuilt, that is slow again tells nothing more. Its state still follows
-// each cause and each build.
 #[test]
 fn slow_is_told_once_a_plugin_and_session_across_causes_and_activations() {
     // Calls first, then the backlog.
@@ -589,9 +539,6 @@ fn slow_is_told_once_a_plugin_and_session_across_causes_and_activations() {
     assert_eq!(bench.frames(other, 13, 1).len(), 1);
 }
 
-// Expected (review carbon-12): the backlog cause changes slow as the calls do: the plugin list hears it when the
-// backlog makes the plugin slow, also once its news was told, and when the backlog leaves the window with no mail
-// since, at the paint that closes the frames.
 #[test]
 fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
     let bench = Bench::new();
@@ -611,10 +558,6 @@ fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
     assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
 }
 
-// Expected (final review big-boi 11): a build keeps one slot from its load, before its ID is known, to its activation:
-// a crash in either names the same artifact, by its ID once it is known; a later load of the same build finds that
-// slot, and a new build gets its own. An ID too long for the record leaves the build named by its target and digest,
-// never unnamed.
 #[test]
 fn a_build_keeps_one_slot_from_its_load_to_its_activation() {
     let bench = Bench::new();
@@ -642,16 +585,12 @@ fn a_build_keeps_one_slot_from_its_load_to_its_activation() {
     let long = Artifact::external(&"x".repeat(record::NAME_BYTES), "/p", "0000000000000002");
     assert_eq!(bench.monitor.slot(&long), other);
     assert_eq!(crashed(other, "setup"), Some(Artifact::external("", "/p", "0000000000000002")));
-    // The same build loaded again, before its ID is known: its build names it, so it is admitted (re-review big-boi
-    // 11), and it is the same slot.
     let again = bench.monitor.slot(&Artifact::external("", "/p", "0000000000000002"));
     assert_eq!(again, other);
     assert!(bench.monitor.attributed(again), "the same build is refused on its reload");
     assert!(bench.monitor.attributed(active), "a build named with its ID");
 }
 
-// Expected (final review big-boi 11): a build whose identity the record cannot hold, by its length or past the record's
-// slots, is not attributed, so the loader does not admit it; without a record every build is.
 #[test]
 fn a_build_the_record_cannot_name_is_not_attributed() {
     let bench = Bench::new();
@@ -674,8 +613,6 @@ fn a_build_the_record_cannot_name_is_not_attributed() {
     assert_eq!(record.snapshot(), Some(snapshot));
 }
 
-// Expected (big-boi tm-1): a timer's idle close ends a frame of timer calls alone, as a frame of its own with no
-// paint. A frame where another call ran too is left for a paint to end, so that call's time stays the scheduler's.
 #[test]
 fn an_idle_close_leaves_a_frame_with_other_work_for_its_paint() {
     let bench = Bench::new();

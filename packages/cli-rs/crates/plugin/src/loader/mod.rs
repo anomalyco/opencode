@@ -1,13 +1,5 @@
-//! External plugins (`docs/plugins.md`, "Running plugins"): discovery in `plugins` directories, the `plugins` entries of
-//! `cli.json`, and loading of native builds (shared libraries on the C ABI of `opencode-plugin-abi`, decision
-//! O-42) through a [`Backend`], which is [`native::Native`] in the TUI. Targets without a native build
-//! (TypeScript plugins) run on the JS host ([`crate::pipe`]) when the loader has one, and are listed as skipped
-//! otherwise.
-//!
-//! A [`Loader`] reconciles the targets with the [`Registry`]: it loads new and changed builds, keeps a running
-//! plugin when its new build fails, and unloads removed ones. The host calls [`Loader::reconcile`] again when a
-//! directory of [`Loader::watch_dirs`] changes, which gives hot reload. A build found in a project's
-//! `.opencode/plugins` loads only once the user approved it ([`approval`]).
+//! Discovers plugin targets and reconciles them with the registry. A failed rebuild leaves the running plugin
+//! active. Project plugins require approval before loading.
 
 pub mod approval;
 pub mod deps;
@@ -48,9 +40,8 @@ pub trait Backend {
         options: Option<&str>,
     ) -> Result<(Definition, ErrorFn), String>;
 
-    /// [`Backend::load`] of a build read whole through one descriptor, with the raw quarantine read through the same
-    /// one ([`quarantine::read`]): what the loaded copy carries is the attribute of the bytes that were read (final
-    /// review big-boi 3). A backend that keeps no quarantine loads the bytes alone.
+    /// Loads bytes and quarantine metadata read from the same descriptor, so replacing the path cannot change which
+    /// attribute travels with the copy.
     fn load_read(
         &self,
         host: &Rc<dyn Host>,
@@ -96,8 +87,8 @@ impl Target {
     }
 }
 
-/// A server plugin's TUI part as `GET /api/plugin` reports it (TS `serverTuiPlugins`): its source, and the plugin's ID
-/// when the server gives one, which the user's `-<id>` removals select (O-162, carbon recheck-1).
+/// A server plugin's TUI part as `GET /api/plugin` reports it: its source, and the plugin's ID when the server gives
+/// one, which the user's `-<id>` removals select.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ServerPart {
     /// A package spec, found in the npm cache ([`npm::resolve`]).
@@ -111,7 +102,7 @@ pub enum Found {
     /// A library, identified at once.
     Build(Result<Artifact, String>),
     /// A TypeScript plugin's directory, whose full hash can take seconds with a large `node_modules`: the caller runs
-    /// [`Found::identify`] off the UI thread (FT-2).
+    /// [`Found::identify`] off the UI thread.
     Tree(PathBuf),
     /// A Luau plugin's directory, hashed as a TypeScript plugin's tree and approved as a Luau plugin
     /// ([`crate::luau::artifact`]); also identified off the UI thread.
@@ -177,14 +168,14 @@ pub struct Loader {
     /// The global cache directory TS installs packages into (`~/.cache/opencode`), where a target named by npm
     /// package is found ([`npm::resolve`]), and nothing installed.
     npm: Option<PathBuf>,
-    /// The TUI parts of the active server plugins (TS `serverTuiPlugins`), and the `plugins` entries of the user's
-    /// global opencode config, which vouch for the parts they name (O-162).
+    /// The TUI parts of the active server plugins, and the `plugins` entries of the user's global opencode config,
+    /// which vouch for the parts they name.
     server: RefCell<(Vec<ServerPart>, Vec<String>)>,
-    /// The package each npm spec resolved to, kept while the spec is a target: TS resolves a loaded package's entry
-    /// once a session (`context.tsx:663-665`), so a later install does not move it.
+    /// Cache the resolved entry while the spec remains configured. Installing a newer generation must not move a
+    /// running plugin.
     packages: RefCell<HashMap<String, npm::Package>>,
     /// A directory with a `plugin.toml` and no native build runs as a Luau plugin ([`crate::luau`]), its files walked,
-    /// hashed and staged on threads of their own, as a TypeScript plugin's are (FT-2).
+    /// hashed and staged on threads of their own, as a TypeScript plugin's are.
     #[cfg(luau)]
     luau: Option<crate::pipe::tree::Trees>,
     /// A Luau plugin's sources, read and compiled on threads of their own.
@@ -192,9 +183,9 @@ pub struct Loader {
     luau_builds: Option<crate::luau::Builds>,
 }
 
-/// The path `realpath` gives (carbon recheck-3): `canonicalize`, without the verbatim prefix it gives on Windows
-/// (`\\?\C:\x` is `C:\x`), so a path compares with one written as the user or the server writes it, and the JS host
-/// is handed one Bun and Node read alike.
+/// The path `realpath` gives: `canonicalize`, without the verbatim prefix it gives on Windows (`\\?\C:\x` is `C:\x`),
+/// so a path compares with one written as the user or the server writes it, and the JS host is handed one Bun and Node
+/// read alike.
 fn real(path: &Path) -> Option<PathBuf> {
     std::fs::canonicalize(path).ok().map(plain)
 }
@@ -207,8 +198,7 @@ fn plain(path: PathBuf) -> PathBuf {
     }
 }
 
-/// TS's plugin selector (`matches`, `core/src/plugin/supervisor.ts`, `tui/src/plugin/context.tsx`): `*`, a
-/// `<prefix>.*`, or the name itself.
+/// Matches an exact plugin ID, a `prefix.*` selector, or `*`.
 fn selects(selector: &str, name: &str) -> bool {
     selector == "*"
         || match selector.strip_suffix('*').filter(|prefix| prefix.ends_with('.')) {
@@ -348,18 +338,8 @@ impl Loader {
         Some(directory)
     }
 
-    /// Whether the user's own configuration names the server part `spec` (a package's spec, or the path the server
-    /// reported, `local` its real path), with the plugin ID `id` (O-162). `user` is the `plugins` entries of the
-    /// global opencode config (`opencode.json`, then `opencode.jsonc`) and then of `cli.json`, in order, removals
-    /// included. They fold as TS's server folds its operations (`supervisor.ts`, carbon recheck-1):
-    /// - a plugin directly under a global `plugin` or `plugins` directory is named first, as discovery adds it before
-    ///   any entry (`source.ts` `scan`, `PluginSourceDirectory.discover`), and nothing deeper in it is;
-    /// - an entry that is the spec, or names the path (`./`, `../` and `file://` against the config directory, as TS
-    ///   resolves them), names and enables it;
-    /// - a selector (`*`, `<prefix>.*`, `opencode.…`, or the ID) enables it again, without naming it;
-    /// - a `-<selector>` that selects the spec, the path or the ID disables it.
-    ///
-    /// It is vouched for when it is named and, after the last entry, enabled.
+    /// Does the user's global configuration vouch for this server part? Project configuration can request a plugin,
+    /// but cannot approve it.
     fn vouched(&self, user: &[String], spec: &str, local: Option<&Path>, id: Option<&str>) -> bool {
         let dirs = ["plugin", "plugins"].map(|name| real(&self.config_dir.join(name)));
         let child = local.is_some_and(|_| {
@@ -415,10 +395,7 @@ impl Loader {
         Self { approvals, ..self }
     }
 
-    /// The discovered directories, then the configured entries, merged by local path (TS `mergePluginTargets`:
-    /// a later entry replaces an earlier one in its place). Only the global `plugins` directory is not a project's. A
-    /// configured entry also replaces a project's plugin whose library is the same file under another spelling (a link,
-    /// another case, or the library rather than its directory; carbon-4, bigboi-6), so it is not listed twice.
+    /// Merges discovered and configured targets by local path. Later entries replace earlier ones in place.
     pub fn targets(&self) -> Vec<Target> {
         let directories = plugin_directories(&self.config_dir, &self.cwd);
         let discovered = directories.iter().enumerate().flat_map(|(index, directory)| {
@@ -429,17 +406,9 @@ impl Loader {
                 project: index > 0,
             })
         });
-        // TS's order: the discovered directories, the server plugins' TUI parts, then `cli.json` (`context.tsx:290-309`).
+        // Later entries take precedence: discovery, server parts, then `cli.json`.
         let (parts, user) = if self.js() { self.server.borrow().clone() } else { Default::default() };
-        // A part that does not resolve is left out, as TS leaves out an optional target it cannot load
-        // (`context.tsx:362-363`). It loads without approval only when the user's own configuration names it: its spec
-        // in `cli.json` or the global opencode config, or its path there or under a global plugin directory. Any other
-        // needs approval as a project's plugin does (O-162): a project's `opencode.json` names packages the server runs
-        // none of, and a path the server reports is its directory, held for the same artifact. A server target never
-        // loads a native build.
-        // A package `cli.json` names, at any version, is `cli.json`'s: TS folds its entries after the server's parts,
-        // so its version replaces the server's for the plugin's ID (`context.tsx:289-309`, `desired.set`), and the
-        // server's part never loads (carbon recheck-2).
+        // Skip unresolved optional parts. Only the user's configuration can vouch for a server part.
         let configured = self.configured.borrow();
         let named: Vec<String> = configured.iter().filter_map(|entry| self.package_name(&entry.target)).collect();
         let server = parts.into_iter().filter_map(|part| {
@@ -479,23 +448,22 @@ impl Loader {
                     .as_ref()
                     .map_or_else(|| target.target.clone(), |local| local.to_string_lossy().into_owned())
             };
-            // A library's file, or a TypeScript plugin's directory (review carbon-1).
+            // A library's file, or a TypeScript plugin's directory.
             let same_file = |known: &Target| {
                 let file = |target: &Target| {
                     target.library().or_else(|| target.local.clone()).and_then(|file| identity(&file))
                 };
                 file(known).is_some_and(|known| file(&target) == Some(known))
             };
-            // Only a configured entry stands in for a project's plugin: a server's never does (carbon jsnpm-2).
+            // Only a configured entry stands in for a project's plugin: a server's never does.
             let alias = |known: &Target| !from_server && known.project && !target.project && same_file(known);
             // A server part that names a target already found, under any spelling, is that target: one target, one
             // approval.
             if from_server && targets.iter().any(|known| key(known) == key(&target) || same_file(known)) {
                 continue;
             }
-            // A `cli.json` entry replaces a server's part for the same directory in its place, however each spells it
-            // (a link, a Windows verbatim path), as TS merges them by `localSource` (carbon recheck-2): the server's
-            // part is stored by its real path, the entry as written.
+            // Compare real paths so a `cli.json` entry overrides the same server part reached through a symlink or
+            // Windows verbatim path.
             let real_path = |target: &Target| target.local.as_deref().and_then(real);
             let same_part = |index: usize, known: &Target| {
                 !from_server
@@ -554,8 +522,8 @@ impl Loader {
             if local_source(&target.target, &self.config_dir).is_none() {
                 continue;
             }
-            // A TypeScript plugin's modules may sit in its subdirectories, whose saves reload it too (review carbon-2);
-            // its dependencies change by an install, which touches the directory itself. So may a Luau plugin's.
+            // A TypeScript plugin's modules may sit in its subdirectories, whose saves reload it too; its dependencies
+            // change by an install, which touches the directory itself. So may a Luau plugin's.
             if (self.scripted(&target) || self.luau_target(&target))
                 && let Some(local) = &target.local
             {
@@ -681,7 +649,7 @@ impl Loader {
         if self.scripted(target)
             && let (Some(scripts), Some(dir)) = (&self.scripts, &target.local)
         {
-            // Bun is looked for only now, for the first TypeScript plugin (O-166); without it the plugin is skipped.
+            // Bun is looked for only now, for the first TypeScript plugin; without it the plugin is skipped.
             if !scripts.runtime() {
                 return skip(crate::SKIPPED_NO_BUN);
             }
@@ -689,7 +657,7 @@ impl Loader {
         }
         let Some(file) = target.library() else {
             self.held.borrow_mut().remove(name);
-            // What ran from a project's plugin whose build went stops now, not at the next reconcile (bigboi-8).
+            // What ran from a project's plugin whose build went stops now, not at the next reconcile.
             if target.project {
                 registry.unload(host, name);
                 self.seen.borrow_mut().remove(name);
@@ -698,7 +666,7 @@ impl Loader {
                 registry.set_unloaded(name, None);
                 return false;
             }
-            // Why, with the way to load it where there is one (FT-10).
+            // Why, with the way to load it where there is one.
             return skip(&match (&target.local, self.js()) {
                 (None, true) => npm::missing(name),
                 (None, false) => SKIPPED_OFF.to_owned(),
@@ -711,12 +679,11 @@ impl Loader {
             Err(changed) => return changed,
         };
         self.waiting.borrow_mut().remove(name);
-        // Nothing the build names may come from the project, or leave its private copy (bigboi-3).
+        // Nothing the build names may come from the project, or leave its private copy.
         let checked = deps::check(&bytes, target.project);
         // Opening the library runs its code: the record names the build while it does, before its ID is known.
         let slot = registry.monitor().slot(&crate::contain::Artifact::external("", name, &format!("{digest:016x}")));
-        // A crash in a build the record cannot name would restart into the same build: it does not run at all (final
-        // review big-boi 11).
+        // Do not run an unrecordable build: a crash would restart the same plugin.
         let checked = checked.and_then(|()| match registry.monitor().attributed(slot) {
             true => Ok(()),
             false => Err(format!(
@@ -799,14 +766,14 @@ impl Loader {
     ) -> bool {
         let name = target.target.as_str();
         // A project's TypeScript plugin runs only once the user approved its files, as a native build does: until then
-        // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of exactly
-        // the approved files (bigboi P8-1); a save since the approval holds the plugin back for a decision on it.
-        // Its files are hashed and copied off the UI thread (FT-2): until the first walk, or the copy of an approved
-        // tree, ended it is starting. A copy that does not stage, as the files changed under a stamp the walk could not
-        // tell from the approved one, is held back with why, and its tree is hashed whole again off the UI thread: the
-        // new build is asked about once that walk ends. A package from the npm cache a server part names (O-162) is
-        // approved by its files and its install's `package.json` and lockfile ([`Artifact::tree`]), and runs where it is:
-        // its dependencies sit beside it, not in it, so a copy of it could not import them.
+        // nothing of it reaches the JS host, which does not start for it. What the JS host imports is a copy of
+        // exactly the approved files; a save since the approval holds the plugin back for a decision on it. Its files
+        // are hashed and copied off the UI thread: until the first walk, or the copy of an approved tree, ended it is
+        // starting. A copy that does not stage, as the files changed under a stamp the walk could not tell from the
+        // approved one, is held back with why, and its tree is hashed whole again off the UI thread: the new build is
+        // asked about once that walk ends. A package from the npm cache a server part names is approved by its files
+        // and its install's `package.json` and lockfile ([`Artifact::tree`]), and runs where it is: its dependencies
+        // sit beside it, not in it, so a copy of it could not import them.
         let package = self.packages.borrow().values().any(|known| known.directory == dir);
         let staged = match target.project {
             true => {
@@ -833,8 +800,8 @@ impl Loader {
             false => None,
         };
         let dir = staged.as_deref().unwrap_or(dir);
-        // Safe mode holds it as it holds a library (review carbon-1). A crash or a client no parent guards does not:
-        // nothing of it runs in this process.
+        // Safe mode holds it as it holds a library. A crash or a client no parent guards does not: nothing of it runs
+        // in this process.
         let was_held = registry.held(name);
         if !registry.admit_script(name) {
             scripts.forget(name);
@@ -846,7 +813,7 @@ impl Loader {
         }
         match scripts.step(name, dir, target.options.as_deref(), staged.is_some()) {
             Step::Same => false,
-            // Its setup runs only when it starts enabled (review carbon-8).
+            // Its setup runs only when it starts enabled.
             Step::Described(id) => {
                 match registry.starts_enabled(name, &id) {
                     true => scripts.set_up(name),
@@ -873,7 +840,6 @@ impl Loader {
             }
             Step::Failed(_, digest) if self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest) => false,
             Step::Failed(error, digest) => {
-                // Named by its package, as a skipped one is, not by its path (CT-6, FT-15).
                 if let Some(package) = package_name(dir) {
                     registry.set_label(name, package);
                 }
@@ -881,7 +847,7 @@ impl Loader {
             }
             Step::Ready(definition, error, digest) => {
                 if registry.id_taken(&definition.id, name) {
-                    // What the JS host set up of it goes (review carbon-2).
+                    // What the JS host set up of it goes.
                     scripts.forget(name);
                     let error = format!("plugin ID {} is already registered", definition.id);
                     return self.fail(&**host, registry, listed, name, digest, error);
@@ -997,8 +963,7 @@ impl Loader {
         };
         // The registry asks the running build whether it panicked, without the last reload's failure.
         reload.take();
-        // Told as listed, as TS compares the failures it lists: a failure that left the previous version running
-        // is new after the same error without it.
+        // The same error is a new notification if the previous build no longer runs.
         let error = match registry.failed_load(target, &error) {
             true => reload.borrow_mut().insert(format!("{error} (previous version still active)")).clone(),
             false => error,
@@ -1007,11 +972,11 @@ impl Loader {
         true
     }
 
-    /// Records the user's `decision` on `artifact`, the build of `target` they were shown (bigboi-1, carbon-1), once
-    /// `now`, what [`Loader::found`] identified on the disk after the answer, is that build. It is recorded only while
-    /// that build is the one held back: `Ok(false)` records nothing when the build changed since, and the user is asked
-    /// about the new one. An error when it cannot be saved; nothing changes then. The next [`Loader::reconcile`]
-    /// applies it: an approved build loads, a declined one is not asked about again.
+    /// Records the user's `decision` on `artifact`, the build of `target` they were shown, once `now`, what
+    /// [`Loader::found`] identified on the disk after the answer, is that build. It is recorded only while that build
+    /// is the one held back: `Ok(false)` records nothing when the build changed since, and the user is asked about the
+    /// new one. An error when it cannot be saved; nothing changes then. The next [`Loader::reconcile`] applies it: an
+    /// approved build loads, a declined one is not asked about again.
     pub fn decide(
         &self,
         target: &str,
@@ -1022,16 +987,14 @@ impl Loader {
         if self.held.borrow().get(target) != Some(&Ok(artifact.clone())) {
             return Ok(false);
         }
-        // A build that changed since the question opened, before the watcher told the loader, leaves no decision behind
-        // for either build (final review big-boi 9). The load still hashes what it opens.
+        // An approval applies only if the build on disk still matches the one shown in the prompt.
         if now.as_ref().is_none_or(|now| now.as_ref() != Ok(artifact)) {
             return Ok(false);
         }
         self.approvals.decide(artifact, decision).map(|()| true)
     }
 
-    /// Counts the user's answer on `target`, whose check of the disk may end after a later answer's (review jsnpm-5).
-    /// The count goes to [`Loader::superseded`] once the check ended.
+    /// Sequence answers because their disk checks can finish out of order.
     pub fn deciding(&self, target: &str) -> u64 {
         let mut answers = self.answers.borrow_mut();
         let answer = answers.entry(target.to_owned()).or_default();
@@ -1076,7 +1039,7 @@ impl Loader {
         listed: &Option<Status>,
     ) -> Result<Build, bool> {
         let name = target.target.as_str();
-        // Setup runs with the options, so new options load the build again (TS `sameGeneration`).
+        // Setup runs with the options, so new options load the build again.
         let digest = |build: &[u8]| {
             let mut hasher = DefaultHasher::new();
             hasher.write(build);
@@ -1087,7 +1050,7 @@ impl Loader {
         let (digest, bytes, quarantine) = match target.project {
             // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
             // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
-            // cannot be identified, what ran from it stops (bigboi-8) and nothing is reported (carbon-5).
+            // cannot be identified, what ran from it stops and nothing is reported.
             true => {
                 let (artifact, mut handle) = match Artifact::open(target.local.as_deref().unwrap_or(file), file) {
                     Ok((artifact, handle)) => (self.approved(host, registry, name, Ok(artifact))?, handle),
@@ -1097,7 +1060,7 @@ impl Loader {
                 if unchanged(digest) {
                     return Err(false);
                 }
-                // The quarantine of the file that was hashed, read through its descriptor (big-boi 3).
+                // The quarantine of the file that was hashed, read through its descriptor.
                 let read = artifact.bytes(&mut handle).and_then(|bytes| {
                     let quarantine = quarantine::read(&handle).map_err(|error| format!("{}: {error}", file.display()));
                     Ok((bytes, quarantine?))
@@ -1142,7 +1105,7 @@ impl Loader {
             }
         };
         let build = format!("{digest:016x}");
-        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs (synthesis 4.5).
+        // A held build is not opened at all: no initializer, no `describe`, nothing of it runs.
         let was_held = registry.held(name);
         if !registry.admit(name, &build) {
             if self.seen.borrow_mut().remove(name).is_some() {
@@ -1154,9 +1117,8 @@ impl Loader {
         Ok((digest, bytes, quarantine))
     }
 
-    /// The one place that decides whether a project's plugin `target` may run: `artifact` (or why it cannot be read),
-    /// when the user approved exactly it; otherwise it is held back, and the error says whether the manager's list
-    /// changed. A native build and a TypeScript plugin go through it alike (3.9, P7).
+    /// Returns the approved artifact or holds the target pending. The error indicates whether the manager list
+    /// changed.
     fn approved(
         &self,
         host: &Rc<dyn Host>,
@@ -1273,9 +1235,8 @@ fn identity(file: &Path) -> Option<(u64, u64)> {
     }
 }
 
-/// Whether a native build is among the targets: the discovered directories and the `configured` entries, enabled or
-/// not. The client starts under a parent only then (synthesis 4.5, decision 5). It reads directories and no library. With
-/// Luau on, a Luau plugin's directory counts as a native build.
+/// Checks targets for native builds without opening a library. Disabled targets count because they can be enabled
+/// later.
 pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> bool {
     let discovered = discover(&plugin_directories(config_dir, cwd)).into_iter().map(Some);
     let configured = configured.iter().map(|target| local_source(target, config_dir));
@@ -1293,9 +1254,9 @@ pub fn has_native_build(config_dir: &Path, cwd: &Path, configured: &[&str]) -> b
     })
 }
 
-/// The `plugins` directories to search (TS `localPluginDirectories`): the global config directory's, then each
-/// `.opencode` directory from the project root ([`project_root`]) down to `cwd`. Directories other than the global
-/// one and the project's that do not exist are left out.
+/// The `plugins` directories to search: the global config directory's, then each `.opencode` directory from the
+/// project root ([`project_root`]) down to `cwd`. Directories other than the global one and the project's that do not
+/// exist are left out.
 pub fn plugin_directories(config_dir: &Path, cwd: &Path) -> Vec<PathBuf> {
     let ancestors: Vec<PathBuf> = {
         let mut ancestors: Vec<PathBuf> = cwd.ancestors().map(Path::to_path_buf).collect();
@@ -1322,8 +1283,7 @@ pub fn plugin_directories(config_dir: &Path, cwd: &Path) -> Vec<PathBuf> {
     unique.into_iter().map(|dir| dir.join("plugins")).collect()
 }
 
-/// The plugin directories inside `directories` (TS `discoverPluginTargets`): every subdirectory, or symlink to
-/// one, by name in each.
+/// The plugin directories inside `directories`: every subdirectory, or symlink to one, by name in each.
 pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
     directories
         .iter()
@@ -1345,10 +1305,10 @@ pub fn discover(directories: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The local path a `plugins` target names (TS `localSource`): a `file://` URL, or a `./`, `../`, or absolute
-/// path resolved against `directory`. A package name is not local. A URL decodes as TS `fileURLToPath` does; one
-/// that names no local file (a remote host) is not local. Absolute is `path.isAbsolute`: on Windows a rooted path
-/// without a drive (`/abs/x`) is absolute too and takes `directory`'s drive.
+/// The local path a `plugins` target names: a `file://` URL, or a `./`, `../`, or absolute path resolved against
+/// `directory`. A package name is not local. A URL decodes as TS `fileURLToPath` does; one that names no local file (a
+/// remote host) is not local. Absolute is `path.isAbsolute`: on Windows a rooted path without a drive (`/abs/x`) is
+/// absolute too and takes `directory`'s drive.
 pub fn local_source(target: &str, directory: &Path) -> Option<PathBuf> {
     let path = if target.starts_with("file://") {
         opencode_api_types::js::parse_url(target).ok()?.to_file_path().ok()?
