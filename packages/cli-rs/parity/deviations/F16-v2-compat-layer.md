@@ -199,7 +199,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `renderer.root` takes nothing, and `renderer.currentFocusedEditor` and `currentFocusedRenderable` are undefined,
   each reported as it is read, so a plugin that checks they exist starts (CT-17: opencode-dollar-skills). What such a
   plugin then does with the composer's editor (opencode-vim-navigation's modal editing, dollar-skills' completion)
-  would need the composer as a renderable a plugin edits, where the contract has only `ComposerEdit`.
+  would need the composer as a renderable a plugin edits, where the contract has only `ComposerEdit`. The root's
+  `findDescendantById` finds nothing, as it holds none of the host's renderables, so a plugin that finds a message's
+  renderable to place its own beside it starts and draws nothing there (CT-40: recap's card after the message it
+  summarizes); that would need a mount the contract anchors in the transcript.
 - **Code-block renderers** (contract 2.x, addition 3, step D): `markdown.registerCodeBlockRenderer(language, render)`
   is a fence claim of the host's, registered by the filetype the language resolves to (OpenTUI's own maps and
   `infoStringToFiletype`); a second registration of a filetype by the plugin throws, as in TS, and across plugins the

@@ -1344,7 +1344,14 @@ export function context(base: Base, carrier: Carrier) {
     ...(options.sessionID ? { session: options.sessionID } : {}),
   })
 
-  const root = { add() {}, remove() {}, insertBefore() {}, getChildren: () => [], requestRender: () => invalidate() }
+  const root = {
+    add() {},
+    remove() {},
+    insertBefore() {},
+    getChildren: () => [],
+    findDescendantById: () => undefined,
+    requestRender: () => invalidate(),
+  }
   const renderer = new Proxy(
     {
       requestRender: () => invalidate(),
