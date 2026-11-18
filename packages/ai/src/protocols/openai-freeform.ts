@@ -5,6 +5,7 @@ import {
   type LLMEvent,
   type LLMRequest,
   type ProviderMetadata,
+  type ToolEntry,
 } from "../schema/index.js"
 import { encodeJson, flattenTools, isRecord } from "./shared.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -27,16 +28,29 @@ export const resolve = (tool: ToolDefinition): Custom | undefined => {
   return { field, format: tool.freeform }
 }
 
-/** Custom tools in this request, including ones added mid-conversation, by flattened tool name. */
-export const tools = (request: LLMRequest): ReadonlyMap<string, Custom> => {
-  const added = request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])
-  return new Map(
-    flattenTools([...request.tools, ...added]).flatMap((tool) => {
-      const custom = resolve(tool)
-      return custom ? [[tool.name, custom] as const] : []
-    }),
+/** Custom tools in this request as they stand after every mid-conversation change, by flattened tool name. */
+export const tools = (request: LLMRequest): ReadonlyMap<string, Custom> =>
+  request.messages.reduce(
+    (custom, message) => declare(custom, toolsUpdate(message)?.add ?? []),
+    declare(new Map(), request.tools),
   )
-}
+
+/**
+ * The custom tools after `tools` are declared: a custom definition is recorded, and a name redefined as a JSON tool
+ * is dropped. A removed tool keeps its last format, so a call to it already in the history replays the same way.
+ */
+export const declare = (
+  custom: ReadonlyMap<string, Custom>,
+  tools: ReadonlyArray<ToolEntry>,
+): ReadonlyMap<string, Custom> =>
+  flattenTools(tools).reduce((next, tool) => {
+    const resolved = resolve(tool)
+    if (resolved) return new Map(next).set(tool.name, resolved)
+    if (!next.has(tool.name)) return next
+    const without = new Map(next)
+    without.delete(tool.name)
+    return without
+  }, custom)
 
 /** The format's grammar, or `undefined` for unconstrained text. */
 export const grammar = (format: Freeform) =>

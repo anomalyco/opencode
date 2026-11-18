@@ -2693,6 +2693,40 @@ describe("SessionRunnerLLM", () => {
       expect((yield* s.context).filter((message) => message.type === "system")).toEqual(recorded)
     })
 
+    scenario("keeps the system prompt's tool guidance from the start of the epoch", function* (s) {
+      const withEdit = Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const scope = yield* Scope.make()
+        yield* transformTools(registry, { edit: tool("edit", "Edit a file") }, { codemode: false }).pipe(
+          Scope.provide(scope),
+        )
+        yield* s.runPrompt("First")
+        yield* Scope.close(scope, Exit.void)
+        yield* s.runPrompt("Second")
+      })
+      s.currentModel = trackedModel()
+      yield* withEdit
+      const [first, second] = s.requests
+      expect(first?.system[0]?.text).toContain("Use the edit tool")
+      // Removing edit is a recorded change, so the cached system prompt stays as it was.
+      expect(second?.system).toEqual(first?.system)
+      expect(markers(second).map(names)).toEqual([{ add: [], remove: ["edit"] }])
+    })
+
+    scenario("updates the tool guidance on models without tool updates", function* (s) {
+      const registry = yield* Tool.Service
+      const scope = yield* Scope.make()
+      yield* transformTools(registry, { edit: tool("edit", "Edit a file") }, { codemode: false }).pipe(
+        Scope.provide(scope),
+      )
+      yield* s.runPrompt("First")
+      yield* Scope.close(scope, Exit.void)
+      yield* s.runPrompt("Second")
+      const [first, second] = s.requests
+      expect(first?.system[0]?.text).toContain("Use the edit tool")
+      expect(second?.system[0]?.text).not.toContain("Use the edit tool")
+    })
+
     scenario("places a change after a step a crash cut short, where it replays", function* (s) {
       s.currentModel = trackedModel()
       yield* swapTools(s)

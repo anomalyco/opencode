@@ -127,7 +127,9 @@ export const baseTranscript = (input: {
       SystemPart.make(
         input.agent.system
           ? input.agent.system
-          : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
+          : // Tool guidance follows the epoch's starting tools, so a later tool change doesn't rewrite the cached
+            // system prompt; the change itself tells the model what it gained or lost.
+            SessionSystemPrompt.make((toolEpoch?.baseline ?? input.tools.definitions).map((tool) => tool.name)),
       ),
       {
         ...SystemPart.make(Instructions.join(input.initial)),

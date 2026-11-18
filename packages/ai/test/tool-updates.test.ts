@@ -810,6 +810,44 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
+  it.effect("keeps earlier declarations and calls of a freeform tool unchanged when it is redefined later", () =>
+    Effect.gen(function* () {
+      const schema = { type: "object", properties: { code: { type: "string" } }, required: ["code"] }
+      const run = ToolDefinition.make({
+        name: "run",
+        description: "Run code",
+        inputSchema: schema,
+        freeform: { type: "text" },
+      })
+      const runRegex = ToolDefinition.make({
+        name: "run",
+        description: "Run code",
+        inputSchema: schema,
+        freeform: { type: "regex", pattern: "[a-z]+" },
+      })
+      const runJson = ToolDefinition.make({ name: "run", description: "Run code (JSON)", inputSchema: schema })
+      const history = [
+        Message.user("Run it."),
+        Message.assistant([ToolCallPart.make({ id: "call_1", name: "run", input: { code: "ls" } })]),
+        Message.tool({ id: "call_1", name: "run", result: "ok" }),
+        Message.assistant("Done."),
+      ]
+      const before = yield* compileRequest(ai.request({ model: astra, tools: [read, run], messages: history }))
+      for (const redefined of [runRegex, runJson]) {
+        const after = yield* compileRequest(
+          ai.request({
+            model: astra,
+            tools: [read, run],
+            messages: [...history, Message.user("Again."), Message.tools({ add: [redefined] })],
+          }),
+        )
+        // The request before the change is a prefix of the one after it, so the cached prompt holds.
+        expect(after.body.input.slice(0, before.body.input.length)).toEqual(before.body.input)
+      }
+      expect(before.body.input[2]).toEqual({ type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" })
+    }),
+  )
+
   it.effect("keeps top-level tools and folds markers without updates", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
