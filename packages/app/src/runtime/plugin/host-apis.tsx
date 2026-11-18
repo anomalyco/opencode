@@ -36,7 +36,7 @@ import {
   type StorageScope,
   type Tabs,
 } from "@opencode/plugin/gui"
-import { BuiltinPanel, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@opencode/plugin/gui/builtin"
+import { BuiltinPanel, BuiltinPromptGate, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@opencode/plugin/gui/builtin"
 import { usePlatform } from "@/runtime/platform/platform"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
@@ -84,6 +84,7 @@ import {
 } from "./host-layout-machine"
 import { usePluginHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
+import { settlePromptGates } from "./prompt-gate"
 import { createSessionPanelMenu } from "./panel-menu"
 import type { Region } from "./panels"
 import {
@@ -1224,6 +1225,20 @@ export function createPluginAttachment(apis: HostApis) {
     attach: () => apis.attach(mounted),
     /** The routed `MountedSession`. */
     current,
+    /**
+     * What a send to a session waits for before its request goes out: every plugin's `BuiltinPromptGate`, such as the
+     * desktop browser attaching so the first step already lists its tools. A session no open tab owns has no gate.
+     */
+    ready(server: string, sessionID: string) {
+      const session = untrack(sessions).find((item) => item.key === `${server}\n${sessionID}`)
+
+      if (!session) return Promise.resolve()
+
+      return settlePromptGates(
+        untrack(() => host.items(BuiltinPromptGate)).map((item) => item.value),
+        session,
+      )
+    },
     closed,
     /** Opens and selects a side tab by key, as a reopened closed tab comes back. */
     openTab: (key: string, session: SessionRef) => open(key, session, { tab: "select" }),

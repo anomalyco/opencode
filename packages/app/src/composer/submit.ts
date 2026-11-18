@@ -57,6 +57,11 @@ type ComposerSubmitInput = {
   delivery?: (alternate: boolean) => ComposerDelivery
   queueFirst?: (inboxID: string) => void
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
+  /**
+   * What a prompt or a command waits for before its request goes out, such as the desktop browser attaching to the
+   * session so the first step already lists its tools. It never rejects and is bounded by the plugin host.
+   */
+  ready?: (sessionID: string) => Promise<void>
   notify: {
     missingSelection: () => void
     unqueueable: () => void
@@ -409,6 +414,7 @@ function clearSubmission(
       effect.value,
       effect.kind.command,
       input.adapter.controls().model.selection.trackSessionCommit,
+      input.ready,
     ).catch((error) => failSubmission(input, effect.session, "command", error, restore, effect.value.id))
 }
 
@@ -552,7 +558,7 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
 
   updateStatus(session, { type: "dispatched", id: value.id, working })
 
-  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, input.ready).then(
     () => ({ ok: true as const }),
     (error) => ({ ok: false as const, error }),
   )
@@ -714,11 +720,16 @@ async function sendCommand(
   value: ComposerSubmission,
   command: { command: string; arguments: string },
   track?: ModelSelection["trackSessionCommit"],
+  ready?: ComposerSubmitInput["ready"],
 ) {
   const request = await buildSubmissionRequest(session, value)
 
-  // Like queued prompts, queued commands must not apply the composer's selection to active work.
-  if (value.delivery === "steer") await applySelection(session, value.selection, track)
+  // Like queued prompts, queued commands must not apply the composer's selection to active work. The plugins' gates
+  // run beside it.
+  await Promise.all([
+    ready?.(session.id),
+    value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined,
+  ])
   await session.api.command({
     sessionID: session.id,
     name: command.command,
@@ -780,6 +791,7 @@ async function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
+  ready: ComposerSubmitInput["ready"],
 ) {
   const request = await buildSubmissionRequest(session, value)
 
@@ -803,7 +815,7 @@ async function sendPrompt(
 
   if (staged) await commit()
   // A retried admission reuses the first commit rather than switching again.
-  let committed: Promise<void> | undefined
+  let committed: Promise<unknown> | undefined
 
   const admission = {
     id: value.id,
@@ -825,7 +837,9 @@ async function sendPrompt(
       agent: value.selection.agent,
       model: selectionModel(value.selection),
     },
-    prepare: staged ? undefined : () => (committed ??= commit()),
+    // The data layer runs this once the server has created the session, so the plugins' gates see a session that
+    // exists. They run beside the selection's commit, not after it.
+    prepare: () => (committed ??= Promise.all([ready?.(session.id), staged ? undefined : commit()])),
   }
 
   await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))

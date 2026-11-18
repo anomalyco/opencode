@@ -4,7 +4,7 @@
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
 import { Registry, type Catalog, type Cleanup, type Contract, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
-import type { Desktop, Layout, Locale, StorageScope, StoreOptions } from "./host-apis.js"
+import type { Desktop, Layout, Locale, SessionRef, StorageScope, StoreOptions } from "./host-apis.js"
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
@@ -47,6 +47,36 @@ export function onIdle(fn: () => void) {
 
   return () => clearTimeout(id)
 }
+
+/** Work a built-in finishes before the host sends a prompt or a command to a session. */
+export interface BuiltinPromptGate {
+  /**
+   * Called each time the host is about to send a prompt or a command to a session, once the server has created the
+   * session and before the request goes out. Return at once when there is nothing to prepare. The host waits for every
+   * gate at the same time, for at most two seconds, then sends whatever they did; a gate that throws or rejects is
+   * ignored. The prompt already shows in the conversation while the host waits.
+   *
+   * @param input - The session the prompt goes to, mounted or not, and a signal that aborts when the host stops
+   *   waiting.
+   */
+  ready(input: {
+    /** The session the prompt goes to. It may not be routed or mounted yet, as when a draft sends its first prompt. */
+    readonly session: SessionRef
+    /** Aborts when the host stops waiting: every gate settled, or the two seconds passed. */
+    readonly signal: AbortSignal
+  }): Promise<void> | void
+}
+
+/**
+ * Gates the host waits for before it sends a prompt or a command to a session. Use it for what the session's first
+ * step must already find, such as a desktop attachment that adds tools; never for work that can finish later.
+ *
+ * @example
+ * ```ts
+ * ctx.add(BuiltinPromptGate, { ready: ({ session, signal }) => attach(session, signal) })
+ * ```
+ */
+export const BuiltinPromptGate = Registry.define<BuiltinPromptGate>("prompt-gate")
 
 /** A `Command` with the fields only built-ins set. */
 export interface BuiltinCommand extends Command {

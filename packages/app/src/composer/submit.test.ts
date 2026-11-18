@@ -86,9 +86,11 @@ function submitInput(
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
   delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
+  ready?: Parameters<typeof createComposerSubmit>[0]["ready"],
 ) {
   return createComposerSubmit({
     adapter,
+    ready,
     mode: () => mode,
     commands,
     clientCommand,
@@ -211,6 +213,36 @@ describe("Composer submission", () => {
     admitted.resolve()
     expect(calls[0]).toBe("keep-preview")
     expect(calls).toContain("admit")
+  })
+
+  test("a prompt shows at once and goes out only when what the plugins prepare for it is ready", async () => {
+    const calls: string[] = []
+    const reached = Promise.withResolvers<void>()
+    const gate = Promise.withResolvers<void>()
+    const sent = Promise.withResolvers<void>()
+    const state = createMemoryComposerState({ prompt: "Hello" }).capture()
+    const target = session({ calls, prompt: async () => sent.resolve() })
+
+    const waits = (sessionID: string) => {
+      calls.push(sessionID === target.id ? "gate" : "gate for another session")
+      reached.resolve()
+
+      return gate.promise
+    }
+
+    await submitInput(active(state, target), undefined, "normal", () => [], [], undefined, () => "steer", waits).submit(
+      new Event("submit"),
+    )
+    await reached.promise
+
+    // More turns than the selection's commit takes, which runs beside the gate.
+    for (const _ of Array.from({ length: 16 })) await Promise.resolve()
+    expect(calls.slice(0, 2)).toEqual(["admit", "gate"])
+    expect(calls).not.toContain("send")
+
+    gate.resolve()
+    await sent.promise
+    expect(calls.filter((call) => call === "gate" || call === "send")).toEqual(["gate", "send"])
   })
 
   test("marks the session accepted only once the send is admitted", async () => {
