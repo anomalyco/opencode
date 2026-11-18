@@ -1,21 +1,11 @@
-//! Text selection and copy (E.20, rows T13 and CB01): `util/selection.ts`, `app.tsx:586-611`, and the clipboard
-//! write of `clipboard.ts:53-61`.
-//!
-//! - With `terminal.copy: "select"` (the default outside Windows), releasing a drag copies the selected text.
-//! - With `"manual"`, a right click copies it, and Ctrl+C copies it instead of exiting.
-//! - Ctrl+C under copy-on-select, Escape, and any other key clear the selection; Ctrl+C and Escape go on to the
-//!   keymap only when there was nothing to copy or clear. A key aimed at the focused prompt keeps the prompt's
-//!   own selection, as TS keeps an editor's.
-//!
-//! [`copy`] is the one clipboard write of the TUI: it drops NUL, then writes OSC 52 and the host clipboard
-//! (`App::copy_to_clipboard`, G.4), and toasts.
+//! Selection and clipboard handling. The focused editor keeps its own selection; Ctrl+C copies or clears a selection
+//! before the exit binding runs.
 
 use opencode_local::cli_config::TerminalCopy;
 
 use crate::prelude::*;
 
-/// Registers the selection keys, the release copy, and the right-click copy. `app::install_keys` calls it before
-/// the keymap's key handler, as TS intercepts selection keys at priority 101 (`app.tsx:589-596`).
+/// Install selection handling before the keymap so copying a selection takes priority.
 pub fn install(tui: &Rc<Tui>) {
     let weak = tui.weak();
     tui.app.on_key_capture(bind!(weak, |tui, cx, key| handle_key(&tui, cx, key)));
@@ -87,8 +77,7 @@ pub fn put(app: &App, text: &str) -> bool {
 
 fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
     let Some(text) = tui.app.selected_text() else { return };
-    // TS checks that the focused editor is part of the mouse selection; a keyboard selection in the prompt
-    // ends the mouse selection here, so the prompt's own selection is the one that counts.
+    // A keyboard selection in the prompt takes precedence over the mouse selection.
     let editing = tui.textarea.borrow().as_ref().is_some_and(|textarea| {
         tui.app.focused().is_some_and(|widget| widget.id() == textarea.id()) && !textarea.selected_text().is_empty()
     });

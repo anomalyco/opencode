@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/app.tsx`.
+//! The native terminal UI.
 
 pub mod app;
 pub mod client_mcp;

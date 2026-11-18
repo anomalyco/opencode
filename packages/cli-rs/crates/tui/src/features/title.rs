@@ -1,10 +1,4 @@
-//! The terminal title (E.1, row T09, `app.tsx:636-662`): "OpenCode" on home and for a session without a
-//! real title, "OC | <title>" for a session, and "OC | <name>" for a plugin route. `terminal.title: false`
-//! leaves the title alone until quitting, which clears it whatever the setting (`util/renderer.ts`
-//! `destroyRenderer`).
-//!
-//! `app::mount` calls [`install`] once, `Tui::navigate` calls [`route_changed`], and `Tui::sync` calls
-//! [`sync`] with what changed.
+//! Terminal titles for home and session routes.
 
 use crate::prelude::*;
 
@@ -12,8 +6,7 @@ use crate::prelude::*;
 pub struct Title {
     /// The title last sent, so a sync that changes nothing sends nothing.
     sent: RefCell<Option<String>>,
-    /// The last session the session route showed, with its title (TS `active`). The deleted toast names it
-    /// after the store dropped the session.
+    /// Cache the last viewed session title for the deletion toast, which follows removal from the store.
     active: RefCell<Option<(SessionID, Option<String>)>>,
 }
 
@@ -27,7 +20,7 @@ impl Title {
         *self.sent.borrow_mut() = Some(title);
     }
 
-    /// The title of `id` when it was the last session shown.
+    /// Return the title if `id` matches the last session shown.
     pub fn active(&self, id: &SessionID) -> Option<String> {
         self.active.borrow().as_ref().filter(|(active, _)| active == id).and_then(|(_, title)| title.clone())
     }
@@ -86,7 +79,7 @@ pub fn clear(tui: &Tui) {
     tui.title.set(tui, String::new());
 }
 
-/// `terminal.title` as the last settings write left it, so `terminal.title.toggle` (E.20) takes effect.
+/// Read the latest `terminal.title` setting.
 fn enabled(tui: &Tui) -> bool {
     crate::features::system_commands::title_enabled(&tui.settings.info())
 }

@@ -1,15 +1,5 @@
-//! App-wide overlays (E.1, rows T04 to T07):
-//!
-//! - the reconnecting overlay, shown 1 s into reconnecting or 5 s into the first connection
-//!   (`app.tsx:1379-1403`, `component/reconnecting.tsx`);
-//! - the data migration overlay, which polls the V1 migration status from 1 s after the first connection
-//!   (`component/migration-overlay.tsx`; TS starts 1 s after mount);
-//! - the startup loading screen waits for TS plugins to load (`component/startup-loading.tsx`). Built-in
-//!   Rust plugins are ready at mount, so it never shows, as in TS when plugins load within 500 ms;
-//! - the error boundary screen (`component/error-component.tsx`) has no Rust equivalent: a panic in the UI
-//!   restores the terminal and ends the process (see the E.1 report).
-//!
-//! `app::mount` calls [`install`] once and [`connection_changed`] on every connection state.
+//! Connection and data-migration overlays. Delay the first reconnect indication longer than subsequent ones to avoid
+//! flashing during startup.
 
 use opencode_api::events::{State, Status};
 use opencode_ui::motion::Spinner;
@@ -42,8 +32,7 @@ pub fn connection_changed(tui: &Tui, state: &State) {
     }
     let connected = state.status == Status::Connected;
     if connected && !overlays.connected.replace(true) {
-        // TS polls 1 s after mount whatever the connection; polling from the first connection keeps a
-        // server that is still starting from showing "Data migration failed".
+        // Wait for a connection before polling; a starting server must not look like a failed migration.
         if !overlays.polling.replace(true) {
             let weak = tui.weak();
             tui.app.set_timeout(MIGRATION_POLL, move |_| poll_migration(&weak));
@@ -112,7 +101,7 @@ fn reconnecting(tui: &Tui) -> View {
         .child(&panel)
 }
 
-/// One `v1.status` read; a running migration shows its progress, and polling stops once it completed.
+/// Read migration status and continue polling while it runs.
 fn poll_migration(weak: &Weak<Tui>) {
     let Some(tui) = weak.upgrade() else { return };
     let client = tui.data.client().clone();

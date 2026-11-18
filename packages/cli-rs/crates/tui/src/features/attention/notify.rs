@@ -1,9 +1,4 @@
-//! Notifications (E.19a, row N01, `attention.ts:35-189`): the attention service plugins call (TS
-//! `context.attention.notify`). A request becomes a desktop notification through the terminal when
-//! `attention.notifications` is on and its focus rule holds, and its sound plays (E.19b, [`super::sound`]) when
-//! `attention.sound` is on and the sound's focus rule holds.
-//!
-//! `app::Tui` holds one [`Attention`]; `app::mount` calls [`install`] once.
+//! Desktop notifications and sounds obey separate focus rules and settings.
 
 use std::cell::{Cell, RefCell};
 use std::sync::LazyLock;

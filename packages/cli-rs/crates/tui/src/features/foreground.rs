@@ -96,8 +96,7 @@ thread_local! {
     static EXITED: RefCell<Option<Exited>> = RefCell::default();
 }
 
-/// Runs `exited` each time a plugin's program exits, before its reply goes, or nothing for `None`: a test closes a
-/// mount between a program's launch and its reply (bigboi's ownership pass).
+/// Run `exited` between a foreground program's exit and delivery of its reply. `None` removes the hook.
 #[doc(hidden)]
 pub fn on_exit(exited: Option<Exited>) {
     EXITED.set(exited);

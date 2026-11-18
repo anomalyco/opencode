@@ -1,10 +1,5 @@
-//! Release highlights (E.18b, rows DLG08 and T03): `opencode.highlights` (`/highlights`, `app.tsx:1033-1043`) and the
-//! auto-open once after an update (`app.tsx:728-750`, `util/highlights.ts`).
-//!
-//! As in TS, only stable release builds embed highlights (`OPENCODE_RELEASE_HIGHLIGHTS` at build time, a JSON array
-//! of `{ title, body }`); every other build has none, so the command is not registered. The auto-open runs once,
-//! when the event connection first connects, into an idle home screen, and claims the version in the `highlights`
-//! storage under its lock, so only one of several TUIs starting together shows it.
+//! Stable builds embed release highlights. The first idle home screen to claim the version in shared storage shows
+//! them.
 
 use crate::dialogs::highlights::{self, Highlight};
 use crate::prelude::*;

@@ -1,10 +1,5 @@
-//! The current location (E.1, `context/location.tsx`): the location the home or the open session works in,
-//! read with `location.sync` while connected, and the "location not found" error the session route shows as
-//! the location-missing view (row T18).
-//!
-//! Home sets its target (the one [`navigate_home`] passed, else the default), the session route sets the
-//! session's location, and every new connection reads it again. Opening a session also uploads the
-//! terminal's environment to it when the server is local (row G13, `app.tsx:529-539`).
+//! Track the location of home or the open session. On reconnect, refresh it and upload the terminal environment only to
+//! a local server.
 
 use opencode_store::location::Catalog;
 use opencode_store::{Error, Location};
@@ -61,8 +56,7 @@ pub fn home(tui: &Tui) {
     set(tui, explicit.unwrap_or(default));
 }
 
-/// A home without a location of its own moves with the default, as a read adopts the server's directory
-/// (`home.tsx`'s effect). A `/cd` holds until the default changes.
+/// A home without its own location follows the default. A `/cd` selection lasts until the default changes.
 pub fn follow_default(tui: &Tui) {
     let default = tui.data.read(|state| state.default_location().clone());
     let mut followed = tui.location.followed.borrow_mut();
@@ -97,8 +91,7 @@ pub(crate) fn reconnected(tui: &Tui) {
     }
 }
 
-/// The status turned connected: uploads the open session's environment again. TS runs the upload as an
-/// effect of the connection status (`app.tsx:529-539`), which turns connected after `server.connected`.
+/// Upload the open session's environment when its connection becomes ready.
 pub(crate) fn connected_again(tui: &Tui) {
     tui.location.uploaded.borrow_mut().take();
     if let Route::Session { id } = tui.route() {

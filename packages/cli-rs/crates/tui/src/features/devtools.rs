@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/component/devtools-bar.tsx`, `app.tsx:497`.
+//! Developer tools bar and runtime samples.
 
 use opencode_api::events::{State, Status};
 use opencode_api::generated::ExperimentalSessionLogInput;
@@ -148,8 +148,7 @@ struct Bar {
     dump: RefCell<Option<Result<String, String>>>,
     focus: RefCell<Option<AnyWidget>>,
     first_draw: Cell<Option<f64>>,
-    /// The items and actions of this render. Their handlers hold them weakly, since a widget whose handler holds the
-    /// widget is never freed.
+    /// Handlers hold widgets weakly to avoid ownership cycles.
     shown: RefCell<Vec<Rc<View>>>,
     /// The item or action a press landed on, kept until its release so that redraws in between do not drop it.
     pressed: RefCell<Option<Rc<View>>>,
@@ -229,8 +228,7 @@ fn install_connection(tui: &Rc<Tui>, bar: &Rc<Bar>) {
     });
 }
 
-/// Takes a UI sample now and every 2 s while the bar shows: CPU, memory, and how late the sampling timer fired. A
-/// hidden bar reads nothing and starts over when it shows again, as TS mounts the bar afresh.
+/// Sample CPU, memory, and timer delay every two seconds while visible. Reopening starts a new sample series.
 fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
     let last = Cell::new((tui.app.now(), 0.0, false));
     let sample = bind!(bar, |bar, now: Instant| {
@@ -689,7 +687,7 @@ impl Bar {
     }
 }
 
-/// Runs `run` after the current event, since bar handlers run inside widgets a render replaces.
+/// Defer the action past the event: painting replaces the handler's widget.
 fn defer(tui: &Tui, run: impl FnOnce(&Tui) + 'static) {
     tui.app.defer(bind!(tui, |tui, _| run(&tui)));
 }
@@ -797,7 +795,7 @@ fn memory() -> f64 {
     opencode_util::win::resident_memory().map_or(0.0, |bytes| bytes as f64)
 }
 
-/// Milliseconds since the process started (`performance.now()` at the first draw).
+/// Process uptime in milliseconds.
 #[cfg(windows)]
 fn process_age_ms() -> f64 {
     opencode_util::win::process_times().map_or(0.0, |times| times.age_ms.max(0.0))
@@ -823,7 +821,7 @@ fn memory() -> f64 {
         .map_or(0.0, |kilobytes| kilobytes * 1024.0)
 }
 
-/// Milliseconds since the process started (`performance.now()` at the first draw), from `/proc` on Linux.
+/// Process uptime in milliseconds from Linux `/proc`.
 #[cfg(not(windows))]
 fn process_age_ms() -> f64 {
     const TICKS: f64 = 100.0;

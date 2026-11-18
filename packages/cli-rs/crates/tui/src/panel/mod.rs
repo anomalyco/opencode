@@ -1,8 +1,4 @@
-//! Plugin side panels (W07): the state of `context/panel.tsx` and the host of `component/panel-host.tsx`.
-//!
-//! A plugin opens a panel for a session with [`Panels::open`]; the session frame shows it beside the session,
-//! or over the whole screen when the room is too small to split or the plugin asks for it. The host is a
-//! raised, focusable box that the plugin's panel surface (P2) fills; E.15a's diff viewer is the first user.
+//! Session plugin panels. Show a panel beside the session when it fits, or full-screen when requested.
 
 use crate::frame::layout::SESSION_PANEL_SPLIT_MIN_WIDTH;
 use crate::prelude::*;

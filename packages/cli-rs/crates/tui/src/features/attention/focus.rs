@@ -1,8 +1,4 @@
-//! Focus rules (E.19a, rows N01 and N04, `attention.ts:22,78-102`): the terminal's focus as its focus reports
-//! last said, and whether a notification or sound asked for `always`, `focused`, or `blurred` goes out.
-//!
-//! The focus is unknown until the first report, so a `focused` or `blurred` request waits on a terminal that
-//! reports focus. `app::mount` calls [`install`] once.
+//! Terminal focus is unknown until the first report. Focus-dependent notifications and sounds wait for it.
 
 use crate::prelude::*;
 
