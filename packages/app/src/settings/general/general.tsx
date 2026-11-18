@@ -372,6 +372,19 @@ export const SettingsGeneral: Component = () => {
                 />
               </div>
             </SettingsRow>
+            <Show when={desktop()}>
+              <SettingsRow
+                title={language.t("settings.timeline.row.followStreaming.title")}
+                description={language.t("settings.timeline.row.followStreaming.description")}
+              >
+                <div data-action="settings-follow-streaming">
+                  <Switch
+                    checked={settings.general.followStreaming()}
+                    onChange={(checked) => settings.general.setFollowStreaming(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            </Show>
             <SettingsRow
               title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
               description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
