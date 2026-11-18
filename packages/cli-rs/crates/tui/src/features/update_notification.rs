@@ -33,7 +33,6 @@ pub enum Check {
     Unavailable(String),
 }
 
-/// `UpdateState`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpdateState {
     Available(String),

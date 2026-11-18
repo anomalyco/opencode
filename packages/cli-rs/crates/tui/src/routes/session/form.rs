@@ -97,7 +97,6 @@ impl Host {
 pub struct SessionForms {
     host: Host,
     session: SessionID,
-    /// The owners and the location last read.
     read: RefCell<(Vec<String>, Option<Location>)>,
 }
 

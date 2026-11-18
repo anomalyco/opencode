@@ -1122,7 +1122,6 @@ impl Keys {
 struct Visible<'a> {
     session: &'a SessionID,
     info: Option<&'a SessionInfo>,
-    /// Every loaded message.
     all: &'a [SessionMessageInfo],
     /// The messages before the revert boundary, which hides the ones after it (`rows.ts:70`).
     messages: &'a [SessionMessageInfo],
@@ -1215,7 +1214,6 @@ pub struct Context<'a> {
     /// Reasoning's syntax: every style in `text.muted` (`thinking-syntax.ts`).
     pub thinking_syntax: &'a SyntaxTheme,
     pub renderers: &'a CodeBlockRenderers,
-    /// The plugins' tool claims (Pr).
     pub claims: &'a ToolClaims,
     /// Renders a message's rows again: a claim's view at a paint changed which row shows one of its parts.
     pub switched: &'a Rc<dyn Fn(&str)>,
@@ -1226,16 +1224,12 @@ pub struct Context<'a> {
     /// `session.thinking` is `hide`.
     pub hide_thinking: bool,
     pub groups: &'a Rc<grouping::Settings>,
-    /// `session.tps`.
     pub tps: bool,
     /// `debug.turn_tokens` is `verbose`.
     pub verbose_tokens: bool,
-    /// `session.image_preview`.
     pub image_preview: bool,
-    /// The session's directory.
     pub directory: Option<&'a str>,
     pub mode: ThemeMode,
-    /// The terminal width.
     pub width: u16,
     /// The session pane's width less its padding (`contentWidth`).
     pub content: u16,

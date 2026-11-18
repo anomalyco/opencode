@@ -155,7 +155,6 @@ fn try_update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Result<Vec
     }
 }
 
-/// The one notice of a restart.
 fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
     let lost = if dropped { " The draft was too long to keep." } else { "" };
     let call = crash.call.as_deref().unwrap_or("a call");

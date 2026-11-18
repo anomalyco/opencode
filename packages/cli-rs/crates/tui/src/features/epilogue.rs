@@ -102,7 +102,6 @@ impl Console for Stdout {
     }
 }
 
-/// `epilogue`.
 fn render(session: Option<(&str, &str)>, updated: Option<&str>, cli: &str) -> Option<String> {
     if session.is_none() && updated.is_none() {
         return None;

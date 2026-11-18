@@ -11,7 +11,6 @@ use opencode_ui::select::{ActionRun, SelectAction};
 use crate::local::{Local, is};
 use crate::prelude::*;
 
-/// `isFreeModel`.
 pub fn is_free(model: &ModelInfo) -> bool {
     !model.cost.is_empty() && model.cost.iter().all(|cost| cost.input == 0.0)
 }

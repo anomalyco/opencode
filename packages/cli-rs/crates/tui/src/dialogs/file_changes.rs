@@ -9,7 +9,6 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::prelude::*;
 
-/// `WorkspaceFileChangesChoice`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Choice {
     No,
@@ -112,7 +111,6 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
     );
 }
 
-/// `statusLabel`.
 pub fn status_label(status: &FileDiffInfoStatus) -> &'static str {
     match status {
         FileDiffInfoStatus::Added => "A",

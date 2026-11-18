@@ -214,7 +214,6 @@ pub struct Mention {
 }
 
 impl Mention {
-    /// The ID it names.
     pub fn id<'a>(&self, text: &'a str) -> &'a str {
         &text[self.end - ID_LEN..self.end]
     }

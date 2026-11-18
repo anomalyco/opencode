@@ -73,7 +73,6 @@ pub struct Diffs {
     pub(crate) memory: RefCell<Memory>,
     /// Where the next route goes back to, which `diff.open` sets before it navigates.
     back: RefCell<Option<abi::Route>>,
-    /// The viewer on screen, if one is.
     pub(crate) viewer: RefCell<Option<Viewer>>,
     /// The mounts of its panel or route that live: a mount that begins while another lives keeps the viewer.
     mounts: Cell<u32>,

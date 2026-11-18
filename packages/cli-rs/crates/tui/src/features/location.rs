@@ -117,7 +117,6 @@ pub(crate) fn connected_again(tui: &Tui) {
     }
 }
 
-/// `location.set`.
 pub(crate) fn set(tui: &Tui, location: Location) {
     *tui.location.reference.borrow_mut() = Some(location.clone());
     tui.local.sync(&opencode_store::Changes::default());

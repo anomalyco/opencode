@@ -120,7 +120,6 @@ pub struct Tabs {
 }
 
 impl Tabs {
-    /// `config.tabs.enabled`.
     pub fn enabled(tui: &Tui) -> bool {
         tui.config().tabs.enabled
     }
@@ -592,7 +591,6 @@ fn remove(tui: &Tui, session: &str, navigate: bool) {
     changed(tui);
 }
 
-/// `select`.
 pub fn select(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
@@ -652,7 +650,6 @@ pub fn close(tui: &Tui, session: Option<&str>) {
     remove(tui, &target, true);
 }
 
-/// `reopen`.
 pub fn reopen(tui: &Tui, session: Option<&str>) {
     if !Tabs::enabled(tui) {
         return;
@@ -664,7 +661,6 @@ pub fn reopen(tui: &Tui, session: Option<&str>) {
     tui.navigate(Route::Session { id: SessionID(session) });
 }
 
-/// `move`.
 pub fn reorder(tui: &Tui, session: &str, index: usize) {
     if !Tabs::enabled(tui) {
         return;

@@ -5,9 +5,7 @@ use opencode_plugin::abi::{Dialog, Host, Layout, Node, Panel, PanelSize, Read, S
 
 use super::viewer::Viewer;
 
-/// The width of the shortcut column.
 const SHORTCUT_WIDTH: u16 = 17;
-/// The help panel's key.
 pub const KEY: &str = "help";
 
 /// `diff.help` and a click on the help shortcut (`openHelpDialog`).

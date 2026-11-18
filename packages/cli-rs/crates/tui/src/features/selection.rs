@@ -90,7 +90,6 @@ pub fn put(app: &App, text: &str) -> bool {
     }
 }
 
-/// `Selection.handleSelectionKey`.
 fn handle_key(tui: &Tui, cx: &mut Cx<'_>, key: &KeyEvent) {
     let Some(text) = tui.app.selected_text() else { return };
     // TS checks that the focused editor is part of the mouse selection; a keyboard selection in the prompt

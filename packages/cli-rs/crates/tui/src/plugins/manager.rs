@@ -393,7 +393,6 @@ fn details(row: &Row) -> ErrorDetails {
     }
 }
 
-/// A row of the list.
 enum Row {
     Tui(PluginEntry),
     Server {
@@ -528,7 +527,6 @@ impl Row {
         (!details.is_empty()).then(|| details.join(", "))
     }
 
-    /// The report of a TUI plugin that is slow.
     fn slow(&self) -> Option<&str> {
         match self {
             Row::Tui(PluginEntry { slow: Some(slow), .. }) => Some(slow),

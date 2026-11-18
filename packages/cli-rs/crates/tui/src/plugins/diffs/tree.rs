@@ -148,12 +148,10 @@ pub fn move_file(files: &[usize], current: Option<usize>, offset: i64) -> Option
     Some(files[(index as i64 + offset).clamp(0, last) as usize])
 }
 
-/// `allExpandedFileTreeDirectories`.
 pub fn all_expanded(tree: &Tree) -> Expanded {
     tree.nodes.iter().filter(|node| node.kind == Kind::Directory).map(|node| node.id).collect()
 }
 
-/// `toggleFileTreeDirectory`.
 pub fn toggle(tree: &Tree, expanded: &Expanded, selected: usize) -> Expanded {
     let mut next = expanded.clone();
     if tree.nodes.get(selected).is_some_and(|node| node.kind == Kind::Directory) && !next.remove(&selected) {
@@ -201,7 +199,6 @@ pub enum Status {
     Unknown,
 }
 
-/// What the pane shows.
 pub struct Pane<'a> {
     pub width: u16,
     pub files: &'a [Item<'a>],

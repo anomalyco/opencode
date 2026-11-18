@@ -238,7 +238,6 @@ impl Inner {
         self.label.set_text(spans);
     }
 
-    /// `openQueuedPrompts`.
     fn open(self: &Rc<Self>) {
         if let Some(tui) = self.tui.upgrade() {
             crate::dialogs::queued::show(&tui, self);

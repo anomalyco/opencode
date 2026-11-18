@@ -953,7 +953,6 @@ mod sqlite {
     type Db = *mut c_void;
     type Stmt = *mut c_void;
 
-    /// A column value.
     pub enum Value {
         Null,
         Integer(i64),

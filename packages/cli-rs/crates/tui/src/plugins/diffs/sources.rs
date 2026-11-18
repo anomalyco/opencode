@@ -9,7 +9,6 @@ use super::viewer::{Memory, Viewer};
 
 /// The width the labels are padded to, so the descriptions line up (`padEnd(11)`).
 const LABEL_WIDTH: usize = 11;
-/// The value of the "Base" row.
 pub const BASE: &str = "base";
 /// The source dialog's key, which a pick or the viewer's end closes.
 pub const KEY: &str = "source";

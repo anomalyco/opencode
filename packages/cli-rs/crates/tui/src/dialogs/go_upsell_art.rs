@@ -52,7 +52,6 @@ fn glyph(character: char) -> Glyph {
     }
 }
 
-/// The colors the art draws with.
 pub struct Colors {
     pub background: Color,
     pub primary: Color,

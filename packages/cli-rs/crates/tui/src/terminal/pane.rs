@@ -37,7 +37,6 @@ struct State {
     size: Option<Size>,
     /// The server's size, which the embedded terminal follows.
     canonical: Option<Size>,
-    /// The embedded terminal's size.
     terminal_size: Option<Size>,
     /// The snapshot waiting for the embedded terminal to reach its size.
     waiting: Option<(Size, Vec<u8>, i64)>,

@@ -766,7 +766,6 @@ pub struct Reads {
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
     /// What the last change batch changed, for the plugins.
     batch: RefCell<abi::Changed>,
-    /// The plugin panel on screen.
     pub(super) panel: RefCell<Option<super::panel::Live>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
@@ -1477,7 +1476,6 @@ fn server_failed(plugins: &[PluginInfo]) -> usize {
     plugins.iter().filter(|plugin| matches!(plugin.state, PluginState::Failed(_))).count()
 }
 
-/// `serverPluginName`.
 fn server_name(plugin: &PluginInfo) -> String {
     if let Some(id) = &plugin.id {
         return id.0.clone();

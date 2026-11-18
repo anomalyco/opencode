@@ -31,7 +31,6 @@ pub enum Unread {
     Error,
 }
 
-/// `sessionTabComplete`.
 pub fn complete(unread: Option<Unread>, busy: bool) -> bool {
     unread == Some(Unread::Activity) && !busy
 }
@@ -41,7 +40,6 @@ pub fn overflow_width(count: usize) -> usize {
     count.to_string().len() + 2
 }
 
-/// `sessionTabDetail`.
 pub fn detail(project: &str, current: Option<&str>, default: Option<&str>, worktree: bool) -> String {
     let branch = current.filter(|current| worktree && Some(*current) != default);
     match branch {
@@ -51,7 +49,6 @@ pub fn detail(project: &str, current: Option<&str>, default: Option<&str>, workt
     }
 }
 
-/// `openSessionTab`.
 pub fn open(tabs: &[Tab], tab: Tab) -> Option<Vec<Tab>> {
     let Some(index) = tabs.iter().position(|item| item.session_id == tab.session_id) else {
         let mut next = tabs.to_vec();
@@ -87,7 +84,6 @@ pub struct Closed {
     pub index: usize,
 }
 
-/// `recordClosedSessionTab`.
 pub fn record_closed(stack: &mut Vec<Closed>, tab: Tab, index: usize) {
     stack.retain(|entry| entry.tab.session_id != tab.session_id);
     stack.push(Closed { tab, index });
@@ -114,7 +110,6 @@ pub fn reopen(stack: &mut Vec<Closed>, tabs: &[Tab], session: Option<&str>) -> O
     None
 }
 
-/// `moveSessionTab`.
 pub fn reorder(tabs: &[Tab], session: &str, index: usize) -> Option<Vec<Tab>> {
     let from = tabs.iter().position(|tab| tab.session_id == session)?;
     let to = index.min(tabs.len().saturating_sub(1));
@@ -127,7 +122,6 @@ pub fn reorder(tabs: &[Tab], session: &str, index: usize) -> Option<Vec<Tab>> {
     Some(next)
 }
 
-/// `cycleSessionTab`.
 pub fn cycle<'a>(
     tabs: &'a [Tab],
     active: Option<&str>,
@@ -165,7 +159,6 @@ impl History {
         usize::try_from(index).ok().and_then(|index| self.entries.get(index))
     }
 
-    /// `recordSessionTabHistory`.
     pub fn record(&mut self, session: &str) {
         if self.at(self.index).map(String::as_str) == Some(session) {
             return;

@@ -104,7 +104,6 @@ impl Shared {
         self.writer.get_or_init(|| Serial::new("prompt-autocomplete"))
     }
 
-    /// `getFrecency(path)`.
     fn score(&self, path: &str) -> f64 {
         self.frecency
             .lock()
@@ -237,12 +236,16 @@ fn recents_initial() -> Value {
 #[derive(Clone, Debug)]
 enum Action {
     /// `insertPart`: a mention of `text`, and the path frecency counts, if any.
-    Part { text: String, kind: Kind, part: Value, visit: Option<String> },
+    Part {
+        text: String,
+        kind: Kind,
+        part: Value,
+        visit: Option<String>,
+    },
     /// A keymap command without arguments runs.
     Run(String),
     /// `insertSlash`: `/name ` replaces the prompt up to the cursor.
     Slash(String),
-    /// `insertDirectory`.
     Directory(String),
 }
 

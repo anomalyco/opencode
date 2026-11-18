@@ -85,7 +85,6 @@ impl Viewer {
         }
     }
 
-    /// The diff arrived, or failed.
     fn loaded(&mut self, host: &dyn Host, diffs: &Diffs, result: Result<(Option<Base>, Vec<FileDiffInfo>), String>) {
         self.load = match result {
             Ok((base, files)) => Load::Ready { base, files: files.into_iter().map(File::from).collect() },
@@ -126,7 +125,6 @@ impl Viewer {
         let _ = diffs.fetch(host, fetch_of(call.expect("the base input encodes")), asked);
     }
 
-    /// A reply for this viewer.
     pub fn reply(&mut self, host: &dyn Host, diffs: &Diffs, asked: Asked, reply: Result<serde_json::Value, String>) {
         let base_of = |reply: Result<serde_json::Value, String>| -> Result<Option<Base>, String> {
             let output: VcsBaseOutput = serde_json::from_value(reply?).map_err(|error| error.to_string())?;

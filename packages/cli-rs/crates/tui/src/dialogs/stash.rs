@@ -126,7 +126,6 @@ fn preview(text: &str) -> String {
     select::truncate(text.split('\n').next().unwrap_or_default().trim(), 50)
 }
 
-/// `getRelativeTime`.
 fn relative_time(timestamp: f64, now: f64) -> String {
     let seconds = ((now - timestamp) / 1000.0).floor();
     let minutes = (seconds / 60.0).floor();

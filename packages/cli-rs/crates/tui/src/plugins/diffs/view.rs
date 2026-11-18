@@ -212,7 +212,6 @@ struct Shape {
     view: DiffView,
     compact: bool,
     inset: u16,
-    /// The half blocks of a gap.
     gap: u16,
     mode: Mode,
     surface: &'static str,

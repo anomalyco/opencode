@@ -34,7 +34,6 @@ pub(super) struct State {
 }
 
 impl State {
-    /// `moveTo`.
     fn move_to(&mut self, next: usize, center: bool) {
         self.selected = next;
         self.scroll_to_index(next, center);

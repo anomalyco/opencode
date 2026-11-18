@@ -212,7 +212,6 @@ impl Tui {
         self.painted.clone()
     }
 
-    /// The page theme.
     pub fn page(&self) -> Theme {
         self.theme.borrow().theme().page()
     }

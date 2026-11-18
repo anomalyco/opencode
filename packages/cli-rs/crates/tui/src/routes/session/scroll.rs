@@ -464,7 +464,6 @@ impl Inner {
         tui.tabs.set_scroll_anchor(tui, &session.0, anchor);
     }
 
-    /// `clearMessageNavigation`.
     pub(super) fn clear_navigation(&self) {
         if self.first_jump.replace(false) {
             self.transcript.hint().visible(false);
@@ -493,7 +492,6 @@ impl Inner {
         }
     }
 
-    /// `isAwayFromBottom`.
     fn is_away(&self) -> bool {
         let scroll = self.transcript.scroll();
         let (_, top) = scroll.scroll_position();

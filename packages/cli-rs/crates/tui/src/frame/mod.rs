@@ -91,7 +91,6 @@ impl Frame {
         self.body.clone()
     }
 
-    /// Where the route view mounts.
     pub fn main(&self) -> View {
         self.main.clone()
     }
@@ -302,7 +301,6 @@ struct SessionState {
     active: Cell<Pane>,
 }
 
-/// The session frame of one session route.
 pub struct SessionFrame {
     root: View,
     state: Rc<SessionState>,
@@ -579,7 +577,6 @@ pub(crate) fn activate_session(tui: &Tui) {
     }
 }
 
-/// `focusSession`.
 pub(crate) fn focus_session(tui: &Tui) {
     if let Some(session) = tui.frame.session() {
         session.focus_session(tui);

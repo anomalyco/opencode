@@ -88,7 +88,6 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
     );
 }
 
-/// `HighlightsInput`.
 #[derive(Clone, Debug)]
 pub struct Input {
     pub version: String,

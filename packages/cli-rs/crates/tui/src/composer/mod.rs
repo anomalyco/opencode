@@ -61,9 +61,7 @@ struct Inner {
     header: View,
     body: View,
     footer: View,
-    /// `composer.open`.
     requested: Cell<bool>,
-    /// `composer.tab`.
     tab: Cell<Option<Tab>>,
     /// The session is a child; it shows the composer instead of a prompt while it has no form.
     child: Cell<bool>,

@@ -38,7 +38,6 @@ struct State {
     pending: RefCell<HashMap<RequestId, String>>,
     /// The session the open prompt asks about, captured as it opened.
     prompted: RefCell<Option<String>>,
-    /// The answer on screen.
     shown: RefCell<Option<Answer>>,
     answers: Cell<u64>,
 }

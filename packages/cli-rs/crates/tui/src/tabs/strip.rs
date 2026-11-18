@@ -266,7 +266,6 @@ pub(super) fn indicator(
     (text, unread)
 }
 
-/// `fadeTitleColor`.
 pub(super) fn fade(color: Color, background: Color, index: usize, length: usize, leading: f64) -> Color {
     let step = |position: f64| {
         if position <= 0.0 { 0.0 } else { 0.2 + 0.72 * ((position - 1.0) / (FADE_WIDTH as f64 - 1.0).max(1.0)) }

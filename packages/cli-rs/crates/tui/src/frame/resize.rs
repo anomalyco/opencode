@@ -24,7 +24,6 @@ pub struct Rules {
     pub commit: Commit,
 }
 
-/// The size of one pane boundary.
 pub struct PaneResize {
     rules: Rules,
     /// The size the store holds (`options.value`); `None` is the default, which can depend on the room.

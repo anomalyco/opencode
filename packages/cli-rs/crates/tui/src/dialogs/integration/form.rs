@@ -136,7 +136,6 @@ fn active(field: &FormField, answer: &FormAnswer) -> bool {
     })
 }
 
-/// `String(when.value)`.
 fn when_string(value: &FormWhenValue) -> String {
     match value {
         FormWhenValue::String(text) => text.clone(),

@@ -17,12 +17,10 @@ pub struct Draft {
 pub struct Drafts(RefCell<HashMap<Option<SessionID>, Draft>>);
 
 impl Drafts {
-    /// `takeDraft`.
     pub fn take(&self, session: Option<&SessionID>) -> Option<Draft> {
         self.0.borrow_mut().remove(&session.cloned())
     }
 
-    /// `saveDraft`.
     pub fn save(&self, session: Option<&SessionID>, draft: Draft) {
         self.0.borrow_mut().insert(session.cloned(), draft);
     }

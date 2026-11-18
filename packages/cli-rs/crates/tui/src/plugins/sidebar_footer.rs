@@ -66,7 +66,6 @@ fn view(read: &dyn abi::Read, session: &str) -> Node {
     Node::column(children).gap(1)
 }
 
-/// `SidebarOnboarding`.
 fn card() -> Node {
     let muted = |text: &str| Node::text([Span::new(text)]).fg("text.muted");
     let body = Node::column(vec![

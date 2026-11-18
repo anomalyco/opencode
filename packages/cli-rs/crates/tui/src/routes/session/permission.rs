@@ -78,7 +78,6 @@ enum Choice {
 }
 
 impl Choice {
-    /// `permissionOptionLabel`.
     fn label(self) -> &'static str {
         match self {
             Choice::Once => "Allow once",
