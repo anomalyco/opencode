@@ -63,7 +63,7 @@ impl Compiled {
         let (mut modules, mut configs) = (BTreeMap::new(), BTreeMap::new());
         for (path, bytes) in sources.files() {
             if let Some(dir) = path.strip_suffix(super::LUAURC).filter(|dir| dir.is_empty() || dir.ends_with('/')) {
-                configs.insert(dir.trim_end_matches('/').to_owned(), bytes.clone());
+                configs.insert(dir.trim_end_matches('/').to_owned(), config(id, path, bytes)?);
                 continue;
             }
             let Some(name) = path.strip_suffix(".luau") else { continue };
@@ -106,6 +106,16 @@ impl Compiled {
             _ => Err(NavigateError::NotFound),
         }
     }
+}
+
+/// The `.luaurc` at `path` of plugin `id`, as `require` reads it: a JSON object, written again as compact JSON. Luau
+/// 747 also takes a Luau-syntax config, which it runs on the UI thread in a state of its own, with no memory cap, the
+/// process's `print` and no bound on the table it walks (carbon `ls-1`). Compact JSON always starts `{"` or is `{}`,
+/// which is what mlua takes for JSON, so no config the host did not parse reaches Luau.
+fn config(id: &str, path: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let config: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(bytes).map_err(|error| format!("{id}: {path}: a .luaurc is a JSON object: {error}"))?;
+    serde_json::to_vec(&config).map_err(|error| format!("{id}: {path}: {error}"))
 }
 
 /// The budget of one call: armed by the outermost entry into the VM, read at the interrupt.
