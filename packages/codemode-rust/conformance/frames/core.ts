@@ -51,6 +51,51 @@ export default ({ after, text }: Helpers) => ({
     "await (async () => { const it = { [Symbol.asyncIterator]() { return this }, next: async () => ({ done: false, value: S(1) }), return: async (v) => ({ done: true, value: S(2) + v }), throw: async (e) => ({ done: false, value: S(3) + e }) }; async function* g() { yield* it } const gen = g(); return [await gen.next(), await gen.throw(10), await gen.return(5), await gen.next()] })()",
   ],
   programs: [
+    // Destructuring reads a promise's missing key as undefined, unlike a member read, in every pattern form; a rest
+    // and array destructuring still refuse it.
+    `const p = Promise.resolve(1); const { a, b = 5, [Symbol.iterator]: it, then } = p; let c; ({ c } = p); const f = ({ d }) => d; const r = []; for (const { e } of [p]) r.push(e); const [{ g }] = [p]; const o = {}; ({ h: o.h } = p); return [a, b, typeof it, typeof then, c, f(p), r, g, o]`,
+    `const { a: { b } } = Promise.resolve(1)`,
+    `const { a, ...r } = Promise.resolve(1)`,
+    `const [x] = Promise.resolve(1)`,
+    `for (const [a] of [Promise.resolve(1)]) {}`,
+    // Where an uncaught error points: a pattern's property, element, rest and target, ...
+    `const { b: { c } } = { b: null }`,
+    `const [[a]] = [Promise.resolve(1)]`,
+    `let o = null; ({ a: o.x } = { a: 1 })`,
+    `const c = 1; [...c] = []`,
+    `const c = 1; ({ a: c } = { a: 1 })`,
+    `const { [{ toString() { return {} } }]: v } = {}`,
+    // ... the for-in right side, a labeled loop, an object spread, ...
+    `for (const k in Promise.resolve(1)) {}`,
+    `x: y: for (const a of 5) {}`,
+    `const o = { a: 1, ...tools.t }`,
+    // ... a member's object without parentheses, a namespace path's key and a key that doesn't convert, ...
+    `const o = null; return (((o))).a`,
+    `const o = Promise.resolve(1); (o).a = 1`,
+    `const o = null; delete (o)[0]`,
+    `return (tools.t)[(0)]`,
+    `tools.t[Symbol.iterator] = 1`,
+    `const o = {}; o[{ toString() { return {} } }] += 1`,
+    // ... a callee without parentheses, a comparison with a constant, a template's substitution, ...
+    `const o = {}; (o.f)()`,
+    `return Promise.resolve(1) > 1`,
+    `let x = Promise.resolve(1); x += 1`,
+    "return `a${(({ toString() { return {} } }))}`",
+    // ... and a tool call's or import()'s arguments that can't cross.
+    `const x = 1; await tools.t.echo({ s: Symbol.iterator })`,
+    `let d = []; for (let i = 0; i < 300; i++) d = [d]; const p = tools.t.echo(1, d); await p`,
+    `await import("z")`,
+    // An update or compound assignment checks the member it writes first, and a computed one before its right side
+    // runs or its key converts.
+    `tools.t.a += 1`,
+    `tools.t.a ??= 1`,
+    `tools.t[0]++`,
+    `const s = "abc"; s.length += 1`,
+    `const s = "abc"; s[0] = "x"`,
+    `const o = null; o[(() => { console.log("key"); return 1 })()] = console.log("value")`,
+    `const o = null; o[{ toString() { console.log("converted"); return "a" } }] += 1`,
+    `const p = Promise.resolve(1); p[(() => "k")()] = console.log("value")`,
+    `y; let y = 1`,
     // An uncaught value that holds what is not data fails without showing it.
     `throw [tools]`,
     `throw { a: Promise.resolve(1) }`,
