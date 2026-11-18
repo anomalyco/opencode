@@ -4,10 +4,12 @@
 -- whose select shows the goal's summary and sends the prompt that refreshes, lists the history of, pauses, resumes or
 -- clears it. The options' `locale` picks English or Chinese, as TS's.
 --
--- Where it differs from TS: a Luau plugin reads no files and keeps no time, so it never reads the goal server's state
--- file, and an active goal's time is what its last tool result says; `locale: "auto"` is English, as the environment
--- and the system's locale are not a Luau plugin's to read; and its select opens medium, as TS's does after a
--- `dialog.set` that comes before it.
+-- An active goal's time counts on each second, on the host's clock (`plugin.every`), from when its result was sampled.
+--
+-- Where it differs from TS: a Luau plugin reads no files, so it never reads the goal server's state file, and an
+-- active goal's time counts on only when its tool result says when it was sampled; `locale: "auto"` is English, as the
+-- environment and the system's locale are not a Luau plugin's to read; and its select opens medium, as TS's does after
+-- a `dialog.set` that comes before it.
 local plugin = require("@opencode/plugin")
 local i18n = require("@self/i18n")
 
@@ -166,6 +168,15 @@ local function duration(seconds: number): string
     return string.format("%d:%02d", minutes, secs)
 end
 
+-- TS `liveTimeUsedSeconds`: the time used, and for an active goal sampled at a known time, the seconds since.
+local function live(goal): number
+    local base = math.max(0, math.floor(goal.timeUsedSeconds))
+    if goal.status ~= "active" or not isNumber(goal.sampledAt) then
+        return base
+    end
+    return base + math.max(0, math.floor(os.time() - goal.sampledAt))
+end
+
 -- TS `formatGoal`: the summary, a line a field.
 local function summary(goal, t, locale: string): string
     if not goal then
@@ -220,12 +231,19 @@ return plugin.define(function(setup)
         host:toast({ variant = variant, title = t.title, message = message })
     end
 
+    -- TS counts an active goal's time each second; the tick draws the sidebar again (`changed.woken`).
+    plugin.every(1000, function()
+        return true
+    end)
+
     setup:slot({ path = "sidebar.content" }, function(read, input, changed)
         local id = input.session_id
         if not id then
             return plugin.HIDE
         end
-        local moved = changed.all or changed["local"] or changed.size or table.find(changed.lists or {}, id)
+        -- Each second's tick draws an active goal's time again.
+        local ticking = changed.woken and cache[id] and cache[id].status == "active"
+        local moved = changed.all or changed["local"] or changed.size or ticking or table.find(changed.lists or {}, id)
         for _, pair in changed.messages or {} do
             moved = moved or pair[1] == id
         end
@@ -241,7 +259,7 @@ return plugin.define(function(setup)
         local function muted(line: string)
             return plugin.text(line, { fg = "text.muted" })
         end
-        local elapsed = duration(goal.timeUsedSeconds)
+        local elapsed = duration(live(goal))
         if goal.status == "complete" then
             return plugin.show(plugin.column({ plugin.text(`{t.achieved} ({elapsed})`, { fg = "text.feedback.success.base" }) }))
         elseif goal.status == "unmet" then

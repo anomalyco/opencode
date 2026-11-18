@@ -6,8 +6,8 @@
 --
 -- The rename prompt is filled with the session's title under its directory, `/` focuses the search field the same
 -- call shows (the host's focus waits for the view that shows it), and `/sm` is the command's alias, as in TS. Where it
--- differs: a refresh after a session event runs at once, as Luau has no timer for TS's 300 ms; and paths keep the home
--- directory, which a Luau plugin cannot read.
+-- differs: a refresh after a session event runs 300 to 600 ms after the last one, as TS's runs 300 ms after it; and
+-- paths keep the home directory, which a Luau plugin cannot read.
 local plugin = require("@opencode/plugin")
 local grouping = require("@self/grouping")
 local i18n = require("@self/i18n")
@@ -748,7 +748,24 @@ return plugin.define(function(setup)
         mounts = true,
         layers = { binds(LIST_KEYS, "list:"), binds(SEARCH_KEYS, "search:") },
     }, view, event)
+    -- TS refreshes 300 ms after the last change it heard: a change during the wait waits 300 ms more.
+    local armed, debouncing = 0, false
     setup:onEvent({ "session.created", "session.deleted", "session.renamed", "session.archived" }, function(host)
-        refresh(host)
+        armed += 1
+        if debouncing then
+            return
+        end
+        debouncing = true
+        while true do
+            local seen = armed
+            local slept = plugin.sleep(300)
+            if not slept or armed == seen then
+                debouncing = false
+                if slept then
+                    refresh(host)
+                end
+                return
+            end
+        end
     end)
 end)

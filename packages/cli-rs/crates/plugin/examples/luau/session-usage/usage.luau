@@ -5,6 +5,9 @@ local plugin = require("@opencode/plugin")
 
 local usage = {}
 
+-- TS `TICK_MS`: the countdowns move, and the throttled read may run, this often.
+usage.TICK_MS = 15000
+
 -- `Math.round`: halves go up.
 function usage.round(value: number): number
     return math.floor(value + 0.5)

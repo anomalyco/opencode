@@ -5,10 +5,11 @@
 --
 -- The total covers every message, not the loaded transcript: the panel walks the tree with `session.list` and pages
 -- `message.list` for each session, through the host's `fetch`, after each turn in the tree as TS does. It reads the
--- meters with `usage.limits`, at most once per `refreshMs` and at once after a turn.
+-- meters with `usage.limits`, at most once per `refreshMs` and at once after a turn. While a panel shows, it ticks every
+-- 15 seconds on the host's clock (`plugin.every`), which moves the countdowns and lets the throttled read run.
 --
--- Where the native port differs: Luau has no thread, so the pages are read and priced on the UI thread, and no clock,
--- so the countdowns and the throttled read move only when the panel draws again; and it reads no config file.
+-- Where the native port differs: Luau has no thread, so the pages are read and priced on the UI thread; and it reads
+-- no config file.
 local plugin = require("@opencode/plugin")
 local usage = require("@self/usage")
 local configure = require("@self/config")
@@ -123,6 +124,8 @@ return plugin.define(function(setup)
     local limits = false
     local lastLoaded, lastForced = 0, 0
     local running = false
+    -- The tick runs: it ends at its first tick with no panel mounted.
+    local ticking = false
     local queued: boolean? = nil
     local priced: { location: plugin.LocationRef?, sessions: { { plugin.SessionMessageInfo } } }? = nil
     local total: number? = nil
@@ -278,6 +281,18 @@ return plugin.define(function(setup)
             return
         end
         table.insert(mounts, id)
+        -- TS's tick: the countdowns move as the panel draws again after it, and the throttled read may run.
+        if not ticking then
+            ticking = true
+            plugin.every(usage.TICK_MS, function(host)
+                if #mounts == 0 then
+                    ticking = false
+                    return false
+                end
+                load(host, false)
+                return true
+            end)
+        end
         if session == id then
             return load(host, true)
         end

@@ -1,8 +1,8 @@
 //! A port of `@prevalentware/opencode-goal-plugin` 0.1.98's TUI (`src/tui.ts`, its V2 part): a sidebar block with the
 //! session's goal, read from the newest goal tool result among the session's messages and from the goal server's state
-//! file, which it reads again each second; and a palette command, `Goal`, whose select shows the goal's summary and
-//! sends the prompt that refreshes, lists the history of, pauses, resumes or clears it. The options' `locale` picks
-//! English or Chinese, as TS's.
+//! file, which it reads again each second on the host's clock; and a palette command, `Goal`, whose select shows the
+//! goal's summary and sends the prompt that refreshes, lists the history of, pauses, resumes or clears it. The options'
+//! `locale` picks English or Chinese, as TS's.
 //!
 //! Where it differs from TS: TS's `dialog.set({ size: "large" })` comes before its select, which opens medium, so
 //! this one opens medium too; and `locale: "auto"` reads `LC_ALL` and `LANG` but not the system's locale (TS's `Intl`).
@@ -11,9 +11,8 @@ mod i18n;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use i18n::{Locale, Messages};
@@ -65,20 +64,13 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             toast(host, t, &error, Variant::Error);
         }
     });
-    // TS reads the state file each second, and counts an active goal's time each second; a thread wakes the host.
-    if let Some(waker) = setup.waker() {
-        let stopped = Arc::new(AtomicBool::new(false));
-        let running = stopped.clone();
-        std::thread::spawn(move || {
-            while !running.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_secs(1));
-                waker.wake();
-            }
-        });
-        let woken = state.clone();
-        setup.on_wake(move |_| woken.borrow_mut().read_state_file());
-        setup.on_dispose(move |_| stopped.store(true, Ordering::Release));
-    }
+    // TS reads the state file each second, and counts an active goal's time each second: a tick on the host's clock,
+    // after which the sidebar draws again.
+    let ticked = state.clone();
+    setup.tasks().every(setup.host(), Duration::from_secs(1), move |_| {
+        ticked.borrow_mut().read_state_file();
+        async { ControlFlow::Continue(()) }
+    });
     Ok(())
 }
 
