@@ -25,6 +25,17 @@ export type Key = keyof typeof registry
 
 export const optInOnly: ReadonlySet<Key> = new Set(["full_codemode"])
 
+/**
+ * Flags read before any config loads, such as when the database opens. Only `OPENCODE_FLAGS` and the build channel
+ * set them: they have no `experimental.<key>` setting, and `experimental.all_flags` leaves them alone.
+ */
+export const envOnly = [] as const satisfies ReadonlyArray<Key>
+/** A flag that `experimental.<key>` can set. */
+export type ConfigKey = Exclude<Key, (typeof envOnly)[number]>
+
+const envOnlyKeys: ReadonlySet<Key> = new Set(envOnly)
+export const configurable = (key: Key): key is ConfigKey => !envOnlyKeys.has(key)
+
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {
   schedules: "automations",

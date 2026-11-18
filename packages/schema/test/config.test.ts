@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigExperimental } from "../src/config/experimental.js"
 import { ConfigFlag } from "../src/config/flag.js"
 import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigPolicy } from "../src/config/policy.js"
@@ -191,4 +192,9 @@ describe("Config.Entry", () => {
 test("wildcard switches are reserved flag names", () => {
   expect(ConfigFlag.registry).not.toHaveProperty("all_flags")
   expect(ConfigFlag.registry).not.toHaveProperty(ConfigFlag.wildcard)
+})
+
+test("config settings cover every flag except env-only flags", () => {
+  const settings = Object.keys(ConfigExperimental.Info.fields)
+  expect(Object.keys(ConfigFlag.registry).filter((key) => !settings.includes(key))).toEqual([...ConfigFlag.envOnly])
 })
