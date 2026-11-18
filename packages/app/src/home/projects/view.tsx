@@ -80,6 +80,8 @@ export type HomeProjectsViewProps = {
   onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
+  /** With `dropdown`, opens the panel from a compact picker at the end of Home's search field. */
+  scope?: boolean
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
@@ -95,38 +97,59 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
       <Popover
         open={state.open}
         onOpenChange={(open) => setState("open", open)}
-        placement="bottom-start"
-        sameWidth
-        gutter={6}
+        placement={props.scope ? "bottom-end" : "bottom-start"}
+        sameWidth={!props.scope}
+        gutter={props.scope ? 8 : 6}
       >
-        <Popover.Trigger
-          data-component="home-projects-dropdown"
-          aria-label={props.language.t("home.projects")}
-          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+        <Show
+          when={props.scope}
+          fallback={
+            <Popover.Trigger
+              data-component="home-projects-dropdown"
+              aria-label={props.language.t("home.projects")}
+              class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+            >
+              <Show when={selected()} fallback={<Icon name="folder" />}>
+                {(project) => <HomeProjectAvatar project={project()} />}
+              </Show>
+              <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
+                <bdi class="truncate">
+                  <Show when={selected()} fallback={props.language.t("home.projects.all")}>
+                    {(project) => displayName(project())}
+                  </Show>
+                </bdi>
+                <Show when={props.servers.length > 1 && server()}>
+                  {(server) => (
+                    <bdi class="truncate text-v2-text-text-muted opacity-70">
+                      {props.serverLabel(server())}
+                    </bdi>
+                  )}
+                </Show>
+              </span>
+              <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
+            </Popover.Trigger>
+          }
         >
-          <Show when={selected()} fallback={<Icon name="folder" />}>
-            {(project) => <HomeProjectAvatar project={project()} />}
-          </Show>
-          <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
-            <bdi class="truncate">
+          <Popover.Trigger
+            data-action="home-project-scope"
+            aria-label={props.language.t("home.projects")}
+            class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted outline-none hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
+            onMouseDown={(event: MouseEvent) => event.preventDefault()}
+          >
+            <Show when={selected()}>{(project) => <HomeProjectAvatar project={project()} />}</Show>
+            <bdi class="min-w-0 truncate">
               <Show when={selected()} fallback={props.language.t("home.projects.all")}>
                 {(project) => displayName(project())}
               </Show>
             </bdi>
-            <Show when={props.servers.length > 1 && server()}>
-              {(server) => (
-                <bdi class="truncate text-v2-text-text-muted opacity-70">
-                  {props.serverLabel(server())}
-                </bdi>
-              )}
-            </Show>
-          </span>
-          <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
-        </Popover.Trigger>
+            <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
+          </Popover.Trigger>
+        </Show>
         <Popover.Portal>
           <Popover.Content
             aria-label={props.language.t("home.projects")}
             dir={props.language.direction()}
+            style={props.scope ? { width: "280px" } : undefined}
             class="z-50 max-h-[min(70dvh,var(--kb-popper-content-available-height))] overflow-hidden rounded-[10px] bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-floating)] outline-none data-[expanded]:animate-in data-[expanded]:fade-in data-[expanded]:slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none"
           >
             <HomeProjectsPanel
@@ -327,6 +350,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
       </div>
       <HomeUtilityNav
         class="mb-8 mt-4 hidden shrink-0 lg:flex"
+        classList={{ "!hidden": !!props.dropdown }}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
         language={props.language}
@@ -337,6 +361,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
 
 export function HomeUtilityNav(props: {
   class?: string
+  classList?: Record<string, boolean>
   onOpenSettings: () => void
   onOpenHelp: () => void
   language: ReturnType<typeof useLanguage>
@@ -344,6 +369,7 @@ export function HomeUtilityNav(props: {
   return (
     <div
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
+      classList={props.classList}
     >
       <HomeProjectNavButton
         type="button"
