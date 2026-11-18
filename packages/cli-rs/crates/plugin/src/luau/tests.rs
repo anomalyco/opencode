@@ -491,9 +491,10 @@ fn timed(init: &str, name: &str) -> (Duration, Option<String>, Option<String>) {
     (took, failure(&registry, "test.luau"), toast)
 }
 
-// Expected (luau-fork, safety-audit #3): a plain search and a pattern with no specials for a 64 KiB periodic needle in
-// 1 MiB return within the budget. Stock Luau's search compares the whole needle at every position, with no safepoint:
-// 0.6 s of CPU in a release build, which the budget fails once the call returns.
+// Expected (luau-fork, luau-fork-2, safety-audit #3): a plain search, a pattern with no specials and a literal `gsub`
+// for a 64 KiB periodic needle in 1 MiB return within the budget. Stock Luau's search compares the whole needle at every
+// position, with no safepoint: 0.6 s of CPU in a release build, which the budget fails once the call returns. Its
+// `gsub` matches at each position through the pattern matcher, which the budget stops.
 #[test]
 fn a_long_plain_search_is_linear() {
     let init = r#"
@@ -504,13 +505,14 @@ fn a_long_plain_search_is_linear() {
                 local needle = string.rep("a", 64 * 1024 - 1) .. "b"
                 local plain = string.find(haystack, needle, 1, true)
                 local bare = string.find(haystack, needle)
-                host:toast({ variant = "info", message = `{plain} {bare}` })
+                local _, replaced = string.gsub(haystack, needle, "x")
+                host:toast({ variant = "info", message = `{plain} {bare} {replaced}` })
             end)
         end)
     "#;
     let (took, failed, toast) = timed(init, "find");
     assert_eq!(failed, None, "took {took:?}");
-    assert_eq!(toast.as_deref(), Some("nil nil"));
+    assert_eq!(toast.as_deref(), Some("nil nil 0"));
     assert!(took < Duration::from_millis(1500), "the search held the thread {took:?}");
 }
 
@@ -532,6 +534,67 @@ fn a_split_on_a_long_separator_is_linear() {
     assert_eq!(failed, None, "took {took:?}");
     assert_eq!(toast.as_deref(), Some("1 1048576"));
     assert!(took < Duration::from_millis(1500), "the split held the thread {took:?}");
+}
+
+// Expected (luau-fork-2, Luau sort-interrupt carbon 5): `table.move` of 32,768 absent elements into absent keys of a
+// table with 16,383 hash keys returns at once. Stock Luau wrote each nil, and each write rehashed the table to the same
+// size: about 7 s of CPU with no safepoint, past the 2 s watchdog.
+#[test]
+fn a_move_of_absent_elements_does_not_rehash_each_one() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "move" }, function(host)
+                local t = {}
+                for i = 1, 16383 do t[-i] = 1 end
+                table.move(t, 1, 32768, 2^29, t)
+                host:toast({ variant = "info", message = `{t[2^29]}` })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "move");
+    assert_eq!(failed, None, "took {took:?}");
+    assert_eq!(toast.as_deref(), Some("nil"));
+    assert!(took < Duration::from_millis(1500), "the move held the thread {took:?}");
+}
+
+// Expected (luau-fork-2, Luau pattern-budget): a `gsub` through the pattern matcher over 40 KB, a function call for each
+// byte, returns within the budget: the matcher charges its work and calls the interrupt every 8192 units, not at each
+// position.
+#[test]
+fn a_gsub_over_40_kb_returns_within_the_budget() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "gsub" }, function(host)
+                local text, count = string.gsub(string.rep("ab", 20000), ".", string.upper)
+                host:toast({ variant = "info", message = `{count} {text == string.rep("AB", 20000)}` })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "gsub");
+    assert_eq!(failed, None, "took {took:?}");
+    assert_eq!(toast.as_deref(), Some("40000 true"));
+}
+
+// Expected (luau-fork-2, Luau pattern-budget): a quadratic pattern, `.-b` over 1 MiB with no `b`, is still stopped by
+// the budget, though the matcher now calls the interrupt only every 8192 units of work.
+#[test]
+fn a_quadratic_pattern_is_stopped_by_the_budget() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "match" }, function(host)
+                string.find(string.rep("a", 1024 * 1024), ".-b")
+                host:toast({ variant = "info", message = "matched" })
+            end)
+        end)
+    "#;
+    let (took, failed, toast) = timed(init, "match");
+    let failed = failed.expect("the pattern was stopped");
+    assert!(failed.contains("Luau budget"), "{failed}");
+    assert_ne!(toast.as_deref(), Some("matched"));
+    assert!(took < Duration::from_millis(1500), "the pattern held the thread {took:?}");
 }
 
 /// A plugin in `dir` whose `init.luau` holds a table literal of `items` numbers: about `2 * items` bytes.
