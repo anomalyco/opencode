@@ -141,7 +141,7 @@ fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
 fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
     let (weak, clear, confirmed) = (tui.weak(), tui.dialogs.clone(), owner.clone());
     let abi::Prompt { title, placeholder, value, description, action, .. } = asked;
-    // The field is one row: a line break would scroll the text out of it (deviation CF3-plugin-prompt).
+    // Keep the field on one line so its value stays visible.
     let value = value
         .as_deref()
         .map(|value| bounded(value).split(['\r', '\n']).filter(|line| !line.is_empty()).collect::<Vec<_>>().join(" "));

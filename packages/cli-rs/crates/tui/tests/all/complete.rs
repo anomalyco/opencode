@@ -574,8 +574,6 @@ fn the_replay_settles_a_list_typed_before_its_composer_laid_out() {
     assert!(remounted == twin, "{after}\nthe twin:\n{text}");
 }
 
-/// Expected (select-search-flake): two remounts before the screen lays out again, as a plugin's load and the reload of
-/// its registrations give in one turn, keep the open list as one remount does: its height, its rows and its selection.
 #[test]
 fn an_open_list_keeps_its_height_across_two_remounts_in_one_turn() {
     let setup = Setup::new();

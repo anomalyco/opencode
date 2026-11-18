@@ -714,8 +714,6 @@ fn alias(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`lifecycle`, mounts): a content handle names what its own mount gave, and nothing in another mount, also
-// one of the same surface opened again whose first handle would have the same number: such a tree is refused.
 #[test]
 fn a_content_handle_names_nothing_in_another_mount() {
     FIRST.set(None);
@@ -1527,9 +1525,7 @@ fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
     }
 }
 
-// A dialog whose body is a surface (contract ergonomics 2.7): the plugin `test.dlg` has a route `pg` with a field
-// `outside`, and a dialog surface `ask` with a field `name`, which its command `dlg.open` shows and focuses in one
-// call. The surface's handler records each edit of its field and the dialog's close.
+// The route and dialog each expose a field; the probe records which mount receives input.
 
 thread_local! {
     static DIALOG_SEEN: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };

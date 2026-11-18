@@ -1,11 +1,4 @@
-//! The update notification (E.18b, row T29): `packages/tui/src/context/update-notification.tsx` and the home
-//! notice of `routes/home.tsx:125-176`.
-//!
-//! The updater belongs to the CLI (TS `UpdateSource`: background checks every 10 minutes, `/update` lookups, and
-//! installs). D.2 provides one through [`set_source`]; until then the TUI has none and, as in TS without an updater,
-//! there is no `/update` and no home notice. With a source, client notices ([`client_notice`]) and the server's
-//! `installation.update-available` and `installation.updated` events show the notice; a notice dismissed once is
-//! kept in the `update-notifications` storage and not shown again.
+//! Register update actions only when an updater is available. Keep dismissed notices in shared storage.
 
 use opencode_api::generated::V2Event;
 use opencode_ui::motion::FadeInText;
@@ -77,7 +70,7 @@ pub struct Updates {
     parts: RefCell<Vec<(FadeInText, bool)>>,
     hovered: Cell<bool>,
     pub(crate) dialog: RefCell<Option<Weak<dyn Fn()>>>,
-    /// Counts dialog openings, so a check of a closed dialog is ignored (TS aborts it).
+    /// Ignore results from a check whose dialog has closed.
     pub(crate) generation: Cell<u64>,
 }
 

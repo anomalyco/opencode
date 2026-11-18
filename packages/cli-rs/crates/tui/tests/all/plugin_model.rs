@@ -1099,8 +1099,6 @@ const FIXED: &[(&str, &[Command])] = &[
         "a-repeated-reload-failure-is-told-once",
         &[Command::Arm(Fault::Setup), Command::Reload(3), Command::Arm(Fault::Setup), Command::Reload(2)],
     ),
-    // Seed 319 of the deep run: a reload that failed while the plugin ran is told after a setup failure with the same
-    // error without "(previous version still active)".
     (
         "a-kept-reload-failure-is-told-after-a-setup-failure",
         &[

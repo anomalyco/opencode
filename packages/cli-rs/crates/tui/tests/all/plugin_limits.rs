@@ -701,7 +701,7 @@ fn images_decode_on_a_worker_within_their_limits() {
         let roomy = Limits { plugin_images: 1 << 20, ..base };
         let encoded = png(16, 16, gradient);
         let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
-        // Two images past what all plugins may hold decoded, with room in the plugin's share (the mutant CM5).
+        // Exceed the global decoded-image limit while staying within the individual plugin limit.
         let all = Limits { all_images: 16 * 16 * 4, ..roomy };
         let cases = [
             ("pixels", picture(png(16, 17, gradient)), 0, roomy),

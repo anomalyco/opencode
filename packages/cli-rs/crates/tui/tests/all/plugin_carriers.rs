@@ -713,10 +713,6 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     }
 }
 
-// Expected (contract ergonomics 2.7): the board's dialog surface opens with its field focused, so what the user types
-// is the field's; the dialog's key moves the focus to its long scroll, which the arrows scroll, with its scrollbar;
-// escape closes the dialog, whose handler toasts. Opened again, `ctrl+c` empties the field and leaves the dialog open,
-// then closes it. Frames, toasts and status are the same on every carrier, the real library included.
 #[test]
 fn a_dialog_surface_is_equal_on_every_carrier() {
     let run = |run: Run| {
