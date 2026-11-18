@@ -38,7 +38,7 @@
 //! - A dialog closes with no answer as `None`: escape, the backdrop, another dialog that replaced it, the plugin's own
 //!   included, or the host's refusal to open it. A [`Confirm`] answers `Some(false)` on escape, as the host's confirm
 //!   runs its action with `false`. An answer reaches only the dialog it answers: each dialog's answer comes through the
-//!   hidden command of its generation, `<id>.task.answer.<generation % 8>`.
+//!   hidden command it holds alone, `<id>.task.answer.<n>`, until its answer or its close runs.
 //! - A task's requests are owned as any request of the call that sent it ([`Host::try_fetch`]): what it sends before
 //!   its first wait is its starting call's, what it sends after is the activation's, as the call that resumed it is
 //!   a reply's, an answer's, a close's or a wake's. A task goes on only in such a call: a waiting task that becomes
@@ -93,9 +93,11 @@ impl Tasks {
     }
 }
 
-/// How many generations of dialogs have a command of their own: the answer of a dialog reaches its task only through
-/// the command of its generation, so an answer still on its way when the next dialog opens reaches nobody.
-const ANSWERS: u64 = 8;
+/// How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until its
+/// answer or its close runs. The host runs a dialog's answer before its close, so no answer can still come for a
+/// command once it is free: an answer reaches the one dialog that holds its command (big-boi `acf-1`). A dialog that
+/// finds every command held, as more dialogs wait unclosed than that, answers `None` at once.
+pub const ANSWERS: usize = 64;
 
 /// The most [`Cx::blocking`] threads a plugin runs at once.
 pub const MAX_THREADS: usize = 4;
@@ -181,18 +183,24 @@ impl Cx {
     }
 
     /// Opens the dialog `dialog` builds around the task's answer action, so that its answer or its close goes to the
-    /// task. The answer action is the command of the dialog's generation ([`ANSWERS`]), and its close names the
-    /// generation, so neither reaches a later dialog. A dialog of an earlier wait that this one replaces closes with no
-    /// answer as the host runs its close: in that command's call, not this one, so the earlier task never goes on with
-    /// this call's host (carbon `ac-2`).
+    /// task. The answer action is a command no other waiting dialog holds ([`ANSWERS`]), and its close names the
+    /// dialog's generation, so neither reaches another dialog. A dialog of an earlier wait that this one replaces closes
+    /// with no answer as the host runs its close: in that command's call, not this one, so the earlier task never goes
+    /// on with this call's host (carbon `ac-2`).
     fn ask(&self, dialog: impl FnOnce(Action) -> Dialog) -> Wait<Option<String>> {
         let shared = self.shared();
         let slot = Slot::new();
         let generation = shared.generation.get() + 1;
-        let answer = Action::command(format!("{}.{}", shared.answer, generation % ANSWERS));
+        let free = shared.answers.borrow().iter().position(Option::is_none);
+        let Some(free) = free else {
+            slot.fill(None);
+            return Wait { slot };
+        };
+        let answer = Action::command(format!("{}.{free}", shared.answer));
         let dismissed = Action::command(&shared.closed).input(generation.to_string());
         self.with(|host| host.dialog(Dialog::Dismissable { dialog: Box::new(dialog(answer)), dismissed }));
         shared.generation.set(generation);
+        shared.answers.borrow_mut()[free] = Some(generation);
         let mut dialogs = shared.dialogs.borrow_mut();
         dialogs.retain(|_, waiting| waiting.strong_count() > 0);
         dialogs.insert(generation, Rc::downgrade(&slot));
@@ -370,8 +378,8 @@ impl Confirm {
 
 /// The plugin's tasks and what they wait for, which the handlers [`register`] holds.
 pub(crate) struct Shared {
-    /// The hidden commands a task's dialog runs: with its answer, one a generation modulo [`ANSWERS`] (`<answer>.<n>`),
-    /// and as it closes, with its generation.
+    /// The hidden commands a task's dialog runs: with its answer, the one of [`ANSWERS`] it holds (`<answer>.<n>`), and
+    /// as it closes, with its generation.
     answer: String,
     closed: String,
     tasks: RefCell<BTreeMap<u64, Task>>,
@@ -383,6 +391,8 @@ pub(crate) struct Shared {
     host: Cell<Option<*const (dyn Host + 'static)>>,
     /// The dialogs tasks wait on, by generation: the one shown last, and those it replaced until their close runs.
     dialogs: RefCell<BTreeMap<u64, Weak<Slot<Answer>>>>,
+    /// The generation of the dialog that holds each answer command, until its answer or its close runs.
+    answers: RefCell<Vec<Option<u64>>>,
     generation: Cell<u64>,
     replies: RefCell<HashMap<RequestId, Weak<Slot<Reply>>>>,
     spawner: Spawner,
@@ -508,22 +518,22 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
         queue: Arc::new(queue),
         host: Cell::new(None),
         dialogs: RefCell::new(BTreeMap::new()),
+        answers: RefCell::new(vec![None; ANSWERS]),
         generation: Cell::new(0),
         replies: RefCell::new(HashMap::new()),
         spawner: setup.spawner(),
         pool: Arc::default(),
         disposed: Cell::new(false),
     });
-    // An answer reaches the dialog that waits only through the command of its generation: it answers the dialog shown
-    // last on that command, so one still on its way from an earlier dialog, which a later one replaced, is no answer
-    // to the later one.
+    // An answer reaches the one dialog that holds its command, which it frees.
     for at in 0..ANSWERS {
         let answered = shared.clone();
         setup.command(Command::new(format!("{}.{at}", shared.answer)), move |host, input| {
             answered.enter(host, |shared| {
-                let last = (1..=shared.generation.get()).rev().find(|generation| generation % ANSWERS == at);
-                let slot =
-                    last.and_then(|last| shared.dialogs.borrow_mut().remove(&last)).and_then(|slot| slot.upgrade());
+                let holder = shared.answers.borrow_mut()[at].take();
+                let slot = holder
+                    .and_then(|holder| shared.dialogs.borrow_mut().remove(&holder))
+                    .and_then(|slot| slot.upgrade());
                 if let Some(slot) = slot {
                     slot.fill(Some(input.unwrap_or_default().to_owned()));
                 }
@@ -536,6 +546,11 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
     setup.command(Command::new(shared.closed.clone()), move |host, input| {
         closed.enter(host, |shared| {
             let generation = input.and_then(|input| input.parse::<u64>().ok());
+            if let Some(held) =
+                shared.answers.borrow_mut().iter_mut().find(|held| held.is_some() && **held == generation)
+            {
+                held.take();
+            }
             let slot =
                 generation.and_then(|at| shared.dialogs.borrow_mut().remove(&at)).and_then(|slot| slot.upgrade());
             if let Some(slot) = slot {
@@ -661,6 +676,7 @@ impl Shared {
         }
         self.replies.borrow_mut().clear();
         self.dialogs.borrow_mut().clear();
+        self.answers.borrow_mut().iter_mut().for_each(|held| *held = None);
         self.live.set(0);
     }
 }
@@ -905,7 +921,7 @@ mod tests {
         // The dialogs ran the task's command, whatever action they were built with.
         let Dialog::Dismissable { dialog, .. } = &host.dialogs.borrow()[0] else { panic!() };
         let Dialog::Select(select) = &**dialog else { panic!() };
-        assert_eq!(select.action, Action::command("t.task.answer.1"));
+        assert_eq!(select.action, Action::command("t.task.answer.0"));
     }
 
     #[test]
@@ -1164,6 +1180,27 @@ mod tests {
         assert_eq!(mount.fetches.get(), 0, "the older task went on with the mount's host");
         reply(&registered, &later, 99, Ok(Value::Null));
         assert_eq!(later.fetches.get(), 1);
+    }
+
+    // Expected (big-boi acf-1): an answer that comes after eight more dialogs replaced its own reaches its own dialog,
+    // not the ninth: a dialog holds its answer command until its answer or close runs, and no other dialog takes it.
+    #[test]
+    fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let log = Log::default();
+        for at in 1..=9 {
+            let log = log.clone();
+            tasks.spawn(&host, move |cx| async move {
+                let answer = cx.prompt(Prompt::ask(format!("prompt {at}"))).await;
+                log.borrow_mut().push(format!("{at} {answer:?}"));
+            });
+        }
+        // The user's answer to prompt 1 comes after prompts 2 to 9 replaced it, before any close ran.
+        answer(&registered, &host, 0, "first");
+        assert_eq!(*log.borrow(), ["1 Some(\"first\")"], "the answer reached another prompt");
+        answer(&registered, &host, 8, "ninth");
+        assert_eq!(*log.borrow(), ["1 Some(\"first\")", "9 Some(\"ninth\")"]);
     }
 
     // Expected (carbon ac-2): a waiting task that becomes ready while another task starts (here the new one wakes it)
