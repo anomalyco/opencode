@@ -1,6 +1,4 @@
-//! Console copy (E.20, row T28): Ctrl+Y in the console overlay copies the selected text with the "Copied to
-//! clipboard" toast and clears the selection (`app.tsx:261-263,601-611`). TS binds the key in the console's own
-//! options; here it is a key handler that acts only while the console is visible.
+//! Ctrl+Y copies the console selection while the overlay is visible.
 
 use crate::prelude::*;
 

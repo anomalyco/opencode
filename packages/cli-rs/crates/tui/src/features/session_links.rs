@@ -1,10 +1,5 @@
-//! Session IDs as links (`ui/session-link.ts`, `useSessionLinks`, #63224 and #63247): a Markdown that names another
-//! session by ID shows it as `@<title>` (the ID itself when markers are shown) in `markup.link.url`, underlined, and
-//! a plain click on it opens that session. The current session, archived sessions and sessions that cannot be loaded
-//! stay plain IDs. When a title changes, only the blocks that mention that session are drawn again.
-//!
-//! The transcript's text parts, the compaction summary and the `/btw` answer use it, through [`attach`]; other
-//! plugins' Markdown does not, as in TS.
+//! Link known, unarchived session IDs in transcript text, compaction summaries, and `/btw` answers. Title changes
+//! invalidate only blocks that mention the session.
 
 use std::collections::HashSet;
 
@@ -16,7 +11,7 @@ use crate::prelude::*;
 /// A Markdown with session links. Its owner holds it; the TUI's [`Registry`] and the click handler hold it weakly.
 pub struct Links {
     pub markdown: Markdown,
-    /// The label each mentioned ID was last drawn with (`None`: plain), so a sync draws again only on a change.
+    /// Last rendered label by ID; `None` denotes an unlinked ID.
     used: Rc<RefCell<HashMap<SessionID, Option<String>>>>,
     /// Where a plain left press went down, until its release.
     pressed: Cell<Option<(u16, u16)>>,
@@ -114,7 +109,7 @@ fn link_spans(
     spans: Vec<InlineSpan>,
     cx: &InlineContext<'_>,
 ) -> Vec<InlineSpan> {
-    // Core never passes table cells to the chunk callback, so TS shows their IDs as written.
+    // Table cells bypass the chunk callback and keep literal IDs.
     if cx.table_cell {
         return spans;
     }

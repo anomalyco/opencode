@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/app.tsx`.
+//! The TUI shell, route lifecycle, and application keymap.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,11 +29,10 @@ pub struct Deps {
     pub route: Route,
     pub continue_: bool,
     pub events: bool,
-    /// The built-ins from other crates, in TS order: Mermaid and LaTeX. `tui` does not depend on them, so an edit
-    /// there does not rebuild it.
+    /// Renderer plugins in registration order: Mermaid, then LaTeX. The shell receives them from the caller to avoid
+    /// depending on the renderers.
     pub builtins: Vec<opencode_plugin::Builtin>,
-    /// Runs every built-in plugin through the byte shims of the C ABI, as a loaded library runs, instead of with Rust
-    /// values: the other carrier, for the tests that compare the two (`carrier-equal`, P6a).
+    /// Run built-ins through the native plugin ABI for carrier comparison tests.
     pub abi_builtins: bool,
 }
 
@@ -61,8 +60,7 @@ pub struct Tui {
     pub toasts: Toasts,
     pub theme: RefCell<ThemeState>,
     pub directory: String,
-    /// The prompt textarea while it has the keymap's edit bindings (E.2 fills it). The keymap's
-    /// `textarea_enabled` holds while it is focused.
+    /// The prompt textarea with edit bindings. `textarea_enabled` also requires focus.
     pub textarea: Rc<RefCell<Option<Textarea>>>,
     pub prompt: crate::prompt::editor::Shared,
     pub settings: crate::dialogs::settings::Live,
@@ -97,9 +95,9 @@ pub struct Tui {
     /// The routes shown before the plugin routes on screen, the latest last: where the reserved chord goes back to.
     before_plugin: RefCell<Vec<Route>>,
     view: RefCell<Option<Box<dyn RouteView>>>,
-    /// The page theme the shell was last painted with, which the route view's parts read when they paint.
+    /// Page theme of the current route.
     painted: Live,
-    /// A theme change arrived while a key sequence was pending; remount once it ends.
+    /// Defer the theme remount until the pending key sequence ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
     /// [`Tui::hold_sync`].
@@ -153,7 +151,7 @@ impl Tui {
         );
     }
 
-    /// The resolved config now (`useConfig().data`). Keep the borrow short: a change replaces it.
+    /// Borrow the current resolved config briefly: a settings change replaces it.
     pub fn config(&self) -> std::cell::Ref<'_, Resolved> {
         self.settings.config()
     }
@@ -193,9 +191,8 @@ impl Tui {
         let complete = remount
             .then(|| self.prompt.current.borrow().upgrade().and_then(|prompt| prompt.autocomplete.get()?.take_open()))
             .flatten();
-        // A remount of a plugin's route drops the old view once the new one is mounted, so a plugin that counts its
-        // mounts (`mounts()`) hears the new one begin before the old one ends, and keeps its state (review carbon-4).
-        // The host's own routes drop it first: the composer hands its draft on as it goes.
+        // Mount the new plugin view before dropping its predecessor so mount counts never reach zero. Host routes drop
+        // the old view first to hand over the draft.
         let old = self.view.borrow_mut().take();
         if let Some(view) = &old {
             view.root().detach();
@@ -243,8 +240,7 @@ impl Tui {
             }
         }
         *self.view.borrow_mut() = Some(view);
-        // Only over the new composer when it takes the focus (now, or once the dialog closes); else the list's mode goes
-        // after the event, as a dropped prompt's does, and keys reach what has the focus.
+        // Restore list mode only when the new composer owns focus, including after a dialog closes.
         if let Some(open) = complete {
             let prompt = self.prompt.current.borrow().upgrade();
             let focused = |prompt: &Rc<crate::prompt::editor::Inner>| target == Some(prompt.textarea.as_any());
@@ -284,7 +280,7 @@ impl Tui {
         self.seen.get() == self.data.revision()
     }
 
-    /// Passes what changed since the last sync to the route view.
+    /// Pass changes accumulated between syncs to the route view.
     fn sync(&self) {
         if self.held.get() {
             return;
@@ -319,9 +315,7 @@ impl Tui {
         crate::features::attention::program_status::sync(self);
     }
 
-    /// Calls `sync` with `target` and the store's changes at each flush, after the route view, until the returned
-    /// disposer runs or `target` is gone. An open dialog or viewer follows the store this way, on the route view's
-    /// update path (O-104).
+    /// Sync `target` after the route view on each store flush, until the disposer runs or the target drops.
     pub(crate) fn follow<T: 'static>(&self, target: &Rc<T>, sync: impl Fn(&T, &Tui, &Changes) + 'static) -> Disposer {
         let target = Rc::downgrade(target);
         let follower: Follower =
@@ -344,7 +338,7 @@ impl Tui {
         self.app.request_redraw();
     }
 
-    /// Syncs the route view with no store changes, after view state outside the store changed (E.13b's composer).
+    /// Refresh the route for a view change outside the store.
     pub(crate) fn sync_view(&self) {
         if let Some(view) = self.view.borrow().as_ref() {
             view.sync(self, &opencode_store::Changes::default());
@@ -386,9 +380,7 @@ impl Tui {
         self.app.set_theme(app_theme(&theme));
         self.dialogs.set_theme(theme.clone());
         self.toasts.set_theme(theme);
-        // The route view restyles in place, as TS's does, and so does a plugin's route. The diff viewer's route mounts
-        // again, and its focus would clear a half-typed sequence such as `<leader>l` that TS keeps, so wait for that to
-        // end.
+        // Remounting the diff viewer resets focus; defer it until the pending key sequence ends.
         if matches!(self.route(), Route::Plugin { .. }) && self.keymap.keymap().has_pending_sequence() {
             self.restyle.set(true);
             return;
@@ -558,9 +550,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     install_keys(&tui);
     install_theme(&tui);
     crate::plugins::host::count_local(&tui);
-    // Before the connection starts: a broadcast receiver gets only later events, and the first `server.connected`
-    // (terminal support, the client MCP) can arrive before mount ends. TS subscribes synchronously during mount, before
-    // its event stream yields anything.
+    // Subscribe before connecting: broadcasts do not replay the initial `server.connected` event.
     crate::features::events::install(&tui);
     let wakeups = install_wakeups(&tui, deps.events);
     crate::tabs::install(&tui);
@@ -583,13 +573,12 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     crate::dialogs::pair::install(&tui);
     crate::dialogs::model::install(&tui);
     crate::dialogs::integration::install(&tui);
-    // TS loads the built-in plugins once the first route has mounted, so the palette lists their commands first.
+    // Mount the route before registering built-ins to preserve palette order.
     let held = tui.keymap.hold(|| crate::plugins::host::install(&tui));
     tui.startup.aim(&deps.route, deps.continue_);
     tui.navigate(deps.route);
     drop(held);
-    // After the first route's reads, as in TS, where they start during mount and the event stream connects later.
-    // Otherwise `session.active` can answer first and read again the running sessions the route's family read brings.
+    // Start route reads before the event stream to avoid reading active sessions twice.
     let status = deps.events.then(|| connect(&tui));
     pump(&tui.app, wakeups, status);
     crate::features::highlights::install(&tui, deps.continue_);
@@ -602,13 +591,13 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
 pub fn options() -> AppOptions {
     AppOptions {
         exit_on_ctrl_c: false,
-        // `terminal.suspend` (E.20) owns Ctrl+Z, so `keybinds` can turn it off.
+        // Let the configurable `terminal.suspend` binding own Ctrl+Z.
         suspend_on_ctrl_z: false,
         palette_size: 16,
         // `--print-logs` records and stray stderr writes would draw over the screen; they go to the console and
         // reach the real stderr once the terminal is restored.
         capture_stderr: true,
-        // `autoFocus: false` (`app.tsx:258`): a click moves no focus unless its handler does.
+        // A click moves focus only when its handler requests it.
         focus_on_click: false,
         ..AppOptions::default()
     }
@@ -641,12 +630,11 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     started(&tui)?;
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
-    // As soon as the terminal is restored, as TS does: the teardown below runs with Ctrl+C sending SIGINT again, so a
-    // second press while it runs would end the process before a later summary.
+    // Print as soon as the terminal returns: a second Ctrl+C can interrupt teardown.
     if let Some(text) = crate::features::epilogue::text(&tui).filter(|_| result.is_ok()) {
         crate::features::epilogue::print(&text);
     }
-    // As TS's plugin context on exit: every active plugin is disposed while the TUI is still alive.
+    // Dispose active plugins while their TUI still exists.
     tui.plugins.deactivate_all();
     // Their storage writes reach the disk before the process can exit; UI effects and replies are not waited for.
     crate::plugins::host::flush_storage(&tui);
@@ -655,9 +643,7 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     result
 }
 
-/// Sends keys to the keymap before any widget, as `opencode_ui::dialog::route_keys` does, with the plugins' rules
-/// (synthesis 3.8): a mode the host ended goes before the key is routed, and what a plugin's handler asked for (an
-/// edit of the composer, a mode, a focus) applies before the next key of the same batch.
+/// Route keys before widgets. Apply plugin edits, mode changes, and focus changes before the next key in the batch.
 fn route_keys(tui: &Rc<Tui>) {
     let weak = tui.weak();
     tui.app.on_key_capture(move |cx, key| {
@@ -687,8 +673,7 @@ fn close_plugin_surface(tui: &Tui) -> bool {
         tui.panels.close(tui);
         return true;
     }
-    // A slot surface a plugin focused (a field, `focus-input`): the composer takes the focus back, and the chord stops
-    // there, so neither the composer's draft nor the app is lost to it (carbon c2a-1).
+    // The reserved chord returns focus from a plugin field to the composer without clearing its draft or exiting.
     if tui.router.surface_focused(tui) && !matches!(tui.route(), Route::Plugin { .. }) {
         opencode_plugin::Host::focus_composer(tui);
         if opencode_plugin::Host::composer_focused(tui) {
@@ -701,7 +686,7 @@ fn close_plugin_surface(tui: &Tui) -> bool {
         return false;
     }
     let back = tui.before_plugin.borrow_mut().pop().unwrap_or(Route::Home);
-    // Going back to an earlier plugin route keeps what was before it.
+    // Preserve the back stack when returning to a plugin route.
     let rest = std::mem::take(&mut *tui.before_plugin.borrow_mut());
     tui.navigate(back);
     if matches!(tui.route(), Route::Plugin { .. }) {
@@ -711,7 +696,7 @@ fn close_plugin_surface(tui: &Tui) -> bool {
 }
 
 fn install_keys(tui: &Rc<Tui>) {
-    // The reserved chord resets the plugins' input before anything may stop it, and goes on (synthesis 3.8).
+    // Reset plugin input before routing the reserved chord.
     let weak = tui.weak();
     tui.app.on_key_capture(move |cx, key| {
         let Some(tui) = weak.upgrade() else { return };
@@ -727,17 +712,14 @@ fn install_keys(tui: &Rc<Tui>) {
             cx.stop_propagation();
         }
     });
-    // Console copy, then the selection keys, go before the keymap (E.20).
     crate::features::console_copy::install(tui);
     crate::features::selection::install(tui);
-    // A focused terminal takes keys before the keymap (E.13a).
     crate::terminal::install_keys(tui);
     route_keys(tui);
     tui.layers.borrow_mut().push(opencode_ui::dialog::expire_leader(&tui.app, &tui.keymap));
 
     tui.keymap.set_first_layer(app_commands());
-    // As `app.tsx:1303-1335`: the commands live in a global layer without bindings, so the palette
-    // reaches them over a dialog, and separate layers bind their keys.
+    // Keep commands globally available to the palette over dialogs; bind their keys in separate layers.
     let weak = tui.weak();
     let command = |id: &str, run: fn(&Tui)| TuiCommand::new(id, bind!(weak, |tui, _, _| run(&tui))).bind(Bind::Off);
     let commands = KeymapLayer::global(vec![
@@ -789,7 +771,6 @@ fn install_keys(tui: &Rc<Tui>) {
             palette::show(&tui.dialogs, crate::dialogs::settings::palette_options(tui), Some(run))
         }),
     ]);
-    // `app.exit`'s keys work unless the focused prompt has text (`app.tsx:1329-1335`).
     let exit = KeymapLayer::default()
         .enabled({
             let app = tui.app.clone();
@@ -816,7 +797,7 @@ fn install_keys(tui: &Rc<Tui>) {
     }
 }
 
-/// `appCommands` (`app.tsx:752-1300`) in its order, the layer the palette lists last (D131).
+/// Application commands in palette order.
 fn app_commands() -> Vec<String> {
     let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect::<Vec<_>>();
     let numbered = |prefix: &str, count: usize| (1..=count).map(|n| format!("{prefix}{n}")).collect::<Vec<_>>();
@@ -881,7 +862,7 @@ fn install_theme(tui: &Rc<Tui>) {
         tui.theme.borrow_mut().terminal_mode(mode);
         tui.theme_changed();
     }));
-    // TS reads the palette again on `?997` (`theme.tsx:263-268`), so `system` follows a terminal theme switch.
+    // Re-read the palette on `?997` so the system theme follows the terminal.
     tui.app.on_color_scheme(bind!(tui, |tui, _| {
         tui.theme.borrow_mut().colors_changed();
         tui.theme_changed();
@@ -957,7 +938,7 @@ fn install_wakeups(tui: &Rc<Tui>, connect: bool) -> Wakeups {
         &tui, state
     )));
 
-    // Offline until the connection reports connected, so reads behind `refresh` wait for it as in TS.
+    // Start offline so refresh waits for the first connection.
     if connect {
         tui.data.set_online(false);
     }
@@ -1128,8 +1109,6 @@ mod tests {
         Arc::new(serde_json::from_value(serde_json::json!({ "id": "evt_1", "type": kind, "data": {} })).unwrap())
     }
 
-    // Expected: the first layer is `appCommands` of the TS source, name for name; a `${i + 1}` name stands for each
-    // number its `Array.from({ length })` makes.
     #[test]
     fn the_first_layer_follows_app_tsx() {
         let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tui/src/app.tsx")).unwrap();
@@ -1151,8 +1130,6 @@ mod tests {
         assert_eq!(app_commands(), names);
     }
 
-    // Expected: a full UI queue (a burst, a suspended terminal) delays the pump's store revisions, signals and
-    // connection changes; once it drains they arrive, and later ones still do (reviews bigboi-1 and carbon-2).
     #[test]
     fn a_full_queue_delays_the_pump_but_never_stops_it() {
         let app = TestApp::new(10, 4);

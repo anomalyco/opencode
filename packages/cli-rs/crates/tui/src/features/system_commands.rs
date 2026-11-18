@@ -1,15 +1,4 @@
-//! System commands and toggles (E.20, rows T16 and T19), `app.tsx:1083-1290`. T.1 registers `app.exit`,
-//! `help.show`, `session.new`, and the palette in `app::install_keys`, and calls [`install`] once for the rest.
-//!
-//! As in TS, only `docs.open`, `app.console`, and `location.reload` show in the palette; the others run from
-//! their keybinds (all `none` by default except `terminal.suspend`, Ctrl+Z). The toggles write `cli.json`
-//! through the settings writer (E.18a), so every view that reads the live config follows them.
-//!
-//! `service.restart` is not registered: TS offers it only for a managed service, and restarting stops the
-//! shared service, which this client never does (orchestrator O-21).
-//!
-//! T16: [`mouse_tracking`] picks the startup mouse mode, and `mouse` changes apply while the TUI runs;
-//! [`cursor`] is the prompt's cursor shape.
+//! System commands and settings toggles. Restart is unavailable because the client shares its background service.
 
 use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
 use opentui::native::{Control, MouseTracking};
@@ -98,14 +87,12 @@ pub fn cursor(config: &Resolved) -> (opentui::native::CursorStyle, bool) {
     (style, config.cursor_blinking)
 }
 
-/// Tool-result images stay in the store only while the transcript can show them (`omitToolFileData` in
-/// `context/data.tsx`): live tool events carry screenshots as inline base64.
+/// Retain screenshot payloads only while transcript previews are enabled; live events carry inline base64.
 pub(crate) fn image_preview(info: &Info) -> bool {
     info.session.as_ref().and_then(|session| session.image_preview) == Some(true)
 }
 
-/// What TS effects redo when the config changes: `renderer.useMouse = config.data.mouse`, the title effect,
-/// which sets the route's title again once `terminal.title` is back on, and the data context's image previews.
+/// Apply live mouse, title, and transcript preview settings.
 fn install_effects(tui: &Rc<Tui>) {
     let mouse = Rc::new(Cell::new(tui.config().mouse));
     let title = Rc::new(Cell::new(title_enabled(&tui.config().info)));
@@ -118,7 +105,7 @@ fn install_effects(tui: &Rc<Tui>) {
         let next = image_preview(&info);
         if preview.replace(next) != next {
             tui.data.set_omit_tool_file_data(!next);
-            // Turning previews on brings back the screenshots dropped while they were off.
+            // Reload screenshots discarded while previews are off.
             if next {
                 tui.data.restore_files();
             }
@@ -152,8 +139,7 @@ fn write(tui: &Tui, path: &'static [&'static str], value: Value) {
     tui.dialogs.clear();
 }
 
-/// "Disable X" while on, "Enable X" while off. The titles are fixed at startup: TS shows them only in the
-/// palette, and these commands are not in it.
+/// Hidden toggle commands use their startup titles.
 fn toggle_title(on: bool, what: &str) -> String {
     format!("{} {what}", if on { "Disable" } else { "Enable" })
 }

@@ -1,15 +1,5 @@
-//! Server-driven events (E.1, rows T10 to T12, `app.tsx:556-584,1338-1377`):
-//!
-//! - `tui.command.execute`, `tui.toast.show`, `tui.session.select`, and `tui.prompt.append`
-//!   (`prompt/index.tsx:341-352`), for the current location only;
-//! - `session.deleted` of the open session goes home with a toast;
-//! - `session.execution.succeeded` of the open session reloads the usage limits (`usage.tsx:219-223`);
-//! - a toast when an MCP server of the default location fails or needs authentication, once per state.
-//!
-//! `session.moved` updates the open dialog's cache, which E.11a replaced with the store's sessions.
-//! `app::mount` calls [`install`] once and `Tui::sync` calls [`sync`]. The app's pump posts each store signal once as
-//! a [`Signal`]; [`handle`] sees it first, then every [`subscribe`]r in order. When it skipped signals, it posts
-//! [`Lagged`] instead.
+//! Dispatch store signals to the TUI, then subscribers in registration order. A missed broadcast sends `Lagged` so
+//! consumers can resync.
 
 use std::sync::Arc;
 
@@ -20,7 +10,7 @@ use crate::prelude::*;
 type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
 type DeltaSubscribers = Rc<RefCell<Vec<(u64, Rc<opencode_store::DeltaListening>, Rc<dyn Fn(&[V2Event])>)>>>;
 
-/// The last status each MCP server was alerted for, and the signal and delta subscribers.
+/// Last reported MCP status per server and subscribers to signals and deltas.
 #[derive(Default)]
 pub struct Events {
     alerted: RefCell<HashMap<String, &'static str>>,
@@ -77,8 +67,7 @@ handled! {
 pub fn install(tui: &Tui) {
     std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
-        // What the plugins asked for while the signal before it was handled runs first (`opencode_plugin::flush`): a
-        // signal runs plugin handlers and can navigate.
+        // Flush the previous signal's plugin actions before the next signal can navigate.
         opencode_plugin::flush();
         if let Some(event) = Handled::of(event) {
             handle(&tui, &event);
@@ -125,7 +114,7 @@ fn resync(tui: &Tui) {
         handle(tui, &Handled::SessionDeleted(&event));
     }
     tui.resync();
-    // The subscribers missed what changed too, as across a reconnect: they hear it as one (carbon's review of P6c, 6).
+    // Notify subscribers to resync after a missed broadcast, as on reconnect.
     let event = V2Event::ServerConnected(V2EventServerConnected {
         r#type: "server.connected".to_owned(),
         ..V2EventServerConnected::default()
@@ -157,8 +146,7 @@ pub fn subscribe<S: Into<String>>(
     })
 }
 
-/// Calls `subscriber` with the streaming deltas the store applied since it last called it, or since it subscribed,
-/// once a frame that has any, until the disposer drops (the plugins' `on_deltas`).
+/// Deliver accumulated streaming deltas once per frame until the subscription is disposed.
 pub fn subscribe_deltas(tui: &Tui, subscriber: impl Fn(&[V2Event]) + 'static) -> Disposer {
     let id = tui.events.next.get();
     tui.events.next.set(id + 1);
@@ -207,7 +195,7 @@ fn handle(tui: &Tui, event: &Handled) {
     crate::features::quick_switch::event(tui, event);
     crate::dialogs::worktrees::event(event);
     crate::dialogs::open::event(event);
-    // Every connection, also one the connection status coalesced (`context/location.tsx`).
+    // Include connections that coalesce into a single status change.
     if let Handled::ServerConnected(_) = event {
         crate::features::location::reconnected(tui);
     }

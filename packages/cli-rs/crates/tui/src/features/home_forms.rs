@@ -1,6 +1,4 @@
-//! The global form overlay on home (E.9b, row T30; `routes/home.tsx:36-38,109-120`). Global MCP elicitations can
-//! arrive without a session route, so home shows the first one of its location over the screen's bottom. The home
-//! prompt keeps its place but takes no keys meanwhile.
+//! Show the current location's global form over home. The prompt keeps its place but yields its keys.
 
 use opencode_store::Location;
 use opencode_store::forms::GLOBAL;

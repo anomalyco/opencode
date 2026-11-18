@@ -1,6 +1,4 @@
-//! Quick switch (E.11b, row W03; `app.tsx:841-848,1323-1327`, `context/local.tsx:549-601`): with tabs off,
-//! `<leader>1` to `<leader>9` open the pinned root sessions in pin order. Pins are toggled in the session
-//! list (`session.pin.toggle`, `dialogs::session_list::pins`); a deleted session loses its pin.
+//! With tabs off, the leader and a digit open pinned root sessions in pin order.
 
 use crate::dialogs::session_list::pins;
 use crate::features::events::Handled;

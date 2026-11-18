@@ -1,10 +1,5 @@
-//! The model and agent state of `context/local.tsx` (E.16).
-//!
-//! [`Local`] holds the current location's catalog (models, providers, agents, integrations, and the configured
-//! model, read through the store; and the usage limits), `model.json`, and the per-session and per-agent
-//! selections. It sends no mutating request: the prompt commits a selection when it submits
-//! (`prompt/index.tsx:1293`), and the session's `session.agent.selected` and `session.model.selected` settle the
-//! drafts that commit sent. `model.json` writes run in order on one worker thread, because its file lock blocks.
+//! Local model and agent selections. The composer commits drafts on submit; selection events settle them. Serialize
+//! preference writes off the UI thread because the file lock blocks.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -75,11 +70,11 @@ pub struct Local {
     state: RefCell<State>,
     listeners: Listeners,
     next_listener: Cell<u64>,
-    /// The usage warnings shown, once per model and level while the TUI runs (`usage.tsx` `warned`).
+    /// Usage warnings already shown by model and severity.
     pub(crate) warned: RefCell<HashSet<String>>,
-    /// `--agent`, which a session without an agent draft shows over its own agent (`local.tsx:90-96`).
+    /// Startup agent selection when a session has no agent draft.
     pub(crate) startup_agent: RefCell<Option<String>>,
-    /// `--model`, which `fallbackModel` tries first (`local.tsx:184-193`).
+    /// First model to try when falling back.
     pub(crate) startup_model: RefCell<Option<Model>>,
     watch: RefCell<Option<Watch>>,
     pub(crate) layers: RefCell<Vec<Disposer>>,
@@ -399,8 +394,7 @@ impl Local {
         }
     }
 
-    /// The prompt's effect (`prompt/index.tsx:1578-1582`): loads the limits once when OpenCode Console serves the
-    /// selected model.
+    /// Load limits when OpenCode Console serves the selected model.
     pub(crate) fn load_served_usage(&self) {
         let served = self
             .current()
@@ -658,9 +652,7 @@ impl Local {
         self.reconcile(session, &[]);
     }
 
-    // `reconcileSessionSelection` and the agent arm of `session.agent.selected`, once for the agent and
-    // model after each selection event of the batch, as TS handles each event, then for the session as the
-    // store holds it.
+    // Reconcile each selection event before reconciling the final stored session.
     fn reconcile(&self, id: &SessionID, selected: &[Selected]) {
         let session = self.data.read(|state| state.session(id).cloned());
         let Some(session) = session else { return };

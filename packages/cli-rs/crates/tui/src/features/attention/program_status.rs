@@ -1,10 +1,4 @@
-//! Program status (E.19a, row N03, `context/program-status.ts`, `context/session-tabs.tsx:180-200`): OSC 7501
-//! records that mirror the sessions waiting on the user or working. There is one root summary plus one record
-//! per pending session among the open tabs and the viewed session. Terminals drop working and blocked records
-//! when the process exits, and quitting clears the root.
-//!
-//! `Tui::sync`, `Tui::navigate`, and the tabs call [`sync`]; `app.exit` calls [`clear`] before the terminal is
-//! released. Records are not sent again after a suspend and resume (G.4).
+//! OSC 7501 publishes a root summary and records for pending sessions. Clear the root before releasing the terminal.
 
 use std::sync::LazyLock;
 
@@ -58,10 +52,10 @@ impl Record {
     }
 }
 
-/// The records the terminal took, by ID, in the order they were first sent.
+/// Terminal records by ID, in insertion order.
 pub type Sent = IndexMap<String, Record>;
 
-/// Sends the records that changed since the last sync.
+/// Send changed status records.
 pub fn sync(tui: &Tui) {
     let reports = reports(&pending(tui));
     let mut sent = tui.attention.program.borrow_mut();
@@ -102,7 +96,7 @@ fn pending(tui: &Tui) -> Vec<Pending> {
         .collect()
 }
 
-/// `title` of `session-tabs.tsx` without a persisted title: the store's, else the timestamped fallback.
+/// Prefer the stored session title; fall back to its timestamp.
 fn title(tui: &Tui, id: &str) -> Option<String> {
     tui.data.read(|state| {
         let info = state.session(&SessionID(id.to_owned()))?;

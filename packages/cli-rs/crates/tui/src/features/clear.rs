@@ -1,6 +1,4 @@
-//! `session.clear` (`/clear`, row T25, `app.tsx:802-827`): closes the session's tab and goes home in the
-//! new-session location, keeping the agent and model the session had. `session.new` (`app.tsx:775-800`) is the same
-//! without closing the tab.
+//! Both session commands keep the agent and model. Only `/clear` closes the current tab.
 
 use opencode_local::cli_config::NewLocation;
 use opencode_store::Location;

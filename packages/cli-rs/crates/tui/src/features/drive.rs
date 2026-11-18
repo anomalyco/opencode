@@ -1,4 +1,4 @@
-//! TypeScript: `app.tsx:276-279`.
+//! Headless simulation endpoint.
 
 use crate::app::{Launch, Tui};
 use opencode_drive::Manifest;
@@ -12,8 +12,7 @@ pub fn manifest() -> Option<opentui::Result<Manifest>> {
         .map(|manifest| manifest.map_err(opentui::Error::other))
 }
 
-/// Runs the TUI on a headless app at the manifest's viewport (100 by 40 without one, as `renderer.ts` sizes it) and
-/// serves the endpoint until the TUI quits.
+/// Serve the headless TUI at the manifest viewport, defaulting to 100 by 40, until it quits.
 pub fn run(manifest: Manifest, options: AppOptions, launch: Launch) -> opentui::Result<()> {
     let (width, height) = manifest.viewport.unwrap_or((100, 40));
     let app = App::headless(HeadlessOptions {

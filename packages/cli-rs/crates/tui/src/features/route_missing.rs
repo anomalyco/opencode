@@ -1,6 +1,4 @@
-//! The missing plugin route screen (E.1, row T26, `component/plugin-route-missing.tsx`): the route's name in
-//! the warning color and a "go home" button, centered. The route of a plugin that failed says that instead, and points
-//! to `/plugins` (PL-8, deviation `F16-plugin-failed-route`).
+//! Explain unavailable plugin routes and direct the user to the plugin manager after a failure.
 
 use crate::prelude::*;
 

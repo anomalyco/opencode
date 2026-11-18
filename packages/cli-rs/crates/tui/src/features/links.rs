@@ -1,12 +1,5 @@
-//! Clickable links and opening URLs and paths (E.20, row T23): `ui/link.tsx`, `@opencode/util/open`, and the
-//! root `onMouseUp` of `app.tsx:1419-1423`.
-//!
-//! A plain left click on a cell that carries a hyperlink opens it: a press and a release on the same cell, with
-//! no modifier and no selected text. TS reads that from the selection (`isStart` with `cell` behavior); here the
-//! press position stands in for it. Modified clicks are left to the terminal.
-//!
-//! [`open_url`] and [`open_path`] start the system opener. Tests call [`testing::capture`] first, so nothing
-//! opens a browser or file manager.
+//! Open a link only for an unmodified press and release on the same cell with no selection. Leave modified clicks to
+//! the terminal.
 
 use crate::prelude::*;
 

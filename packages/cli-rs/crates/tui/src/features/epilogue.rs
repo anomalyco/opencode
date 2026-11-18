@@ -1,8 +1,4 @@
-//! What the TUI prints after it exits (E.1, row G14): the wordmark, the updated version, and the open
-//! session with the command that continues it (`util/presentation.ts`, `app.tsx:485-490`).
-//!
-//! E.18b records an installed update with [`Epilogue::updated_version`]. `app::run` [`print`]s [`text`] once the
-//! terminal is restored.
+//! Exit summary and command to continue the last session.
 
 use crate::prelude::*;
 
@@ -26,9 +22,7 @@ impl Epilogue {
     }
 }
 
-/// The text to print after exit, or none when there is nothing to say. The session is the one the session
-/// route shows when the TUI quits, its title cut to 50 characters (`Locale.truncate`). An untitled session reads
-/// "New session" or "Child session" (`displayLabel`), where TS prints an empty title (D131-epilogue-untitled).
+/// Build the exit text from the current session. An untitled session uses its display label.
 pub fn text(tui: &Tui) -> Option<String> {
     let session = match tui.route() {
         Route::Session { id } => {
@@ -46,16 +40,13 @@ pub fn text(tui: &Tui) -> Option<String> {
     };
     let session = session.as_ref().map(|(title, id)| (title.as_str(), id.0.as_str()));
     let updated = tui.epilogue.updated_version.borrow().clone();
-    // The command name in the continue hint. TS prints "opencode"; this client names itself, so the hint
-    // reopens the client the user ran.
+    // Use this client's executable name so the hint reopens it.
     let cli_name = std::env::var("OPENCODE_CLI_NAME").unwrap_or_else(|_| "opencode-native".to_owned());
     render(session, updated.as_deref(), &cli_name)
 }
 
-/// Prints `text` and a newline on stdout (`process.stdout.write(text + "\n")`), once the renderer has put the terminal
-/// back. On Windows that turned the console's escape sequences off again, and conhost would show the colors as
-/// `←[90m`; TS writes through libuv, which turns them on for a console it writes to. So they go on for this write,
-/// and back to what they were after it.
+/// Print the exit text after terminal restoration. Windows console output needs escape processing enabled until the
+/// write flushes.
 pub fn print(text: &str) {
     let _ = write(&mut Stdout::default(), &mut std::io::stdout().lock(), text);
 }
@@ -177,8 +168,6 @@ mod tests {
         assert!(text.contains("\x1b[1mxy\x1b[0m"), "{text:?}");
     }
 
-    /// D131 N1: the renderer has restored the console when the epilogue is written, so the write turns escape
-    /// sequences on before it and restores the mode only once the text is flushed.
     #[test]
     fn writes_with_escape_sequences_on() {
         struct Log<'a>(&'a RefCell<Vec<String>>);

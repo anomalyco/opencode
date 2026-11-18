@@ -1,9 +1,5 @@
-//! The client MCP socket (E.13b, rows A05 and X03): `context/client-mcp.tsx`.
-//!
-//! While the `client-mcp` experiment is on, the TUI serves two tools to the server as the client MCP server `tui`, so
-//! the model sees `tui_open_terminal` and `tui_write_terminal`. Both act on the terminal of the calling session's
-//! family that this TUI shows: the routed session if it is in that family, else the family's root while it is open in
-//! a tab. The socket reconnects when the flag, the viewed location, or the server changes.
+//! The client MCP socket exposes terminal tools for the current session family. Reconnect when the experiment,
+//! location, or server changes.
 
 use std::sync::{Arc, Mutex};
 

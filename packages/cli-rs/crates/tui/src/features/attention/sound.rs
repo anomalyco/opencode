@@ -1,10 +1,5 @@
-//! Sounds (E.19b, row N02): `attention.ts:36-43,77-121` and `audio.ts`. A request's sound name picks the
-//! `attention.sounds` override, then the bundled sound (`attention-sounds.bun.ts`); the first that loads and plays wins.
-//! The volume is the request's, else `attention.volume`, clamped to 0..1.
-//!
-//! The engine (OpenTUI's native audio) starts on the first sound. Only the real terminal app opens a playback device
-//! ([`Output::Device`]); every other app, tests included, mixes without one, so nothing plays out loud and
-//! [`Player::audio`] can read what would have.
+//! Prefer configured sounds over bundled ones. The audio engine starts on demand; headless clients mix without a
+//! playback device.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;

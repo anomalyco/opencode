@@ -1,10 +1,5 @@
-//! Startup flows (E.1, rows T02, T14b and T27): `--continue`, `--session` with and without `--fork`,
-//! `--prompt`, a new session ID taken from `--session`, `--agent` and `--model`, and `OPENCODE_ROUTE`
-//! (`app.tsx:664-726`, `context/args.tsx`, `context/route.tsx:48-69`). C.13 adds where `--prompt` goes.
-//!
-//! `app::mount` mounts the initial route, then calls [`run`]. The root command resolves `--session`
-//! first: an ID the server knows opens that session; any other becomes [`Startup::take_new_session_id`],
-//! the ID of the first session the home prompt creates.
+//! Resolve the initial route, model, agent, and prompt. An unknown `--session` ID becomes the ID of the first session
+//! created from home.
 
 use indexmap::IndexMap;
 use opencode_api::generated::{SessionForkInput, SessionListInput, SessionListInputOrder};
@@ -27,7 +22,7 @@ pub struct Args {
     pub server_executable: Option<std::path::PathBuf>,
     pub auto: bool,
     pub environment: Option<IndexMap<String, String>>,
-    /// What the parent tells a client it starts after a plugin crash (P4c).
+    /// State passed to a client restarted after a plugin crash.
     pub contain: crate::plugins::contain::Contain,
 }
 
@@ -57,8 +52,7 @@ pub struct Startup {
     prompt: RefCell<Option<Target>>,
 }
 
-/// Which prompt receives `--prompt`: TS hands it to the first home, or through `route.prompt` to the
-/// session that startup opens.
+/// Destination for `--prompt`: home or the session selected at startup.
 #[derive(Clone, Debug, PartialEq)]
 enum Target {
     Home,
@@ -118,14 +112,13 @@ impl Startup {
         self.new_session_id.borrow_mut().get_or_insert(id);
     }
 
-    /// `--model` as `provider/model`, once it parsed (`util/model.ts` `parse`).
+    /// Parse `--model` as `provider/model`.
     pub fn model(&self) -> Option<(String, String)> {
         parse_model(self.args.model.as_deref()?)
     }
 }
 
-/// `OPENCODE_ROUTE`: a JSON route for the first screen (`context/route.tsx` `initialRoute`). Anything that is
-/// not a route reads as none.
+/// Decode the initial route from `OPENCODE_ROUTE`, ignoring invalid values.
 pub fn env_route(value: &str) -> Option<Route> {
     let value: serde_json::Value =
         serde_json::from_str(value).inspect_err(|error| log::warn!("OPENCODE_ROUTE is not JSON: {error}")).ok()?;
@@ -138,7 +131,7 @@ pub fn env_route(value: &str) -> Option<Route> {
     }
 }
 
-/// Runs once after the first route mounted (`app.tsx` `onMount` and the `--continue` and `--fork` effects).
+/// Apply startup arguments after the first route mounts.
 pub fn run(tui: &Tui, continue_: bool) {
     if let Some(model) = tui.startup.args.model.as_deref()
         && parse_model(model).is_none()
