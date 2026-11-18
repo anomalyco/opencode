@@ -2,6 +2,7 @@ import { Option, Schema } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileContent, Files } from "@opencode/plugin/gui"
 import { bytesFromContent, frameMediaPath, htmlWithScript } from "./artifact"
+import { fileTabId } from "./path"
 
 /** Marks messages between the app and the media script it adds to an HTML preview. */
 const CHANNEL = "opencode-file-media"
@@ -20,6 +21,8 @@ export function createFrameMedia(input: {
   frame: () => HTMLIFrameElement | undefined
   path: () => string
   file: Files
+  /** The open file tabs' ids. */
+  open: () => readonly string[]
 }) {
   makeEventListener(window, "message", async (event: MessageEvent) => {
     const target = input.frame()?.contentWindow
@@ -32,10 +35,11 @@ export function createFrameMedia(input: {
 
     if (!path) return
 
-    // An open tab may already hold the file. Otherwise load it and stop the watch `sync` starts, as nothing shows it.
     if (!input.file.get(path)?.content) {
       await input.file.sync(path, { silent: true })
-      input.file.unwatch(path)
+
+      // `sync` starts a server watch that only an open tab of the file needs.
+      if (!input.open().includes(fileTabId(input.file, path))) input.file.unwatch(path)
     }
 
     const content = input.file.get(path)?.content

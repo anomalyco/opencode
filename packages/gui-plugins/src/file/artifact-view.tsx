@@ -25,7 +25,14 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import {
+  createKeyed,
+  usePanel,
+  usePlugin,
+  type FileContent,
+  type MountedSession,
+  type SessionScreen,
+} from "@opencode/plugin/gui"
 import {
   blobUrlFromContent,
   bytesFromContent,
@@ -726,11 +733,13 @@ function ArtifactAudio(props: MediaProps) {
 function ArtifactFrame(props: { screen: SessionScreen; path: string; content: FileContent; kind: "pdf" | "html" }) {
   let frame: HTMLIFrameElement | undefined
 
+  const panel = usePanel()
+
   const source = createMediaSource(() =>
     props.kind === "html" ? findableHtml(mediaHtml(props.content)) : props.content,
   )
 
-  createFrameMedia({ frame: () => frame, path: () => props.path, file: props.screen.file })
+  createFrameMedia({ frame: () => frame, path: () => props.path, file: props.screen.file, open: panel.open })
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
   const src = () => (props.kind === "pdf" ? `${source().src}#navpanes=0&view=FitH` : source().src)
 
