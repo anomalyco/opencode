@@ -18,6 +18,8 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
   const listeners: Array<(key: string) => void> = []
   const fake = {
     surfaces: [] as Json[],
+    // The dialog surface every plugin registers for `ui.dialog.show`, apart from the surfaces the plugin registers.
+    dialogs: [] as Json[],
     commands: new Map<string, (input?: string) => unknown>(),
     effects: [] as Json[],
     watches: new Set<string>(),
@@ -34,6 +36,7 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
       for (const listener of [...listeners]) listener(key)
     },
     surface(name: string, place: Json, view: Json, options: Json) {
+      if (place.type === "dialog") return void fake.dialogs.push({ name, place, view, options })
       fake.surfaces.push({ name, place, view, options })
       return fake.surfaces.length - 1
     },
@@ -137,6 +140,20 @@ function view(fake: Json, index: number, key: string, slot: Json = {}) {
     unmount: () => fake.surfaces[index].options.unmount(cx.mount),
   }
 }
+
+// The view of the plugin's dialog surface for the mount of `ui.dialog.show`'s `key`.
+function dialogView(fake: Json, key: string, generation = 1) {
+  const cx = { mount: { surface: "compat.dialog", key, generation }, input: { width: 40, height: 10 } }
+  return {
+    mount: cx.mount,
+    draw: () => fake.dialogs[0].view(cx),
+    unmount: () => fake.dialogs[0].options.unmount(cx.mount),
+  }
+}
+
+// The keys of the dialog surfaces `ui.dialog.show` asked the host for, in order.
+const surfaceKeys = (fake: Json): string[] =>
+  fake.effects.filter((effect: Json) => effect.dialog?.type === "surface").map((effect: Json) => effect.dialog.key)
 
 const text = (tree: Json): string =>
   tree === undefined ? "<none>" : [...(tree.spans ?? []).map((span: Json) => span.text), ...(tree.children ?? []).map(text)].join("")
@@ -611,7 +628,8 @@ test("a dialog cleared or replaced before it is built never shows", async () => 
   await turn()
   await turn()
   expect(shown().filter((dialog: string) => dialog.includes("Stale"))).toEqual([])
-  expect(shown().some((dialog: string) => dialog.includes("LiveShow"))).toBe(true)
+  const [key] = surfaceKeys(fake)
+  expect(text(dialogView(fake, key!).draw())).toBe("LiveShow")
   expect(answers).toEqual([undefined, undefined])
 })
 
@@ -822,9 +840,9 @@ test("a field's focused prop focuses and blurs it", async () => {
   expect(fake.warnings()).toEqual([])
 })
 
-// Contract 2.x, step B: a field's focus is the request of the mount whose render holds it, which names it; a field in
-// no mount (a dialog of the plugin's own) has no focus on the host, which the client's log says once.
-test("a field's focus names its mount, and a field in no mount has none", async () => {
+// Contract 2.x, step B: a field's focus is the request of the mount whose render holds it, which names it. A field in a
+// dialog of the plugin's own is one too (contract ergonomics 2.7, CT-37): the dialog's body is a mount.
+test("a field's focus names its mount, also in a dialog of the plugin's own", async () => {
   const fake = host()
   const ctx = plugin("t.owned", fake)
   const refs: Json = {}
@@ -834,12 +852,17 @@ test("a field's focus names its mount, and a field in no mount has none", async 
   route.view({ mount, input: { width: 40, height: 10 } })
   refs.routed.focus()
   ctx.ui.dialog.show(() => h("input", { id: "d", ref: (el: Json) => (refs.shown = el) }))
-  refs.shown.focus()
+  await turn()
+  const dialog = dialogView(fake, surfaceKeys(fake)[0]!)
+  dialog.draw()
   refs.shown.focus()
   await turn()
   const focus = fake.effects.filter((effect: Json) => effect.type === "focus")
-  expect(focus).toEqual([{ type: "focus", node: "q", mount }])
-  expect(fake.warnings()).toEqual(["t.owned: focus() of an <input> in no mount is not supported by opencode-native yet"])
+  expect(focus).toEqual([
+    { type: "focus", node: "q", mount },
+    { type: "focus", node: "d", mount: dialog.mount },
+  ])
+  expect(fake.warnings()).toEqual([])
 })
 
 // Contract 2.x, step B (big-boi's G2): a field in no mount's tree, one the plugin removed and still holds by its ref or
@@ -1645,10 +1668,13 @@ test("each dialog settles once, and clear closes it", async () => {
   expect(fake.warnings()).toEqual([])
   ctx.ui.dialog.show(() => h("text", { children: "big" }))
   ctx.ui.dialog.set({ size: "large", centered: true })
+  await turn()
   ctx.ui.dialog.clear()
   ctx.ui.dialog.show(() => h("text", { children: "small" }))
-  const panel = fake.effects.filter((effect) => effect.dialog?.type === "panel").at(-1).dialog
-  expect([panel.size, panel.centered]).toEqual(["medium", false])
+  await turn()
+  const dialogs = fake.effects.filter((effect) => effect.dialog?.type === "surface").map((effect) => effect.dialog)
+  // The first opened large and centered, with the `set` right after it; the next is the host's own size.
+  expect(dialogs.map((dialog) => [dialog.size, dialog.centered])).toEqual([["large", true], [undefined, undefined]])
 })
 
 // A select's footer actions are the contract's (session-time's "Close ctrl+a"): each with its key, side and selection,
@@ -1781,37 +1807,48 @@ test("pending items are the host's", async () => {
   expect(ctx.data.session.pending.list("s1")).toEqual([item])
 })
 
-// Bigboi P8-6: a `<scrollbox>` in a dialog of the plugin's own does not scroll here; the keys that would scroll it say
-// so, once, while it shows.
-test("a dialog's scrollbox says it does not scroll", () => {
+// Contract ergonomics 2.7: a `<scrollbox>` in a dialog of the plugin's own is a scroll of the dialog's mount, and its
+// `focused` prop gives it the host's focus, so the arrows and the page keys scroll it (sidebar-prompt's long prompt).
+test("a dialog's scrollbox is a scroll its focused prop focuses", async () => {
   const fake = host()
   const ctx = plugin("t.scroll", fake)
-  ctx.ui.dialog.show(() => h("scrollbox", { children: h("text", { children: "long" }) }))
-  const scroll = fake.meta.get("t.scroll.compat.dialog-scroll")
-  expect(scroll?.keybind).toBe("up,down,pageup,pagedown")
-  fake.commands.get("t.scroll.compat.dialog-scroll")!()
-  fake.commands.get("t.scroll.compat.dialog-scroll")!()
-  expect(fake.warnings()).toEqual(["t.scroll: scrolling a <scrollbox> in ui.dialog.show is not supported by opencode-native yet"])
+  ctx.ui.dialog.show(() => h("scrollbox", { id: "body", focused: true, children: h("text", { children: "long" }) }))
+  await turn()
+  const dialog = dialogView(fake, surfaceKeys(fake)[0]!)
+  const tree = dialog.draw()
+  const scroll = (node: Json): Json => (node?.type === "scroll" ? node : (node?.children ?? []).map(scroll).find(Boolean))
+  expect(text(scroll(tree))).toBe("long")
+  await turn()
+  expect(fake.effects.filter((effect: Json) => effect.type === "focus")).toEqual([
+    { type: "focus", node: "body", mount: dialog.mount },
+  ])
+  expect(fake.warnings()).toEqual([])
 })
 
 // Carbon-3: a dialog that replaced another is a panel of its own, so its close (escape) closes it and calls its
 // `onClose`; a render that throws in a dialog closes it, as TS's boundary clears it.
-test("a replacing dialog closes, and a crashing one closes at once", () => {
+test("a replacing dialog closes, and a crashing one closes at once", async () => {
   const fake = host()
   const ctx = plugin("t.show", fake)
   const closed: string[] = []
   ctx.ui.dialog.show(() => h("text", { children: "A" }), () => closed.push("A"))
+  await turn()
   ctx.ui.dialog.show(() => h("text", { children: "B" }), () => closed.push("B"))
-  const panels = fake.effects.filter((effect) => effect.dialog?.type === "panel").map((effect) => effect.dialog.key)
-  expect(new Set(panels).size).toBe(2)
-  fake.push(`dialog-open:${panels.at(-1)}`, true)
-  fake.push(`dialog-open:${panels.at(-1)}`, false)
+  await turn()
+  const keys = surfaceKeys(fake)
+  expect(new Set(keys).size).toBe(2)
+  // The mount of the first renders nothing of the second (each show is its own key).
+  expect([text(dialogView(fake, keys[0]!).draw()), text(dialogView(fake, keys[1]!).draw())]).toEqual(["", "B"])
+  fake.push(`dialog-open:${keys.at(-1)}`, true)
+  fake.push(`dialog-open:${keys.at(-1)}`, false)
   expect(closed).toEqual(["A", "B"])
   ctx.ui.dialog.show(() => {
     throw new Error("")
   })
+  await turn()
+  dialogView(fake, surfaceKeys(fake).at(-1)!).draw()
   const last = fake.effects.at(-1)
-  expect(last.dialog?.type).toBe("close")
+  expect(last.dialog).toEqual({ type: "close", key: surfaceKeys(fake).at(-1) })
 })
 
 // Carbon-4: a change a view makes to another mount is drawn: only the mount being drawn takes its own changes in.

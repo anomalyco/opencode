@@ -579,6 +579,7 @@ impl Node {
         split(value: Split) on Box: split = Some(value);
         height(rows: u16) on Scroll: height = Some(rows);
         follow() on Scroll: follow = true;
+        scrollbar() on Scroll: scrollbar = true;
         horizontal() on List: row = true;
         placeholder(value: impl Into<String>) on Input: placeholder = value.into();
         lines(rows: u16) on Input: lines = Some(rows);

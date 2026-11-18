@@ -1139,6 +1139,7 @@ fn tall_setup(setup: &mut abi::Setup) -> Result<(), String> {
             children: rows,
             notify_top: None,
             user_scroll: false,
+            scrollbar: false,
         };
         v2::Node::column(vec![scroll]).with_id("tall")
     };

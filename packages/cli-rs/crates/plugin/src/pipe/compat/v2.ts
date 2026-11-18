@@ -36,7 +36,6 @@ import { FenceRenderable } from "./renderables"
 import {
   claimTree,
   idOf,
-  legacy,
   missing,
   mount,
   rootOf,
@@ -226,7 +225,7 @@ export function context(base: Base, carrier: Carrier) {
     }
   })
   const idle = () => {
-    const live = new Set([...rendered.values(), ...(shown ? [shown.mounted] : []), ...layered].flatMap((at) => [...at.keys]))
+    const live = new Set([...rendered.values(), ...layered].flatMap((at) => [...at.keys]))
     return [...watched.keys()].filter(
       (key) => !live.has(key) && !key.startsWith("storage:") && !waiters.get(key)?.length,
     )
@@ -695,18 +694,20 @@ export function context(base: Base, carrier: Carrier) {
       else send()
     })
 
-  // `ui.dialog.show`: the plugin's own JSX in the host's live panel dialog (`Dialog::Panel`), the contract's dialog that
-  // shows a node, sent again under its key as the JSX changes. A bare panel: the host draws only the dialog's frame
-  // around it, as TS does; a close of it (escape, the backdrop, another dialog) calls `onClose`, as TS's
-  // `dialog.replace` does.
-  // Each `show` is a panel of its own key (carbon-3), so the host tells its open and its close apart from the one it
-  // replaced, which it changed in place under the same key.
+  // `ui.dialog.show`: the plugin's own JSX as the body of the host's dialog (contract ergonomics 2.7): a mount of the
+  // plugin's dialog surface, which renders it with the full tree, so its `<scrollbox>` scrolls and its `<input>` is a
+  // field that takes the focus. The host draws only the dialog's frame around it, as TS does; a close of it (escape,
+  // the backdrop, another dialog) calls `onClose`, as TS's `dialog.replace` does.
+  // Each `show` is a key of its own (carbon-3), which its mount's ID names, so the host tells its open and its close
+  // apart from the one it replaced, and the mount renders that show's JSX; a `dialog.set` changes its frame in place.
+  const DIALOG = "compat.dialog"
   let shows = 0
-  let shown: { mounted: Mounted; key: string; onClose?: () => void; opened: boolean; keys?: () => void } | undefined
+  let shown: { key: string; onClose?: () => void; opened: boolean; sent: boolean } | undefined
+  // The renders of the shows, by their key, until each closes.
+  const dialogs = new Map<string, () => unknown>()
   let presentation = { size: "medium", centered: false }
   // The dialog of `ask` the host shows, which a `dialog.set` after it no longer sizes.
   let sent = 0
-  let resend = false
   // A dialog's size and centering as the contract has them, left out while they are the host's own.
   const presented = () => ({
     ...(["large", "xlarge"].includes(presentation.size) ? { size: presentation.size } : {}),
@@ -716,62 +717,13 @@ export function context(base: Base, carrier: Carrier) {
     const was = shown
     shown = undefined
     if (!was) return
-    was.mounted.dispose()
-    was.keys?.()
-    presses.delete(was.key)
+    dialogs.delete(was.key)
     was.onClose?.()
   }
-  // A panel's body is a node of ABI 1.x, which has no scroll: a `<scrollbox>` in the dialog is a box that does not
-  // scroll (bigboi P8-6). While one shows, the keys that would scroll it say so, once, rather than do nothing.
-  const SCROLLS = `${id}.compat.dialog-scroll`
-  const scrolls = (node: Json): boolean => node?.type === "scroll" || (node?.children ?? []).some(scrolls)
   const sendShown = () => {
-    resend = false
     if (!shown) return
-    const key = shown.key
-    // As TS's boundary around a dialog, which clears it: a render that threw closes the dialog (carbon-3).
-    if (shown.mounted.crashed !== undefined) {
-      void carrier.effect({ type: "dialog", dialog: { type: "close", key } })
-      unshow()
-      return
-    }
-    missing.clear()
-    const reading = pressing(key)
-    let body: Json
-    try {
-      const tree = serialize(shown.mounted.root, reading)
-      if (scrolls(tree) && !shown.keys)
-        shown.keys = createRoot((dispose) => {
-          ctx.keymap.layer(() => ({
-            mode: "global",
-            commands: [
-              {
-                id: SCROLLS,
-                bind: "up,down,pageup,pagedown",
-                run: () => unsupported("scrolling a <scrollbox> in ui.dialog.show"),
-              },
-            ],
-          }))
-          return dispose
-        })
-      body = legacy(tree)
-    } catch (error) {
-      void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${error instanceof Error ? error.message : String(error)}` })
-      unshow()
-      return
-    }
-    for (const dropped of [...reading.dropped, ...missing]) unsupported(dropped)
-    missing.clear()
-    const size = ["large", "xlarge"].includes(presentation.size) ? presentation.size : "medium"
-    void carrier.effect({
-      type: "dialog",
-      dialog: { type: "panel", key, size, title: [], body, centered: presentation.centered, bare: true },
-    })
-  }
-  const panelChanged = () => {
-    if (!shown || resend) return
-    resend = true
-    queueMicrotask(sendShown)
+    shown.sent = true
+    void carrier.effect({ type: "dialog", dialog: { type: "surface", surface: DIALOG, key: shown.key, ...presented() } })
   }
   // A dialog of the plugin's own ends with its activation, and a dialog it asked answers nothing (carbon-5).
   carrier.cleanup?.(() => {
@@ -826,7 +778,7 @@ export function context(base: Base, carrier: Carrier) {
     taking()
     globalTaking?.()
   }
-  // cg2-1: a route's or panel's listener of every key (by surface name, its index) takes a key only while the field the
+  // cg2-1: a route's, a panel's or a dialog's listener of every key (by surface name, its index) takes a key only while the field the
   // plugin focused is in its tree and has an `onKeyDown`; the host holds a key for the answer only then, and otherwise
   // the key goes on at once.
   const fieldListeners = new Map<string, number>()
@@ -1057,6 +1009,8 @@ export function context(base: Base, carrier: Carrier) {
         return draw(cx)
       } finally {
         drawing = before
+        // As TS's boundary around a dialog, which clears it: a dialog whose render threw closes (carbon-3).
+        if (place.type === "dialog" && rendered.get(key(cx))?.crashed !== undefined) closeCrashed(cx.mount.key)
       }
     }
     const draw = (cx: Json) => {
@@ -1163,11 +1117,11 @@ export function context(base: Base, carrier: Carrier) {
         parked.set(slot, { entry, timer, focused })
       },
       on: (event: Json) => fieldEvent(name, event),
-      // A route or a panel holds the focus, and a field in it: each key while it does comes to the field the plugin
-      // focused, as its `onKeyDown`, which takes it or lets it go on.
-      ...(place.type === "route" || place.type === "panel" ? { layers: [{ scope: "surface", any: true }] } : {}),
+      // A route, a panel or a dialog holds the focus, and a field in it: each key while it does comes to the field the
+      // plugin focused, as its `onKeyDown`, which takes it or lets it go on.
+      ...(["route", "panel", "dialog"].includes(place.type) ? { layers: [{ scope: "surface", any: true }] } : {}),
     })
-    if ((place.type === "route" || place.type === "panel") && typeof index === "number") fieldListeners.set(name, index)
+    if (["route", "panel", "dialog"].includes(place.type) && typeof index === "number") fieldListeners.set(name, index)
     return () => {
       removed = true
       carrier.invalidate()
@@ -1192,6 +1146,15 @@ export function context(base: Base, carrier: Carrier) {
       },
     }
   }
+
+  // The plugin's dialog surface, which each `ui.dialog.show` mounts under its own key: the mount renders that show's
+  // JSX, and nothing once the show closed.
+  const closeCrashed = (key: string) => {
+    if (shown?.key !== key) return
+    void carrier.effect({ type: "dialog", dialog: { type: "close", key } })
+    unshow()
+  }
+  surface(DIALOG, { type: "dialog", name: DIALOG }, (cx) => ({ key: cx.mount.key }), (props: Json) => dialogs.get(props.key)?.(), "dialog")
 
   const slotInput = (path: string, surface = "") => (cx: Json) => {
     const slot = cx.input.slot ?? {}
@@ -1785,38 +1748,22 @@ export function context(base: Base, carrier: Carrier) {
           unshow()
           if (asking) void carrier.effect({ type: "dialog", dialog: { type: "close", key: "" } })
           presentation = { size: "medium", centered: false }
-          const crashed = (error: unknown) => {
-            const message = error instanceof Error ? error.message : String(error)
-            void carrier.effect({ type: "toast", variant: "error", title: "Plugin", message: `${id} crashed in dialog: ${message}` })
-          }
-          const provided = () =>
-            createComponent(PluginContext.Provider, {
-              value: ctx,
-              get children() {
-                return render()
-              },
-            })
-          const before = rendering
-          const reading = { pending: false, keys: new Set<string>() }
-          rendering = reading
-          try {
-            const key = `compat.dialog.${++shows}`
-            shown = {
-              mounted: mount(provided, screen, panelChanged, crashed, focus, undefined, (feature) => unsupported(feature)),
-              key,
-              onClose,
-              opened: false,
-            }
-          } finally {
-            rendering = before
-          }
-          shown.mounted.keys = reading.keys
-          untrack(() => read(`dialog-open:${shown!.key}`, { type: "dialog-open", key: shown!.key }))
-          sendShown()
+          const key = `compat.dialog.${++shows}`
+          dialogs.set(key, render)
+          shown = { key, onClose, opened: false, sent: false }
+          untrack(() => read(`dialog-open:${key}`, { type: "dialog-open", key }))
+          // Sent a microtask later, so a `dialog.set` right after sizes the dialog as it opens, as TS's sizes the
+          // dialog shown; a `show` or a `clear` before then sends nothing of this one.
+          queueMicrotask(() => {
+            if (shown?.key === key) sendShown()
+          })
         },
         set(options: Json) {
           presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
-          if (shown) sendShown()
+          // A dialog of the plugin's own shown already changes its frame in place; one not sent yet opens so.
+          if (shown) {
+            if (shown.sent) sendShown()
+          }
           // A select's, an alert's and a confirm's size and centering are the contract's (contract 2.x, addition 4): a
           // `dialog.set` right after them sizes the dialog, which is built a microtask later. One after the host showed
           // it is not carried: the contract's dialogs are whole values, and sent again it would answer nothing.

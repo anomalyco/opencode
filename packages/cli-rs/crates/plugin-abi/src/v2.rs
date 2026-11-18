@@ -150,6 +150,9 @@ pub enum Node {
         /// P3: the surface hears [`ScrollEvent::UserScroll`] when the user moves it.
         #[serde(default, skip_serializing_if = "is_false")]
         user_scroll: bool,
+        /// A scrollbar shows while its content overflows (TS's `<scrollbox>`).
+        #[serde(default, skip_serializing_if = "is_false")]
+        scrollbar: bool,
     },
     /// A patch in the host's diff view: its own highlighting, colors and line numbers. An added file over 3,000
     /// lines mounts its chunks near the view. 2.0 (P6c): `#[non_exhaustive]`: build it with [`Node::diff`] and the
@@ -873,6 +876,7 @@ impl Node {
             children,
             notify_top: None,
             user_scroll: false,
+            scrollbar: false,
         }
     }
 

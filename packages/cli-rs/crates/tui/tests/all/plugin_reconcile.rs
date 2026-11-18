@@ -505,6 +505,7 @@ impl Generator<'_> {
                 children: (0..self.rng.below(4)).map(|_| self.node(depth + 1)).collect(),
                 notify_top: None,
                 user_scroll: false,
+                scrollbar: self.chance(20),
             },
             _ => v2::Node::Markdown {
                 id: self.id(),
@@ -1283,6 +1284,7 @@ fn nested_scrolls(levels: usize) -> v2::Node {
         children: vec![inner],
         notify_top: None,
         user_scroll: false,
+        scrollbar: false,
     })
 }
 
@@ -1335,6 +1337,7 @@ fn rows_scroll(rows: usize, height: u16, layout: abi::Layout) -> v2::Node {
         children: rows,
         notify_top: None,
         user_scroll: false,
+        scrollbar: false,
     }
 }
 

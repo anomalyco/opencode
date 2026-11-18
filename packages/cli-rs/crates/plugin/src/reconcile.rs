@@ -718,11 +718,11 @@ impl Tree {
         let field = crate::loader::native::serves(abi::FOCUS_INPUT);
         fn walk(nodes: &[Mounted], field: bool, out: &mut Vec<String>) {
             for node in nodes.iter().filter(|node| !node.node.is_hidden()) {
-                // A box that asks for it, and a field with an id, which takes the focus as a click gives it
-                // (`abi::FOCUS_INPUT`).
+                // A box that asks for it, and a field or a scroll with an id, which takes the focus as a click gives it
+                // (`abi::FOCUS_INPUT`): a scroll with the focus scrolls on the arrows and the page keys.
                 let focusable = match &node.node {
                     Node::Box { id: Some(id), interact, .. } if interact.focusable => Some(id),
-                    Node::Input { id: Some(id), .. } if field => Some(id),
+                    Node::Input { id: Some(id), .. } | Node::Scroll { id: Some(id), .. } if field => Some(id),
                     _ => None,
                 };
                 out.extend(focusable.cloned());
@@ -1619,10 +1619,12 @@ impl Pass<'_, '_> {
                 }
                 Ok(old)
             }
-            (Node::Scroll { .. }, Node::Scroll { height, follow, children, .. }) => {
+            (Node::Scroll { .. }, Node::Scroll { height, follow, children, scrollbar, .. }) => {
                 let Extra::Scroll(scroll) = &old.extra else { unreachable!() };
                 let scroll = scroll.clone();
-                let Node::Scroll { height: was, follow: followed, layout, .. } = &old.node else { unreachable!() };
+                let Node::Scroll { height: was, follow: followed, layout, scrollbar: barred, .. } = &old.node else {
+                    unreachable!()
+                };
                 let Node::Scroll { layout: next, .. } = new else { unreachable!() };
                 if layout != next || was.is_some() != height.is_some() {
                     // Built again, it keeps where it was scrolled and the focus.
@@ -1639,11 +1641,11 @@ impl Pass<'_, '_> {
                     built.dynamic = built.children.iter().any(|child| child.dynamic);
                     return Err(Box::new((old, built)));
                 }
-                if was != height || followed != follow {
+                if was != height || followed != follow || barred != scrollbar {
                     if let Some(height) = height {
                         scroll.height(*height);
                     }
-                    scroll.sticky(*follow);
+                    scroll.sticky(*follow).scrollbars(*scrollbar);
                     count(|work| work.set += 1);
                 }
                 // `notify_top` and `user_scroll` are the behaviors' to read; no widget holds them.
@@ -2267,10 +2269,14 @@ impl Pass<'_, '_> {
                 let markdown = env.host.markdown(&text);
                 (markdown.as_any(), Extra::Markdown(markdown, text))
             }
-            Node::Scroll { height, follow, layout, .. } => {
+            Node::Scroll { height, follow, layout, scrollbar, .. } => {
                 // A scroll may be smaller than its content, as CSS's `overflow` makes `min-height: auto` zero; one that
                 // cannot shrink below its content takes the content's height, and every row is laid out and painted.
-                let scroll = ScrollBox::new(app).scrollbars(false).min_height(0);
+                // Its scrollbar in OpenTUI Core's own colors, as a TS plugin's `<scrollbox>` draws it.
+                let scroll = ScrollBox::new(app)
+                    .scrollbars(*scrollbar)
+                    .scrollbar_colors(Color::rgb(0x9a, 0x9e, 0xa3), Color::rgb(0x25, 0x25, 0x27))
+                    .min_height(0);
                 if let Some(height) = height {
                     scroll.height(*height).shrink(0.0);
                 }
@@ -2600,7 +2606,7 @@ fn shell(node: &Node) -> Node {
             interact: interact.clone(),
             visible: *visible,
         },
-        Node::Scroll { id, height, follow, layout, notify_top, user_scroll, .. } => Node::Scroll {
+        Node::Scroll { id, height, follow, layout, notify_top, user_scroll, scrollbar, .. } => Node::Scroll {
             id: id.clone(),
             height: *height,
             follow: *follow,
@@ -2608,6 +2614,7 @@ fn shell(node: &Node) -> Node {
             children: Vec::new(),
             notify_top: notify_top.clone(),
             user_scroll: *user_scroll,
+            scrollbar: *scrollbar,
         },
         Node::List { id, row, layout, notify_top, user_scroll, .. } => Node::List {
             id: id.clone(),

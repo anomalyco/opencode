@@ -27,6 +27,8 @@ const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input
 const UNSUPPORTED = new Set(["tab_select", "ascii_font", "diff", "line_number", "image", "video"])
 // The props whose setter turns a box's border on (OpenTUI's `initializeBorder`).
 const BORDER_ON = new Set(["borderStyle", "borderColor", "focusedBorderColor", "customBorderChars"])
+/// The tags whose `focused` prop takes the host's focus.
+const FOCUSED = new Set(["input", "textarea", "scrollbox"])
 // The events of a field the layer maps (CT-11).
 const FIELD_EVENTS = new Set(["onInput", "onChange", "onSubmit", "onKeyDown"])
 
@@ -414,9 +416,10 @@ const renderer = createRenderer<VNode>({
     if (!SPANS.has(node.tag) && name === "style") Object.assign(node.props, value ?? {})
     else node.props[name === "text" ? "content" : name] = value
     touch(node)
-    // A field's `focused` focuses it as it turns true, also as the field is created, and blurs it as it turns false, as
-    // OpenTUI's does; once the field is in its mount, a microtask later (contract 2.x, `focus-input`).
-    if (name === "focused" && (node.tag === "input" || node.tag === "textarea") && !!value !== !!was)
+    // A field's or a scroll box's `focused` focuses it as it turns true, also as it is created, and blurs it as it turns
+    // false, as OpenTUI's does; once it is in its mount, a microtask later (contract 2.x, `focus-input`). A focused
+    // scroll box scrolls on the arrows and the page keys (sidebar-prompt's dialog).
+    if (name === "focused" && FOCUSED.has(node.tag) && !!value !== !!was)
       queueMicrotask(() => (value ? node.focus() : node.blur()))
   },
   // A renderable the plugin built itself (`new BoxRenderable(…)`), which a render returned or a ref added, is inert and
@@ -606,26 +609,6 @@ export function claimTree(root: VNode, reading: Reading): Json {
 // The props of a node's layout ([`layoutOf`]).
 const LAYOUT = new Set(["width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight", "flexGrow", "flexShrink", "margin", "marginX", "marginY", "marginLeft", "marginRight", "marginTop", "marginBottom", "position", "top", "right", "bottom", "left", "zIndex"])
 
-// A 2.0 tree as the nodes of ABI 1.x a panel dialog's body takes: a scroll is a box (the panel's body scrolls), a code
-// view and a field their text, and the ids go.
-export function legacy(node: Json): Json {
-  const { id: _id, ...rest } = node
-  switch (node.type) {
-    case "box":
-      return { ...rest, children: node.children.map(legacy) }
-    case "scroll":
-      return compact({ type: "box", layout: node.layout, children: node.children.map(legacy) })
-    case "markdown":
-      return { type: "markdown", text: node.source.text }
-    case "code":
-      return compact({ type: "text", spans: [{ text: node.content.text }], layout: node.layout })
-    case "input":
-      return compact({ type: "text", spans: [{ text: node.value ?? node.placeholder ?? "" }], layout: node.layout })
-    default:
-      return rest
-  }
-}
-
 function nodes(children: VNode[], reading: Reading): Json[] {
   return children.flatMap((child) => {
     if (child.tag === "#text") {
@@ -660,6 +643,8 @@ function node(at: VNode, reading: Reading): Json {
         type: "scroll",
         id: idOf(at),
         follow: props.stickyScroll ? true : undefined,
+        // OpenTUI's scroll box shows its scrollbar while its content overflows, unless the plugin hides it.
+        scrollbar: props.scrollbarOptions?.visible === false || props.verticalScrollbarOptions?.visible === false ? undefined : true,
         layout,
         children: nodes(contentOf(at), reading),
       })
