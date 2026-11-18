@@ -32,7 +32,7 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   // links (`/go` about 75k requests a day, `/zen` 46k). Exact paths only: /zen/v1/* and /zen/go/v1/*
   // are the inference API, which a prefix match here would break.
   const moved = (request.locale ? localizedMoves : moves).get(request.path.replace(/(.)\/$/, "$1"))
-  if (moved && read) return redirect(302, `${moved}${request.search}`, "no-store")
+  if (moved && read) return redirect(301, `${moved}${request.search}`)
 
   // The legacy dashboard and its sign-in, now the Console. The V1 CLI's "create a key at /auth" and
   // V1's usage-limit link /workspace/<id>/go (about 50k requests a day).

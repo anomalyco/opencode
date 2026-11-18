@@ -7,10 +7,6 @@
   "observability": { "enabled": true },
   "workersDev": false,
   "previewUrls": false,
-  "env": {
-    "GITHUB_APP_ID": { "type": "secret" },
-    "GITHUB_APP_PRIVATE_KEY": { "type": "secret" }
-  },
   "manifest": {
     "type": "complete",
     "mainModule": "index.js",

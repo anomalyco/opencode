@@ -31,7 +31,6 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
-import { SubagentMetadata } from "@opencode/core/session/subagent-metadata"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
@@ -987,87 +986,6 @@ describe("SubagentTool reporting", () => {
       expect(reports).toHaveLength(1)
       expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="error"`)
       expect(reports[0]?.text).toContain("provider exploded")
-    }),
-  )
-
-  completionIt.live("keeps a silent child silent until a follow-up enables notify", () =>
-    Effect.gen(function* () {
-      const fixture = yield* reportingFixture()
-      const jobs = yield* Job.Service
-      const spawned = yield* fixture.call("call-silent-spawn", { notify: false })
-      const childID = outputSessionID(spawned.metadata)
-      expect(spawned.content).toEqual([
-        {
-          type: "text",
-          text: `The subagent is working in the background (sessionID: ${childID}) and will not notify you when it finishes, so you won't receive its result. Only use notify=false for work whose result you don't need. To send it more work, call subagent again with this sessionID.`,
-        },
-      ])
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-      expect(yield* fixture.notices).toEqual([])
-
-      // Omitted notify keeps the child silent across follow-ups.
-      const silent = yield* fixture.call("call-silent-follow", { sessionID: childID })
-      expect(silent.content).toEqual(spawned.content)
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({ "subagent.notify": false })
-      expect(yield* fixture.notices).toEqual([])
-
-      const loud = yield* fixture.call("call-loud-follow", { sessionID: childID, notify: true })
-      expect(loud.content).toEqual([
-        {
-          type: "text",
-          text: expect.stringContaining(
-            "You will receive a <subagent> message when it goes idle, and again after each later round of work.",
-          ),
-        },
-      ])
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-      expect((yield* fixture.sessions.get(childID)).metadata).toEqual({})
-      const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
-      expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
-      expect(yield* jobs.pendingBackground).toEqual([])
-    }),
-  )
-
-  completionIt.live("defaults a child of a silent parent to reporting", () =>
-    Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-      const sessions = yield* Session.Service
-      const parent = yield* sessions.create({
-        location,
-        model: parentModel,
-        metadata: { [SubagentMetadata.KEY]: false },
-      })
-      yield* withSubagent(parent.location)
-      const locations = yield* LocationServiceMap.Service
-      const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-
-      const spawned = yield* executeTool(registry, {
-        sessionID: parent.id,
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call-silent-parent-child",
-          name: SubagentTool.name,
-          input: { agent: "reviewer", description: "review", prompt: "review this" },
-        },
-      })
-      const childID = outputSessionID(spawned.metadata)
-      // The link switch belongs to the child's link, not to the parent's own metadata.
-      expect((yield* sessions.get(childID)).metadata).toBeUndefined()
-      yield* sessions.wait(childID)
-      yield* sessions.wait(parent.id)
-      const delivered = (yield* sessions.context(parent.id))
-        .filter((message) => message.type === "synthetic")
-        .filter((message) => message.metadata?.["source"] === "subagent")
-      expect(delivered).toHaveLength(1)
-      expect(delivered[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
     }),
   )
 })

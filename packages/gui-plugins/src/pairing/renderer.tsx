@@ -22,7 +22,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   ctx.add(SettingsPage, {
     id: "pairing",
-    icon: "outline-pair",
+    icon: ctx.icons.pair,
     get title() {
       return ctx.t("title")
     },

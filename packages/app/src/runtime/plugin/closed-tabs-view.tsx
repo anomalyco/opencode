@@ -8,6 +8,7 @@ import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { isIconName } from "@opencode/ui/icons/catalog"
+import { isRegisteredIconName } from "@opencode/ui/icons/registry"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
@@ -33,13 +34,18 @@ const SECTION_LIMIT = 5
 /** A closed tab's icon, title and, for a file, its folder. */
 function ClosedTabVisual(props: { entry: ClosedSideTab }): JSX.Element {
   const detail = () => (props.entry.file ? getDirectory(props.entry.file).replace(/\/$/, "") : props.entry.detail)
-  const icon = () => (props.entry.icon && isIconName(props.entry.icon) ? props.entry.icon : "file-document")
+
+  // The stored name: an app icon this build still has, or a plugin's own icon, which draws while that plugin is active.
+  const icon = () =>
+    props.entry.icon && (isIconName(props.entry.icon) || isRegisteredIconName(props.entry.icon))
+      ? props.entry.icon
+      : "file-document"
 
   return (
     <span class="flex min-w-0 items-center gap-1.5">
       <Show
         when={props.entry.file}
-        fallback={<Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />}
+        fallback={<Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />}
       >
         {(file) => (
           <FileIcon
@@ -112,7 +118,7 @@ export function ClosedTabsSection(props: { entries: readonly ClosedSideTab[]; on
             }}
           >
             {language.t("session.tab.showMore")}
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </button>
         </Show>
       </section>

@@ -12,7 +12,7 @@ const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 // through them the `Effect.fn` closures over its Location's services, so evicted Locations stayed alive.
 const jsonSchemas = new WeakMap<object, Schema.Codec<unknown> | undefined>()
 
-const codecFor = (schema: JsonSchema.JsonSchema) => {
+export const codecFor = (schema: JsonSchema.JsonSchema) => {
   if (jsonSchemas.has(schema)) return jsonSchemas.get(schema)
   const codec = Result.try(() => jsonSchema(schema)).pipe(Result.getOrUndefined)
   jsonSchemas.set(schema, codec)

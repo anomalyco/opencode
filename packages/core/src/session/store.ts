@@ -1,6 +1,6 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
@@ -75,8 +75,7 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.MediaInfo } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Recoverable background
-   * children are resumed separately through their durable Job records.
+   * Sessions holding an execution claim, including directly driven children.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
   /**
@@ -89,10 +88,9 @@ export interface Interface {
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
-   * Clears orphaned child claims except children owned by recoverable
-   * background subagent jobs.
+   * Release abandoned claims when the child's parent was deleted.
    */
-  readonly releaseChildClaims: (recoverable: ReadonlyArray<Session.ID>) => Effect.Effect<void>
+  readonly releaseOrphanedChildClaims: () => Effect.Effect<void>
   /**
    * Durably counts one more resume of an orphaned claim, returning the new
    * total — or undefined when the Session no longer exists.
@@ -161,7 +159,7 @@ const layer = Layer.effect(
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.search) conditions.push(sql`${SessionTable.title} GLOB ${titlePattern(input.search)}`)
         if (input.parentID !== undefined)
           conditions.push(
             input.parentID === null ? isNull(SessionTable.parent_id) : eq(SessionTable.parent_id, input.parentID),
@@ -243,7 +241,7 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(isNotNull(SessionTable.time_suspended))
           .all()
           .pipe(
             Effect.orDie,
@@ -270,15 +268,14 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
       }),
-      releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
+      releaseOrphanedChildClaims: Effect.fn("SessionStore.releaseOrphanedChildClaims")(() =>
         db
           .update(SessionTable)
           .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),
-              isNotNull(SessionTable.parent_id),
-              recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
+              notInArray(SessionTable.parent_id, db.select({ id: SessionTable.id }).from(SessionTable)),
             ),
           )
           .run()
@@ -302,3 +299,20 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+
+// SQLite's LIKE folds case for ASCII only, and none of our drivers (bun, node, Durable Objects) ships ICU or lets us
+// register a lowercase function everywhere. GLOB is case-sensitive but supports character classes, so each cased
+// letter becomes a class of its single-character case forms ("т" -> "[тТ]"). The LIKE wildcards % and _ keep their
+// meaning, and GLOB metacharacters are wrapped in a class so they stay literal as they were under LIKE.
+function titlePattern(search: string) {
+  const chars = Array.from(search, (char) => {
+    if (char === "%") return "*"
+    if (char === "_") return "?"
+    const cases = new Set(
+      [char, char.toLowerCase(), char.toUpperCase()].filter((form) => Array.from(form).length === 1),
+    )
+    if (cases.size > 1) return `[${[...cases].join("")}]`
+    return "*?[".includes(char) ? `[${char}]` : char
+  })
+  return `*${chars.join("")}*`
+}

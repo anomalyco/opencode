@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Serwer goşuň",
   "menu.delete": "Poz",
+  "error.unavailable": "SSH elýeterli däl",
 }

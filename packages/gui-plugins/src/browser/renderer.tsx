@@ -28,6 +28,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
@@ -160,6 +161,23 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       editable: true,
       enabled: pane.visible(),
       run: pane.focusAddress,
+    }
+  })
+
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane || !viewportToolbarAvailable(ctx.app.channel)) return undefined
+
+    return {
+      id: "toggleToolbar",
+      title: ctx.t("command.toggleToolbar"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+shift+m",
+      // Browser menus and popovers take keyboard focus in a portal outside the panel.
+      scope: "#browser-panel, [data-browser-popup]",
+      enabled: pane.visible() && pane.inspectable(),
+      run: pane.toggleToolbar,
     }
   })
 

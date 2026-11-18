@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Næste",
   "releaseNotes.action.hideFuture": "Vis ikke disse i fremtiden",
   "releaseNotes.media.alt": "Forhåndsvisning af udgivelse",
+  "action.reload": "Genindlæs for at opdatere",
+  "action.reloading": "Genindlæser…",
+  "web.ready.title": "Opdatering klar",
+  "web.ready.message": "En ny version af OpenCode er klar. Genindlæs for at bruge den i alle åbne vinduer.",
+  "web.reload": "Genindlæs",
+  "web.reset.title": "Genindlæs fra server",
+  "web.reset.description": "Ryd den gemte kopi af appen, og indlæs serverens aktuelle version",
+  "web.reset.action": "Genindlæs fra server",
 }

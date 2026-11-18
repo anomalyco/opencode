@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "Tidsgränsen för {{command}} {{args}} överskreds efter {{timeout}} ms",
   "error.failedPort": "Det gick inte att hämta porten",
   "menu.remove": "Ta bort",
+  "error.busy": "{{distro}} är upptagen med en annan uppgift. Försök igen när den är klar.",
 }

@@ -22,6 +22,11 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import scheduleMigration from "@opencode/core/database/migration/20261026223005_schedule"
+import scheduleChecksMigration from "@opencode/core/database/migration/20261029165540_schedule_checks"
+import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
+import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
+import automationActiveIndex from "@opencode/core/database/migration/20261116213417_automation_active_index"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -448,6 +453,73 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("moves plain live schedules to automations and drops the schedule table", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE session_v2 (id text PRIMARY KEY, project_id text NOT NULL, directory text NOT NULL)`,
+        )
+        yield* db.run(sql`INSERT INTO session_v2 VALUES ('ses_1', 'prj_1', '/repo')`)
+        yield* DatabaseMigration.applyOnly(db, [scheduleMigration, scheduleChecksMigration])
+        const insert = (
+          id: string,
+          when: string,
+          extra: { status?: string; check?: string; remaining?: number; name?: string } = {},
+        ) =>
+          db.run(sql`
+            INSERT INTO schedule (id, session_id, name, action, "when", tz, status, next_due_at, remaining_runs, "check", run_count, last_message_id, time_created, time_updated)
+            VALUES (${id}, 'ses_1', ${extra.name ?? null}, '{"type":"prompt","prompt":"check the build"}', ${when}, 'UTC', ${extra.status ?? "active"}, 60000, ${extra.remaining ?? null}, ${extra.check ?? null}, 2, ${`msg_${id}_2`}, 1, 2)
+          `)
+        yield* insert("sch_cron", '{"type":"cron","cron":"0 9 * * *"}', { name: "morning" })
+        yield* insert("sch_in", '{"type":"in","in":"1 minute"}', { status: "paused" })
+        yield* insert("sch_gated", '{"type":"every","every":"1 minute"}', {
+          check: '{"mode":"if","condition":{"type":"shell","run":"true"}}',
+        })
+        yield* insert("sch_counted", '{"type":"every","every":"1 minute"}', { remaining: 2 })
+        yield* insert("sch_done", '{"type":"every","every":"1 minute"}', { status: "done" })
+
+        yield* DatabaseMigration.applyOnly(db, [automationMigration, automationEventPosition, automationActiveIndex])
+
+        expect(
+          yield* db.all(
+            sql`SELECT id, project_id, session_id, directory, name, "trigger", action, status, next_due_at, run_count, last_message_id, event_position FROM automation ORDER BY id`,
+          ),
+        ).toEqual([
+          {
+            id: "aut_cron",
+            project_id: "prj_1",
+            session_id: "ses_1",
+            directory: "/repo",
+            name: "morning",
+            trigger: '{"type":"cron","cron":"0 9 * * *"}',
+            action: '{"type":"prompt","prompt":"check the build","to":{"session":"ses_1"}}',
+            status: "active",
+            next_due_at: 60000,
+            run_count: 2,
+            last_message_id: "msg_sch_cron_2",
+            event_position: null,
+          },
+          {
+            id: "aut_in",
+            project_id: "prj_1",
+            session_id: "ses_1",
+            directory: "/repo",
+            name: "check the build",
+            trigger: '{"type":"at","at":"1970-01-01T00:01:00.000Z"}',
+            action: '{"type":"prompt","prompt":"check the build","to":{"session":"ses_1"}}',
+            status: "paused",
+            next_due_at: 60000,
+            run_count: 2,
+            last_message_id: "msg_sch_in_2",
+            event_position: null,
+          },
+        ])
+        expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'schedule%'`)).toEqual([])
+      }),
+    )
+  })
+
   test("imports legacy JSON credentials without changing the source file or existing credentials", async () => {
     await using tmp = await tmpdir()
     const source = path.join(tmp.path, "auth.json")
@@ -551,6 +623,22 @@ describe("DatabaseMigration", () => {
       }),
       Global.make({ data: tmp.path }),
     )
+  })
+
+  test("leaves legacy credentials out of in-memory databases", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(
+      path.join(tmp.path, "auth.json"),
+      JSON.stringify({ openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123 } }),
+    )
+
+    const rows = await Effect.runPromise(
+      Database.Service.use((database) => database.db.all(sql`SELECT id FROM credential`)).pipe(
+        Effect.provide(Database.layer({ path: ":memory:" })),
+        Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+      ),
+    )
+    expect(rows).toEqual([])
   })
 
   test("bootstraps a fresh database when the legacy credential file is malformed", async () => {

@@ -29,7 +29,6 @@ import path from "path"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
-import { SubagentMetadata } from "./session/subagent-metadata.js"
 import {
   AttachmentError,
   BusyError,
@@ -212,6 +211,8 @@ export interface Interface {
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
+    /** A bounded durability step after successful admission and wake, in the same interruption mask. */
+    onAccepted?: Effect.Effect<void>,
   ) => ReturnType<Session.Handle["prompt"]>
   /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
   readonly generate: (input: {
@@ -313,9 +314,7 @@ const layer = Layer.effect(
               agent: input.agent,
               // Children inherit metadata and permissions the way they inherit
               // location, so host policies that read them treat the family uniformly.
-              // The per-link subagent switch is not host metadata, though: a silent
-              // child must not silence the sessions created beneath it.
-              metadata: input.metadata ?? SubagentMetadata.inherit(parent?.metadata),
+              metadata: input.metadata ?? parent?.metadata,
               permissions: input.permissions ?? parent?.permissions,
               model: input.model,
             },
@@ -495,7 +494,7 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
+      prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
