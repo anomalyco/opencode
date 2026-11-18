@@ -2231,7 +2231,18 @@ fn loopback_with(
     create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
     describe: unsafe extern "C" fn(*mut Owned) -> i32,
 ) -> Result<(Definition, ErrorFn), String> {
-    let api = PluginApi {
+    let api = sdk_table(create, describe);
+    // The shims would silence the process's panic hook on their first `create`, as a plugin's own std does; the process
+    // here keeps its own. Taking and setting the hook around each load would race other threads' loads.
+    abi::runtime::keep_panic_hook();
+    Library::from_table(&api).and_then(|library| define(library, None))
+}
+
+fn sdk_table(
+    create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
+    describe: unsafe extern "C" fn(*mut Owned) -> i32,
+) -> PluginApi {
+    PluginApi {
         size: size_of::<PluginApi>(),
         major: ABI_MAJOR,
         minor: ABI_MINOR,
@@ -2241,11 +2252,7 @@ fn loopback_with(
         destroy: Some(abi::runtime::destroy),
         free: Some(abi::runtime::free),
         describe: Some(describe),
-    };
-    // The shims would silence the process's panic hook on their first `create`, as a plugin's own std does; the process
-    // here keeps its own. Taking and setting the hook around each load would race other threads' loads.
-    abi::runtime::keep_panic_hook();
-    Library::from_table(&api).and_then(|library| define(library, None))
+    }
 }
 
 /// The definition of the plugin whose table `api` is, as a library's: the conformance tests' reference and the plugin

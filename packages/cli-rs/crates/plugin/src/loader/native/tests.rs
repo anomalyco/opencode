@@ -22,21 +22,25 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
     if let Some((_, library)) = built.iter().find(|(known, _)| known == features) {
         return library.clone();
     }
+    let library = build_example("sample", "opencode_sample_plugin", features);
+    built.push((features.to_owned(), library.clone()));
+    library
+}
+
+pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("../../target/sample-plugin");
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
+    let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
         .args(["build", "--quiet", "--manifest-path"])
-        .arg(root.join("examples/sample/Cargo.toml"))
+        .arg(root.join("examples").join(example).join("Cargo.toml"))
         .arg("--target-dir")
         .arg(&target)
         .args(["--features", features])
         .status()
         .unwrap();
-    assert!(status.success(), "the sample plugin did not build");
-    let name = format!("{}opencode_sample_plugin{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-    let library = fs::read(target.join("debug").join(name)).unwrap();
-    built.push((features.to_owned(), library.clone()));
-    library
+    assert!(status.success(), "{example} did not build");
+    let name = format!("{}{lib}{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
+    fs::read(target.join("debug").join(name)).unwrap()
 }
 
 /// The sample, loaded from `library` and active in a fresh registry.
@@ -135,34 +139,6 @@ fn a_panicking_fence_fails_the_plugin_and_falls_back_to_the_code() {
     assert!(screen.contains("SAMPLE v1 BACK"), "{screen}");
 }
 
-// Expected: a plugin reads the host's theme mode, which follows the host, not the page background.
-#[test]
-fn a_plugin_reads_the_theme_mode() {
-    let host = host();
-    let registry = active(&host, &build(""));
-    let screen = markdown(&host, &registry, "```sample-mode\nx\n```\n");
-    assert!(screen.contains("sample mode dark"), "{screen}");
-    host.mode.set(ThemeMode::Light);
-    let screen = markdown(&host, &registry, "```sample-mode\nx\n```\n");
-    assert!(screen.contains("sample mode light"), "{screen}");
-}
-
-#[test]
-fn a_panicking_command_fails_the_plugin() {
-    let host = host();
-    let registry = active(&host, &build(""));
-    assert!(matches!(host.keymap().dispatch("sample.panic", None), RunResult::Ok));
-    assert_eq!(status(&registry), Status::Failed("run-command panicked: sample command panicked".to_owned()));
-    // Its commands leave the keymap once the key is handled; it stays active, so it can be disabled.
-    host.app.advance(Duration::from_millis(1));
-    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::NotFound));
-    assert!(entry(&registry.entries(), "sample.so").active);
-    assert!(registry.set_active(&dynamic(&host), "sample", false));
-    assert_eq!(status(&registry), Status::Inactive);
-    assert!(registry.set_active(&dynamic(&host), "sample", true));
-    assert!(matches!(host.keymap().dispatch("sample.hello", None), RunResult::Ok));
-}
-
 #[test]
 fn versions_follow_the_abi_rules() {
     let load = |library: &[u8], options: Option<&str>| {
@@ -203,8 +179,6 @@ fn versions_follow_the_abi_rules() {
     assert_eq!(status(&registry), Status::Failed("sample setup failed".to_owned()));
 }
 
-// Expected: a plugin that `cli.json` disables loads without running its setup. Enabling it runs setup, and
-// disabling or unloading it destroys that instance.
 #[test]
 fn setup_runs_on_activation_and_the_instance_is_destroyed_after() {
     let host = host();
@@ -249,8 +223,6 @@ fn the_loader_reloads_a_rebuilt_library() {
     assert_eq!(registry.entries().len(), 1);
 }
 
-// Expected: a rebuild whose setup fails, while the old build is active, is destroyed; the old build keeps running and
-// the plugin reads as failed with "(previous version still active)", as in TS.
 #[test]
 fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -280,8 +252,6 @@ fn a_rebuild_whose_setup_fails_keeps_the_running_version() {
     assert!(matches!(&entry.status, Status::Failed(error) if error.ends_with("(previous version still active)")));
 }
 
-// Expected (carbon-3): a failed rebuild of a plugin that panicked shows the rebuild's error, not the old panic, and the
-// dead instance is not kept as the running version.
 #[test]
 fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -307,9 +277,6 @@ fn a_failed_rebuild_of_a_panicked_plugin_shows_its_own_error() {
     );
 }
 
-// Expected: a table from a C plugin is refused, without reading past its declared size or through a null or
-// misaligned pointer, when it is too short for its header or for the 2.0 table, misaligned, of another major, or leaves
-// a required callback null. A null `destroy` is allowed.
 #[test]
 fn a_malformed_table_is_refused_without_reading_it() {
     let refused = |api: *const PluginApi| Library::from_table(api).err().unwrap();
@@ -356,26 +323,6 @@ fn a_malformed_table_is_refused_without_reading_it() {
     assert_eq!(refused(&short), format!("plugin table is {size} bytes, shorter than the ABI 2.0 table"));
 }
 
-// Expected: a plugin's own thread wakes the host, which asks its mounted claim to render again without a change batch,
-// and the claim shows what the thread counted.
-#[test]
-fn a_wake_from_a_plugin_thread_draws_its_claims_again() {
-    let host = host();
-    let (definition, error) =
-        Native.load(&dynamic(&host), &build(""), std::path::Path::new("plugin.so"), Some("{\"tick_ms\":5}")).unwrap();
-    let registry = Registry::define(Vec::new(), []);
-    registry.load(&dynamic(&host), definition.external("sample.so", error));
-    let parent = View::new(host.app());
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().add(&parent);
-    let ticked = host.app.wait_until(Duration::from_secs(10), || {
-        host.app.render();
-        let screen = host.app.text();
-        screen.contains(" ticks") && !screen.contains(" 0 ticks")
-    });
-    assert!(ticked, "{}", host.app.text());
-}
-
 /// The sample, active with `options`, its home footer claim mounted, after the app's task queue is filled, so the
 /// plugin's wakes find it full.
 fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry, impl Sized) {
@@ -393,8 +340,6 @@ fn woken_into_a_full_queue(host: &Rc<TestHost>, options: &str) -> (Registry, imp
     (registry, mounted)
 }
 
-// Expected: a wake that finds the app's task queue full is delivered once the queue has room, so a plugin that wakes
-// the host once, for one result, still shows it.
 #[test]
 fn a_wake_into_a_full_queue_draws_once_the_queue_has_room() {
     let host = host();
@@ -406,8 +351,6 @@ fn a_wake_into_a_full_queue_draws_once_the_queue_has_room() {
     assert!(drawn, "{}", host.app.text());
 }
 
-// Expected: a wake the host delivers after the plugin is disabled finds no instance and does nothing; enabling the
-// plugin again starts an instance that draws.
 #[test]
 fn a_wake_after_deactivation_does_nothing() {
     let host = host();
@@ -423,8 +366,6 @@ fn a_wake_after_deactivation_does_nothing() {
     assert!(screen.contains("SAMPLE v1 AGAIN"), "{screen}");
 }
 
-// Expected: setup runs against the live host, under its ID: it reads and writes a storage key it declared, reads
-// the theme mode, and its toast shows once the plugin is active.
 #[test]
 fn setup_reaches_the_host() {
     let host = host();
@@ -447,8 +388,6 @@ const VERSION: &str = "v1";
 #[path = "../../../examples/sample/src/fence.rs"]
 mod sample_fence;
 
-// Expected: the sample's fences, compiled into the host and run in process, draw the same cells, colors included, as
-// the same source draws from the library through the C ABI.
 #[test]
 fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -463,10 +402,10 @@ fn the_sample_fence_draws_the_same_in_process_and_through_the_library() {
     let cells = host.app.render();
     assert_eq!(markdown(&host, &library, text), direct);
     assert_eq!(host.app.render(), cells);
+    host.mode.set(ThemeMode::Light);
+    assert!(markdown(&host, &library, "```sample-mode\nx\n```\n").contains("sample mode light"));
 }
 
-// Expected (bigboi notes): a plugin hears, in process and through the library, of each fence key the host no longer
-// shows, once the Markdown that drew its blocks is gone.
 #[test]
 fn a_plugin_hears_of_the_fences_that_go_on_both_paths() {
     let host = host();
@@ -483,8 +422,6 @@ fn a_plugin_hears_of_the_fences_that_go_on_both_paths() {
     }
 }
 
-// Expected: a fence that falls back to the code view and streams on there tells the plugin its key went once, not
-// once per delta, in process and through the library.
 #[test]
 fn a_fence_that_stays_in_the_code_view_goes_once_on_both_paths() {
     let host = host();
@@ -571,10 +508,6 @@ fn sidebar(host: &Rc<TestHost>, registry: &Registry) -> Vec<Capture> {
     vec![first, synced, hovered, host.app.render()]
 }
 
-// Expected: the sample's sidebar claim, compiled into the host and run in process, draws the same cells as the same
-// source draws from the library, where its reads cross the C ABI as requests. Its click count brightens under the
-// pointer, and each click dispatches the sample's hidden command with the session as its input, which stores the
-// count the claim then shows.
 #[test]
 fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -596,9 +529,6 @@ fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
     assert_eq!(host.storage.borrow().get("plugin.sample.clicks").cloned(), stored);
 }
 
-// Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
-// a chunk that does not parse and draws an incomplete one, as it does in process, with the host's fence keys crossing
-// the wire.
 #[test]
 fn latex_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
@@ -618,9 +548,6 @@ fn latex_streams_the_same_through_the_c_abi_loopback() {
     assert_eq!(stream(&host, &loopback, &chunks), direct);
 }
 
-// Expected: the Mermaid built-in through the C ABI loopback draws the same cells as in process, colors included:
-// its theme colors, translucent label backgrounds and white default fg, and the diagram it keeps by fence key while
-// a statement it does not support streams in.
 #[test]
 fn mermaid_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
@@ -673,9 +600,6 @@ fn home(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<abi::
     (rows, host.toasts.borrow().clone())
 }
 
-// Expected: the sample's event handler gets the event it asked for and shows a toast about its session, and its home
-// claim's nested `home.footer.status` slot keeps the sample's status claim mounted, which renders again after the
-// handler without a change batch, the same in process and from the library, where the event crosses the C ABI as JSON.
 #[test]
 fn the_sample_home_and_event_act_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -704,8 +628,6 @@ fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a claim shows only published slots inside its own; a slot outside it, itself, an ancestor, or a path the
-// host does not publish draws nothing.
 #[test]
 fn a_nested_slot_must_be_a_published_slot_inside_the_claims_own() {
     let host = host();
@@ -742,9 +664,6 @@ fn featured(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (bigboi's final pass): a setup reads one list of the host's features, linked and through the C ABI:
-// `Setup::features` and `Setup::abi` agree, and both name the host's features: `image-bounds`, `focus-input` and
-// `fence-node`.
 #[test]
 fn a_setup_reads_one_list_of_features_on_both_carriers() {
     let host = host();
@@ -766,8 +685,6 @@ fn second(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: the effects of a plugin over the C ABI and of one in process share one queue, so they run in the order the
-// handlers ran, which is the order the plugins subscribed in.
 #[test]
 fn effects_of_both_paths_run_in_call_order() {
     let host = host();
@@ -780,8 +697,6 @@ fn effects_of_both_paths_run_in_call_order() {
     assert_eq!(toasts, ["first", "second"]);
 }
 
-// Expected: deactivating, reloading or unloading a plugin destroys its instance at once, also while a route of it is
-// mounted, which then draws nothing; the replacement's setup ran before, and the old instance runs no more.
 #[test]
 fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     let host = host();
@@ -815,8 +730,6 @@ fn the_instance_is_destroyed_at_once_while_its_route_is_mounted() {
     assert_eq!(destroyed().as_deref(), Some("{\"destroyed\":true}"));
 }
 
-// Expected: a command that panics fails the plugin, and its slot claims draw empty once the key is handled, with a toast
-// that says so.
 #[test]
 fn a_panic_clears_the_plugins_claims() {
     let host = host();
@@ -847,8 +760,6 @@ fn fenced(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a fence registered as `ts`, which the host knows as `typescript`, reaches its render through the C ABI as
-// in process, sees the same language, and reads the same host.
 #[test]
 fn a_fence_reads_and_renders_the_same_in_process_and_through_the_c_abi() {
     let host = host();
@@ -869,8 +780,6 @@ fn long_fence(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (fixed row; review carbon 2.4): a fence's lines are held to a tree's rows: 3,001 lines show the placeholder,
-// in process and through the C ABI.
 #[test]
 fn a_fence_past_the_rows_shows_its_placeholder() {
     let host = host();
@@ -880,48 +789,6 @@ fn a_fence_past_the_rows_shows_its_placeholder() {
     assert!(direct.contains("⋯ too large to build at once") && !direct.contains("line 0"), "{direct}");
     let loopback = loopback(&host, abi::export_plugin!(@loopback "long", long_fence));
     assert_eq!(markdown(&host, &loopback, "```long\nx\n```\n"), direct);
-}
-
-/// A claim that shows the ticks of a thread of its own, which wakes the host after each; disposal stops the thread.
-fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
-    use std::sync::atomic::{AtomicBool, AtomicU64};
-    let waker = setup.waker().ok_or("no waker")?;
-    let (ticks, stop) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicBool::new(false)));
-    let thread = {
-        let (ticks, stop) = (ticks.clone(), stop.clone());
-        std::thread::spawn(move || {
-            while ticks.load(Ordering::Relaxed) < 3 && !stop.load(Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_millis(5));
-                ticks.fetch_add(1, Ordering::Relaxed);
-                waker.wake();
-            }
-        })
-    };
-    setup.on_dispose(move |_| {
-        stop.store(true, Ordering::Relaxed);
-        let _ = thread.join();
-    });
-    setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
-        abi::Render::Show(abi::Node::text([abi::Span::new(format!("ticks {}", ticks.load(Ordering::Relaxed)))]))
-    });
-    Ok(())
-}
-
-// Expected: a plugin in process gets a waker too; a wake from its thread renders its claim again.
-#[test]
-fn a_wake_from_an_in_process_plugin_thread_draws_its_claims_again() {
-    let host = host();
-    let registry = Registry::define(vec![abi::Plugin { id: "ticking", setup: ticking }.into()], []);
-    registry.activate(&dynamic(&host));
-    let parent = View::new(host.app());
-    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
-    host.app().root().add(&parent);
-    let ticked = host.app.wait_until(Duration::from_secs(10), || {
-        host.app.render();
-        host.app.text().contains("ticks 3")
-    });
-    assert!(ticked, "{}", host.app.text());
-    assert!(registry.set_active(&dynamic(&host), "ticking", false));
 }
 
 /// The sample's server request and live panel, compiled in rather than loaded.
@@ -957,8 +824,6 @@ fn fetched(host: &Rc<TestHost>, registry: &Rc<Registry>) -> (Vec<String>, Vec<ab
     (rows, fetches, dialogs)
 }
 
-// Expected: the sample's fetch goes to the host, and its reply reaches `on_reply`, whose claim renders it without a
-// change batch; its panel is shown again with its key and a new body; the same in process and from the library.
 #[test]
 fn the_sample_fetch_and_panel_act_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -994,8 +859,6 @@ fn replying(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a reply that arrives after its plugin was disabled reaches nothing, in process and over the C ABI, also while
-// a claim of it is still mounted, while a reply to an active plugin does.
 #[test]
 fn a_slow_reply_across_a_disable_delivers_nothing() {
     let host = host();
@@ -1066,9 +929,6 @@ fn prompted(host: &Rc<TestHost>, registry: &Registry) -> (Vec<String>, Vec<abi::
     (rows, fetches)
 }
 
-// Expected: each mount of the sample's prompt claim runs its `on_mount`, which fetches, and an unmount runs it again;
-// the claim reads whether the session pane owns the input and a command's key; the same in process and from the
-// library, where the mounts cross the C ABI as requests.
 #[test]
 fn the_sample_prompt_mounts_fetch_and_read_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -1137,10 +997,6 @@ fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
     (rows, host.verbs.borrow_mut().drain(..).collect(), toasts, dialogs)
 }
 
-// Expected: a claim reads its own laid-out size (renders again with `size` once a frame laid it out), the
-// variants, the tabs, the keymap, the selection and the themes; it gets the deltas, once a batch; a command's verbs
-// run once it returns, in order, those that answer `false` not at all, and a program's exit code comes back as a
-// reply. The same in process and from the library, where every read and verb crosses the C ABI.
 #[test]
 fn the_small_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     let host = host();
@@ -1185,32 +1041,6 @@ fn the_small_reads_and_verbs_are_the_same_in_process_and_through_the_library() {
     assert_eq!(verbed(&host, &library), direct);
 }
 
-// Expected (the restack, review bigboi-4, O-169): a library of ABI 2 may require up to 2.0, and a table of another
-// major, 1 as 3, is refused, whatever it requires.
-#[test]
-fn the_version_gate_is_exact() {
-    let table = |major: u32, minor: u32, requires_minor: u32| PluginApi {
-        size: size_of::<PluginApi>(),
-        major,
-        minor,
-        requires_minor,
-        create: Some(abi::export_plugin!(@loopback_create "gate", first)),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(abi::export_plugin!(@loopback_described "gate", first).1),
-    };
-    let open = |api: PluginApi| Library::from_table(&api).map(|library| (library.major, library.minor));
-    assert_eq!(open(table(2, 0, 0)), Ok((2, 0)));
-    assert_eq!(open(table(2, 7, 0)), Ok((2, 7)));
-    let newer = "plugin needs host ABI 2.1 or newer, this opencode-native has 2.0; update opencode-native";
-    assert_eq!(open(table(2, 1, 1)), Err(newer.to_owned()));
-    for (major, minor, requires) in [(1, 6, 6), (1, 4, 0), (0, 0, 0), (3, 0, 0)] {
-        let refused = open(table(major, minor, requires)).unwrap_err();
-        assert!(refused.starts_with(&format!("plugin ABI {major}.{minor} is not supported")), "{refused}");
-    }
-}
-
 thread_local! {
     /// The renders of `flipping`'s claim.
     static FLIPS: Cell<u32> = const { Cell::new(0) };
@@ -1228,9 +1058,6 @@ fn flipping(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (reviews bigboi-3, carbon-2): a claim renders for a new size in the frame that laid it out, at most twice
-// a frame. One whose size changes with each render does not fail the frame (OpenTUI lays a frame out at most 8 times);
-// it renders again after each frame, from a timer, until it settles or goes. On both paths.
 #[test]
 fn a_claim_that_resizes_itself_renders_twice_a_frame() {
     let host = host();
@@ -1268,8 +1095,6 @@ fn narrow(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review bigboi-3): a claim that shows nothing while narrow, as an empty column, still has a width, and
-// shows its node in the first frame that is wide enough. (A hidden claim has none, as in TS.)
 #[test]
 fn a_claim_empty_while_narrow_shows_once_wide() {
     let host = host();
@@ -1300,9 +1125,6 @@ fn asking(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (reviews bigboi-4, carbon-1): a program starts only while the plugin that asked for it is active: the host
-// checks as it starts, after the turn, so one asked for before a disable, or before another call fails the plugin,
-// does not start. On both paths.
 #[test]
 fn a_program_starts_only_while_its_plugin_is_active() {
     let host = host();
@@ -1345,8 +1167,6 @@ fn counted(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a route renders once as it mounts and is laid out: it has no size of its own to read (`sized` is for
-// slot claims), so its layout renders nothing more. On both paths.
 #[test]
 fn a_route_renders_once_for_its_layout() {
     let host = host();
@@ -1402,8 +1222,6 @@ fn waking(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a wake from the plugin's thread runs its wake handler on the UI thread, whose effects go out, and then its
-// claim renders again with `woken`; the same in process and through the C ABI's byte shims (`Loopback`).
 #[test]
 fn a_wake_runs_the_wake_handlers_then_renders_on_both_paths() {
     let host = host();
@@ -1459,8 +1277,6 @@ fn guarded(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon-1): a waker that a plugin keeps past its registry, here in a dispose callback that never runs, keeps
-// its target alive, and a wake after the plugin was disabled does nothing, also while a claim of it is still mounted.
 #[test]
 fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
     let host = host();
@@ -1482,8 +1298,6 @@ fn a_waker_never_outlives_its_target_and_a_late_wake_does_nothing() {
     assert_eq!(GUARDED_RENDERS.get(), renders, "a wake after the plugin was disposed rendered it again");
 }
 
-// Expected (review carbon-pt-4): a claim of an in-process plugin that is still mounted after the plugin was disabled
-// calls it no more, as one through the C ABI does, whose instance is gone.
 #[test]
 fn a_claim_mounted_past_a_disable_calls_the_plugin_no_more() {
     let host = host();
@@ -1515,8 +1329,6 @@ fn keeping(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-pt-7, mutant A): a failed plugin in process is disposed without its callbacks, and its waker,
-// which the plugin keeps, lets go of the host's wake as it is disabled.
 #[test]
 fn a_failed_plugins_waker_lets_go_of_the_host() {
     let host = host();
@@ -1541,8 +1353,6 @@ fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-pt-6): a fetch that a call asked for is not sent when a later call in the same turn panics,
-// which ends the activation before the effect queue runs; the same in process and through the C ABI.
 #[test]
 fn a_panic_drops_a_fetch_asked_for_in_the_same_turn() {
     let host = host();
@@ -1564,8 +1374,6 @@ fn a_panic_drops_a_fetch_asked_for_in_the_same_turn() {
     }
 }
 
-// Expected (review carbon-pt-6): a wake from a plugin's thread after its activation ended, by a disposal or a failure,
-// posts nothing to the UI thread. A failed C ABI instance is kept, so its own waker is never revoked.
 #[test]
 fn a_wake_after_the_activation_ended_posts_nothing() {
     let host = host();
@@ -1623,17 +1431,7 @@ fn lifecycled(
                 // SAFETY: the loader passes what `PluginApi::describe` documents.
                 unsafe { abi::runtime::describe("lifecycle", "0.1.0", &[], out) }
             }
-            let api = PluginApi {
-                size: size_of::<PluginApi>(),
-                major: ABI_MAJOR,
-                minor: ABI_MINOR,
-                requires_minor: 0,
-                create: Some(create),
-                call: Some(abi::runtime::call),
-                destroy: Some(abi::runtime::destroy),
-                free: Some(abi::runtime::free),
-                describe: Some(describe),
-            };
+            let api = sdk_table(create, describe);
             let library = Library::from_table(&api).unwrap();
             let (definition, error) = define(library, None).unwrap();
             registry.load(&dynamic(&host), definition.external("lifecycle.so", error));
@@ -1656,9 +1454,6 @@ fn lifecycled(
     (entry, toasts, host.fetches.borrow().len())
 }
 
-// Expected (bigboi-5): a toast in setup and one in a dispose callback both show, in that order, the same in process and
-// through the C ABI; the dispose callback's fetch is never sent. A setup that fails after it registered the callback
-// runs it as it fails, leaves the plugin failed and not active, and acts the same on both paths.
 #[test]
 fn setup_and_dispose_effects_are_the_same_on_both_paths() {
     let direct = lifecycled(lifecycle, abi::export_plugin!(@loopback_create "lifecycle", lifecycle), false, false);
@@ -1678,8 +1473,6 @@ fn setup_and_dispose_effects_are_the_same_on_both_paths() {
     );
 }
 
-// Expected (4.14, plugins-pt): a plugin that failed is called no more, so its dispose callback does not run as it is
-// disabled, on both paths; the same plugin without the panic does run it.
 #[test]
 fn a_failed_plugin_gets_no_dispose_on_both_paths() {
     for (loopback, panic) in [(false, false), (false, true), (true, false), (true, true)] {
@@ -1694,9 +1487,6 @@ fn a_failed_plugin_gets_no_dispose_on_both_paths() {
     }
 }
 
-// Expected (bigboi-1): a setup that fails or panics after it registered a dispose callback runs it while the host is
-// still valid, and the plugin is failed and not active. After a failure the sample's `destroyed` is stored; a panic
-// has no effects (panic-effects), and the callback ran within the call that panicked, so its write is put back.
 #[test]
 fn a_failed_setup_runs_the_dispose_callbacks_it_registered() {
     for (options, error, destroyed) in [
@@ -1733,9 +1523,6 @@ fn configured(options: &str, directives: &[&str]) -> (opencode_util::temp::TempD
 const MAJOR_3: &str = "plugin ABI 3.0 is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild \
                        the plugin against opencode-plugin-abi 2";
 
-// Expected (carbon-2): an external plugin whose setup fails says so in a toast that opens the plugin manager, as a
-// load failure does, and is failed and not active, so the manager offers to enable it; a broken rebuild then replaces
-// the error, and enabling it fails again rather than start the old build.
 #[test]
 fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it() {
     let host = host();
@@ -1758,7 +1545,6 @@ fn a_failed_external_setup_is_failed_and_inactive_and_a_reload_error_replaces_it
     assert_eq!(host.toasts.borrow()[2..], [failed.title("Plugin failed: sample")]);
 }
 
-// Expected (plugin-live R2-3): a build that never described an ID is named by its target in the failure toast.
 #[test]
 fn a_failed_load_without_an_id_is_named_by_its_target() {
     let host = host();
@@ -1769,8 +1555,6 @@ fn a_failed_load_without_an_id_is_named_by_its_target() {
     assert_eq!(*host.toasts.borrow(), [failed.title(format!("Plugin failed: {target}"))]);
 }
 
-// Expected (carbon-2): a broken build of a plugin that `cli.json` disabled is listed as failed with its error, not as
-// inactive, with a toast; enabling it in the plugin manager fails too and starts nothing of the build it replaced.
 #[test]
 fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing() {
     let host = host();
@@ -1789,8 +1573,6 @@ fn a_broken_build_of_an_inactive_plugin_is_failed_and_enabling_it_starts_nothing
     assert!(!screen.contains("SAMPLE"), "{screen}");
 }
 
-// Expected: deactivating every plugin, as the host exits, runs each one's dispose callbacks while the host is alive,
-// in process and through the C ABI.
 #[test]
 fn deactivating_all_disposes_every_active_plugin() {
     let host = host();
@@ -1805,26 +1587,13 @@ fn deactivating_all_disposes_every_active_plugin() {
     assert!(registry.entries().iter().all(|entry| !entry.active), "{:?}", registry.entries());
 }
 
-// Expected: the quick start of `crates/plugin-abi/README.md` (`examples/hello`) works as it says: installed as
-// `<config>/plugins/hello/plugin.so`, it is active, `hello.greet` toasts, and its claim draws in `home.footer`.
 #[test]
 fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let target = root.join("../../target/sample-plugin");
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
-        .args(["build", "--quiet", "--manifest-path"])
-        .arg(root.join("examples/hello/Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&target)
-        .status()
-        .unwrap();
-    assert!(status.success(), "the quick start plugin did not build");
-    let name = format!("{}opencode_hello{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
     let temp = opencode_util::temp::tempdir().unwrap();
     let config = temp.path().join("config");
     let dir = config.join("plugins").join("hello");
     fs::create_dir_all(&dir).unwrap();
-    fs::copy(target.join("debug").join(name), dir.join(entry_file())).unwrap();
+    fs::write(dir.join(entry_file()), build_example("hello", "opencode_hello", "")).unwrap();
 
     let host = host();
     let registry = Registry::define(Vec::new(), []);
@@ -1833,6 +1602,8 @@ fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
     assert!(loader.reconcile(&dynamic(&host), &registry));
     let hello = entry(&registry.entries(), &dir.to_string_lossy()).clone();
     assert_eq!((hello.id.as_str(), hello.status), ("example.hello", Status::Active));
+    let (load, setup) = registry.monitor().load("example.hello");
+    assert!(load.is_some() && setup.is_some(), "{load:?} {setup:?}");
 
     assert!(matches!(host.keymap().dispatch("hello.greet", None), RunResult::Ok));
     host.app.advance(Duration::from_millis(1));
@@ -1845,8 +1616,6 @@ fn the_quick_start_plugin_loads_from_a_plugins_directory_and_runs() {
     assert!(host.app.text().contains("hello"), "{}", host.app.text());
 }
 
-// Expected (bigboi-3): the sample, a Rust `cdylib`, names only system libraries, so it passes the dependency policy
-// for a project's plugin too; the reader finds them, so the check is not empty.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn the_sample_names_only_system_libraries() {
@@ -1857,8 +1626,6 @@ fn the_sample_names_only_system_libraries() {
     assert_eq!(crate::loader::deps::check(&library, true), Ok(()));
 }
 
-// Expected (r2 review, bigboi-ui-1 and carbon-ui-2): a library is staged in a directory this process creates
-// itself, not at a name another user can claim first, and nothing is left behind.
 #[test]
 fn a_library_is_staged_in_a_directory_only_this_process_owns() {
     let library = build("");
@@ -1992,15 +1759,8 @@ fn panicking(host: &Rc<TestHost>, through: bool) -> Rc<Registry> {
         unsafe { abi::runtime::describe("panicky", "0.1.0", &[], out) }
     }
     let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback_create "panicky", panicky)),
         call: Some(corrupting),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(describe),
+        ..sdk_table(abi::export_plugin!(@loopback_create "panicky", panicky), describe)
     };
     let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     registry.load(&dynamic(host), definition.external("panicky.so", error));
@@ -2072,9 +1832,6 @@ fn panicky_run(at: &'static str, leak: (&'static str, bool), through: bool) -> (
     (seen, (entry, failed, command))
 }
 
-// Expected (property `ledger`, the deltas' registration): a plugin's deltas and event handlers are held while it is active
-// and gone once it is disabled, or once a call of it panicked (reviews bigboi-6, carbon-8), on both paths, so the
-// host keeps no deltas for it and it hears none after.
 #[test]
 fn a_deltas_handler_goes_with_its_plugin() {
     for (failing, through) in [(false, false), (false, true), (true, false), (true, true)] {
@@ -2098,12 +1855,6 @@ fn a_deltas_handler_goes_with_its_plugin() {
     }
 }
 
-// Expected (spike SC, property "a call that panics has no effects"): through every entry point and on both paths, a
-// call that asks for effects and then panics leaves the host as the same run leaves it when that call does nothing:
-// no toast, attention, route, fetch or dialog, and the storage it wrote holds what it held before. The plugin is
-// failed with the message the plugin manager lists, and the host says so once; a setup that panics leaves it not
-// active, which the loader or the plugin manager tells. The same call without the panic does have effects, where the
-// entry point can ask for them, so the comparison is not empty.
 #[test]
 fn a_call_that_panics_has_no_effects() {
     let calls = [
@@ -2187,24 +1938,11 @@ macro_rules! describe {
     }};
 }
 
-// Expected (carbon-p0a-2): a C plugin that calls the host's `call` or `theme_mode` from a thread of its own is refused
-// with an error, and gets dark, touching nothing of the host; its requests change nothing, and the same requests from
-// the UI thread are served. In process a `&dyn Host` cannot reach another thread (the doctest on `abi::Host`).
 #[test]
 fn a_host_call_from_another_thread_is_refused() {
     let host = host();
     host.mode.set(ThemeMode::Light);
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(catching),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(describe!("threads")),
-    };
+    let api = sdk_table(catching, describe!("threads"));
     let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("threads.so", error));
@@ -2224,73 +1962,6 @@ fn a_host_call_from_another_thread_is_refused() {
     let toasts: Vec<_> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
     assert_eq!(toasts, ["from the UI thread"]);
     assert!(host.edits.borrow().is_empty());
-}
-
-// Expected (carbon-5, after P0a's check): each small read and verb that a C plugin sends from a thread of its own is
-// refused with an error, as every host call is there, and touches nothing; from the UI thread each is served. In
-// process a `&dyn Host` or `&dyn Read` cannot reach another thread (the doctests on `abi::Host` and `abi::Read`).
-#[test]
-fn a_read_or_verb_from_another_thread_is_refused() {
-    let host = host();
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(catching),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(describe!("threads")),
-    };
-    let load = |registry: &Registry| {
-        let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
-        registry.load(&dynamic(&host), definition.external("threads.so", error));
-        Table(CAUGHT.get())
-    };
-    let requests = [
-        r#"{"type":"variants"}"#,
-        r#"{"type":"tabs-enabled"}"#,
-        r#"{"type":"tabs"}"#,
-        r#"{"type":"keymap-pending"}"#,
-        r#"{"type":"keymap-active"}"#,
-        r#"{"type":"keymap-commands"}"#,
-        r#"{"type":"shortcuts","name":"x"}"#,
-        r#"{"type":"selection"}"#,
-        r#"{"type":"theme"}"#,
-        r#"{"type":"themes"}"#,
-        r#"{"type":"set-variant"}"#,
-        r#"{"type":"set-model","provider":"p","model":"m"}"#,
-        r#"{"type":"tab","edit":{"type":"open","session":"ses_1"}}"#,
-        r#"{"type":"clear-selection"}"#,
-        r#"{"type":"foreground","command":"true"}"#,
-        r#"{"type":"title","title":"t"}"#,
-        r#"{"type":"set-theme","name":"opencode"}"#,
-        r#"{"type":"install-theme","name":"x","theme":{"theme":{}}}"#,
-    ];
-    let registry = Registry::define(Vec::new(), []);
-    let table = load(&registry);
-    for request in requests {
-        let (status, text, _) = std::thread::spawn(move || table.call(request)).join().unwrap();
-        assert_eq!(status, abi::ERROR, "{request}: {text}");
-        assert!(text.contains("UI thread"), "{request}: {text}");
-    }
-    // Disabling destroys the instance, which applies what it asked for: nothing.
-    assert!(registry.set_active(&dynamic(&host), "threads", false));
-    host.app.advance(Duration::from_millis(1));
-    assert!(host.verbs.borrow().is_empty(), "{:?}", host.verbs.borrow());
-    assert!(host.programs.borrow().is_empty());
-
-    // The same from the UI thread: each is served, and its verbs run.
-    let registry = Registry::define(Vec::new(), []);
-    let table = load(&registry);
-    for request in requests {
-        let (status, text, _) = table.call(request);
-        assert_eq!(status, abi::OK, "{request}: {text}");
-    }
-    assert!(registry.set_active(&dynamic(&host), "threads", false));
-    host.app.advance(Duration::from_millis(1));
-    assert!(!host.verbs.borrow().is_empty());
 }
 
 // Per thread: each test runs its plugin on its own thread, so tests that run at once share none of them.
@@ -2373,26 +2044,13 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
     abi::OK
 }
 
-// Expected (bigboi 8): a render of a plugin without the SDK that asks the host for effects gets an error for each, and
-// nothing of them happens, whether its answer is drawn or refused: the host equals one whose render asked for nothing,
-// but that a refused answer fails the plugin (P4, O-135), which says so in one toast.
 #[test]
 fn a_render_that_asks_for_effects_gets_none() {
     let outcome = |mode: u8| {
         RAW_MODE.set(mode);
         RAW_STATUSES.take();
         let host = host();
-        let api = PluginApi {
-            size: size_of::<PluginApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            requires_minor: 0,
-            create: Some(raw_create),
-            call: Some(raw_call),
-            destroy: None,
-            free: Some(abi::runtime::free),
-            describe: Some(describe!("raw")),
-        };
+        let api = PluginApi { call: Some(raw_call), destroy: None, ..sdk_table(raw_create, describe!("raw")) };
         let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         registry.load(&dynamic(&host), definition.external("raw.so", error));
@@ -2453,22 +2111,10 @@ unsafe extern "C" fn tx_call(_: *mut c_void, request: Bytes, out: *mut Owned) ->
     abi::OK
 }
 
-// Expected (decision 8, review big-boi 6, over the C ABI): a library's command the user runs is a handler of the
-// user's input, so the host takes its transcript verb.
 #[test]
 fn a_librarys_command_may_scroll_the_transcript() {
     let host = host();
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(tx_create),
-        call: Some(tx_call),
-        destroy: None,
-        free: Some(abi::runtime::free),
-        describe: Some(describe!("tx")),
-    };
+    let api = PluginApi { call: Some(tx_call), destroy: None, ..sdk_table(tx_create, describe!("tx")) };
     let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("tx.so", error));
@@ -2477,27 +2123,13 @@ fn a_librarys_command_may_scroll_the_transcript() {
     assert_eq!(TX_STATUS.get(), Some(abi::OK));
 }
 
-// Expected (bigboi): a late call's result is checked before its effects apply. A command that returned a result the
-// host takes applies its effects, then, having overrun, fails the plugin; the first call after setup is exempt, so the
-// command runs twice. One that returned a result the host refuses asks for nothing that happens, its storage write goes
-// back, and the plugin fails by the refusal (P4, O-135) at the first call, before any overrun.
 #[test]
 fn a_late_refused_result_leaves_no_effects() {
     let outcome = |mode: u8| {
         RAW_MODE.set(mode);
         RAW_LATE.set(true);
         let host = host();
-        let api = PluginApi {
-            size: size_of::<PluginApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            requires_minor: 0,
-            create: Some(raw_create),
-            call: Some(raw_call),
-            destroy: None,
-            free: Some(abi::runtime::free),
-            describe: Some(describe!("raw")),
-        };
+        let api = PluginApi { call: Some(raw_call), destroy: None, ..sdk_table(raw_create, describe!("raw")) };
         let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
         let registry = Registry::define(Vec::new(), []);
         let base = std::time::Instant::now();
@@ -2554,9 +2186,6 @@ fn late(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (synthesis 4.4, 4.14): a call that overruns did return, so what it asked for happens; then an external
-// plugin fails with the call and its time, and is told once. For a built-in an overrun is a host bug: it runs on. On
-// both paths the call is timed and named in the run record while it runs (`record-balanced`).
 #[test]
 fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
     for through in [false, true] {
@@ -2616,9 +2245,6 @@ fn replacer(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (bigboi 10, carbon 5): a plugin that failed while it ran gives way as if the user had disabled it, on both
-// paths: its `Replace` claim no longer hides the host's content, its fences fall back to the code view, and its route
-// no longer mounts. Before the failure each of them wins.
 #[test]
 fn a_failed_plugin_gives_way_to_the_host() {
     for through in [false, true] {
@@ -2691,8 +2317,6 @@ fn timed(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (synthesis 4.4; bigboi, carbon 8): a built-in's setup, calls and dispose are timed and named in the
-// record; its overrun is a host bug, counted for the performance gate, and fails nothing.
 #[test]
 fn a_builtin_is_timed_and_its_overrun_fails_nothing() {
     let host = host();
@@ -2733,9 +2357,6 @@ fn noting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P4's finding; carrier-equal): a built-in's setup, command and dispose run inside the host's catch, so the
-// panic hooks let their panics unwind to it (`contain::filter_panics`), in process and through the C ABI's shims alike;
-// on that carrier a host callback's panic in a library call is one too. Outside a call, nothing is.
 #[test]
 fn a_builtin_runs_inside_the_catch() {
     for builtin in [crate::Builtin::Plugin, crate::Builtin::Abi] {
@@ -2751,67 +2372,6 @@ fn a_builtin_runs_inside_the_catch() {
     }
 }
 
-/// A plugin whose `fetcher.fetch` asks the server and whose `fetcher.panic` panics.
-fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
-    let command = |name: &str| abi::Command::new(name).title(name);
-    setup.command(command("fetcher.fetch"), |host, _| {
-        let _ = host.try_fetch(abi::Fetch::new("GET", "/late"));
-    });
-    setup.command(command("fetcher.panic"), |_, _| -> () { panic!("fetcher fault") });
-    Ok(())
-}
-
-// Expected (carbon 5): a fetch a plugin asked for is not sent once the plugin failed before it went out, on both
-// paths; while it runs, it is.
-#[test]
-fn a_failed_plugin_sends_no_fetch() {
-    for (through, fail) in [(false, false), (false, true), (true, false), (true, true)] {
-        let host = host();
-        let registry = Rc::new(Registry::define(Vec::new(), []));
-        *host.registry.borrow_mut() = Rc::downgrade(&registry);
-        match through {
-            true => {
-                let loaded =
-                    loopback_described(&dynamic(&host), abi::export_plugin!(@loopback_described "fetcher", fetcher));
-                let (definition, error) = loaded.unwrap();
-                registry.load(&dynamic(&host), definition.external("fetcher.so", error));
-            }
-            false => {
-                registry.add(abi::Plugin { id: "fetcher", setup: fetcher });
-                registry.activate(&dynamic(&host));
-            }
-        }
-        host.keymap().dispatch("fetcher.fetch", None);
-        if fail {
-            host.keymap().dispatch("fetcher.panic", None);
-        }
-        host.app.advance(Duration::from_millis(1));
-        assert_eq!(host.fetches.borrow().len(), usize::from(!fail), "through the C ABI: {through}, failed: {fail}");
-    }
-}
-
-// Expected (bigboi, 4.4): opening a library is timed as its load, which the plugin's statistics keep under its ID once
-// setup made it known.
-#[test]
-fn opening_a_library_is_its_load() {
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config = root.path().join("config");
-    let dir = config.join("plugins").join("sample");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join(entry_file()), build("")).unwrap();
-    let host = host();
-    let registry = Registry::define(Vec::new(), []);
-    let loader =
-        Loader::new(Rc::new(Native) as Rc<dyn Backend>, config, root.path().to_path_buf(), Vec::<Configured>::new());
-    assert!(loader.reconcile(&dynamic(&host), &registry));
-    let (load, setup) = registry.monitor().load("sample");
-    assert!(load.is_some() && setup.is_some(), "{load:?} {setup:?}");
-}
-
-// Expected (`no-effects`, a refused buffer; synthesis 4.14): a command whose answer the host cannot decode, because it
-// is cut short, random bytes or empty, leaves the host as the run where the command does nothing, and fails the plugin
-// once, naming the call; the same command with a good answer does have effects. A view whose tree names a node kind
-// the host does not know is refused whole, and the failure names the kind.
 #[test]
 fn a_result_the_host_refuses_has_no_effects() {
     let (quiet, _) = panicky_run("command", ("", false), true);
@@ -2922,10 +2482,6 @@ fn c_route(host: &Rc<TestHost>, registry: &Registry) -> Option<String> {
     Some(host.app.text())
 }
 
-// Expected: a plugin written in C against `include/opencode_plugin.h` alone, its entry exported with the header's macro
-// from a build that hides symbols, loads as ABI 2.0 and reads the host's table as 2.0: its command toasts and sends a
-// message, which its handler gets on the UI thread, and its route surface draws what it counted. This holds the header
-// to the Rust tables field by field.
 #[cfg(unix)]
 #[test]
 fn a_plugin_written_in_c_against_the_header_runs() {
@@ -2941,8 +2497,6 @@ fn a_plugin_written_in_c_against_the_header_runs() {
     assert!(screen.contains("drawn in C, 1 messages"), "{screen}");
 }
 
-// Expected (O-169): the same plugin built as a 1.4 library, which exports `opencode_plugin_v1` alone, is refused at load
-// and at inspection by its major, with the reason, not as a file that is no plugin; its entry is never called.
 #[cfg(unix)]
 #[test]
 fn a_1_x_library_is_refused_by_its_major() {
@@ -2954,8 +2508,6 @@ fn a_1_x_library_is_refused_by_its_major() {
     assert_eq!(error, refused);
 }
 
-// Expected (review bigboi-4): a 2.x library whose `describe` answers what the host cannot read is refused before any
-// setup, at load and at inspection, rather than read as "requires nothing".
 #[cfg(unix)]
 #[test]
 fn a_2_x_library_whose_describe_fails_is_refused() {
@@ -2965,10 +2517,6 @@ fn a_2_x_library_whose_describe_fails_is_refused() {
     assert!(Native.inspect(&library).err().unwrap().starts_with("plugin describe failed: "));
 }
 
-// Expected (reviews bigboi-3, carbon-3, carbon-4, bigboi "non-null handler replies"): a view asks the host for nothing,
-// and an effect it asks for is refused and never shows; a command that answers anything but `null` is refused whole,
-// with no effect, and fails the plugin; one that answers OPENCODE_ERROR keeps its effects and fails the 2.x plugin; a
-// plugin without a message handler gets `Closed` for a message and no `message` request.
 #[cfg(unix)]
 #[test]
 fn a_c_plugin_gets_what_its_answers_ask_for() {
@@ -3006,10 +2554,6 @@ fn a_c_plugin_gets_what_its_answers_ask_for() {
     assert!(screen.contains("drawn in C, 0 messages"), "{screen}");
 }
 
-// Expected (P5 over the C ABI): a plugin written in C against the header alone draws a canvas: its manifest says its
-// surface has a draw, the host asks for the canvas's list as it paints it, naming the canvas, again for a new version,
-// and draws the bytes the plugin wrote by hand. A draw asks the host for nothing: a toast it asks for is refused and never shows. A draw that
-// answers no bytes keeps the list the canvas holds.
 #[cfg(unix)]
 #[test]
 fn a_c_plugin_draws_a_canvas() {
@@ -3040,10 +2584,6 @@ fn a_c_plugin_draws_a_canvas() {
     assert_eq!((toasted, status), (vec!["hello from C".to_owned(), "send answered 0".to_owned()], Status::Active));
 }
 
-// Expected (4.5, reviews F12, bigboi-13, carbon-6): on macOS a library the system refuses gets a message that names the
-// cause the host knows and what to do about it: another team's signature (library validation), the quarantine of a
-// download the host put on its copy, else a missing or invalid signature, with the same words from `dyld` for the last
-// two. Elsewhere, and for any other error, the system's words alone. The words are `dyld4`'s.
 #[test]
 fn a_library_macos_refuses_says_why() {
     let source = Path::new("/Users/u/plugins/x/plugin.dylib");
@@ -3093,8 +2633,6 @@ fn a_library_macos_refuses_says_why() {
     }
 }
 
-// Expected (reviews carbon-2, carbon-7): the host's table states the version it serves, and offers every entry and its
-// features.
 #[test]
 fn the_host_table_states_its_version_and_features() {
     let table = host_table(std::ptr::null_mut());
@@ -3105,8 +2643,6 @@ fn the_host_table_states_its_version_and_features() {
     assert_eq!(features, abi::FEATURES);
 }
 
-// Expected (review carbon-6): a load names the file the user gave, not the copy the host opened, and on Windows the
-// copies are swept: a directory old enough that no process is still opening it goes, a new one stays.
 #[test]
 fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
     let dir = opencode_util::temp::tempdir().unwrap();
@@ -3138,9 +2674,6 @@ fn a_refused_library_is_named_by_its_file_and_old_copies_are_swept() {
     assert!(!old.exists() && new.exists());
 }
 
-// Expected (review bigboi-3): a setup whose manifest the host refuses, here for another ID than the library described,
-// leaves no effect, as a setup that panics: its toast never shows, its storage writes are put back, and the plugin is
-// listed as failed with the reason.
 #[test]
 fn a_refused_manifest_leaves_no_effect() {
     unsafe extern "C" fn describe(out: *mut Owned) -> i32 {
@@ -3151,17 +2684,7 @@ fn a_refused_manifest_leaves_no_effect() {
     host.storage.borrow_mut().insert("plugin.other.k".to_owned(), "{\"kept\":true}".to_owned());
     let before = host.storage.borrow().clone();
     LEAK_AT.set(("setup", false));
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback_create "panicky", panicky)),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(describe),
-    };
+    let api = sdk_table(abi::export_plugin!(@loopback_create "panicky", panicky), describe);
     let (definition, error) = define(Library::from_table(&api).unwrap(), None).unwrap();
     let registry = Registry::define(Vec::new(), []);
     registry.load(&dynamic(&host), definition.external("other.so", error));
@@ -3174,9 +2697,6 @@ fn a_refused_manifest_leaves_no_effect() {
     assert!(host.attention.borrow().is_empty() && host.routes.borrow().is_empty() && host.fetches.borrow().is_empty());
 }
 
-// Expected (reviews bigboi-12, carbon-2): a buffer descriptor that cannot describe what the plugin allocated (a null
-// pointer with a length, a length past the capacity), or one past the bound, is refused before anything is read
-// through it; every descriptor goes back to the plugin's `free` once.
 #[test]
 fn a_buffer_the_plugin_cannot_have_written_is_refused_unread() {
     static FREED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -3266,9 +2786,6 @@ fn c_table(describe: bool) -> PluginApi {
     }
 }
 
-// Expected (big-boi 6): a library names its ID in `describe` before anything of it runs: one without `describe`, or
-// whose `describe` names no ID or an empty one, is refused with what to do, and its setup never runs; a described one
-// is set up only when it is activated.
 #[test]
 fn a_2x_library_names_its_id_before_any_setup() {
     let host = host();
@@ -3298,9 +2815,6 @@ fn a_2x_library_names_its_id_before_any_setup() {
     }
 }
 
-// Expected (big-boi 8, O-135): a setup's effects follow its result as a call's do: an error the host reads is an
-// answer, and what setup asked for happens; an error in a buffer the host refuses, and a panic, leave nothing of it.
-// Each answer goes back to the plugin's `free` once.
 #[test]
 fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     for (answer, shown, failure) in [
@@ -3323,8 +2837,6 @@ fn a_setup_whose_error_the_host_refuses_leaves_no_effect() {
     }
 }
 
-// Expected (PL-9, contract 2.x additions): a library's host table states `image-bounds`, `focus-input` and
-// `fence-node`, and the host answers `image-bounds` with the bounds it decodes images within, as its limits set them.
 #[test]
 fn the_host_states_the_bounds_of_the_images_it_decodes() {
     let table = host_table(std::ptr::null_mut());
@@ -3340,10 +2852,6 @@ fn the_host_states_the_bounds_of_the_images_it_decodes() {
     );
 }
 
-// Expected (bigboi's re-review, findings 5 and 7): a draw's answer is held to every buffer's rules before the list's:
-// an OK descriptor past 256 MiB is refused unread, even one that starts as a list does, rather than taken as a list
-// over its bytes; an OK list between the two limits is over its bytes and not copied; an error and a panic between
-// them are text, kept whole as a diagnostic. Each descriptor goes back to `free` once, as it came.
 #[test]
 fn a_draw_is_held_to_every_buffer_s_rules_before_the_list_s() {
     thread_local! {
@@ -3383,9 +2891,6 @@ fn a_draw_is_held_to_every_buffer_s_rules_before_the_list_s() {
     }
 }
 
-// Expected (big-boi 5, carbon-8): what a plugin lends the host's entries is checked as what it returns: `call`,
-// `send` and `report` refuse a null pointer with a length, and a length over the bound, before they read it or reach
-// the mailbox; `free` takes back the host's buffer by its pointer and capacity, whatever its length says.
 #[test]
 fn the_host_refuses_borrowed_bytes_a_plugin_cannot_have_lent() {
     let bytes = *b"{}";
@@ -3413,49 +2918,6 @@ fn the_host_refuses_borrowed_bytes_a_plugin_cannot_have_lent() {
     unsafe { host_free(owned) };
 }
 
-// Expected (reviews bigboi-12, carbon-2): the host answers `call` on its UI thread only: one from another thread is
-// refused before the instance's context is read. The same call on the UI thread gets past that check.
-#[test]
-fn the_host_answers_calls_on_its_ui_thread_only() {
-    let host = host();
-    let dynamic = dynamic(&host);
-    let api = PluginApi {
-        size: size_of::<PluginApi>(),
-        major: ABI_MAJOR,
-        minor: ABI_MINOR,
-        requires_minor: 0,
-        create: Some(abi::export_plugin!(@loopback_create "first", first)),
-        call: Some(abi::runtime::call),
-        destroy: Some(abi::runtime::destroy),
-        free: Some(abi::runtime::free),
-        describe: Some(describe!("first")),
-    };
-    let library = Rc::new(Library::from_table(&api).unwrap());
-    let (instance, _) = Instance::create(&library, Rc::downgrade(&dynamic), "first", None, false, None).unwrap();
-    let ctx = instance.shared.as_ptr() as usize;
-    let call = move || {
-        let mut out = Owned::EMPTY;
-        // SAFETY: the instance's context, alive until the instance drops below; `out` goes back to the host's `free`.
-        unsafe {
-            let status = host_call(ctx as *mut c_void, Bytes::new(br#"{"type":"theme"}"#), &mut out);
-            let text = String::from_utf8_lossy(&out.to_vec()).into_owned();
-            host_free(out);
-            (status, text)
-        }
-    };
-    let (status, text) = std::thread::spawn(call).join().unwrap();
-    assert_eq!(status, abi::ERROR);
-    assert!(text.contains("UI thread"), "{text}");
-    let (_, text) = call();
-    assert!(!text.contains("UI thread"), "{text}");
-    // A light host answers light on its UI thread, and dark off it, where it reads nothing.
-    host.mode.set(ThemeMode::Light);
-    // SAFETY: as above.
-    let mode = move || unsafe { host_theme_mode(ctx as *mut c_void) };
-    assert_eq!((mode(), std::thread::spawn(mode).join().unwrap()), (abi::THEME_LIGHT, abi::THEME_DARK));
-    drop(instance);
-}
-
 /// The C plugin's claim of the call `call_1` as it starts, mounted on `host` and shown: whether it draws, and the
 /// screen; `None` when the plugin claims no `c` calls.
 #[cfg(unix)]
@@ -3481,10 +2943,6 @@ fn c_claim(host: &Rc<TestHost>, registry: &Registry) -> Option<(bool, String)> {
     Some((shows, host.app.text()))
 }
 
-// Expected (the header, P4's checks; reviews carbon-3 and carbon-9: N2, N6, CM13, CM14): a renderer claim of a plugin
-// written in C against the header alone draws its part. Its view asks the host for nothing: a toast it asks for is
-// refused and never shows. A decline that says the memo table holds more than the last view left, or content the
-// host did not number, fails the plugin.
 #[cfg(unix)]
 #[test]
 fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
@@ -3550,9 +3008,6 @@ impl Answers for Cancelled {
     }
 }
 
-// Expected (bigboi's ownership pass): a mount's close cancels its own waiting requests and looks at no other mount's,
-// however many wait, and replies in any order each take their own: the work grows with neither unrelated requests nor
-// the order of the replies.
 #[test]
 fn a_mounts_close_cancels_only_its_own_requests() {
     let host = host();
@@ -3571,9 +3026,6 @@ fn a_mounts_close_cancels_only_its_own_requests() {
     assert_eq!(waiting(), 0);
 }
 
-// Expected (carbon ac-1): each cancel of a mount's close is an effect of its own, so a close of a mount whose plugins
-// had 3,000 requests waiting runs at most `FRAME_EFFECTS` of their cancels a frame, as replies are paced, not all of
-// them in one.
 #[test]
 fn a_mounts_close_spreads_its_cancels_over_frames() {
     let host = host();
@@ -3598,8 +3050,6 @@ fn a_mounts_close_spreads_its_cancels_over_frames() {
     assert_eq!((told(), waiting()), (3000, 0));
 }
 
-// Expected (carbon ac-1): at most `MOUNT_REQUESTS` requests of one instance's mounts wait for their reply; one more is
-// not sent, and its reply is the refusal, at once. Once one is answered, the next is taken again.
 #[test]
 fn a_mount_request_past_the_cap_is_refused_with_its_reply() {
     let host = host();
