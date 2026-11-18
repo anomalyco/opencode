@@ -47,10 +47,9 @@ pub struct Limits {
     pub inbox: usize,
     /// Trees from the child the UI thread has not taken, before the reader stops reading (S2: 8).
     pub trees: usize,
-    /// How long the oldest event may wait for its acknowledgement (4.3: 1 s).
+    /// How long the oldest event may wait for its acknowledgement.
     pub ack: Duration,
-    /// The same for a load or a setup, which may import a large module before it reads on: not a frame's event (4.4).
-    /// Also for whatever waits on the JS host's own start, until its hello: Bun loading the host's modules.
+    /// Handshake, load and setup timeout. These events may import modules before acknowledging.
     pub setup: Duration,
     /// The JS host's resident set (S2: a minimal Bun is 20 to 26 MiB; 58 MB a loaded one).
     pub memory: u64,

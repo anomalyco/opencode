@@ -741,7 +741,6 @@ impl Monitor {
                 return backlog;
             }
             stats.slow.then(|| {
-                // The host's time for its nodes goes beside its own calls (4.4).
                 let kinds: Vec<String> = stats
                     .kinds
                     .iter()
@@ -755,7 +754,6 @@ impl Monitor {
                         format!("{kind} {:.1}/{:.1}/{:.1} ms", ms(at(0.5)), ms(at(0.99)), ms(samples.worst))
                     })
                     .collect();
-                // How long it took to start, as the manager's details say it (4.4); a healthy row says nothing.
                 let start: Vec<String> = [("load", stats.load), ("setup", stats.setup)]
                     .into_iter()
                     .filter_map(|(name, took)| Some(format!("{name} {:.1} ms", ms(took?))))

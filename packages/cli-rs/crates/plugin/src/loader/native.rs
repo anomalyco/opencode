@@ -43,7 +43,7 @@ pub const HOST_MINOR: u32 = ABI_MINOR;
 /// a reason, not as no plugin.
 const ENTRY_V1: &str = "opencode_plugin_v1";
 
-/// What crossed the C ABI on this thread, counted outside any plugin and any mount (4.14, `work`).
+/// What crossed the C ABI on this thread, counted outside any plugin and any mount.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Crossed {
     /// Calls the host made into plugins.
@@ -1345,9 +1345,8 @@ struct Guest {
     cancels: bool,
 }
 
-/// However the guest goes, by a disposal or by the host dropping the registry, a failed instance is not destroyed:
-/// `destroy` would run its dispose callbacks, and a failed plugin is called no more (4.14). It is kept, as its library
-/// is (4.5).
+/// Keep failed instances and their libraries alive: calling `destroy` would execute the failed plugin’s disposal
+/// callbacks.
 impl Drop for Guest {
     fn drop(&mut self) {
         self.release();
