@@ -462,11 +462,36 @@ fn write_json(
 
 #[inline(always)]
 fn write_number(out: &mut String, n: f64) {
-    if n.is_finite() {
+    if n.fract() == 0.0 && n.abs() < 9_007_199_254_740_992.0 {
+        write_int(out, n);
+    } else if n.is_finite() {
         write_num(out, n);
     } else {
         out.push_str("null");
     }
+}
+
+/// Writes a safe integer as `write_num` does, without the formatting machinery.
+fn write_int(out: &mut String, n: f64) {
+    if n < 0.0 {
+        out.push('-');
+    }
+    out.push_str(digits(&mut [0; 20], n.abs() as u64));
+}
+
+/// The decimal digits of `n`, written into `buf`.
+fn digits(buf: &mut [u8; 20], n: u64) -> &str {
+    let mut rest = n;
+    let mut at = buf.len();
+    loop {
+        at -= 1;
+        buf[at] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    std::str::from_utf8(&buf[at..]).unwrap_or_default()
 }
 
 /// The element at `i` of the dense array `id`, a hole as undefined.
@@ -516,28 +541,65 @@ fn atom_slot(a: Atom) -> Value {
     Value::Num(a as f64)
 }
 
-/// The reference's `$JsonNames` off the host boundary, as atoms: an error's name and message first, then the own keys.
-fn walk_keys(vm: &mut Vm, id: Id) -> Vec<Value> {
+/// Pushes the reference's `$JsonNames` off the host boundary as atoms (an error's name and message first, then the own
+/// keys), or with a property list the listed ones it has, in the list's order: how many.
+fn push_walk_keys(vm: &mut Vm, id: Id, allow: Option<Id>) -> usize {
     let (nk, mk) = (vm.names.name, vm.names.message);
+    let start = vm.stack.len();
     match vm.heap[id as usize].kind {
-        Kind::Error(_) => [nk, mk]
-            .into_iter()
-            .chain(vm.own_keys(id).into_iter().filter(|k| *k != nk && *k != mk))
-            .map(atom_slot)
-            .collect(),
-        Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
-            vm.own_keys(id).into_iter().map(atom_slot).collect()
+        Kind::Error(_) => {
+            let rest = vm.own_keys(id).into_iter().filter(|k| *k != nk && *k != mk);
+            let keys: Vec<Atom> = [nk, mk].into_iter().chain(rest).collect();
+            vm.stack.extend(keys.into_iter().map(key_slot));
         }
-        _ => Vec::new(),
+        Kind::Ordinary => {
+            // Without index keys, the own keys are the enumerable string-keyed properties in their order.
+            let props = &vm.heap[id as usize].props.items;
+            if props.iter().all(|p| vm.atoms.index(p.key).is_none()) {
+                vm.stack.extend(
+                    props
+                        .iter()
+                        .filter(|p| p.flags & ENUMERABLE != 0 && p.key > SYM_ASYNC_ITERATOR)
+                        .map(|p| key_slot(p.key)),
+                );
+            } else {
+                let keys = vm.own_keys(id);
+                vm.stack.extend(keys.into_iter().map(key_slot));
+            }
+        }
+        Kind::Arguments(_) | Kind::Live(_) => {
+            let keys = vm.own_keys(id);
+            vm.stack.extend(keys.into_iter().map(key_slot));
+        }
+        _ => {}
     }
+    // The property list holds atoms, as the keys do.
+    if let Some(allow) = allow {
+        let own = vm.stack.split_off(start);
+        if let Kind::Array(listed) = &vm.heap[allow as usize].kind {
+            vm.stack.extend(
+                listed
+                    .iter()
+                    .map(|k| Slot::pack(*k))
+                    .filter(|k| own.contains(k)),
+            );
+        }
+    }
+    vm.stack.len() - start
+}
+
+/// A key's atom as the walk's slots keep it.
+fn key_slot(a: Atom) -> Slot {
+    Slot::index(a as usize)
 }
 
 // The slots of the internal walk's frame: the replacer (or undefined), the property list (an internal array of its
 // keys' atoms, or undefined), the indent (undefined for none), the output written before the last call (an internal
 // byte buffer, or undefined), and how many containers deep the walk is; then the value it visits (`holder[key]`, the
 // key a number for an array's element, the value read once the visit starts), what the call it waits on is for, and
-// the key's atom off an array; then, per container, the container, its keys' atoms (an internal array, undefined for
-// an array), how many children it has, the next one, and whether none was written yet.
+// the key's atom off an array; then, per container, an object's keys' atoms, then the container, whether it is an
+// object (undefined for an array), how many children it has, the next one, and whether none was written yet. The
+// innermost container's slots are the top of the frame's stack whenever a step runs.
 const J_F: usize = 0;
 const J_ALLOW: usize = 1;
 const J_INDENT: usize = 2;
@@ -548,10 +610,9 @@ const J_KEY: usize = 6;
 const J_VAL: usize = 7;
 const J_PHASE: usize = 8;
 const J_ATOM: usize = 9;
-const J_LEVELS: usize = 10;
 const LEVEL: usize = 5;
 const L_ID: usize = 0;
-const L_KEYS: usize = 1;
+const L_OBJECT: usize = 1;
 const L_N: usize = 2;
 const L_I: usize = 3;
 const L_FIRST: usize = 4;
@@ -627,12 +688,29 @@ pub(crate) fn stringify_step(
     fr: crate::native::Frame,
     input: crate::native::Input,
 ) -> Result<crate::native::Step, Value> {
+    // The text a step writes before it keeps it in the frame's buffer; its capacity is reused by the next step, as a
+    // replacer makes a step per value.
+    thread_local! {
+        static SCRATCH: std::cell::Cell<String> = const { std::cell::Cell::new(String::new()) };
+    }
+    let mut out = SCRATCH.take();
+    let r = stringify_walk(vm, fr, input, &mut out);
+    out.clear();
+    SCRATCH.set(out);
+    r
+}
+
+fn stringify_walk(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+    out: &mut String,
+) -> Result<crate::native::Step, Value> {
     use crate::native::{Input, Step};
     let indent = match fr.get(vm, J_INDENT) {
         Value::Str(s) => vm.text(s).to_owned(),
         _ => String::new(),
     };
-    let mut out = String::with_capacity(256);
     let mut stage = match input {
         Input::Start => Stage::Visit,
         Input::Returned(r) => {
@@ -658,7 +736,13 @@ pub(crate) fn stringify_step(
                 let (holder, key) = (fr.get(vm, J_HOLDER), fr.get(vm, J_KEY));
                 let v = match key {
                     Value::Num(_) => vm.get_elem(&holder, &key)?,
-                    _ => vm.get(&holder, fr.index(vm, J_ATOM) as Atom)?,
+                    _ => {
+                        let atom = fr.index(vm, J_ATOM) as Atom;
+                        match plain_prop(vm, fr, holder, atom, depth) {
+                            Some(v) => v,
+                            None => vm.get(&holder, atom)?,
+                        }
+                    }
                 };
                 if matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
                 {
@@ -678,7 +762,7 @@ pub(crate) fn stringify_step(
                     let f = vm.get_obj(id, k);
                     if vm.is_callable(&f) {
                         let kv = walk_key(vm, fr);
-                        flush(vm, fr, &mut out);
+                        flush(vm, fr, out);
                         fr.set_index(vm, J_PHASE, TO_JSON);
                         return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), [Slot::pack(kv)]);
                     }
@@ -691,14 +775,14 @@ pub(crate) fn stringify_step(
                     Stage::Emit
                 } else {
                     let kv = walk_key(vm, fr);
-                    flush(vm, fr, &mut out);
+                    flush(vm, fr, out);
                     fr.set_index(vm, J_PHASE, REPLACED);
                     let (holder, v) = (fr.slot(vm, J_HOLDER), fr.slot(vm, J_VAL));
                     return fr.call_slots(vm, f, holder, [Slot::pack(kv), v]);
                 }
             }
-            Stage::Emit => emit(vm, fr, &mut out, &indent, depth)?,
-            Stage::Child => child(vm, fr, &mut out, &indent, depth)?,
+            Stage::Emit => emit(vm, fr, out, &indent, depth)?,
+            Stage::Child => child(vm, fr, out, &indent, depth)?,
             Stage::After(written) => {
                 if depth == 0 {
                     let buf = fr.get(vm, J_OUT).as_obj();
@@ -710,7 +794,7 @@ pub(crate) fn stringify_step(
                             // Only whole strings were written to it.
                             String::from_utf8(bytes).unwrap_or_default()
                         }
-                        _ => out,
+                        _ => std::mem::take(out),
                     };
                     vm.bytecode_builtin();
                     return Ok(Step::Done(if written {
@@ -719,8 +803,8 @@ pub(crate) fn stringify_step(
                         Value::Undef
                     }));
                 }
-                let at = J_LEVELS + (depth - 1) * LEVEL;
-                if fr.slot(vm, at + L_KEYS).obj().is_none() {
+                let at = top(vm, fr);
+                if fr.slot(vm, at + L_OBJECT) == Slot::UNDEF {
                     if !written {
                         out.push_str("null");
                     }
@@ -738,10 +822,53 @@ pub(crate) fn stringify_step(
     }
 }
 
+/// Where the innermost container's slots start in the frame: at the top of its stack.
+#[inline(always)]
+fn top(vm: &Vm, fr: crate::native::Frame) -> usize {
+    vm.stack.len() - fr.base() - LEVEL
+}
+
+/// The containers the walk is in, innermost first, off the frame's stack.
+fn open_containers(stack: &[Slot], depth: usize) -> impl Iterator<Item = Id> + '_ {
+    let mut end = stack.len();
+    (0..depth).map(move |_| {
+        let at = end - LEVEL;
+        let keys = if stack[at + L_OBJECT] == Slot::UNDEF {
+            0
+        } else {
+            stack[at + L_N].f() as usize
+        };
+        end = at - keys;
+        stack[at + L_ID].obj().unwrap_or(0)
+    })
+}
+
+/// `holder[atom]` for an ordinary object whose own property at the child's position is that key's plain value, as
+/// it is when every own key serializes: the read without a search.
+#[inline(always)]
+fn plain_prop(
+    vm: &Vm,
+    fr: crate::native::Frame,
+    holder: Value,
+    atom: Atom,
+    depth: usize,
+) -> Option<Value> {
+    let Value::Obj(id) = holder else {
+        return None;
+    };
+    let o = &vm.heap[id as usize];
+    if depth == 0 || !matches!(o.kind, Kind::Ordinary) {
+        return None;
+    }
+    let p = o.props.items.get(fr.index(vm, top(vm, fr) + L_I))?;
+    (p.key == atom && !matches!(p.value, Value::Uninit)).then_some(p.value)
+}
+
 /// The key of the value the walk visits, as a `toJSON` or the replacer receives it.
 fn walk_key(vm: &mut Vm, fr: crate::native::Frame) -> Value {
     match fr.get(vm, J_KEY) {
-        Value::Num(i) => vm.string_val((i as usize).to_string()),
+        // An index's string, interned: an array's keys repeat from one array to the next.
+        Value::Num(i) => vm.static_str(digits(&mut [0; 20], i as u64)),
         k => k,
     }
 }
@@ -800,8 +927,8 @@ fn write_prefix(vm: &Vm, fr: crate::native::Frame, out: &mut String, indent: &st
     if depth == 0 {
         return;
     }
-    let at = J_LEVELS + (depth - 1) * LEVEL;
-    if fr.slot(vm, at + L_KEYS).obj().is_none() {
+    let at = top(vm, fr);
+    if fr.slot(vm, at + L_OBJECT) == Slot::UNDEF {
         return;
     }
     if fr.index(vm, at + L_FIRST) == 0 {
@@ -852,11 +979,11 @@ fn emit(
             if vm.heap[id as usize].is_callable() {
                 return Ok(Stage::After(false));
             }
-            if (0..depth).any(|d| fr.slot(vm, J_LEVELS + d * LEVEL + L_ID).obj() == Some(id)) {
+            if open_containers(&vm.stack, depth).any(|c| c == id) {
                 return Err(vm.type_error("Converting circular structure to JSON."));
             }
             write_prefix(vm, fr, out, indent, depth);
-            let (keys, n) = if matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
+            let (object, n) = if matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
                 vm.densify(id)?;
                 let len = match &vm.heap[id as usize].kind {
                     Kind::Array(items) => items.len(),
@@ -868,39 +995,20 @@ fn emit(
                     return Ok(Stage::After(true));
                 }
                 out.push('[');
-                (Value::Undef, len)
+                (Slot::UNDEF, len)
             } else {
-                let keys = walk_keys(vm, id);
-                // The property list holds atoms, as the keys do.
-                let keys: Vec<Value> = match fr.get(vm, J_ALLOW).as_obj() {
-                    Some(allow) => match &vm.heap[allow as usize].kind {
-                        Kind::Array(listed) => listed
-                            .iter()
-                            .filter(|k| {
-                                keys.iter().any(
-                                    |e| matches!((e, k), (Value::Num(a), Value::Num(b)) if a == b),
-                                )
-                            })
-                            .copied()
-                            .collect(),
-                        _ => Vec::new(),
-                    },
-                    None => keys,
-                };
-                let n = keys.len();
+                let allow = fr.slot(vm, J_ALLOW).obj();
+                let n = push_walk_keys(vm, id, allow);
                 out.push('{');
-                (vm.new_array(keys), n)
+                (Slot::index(1), n)
             };
-            vm.stack.extend(
-                [
-                    Value::Obj(id),
-                    keys,
-                    Value::Num(n as f64),
-                    Value::Num(0.0),
-                    Value::Num(1.0),
-                ]
-                .map(Slot::pack),
-            );
+            vm.stack.extend_from_slice(&[
+                Slot::pack(Value::Obj(id)),
+                object,
+                Slot::index(n),
+                Slot::index(0),
+                Slot::index(1),
+            ]);
             fr.set_index(vm, J_DEPTH, depth + 1);
             Ok(Stage::Child)
         }
@@ -955,9 +1063,8 @@ fn emit_headers(
         replacer_fn: None,
         allow: allow_list(vm, fr),
     };
-    let mut stack: Vec<Id> = (0..depth)
-        .map(|d| fr.slot(vm, J_LEVELS + d * LEVEL + L_ID).obj().unwrap_or(0))
-        .collect();
+    let mut stack: Vec<Id> = open_containers(&vm.stack, depth).collect();
+    stack.reverse();
     let mode = Mode::new(vm);
     let r = write_json(
         vm,
@@ -986,22 +1093,23 @@ fn child(
     indent: &str,
     depth: usize,
 ) -> Result<Stage, Value> {
-    let at = J_LEVELS + (depth - 1) * LEVEL;
+    let at = top(vm, fr);
     let id = fr.slot(vm, at + L_ID).obj().unwrap_or(0);
     let (i, n) = (fr.index(vm, at + L_I), fr.index(vm, at + L_N));
-    let keys = fr.slot(vm, at + L_KEYS).obj();
+    let object = fr.slot(vm, at + L_OBJECT) != Slot::UNDEF;
     if i >= n {
-        if !indent.is_empty() && (keys.is_none() || fr.index(vm, at + L_FIRST) == 0) {
+        if !indent.is_empty() && (!object || fr.index(vm, at + L_FIRST) == 0) {
             write_indent(out, indent, depth - 1);
         }
-        out.push(if keys.is_none() { ']' } else { '}' });
-        vm.stack.truncate(fr.base() + at);
+        out.push(if object { '}' } else { ']' });
+        vm.stack
+            .truncate(fr.base() + at - if object { n } else { 0 });
         fr.set_index(vm, J_DEPTH, depth - 1);
         check_length(vm, fr, out)?;
         return Ok(Stage::After(true));
     }
-    let key = match keys {
-        None => {
+    let key = match object {
+        false => {
             if i > 0 {
                 out.push(',');
             }
@@ -1015,15 +1123,12 @@ fn child(
             vm.fuel(crate::vm::NATIVE_FUEL);
             Value::Num(i as f64)
         }
-        Some(keys) => {
+        true => {
             vm.fuel(1);
             vm.fuel(crate::vm::NATIVE_FUEL);
             vm.fuel(crate::vm::NATIVE_FUEL);
-            let atom = match &vm.heap[keys as usize].kind {
-                Kind::Array(items) => items.get(i).map_or(0, |a| a.as_num() as Atom),
-                _ => 0,
-            };
-            fr.set(vm, J_ATOM, atom_slot(atom));
+            let atom = fr.index(vm, at - n + i) as Atom;
+            fr.set_index(vm, J_ATOM, atom as usize);
             vm.atom_val(atom)
         }
     };
