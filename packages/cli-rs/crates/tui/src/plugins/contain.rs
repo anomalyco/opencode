@@ -1,14 +1,4 @@
-//! The client's side of containment (synthesis 4.5, phase P4c). Under a parent, the client keeps its run record: the
-//! parent made it, and handed over in it what the client before this one left. The client:
-//!
-//! - holds the build a crash named, by target and digest, in `plugin-crashes.json` in the state directory, and every
-//!   external plugin when the parent says safe mode, or when no parent guards it at all: their libraries are never
-//!   opened ([`opencode_plugin::Registry::admit`]);
-//! - restores the session and the draft of the last snapshot, and shows one notice;
-//! - publishes, on every path that changes them, the session on screen and the composer's exact text;
-//! - on a real terminal, starts the watchdog; when a call it painted the notice for returns, says so on that line.
-//!
-//! The parent's half is the CLI's `contain`.
+//! Report plugin calls to the supervising process and recover held builds after a crash.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -163,7 +153,7 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
         Some(artifact) => {
             let id =
                 if artifact.id.is_empty() { artifact.target.clone().unwrap_or_default() } else { artifact.id.clone() };
-            // The held build, not a loaded plugin of the same ID (review bigboi-3).
+            // Use the held build's identity, not a loaded plugin with the same ID.
             let held = opencode_plugin::Entry::held_key(artifact.target.as_deref().unwrap_or_default());
             ToastOptions::new(Variant::Error, format!("It {}.{lost}", reason(call, crash.hang)))
                 .title(format!("Plugin failed: {id}"))
@@ -191,8 +181,7 @@ pub(crate) fn enable(tui: &Rc<Tui>, key: &str) {
     }
 }
 
-/// A call whose hang notice the watchdog painted over row 1 returned: the line says so, over the notice, and goes, so
-/// the row shows what the UI drew there.
+/// Replace a watchdog hang notice with a brief recovery notice when the call returns.
 fn responded(tui: &Rc<Tui>, artifact: &Artifact, took: Duration) {
     let theme = tui.page();
     let text = format!(" plugin {} responded after {:.1} s ", artifact.id, took.as_secs_f32());
@@ -236,8 +225,6 @@ pub fn sync(tui: &Tui) {
 mod tests {
     use super::*;
 
-    // Expected (review bigboi, inherited): a change of the crash list that cannot be written says so and leaves the
-    // file as it was, so a release that depends on it does not happen.
     #[test]
     fn a_crash_list_that_cannot_be_written_says_so() {
         use std::os::unix::fs::PermissionsExt;

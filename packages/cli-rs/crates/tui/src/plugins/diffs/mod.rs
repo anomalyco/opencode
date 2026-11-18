@@ -1,13 +1,4 @@
-//! The diff viewer (E.15a and E.15b, row F15, `feature-plugins/system/diff-viewer.tsx`): the built-in
-//! `opencode.diffs`, a plugin of contract 2.0 on both carriers (P6c, synthesis 4.9). `/diff` docks the viewer beside
-//! the session as its panel, or opens it as a full-screen route outside a session. The viewer loads the VCS or
-//! last-turn diff, and shows each file as a card under a sticky header, with the file tree beside the cards when the
-//! screen is wide enough, split or unified hunks by width, and reviewed marks.
-//!
-//! What the host did for the old viewer it does for any plugin: the cards are a windowed list, the hunk cursor is a
-//! step, the reading position a keep, the top edge's color a paint of `layout`, and the panel, the keys, the menu and
-//! the dialogs are surfaces, a layer, an overlay and host dialogs. One viewer shows at a time: its state lives from
-//! its mount's begin to its end.
+//! The built-in diff viewer, shown as a route or a docked panel.
 
 use opencode_api::generated::{SessionExecutionInterruptedDataReason, V2Event};
 use opencode_plugin::abi::interact::{Button, Event, Handled, OpenPanel, PointerKind};
@@ -111,7 +102,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     ];
     for (name, run) in commands {
         let ran = diffs.clone();
-        // A pick closes its keyed dialog, also once no viewer is left to take it (review carbon-4).
+        // A pick must close its dialog even if the viewer is gone.
         let closes = match name {
             PICK_SOURCE => Some(sources::KEY),
             PICK_BASE => Some(base_branch::KEY),

@@ -1,5 +1,4 @@
-//! What a built-in's slot surface (contract 2.0, P6a) answers for 1.x's `Render::Keep` and `Render::Hide`. Its own file,
-//! so a built-in's source builds as a library too (`crates/plugin/examples/home-footer`).
+//! Shared retained and hidden nodes for built-in slot surfaces.
 
 use opencode_plugin::abi::v2::Node;
 

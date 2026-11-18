@@ -1,4 +1,4 @@
-//! TypeScript: `feature-plugins/home/footer.tsx`.
+//! Built-in home footer.
 
 use opencode_plugin::abi::v2::{Node, Place, Surface};
 use opencode_plugin::abi::{self, Click, Layout, Placement, Span, Width};

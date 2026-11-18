@@ -1,7 +1,4 @@
-//! The host's own `/plugins` while the plugin manager (`opencode.plugins`) has failed (synthesis 3.6, 4.10): the toasts
-//! and the home footer still say "Run /plugins", so the host lists the TUI plugins and their errors, read only. Enter
-//! on a row with an error shows it; the user's enter or click on the manager's own row enables it again, which brings
-//! the manager back. Rows name registry entries by key, so a held build of the manager's ID is not the manager.
+//! Host fallback for `/plugins` when the plugin manager fails.
 
 use opencode_plugin::{Entry, Source, Status};
 
@@ -67,7 +64,7 @@ fn show(tui: &Rc<Tui>, focus: Option<String>) {
             }));
             props.actions = vec![view_error];
             props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<String>| {
-                // A key or a click, not a run of the submit by name, as a plugin's `dispatch` runs it (review bigboi-1).
+                // Require a user key or click before toggling a plugin.
                 let by_input = picked
                     .upgrade()
                     .is_some_and(|handle| handle.borrow().as_ref().is_some_and(|handle| handle.by_input()));

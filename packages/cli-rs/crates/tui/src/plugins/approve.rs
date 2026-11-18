@@ -1,17 +1,11 @@
-//! The host's question about a project plugin held back for approval (rich-plugins 3.9): a select row that toggles
-//! such a plugin asks it, whichever plugin showed the row (the plugin manager's), since only the host decides what
-//! runs (synthesis 3.6).
+//! Ask before running a project plugin. Approval belongs to the displayed artifact, not its path alone.
 
 use opencode_plugin::loader::approval::{Artifact, Decision};
 use opencode_ui::confirm::{ConfirmProps, confirm};
 
 use crate::prelude::*;
 
-/// Asks whether the build of the project plugin of `target` that the loader holds back now may run. The answer names
-/// that build, so it records nothing when the build changed meanwhile (bigboi-1, carbon-1). Approve and Decline keep
-/// the answer for this build; Escape, Ctrl+C, the header and the backdrop leave it pending (carbon-6). However the
-/// question closes, `back` runs after it, once a library's answer is applied; a TypeScript plugin's tree may still be
-/// hashed for its answer then.
+/// Ask about the held build of `target`; record the answer only while it still identifies the same build.
 pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
     let Some((held, unsaved)) = super::host::held(tui, target) else { return };
     let artifact = match held {
@@ -23,8 +17,7 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
         Rc::new(move || {
             let Some(tui) = weak.upgrade() else { return };
             let (target, artifact) = (target.clone(), artifact.clone());
-            // After the confirm has closed, and before the list comes back; a TypeScript plugin's answer applies once its
-            // tree is hashed off the UI thread, and the list follows it then.
+            // Wait for the off-thread approval check before reopening the list.
             tui.app.defer(bind!(tui, |tui, _| {
                 super::host::decide(&tui, &target, &artifact, decision, |tui, recorded| match recorded {
                     Ok(true) => {}
@@ -56,8 +49,7 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
     tui.dialogs.replace(move |cx| confirm(cx, props.clone()), Some(closed), options);
 }
 
-/// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is
-/// when that is outside the directory, and its hash (bigboi-1, carbon-1).
+/// Describe the actual library path, hash, and whether the decision can be saved.
 fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
     let inside =
         artifact.script || std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
@@ -94,8 +86,6 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
 mod tests {
     use super::*;
 
-    // Expected (bigboi-1, bigboi-2, carbon-1): the question shows the library that would run and its hash, says when it
-    // lies outside the plugin directory, and says when the answer is not saved.
     #[test]
     fn the_question_names_the_library_and_says_what_is_not_saved() {
         let root = opencode_util::temp::tempdir().unwrap();

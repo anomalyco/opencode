@@ -1,4 +1,4 @@
-//! TypeScript: `feature-plugins/system/diff-viewer.tsx`.
+//! Select the diff source for a location.
 
 use opencode_plugin::abi::{Action, Dialog, Host, Select, SelectOption};
 

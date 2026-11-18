@@ -118,8 +118,7 @@ pub enum Load {
     Ready { base: Option<Base>, files: Vec<File> },
 }
 
-/// The plugin's memory, kept while it is active (`storage.memory("review")`): the last source and the chosen base per
-/// location and branch.
+/// Remember the selected source and comparison base per location and branch.
 #[derive(Default)]
 pub struct Memory {
     pub source: Option<Mode>,
@@ -144,7 +143,7 @@ pub enum Showing {
 pub enum Preview {
     Loading,
     Failed,
-    /// Bytes that the host's image decoder refuses (TS `onError`): no size and no preview to click.
+    /// The host cannot decode these bytes. Omit the size and preview action.
     Undecodable,
     /// The bytes, and the width and height the host decodes them to.
     Ready(std::rc::Rc<[u8]>, (u32, u32)),
@@ -189,8 +188,7 @@ pub struct Viewer {
     /// Image previews by file, read once per file list.
     pub previews: HashMap<String, Preview>,
     pub menu: Option<usize>,
-    /// The tree's selected row and its rows when they last scrolled it: the selection scrolls into view only when
-    /// they change, as TS's effect does.
+    /// Scroll to the selected row only when the selection or its rows change.
     pub tree_mark: (Option<usize>, usize),
     pub contents: Contents,
     /// The last view shows this state: a wake that changed nothing of it keeps the tree.
@@ -216,7 +214,7 @@ pub struct Shown {
 }
 
 impl Viewer {
-    /// What its view shows of it now (each event changes a set by one, so the sizes tell).
+    /// State exposed to the current view.
     pub fn shown(&self) -> Shown {
         Shown {
             selected: self.selected,
@@ -309,8 +307,8 @@ impl Viewer {
         self.docked() || self.width < FULL_LAYOUT_MIN_WIDTH
     }
 
-    /// Whether the viewer has the input: always full screen, else while its panel has the focus. A dialog takes the
-    /// focus without changing the panel's (TS `panel.focused`).
+    /// A fullscreen viewer owns input; a docked viewer must hold panel focus. Opening a dialog does not transfer
+    /// ownership of the panel.
     pub fn focused(&self) -> bool {
         !self.docked() || self.panel.is_some_and(|panel| panel.focused)
     }
@@ -642,11 +640,7 @@ impl Viewer {
         self.forget(host);
     }
 
-    /// What a turn event says to the viewer: in `turn` mode the viewer of that session loads again when one of its
-    /// turns ends (TS's `createEffect` on `session.status`, running to idle), and says whether it did. It hears the
-    /// end itself: the status read when the UI hears of an event may already be idle again, for a turn that started
-    /// and ended before then (`steps/flakes-8.md`). A turn it saw start whose end the connection may have lost (a
-    /// reconnect, or signals the UI skipped) loads it again too (carbon's review of P6c, 6).
+    /// Refresh a session's turn diff when its turn ends.
     pub fn turn(&mut self, host: &dyn Host, diffs: &Diffs, turn: Turn<'_>) -> bool {
         let mine = |session: &str| self.mode == Mode::Turn && self.session() == Some(session);
         let ended = match turn {

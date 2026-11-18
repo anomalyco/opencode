@@ -1,14 +1,4 @@
-//! The plugin manager (E.18b, `feature-plugins/system/plugins.tsx`): the built-in `opencode.plugins` with `plugins.list`
-//! (`/plugins`), a plugin of the one API (P6b, synthesis 4.10) on both carriers. It reads the TUI plugins
-//! ([`abi::Read::plugins`]) and hears when they change ([`abi::Setup::on_plugins`]); it never changes them. A row that
-//! enables or disables a plugin, or asks to approve a project's plugin, is a toggle row, which only the host runs, on the
-//! user's key or click (synthesis 3.6). The server rows come from `GET /api/plugin` of the location the manager opened
-//! at; check and update are server calls too.
-//!
-//! Built-ins are internal and hidden until `ctrl+a`; a configured TypeScript plugin is listed as `skipped` with the
-//! reason as its error (F16), and an external plugin that failed as `failed` with its error. Enter on a row that is not a
-//! toggle opens its error, if any. A project plugin held back for approval (rich-plugins 3.9, not in TS) is listed
-//! `pending` or `declined`.
+//! Built-in manager for local and server plugins.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
@@ -37,8 +27,7 @@ pub fn plugin() -> abi::Plugin {
 struct State {
     opened: Cell<u64>,
     erring: Cell<bool>,
-    /// The server-list reads and checks asked for so far: only the reply to the newest one is shown, whatever order
-    /// they come back in (TS's resource keeps the newest).
+    /// Accept only the newest server list or check response.
     asked: Cell<u64>,
     directory: RefCell<String>,
     server: RefCell<Option<Vec<PluginInfo>>>,
@@ -71,8 +60,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.dialog(Dialog::Select(list(host, state, None)));
         state.fetch(host, Asked::List(state.opened.get(), state.next()));
     });
-    // The list's own commands act only while it shows: run by name with no list, they open nothing (review carbon-5).
-    // The internal rows' switch needs no guard: an open starts it again, and only an open list shows it.
+    // Ignore manager actions when the list is closed.
     let internal = state.clone();
     setup.command(hidden("opencode.plugins.internal"), move |host, _| {
         internal.internal.set(!internal.internal.get());
@@ -110,8 +98,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             host.dialog(Dialog::Select(list(host, &back, key.map(str::to_owned))));
         }
     });
-    // After the host's question about a held build: the list on the row as it is now, and the server list read again,
-    // as `plugin.updated` went unheard while the question showed (review carbon-2).
+    // Refresh server entries after approval because list subscriptions stop while the question is open.
     let asked = state.clone();
     setup.command(hidden("opencode.plugins.asked"), move |host, key| {
         if asked.opened.get() > 0 && !host.dialog_open(LIST) {
@@ -211,7 +198,7 @@ impl State {
     }
 
     fn rows(&self, read: &dyn Read) -> Vec<Row> {
-        // Not the manager that runs, whose activation this is; a held build of its ID is a row (review carbon-3).
+        // A held build sharing the manager's ID is a separate row.
         let running = |entry: &PluginEntry| entry.id == ID && entry.active;
         let mut local: Vec<Row> = read.plugins().into_iter().filter(|entry| !running(entry)).map(Row::Tui).collect();
         // A package without a server part runs nothing there; its TUI part has its own row.
@@ -249,8 +236,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
     };
     let checking = state.checking.get();
     let error = command("opencode.plugins.error", None);
-    // TS's order: check, then on the row view error (its own key), the host's toggle, update, and view error on enter;
-    // the toggle is the host's, which comes after these, and never shares a row with update or with the last.
+    // Keep the host's toggle distinct from plugin-supplied update and error actions.
     let mut actions = vec![SelectAction {
         title: if checking { "checking for updates" } else { "check for updates" }.to_owned(),
         key: Some("ctrl+r".to_owned()),
@@ -260,7 +246,7 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
         rowless: true,
         command: Some("dialog.plugins.check".to_owned()),
         disabled: checking,
-        // Kept with no package, so the server list's reply changes the select in place (review carbon-5).
+        // Keep the select mounted while waiting for the server's package list.
         hidden_all: !rows.iter().any(|row| row.package().is_some()),
     }];
     actions.extend([
@@ -395,7 +381,7 @@ impl Row {
         }
     }
 
-    /// The project plugin's build waits for the user's approval, or was declined.
+    /// Whether the user still needs to approve this build or has declined it.
     fn held(&self) -> bool {
         matches!(self, Row::Tui(entry) if matches!(entry.status, PluginStatus::Pending | PluginStatus::Declined))
     }
@@ -444,7 +430,7 @@ impl Row {
     fn local(&self) -> bool {
         match self {
             Row::Server { plugin, .. } => matches!(plugin.source, PluginSource::Local(_)),
-            // TS's `path.isAbsolute`, which on Windows takes a rooted path without a drive (`/plugins/x`) too.
+            // On Windows a drive-less rooted path is absolute for the plugin manager.
             Row::Tui(entry) => entry.target.as_deref().is_some_and(|target| {
                 target.starts_with("file://")
                     || target.starts_with("./")
@@ -513,8 +499,7 @@ impl Row {
     }
 }
 
-/// What a slow plugin's footer says of its `report`: its costliest call kind and that kind's worst time, or its backlog.
-/// The whole report goes in the row's details, so the footer leaves room for the title (PL-5).
+/// Summarize the worst call or backlog in the footer; show the full report in details.
 fn slow_summary(report: &str) -> String {
     let Some(kinds) = report.strip_prefix("slow (p50/p99/worst): ") else { return "slow: backlog".to_owned() };
     let worst = |kind: &str| -> Option<(String, f64)> {

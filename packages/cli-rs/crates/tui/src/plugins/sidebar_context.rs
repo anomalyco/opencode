@@ -1,6 +1,4 @@
-//! The sidebar's context section (E.14, row F04, `feature-plugins/sidebar/context.tsx`): the tokens of the last
-//! reply, the share of the model's context they use, and the session's cost. It is a plugin of the one API (O-67),
-//! on contract 2.0 (P6a). [`Last`] and [`money`] also serve the prompt footer.
+//! Sidebar context usage and cost for the session family.
 
 use std::cell::RefCell;
 
@@ -106,8 +104,7 @@ impl Last {
             self.models = self.location.as_ref().and_then(|location| read.models(Some(location)));
         }
         let mut stale = models || changed.list(&self.session);
-        // A message changed in place from the usage's source on moves the usage only if what it reads of it changed:
-        // each such message is read alone, so a streamed delta costs one message and not the session (P6a review).
+        // Re-read only changed messages that can affect usage; streamed text alone does not invalidate the total.
         for (session, id) in &changed.messages {
             if stale {
                 break;

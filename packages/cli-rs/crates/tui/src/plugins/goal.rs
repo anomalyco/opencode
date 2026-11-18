@@ -1,11 +1,4 @@
-//! The goal `/goal` set on a session (E.14, rows F02 and DLG45, `feature-plugins/prompt/goal.tsx`): the goal plugin's
-//! RPC read, the status under the prompt, and the goal panel, for the prompt footer plugin. The panel is a dialog of
-//! the API both majors share, whose body is a node of 1.x: contract 2.0 has no keyed dialog (P6a).
-//!
-//! [`Goals`] keeps the goal of each session a mounted footer shows. The first footer of a session reads its goal, and
-//! every tracked session is read again after a reconnect, since changes published meanwhile were missed; the `changed`
-//! events keep them current. A change that arrives while a read is in flight is newer than its reply, so each read and
-//! change takes a turn, and a reply of an older turn is dropped.
+//! Session goal status, commands, and progress panel.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{LocationQueryInput, RpcCallInput, RpcCallOutput, SessionCommandInput, V2Event};
@@ -44,7 +37,7 @@ pub enum Status {
     Complete,
 }
 
-/// The goals of the sessions the mounted footers show (TS `createGoal`, once per session).
+/// Track goals for sessions with a mounted goal footer.
 #[derive(Default)]
 pub struct Goals {
     sessions: RefCell<HashMap<String, Tracked>>,

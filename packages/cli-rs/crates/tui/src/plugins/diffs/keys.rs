@@ -1,10 +1,4 @@
-//! The `diff.*` bindings (E.15a): the viewer's commands (`diff-viewer.tsx:588-781`) and the global `diff.open`
-//! (`:1311-1361`). Of the 26 `diff.*` keybinds in `config/keybind.ts`, 20 are viewer commands, `diff.open` opens it,
-//! and the five deprecated tree keys (`diff.toggle`, `.expand`, `.expand_all`, `.collapse`, `.switch_focus`) are
-//! kept for config only and register nothing, as in TS.
-//!
-//! The viewer's keys are a layer of its surface (P6c): each bind is the user's keybind of the command's name
-//! ([`Bind::command`]), heard by the surface's handler while the panel has the focus or the route shows.
+//! Diff commands and key bindings for route and docked views.
 
 use opencode_plugin::abi::interact::{Bind, Layer, LayerScope};
 
@@ -32,9 +26,7 @@ pub enum Action {
     Help,
 }
 
-/// The viewer's commands in TS order. `app.exit` closes the viewer while it has the input; the specific bindings
-/// win over its `ctrl+d`. Its `ctrl+c` is the host's: no plugin layer takes the reserved chord (P2), and the host
-/// closes the plugin's menu, panel or route that has the input on it, as `app.exit` closes the viewer in TS.
+/// Viewer-specific bindings take precedence over exit while the viewer owns input.
 pub const COMMANDS: [(&str, &str, Action); 21] = [
     ("diff.close", "Close diff viewer", Action::Close),
     ("diff.down", "Move diff viewer down", Action::Down),

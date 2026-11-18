@@ -1,6 +1,4 @@
-//! The sidebar's todo section (E.14, row F07, `feature-plugins/sidebar/todo.tsx`): the list of the latest
-//! completed `todowrite` call before the revert boundary. Above two items the header folds the list, and the
-//! folded header counts what remains. It is a plugin of the one API (O-67), on contract 2.0 (P6a).
+//! Show the most recent completed todo list before the revert boundary.
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_plugin::abi::v2::{Node, Place, Surface};
@@ -61,8 +59,7 @@ struct Last {
 }
 
 impl Last {
-    /// Reads what `changed` may have changed; whether the list it shows changed. A streamed delta that leaves the
-    /// latest `todowrite` call as it was allocates nothing.
+    /// Refresh the displayed list only when a relevant message or boundary changes.
     fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> bool {
         let info = fresh || changed.session(&self.session);
         if info {
@@ -70,8 +67,7 @@ impl Last {
                 read.session(&self.session).and_then(|session| session.info.revert).map(|revert| revert.message_id.0);
         }
         let mut messages = info || changed.list(&self.session);
-        // A message changed in place can change the list only if it holds a `todowrite` call or held the one the list
-        // came from: each is read alone, so a streamed delta costs one message and not the session (P6a review).
+        // Inspect changed messages individually; unrelated deltas must not rescan the transcript.
         for (session, id) in &changed.messages {
             if messages {
                 break;

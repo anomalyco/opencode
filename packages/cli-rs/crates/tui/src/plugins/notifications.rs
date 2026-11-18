@@ -1,7 +1,4 @@
-//! The notifications plugin (E.19a, row F09, `feature-plugins/system/notifications.ts`): asks for attention when
-//! a session is done, a subagent is done, a form or a permission waits, or a session fails, and shows failures
-//! as toasts. [`Tracker`] is the event logic; [`plugin`] feeds it the server's events. It is a plugin of the one API
-//! (O-67).
+//! Notify on session completion, pending requests, and failures.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -124,8 +121,7 @@ impl Tracker {
                 self.terminal.remove(id);
             }
             V2Event::SessionExecutionSucceeded(event) => {
-                // A running subagent's report wakes the session again, so it isn't done yet. Subagent sounds stay
-                // as they were.
+                // A running child wakes its parent again; wait before reporting completion.
                 let id = &event.data.session_id.0;
                 if sessions.parent(id).is_some() || !sessions.running_child(id) {
                     self.ended(id, sessions, &mut actions);

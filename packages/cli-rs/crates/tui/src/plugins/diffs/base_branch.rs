@@ -1,6 +1,4 @@
-//! Base branch dialog (E.15b, row DLG46, `DiffBaseDialog` in `feature-plugins/system/diff-viewer.tsx`): the
-//! location's local and remote branches, searched on the server as the user types (the host's query, after 150 ms).
-//! The chosen branch is remembered per location and branch while the plugin is active.
+//! Choose a local or remote comparison branch.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{LocationQueryInput, VcsBranchListInput, VcsBranchListOutput};
