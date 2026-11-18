@@ -457,6 +457,14 @@ fn collect(
             "{name} expects a Uint8Array, an array, or an iterable of numbers, received {d}."
         )));
     }
+    if mapper.is_none() && steps_natively(vm, source) {
+        let mut values = Vec::new();
+        fuel::for_of(vm, source, |_, v| {
+            values.push(v);
+            Ok(true)
+        })?;
+        return convert(vm, &values, into);
+    }
     let (f, this_arg) = mapper.unwrap_or_default();
     let (target, offset) = match into {
         Sink::New => (Value::Undef, Value::Undef),
@@ -472,6 +480,30 @@ fn collect(
         *source,
         &[f, this_arg, values, target, offset, Value::Num(0.0)],
     )
+}
+
+/// Whether iterating `v` runs no program code: its iterator is the VM's own over its items (see `Vm::walks`), which
+/// reads them without calling anything.
+fn steps_natively(vm: &Vm, v: &Value) -> bool {
+    match v {
+        Value::Str(_) => true,
+        Value::Obj(id) => matches!(
+            vm.heap[*id as usize].kind,
+            Kind::Array(_) | Kind::Map(_) | Kind::Set(_)
+        ),
+        _ => false,
+    }
+}
+
+/// The end of the reference's `collectBytes`: each collected value converted to a byte.
+fn convert(vm: &mut Vm, values: &[Value], into: Sink) -> Res {
+    fuel::native(vm);
+    vm.bytecode_builtin();
+    let mut data = Vec::with_capacity(values.len());
+    for v in values {
+        data.push(to_u8(super::builtin_number(vm, v)?));
+    }
+    collected(vm, data, into)
 }
 
 /// Hands collected bytes to what the built-in does with them.
@@ -525,13 +557,7 @@ impl ForOf for Collect {
     }
 
     fn finish(vm: &mut Vm, fr: Frame) -> Res {
-        fuel::native(vm);
-        vm.bytecode_builtin();
         let values = values_of(vm, fr.slot(vm, COL_VALUES)).to_vec();
-        let mut data = Vec::with_capacity(values.len());
-        for v in values {
-            data.push(to_u8(super::builtin_number(vm, &v)?));
-        }
         let into = match fr.get(vm, COL_TARGET) {
             Value::Obj(target) => Sink::Set {
                 target,
@@ -539,7 +565,7 @@ impl ForOf for Collect {
             },
             _ => Sink::New,
         };
-        collected(vm, data, into)
+        convert(vm, &values, into)
     }
 
     fn done(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {

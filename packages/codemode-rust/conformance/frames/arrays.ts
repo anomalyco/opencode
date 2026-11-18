@@ -33,6 +33,7 @@ export default (_: Helpers) => ({
     "try { Uint8Array.from([1, 2], (x) => { if (x === 2) throw new Error('m' + x); return x }) } catch (e) { return [e.name, e.message] }",
     "try { new Uint8Array(1).set({ [Symbol.iterator]: function* () { yield 1; yield 2 } }) } catch (e) { return [e.name, e.message] }",
     "const it = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 2, value: ++n }) } } }; const u = new Uint8Array(5); u.set(it, 2); return [[...u], [...new Uint8Array(it)], [...Uint8Array.from(it, (x) => x * 3)]]",
+    "return [[...new Uint8Array(new Set([1, 2]))], [...Uint8Array.from('12')], [...Uint8Array.from(new Map([[3, 4]]).keys())], [...new Uint8Array([1, 2].values())], [...new Uint8Array((function* () { yield 5; yield 6 })())]]",
     "const u = new Uint8Array([5, 6, 7]); const seen = []; u.forEach((x, i, a) => { seen.push([x, i, a === u]); if (i === 0) u[2] = 9 }); return seen",
     "const u = new Uint8Array([1, 2, 3, 4]); return [u.some((x) => x > 3), u.every((x) => x > 0), u.findLast((x) => x < 3), u.findIndex((x) => x > 9), u.reduceRight((a, x) => a + x, '')]",
   ] as Array<string>,
