@@ -14,7 +14,7 @@ describe("a page that did not load", () => {
     ["ERR_NAME_NOT_RESOLVED", "unreachable"],
     ["ERR_CONNECTION_REFUSED", "unreachable"],
     ["ERR_ADDRESS_UNREACHABLE", "unreachable"],
-    ["502 Bad Gateway", "unreachable"],
+    ["502", "generic"],
     ["ERR_INTERNET_DISCONNECTED", "offline"],
     ["ERR_TIMED_OUT", "slow"],
     ["ERR_CONNECTION_TIMED_OUT", "slow"],
@@ -36,6 +36,26 @@ describe("a page that did not load", () => {
     expect(message(view.description)).toBeTruthy()
     expect(message(view.title)).not.toContain("ERR_")
     expect(view.code).toBe(error.startsWith("ERR_") || error.startsWith("502") ? error : undefined)
+  })
+
+  // A status line's reason phrase is the site's to write. It chooses no page and none of it is shown.
+  test.each([
+    "502 Bad Gateway",
+    "502 ERR_CERT_AUTHORITY_INVALID",
+    "502 ERR_INTERNET_DISCONNECTED",
+    "502 ERR_BLOCKED_BY_CLIENT",
+    "502 ERR_TOO_MANY_REDIRECTS",
+    "502 Your session expired. Call +1 555 0100 or visit evil.example/fix",
+    "502 \u202Egnp.exe",
+    "404 page_crashed",
+  ])("an HTTP status reads the same whatever the site wrote after it: %s", (error) => {
+    expect(loadFailure(error)).toEqual({
+      kind: "generic",
+      title: "failed.generic.title",
+      description: "failed.generic.description",
+      reload: true,
+      code: error.slice(0, 3),
+    })
   })
 
   test("Chromium's code is read out of a longer message", () => {

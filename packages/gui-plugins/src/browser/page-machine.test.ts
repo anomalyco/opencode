@@ -134,7 +134,7 @@ test("Stop before issue publishes the restore address without inventing a commit
 const visit = (url: string, title = url): DocumentEvent[] => [
   { type: "navigation.started", url, isMainFrame: true, isSameDocument: false },
   { type: "loading.started" },
-  { type: "navigation.committed", url, status: 200, statusText: "OK", title },
+  { type: "navigation.committed", url, status: 200, title },
   { type: "document.ready" },
   { type: "loading.stopped", title },
 ]
@@ -243,7 +243,7 @@ describe("uncommitted navigations keep the document", () => {
     expect(documentGeneration(started.state)).toBe(2)
 
     const committed = replay(
-      [{ type: "navigation.committed", url: "https://beta.example/", status: 200, statusText: "OK", title: "beta" }],
+      [{ type: "navigation.committed", url: "https://beta.example/", status: 200, title: "beta" }],
       started.state,
     )
 
@@ -265,7 +265,7 @@ test("a popup on about:blank is not loading until it navigates away", () => {
   expect(isDocumentLoading(started.state)).toBe(true)
 
   const committed = replay(
-    [{ type: "navigation.committed", url: "https://popup.example/", status: 200, statusText: "OK", title: "" }],
+    [{ type: "navigation.committed", url: "https://popup.example/", status: 200, title: "" }],
     started.state,
   )
 
@@ -331,7 +331,6 @@ describe("failed documents", () => {
         type: "navigation.committed",
         url: "https://alpha.example/down",
         status: 502,
-        statusText: "Bad Gateway",
         title: "",
       },
       { type: "document.ready" },
@@ -340,7 +339,7 @@ describe("failed documents", () => {
 
     expect(result.state.status).toBe("failed")
     expect(documentVisible(result.state)).toBe(false)
-    expect(documentTab(result.state, history).loadError).toBe("502 Bad Gateway")
+    expect(documentTab(result.state, history).loadError).toBe("502")
     expect(result.all.filter((effect) => effect.type === "show")).toEqual([
       { type: "show", visible: true },
       { type: "show", visible: false },
@@ -351,7 +350,7 @@ describe("failed documents", () => {
     const result = replay([
       ...visit("https://alpha.example/", "Alpha"),
       { type: "navigation.started", url: "https://alpha.example/next", isMainFrame: true, isSameDocument: false },
-      { type: "navigation.committed", url: "https://alpha.example/next", status: 200, statusText: "OK", title: "" },
+      { type: "navigation.committed", url: "https://alpha.example/next", status: 200, title: "" },
       {
         type: "navigation.failed",
         code: -2,
@@ -426,7 +425,6 @@ describe("title and icon", () => {
       type: "navigation.committed",
       url: "https://alpha.example/next",
       status: 200,
-      statusText: "OK",
       title: "alpha.example/next",
     }).state
 
@@ -446,7 +444,6 @@ describe("title and icon", () => {
           type: "navigation.committed",
           url: "https://beta.example/",
           status: 200,
-          statusText: "OK",
           title: "beta.example",
         },
       ],
@@ -498,7 +495,6 @@ describe("a screenshot waits for a pending navigation", () => {
           type: "navigation.committed",
           url: "https://beta.example/home",
           status: 200,
-          statusText: "OK",
           title: "Home",
         },
       ],

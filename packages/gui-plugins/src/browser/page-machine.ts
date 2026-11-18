@@ -59,7 +59,6 @@ export type DocumentEvent =
       readonly type: "navigation.committed"
       readonly url: string
       readonly status: number
-      readonly statusText: string
       readonly title: string
     }
   | {
@@ -279,7 +278,7 @@ function committed(state: Open, event: Extract<DocumentEvent, { type: "navigatio
       : // The server-network proxy answers an unreachable HTTP target with an empty 502. Other error statuses are
         // real documents from the user's server and stay visible.
         event.status === 502
-        ? { ...document, status: "failed", message: `${event.status} ${event.statusText}`.trim().slice(0, 2_048) }
+        ? { ...document, status: "failed", message: String(event.status) }
         : { ...document, status: "loaded", revealed: documentVisible(state) }
 
   return settle(state, next, [RESET, PUBLISH, DETAIL])

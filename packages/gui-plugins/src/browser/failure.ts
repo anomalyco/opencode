@@ -73,11 +73,16 @@ export function loadFailure(error: string) {
     return { kind: "unavailable", title: "failed.unavailable.title", description: "preview.upgrade", reload: true, code: undefined } as const
 
   if (error === "page_crashed") return { kind: "crashed", ...LOAD_COPY.crashed, reload: true, code: undefined } as const
-  const code = CHROMIUM_CODE.exec(error)?.[0]
-  // The server-network proxy answers an unreachable target with an empty 502.
-  const kind = code ? (CHROMIUM_KINDS.find((rule) => rule[0].test(code))?.[1] ?? "generic") : /^502\b/.test(error) ? "unreachable" : "generic"
+  // An HTTP status, as the proxy's 502 for a target it cannot reach. A site can answer with the same number, and
+  // whatever follows it would be the site's own words: the page says what it says for any load, with the number alone.
+  const status = /^\d{3}\b/.exec(error)?.[0]
 
-  return { kind, ...LOAD_COPY[kind], reload: true, code: code ?? (/^\d{3}\b/.test(error) ? error.slice(0, 64) : undefined) }
+  if (status) return { kind: "generic", ...LOAD_COPY.generic, reload: true, code: status } as const
+  // Only Chromium's own network error for the load chooses among the pages.
+  const code = CHROMIUM_CODE.exec(error)?.[0]
+  const kind = code ? (CHROMIUM_KINDS.find((rule) => rule[0].test(code))?.[1] ?? "generic") : "generic"
+
+  return { kind, ...LOAD_COPY[kind], reload: true, code }
 }
 
 export type LoadFailure = ReturnType<typeof loadFailure>

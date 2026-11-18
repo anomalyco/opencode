@@ -805,8 +805,9 @@ export function createBrowserPage(
       isSameDocument: event.isSameDocument,
     })
   })
-  contents.on("did-navigate", (_event, url, status, statusText) =>
-    dispatch({ type: "navigation.committed", url: displayURL(url), status, statusText, title: pageTitle(displayURL(url)) }),
+  // The status line's reason phrase is the site's own text: only the number is kept.
+  contents.on("did-navigate", (_event, url, status) =>
+    dispatch({ type: "navigation.committed", url: displayURL(url), status, title: pageTitle(displayURL(url)) }),
   )
   contents.on("did-navigate", () => {
     documentInput = false
