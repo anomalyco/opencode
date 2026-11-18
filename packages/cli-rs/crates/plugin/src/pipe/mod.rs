@@ -846,7 +846,8 @@ impl Scripts {
         seq
     }
 
-    /// Whether ping `seq` was answered, and if so whether a tree waited for the host then.
+    /// Whether ping `seq` was answered, and if so whether a tree waited for the host then, or a mount's view still owed
+    /// one (a first render that waits for its reads).
     pub fn ponged(&self, seq: u64) -> Option<bool> {
         self.pong.get().filter(|(answered, _)| *answered >= seq).map(|(_, waiting)| waiting)
     }
