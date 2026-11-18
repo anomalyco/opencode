@@ -1,6 +1,4 @@
-//! Terminal-cell layout of a parsed formula, a port of `packages/latex/src/layout.ts` with opentui-tex's
-//! `math-layout.ts`: a radical `√` with its overbar, matrix rows without blank rows between them, limits in three
-//! ways, and blocks of at most [`BLOCK_CELLS`] cells.
+//! Terminal-cell layout for parsed TeX formulas.
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -22,8 +20,7 @@ pub struct Cell {
     pub style: Style,
 }
 
-/// A laid-out formula (TS `MathLayout`): rows of cells, `None` where nothing is drawn. A wide grapheme leaves the
-/// cell after it empty.
+/// Rows of cells. Empty cells also occupy the trailing columns of a wide grapheme.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Layout {
     pub width: usize,
@@ -34,7 +31,7 @@ pub struct Layout {
 }
 
 impl std::fmt::Display for Layout {
-    /// The rows as text with trailing blanks trimmed (TS `toString`).
+    /// Rows as text, without trailing blanks.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rows: Vec<String> = self
             .cells
@@ -61,7 +58,7 @@ impl std::fmt::Display for Layout {
     }
 }
 
-/// Layout options (TS `RenderLatexOptions`); the plugin uses the defaults.
+/// Options for display and inline layout.
 #[derive(Clone, Debug)]
 pub struct Options {
     /// Operator limits above and below, as display math sets them.
@@ -69,7 +66,7 @@ pub struct Options {
     /// Unicode super- and subscript characters where every script character has one.
     pub compact_scripts: bool,
     pub color: Option<String>,
-    /// Inline math: compact scripts take every super- and subscript letter Unicode has, not only TS's.
+    /// Allow the extended inline script alphabet.
     pub inline: bool,
 }
 
@@ -79,12 +76,10 @@ impl Default for Options {
     }
 }
 
-/// The cells one layout may allocate in all its intermediate blocks. The parser bounds the source, not the
-/// rectangles: a short ragged matrix pays for its longest row on every row. TS leaves such input to a `RangeError`,
-/// which `layoutLatex` turns into the source fallback.
+/// Total cell budget across intermediate blocks. Even a short ragged matrix can occupy a large rectangle.
 pub const MAX_CELLS: usize = 1 << 20;
 
-/// The cells one block may take (opentui-tex's `CELL_LIMIT`): a wider or taller formula is not drawn.
+/// Maximum cells in a single block.
 pub const BLOCK_CELLS: usize = 16384;
 
 thread_local! {
@@ -121,7 +116,6 @@ struct Context {
     variant: Option<Variant>,
 }
 
-/// TS `Box`.
 struct Block {
     width: i32,
     height: i32,
@@ -184,7 +178,6 @@ fn layout_fraction(numerator: &Node, denominator: &Node, bar: bool, align: Optio
     // parentheses align between the two entries.
     let gap = 1;
     let height = numerator.height + denominator.height + gap;
-    // TeX places a fraction's math axis on its rule (or the equivalent empty axis row for a binomial).
     let baseline = numerator.height;
     let mut result = blank(width, height, baseline);
     let numerator_x = match align {
@@ -222,7 +215,7 @@ fn layout_root(body: &Node, index: Option<&Node>, context: &Context) -> Block {
 }
 
 fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&Node>, context: &Context) -> Block {
-    // A script that lays out to nothing, such as `{}` or an empty `\textcolor`, adds no geometry (opentui-tex).
+    // An empty script adds no geometry.
     let present = |node: &Node| layout_node(node, context).width > 0;
     let (superscript, subscript) = (superscript.filter(|n| present(n)), subscript.filter(|n| present(n)));
     let limits = match script_target(base) {
@@ -288,8 +281,7 @@ fn script_target(node: &Node) -> &Node {
     }
 }
 
-/// `node` as compact script characters, when it is plain text that has them all: TS's characters, or with `inline`
-/// every one Unicode has.
+/// Returns compact script text only if the alphabet covers every character.
 pub(crate) fn script_text(node: &Node, superscript: bool, inline: bool) -> Option<String> {
     let (base, extra) = if superscript { (SUPERSCRIPTS, INLINE_SUPERSCRIPTS) } else { (SUBSCRIPTS, INLINE_SUBSCRIPTS) };
     simple_text(node)?
@@ -434,7 +426,7 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
     if height <= 1 {
         return text_box(delimiter, style);
     }
-    // Combining marks typed after a delimiter stay on its middle row (opentui-tex).
+    // Combining marks on a stretched delimiter stay on its middle row.
     let split = delimiter.chars().next().map_or(0, char::len_utf8);
     let (base, marks) = delimiter.split_at(split);
     let glyphs = delimiter_glyphs(base);
@@ -558,11 +550,9 @@ fn set_cell(block: &mut Block, x: i32, y: i32, text: &str, style: &Style) {
 fn node_role(node: &Node) -> Option<Role> {
     match node {
         Node::Symbol { role, .. } => *role,
-        // Tall constructs need a terminal-cell side bearing. Treating them like operators gives their fraction
-        // bars and radical hooks breathing room without adding padding inside the construct itself.
+        // Use operator spacing around tall constructs without padding inside them.
         Node::Operator { .. } | Node::Fraction { .. } | Node::Root { .. } | Node::Matrix { .. } => Some(Role::Operator),
         Node::Scripts { base, .. } => node_role(base),
-        // A styled operator spaces as one (opentui-tex): `\mathbf{\sin}x`.
         Node::Variant { body, .. } | Node::Color { body, .. } => node_role(body),
         _ => None,
     }
@@ -637,8 +627,7 @@ fn apply_variant(value: &str, variant: Option<Variant>) -> String {
         .collect()
 }
 
-/// The cells a grapheme takes, as opentui-tex's `string-width` counts them: East Asian wide and emoji graphemes take
-/// two, combining and default-ignorable ones none.
+/// Terminal width in cells, including wide and zero-width graphemes.
 pub fn cell_width(value: &str) -> i32 {
     unicode_width::UnicodeWidthStr::width(value) as i32
 }

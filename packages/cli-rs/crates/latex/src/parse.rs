@@ -1,17 +1,12 @@
-//! The LaTeX math parser, a port of `packages/latex/src/parser.ts` and `limits.ts` in strict mode, the mode the
-//! TypeScript plugin uses, with the fixes of opentui-tex's `math-parser.ts`: literals are whole graphemes, combining
-//! marks after a command or delimiter stay on it, style directives and `\limits` make no atom, `\limits` reaches an
-//! operator through styles, `\color` stops at a cell, comments end at any line break, operators place limits in
-//! three ways, and the permissive and incomplete modes of `parseMath` and `parseMathIncomplete` ([`Mode`]). User
-//! macros are not ported: the plugin never passes any.
+//! Parses TeX math into a layout tree, optionally accepting an incomplete streaming prefix.
 
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::symbols;
 
-/// Longest accepted source, in characters (`DEFAULT_MAX_SOURCE_LENGTH`).
+/// Maximum input length in characters.
 const MAX_SOURCE_LENGTH: usize = 100_000;
-/// Deepest accepted brace or construct nesting (`DEFAULT_MAX_NESTING_DEPTH`).
+/// Maximum depth of nested braces and constructs.
 const MAX_DEPTH: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,7 +68,7 @@ pub enum Align {
     Right,
 }
 
-/// Where an operator puts its scripts (opentui-tex's `limits: boolean | "display"`).
+/// Where an operator places its scripts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Limits {
     /// Beside it: `\int`, `\sin`, `\nolimits`.
@@ -84,21 +79,19 @@ pub enum Limits {
     Always,
 }
 
-/// How [`parse_with`] reads a source.
+/// Parser options for unsupported commands and streaming input.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Mode {
-    /// An unsupported command is its name as text and an unsupported delimiter its name or character, instead of an
-    /// error (opentui-tex's default; the plugin parses strictly and shows the source).
+    /// Treat unsupported commands and delimiters as literal text.
     pub permissive: bool,
-    /// The source is a prefix of a formula, as one streams: a construct the end cuts off takes `□` for what is
-    /// missing (`parseMathIncomplete`). Malformed syntax before the end still fails.
+    /// Fill a missing operand at end of input with `□`. Earlier syntax errors still fail.
     pub incomplete: bool,
 }
 
 /// What an incomplete formula shows for a missing part.
 pub const PLACEHOLDER: &str = "\u{25a1}";
 
-/// A parsed formula (TS `MathNode`).
+/// A parsed formula.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Row(Vec<Node>),
@@ -118,7 +111,7 @@ pub enum Node {
     Color { color: String, body: Box<Node> },
 }
 
-/// Why a source is not rendered (TS `LatexParseError`); the plugin then shows the source.
+/// An error parsing or laying out a formula.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseError {
     pub message: String,
@@ -175,7 +168,6 @@ fn boundaries(source: &[char]) -> Vec<bool> {
     starts
 }
 
-/// Rejects brace nesting deeper than [`MAX_DEPTH`] before parsing (`assertNestingDepth`).
 fn check_nesting(source: &[char]) -> Result<()> {
     let mut depth = 0usize;
     let mut slashes = 0usize;
@@ -392,7 +384,7 @@ impl Parser {
             }
             "not" => {
                 self.skip_whitespace();
-                // At the end TS negates an empty symbol.
+                // A trailing negation applies to the empty symbol.
                 if self.done() {
                     return Ok(Node::Symbol { value: negate(""), role: Some(infer_role("")) });
                 }
@@ -773,7 +765,6 @@ impl Parser {
         self.source[..index].iter().rev().take_while(|&&c| c == '\\').count() % 2 == 1
     }
 
-    /// A raw group with TeX's text escapes resolved (`readTextGroup`).
     fn read_text_group(&mut self) -> Result<String> {
         let (raw, closed) = self.read_raw(true)?;
         let raw: Vec<char> =
@@ -782,7 +773,7 @@ impl Parser {
         let mut index = 0;
         while index < raw.len() {
             let char = raw[index];
-            // TS's `\\([A-Za-z@]+|.)`: `.` does not match a line break.
+            // The escaped-character pattern excludes line breaks.
             if char != '\\' || raw.get(index + 1).is_none_or(|&c| c == '\n' || c == '\r') {
                 text.push(if char == '~' { ' ' } else { char });
                 index += 1;
@@ -915,7 +906,7 @@ fn is_command_letter(char: char) -> bool {
     char.is_ascii_alphabetic() || char == '@'
 }
 
-/// The spacing role of a literal character. As in TS, an empty value (read at the end) is binary.
+/// An empty literal at end of input has binary spacing.
 fn infer_role(value: &str) -> Role {
     if "+-*/×÷±∓".contains(value) {
         return Role::Binary;

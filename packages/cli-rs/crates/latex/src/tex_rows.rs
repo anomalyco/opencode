@@ -1,8 +1,3 @@
-//! Rows ported from opentui-tex (`src/math-parser.test.ts`, `math-layout.test.ts`, `unicode-tex-backend.test.ts`),
-//! in each mode they name. Where the TS oracle disagrees, `oracle_rust.json` holds Rust's expectation
-//! (`parity/deviations/P2-latex-opentui-tex.md`). `steps/latex-more.md` lists what is not ported. Then the inline
-//! rows.
-
 use crate::layout::{self, Options};
 use crate::parse::{Accent, Environment, Limits, Mode, Node, PLACEHOLDER, Role, Variant, parse, parse_with};
 
@@ -435,12 +430,10 @@ fn inline_math_takes_one_row() {
     ] {
         assert_eq!(inline(source), expected, "{source:?}");
     }
-    // Styles stay: relations bold, as display math draws them.
     let line = crate::inline_line("a \\le \\mathit{b}").unwrap();
     assert!(line.iter().any(|span| span.text.contains('≤') && span.bold), "{line:?}");
     assert!(line.iter().any(|span| span.text == "b" && span.italic), "{line:?}");
     assert!(line.iter().all(|span| span.fg.is_none()), "{line:?}");
-    // TeX that does not parse shows as typed: the renderer returns nothing.
     for source in ["\\frac{1}{", "x^", "\\unknown", "", " "] {
         assert_eq!(crate::inline_line(source), None, "{source:?}");
     }
@@ -452,7 +445,6 @@ fn accents_on_styled_text() {
     assert_eq!(inline("\\tilde{\\mathbb{R}}"), "ℝ\u{303}");
 }
 
-/// `source` laid out inline-style (opentui-tex's `display: false`), as text.
 fn text_mode(source: &str, display: bool, mode: Mode) -> String {
     let options = Options { display, ..Options::default() };
     crate::render_mode(source, &options, mode).unwrap_or_else(|error| panic!("{source:?}: {error}")).to_string()
@@ -648,7 +640,6 @@ fn incomplete_mode_draws_a_prefix_with_placeholders() {
     let both = Mode { permissive: true, incomplete: true };
     assert!(text_mode("\\left(x\\rightfoo", false, both).contains("\\rightfoo"));
     assert!(parse("\\left(x\\rightfoo").is_err());
-    // Malformed syntax before the end fails in both modes.
     for source in [
         "a}b",
         "\\frac}",
@@ -688,14 +679,12 @@ fn sources_and_blocks_are_bounded() {
     };
     assert!(layout::layout(&wide, &options).is_none());
     assert!(layout::layout(&Node::Brace { body: Box::new(text(&"x".repeat(8193))), over: true }, &options).is_none());
-    // Widths as `string-width` counts them: a ZWJ sequence, a flag, and a keycap take two cells.
     assert_eq!(crate::render("\u{1f469}\u{200d}\u{1f52c}^2+\u{1f1e9}\u{1f1f0}").unwrap().width, 8);
     assert_eq!(
-        // `#` is no delimiter: permissive mode, as opentui-tex's row.
         text_mode("\\left#\u{fe0f}\u{20e3}\\frac{1}{2}\\right#\u{fe0f}\u{20e3}", false, PERMISSIVE),
         "#  1 #\n#\u{fe0f}\u{20e3}───#\u{fe0f}\u{20e3}\n#  2 #"
     );
-    // A zero-width delimiter mark draws or fails, and never panics.
+    // Zero-width delimiter marks may fail to render, but must not panic.
     for display in [false, true] {
         for mode in [Mode::default(), INCOMPLETE] {
             let _ = crate::render_mode(
@@ -799,7 +788,6 @@ fn alphabets_and_styles() {
     assert_eq!(display("\\epsilon\\varepsilon\\phi\\varphi"), "ϵεϕφ");
 }
 
-/// `\textcolor` keeps its color in the drawn rows, in display and inline math (opentui-tex's spans).
 #[test]
 fn colors_reach_the_rows() {
     use opencode_plugin_abi::{Color, Rgba};
