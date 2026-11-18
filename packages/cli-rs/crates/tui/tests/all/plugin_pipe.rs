@@ -499,12 +499,20 @@ fn probe_and_twin(config: Config, record: bool) -> (Pipe, PathBuf) {
 thread_local! {
     /// What the probe's effects asked the test's recorder to note, in the order they applied.
     static NOTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The host's frame number as each note applied, while a row lends the recorder its app ([`FRAMES_OF`]).
+    static NOTED_FRAMES: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) };
+    static FRAMES_OF: std::cell::RefCell<Option<opentui::prelude::App>> = const { std::cell::RefCell::new(None) };
 }
 
 fn recorder() -> opencode_plugin::Builtin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let command = abi::Command::new("recorder.note").title("note");
-        setup.command(command, |_, input| NOTED.with(|noted| noted.borrow_mut().push(input.unwrap_or("").to_owned())));
+        setup.command(command, |_, input| {
+            NOTED.with(|noted| noted.borrow_mut().push(input.unwrap_or("").to_owned()));
+            if let Some(frame) = FRAMES_OF.with_borrow(|app| app.as_ref().map(opentui::prelude::App::frame_number)) {
+                NOTED_FRAMES.with(|frames| frames.borrow_mut().push(frame));
+            }
+        });
         Ok(())
     }
     opencode_plugin::Builtin::Plugin(abi::Plugin { id: "test.recorder", setup })
@@ -563,17 +571,22 @@ fn many_effects_of_one_answer_wait_for_the_next_paint() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe_and_twin(config, true);
     NOTED.with(|noted| noted.borrow_mut().clear());
+    NOTED_FRAMES.with(|frames| frames.borrow_mut().clear());
+    FRAMES_OF.with_borrow_mut(|app| *app = Some(pipe.harness.app.app().clone()));
     let noted = || NOTED.with(|noted| noted.borrow().len());
     pipe.harness.tui.keymap.dispatch("probe.burst", Some("100"));
-    let (begun, mut most) = (Instant::now(), 0);
+    let begun = Instant::now();
     while noted() < 100 * 100 {
         assert!(begun.elapsed() < Duration::from_secs(60), "{} noted, {:?}", noted(), pipe.status(PROBE));
-        let before = noted();
         turn(&pipe.harness);
-        most = most.max(noted() - before);
         std::thread::sleep(Duration::from_micros(200));
     }
-    assert!(most <= 2048, "{most} ran in one turn");
+    // One budget a painted frame, however many of the JS host's answers drained before its paint (frame-effects).
+    let mut frames = std::collections::BTreeMap::<u64, usize>::new();
+    NOTED_FRAMES.with(|noted| noted.borrow().iter().for_each(|frame| *frames.entry(*frame).or_default() += 1));
+    FRAMES_OF.with_borrow_mut(|app| *app = None);
+    let most = frames.values().copied().max().unwrap_or_default();
+    assert!(most <= opencode_plugin::FRAME_EFFECTS, "{most} ran in one frame");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
@@ -3366,8 +3379,10 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     // A frame runs its budget of what waits: the drain is so many frames, however long each takes under load
     // (pipe-flakes: 65 frames of the full queue took 5 s alone, past the 30 s of a wait under the lane's load).
     let waiting = opencode_plugin::effects_waiting();
+    // Each paint runs nothing past its budget; the rest comes due just after it.
     for _ in 0..waiting.div_ceil(opencode_plugin::FRAME_EFFECTS) {
         h.app.render();
+        h.app.advance(Duration::ZERO);
     }
     assert_eq!(opencode_plugin::effects_waiting(), 0, "the queue drained within a frame for each budget of {waiting}");
     h.tui.keymap.dispatch("refused.fetch", None);

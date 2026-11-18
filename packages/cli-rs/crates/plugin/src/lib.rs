@@ -1873,8 +1873,9 @@ thread_local! {
     static FLUSHING: Cell<bool> = const { Cell::new(false) };
     /// The depth of what runs now: of the effect that runs, one more inside a dispatch it runs, 0 outside effects.
     static DEPTH: Cell<u32> = const { Cell::new(0) };
-    /// The host and frame the effects run in, how many ran in that frame, and whether the next paint was asked for.
-    static RAN: Cell<((usize, u64), usize, bool)> = const { Cell::new(((0, 0), 0, false)) };
+    /// The host and frame the effects run in, how many ran in that frame, whether the next paint was asked for, and
+    /// when on the host's clock the count began.
+    static RAN: Cell<Ran> = const { Cell::new(Ran { frame: (0, 0), count: 0, asked: false, since: None }) };
 }
 
 /// An effect asked for under this many dispatches of effects, each by a command the one before ran (a command that
@@ -1890,6 +1891,23 @@ const QUEUE: usize = 1 << 16;
 /// tests, which bound a drain by frames, not by the wall clock.
 #[doc(hidden)]
 pub const FRAME_EFFECTS: usize = 1024;
+
+/// A frame's slot at the host's 60 frames a second: a frame's count of effects ends when it paints, or, once the queue
+/// went idle, when a slot passed on the host's clock since the count began (big-boi tm-2: lone timer ticks a second
+/// apart, which ask for no paint, must not add up to a forced one).
+const FRAME_SLOT: std::time::Duration = std::time::Duration::from_millis(16);
+
+/// What ran in a frame ([`next_effect`]).
+#[derive(Clone, Copy)]
+struct Ran {
+    /// The host, by address, and its frame number.
+    frame: (usize, u64),
+    count: usize,
+    /// The next paint was asked for, to run the rest.
+    asked: bool,
+    /// When the count began, on the host's clock.
+    since: Option<std::time::Instant>,
+}
 
 /// Acts on what the budget said of a call of plugin `id`: a plugin that became slow is told once a session, unless the
 /// call `failed` it, which tells its own report; a call that opened a frame has the frames closed at the next paint.
@@ -2004,20 +2022,28 @@ pub fn flush() {
     if FLUSHING.with(|flushing| flushing.replace(true)) {
         return;
     }
+    let mut last = None;
     while let Some((host, depth, timed, effect)) = next_effect() {
         if let Some(host) = host.upgrade() {
+            last = Some(Rc::downgrade(&host));
             let outer = DEPTH.replace(depth);
             // What a timer's work queued is the timer's work too: it asks for no paint of its own ([`close_idle`]).
             ticking(timed, || behave::as_user(false, || effect(&*host)));
             DEPTH.set(outer);
         }
     }
-    // The queue drained, not stopped by the frame's bound: what comes next, a later turn's, counts afresh. A drain that
-    // goes on without emptying keeps its count, so the bound holds for it; ticks with no paint between them no longer
-    // add up to it (big-boi tm-2).
-    if EFFECTS.with(|effects| effects.borrow().is_empty()) {
-        let (at, _, asked) = RAN.get();
-        RAN.set((at, 0, asked));
+    // The budget is the painted frame's: answers that drain one after another before the paint share it (the frame
+    // never runs unbounded plugin work). Once the queue went idle, a frame slot later on the host's clock counts afresh,
+    // as a frame would have come by then: lone timer ticks, which ask for no paint, never add up to a forced one
+    // (big-boi tm-2). A drain that goes on without emptying keeps its count whatever the clock says.
+    let now = last.and_then(|host: Weak<dyn Host>| host.upgrade()).map(|host| host.app().now());
+    if EFFECTS.with(|effects| effects.borrow().is_empty())
+        && let Some(now) = now
+    {
+        let ran = RAN.get();
+        if ran.since.is_none_or(|since| now.duration_since(since) >= FRAME_SLOT) {
+            RAN.set(Ran { count: 0, since: None, ..ran });
+        }
     }
     FLUSHING.with(|flushing| flushing.set(false));
 }
@@ -2076,21 +2102,23 @@ fn next_effect() -> Option<Queued> {
     // The effect of a host that is gone runs nothing.
     let Some(host) = next.0.upgrade() else { return Some(next) };
     let frame = (Rc::as_ptr(&host).cast::<()>() as usize, host.app().frame_number());
-    let (count, asked) = match RAN.get() {
-        (at, count, asked) if at == frame => (count, asked),
-        _ => (0, false),
+    let ran = match RAN.get() {
+        ran if ran.frame == frame => ran,
+        _ => Ran { frame, count: 0, asked: false, since: None },
     };
-    if count < FRAME_EFFECTS {
-        RAN.set((frame, count + 1, asked));
+    let since = ran.since.or_else(|| Some(host.app().now()));
+    if ran.count < FRAME_EFFECTS {
+        RAN.set(Ran { count: ran.count + 1, since, ..ran });
         return Some(next);
     }
     EFFECTS.with(|effects| effects.borrow_mut().push_front(next));
-    RAN.set((frame, count, true));
-    if !asked {
-        // Runs before the paint's deferred work: a new budget for the rest of this frame number, and a flush there.
+    RAN.set(Ran { asked: true, since, ..ran });
+    if !ran.asked {
+        // The rest waits for the next paint, which this asks for. Its animations run before it paints, and so does its
+        // deferred work, which would join what this frame ran: a timer set there comes due once it painted, and the
+        // flush then counts the new frame's budget (frame-effects).
         host.app().animate(move |cx, _| {
-            RAN.set((frame, 0, false));
-            cx.app().defer(|_| flush());
+            cx.app().set_timeout(std::time::Duration::ZERO, |_| flush());
             false
         });
     }
