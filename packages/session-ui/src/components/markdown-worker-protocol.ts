@@ -2,6 +2,9 @@ import type { Block } from "./markdown-stream"
 
 export type MarkdownToken = [content: string, style: string]
 
+/** Only the worker can supply fragments. The prose never authorizes styles on a subtree. */
+export type MarkdownHTML = string | { html: string; fragments: Map<string, string> }
+
 /** Projections and highlight streams keep separate per-key caches, so a disposal names the one it clears. */
 export type MarkdownWorkerLaneTarget = "project" | "highlight"
 
@@ -12,7 +15,7 @@ export type MarkdownWorkerRequest =
   | { type: "dispose"; target: MarkdownWorkerLaneTarget; key: string }
 
 export type MarkdownWorkerResponse =
-  | { type: "parse"; id: number; html: string }
+  | { type: "parse"; id: number; html: MarkdownHTML }
   | { type: "project"; id: number; key: string; from: number; blocks: Block[] }
   | {
       type: "highlight"
