@@ -4,41 +4,35 @@ import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
+import { pollMigrationStatus, type MigrationProgress } from "./migration-status"
 import { Spinner } from "./spinner"
-
-type Progress = { label: string; numerator?: number; denominator?: number }
 
 export function MigrationOverlay() {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme()
-  const [progress, setProgress] = createSignal<Progress>()
+  const [progress, setProgress] = createSignal<MigrationProgress>()
   const abort = new AbortController()
 
-  onMount(async () => {
-    await Bun.sleep(1_000)
-    void (async () => {
-      while (true) {
-        const status = await client.api.experimental.migration.v1.status({ signal: abort.signal })
-        setProgress(status.status === "running" ? status.progress : undefined)
-        if (status.status === "completed") return
-        if (status.status === "error") throw new Error(status.error)
-        await Bun.sleep(1_000)
-      }
-    })().catch((error) => {
-      if (abort.signal.aborted) return
-      setProgress(undefined)
-      toast.show({
-        variant: "error",
-        title: "Data migration failed",
-        message: errorMessage(error),
-        duration: 10_000,
+  onMount(() => {
+    void pollMigrationStatus(
+      (options) => client.api.experimental.migration.v1.status(options),
+      setProgress,
+      abort.signal,
+    )
+      .then(
+        (status) => (status.status === "error" ? { title: "Data migration failed", message: status.error } : undefined),
+        (error: unknown) => ({ title: "Could not check data migration status", message: errorMessage(error) }),
+      )
+      .then((failure) => {
+        if (abort.signal.aborted) return
+        setProgress(undefined)
+        if (failure) toast.show({ variant: "error", ...failure, duration: 10_000 })
       })
-    })
   })
   onCleanup(() => abort.abort())
 
-  const count = (value: Progress) => {
+  const count = (value: MigrationProgress) => {
     if (value.numerator === undefined) return ""
     if (value.denominator === undefined) return ` ${value.numerator}`
     return ` ${value.numerator}/${value.denominator}`
