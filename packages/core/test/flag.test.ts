@@ -95,6 +95,11 @@ describe("Flag.resolve", () => {
     ])
   })
 
+  test("a flag given settings is on", () => {
+    const entries = [document({ video_generate: {} })]
+    expect(Flag.resolve({ entries, channel: "latest" }).video_generate).toEqual({ enabled: true, source: "config" })
+  })
+
   test("reads the old schedules key for automations, below the new key", () => {
     expect(Flag.resolve({ entries: [document({ schedules: true })], channel: "latest" }).automations).toEqual({
       enabled: true,

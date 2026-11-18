@@ -17335,7 +17335,44 @@
                 "type": "boolean"
               },
               "video_generate": {
-                "type": "boolean"
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               },
               "console_watches": {
                 "type": "boolean"

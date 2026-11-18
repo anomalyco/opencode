@@ -3,11 +3,13 @@ export * as VideoGenerateTool from "./video-generate.js"
 import path from "path"
 import { Media, ToolFailure, VideoAspectRatio } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Document, Entry } from "@opencode/schema/config"
 import type { VideoID } from "@opencode/schema/generate"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Effect, Schema, Scope, Stream } from "effect"
 import { toolFailure } from "../runtime.js"
+import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Flag } from "../../flag.js"
@@ -186,6 +188,7 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const models = yield* Model.Service
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
     if (!(yield* Flag.enabled("video_generate"))) return
 
     const resolveModel = Effect.fn("VideoGenerateTool.resolveModel")(function* (
@@ -194,8 +197,14 @@ export const Plugin = {
     ) {
       const available = yield* models.available(["video"])
       if (!input) {
+        // A configured default that isn't available falls back to the automatic pick.
+        const configured = configuredModel(yield* config.entries())
         const providerID = (yield* ctx.session.get({ sessionID })).model?.providerID
-        const model = available.find((model) => model.providerID === providerID) ?? available[0]
+        const model =
+          (configured &&
+            available.find((model) => model.providerID === configured.providerID && model.id === configured.model)) ??
+          available.find((model) => model.providerID === providerID) ??
+          available[0]
         if (!model) return yield* new ToolFailure({ message: "No video model is available." })
         return model
       }
@@ -369,6 +378,14 @@ export const Plugin = {
       })
       .pipe(Effect.orDie)
   }),
+}
+
+// Read per field so a later config that sets other experimental options doesn't hide this one.
+function configuredModel(entries: readonly Entry[]) {
+  const value = entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.video_generate !== undefined,
+  )?.info.experimental?.video_generate
+  return typeof value === "object" ? value.model : undefined
 }
 
 function urlType(url: string) {
