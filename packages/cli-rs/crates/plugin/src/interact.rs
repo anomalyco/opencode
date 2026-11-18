@@ -74,9 +74,11 @@ pub struct Owner {
     dialog: Cell<bool>,
     /// Brings a widget of the mount's tree into view in the scrolls of the tree that hold it.
     reveal: RefCell<Option<Reveal>>,
-    /// What waits for a node of the mount to take the focus, or for the mount to end: input typed while a dialog
-    /// surface opened goes on then (big-boi ds-3).
+    /// What waits for the mount's first tree of the plugin's, and the focus it asked for with it, or for the mount's
+    /// end: input typed while a dialog surface opened goes on then (big-boi ds-3).
     focus_waiters: RefCell<Vec<Box<dyn FnOnce()>>>,
+    /// The mount showed a tree of the plugin's, not only the pipe's stand-in.
+    viewed: Cell<bool>,
     /// When a dialog surface's mount began: input waits for its focus only that soon after ([`OPENING`]).
     born: Cell<Option<std::time::Instant>>,
     layers: RefCell<Vec<Disposer>>,
@@ -292,6 +294,7 @@ impl Owner {
             dialog: Cell::new(false),
             reveal: RefCell::default(),
             focus_waiters: RefCell::default(),
+            viewed: Cell::new(false),
             born: Cell::new(None),
             layers: RefCell::default(),
             mode: RefCell::default(),
@@ -347,7 +350,8 @@ impl Owner {
         !self.ids.borrow().is_empty()
     }
 
-    /// Runs `then` once a node of the mount takes the focus, or once the mount ends.
+    /// Runs `then` once a node of the mount takes the focus, a view of the plugin's tree settled the focus it asked
+    /// for, or the mount ends.
     pub(crate) fn when_focused(&self, then: Box<dyn FnOnce()>) {
         self.focus_waiters.borrow_mut().push(then);
     }
@@ -724,7 +728,14 @@ impl Owner {
     /// mount's view that comes later never applies it (big-boi's G2 of step B).
     /// A focus the user moved meanwhile, a click or the host's own, is dropped too (carbon c2b-2): the user's choice
     /// stands.
-    pub(crate) fn settle_pending(&self, host: &dyn Host) {
+    /// `shows`: the view is the plugin's tree, not the pipe's stand-in before its first.
+    pub(crate) fn settle_pending(&self, host: &dyn Host, shows: bool) {
+        // The plugin's tree is here, and the focus it asked for settles now: input that waits for it goes on, after
+        // (its waiters go after the turn). The pipe's stand-in before the first tree is no answer.
+        if shows {
+            self.viewed.set(true);
+            self.focused_now();
+        }
         let Some(Pending { id, from }) = self.pending.borrow_mut().take() else { return };
         if !self.has(&id) {
             log::warn!("plugin {}: {id:?} is not a node of its mount's next view", self.plugin);
@@ -1141,15 +1152,15 @@ impl Router {
         self.offered(host)
     }
 
-    /// The mount of a plugin's dialog surface on top, opened less than [`OPENING`] ago, whose nodes have not taken the
-    /// focus yet: its first tree and focus may still come (the JS host's next revisions).
+    /// The mount of a plugin's dialog surface on top, opened less than [`OPENING`] ago, that has shown no tree of the
+    /// plugin's yet: its tree and the focus it asks for come with the JS host's next revisions.
     pub(crate) fn opening(&self, host: &dyn Host) -> Option<Rc<Owner>> {
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
         owners.into_iter().rev().find(|owner| {
             owner.alive()
                 && owner.born.get().is_some_and(|born| born.elapsed() < OPENING)
+                && !owner.viewed.get()
                 && owner.on_top(host)
-                && owner.focused().node.is_none()
         })
     }
 

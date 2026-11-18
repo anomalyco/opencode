@@ -1374,7 +1374,7 @@ impl surface::Viewer for Viewer {
             let mount = mounts.get_mut(id)?;
             mount.shown = true;
             let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
-            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0) });
+            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0), stand_in: true });
         }
         // The height it was laid out at, not the input's, which stands in the screen's before a solve (review carbon-7).
         if let (true, Some(laid)) = (real, viewing.laid) {
@@ -1392,7 +1392,7 @@ impl surface::Viewer for Viewer {
             drop(mounts);
             let error = "the host asked for a whole tree".to_owned();
             guest.send(Down::Refused { id: guest.id().to_owned(), mount: id.clone(), rev, adopted, error }, None);
-            return Some(Viewed { node: None, memo: None });
+            return Some(Viewed { node: None, memo: None, stand_in: false });
         }
         if let Some(tree) = mount.pending.take() {
             let tree = *tree;
@@ -1447,15 +1447,15 @@ impl surface::Viewer for Viewer {
                     viewer.settle(&id, true);
                 }
             });
-            return Some(Viewed { node: Some(node), memo: Some(tree.memo) });
+            return Some(Viewed { node: Some(node), memo: Some(tree.memo), stand_in: false });
         }
         if !mount.shown {
             mount.shown = true;
             let height = self.heights.borrow().get(&id.key).copied().unwrap_or(1);
             let _ = host;
-            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0) });
+            return Some(Viewed { node: Some(placeholder(height)), memo: Some(0), stand_in: true });
         }
-        Some(Viewed { node: None, memo: None })
+        Some(Viewed { node: None, memo: None, stand_in: false })
     }
 
     fn waits_for_room(&self) -> bool {

@@ -181,6 +181,8 @@ export default Plugin.define({
           run: () =>
             context.ui.dialog.show(() => <input id="ahead" focused onInput={(value: string) => log({ ahead: value })} />),
         },
+        // A key that opens a dialog of its own with nothing to focus, which the user types past at once (big-boi ds-3).
+        { id: "v2probe.plain", bind: "f3", run: () => context.ui.dialog.show(() => <text>Plain dialog</text>) },
         { id: "v2probe.relayer", run: () => context.keymap.layer(() => ({ commands: [{ id: "v2probe.relayered", run() {} }] })) },
         {
           id: "v2probe.color",
