@@ -1131,6 +1131,11 @@ describe("OpencodeMemoryPolicy.initial", () => {
     expect(failed("bun test 2>&1 | tail -20", "error: ACME_DB_URL is not set\n 1 pass\n 1 fail", 0)).toBe(true)
     expect(failed("pytest | tail", "Traceback (most recent call last):\n  ...", 0)).toBe(true)
     expect(failed("bun test 2>&1 | tail -5", " 4 pass\n 0 fail", 0)).toBe(false)
+    // A later command after `;` hides the exit code as a pipe does.
+    expect(failed('bun test 2>&1; echo "exit=$?"', "(fail) config reads the database URL\n 1 fail\nexit=1", 0)).toBe(
+      true,
+    )
+    expect(failed("cd app; bun test", " 3 pass\n 0 fail", 0)).toBe(false)
     // Unpiped, a zero exit is a success whatever it prints, as a search for errors is.
     expect(failed("grep -rn error: src", "src/a.ts:1: error: x", 0)).toBe(false)
     expect(failed("make || echo done", "Error: x", 0)).toBe(false)

@@ -151,10 +151,10 @@ export const initial: Policy = {
       }),
     }
   },
-  // A pipe into `tail` or `head` exits 0 however the command before it ended, so a piped command counts as failed when
-  // its output says so.
+  // A pipe into `tail` or `head`, or a later command after `;` such as `echo "exit=$?"`, exits 0 however the command
+  // before it ended, so such a command counts as failed when its output says so.
   failed: (command, output, exitCode) =>
-    output.trim() !== "" && (exitCode !== 0 || (/(?<!\|)\|(?!\|)/.test(command) && FAILURE.test(output))),
+    output.trim() !== "" && (exitCode !== 0 || (/(?<!\|)\|(?!\|)|;/.test(command) && FAILURE.test(output))),
   timeout: "3 seconds",
   render: (entries, moment) =>
     [
