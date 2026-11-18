@@ -30,7 +30,6 @@ const { testRender } = await import(Bun.resolveSync("@opentui/solid", tui))
 const { createComponent, createSignal } = await import(Bun.resolveSync("solid-js", tui))
 
 const names = Object.keys(TuiKeybind.Definitions).filter((name) => name !== "leader")
-const kitty = (stroke: Stroke) => encode(stroke, true)
 const escape = "\x1b[27u"
 const backspace = "\x1b[127u"
 
@@ -237,7 +236,11 @@ async function run(scenario: Scenario): Promise<Case[]> {
       })),
     )
     const cases: Case[] = []
+    const seen = new Set<string>()
     const press = async (keys: Step[], command?: string) => {
+      const id = JSON.stringify([command, keys])
+      if (seen.has(id)) return
+      seen.add(id)
       raw.clearPendingSequence()
       calls.length = 0
       for (const key of keys) {
@@ -248,13 +251,10 @@ async function run(scenario: Scenario): Promise<Case[]> {
     }
     for (const sequence of sequences) {
       if (scenario.layout === "isolated") setRegistered([sequence.command])
-      const encodings = [sequence.strokes.map(kitty), sequence.strokes.map((stroke) => encode(stroke, false))]
-      const unique = encodings.filter(
-        (keys, index) =>
-          keys.every((key) => key !== undefined) &&
-          encodings.findIndex((other) => JSON.stringify(other) === JSON.stringify(keys)) === index,
-      ) as string[][]
-      for (const keys of unique) await press(keys, scenario.layout === "isolated" ? sequence.command : undefined)
+      for (const csi of [true, false]) {
+        const keys = sequence.strokes.map((stroke) => encode(stroke, csi))
+        if (keys.every((key) => key !== undefined)) await press(keys, scenario.layout === "isolated" ? sequence.command : undefined)
+      }
     }
     if (scenario.layout === "all") for (const keys of scenario.extra ?? []) await press(keys)
     return cases
