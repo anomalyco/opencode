@@ -139,6 +139,13 @@ impl Vm<'_> {
     /// Whether converting `v` with `hint` calls the program: one of the methods ToPrimitive may call is not native.
     pub(crate) fn converts_by_call(&mut self, v: &Value, hint: Hint) -> bool {
         let Value::Obj(id) = v else { return false };
+        // A namespace or a promise converts without consulting its methods (see `Vm::primitive_of`).
+        if matches!(
+            self.heap[*id as usize].kind,
+            Kind::ToolRef(_) | Kind::Promise(_)
+        ) {
+            return false;
+        }
         let hint = if hint == Hint::Default && crate::builtins::exotic::prefers_string(self, *id) {
             Hint::String
         } else {
@@ -629,7 +636,7 @@ fn next_listed(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
             Kind::Array(h) => h.get(i).map_or(0, |x| x.as_num() as usize),
             _ => 0,
         };
-        if let Value::Obj(_) = v {
+        if vm.is_convertible_obj(&v) {
             fr.set(vm, VALUE, v);
             fr.set_index(vm, HINT, hint);
             return begin(vm, fr);

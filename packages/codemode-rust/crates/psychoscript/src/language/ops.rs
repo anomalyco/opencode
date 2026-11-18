@@ -246,6 +246,11 @@ impl<'rt> Vm<'rt> {
             Value::Sym(s) => *s,
             Value::Obj(_) => {
                 let p = self.primitive_of(k, Hint::String)?;
+                // A namespace or a promise stays as it is; its key is its text.
+                if let Value::Obj(_) = p {
+                    let s = self.string_of(&p)?;
+                    return Ok(self.atoms.intern_id(s));
+                }
                 return self.key_of(&p);
             }
             Value::Bool(b) => self.atoms.intern(if *b { "true" } else { "false" }),
@@ -255,6 +260,23 @@ impl<'rt> Vm<'rt> {
     }
 
     // ---------- data guards ----------
+
+    /// Whether `id` is a namespace reference, which the reference keeps outside its objects (`HostNamespace`).
+    #[inline]
+    pub(crate) fn is_namespace(&self, id: Id) -> bool {
+        matches!(self.heap[id as usize].kind, Kind::ToolRef(_))
+    }
+
+    #[inline]
+    pub(crate) fn is_promise(&self, id: Id) -> bool {
+        matches!(self.heap[id as usize].kind, Kind::Promise(_))
+    }
+
+    /// Whether `v` is an object the reference converts (`instanceof Obj`): not a primitive and not a namespace.
+    #[inline]
+    pub(crate) fn is_convertible_obj(&self, v: &Value) -> bool {
+        matches!(v, Value::Obj(id) if !self.is_namespace(*id))
+    }
 
     /// Promises and tool references are not data: operators reject them, as the reference does.
     pub fn is_opaque_operand(&self, v: &Value) -> bool {
@@ -1019,7 +1041,11 @@ impl<'rt> Vm<'rt> {
             Value::Sym(_) => {
                 return Err(self.type_error("Cannot convert a Symbol value to a number"));
             }
-            Value::Obj(_) => {
+            Value::Obj(id) => {
+                // A namespace is not an object to the reference: it converts without a call, as "[object Object]".
+                if self.is_namespace(*id) || self.is_promise(*id) {
+                    return Ok(f64::NAN);
+                }
                 let p = self.primitive_of(v, Hint::Number)?;
                 return self.number_of(&p);
             }
@@ -1045,7 +1071,14 @@ impl<'rt> Vm<'rt> {
             Value::Sym(_) => {
                 return Err(self.type_error("Cannot convert a Symbol value to a string"));
             }
-            Value::Obj(_) => {
+            Value::Obj(id) => {
+                if self.is_namespace(*id) {
+                    return Ok(self.static_id("[object Object]"));
+                }
+                // A promise converts without consulting its methods (`$vmToPrimitive` keeps it).
+                if self.is_promise(*id) {
+                    return Ok(self.static_id("[object Promise]"));
+                }
                 let p = self.primitive_of(v, Hint::String)?;
                 return self.string_of(&p);
             }
@@ -1082,12 +1115,20 @@ impl<'rt> Vm<'rt> {
         let Value::Obj(id) = v else {
             return Ok(*v);
         };
+        // A namespace is not an object to the reference's `$vmToPrimitive`: it stays as it is, for nothing.
+        if self.is_namespace(*id) {
+            return Ok(*v);
+        }
         if self.convert_ok
             && let Some(r) = self.restartable_conversion(v, hint)
         {
             return r;
         }
         self.fuel(1);
+        // `$vmToPrimitive` keeps a promise, so that what reads it rejects it as an un-awaited value.
+        if self.is_promise(*id) {
+            return Ok(*v);
+        }
         let hint = if hint == Hint::Default && exotic::prefers_string(self, *id) {
             Hint::String
         } else {
@@ -1260,11 +1301,17 @@ impl<'rt> Vm<'rt> {
             (Value::Obj(_), Value::Num(_) | Value::Str(_) | Value::Sym(_)) => {
                 let p = self.primitive_of(a, Hint::Default)?;
                 self.fuel(1);
+                if let Value::Obj(_) = p {
+                    return Ok(false);
+                }
                 return self.loose_eq(&p, b);
             }
             (Value::Num(_) | Value::Str(_) | Value::Sym(_), Value::Obj(_)) => {
                 self.fuel(1);
                 let p = self.primitive_of(b, Hint::Default)?;
+                if let Value::Obj(_) = p {
+                    return Ok(false);
+                }
                 return self.loose_eq(a, &p);
             }
             _ => self.strict_eq(a, b),

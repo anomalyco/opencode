@@ -79,7 +79,7 @@ impl Conversions {
         values: &mut [Value],
         coerce: bool,
     ) -> Result<(), Value> {
-        if !values.iter().any(|v| matches!(v, Value::Obj(_))) {
+        if !values.iter().any(|v| vm.is_convertible_obj(v)) {
             return Ok(());
         }
         if self.requested {
@@ -122,7 +122,7 @@ impl Conversions {
         values: &'a [Value],
         coerce: bool,
     ) -> Result<Cow<'a, [Value]>, Value> {
-        if !values.iter().any(|v| matches!(v, Value::Obj(_))) {
+        if !values.iter().any(|v| vm.is_convertible_obj(v)) {
             return Ok(Cow::Borrowed(values));
         }
         let mut owned = values.to_vec();
