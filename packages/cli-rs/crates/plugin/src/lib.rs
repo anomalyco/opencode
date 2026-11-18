@@ -1855,47 +1855,33 @@ pub(crate) fn fail(
     activation.dispose();
 }
 
-/// A waiting effect, with its host and its depth: how many dispatches of effects led to it ([`dispatch`]).
-/// An effect, with its host, its depth ([`CHAIN`]), and whether a timer's work queued it ([`ticking`]).
+/// Queued effect, dispatch depth, and whether a timer owns the work.
 type Queued = (Weak<dyn Host>, u32, bool, Effect);
 
 thread_local! {
-    /// The plugins' effects that wait, in the order they were asked for, on both paths.
     static EFFECTS: RefCell<std::collections::VecDeque<Queued>> = RefCell::default();
     static FLUSHING: Cell<bool> = const { Cell::new(false) };
-    /// The depth of what runs now: of the effect that runs, one more inside a dispatch it runs, 0 outside effects.
     static DEPTH: Cell<u32> = const { Cell::new(0) };
-    /// The host and frame the effects run in, how many ran in that frame, whether the next paint was asked for, and
-    /// when on the host's clock the count began.
     static RAN: Cell<Ran> = const { Cell::new(Ran { frame: (0, 0), count: 0, asked: false, since: None }) };
 }
 
-/// An effect asked for under this many dispatches of effects, each by a command the one before ran (a command that
-/// dispatches itself, a copy whose `then` runs it again), is dropped: each call is short, so no limit of a call ends
-/// such a chain, and the UI thread would never read input again (review carbon-2). Other effects, such as a reply a
-/// fetch got at once, keep the depth of the one that asked: only the frame's count bounds them.
+/// Bound recursive dispatch separately from the frame budget: a self-dispatching command can keep every call
+/// short.
 const CHAIN: u32 = 64;
-/// At most this many effects wait: a plugin's request past them is dropped, so a chain that fans out over frames
-/// cannot grow the queue without bound (review carbon new-1). The host's own work is never dropped.
+/// Queue limit for plugin requests. Host work and replies with reserved room still run.
 const QUEUE: usize = 1 << 16;
-/// At most this many effects run in a frame; the rest waits for the next paint, so a chain that fans out, or many
-/// answers that arrive at once, still let the UI read input and paint (reviews carbon-2, carbon new-1). Public for the
-/// tests, which bound a drain by frames, not by the wall clock.
+/// Maximum effects shared by all drains in one painted frame.
 #[doc(hidden)]
 pub const FRAME_EFFECTS: usize = 1024;
 
-/// A frame's slot at the host's 60 frames a second: a frame's count of effects ends when it paints, or, once the queue
-/// went idle, when a slot passed on the host's clock since the count began (big-boi tm-2: lone timer ticks a second
-/// apart, which ask for no paint, must not add up to a forced one).
+/// After an idle interval, reset the budget without forcing a paint just for timer ticks.
 const FRAME_SLOT: std::time::Duration = std::time::Duration::from_millis(16);
 
-/// What ran in a frame ([`next_effect`]).
 #[derive(Clone, Copy)]
 struct Ran {
     /// The host, by address, and its frame number.
     frame: (usize, u64),
     count: usize,
-    /// The next paint was asked for, to run the rest.
     asked: bool,
     /// When the count began, on the host's clock.
     since: Option<std::time::Instant>,
@@ -1933,24 +1919,19 @@ pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monito
     });
 }
 
-/// How long the frame a timer's call opened waits for a paint before it ends as a frame of its own: longer than a
-/// frame's slot at 60 frames a second, so a paint that was due anyway comes first and the frame ends as at any paint;
-/// and shorter than the shortest timer, so each tick of the fastest timer is a frame of its own, judged alone against
-/// the frame budget (carbon tm2-2).
+/// Longer than a frame slot but shorter than the minimum timer period: let an already scheduled paint close the
+/// frame before the next timer tick.
 const IDLE_CLOSE: std::time::Duration = std::time::Duration::from_millis(17);
 const _: () = assert!(IDLE_CLOSE.as_nanos() < abi::MIN_TIMER.as_nanos());
 
-/// Closes the frames a timer's call opened without asking for a paint, unlike [`close_at_paint`]: [`IDLE_CLOSE`]
-/// later, as one frame of their own if no paint came by then. So a timer whose plugin changes nothing on screen costs
-/// a wake and no frame (timers, 2.3).
+/// Close a timer-only frame without requesting a paint.
 fn close_idle(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
     let Some(strong) = host.upgrade() else { return };
     let (host, monitor, painted) = (host.clone(), monitor.clone(), monitor.painted());
     strong.app().set_timeout(IDLE_CLOSE, move |_| match monitor.close_idle(painted) {
         Some(news) => {
             closed(&host, &monitor, news);
-            // A paint came, and a timer's call ran after it, in a frame no close waits for: it ends the same way
-            // (carbon tm2-2).
+            // A tick after the intervening paint may have opened another frame.
             if monitor.open_now() && monitor.wants_close() {
                 close_idle(&host, &monitor);
             }
@@ -1966,8 +1947,7 @@ fn closed(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>, news: Vec<(Stri
     for (id, cost) in news {
         defer(host, move |host| host.slow(&id, &cost));
     }
-    // Every change of slow, not only the first one a session that a toast tells (review carbon-4). A frame of plugin
-    // calls always ends at a close, so a change is always seen here.
+    // Report changes in slow status even after the first notification.
     if monitor.take_flipped() {
         defer(host, |host| host.slow_changed());
     }
@@ -1977,7 +1957,6 @@ fn closed(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>, news: Vec<(Stri
 }
 
 thread_local! {
-    /// A timer's reply runs: the call it makes asks for no paint of its own ([`close_idle`]).
     static TICKING: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -1989,20 +1968,15 @@ pub(crate) fn ticking<R>(ticking: bool, f: impl FnOnce() -> R) -> R {
     result
 }
 
-/// Whether a timer's reply runs ([`ticking`]).
 pub(crate) fn is_ticking() -> bool {
     TICKING.get()
 }
 
-/// Queues `effect` on the host's one effect queue, which both paths share: it runs in order with every other plugin
-/// effect, once the outermost plugin callback has returned and every UI and store borrow has ended, at the latest
-/// when the host routes its next message ([`flush`]).
+/// Defer effects in call order until the outermost plugin callback has released its UI and store borrows.
 pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
     let queued = (host.clone(), DEPTH.get(), TICKING.get(), Box::new(effect) as Effect);
     EFFECTS.with(|effects| effects.borrow_mut().push_back(queued));
-    // Each effect asks for a drain of its own, as each was deferred before; a drain finds the queue empty once an
-    // earlier one or a message ran it.
     strong.app().defer(|_| flush());
 }
 
@@ -2019,15 +1993,12 @@ pub fn flush() {
         if let Some(host) = host.upgrade() {
             last = Some(Rc::downgrade(&host));
             let outer = DEPTH.replace(depth);
-            // What a timer's work queued is the timer's work too: it asks for no paint of its own ([`close_idle`]).
+            // Nested effects inherit the timer’s paint policy.
             ticking(timed, || behave::as_user(false, || effect(&*host)));
             DEPTH.set(outer);
         }
     }
-    // The budget is the painted frame's: answers that drain one after another before the paint share it (the frame
-    // never runs unbounded plugin work). Once the queue went idle, a frame slot later on the host's clock counts afresh,
-    // as a frame would have come by then: lone timer ticks, which ask for no paint, never add up to a forced one
-    // (big-boi tm-2). A drain that goes on without emptying keeps its count whatever the clock says.
+    // Drains between paints share a budget. Only an empty queue can start a fresh interval without painting.
     let now = last.and_then(|host: Weak<dyn Host>| host.upgrade()).map(|host| host.app().now());
     if EFFECTS.with(|effects| effects.borrow().is_empty())
         && let Some(now) = now
@@ -2040,9 +2011,7 @@ pub fn flush() {
     FLUSHING.with(|flushing| flushing.set(false));
 }
 
-/// Whether a request's effect, after the `staged` effects of the call that asks, has room: under [`CHAIN`] and
-/// [`QUEUE`]. A request is given an ID only then, and its effect is then admitted past the bound, so an ID always gets
-/// its reply (bigboi's final pass); a request refused is an error, [`REFUSED`], on every carrier.
+/// Reserve room before assigning a request ID so every accepted request can receive a reply.
 pub(crate) fn has_room(staged: usize) -> bool {
     DEPTH.get() <= CHAIN && EFFECTS.with(|effects| effects.borrow().len()).saturating_add(staged) < QUEUE
 }
@@ -2076,9 +2045,7 @@ pub(crate) fn dispatch(host: &dyn Host, name: &str, input: Option<&str>) {
     deeper(|| host.dispatch(name, input));
 }
 
-/// Runs `f`, a call into a plugin that what runs now causes (a dispatch, an event its input router sends it), one
-/// deeper: what it asks for counts toward [`CHAIN`], so a chain through events, such as an overlay opened again as
-/// the overlay it replaced tells it closed, ends too (review carbon new-1).
+/// Count both command dispatch and event reentry toward the recursive dispatch limit.
 pub(crate) fn deeper<R>(f: impl FnOnce() -> R) -> R {
     let outer = DEPTH.get();
     DEPTH.set(outer + 1);
@@ -2087,11 +2054,9 @@ pub(crate) fn deeper<R>(f: impl FnOnce() -> R) -> R {
     out
 }
 
-/// The next effect to run, unless the queue is empty or [`FRAME_EFFECTS`] ran in this frame, whatever asked for them
-/// (many answers of a carrier arrive in one turn): then the rest runs as the next paint starts (review carbon new-1).
+/// At the frame limit, put the effect back and resume after the next paint.
 fn next_effect() -> Option<Queued> {
     let next = EFFECTS.with(|effects| effects.borrow_mut().pop_front())?;
-    // The effect of a host that is gone runs nothing.
     let Some(host) = next.0.upgrade() else { return Some(next) };
     let frame = (Rc::as_ptr(&host).cast::<()>() as usize, host.app().frame_number());
     let ran = match RAN.get() {

@@ -1065,7 +1065,6 @@ fn a_slash_name_the_prompt_cannot_complete_is_left_out() {
     assert_eq!(names(abi::Command::new("p.run").aliases(["sm".to_owned()])), None);
 }
 
-/// Queues `count` effects of `host` that each count one run in `ran`.
 fn counted(host: &Rc<TestHost>, ran: &Rc<Cell<usize>>, count: usize) {
     let weak = Rc::downgrade(&dynamic(host));
     for _ in 0..count {
@@ -1074,9 +1073,6 @@ fn counted(host: &Rc<TestHost>, ran: &Rc<Cell<usize>>, count: usize) {
     }
 }
 
-// Expected (frame-effects): the budget is the painted frame's. Three answers that each drain before the paint, the
-// clock stepped 1 ms between them, run one budget in all; the rest waits for the paint, which comes, and runs there.
-// Each drain counted afresh, so the three ran whole in one frame.
 #[test]
 fn answers_that_drain_before_a_paint_share_its_budget() {
     let host = host();
@@ -1092,8 +1088,6 @@ fn answers_that_drain_before_a_paint_share_its_budget() {
     assert_eq!((ran.get(), effects_waiting()), (1800, 0), "the rest did not run at the paint");
 }
 
-// Expected (big-boi tm-2, kept): lone effects a second apart, which ask for no paint, each count afresh once the queue
-// went idle: thousands of them never add up to a forced paint.
 #[test]
 fn lone_effects_a_second_apart_force_no_paint() {
     let host = host();
