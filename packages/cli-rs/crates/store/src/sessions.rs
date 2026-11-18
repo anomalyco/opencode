@@ -1,6 +1,3 @@
-//! Sessions and session status (F.7): info, families, deletion, status, creation, and the
-//! session events.
-
 use std::collections::HashSet;
 
 use futures_util::FutureExt;

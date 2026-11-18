@@ -1,6 +1,4 @@
-//! Session target resolution (D03), ported from `packages/cli/src/session-target.ts`: which
-//! session `run`, `mini`, and the TUI open for `--session`, `--continue`, and `--fork`, at which
-//! location, with which model and agent; and new worktree locations.
+//! Resolves session, model, agent and worktree selections for `--session`, `--continue` and `--fork`.
 
 use std::future::Future;
 

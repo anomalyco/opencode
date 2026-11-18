@@ -1,13 +1,5 @@
-//! JSONC parsing and path edits that keep comments and formatting (F.5).
-//!
-//! A port of the parts of `jsonc-parser` 3.3.1 the TypeScript client uses
-//! (`lib/esm/impl/{scanner,parser,edit,format}.js`): the scanner, the fault-tolerant tree, `parse` with
-//! `allowTrailingComma`, and `modify` with `{ tabSize: 2, insertSpaces: true }` formatting. Edits come
-//! out byte for byte as the TypeScript `applyEdits(text, modify(...))` gives them.
-//!
-//! Offsets are UTF-8 byte offsets where the library uses UTF-16 units. Every split is at a token
-//! boundary and the formatter counts only ASCII spaces, tabs, and line breaks, so the text that comes
-//! out is the same.
+//! JSONC parsing and path edits preserve comments and formatting. Byte offsets always fall on token boundaries;
+//! indentation counts only ASCII spaces, tabs and line breaks.
 
 use serde_json::{Map, Number, Value};
 

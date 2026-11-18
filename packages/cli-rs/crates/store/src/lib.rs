@@ -1,4 +1,4 @@
-//! Client data store, ported from `packages/client/src/solid/data.ts`.
+//! Shared client data store.
 
 pub mod changes;
 pub mod connection;

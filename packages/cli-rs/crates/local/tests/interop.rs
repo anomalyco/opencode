@@ -1,9 +1,4 @@
-//! P-FILE and P-ORACLE for F.4: the Rust lock, registration, and service config against the
-//! TypeScript code, through `parity/oracle/F.4-local.ts`.
-//!
-//! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout. Lock tests need only `bun`;
-//! the others also need the root's `node_modules` and are skipped, with a note, without it.
-//! `OPENCODE_RS_REQUIRE_TS` turns every skip into a failure. Every test uses temporary directories.
+//! Checks locks, registrations and service configs across both clients.
 
 use std::ffi::OsString;
 use std::fs;

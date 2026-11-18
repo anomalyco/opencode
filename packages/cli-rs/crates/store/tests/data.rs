@@ -1,6 +1,3 @@
-//! Port of the session, message, and activity cases of `packages/client/test/solid-data.test.ts`.
-//! Its project, location, catalog, and credential cases belong to F.8. Plus change tracking.
-
 mod common;
 
 use std::sync::Arc;
@@ -1060,10 +1057,6 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
     assert_eq!(tags(), Vec::<String>::new());
 }
 
-// Expected: the streaming deltas are kept only while a delta listener lives, in order, at most `DELTAS` of them with
-// the oldest dropped; a batch that kept one wakes the revision watchers, also with no change. Each listener takes
-// its own: those since it last took, or since it started, never one from before (reviews bigboi-6, carbon-8); the
-// last listener's drop forgets what was kept.
 #[tokio::test]
 async fn deltas_are_kept_while_listened_and_bounded() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());

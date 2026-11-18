@@ -1,5 +1,3 @@
-//! Small modules that several crates share, on `libc` alone, `ring` behind its feature, and `windows-sys` on Windows.
-
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 pub mod bundle;

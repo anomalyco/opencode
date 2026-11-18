@@ -1,8 +1,4 @@
-//! Inbox (F.7 core, F.8 rest): pending items, their status, and optimistic prompt and compaction
-//! admission.
-//!
-//! F.7 took this file from F.8 because its tests (`solid-compaction.test.ts`,
-//! `solid-pending-status.test.ts`) need admission; F.8 continues it.
+//! Pending inbox items and optimistic prompt and compaction admission.
 
 use std::collections::HashSet;
 use std::future::Future;

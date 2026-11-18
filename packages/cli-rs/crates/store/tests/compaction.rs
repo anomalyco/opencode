@@ -1,6 +1,3 @@
-//! Port of `packages/client/test/solid-compaction.test.ts`. The TS listener-count assertions have
-//! no counterpart: the Rust store receives batches through `Data::apply`, not a listener.
-
 mod common;
 
 use std::sync::Arc;

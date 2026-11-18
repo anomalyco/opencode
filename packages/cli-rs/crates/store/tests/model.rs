@@ -1,26 +1,6 @@
-//! Model-based test of the store's snapshot-and-event folds (O-91, `round2/models.md`).
-//!
-//! The reference is a small server. Per session it holds pending permissions and forms in arrival order, and a
-//! transcript in server order (a per-session sequence, as `SessionStore` orders by `seq`). Message IDs deliberately
-//! do not sort in that order (`msg_watch_*`, `msg_sch_*`, descending numbers), so no fold may rely on ID order.
-//! It also holds the running shells of one location, read by the location's `Catalog::Shell` read; their exits
-//! settle them as replies settle requests.
-//!
-//! Commands change the server (each change queues its events), start the store's reads (each answered from the
-//! server state when the request arrives, then held), release or fail held responses by identity, deliver queued
-//! events late, drop the stream (queued events are lost, then `server.connected`), and delete sessions. A "view"
-//! syncs every read it opened again whenever the store reports `changes.all`, as the TUI does.
-//!
-//! Checked after every command (safety): nothing of a session whose deletion was delivered; no request whose
-//! settlement was delivered; transcript rows exist on the server and are in server order; every visible change is
-//! reported by `changes_since`. Checked after the drain (convergence): permissions and forms equal the server, in
-//! order and content; after a confirmed head read the transcript is a gapless suffix with the server's text and
-//! `more` exactly when older rows exist; an older-page load grows the window; every started read finished.
-//!
-//! Deterministic: one current-thread runtime, no timers, a seeded generator (SplitMix64), and a fixed-point handshake
-//! instead of a fixed number of yields. The default run is `KNOWN` (must pass), `OPEN` (must still fail with its
-//! class; a fix makes it pass, which fails this test until the entry moves to `KNOWN`), the checker mutants, the
-//! generator coverage, and the shrinker test.
+//! The model delays reads and events independently, including across reconnects and deletions.
+//! Check visible state and change notifications after each command. After draining, pending requests and
+//! ordered transcript windows must agree with the server. Message IDs do not sort in server sequence order.
 //!
 //! Environment:
 //! - `MODEL_SEED` (default 1), `MODEL_CASES` (default 200) and `MODEL_LEN` (default 30) set the random searches.
@@ -29,19 +9,7 @@
 //! - `MODEL_TRACE=<name>` with `-- trace --nocapture` prints the requests, replies and observations of a `KNOWN` or
 //!   `OPEN` entry.
 //!
-//! `permissions_converge_to_the_server` and `forms_converge_to_the_server` run by default. The other random searches
-//! are `#[ignore]`d until the plan step that fixes their open defects un-ignores them. Before a store change, run the
-//! searches at 5,000 cases:
-//!
-//! ```sh
-//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- permissions_converge forms_converge
-//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored --nocapture
-//! MODEL_CASES=5000 cargo test -p opencode-store --test model -- --ignored everything_together
-//! ```
-//!
-//! A failure prints its seed, case and the command line that reproduces it, then the shrunk sequence. The seed,
-//! `MODEL_LEN` and `MODEL_NO` fix every case, so `MODEL_CASES=<case + 1>` replays up to the failing one. Paste the
-//! shrunk sequence into `OPEN` with its class to pin it; `MODEL_TRACE` then prints it by name.
+//! A failure prints its seed, reproduction command and shrunk sequence.
 
 mod common;
 
@@ -156,7 +124,6 @@ const PROJECT: &str = "/project";
 /// Shells in one [`Op::ShellBurst`]: more than the store's 1,024-change overlay.
 const SHELL_BURST: u32 = 1_100;
 
-/// One weighted arm per command, so every command is generated whatever the mix (models-review carbon-2).
 fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
     let mut ops = Vec::with_capacity(len);
     let reads: Vec<Read> = [
@@ -267,8 +234,7 @@ struct Held {
     after_delete: bool,
 }
 
-/// Message IDs in four shapes whose string order is not the server order (`msg_watch_*`, `msg_sch_*`, and numbers
-/// that fall), as production IDs are (models-review bigboi-1, carbon-1).
+/// Message IDs intentionally sort differently from server sequence order.
 fn message_id(n: u32) -> String {
     match n % 4 {
         0 => format!("msg_{n:04}"),
@@ -354,8 +320,7 @@ impl Server {
             Read::Head | Read::Older => {
                 let limit: usize = req.param("limit").and_then(|v| v.parse().ok()).unwrap_or(20);
                 let all = &self.messages[s];
-                // `SessionStore`: the cursor names the message to read before, by exact ID; a missing anchor reads
-                // nothing (packages/core/src/session/store.ts:101-134).
+                // A cursor names the message before which to read. A missing anchor returns no messages.
                 let end = match req.param("cursor") {
                     None => all.len(),
                     Some(cursor) => match all.iter().position(|message| message.id == cursor) {
@@ -429,7 +394,7 @@ fn session_json(s: usize) -> Value {
 }
 
 /// Answers for reads the model does not hold. Unknown reads fail loudly: an oracle that answers anything hides
-/// traffic it should know about (models-review bigboi-5).
+/// traffic it should know about.
 fn immediate(req: &Req, deleted: &[bool], unexpected: &mut Vec<String>) -> Reply {
     match req.path.as_str() {
         "/api/session/active" => return ok(json!({ "data": {} })),
@@ -1193,8 +1158,8 @@ fn run(ops: &[Op], mutant: Mutant) -> Option<Failure> {
     run_counted(ops, mutant).0
 }
 
-/// Deletes chunks, then single commands, while the run fails with the same class (models-review bigboi-5: a shrink
-/// may not trade a transcript failure for a shorter permission failure). The result is minimal for deleting one
+/// Deletes chunks, then single commands, while the run fails with the same class. A shrink
+/// may not trade a transcript failure for a shorter permission failure. The result is minimal for deleting one
 /// command, not globally shortest.
 fn shrink(mut ops: Vec<Op>, failing: &dyn Fn(&[Op]) -> Option<Failure>) -> (Vec<Op>, Failure) {
     let mut failure = failing(&ops).expect("shrink starts from a failure");
@@ -1349,7 +1314,7 @@ fn the_generator_covers_every_command() {
 
 /// Responses land on each side of a deletion (computed before it and released before or after its event, or
 /// computed after it) and of a replacement (computed before a reconnect and released after it, so the read was
-/// invalidated, and the response of the read that replaces it) (models-review bigboi-5). `Syncs` starts a replacement
+/// invalidated, and the response of the read that replaces it). `Syncs` starts a replacement
 /// only once the invalidated read settles, so two responses of one read are never outstanding together. The checks
 /// are off, so a run continues past an open defect.
 #[test]
@@ -1408,8 +1373,7 @@ fn the_checker_catches_wrong_clients() {
 }
 
 /// The shrinker keeps the class of the failure it started from: a sequence that first fails on transcript order (O10)
-/// and also on permissions (the `Reversed` mutant) must not shrink to the shorter permission failure (models-review
-/// bigboi-5).
+/// and also on permissions (the `Reversed` mutant) must not shrink to the shorter permission failure.
 #[test]
 fn the_shrinker_keeps_the_failure_class() {
     let ops = [
@@ -1462,7 +1426,6 @@ fn shrink_any(mut ops: Vec<Op>, mutant: Mutant) -> (Vec<Op>, Failure) {
 /// Shrunk sequences of defects, each with the class it fails with. `KNOWN` must pass; `OPEN` lists defects of the
 /// current tip, each asserted to still fail the same way so a fix moves it to `KNOWN`.
 const KNOWN: &[(&str, &str, &[Op])] = &[
-    // bigboi-data-2 and its forms half (shared-data, O89-list-snapshots).
     ("permission ask overtakes the list", "permissions ses_0", &[Op::SyncPermissions(0), Op::Ask(0)]),
     (
         "permission answer overtakes the list",
@@ -1470,9 +1433,7 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         &[Op::Ask(0), Op::SyncPermissions(0), Op::Answer(0, 0)],
     ),
     ("form cancel overtakes the list", "forms ses_1", &[Op::Open(1), Op::SyncForms(1), Op::Cancel(1, 0)]),
-    // bigboi-data-3 (O89-transcript-refresh).
     ("step overtakes the newest page", "transcript ses_0", &[Op::SyncMessages(0), Op::Step(0)]),
-    // bigboi-data-6 (O89-older-page).
     (
         "older page after a head refresh",
         "transcript ses_0",
@@ -1493,10 +1454,8 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "deleted ses_0",
         &[Op::SyncMessages(0), Op::Release(Read::Head, 0), Op::LoadOlder(0), Op::Delete(0), Op::Deliver(1)],
     ),
-    // carbon-data-2.
     ("delete keeps forms", "deleted ses_0", &[Op::Open(0), Op::Deliver(1), Op::Delete(0), Op::Deliver(1)]),
-    // O7, O8 (bigboi-4, models review): the global 512-ID `state::Live` window evicted what overtook a read, in the
-    // same session or another (fixed by the per-read overlay, models step 2).
+    // A burst of events overtakes an outstanding list read.
     ("burst in the same session", "permissions ses_1", &[Op::SyncPermissions(1), Op::Burst(1)]),
     ("burst in another session", "permissions ses_0", &[Op::SyncPermissions(0), Op::Ask(0), Op::Burst(1)]),
     // O9, permission half: a late ask for a session the store found missing recreated its permissions.
@@ -1505,14 +1464,13 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "missing ses_1",
         &[Op::Ask(1), Op::Delete(1), Op::SyncPermissions(1), Op::Release(Read::Permissions, 1)],
     ),
-    // O9, form half: a late form for a session the store found missing recreated its forms (models step 3).
+    // A form read returns after its session disappears.
     (
         "late form for a missing session",
         "missing ses_0",
         &[Op::Open(0), Op::Delete(0), Op::SyncForms(0), Op::Release(Read::Forms, 0)],
     ),
-    // S1 (carbon-4, O92-shell-list): a `Catalog::Shell` read replaced the location's shells, losing a
-    // `shell.created` and bringing back a shell whose `shell.exited` arrived while it was in flight.
+    // Shell creation and exit both overtake a shell snapshot.
     ("shell created during the shell read", "shells", &[Op::SyncShells, Op::ShellCreate]),
     ("shell exited during the shell read", "settled shells", &[Op::ShellCreate, Op::SyncShells, Op::ShellExit(0)]),
     // More shells start during the read than its overlay holds: it publishes its list and reads again.
@@ -1524,7 +1482,7 @@ const KNOWN: &[(&str, &str, &[Op])] = &[
         "transcript ses_1",
         &[Op::Step(1), Op::Text(1), Op::SyncMessages(1), Op::Release(Read::Head, 1), Op::End(1)],
     ),
-    // O6 (bigboi-2): the held single-message refetch after `session.model.selected` upserted through
+    // The held single-message refetch after `session.model.selected` upserted through
     // `transcript_mut` after `session.deleted` (fixed by the transcript incarnation, O6-held-message-read).
     (
         "held single-message read after a delete",

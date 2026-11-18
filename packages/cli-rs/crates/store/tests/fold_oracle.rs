@@ -1,8 +1,5 @@
-//! P-ORACLE for the event fold (models step 7): folds every event of `parity/fixtures/F.7/folds.json`
-//! (written by `parity/oracle/F.7-folds.ts` from the TS `createData`) with `Data::apply`, on an empty store and on
-//! one loaded from the fixture's routes, and compares what the store holds and which reads the event started, field
-//! by field. A difference the fixture's `allow` list names with its deviation file passes; an allow entry that no
-//! longer differs fails, so the list stays current.
+//! Compares store state and outgoing reads with the recorded event folds. A listed difference must still differ, so
+//! stale exceptions fail.
 
 mod common;
 

@@ -1,6 +1,4 @@
-//! Locations and their catalogs (F.8): location info, VCS, agents, commands, config, integrations,
-//! MCP servers and resources, models, providers, references, skills, shells, web search, and usage
-//! limits, each read once per invalidation and refreshed by the events that name its location.
+//! Location catalogs are read once per invalidation. Events refresh only their affected location.
 
 use std::time::Duration;
 

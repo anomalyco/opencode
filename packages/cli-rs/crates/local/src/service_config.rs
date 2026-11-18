@@ -1,12 +1,5 @@
-//! Service config with legacy migrations (F.4).
-//!
-//! Ports the file handling of `packages/cli/src/services/service-config.ts`: the config at
-//! `<config>/service.json` (or `service-<channel>.json`) behind `opencode service get/set/unset`.
-//! Writes keep the key order the TypeScript object spreads produce (decoded fields in schema order,
-//! new keys appended), so either client can rewrite the other's file without reordering it.
-//!
-//! Stopping the service before a change and creating the remote tunnel are not file operations:
-//! [`Edit::stops_service`] and [`Edit::needs_tunnel`] tell the caller when to do them.
+//! Reads and edits the per-channel service config. Preserve schema field order and append new keys. The caller
+//! handles any required service stop or tunnel setup.
 
 use std::fmt;
 use std::fs;

@@ -1,5 +1,4 @@
-//! The client's environment, uploaded to a session so its shells and tools run with the
-//! terminal's variables (G13). Only clients of a local server upload it.
+//! Only clients connected to a local server upload their terminal environment for shells and tools.
 
 use indexmap::IndexMap;
 use opencode_api::client::Client;

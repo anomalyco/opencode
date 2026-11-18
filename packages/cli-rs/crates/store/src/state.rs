@@ -1,8 +1,5 @@
-//! Store state (F.7): the shared handle, the locked state, keyed reads, and follow-up refreshes.
-//!
-//! `Data` ports `createData` (`packages/client/src/solid/data.ts`). It is a cheap `Clone` handle
-//! around one locked [`State`]. The lock is never held across an `.await`. Requests run on the
-//! tokio runtime captured by [`Data::new`], so the handle also works from the UI thread.
+//! [`Data`] shares a locked [`State`] across handles. The lock never crosses an `.await`; requests run on the runtime
+//! captured at construction, including those issued on the UI thread.
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -127,7 +124,7 @@ pub struct State {
     pub(crate) event_seq: Option<i64>,
 }
 
-/// Changes one list read may record before it overflows (O-92 Q1).
+/// Maximum changes retained by one in-flight list read.
 pub(crate) const OVERLAY_LIMIT: usize = 1024;
 
 /// What overtook one list read (model M1, deviation O89-list-snapshots): the items events added

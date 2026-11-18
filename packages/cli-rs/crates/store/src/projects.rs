@@ -1,5 +1,4 @@
-//! Projects (F.8), and the adoption of sessions into a project when
-//! its repository is resolved (`worktree.resolved`).
+//! Adopts sessions into their project when `worktree.resolved` supplies the repository root.
 use std::collections::HashSet;
 
 use opencode_api::generated::*;
@@ -196,8 +195,8 @@ mod tests {
         assert_eq!(adopt("global", "\\repo\\.\\Legacy"), Some(("repository".into(), Some("Legacy".into()))));
         let windows = event("C:\\Repo", &[]);
         assert_eq!(super::adopt("global", "c:/repo/App", &windows), Some(("repository".into(), Some("App".into()))));
-        // Lowercasing `İ` lengthens it. TS slices by the root's UTF-16 length and gives an empty subpath;
-        // the subpath is what follows the root's segments (deviation O89-adopt-case-fold).
+        // Case folding can change string length (`İ`); match root segments rather than slicing by the original
+        // length.
         let folded = event("c:\\i\u{307}", &[]);
         assert_eq!(super::adopt("global", "C:\\\u{130}\\ä", &folded), Some(("repository".into(), Some("ä".into()))));
     }

@@ -1,11 +1,4 @@
-//! P-FILE under contention for the state files the TypeScript TUI shares (MS1 review carbon-7, MS3/MS4
-//! review carbon-3): `session.json`, `prompt-history.jsonl`, `frecency.jsonl` and `prompt-stash.jsonl`,
-//! written at the same time by this crate and by
-//! `parity/oracle/MS1-files.ts`, which writes with the TypeScript TUI's own `util/persistence`
-//! functions. A reader thread checks every state of the files meanwhile.
-//!
-//! The TypeScript side comes from `OPENCODE_TS_ROOT`, else this checkout; without its `node_modules`
-//! the tests are skipped, or fail when `OPENCODE_RS_REQUIRE_TS` is set.
+//! Concurrent writers use the same state files; a reader checks that intermediate contents remain valid.
 
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -265,13 +258,8 @@ fn frecency_at_the_limit_under_contention() {
     eprintln!("frecency.jsonl: {reads} reads, all whole; {lines} lines before the load trimmed it to 1000");
 }
 
-/// `prompt-stash.jsonl`: the TypeScript TUI stashes while Rust does, and then Rust pops its own entries.
-/// Every state a reader sees is whole lines, no entry either side stashed is lost, and a pop drops only
-/// its own line.
-///
-/// The pops run after TypeScript stopped: a pop rewrites the file, and TypeScript appends without the
-/// lock, so an append that opened the file just before the rename and writes just after it is lost (see
-/// `steps/rs-ms34-files.md`).
+/// Pop only after the other writer stops. An unlocked append can open the old inode before an atomic rename and write
+/// to it afterward.
 #[test]
 fn prompt_stash_under_contention() {
     if !available() {

@@ -1,5 +1,3 @@
-//! Regressions for the `carbon` review of F.7 (`reviews/rs-store-core.review-carbon.md`).
-
 mod common;
 
 use std::sync::Arc;
@@ -79,8 +77,6 @@ fn reads(paths: &Log<String>, path: &str) -> usize {
     paths.get().iter().filter(|item| *item == path).count()
 }
 
-// carbon-1 -------------------------------------------------------------------------------------
-
 /// A reconnect the status watch coalesces (`Connected -> Reconnecting -> Connected` before `run`
 /// polls it) must still invalidate cached reads and wake views.
 #[tokio::test]
@@ -118,7 +114,6 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
 
-    // F.3 flushes the tail into the queue, then reports the disconnect.
     let created = durable(
         "session.created",
         "evt_created",
@@ -136,10 +131,6 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     driver.await.unwrap();
 }
 
-// carbon-2 -------------------------------------------------------------------------------------
-
-/// A deletion between a read's call and its task's first poll must not let the read publish
-/// (`solid-refresh.test.ts` "does not resurrect").
 async fn deleted_before_first_poll(read: &str) {
     let (data, _) = counting();
     let target = id("ses_gone");
@@ -180,8 +171,6 @@ async fn a_form_read_started_before_a_deletion_does_not_resurrect_it() {
     deleted_before_first_poll("form").await;
 }
 
-// carbon-3 -------------------------------------------------------------------------------------
-
 #[tokio::test]
 async fn overtaking_enqueues_keep_their_order() {
     let release = Slot::<()>::default();
@@ -215,8 +204,6 @@ async fn overtaking_enqueues_keep_their_order() {
     assert_eq!(order, ids);
 }
 
-// carbon-4 -------------------------------------------------------------------------------------
-
 /// The read of a running session that is not loaded checks the connection when it would start.
 #[tokio::test]
 async fn rehydration_reads_nothing_once_offline() {
@@ -244,8 +231,6 @@ async fn rehydration_reads_nothing_once_offline() {
     settle().await;
     assert_eq!(reads(&paths, "/api/session/ses_x"), 0);
 }
-
-// carbon-6 -------------------------------------------------------------------------------------
 
 #[tokio::test]
 async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
@@ -328,8 +313,6 @@ async fn views_read_changes_and_state_under_one_lock() {
     assert_eq!(count, 1);
 }
 
-// carbon-7 -------------------------------------------------------------------------------------
-
 #[test]
 fn connect_works_from_a_thread_outside_the_runtime() {
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
@@ -351,8 +334,7 @@ fn connect_works_from_a_thread_outside_the_runtime() {
     drop(connection);
 }
 
-/// MS1 `carbon-5`, after `store-ui-flow`: a read inside a read on the same thread reuses the outer guard, and reads
-/// of another store nest. A write inside a read panics in every build instead of hanging.
+/// Nested reads reuse the outer guard. Writing inside a read must panic rather than deadlock.
 #[tokio::test]
 async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let data = common::data(handler(|_| async { ok(json!({})) }), Options::default());
@@ -368,8 +350,6 @@ async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
     assert_eq!(panicked, Ok(true), "a write inside a read must panic, not hang");
 }
-
-// r2 data review --------------------------------------------------------------------------------
 
 #[tokio::test]
 async fn deleting_a_session_drops_its_forms() {
@@ -425,8 +405,6 @@ async fn a_budget_refusal_refreshes_usage_limits() {
     wait(|| reads(&paths, "/api/experimental/usage/limits") == 3).await;
 }
 
-// O-89: list snapshots keep what arrived meanwhile -------------------------------------------------
-
 /// A handler that answers `path` with the list the test releases, and everything else empty.
 fn held(path: &'static str) -> (Data, Slot<Value>) {
     let slot = Slot::<Value>::default();
@@ -474,8 +452,7 @@ async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
     assert_eq!(ids, ["per_kept", "per_new"]);
 }
 
-/// More changes than the overlay holds overtake a permission read: it publishes nothing and reads
-/// again, so the bound costs a read, never an ask (model M1, O-92 Q1).
+/// An overflow costs another read, never a lost permission request.
 #[tokio::test]
 async fn an_overflowed_permission_read_reads_again() {
     let slot = Slot::<Value>::default();
@@ -546,8 +523,6 @@ async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     assert_eq!(ids, ["frm_kept", "frm_new"]);
 }
 
-/// More forms than the overlay holds overtake a form read: it publishes nothing and reads again
-/// (model M1, O-92 Q1).
 #[tokio::test]
 async fn an_overflowed_form_read_reads_again() {
     let slot = Slot::<Value>::default();

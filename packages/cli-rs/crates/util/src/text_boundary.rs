@@ -1,6 +1,4 @@
-//! `TextBoundary` (`packages/util/src/text-boundary.ts`): clip text to a budget of UTF-16 code units, as
-//! JavaScript's `.length` counts them, without starting on half a character. The result can be shorter than the
-//! budget by the part of the character at the cut. Boundaries are code points, not graphemes.
+//! Clips at a Unicode scalar boundary within a UTF-16 budget; the cut may fall inside a grapheme.
 
 /// The last `limit` UTF-16 code units of `text`, without the low surrogate whose pair the limit cut off.
 pub fn tail(text: &str, limit: usize) -> &str {

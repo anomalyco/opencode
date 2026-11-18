@@ -1,9 +1,4 @@
-//! Pinned sessions in `<state>/session.json`, shared with the TypeScript TUI (`context/local.tsx:508-603`).
-//!
-//! TypeScript reads the file once and writes its whole list with `writeJsonAtomic`. Here every change
-//! runs under the `Flock` lock in `<state>/locks` with the file path as the key, reads the file again,
-//! and applies only its own pin or unpin, so pins another client wrote since survive. Other fields of
-//! the file survive too.
+//! Changes to `<state>/session.json` reread the file under its lock so concurrent pins and unrelated fields survive.
 
 use std::fs;
 use std::path::{Path, PathBuf};

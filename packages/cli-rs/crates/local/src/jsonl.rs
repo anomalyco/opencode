@@ -1,14 +1,5 @@
-//! JSONL files in the state directory (F.5, row L06): `prompt-history.jsonl`, `prompt-stash.jsonl`, and
-//! `frecency.jsonl`.
-//!
-//! Ports the three TypeScript providers (`packages/tui/src/prompt/{history,stash,frecency}.tsx`): their
-//! parse and limit rules, the rewrite on load that heals a broken file, and appends. Both TUIs write all
-//! three files, and TypeScript writes from memory without a lock. So this client writes each under its
-//! lock in `<state>/locks` from what the file holds, never from memory: saves only append, a stash pop
-//! or remove drops its one line, and only a load trims. Rewrites are atomic, and replace only a file that
-//! did not change since it was read. Write failures are logged,
-//! and TypeScript ignores them. Prompt entries stay `serde_json::Value`, so fields this client does not
-//! know survive.
+//! Prompt history, stash and frecency files have other writers that do not take our locks. Append on save, trim only
+//! on load and base rewrites on the current file, never a cached copy. Keep unknown prompt fields.
 
 use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -279,7 +270,6 @@ impl Stash {
         &self.entries
     }
 
-    /// `push({prompt})` with the time `now` in milliseconds.
     pub fn push(&mut self, prompt: Value, now: i64) {
         let entry = stash_entry(prompt, now);
         self.entries.push(entry.clone());
@@ -398,14 +388,12 @@ impl Frecency {
         &self.data
     }
 
-    /// `getFrecency(path)` at the time `now`.
     pub fn score(&self, path: &str, now: i64) -> f64 {
         self.data
             .get(&resolve(Flavor::NATIVE, &self.cwd, path))
             .map_or(0.0, |visit| visit.frequency / (1.0 + (now as f64 - visit.last_open) / 86_400_000.0))
     }
 
-    /// `updateFrecency(path)` at the time `now`: [`save_frecency`], then [`Frecency::record`].
     pub fn update(&mut self, path: &str, now: i64) {
         match save_frecency(&self.state, &self.cwd, path, now) {
             Ok((path, visit)) => self.record(path, visit),
