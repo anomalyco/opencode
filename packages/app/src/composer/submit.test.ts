@@ -4,6 +4,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import { PROMPT_GATE_TIMEOUT_MS, settlePromptGates } from "@/runtime/plugin/prompt-gate"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
+import { createRoot } from "solid-js"
 import type {
   ActiveComposerAdapter,
   ComposerControls,
@@ -354,6 +355,89 @@ describe("Composer submission", () => {
     await flush()
     expect(calls.filter((call) => call === "send" || call === "command")).toEqual([])
     expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+  })
+
+  // The composer the person presses Stop in is not always the one that made the send: a new session's composer
+  // unmounts as soon as Enter is pressed, and a tab switch away and back mounts a session's composer anew.
+  test.each([
+    { name: "a new session's first prompt, from the session's own composer", draft: true },
+    { name: "a prompt whose composer a tab switch has replaced", draft: false },
+  ])("Stop cancels $name while it waits on the gate", async (row) => {
+    const calls: string[] = []
+    const timeline: string[] = []
+    const failures: string[] = []
+    const gate = Promise.withResolvers<void>()
+    // The send ends one way or the other: its prompt leaves the timeline, or its request leaves the window.
+    const ended = Promise.withResolvers<void>()
+
+    const target = session({
+      calls,
+      prompt: async () => ended.resolve(),
+      handoff: {
+        set: () => timeline.push("set"),
+        hold() {},
+        settle() {},
+        clear: () => {
+          timeline.push("clear")
+          ended.resolve()
+        },
+      },
+    })
+
+    const image = {
+      type: "image" as const,
+      id: "attachment",
+      filename: "shot.png",
+      mime: "image/png",
+      blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+    }
+
+    const draft = createMemoryComposerState({ prompt: "first prompt" }).capture()
+    draft.set([...draft.current(), image])
+    // What the session's composer holds: its own draft, which a new session's first prompt is moved to.
+    const seen = row.draft ? createMemoryComposerState().capture() : draft
+
+    const sender = row.draft
+      ? fresh(draft, async (_selection, submission) => {
+          submission.retarget(seen)
+
+          return { session: target, cleanupReady: Promise.resolve() }
+        })
+      : active(draft, target)
+
+    const notify = { missingSelection() {}, unqueueable() {}, failed: (kind: string) => void failures.push(kind) }
+    const compose = (adapter: ActiveComposerAdapter | NewSessionComposerAdapter) =>
+      submitInput(adapter, notify, undefined, undefined, undefined, undefined, undefined, () => gate.promise)
+
+    const unmount = createRoot((dispose) => {
+      void compose(sender).submit(new Event("submit"))
+
+      return dispose
+    })
+
+    // A new session's composer goes at Enter; a tab switch comes once the prompt shows and waits.
+    if (row.draft) unmount()
+    await flush()
+
+    if (!row.draft) unmount()
+    expect(timeline).toEqual(["set"])
+    expect(text(seen)).toBe("")
+
+    await compose({ ...active(seen, target), interrupt: async () => void calls.push("interrupt") }).stop()
+    // What the send waited for is ready later: the cancelled prompt must not leave then either.
+    gate.resolve()
+    await ended.promise
+    await flush()
+
+    expect(calls.filter((call) => call === "send" || call === "interrupt")).toEqual([])
+    expect(timeline).toEqual(["set", "clear"])
+    expect(text(seen)).toBe("first prompt")
+    expect(seen.current()).toContainEqual(image)
+    expect(failures).toEqual([])
+
+    // Nothing waits any more, so the next Stop interrupts the session as before.
+    await compose({ ...active(seen, target), interrupt: async () => void calls.push("interrupt") }).stop()
+    expect(calls.filter((call) => call === "interrupt")).toEqual(["interrupt"])
   })
 
   // A session's draft composer and its own composer are two of these. Each press of Enter is one send, and the server

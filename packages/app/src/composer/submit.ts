@@ -81,6 +81,11 @@ const CANCELLED = new Error("The send was cancelled before its request left.")
  */
 type Gate = { open: Promise<void>; cancel: () => void }
 
+// The gates each session's sends still wait on, by session ID, until each settles. Module-wide for the same reason as
+// `statuses`: a new session's composer unmounts while its first prompt waits, and a tab switch remounts a session's
+// composer, so the composer the person presses Stop in is not always the one that made the send.
+const waiting = new Map<string, Set<Gate>>()
+
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
   mode: Accessor<"normal" | "shell">
@@ -146,8 +151,19 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
     gates.set(attempt, gate)
 
-    if (ready) void ready.then(settled)
-    else settled()
+    if (ready) {
+      const pending = waiting.get(session.id) ?? new Set<Gate>()
+
+      waiting.set(session.id, pending.add(gate))
+      void gate.open
+        .catch(() => undefined)
+        .then(() => {
+          pending.delete(gate)
+
+          if (pending.size === 0 && waiting.get(session.id) === pending) waiting.delete(session.id)
+        })
+      void ready.then(settled)
+    } else settled()
 
     return gate
   }
@@ -168,7 +184,13 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     if (effect.type === "notify.unqueueable") return input.notify.unqueueable()
 
     if (effect.type === "interrupt") {
-      if (input.adapter.kind === "active-session") void input.adapter.interrupt()
+      if (input.adapter.kind !== "active-session") return
+      // A send to this session that another composer made still waits on its gate. Nothing of it has reached the
+      // server, so Stop cancels it, as this composer's own machine does for its own send, and interrupts nothing.
+      const pending = waiting.get(input.adapter.session().id)
+
+      if (pending?.size) return pending.forEach((gate) => gate.cancel())
+      void input.adapter.interrupt()
 
       return
     }
