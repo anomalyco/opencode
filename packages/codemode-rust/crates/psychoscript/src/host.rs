@@ -1434,11 +1434,14 @@ pub fn lost_function(name: &str) -> HostFunction {
         length: 0,
         body: Body::Lost(message.into()),
         carrier: false,
+        constructible: false,
     }
 }
 
-/// A host function as a program function, at `label`. Inside a global object, it is an entry point.
+/// A host function as a program function, at `label`. Inside a global object, it is an entry point. A constructible
+/// entry point is called the same way by `new`; a function inside a result never is, as in the reference.
 fn wrap(vm: &mut Vm, f: &HostFunction, label: &str, entry: Option<(&str, bool)>) -> Value {
+    let constructible = f.constructible && entry.is_some_and(|(_, e)| e);
     let index = vm.host.functions.len();
     vm.host.functions.push(FnEntry {
         f: f.clone(),
@@ -1446,13 +1449,20 @@ fn wrap(vm: &mut Vm, f: &HostFunction, label: &str, entry: Option<(&str, bool)>)
         extension: entry.map(|(e, _)| e.to_owned()).unwrap_or_default(),
         entry: entry.is_some_and(|(_, e)| e),
     });
-    native(
+    let made = native(
         vm,
         &f.name.clone(),
         f.length,
         extension_native,
         Value::Num(index as f64),
-    )
+    );
+    if constructible
+        && let Value::Obj(id) = made
+        && let Kind::Native { ctor, .. } = &mut vm.heap[id as usize].kind
+    {
+        *ctor = true;
+    }
+    made
 }
 
 fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {

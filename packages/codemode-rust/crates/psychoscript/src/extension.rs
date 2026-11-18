@@ -267,6 +267,8 @@ pub struct HostFunction {
     pub(crate) body: Body,
     /// Its results' strings are already run text, lone surrogates in carrier form (see `strings::from_units`).
     pub(crate) carrier: bool,
+    /// Whether the program may call it with `new`.
+    pub(crate) constructible: bool,
 }
 
 impl HostFunction {
@@ -281,6 +283,7 @@ impl HostFunction {
             length,
             body: Body::Sync(Arc::new(f)),
             carrier: false,
+            constructible: false,
         }
     }
 
@@ -297,7 +300,15 @@ impl HostFunction {
             length,
             body: Body::Async(Arc::new(move |args| Box::pin(f(args)))),
             carrier: false,
+            constructible: false,
         }
+    }
+
+    /// Lets a program call the function with `new`, as it would a class such as `Bun.Glob`, the reference's
+    /// `Extension.constructible`. `new` calls it the same way a plain call does, and the program gets what it returns.
+    pub fn constructible(mut self) -> Self {
+        self.constructible = true;
+        self
     }
 
     pub fn name(&self) -> &str {
@@ -306,6 +317,10 @@ impl HostFunction {
 
     pub fn is_async(&self) -> bool {
         matches!(self.body, Body::Async(_))
+    }
+
+    pub fn is_constructible(&self) -> bool {
+        self.constructible
     }
 }
 
