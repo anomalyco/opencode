@@ -2021,8 +2021,14 @@ impl Pass<'_, '_> {
             (Node::Code { .. }, Extra::Code(code, _)) => {
                 code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme((*self.syntax()).clone());
             }
-            // Under a keep too: the code view in it is the host's, which restyles with its fence (carbon c2a-3).
-            (Node::Fence { bg: Some(bg), .. }, Extra::Fence(view)) => drop(view.bg(fill(theme, Some(bg)))),
+            // Under a keep too: the code view in it is the host's, which restyles with its fence (carbon c2a-3), its
+            // code on the fence's new background as a fresh build puts it (carbon c2d-3).
+            (Node::Fence { bg: Some(bg), .. }, Extra::Fence(view)) => {
+                view.bg(fill(theme, Some(bg)));
+                if let Some(fence) = self.env.fence {
+                    drop(fence(color(theme, Some(bg))));
+                }
+            }
             _ => return,
         }
         count(|work| work.set += 1);

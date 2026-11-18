@@ -33,6 +33,8 @@ struct TestHost {
     keymap: DialogKeymap,
     theme: RefCell<Theme>,
     clicks: Rc<RefCell<Vec<String>>>,
+    /// The host's code view of a fence ([`apply_fenced`]).
+    code: std::cell::OnceCell<Text>,
 }
 
 impl Host for TestHost {
@@ -61,6 +63,7 @@ fn host(theme_index: usize) -> TestHost {
         keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
         theme: RefCell::new(theme(theme_index)),
         clicks: Rc::default(),
+        code: std::cell::OnceCell::new(),
     }
 }
 
@@ -88,9 +91,12 @@ fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::No
 }
 
 /// [`apply`] as a fence claim's tree, which may hold a fence node: its code view is a text of the host's.
+/// [`apply`] with the host's code view of a fence: one text, kept from build to build, on the background the fence gives
+/// it, as the claim's `FenceCode` puts its code on it.
 fn apply_fenced(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node]) -> Result<(), Refused> {
-    let code = |_| Some(Text::new(&host.app, "HOST CODE").as_any());
-    apply_in(host, tree, parent, nodes, recorder(host), Some(&code))
+    let code = host.code.get_or_init(|| Text::new(&host.app, "HOST CODE").bg(Color::rgba(0, 0, 0, 0)));
+    let view = |bg: Option<Color>| Some(code.clone().bg(bg.unwrap_or(Color::rgba(0, 0, 0, 0))).as_any());
+    apply_in(host, tree, parent, nodes, recorder(host), Some(&view))
 }
 
 fn apply_in(

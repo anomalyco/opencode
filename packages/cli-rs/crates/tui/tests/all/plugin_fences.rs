@@ -139,6 +139,18 @@ impl Fences {
     fn status(&self) -> Option<opencode_plugin::Status> {
         self.pipe.status(ID)
     }
+
+    /// Whether the JS host holds a tree in flight once it handled everything sent so far: a ping, waited for 5 s at
+    /// most, which [`Pipe::settle`] would wait on for good.
+    fn in_flight(&self) -> Option<bool> {
+        let scripts = self.pipe.scripts();
+        let seq = scripts.ping();
+        self.pipe.harness.app.wait_until(Duration::from_secs(5), || {
+            self.now();
+            scripts.ponged(seq).is_some()
+        });
+        scripts.ponged(seq)
+    }
 }
 
 /// The claimed parts that show the plugin's tree.
@@ -311,6 +323,75 @@ fn a_tree_for_a_gone_part_is_dropped() {
     assert_eq!(opencode_plugin::pipe::crossed().dropped, dropped + 1, "the tree was not dropped");
     assert_eq!(mounted(), Vec::new());
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+}
+
+// Expected (carbon c2d-1): a part's mount ends on the JS host also after a reload of the plugin's registrations handed
+// its activation on. The part's tree is held while the plugin registers a renderer late, which reloads it; the session
+// is then left. The JS host holds no part in flight, so it settles: a ping says nothing waits.
+#[test]
+fn a_parts_mount_ends_on_the_js_host_after_a_reload() {
+    let Some(config) = config() else { return };
+    let fences = Fences::open(config, None);
+    let (app, tui) = (&fences.pipe.harness.app, &fences.pipe.harness.tui);
+    fences.pipe.scripts().tamper(Tamper::Hold);
+    fences.answer("```probe\nlet a = 1;\n```\n\nAfter.\n");
+    app.wait_until(Duration::from_millis(300), || {
+        fences.now();
+        false
+    });
+    assert_eq!((mounted().len(), drawn()), (1, 0));
+    tui.keymap.dispatch("fences.late", None);
+    for _ in 0..20 {
+        fences.now();
+    }
+    fences.pipe.scripts().replay();
+    for _ in 0..20 {
+        fences.now();
+    }
+    tui.navigate(Route::Home);
+    for _ in 0..20 {
+        fences.now();
+    }
+    assert_eq!(mounted(), Vec::new());
+    assert_eq!(fences.in_flight(), Some(false), "the JS host holds a part in flight");
+    assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
+}
+
+// Expected (carbon c2d-2): a part falls back and settles on the JS host however its tree in flight ends, while a newer
+// part streams in: the renderer threw (one toast, and the renderer runs no more), the fence grew past 256 KiB, or the
+// host refused the tree (two fence nodes). The JS host then holds nothing in flight, and the plugin stays active.
+#[test]
+fn a_part_whose_tree_fails_in_flight_falls_back_and_settles() {
+    let Some(config) = config() else { return };
+    let big: String = (0..30_000).map(|line| format!("line {line:05}\n")).collect();
+    for (case, first, then, shown) in [
+        ("a throw", "```boom\nfirst\n", "second\n".to_owned(), "second"),
+        ("the cap", "```probe\nsmall\n", big, "line 29999"),
+        ("a refusal", "```twice\nfirst\n", "second\n".to_owned(), "second"),
+    ] {
+        let fences = Fences::open(config.clone(), None);
+        let app = &fences.pipe.harness.app;
+        fences.pipe.scripts().tamper(Tamper::Hold);
+        fences.answer(first);
+        app.wait_until(Duration::from_millis(300), || {
+            fences.now();
+            false
+        });
+        fences.more(&then);
+        for _ in 0..20 {
+            fences.now();
+        }
+        fences.pipe.scripts().replay();
+        for _ in 0..40 {
+            fences.now();
+        }
+        assert_eq!(fences.in_flight(), Some(false), "{case}: the JS host holds a part in flight");
+        let screen = fences.now();
+        assert!(screen.contains(shown) && drawn() == 0, "{case}: the part did not fall back:\n{screen}");
+        let crashed = fences.toasts().into_iter().filter(|toast| toast.contains("crashed")).count();
+        assert_eq!(crashed, usize::from(case == "a throw"), "{case}: the renderer ran again");
+        assert_eq!(fences.status(), Some(opencode_plugin::Status::Active), "{case}");
+    }
 }
 
 // Expected (the existing rule, P.4): a renderer that never returns leaves its fence as the host's code view; the JS host,

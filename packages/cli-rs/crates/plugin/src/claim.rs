@@ -75,6 +75,8 @@ pub(crate) trait Viewer {
     fn view(&self, host: &dyn Host, viewing: Viewing<'_>, part: &Part) -> Viewed;
     /// The part's mount ended.
     fn forget(&self, _host: &dyn Host, _mount: &v2::MountId) {}
+    /// The part fell back to the host's row for good: it is not viewed again while its mount lives.
+    fn fell(&self, _host: &dyn Host, _mount: &v2::MountId) {}
 }
 
 /// How one call of a claim's view ended.
@@ -544,7 +546,11 @@ impl Core {
 
     /// The part shows the host's row from now on.
     fn fall(&self) -> bool {
-        self.fallen.set(true);
+        if !self.fallen.replace(true)
+            && let Some(host) = self.claim.owner.upgrade()
+        {
+            self.claim.viewer.fell(&*host, &self.id);
+        }
         self.wipe();
         self.shows.set(false);
         false

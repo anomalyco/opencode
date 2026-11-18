@@ -429,6 +429,9 @@ impl Guest {
         for viewer in self.viewers.borrow().iter() {
             viewer.handed.set(handed);
         }
+        for claim in self.claims.borrow().iter() {
+            claim.handed.set(handed);
+        }
         let mut loads = scripts.loads.borrow_mut();
         if let Some(load) = loads.get_mut(&self.loaded.target) {
             // What the activation watches it keeps watching.
@@ -1303,14 +1306,16 @@ pub(crate) struct ClaimViewer {
     scripts: Weak<Scripts>,
     index: usize,
     mounts: RefCell<HashMap<v2::MountId, ClaimMount>>,
+    /// The JS host's activation the guest handed to a reload: its parts' mounts still end there (carbon c2d-1).
+    handed: Cell<u64>,
 }
 
 #[derive(Default)]
 struct ClaimMount {
     /// A part of it was sent: the JS host has the mount, whose end it is told.
     started: bool,
-    /// The part the JS host was sent last.
-    sent: Option<opencode_plugin_abi::claim::Part>,
+    /// A digest of the part the JS host was sent last ([`digest`]), with no copy of it: a fence's may be 256 KiB.
+    sent: Option<u64>,
     pending: Option<Box<Revision>>,
     /// The revision offered to the claim, until it is adopted or refused.
     offered: Option<u64>,
@@ -1326,6 +1331,7 @@ impl ClaimViewer {
             scripts: guest.scripts.clone(),
             index,
             mounts: RefCell::default(),
+            handed: Cell::new(0),
         })
     }
 
@@ -1376,6 +1382,23 @@ impl ClaimViewer {
         true
     }
 
+    /// Ends a part's mount: it is not viewed again, and ends on the JS host too, also one of a guest that handed its
+    /// activation to a reload, whose replacement claims its parts in mounts of its own: the JS host would hold the old
+    /// one in flight for good, and its `ping` would never settle (carbon c2d-1). A tree for it that comes later is
+    /// dropped.
+    fn end(&self, id: &v2::MountId) {
+        let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
+        if !mount.started {
+            return;
+        }
+        let running = self.guest.upgrade().filter(|guest| !guest.ended()).map(|guest| guest.js.get());
+        let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
+        let Some(scripts) = self.scripts.upgrade() else { return };
+        let seq = scripts.next();
+        let message = Down::Unmount { seq, id: self.id.clone(), activation, mount: id.clone(), handover: false };
+        scripts.send(message, None);
+    }
+
     /// The JS host started again: each part is sent again as it is drawn next.
     fn restart(&self) {
         for mount in self.mounts.borrow_mut().values_mut() {
@@ -1394,7 +1417,7 @@ impl ClaimViewer {
         }
         let seq = scripts.next();
         if let Some(mount) = self.mounts.borrow_mut().get_mut(id) {
-            (mount.started, mount.sent) = (true, Some(part.clone()));
+            (mount.started, mount.sent) = (true, Some(digest(part)));
         }
         guest.caused();
         let message = Down::Claim {
@@ -1426,6 +1449,9 @@ impl crate::claim::Viewer for ClaimViewer {
             if !guest.over_cap.replace(true) {
                 log::warn!("plugin {}: a fence of {} bytes keeps the host's code view", guest.id(), fence.code.len());
             }
+            // One that grew past it while a tree was in flight ends its mount on the JS host, which drops that tree and
+            // holds nothing in flight for it (carbon c2d-2).
+            self.end(id);
             return Viewed::Returned(None, Some(0));
         }
         // A view with `full` after an offer: the claim refused the tree it took.
@@ -1435,56 +1461,70 @@ impl crate::claim::Viewer for ClaimViewer {
         let (taken, unsent) = {
             let mut mounts = self.mounts.borrow_mut();
             let mount = mounts.entry(id.clone()).or_default();
-            (mount.pending.take(), mount.sent.as_ref() != Some(part))
+            (mount.pending.take(), mount.sent != Some(digest(part)))
+        };
+        // The renderer threw, or gave what the host cannot read: the part falls back for its mount, which ends on the
+        // JS host ([`ClaimViewer::fell`]); the plugin goes on. No newer part goes to it first (carbon c2d-2).
+        let tree = match taken.map(|tree| (tree.rev, tree.error, tree.node)) {
+            Some((_, Some(error), _)) => {
+                log::warn!("plugin {}: the renderer of part {} threw: {error}", guest.id(), id.key);
+                return Viewed::Failed;
+            }
+            Some((rev, None, node)) if node.is_null() => Some((rev, None)),
+            Some((rev, None, node)) => match super::timed(|| serde_json::from_value::<v2::Node>(node)) {
+                Ok(node) => Some((rev, Some(Box::new(node)))),
+                Err(error) => {
+                    log::warn!("plugin {}: a tree for part {} the host cannot read: {error}", guest.id(), id.key);
+                    return Viewed::Failed;
+                }
+            },
+            None => None,
         };
         // The newest part goes now, also beside a tree that was drawn for an older one: the JS host draws it next.
         if unsent {
             self.tell(&guest, id, part);
         }
-        let Some(tree) = taken else { return Viewed::Pending };
-        let rev = tree.rev;
-        let offer = |node: Option<Box<v2::Node>>| {
-            if let Some(mount) = self.mounts.borrow_mut().get_mut(id) {
-                mount.offered = Some(rev);
+        let Some((rev, node)) = tree else { return Viewed::Pending };
+        if let Some(mount) = self.mounts.borrow_mut().get_mut(id) {
+            mount.offered = Some(rev);
+        }
+        // Adopted unless the claim refuses it in this same draw, which asks again with `full` at once, or falls back,
+        // which ends the mount and leaves nothing to settle.
+        let (viewer, owner, id) = (self.this.clone(), guest.host.clone(), id.clone());
+        crate::defer(&owner, move |_| {
+            if let Some(viewer) = viewer.upgrade() {
+                viewer.settle(&id, true);
             }
-            // Adopted unless the claim refuses it in this same draw, which asks again with `full` at once.
-            let (viewer, owner, id) = (self.this.clone(), guest.host.clone(), id.clone());
-            crate::defer(&owner, move |_| {
-                if let Some(viewer) = viewer.upgrade() {
-                    viewer.settle(&id, true);
-                }
-            });
-            Viewed::Returned(node, Some(0))
-        };
-        // The renderer threw: the layer said so, and the part falls back for its mount; the plugin goes on.
-        if let Some(error) = tree.error {
-            log::warn!("plugin {}: the renderer of part {} threw: {error}", guest.id(), id.key);
-            offer(None);
-            return Viewed::Failed;
-        }
-        if tree.node.is_null() {
-            return offer(None);
-        }
-        match super::timed(|| serde_json::from_value::<v2::Node>(tree.node)) {
-            Ok(node) => offer(Some(Box::new(node))),
-            Err(error) => {
-                log::warn!("plugin {}: a tree for part {} the host cannot read: {error}", guest.id(), id.key);
-                offer(None);
-                Viewed::Failed
-            }
-        }
+        });
+        Viewed::Returned(node, Some(0))
     }
 
     fn forget(&self, _: &dyn Host, id: &v2::MountId) {
-        let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
-        let guest = self.guest.upgrade().filter(|guest| !guest.ended() && !guest.handed_over.get());
-        let (Some(guest), true) = (guest, mount.started) else { return };
-        let Some(scripts) = self.scripts.upgrade() else { return };
-        let seq = scripts.next();
-        let message =
-            Down::Unmount { seq, id: self.id.clone(), activation: guest.js.get(), mount: id.clone(), handover: false };
-        scripts.send(message, None);
+        self.end(id);
     }
+
+    fn fell(&self, _: &dyn Host, id: &v2::MountId) {
+        self.end(id);
+    }
+}
+
+/// A digest of `part`: its JSON as the JS host would read it, hashed as it is written, so no copy of it is made (carbon
+/// c2d-3). Two parts with the same digest are taken for one: 64 bits make another part's the same by chance negligible.
+fn digest(part: &opencode_plugin_abi::claim::Part) -> u64 {
+    use std::hash::Hasher;
+    struct Hashing(std::collections::hash_map::DefaultHasher);
+    impl std::io::Write for Hashing {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.write(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut hashing = Hashing(std::collections::hash_map::DefaultHasher::new());
+    let _ = serde_json::to_writer(&mut hashing, part);
+    hashing.0.finish()
 }
 
 /// What a mount shows before the JS host's first tree: the rows its key had, or one (review F1).

@@ -247,10 +247,12 @@ interface Claim {
 interface ClaimMount {
   id: Json
   claim: number
+  // The newest part, until the host adopted the tree drawn for it: the next one comes with its own (carbon c2d-3).
   part: Json
   rev: number
   inflight: boolean
   dirty: boolean
+  // A hash of the last tree sent, which an unchanged one is not sent again for.
   last?: string
 }
 
@@ -543,10 +545,11 @@ function viewClaim(plugin: Plugin, mount: ClaimMount) {
   } finally {
     plugin.claiming = false
   }
-  if (error === undefined && text === mount.last) return
+  const hash = String(Bun.hash(text))
+  if (error === undefined && hash === mount.last) return
   mount.rev += 1
   mount.inflight = true
-  mount.last = text
+  mount.last = hash
   frame(TREE, {
     id: plugin.id,
     mount: mount.id,
@@ -1186,6 +1189,7 @@ async function handle(message: Json) {
         if (message.rev !== claimed.rev || !claimed.inflight) return
         claimed.inflight = false
         if (claimed.dirty) within(plugin, () => viewClaim(plugin, claimed))
+        else claimed.part = null
         return
       }
       const mount = plugin?.mounts.get(mountKey(message.mount))

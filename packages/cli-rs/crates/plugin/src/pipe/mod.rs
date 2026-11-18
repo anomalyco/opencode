@@ -1861,6 +1861,8 @@ impl Scripts {
         // Its generation is over: an end scheduled for it ends nothing more ([`Scripts::shut`]).
         self.generation.set(self.generation.get() + 1);
         *self.overflow.borrow_mut() = Default::default();
+        // What waited for the overflow to drain goes with it: the next JS host is sent each part as it is drawn.
+        self.reoffers.take();
         log::error!("{why}");
         // A ping on its way is lost with it: answered, as one a tree waits behind, so its sender asks again.
         self.pong.set(Some((self.seq.get(), true)));
@@ -2491,8 +2493,14 @@ mod tests {
             route: None,
             parted: false,
         };
+        // A tree's adoption and its refusal settle what the JS host holds in flight (carbon's step D review).
+        let mount = opencode_plugin_abi::v2::MountId { surface: "s".into(), key: "k".into(), generation: 1 };
+        let adopted = Down::Adopted { id: "p".into(), mount: mount.clone(), rev: 1 };
+        let refused = Down::Refused { id: "p".into(), mount, rev: 2, adopted: 1, error: "refused".into() };
         scripts.overflowed(cancelled.clone(), bytes(&cancelled));
         scripts.overflowed(answered.clone(), bytes(&answered));
+        scripts.overflowed(adopted.clone(), bytes(&adopted));
+        scripts.overflowed(refused.clone(), bytes(&refused));
         scripts.overflowed(Down::Forget { target: "t".into() }, 64);
         scripts.overflowed(call, 64);
         scripts.refuse(&huge, wire::CONTROL_CAP + 1);
@@ -2504,7 +2512,7 @@ mod tests {
         };
         let skipped = Down::Skipped { seq: 2 };
         let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
-        let expected = [held, cancelled, answered, skipped, failed];
+        let expected = [held, cancelled, answered, adopted, refused, skipped, failed];
         let charged = 512 + expected[1..].iter().map(bytes).sum::<usize>();
         assert_eq!(kept, expected);
         assert_eq!(scripts.overflow_bytes(), charged, "a message kept past the bound is charged its bytes");

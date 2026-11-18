@@ -351,6 +351,9 @@ function insertNode(parent: VNode, node: VNode, anchor?: VNode) {
   // An empty text node is Solid's marker, which stands anywhere.
   if (textual(node) && !(node.tag === "#text" && node.text === "") && !(parent.tag === "text" || SPANS.has(parent.tag)))
     throw new Error(`Orphan text error: "${plain(node)}" must have a <text> as a parent`)
+  // A node under itself would be a tree without end, which no view leaves (carbon c2d-3).
+  for (let at: VNode | undefined = parent; at; at = at.parent)
+    if (at === node) throw new Error(`a <${node.tag}> cannot be added inside itself`)
   if (node.parent) remove(node.parent, node)
   const index = anchor ? parent.children.indexOf(anchor) : -1
   if (index === -1) parent.children.push(node)
