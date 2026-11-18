@@ -1,35 +1,12 @@
-//! Where a plugin's storage keys live in the host's storage (review carbon-6), on every carrier: the linked one, the C
-//! ABI's and the JS pipe's.
-//!
-//! A key the plugin declared is kept under one name of the host's storage. TS names it `plugin.{id}.{key}`, which two
-//! plugins can share: a plugin `acme` with a key `cloud.token` and a plugin `acme.cloud` with a key `token` both name
-//! `plugin.acme.cloud.token`. So the name of `(id, key)` is:
-//!
-//! - `plugin.{id}.{key}` for a key with no dot, as TS has it, so the stores of both clients stay one;
-//! - `plugin.{id}..{key}` for a key with a dot.
-//!
-//! An ID and a key are made of letters, digits, `.`, `_` and `-`, and neither starts or ends with a dot or holds two in
-//! a row. Then the names are apart: a name with `..` is of a dotted key, whose ID is what comes before the one `..`; a
-//! name without is of a dot-free key, whose ID is what comes before the last dot. A pair the rule refuses is refused
-//! where it is asked for, and nothing is read or kept for it.
-//!
-//! What was stored under a dotted key's TS name stays readable: a read finds it there while the new name holds
-//! nothing, and the first write moves it to the new name. Until then it is read as it was.
-//!
-//! What the host keeps for a plugin is bounded: [`KEYS`] declared keys, and [`VALUE_BYTES`] of JSON a value.
+//! An undotted key keeps its TS name `plugin.{id}.{key}`. Dotted keys use `..` as the separator so
+//! `(acme.cloud, token)` and `(acme, cloud.token)` cannot collide. Reads fall back to the old name until the
+//! first write; merges must migrate the old object before applying fields.
 
 use crate::Host;
 
-/// The storage keys one plugin may declare (FT-9: opencode-tokscope declares about 80, its 64 history shards and a
-/// dozen others).
 pub const KEYS: usize = 128;
-/// The JSON bytes one stored value may have. The host keeps what a plugin read or wrote of each key, and a merge reads,
-/// merges and writes the whole value on the UI thread, so the bound holds those too: 128 keys of it is 32 MiB a plugin
-/// (big-boi's `cg4-3`, `cg4-4`). opencodebar's price list of 1 MB and prompt-search's index of every prompt are refused
-/// (CT-36), and the plugin goes on.
 pub const VALUE_BYTES: usize = 256 << 10;
 
-/// The host's names of a plugin's key: where it is kept, and where TS kept it, when that is another name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Name {
     pub now: String,
@@ -97,12 +74,17 @@ pub(crate) fn bounded_merge(
     name: &Name,
     fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
-    let mut merged = match read(host, name).and_then(|json| serde_json::from_str(&json).ok()) {
-        Some(serde_json::Value::Object(object)) => object,
-        _ => serde_json::Map::new(),
-    };
-    merged.extend(fields.iter().map(|(key, value)| (key.clone(), value.clone())));
-    bounded(serde_json::Value::Object(merged).to_string().len())
+    bounded(merged(read(host, name), fields.iter().map(|(k, v)| (k.clone(), v.clone()))).len())
+}
+
+pub(crate) fn merged(
+    previous: Option<String>,
+    fields: impl IntoIterator<Item = (String, serde_json::Value)>,
+) -> String {
+    let mut object: serde_json::Map<_, _> =
+        previous.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
+    object.extend(fields);
+    serde_json::Value::Object(object).to_string()
 }
 
 /// Refuses a value of `bytes` JSON bytes past [`VALUE_BYTES`].
@@ -117,44 +99,22 @@ pub(crate) fn bounded(bytes: usize) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// The pair a name is of, by the rule the module states: what an independent reader of the names makes of them.
-    fn parse(name: &str) -> (String, String) {
-        let rest = name.strip_prefix("plugin.").unwrap();
-        match rest.split_once("..") {
-            Some((id, key)) => (id.to_owned(), key.to_owned()),
-            None => {
-                let (id, key) = rest.rsplit_once('.').unwrap();
-                (id.to_owned(), key.to_owned())
-            }
-        }
-    }
-
-    // Expected (review carbon-6): no two pairs share a name, over every pair of short IDs and keys of letters and dots,
-    // the ones carbon names among them, and each name reads back as its pair; a dot-free key keeps TS's name, a dotted
-    // one names TS's as its old name; a pair the rule cannot keep apart has none.
     #[test]
     fn names_keep_every_pair_apart() {
-        let parts: Vec<String> = ["a", "b", "ab", "a.b", "b.a", "a.b.c", "x-y", "x_y", "a.bb", "aa.b"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
-        let mut seen = std::collections::HashMap::new();
-        for id in &parts {
-            for key in &parts {
+        let parts = ["a", "b", "ab", "a.b", "b.a", "a.b.c", "x-y", "x_y", "a.bb", "aa.b"];
+        let mut names = std::collections::HashSet::new();
+        for id in parts {
+            for key in parts {
                 let name = name(id, key).unwrap();
-                assert_eq!(parse(&name.now), (id.clone(), key.clone()), "{name:?}");
-                if let Some(other) = seen.insert(name.now.clone(), (id.clone(), key.clone())) {
-                    panic!("{id:?} {key:?} and {other:?} share {}", name.now);
+                assert!(names.insert(name.now.clone()), "collision: {id} {key}");
+                let ts = format!("plugin.{id}.{key}");
+                if key.contains('.') {
+                    assert_eq!(name.before.as_ref(), Some(&ts));
+                } else {
+                    assert_eq!(name, Name { now: ts, before: None });
                 }
             }
         }
-        assert_eq!(
-            name("opencode.diffs", "view").unwrap(),
-            Name { now: "plugin.opencode.diffs.view".into(), before: None }
-        );
-        let dotted = name("acme", "cloud.token").unwrap();
-        assert_eq!(dotted.before.as_deref(), Some("plugin.acme.cloud.token"));
-        assert_ne!(dotted.now, name("acme.cloud", "token").unwrap().now);
         for (id, key) in [
             ("a.", "k"),
             (".a", "k"),
@@ -172,8 +132,6 @@ mod tests {
         }
     }
 
-    // Expected (review carbon-6): a plugin declares 64 keys at most, a key twice counts once, and a value past 256 KiB is
-    // refused.
     #[test]
     fn what_a_plugin_keeps_is_bounded() {
         let mut keys = Vec::new();

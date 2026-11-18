@@ -101,12 +101,7 @@ pub trait Host: 'static {
     /// Sets `fields` in the object stored under storage key `key` and keeps its other fields; a host with storage
     /// sets them in the latest stored object under the storage lock.
     fn storage_merge(&self, key: &str, fields: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
-        let mut object = match self.storage_read(key).and_then(|json| serde_json::from_str(&json).ok()) {
-            Some(serde_json::Value::Object(object)) => object,
-            _ => serde_json::Map::new(),
-        };
-        object.extend(fields);
-        self.storage_write(key, &serde_json::Value::Object(object).to_string())
+        self.storage_write(key, &storage::merged(self.storage_read(key), fields))
     }
     /// Shows `toast`; with a session, it offers to open the session unless the session's family is on screen.
     fn toast(&self, _toast: &abi::Toast) {}
@@ -1294,45 +1289,47 @@ struct Scoped<'a> {
     scope: &'a Rc<Scope>,
 }
 
+macro_rules! delegate_reads {
+    ($($name:ident($($arg:ident: $ty:ty),*) $(-> $result:ty)?;)*) => {$(
+        fn $name(&self, $($arg: $ty),*) $(-> $result)? { self.read.$name($($arg),*) }
+    )*};
+}
+
 impl abi::Read for Scoped<'_> {
-    fn theme_mode(&self) -> abi::ThemeMode {
-        self.read.theme_mode()
-    }
-
-    fn color(&self, token: &str) -> Option<abi::Rgba> {
-        self.read.color(token)
-    }
-
-    fn session(&self, id: &str) -> Option<abi::Session> {
-        self.read.session(id)
-    }
-
-    fn family(&self, id: &str) -> abi::Family {
-        self.read.family(id)
-    }
-
-    fn messages(&self, id: &str, visit: &mut dyn FnMut(&[abi::types::SessionMessageInfo])) {
-        self.read.messages(id, visit)
-    }
-
-    fn pending(&self, id: &str) -> Vec<abi::types::SessionInboxInfo> {
-        self.read.pending(id)
-    }
-
-    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>> {
-        self.read.models(location)
-    }
-
-    fn model(&self) -> Option<abi::types::ModelRef> {
-        self.read.model()
-    }
-
-    fn limits(&self) -> Option<abi::types::UsageLimitsInfo> {
-        self.read.limits()
-    }
-
-    fn providers(&self) -> Option<Vec<abi::types::ProviderInfo>> {
-        self.read.providers()
+    delegate_reads! {
+        theme_mode() -> abi::ThemeMode;
+        color(token: &str) -> Option<abi::Rgba>;
+        session(id: &str) -> Option<abi::Session>;
+        family(id: &str) -> abi::Family;
+        messages(id: &str, visit: &mut dyn FnMut(&[abi::types::SessionMessageInfo]));
+        pending(id: &str) -> Vec<abi::types::SessionInboxInfo>;
+        models(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>>;
+        model() -> Option<abi::types::ModelRef>;
+        limits() -> Option<abi::types::UsageLimitsInfo>;
+        providers() -> Option<Vec<abi::types::ProviderInfo>>;
+        info() -> abi::Info;
+        mcp_servers(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::McpServer>>;
+        integrations(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::IntegrationInfo>>;
+        vcs(location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo>;
+        route() -> abi::Route;
+        interactive() -> bool;
+        shortcut(name: &str) -> Option<String>;
+        composer() -> Option<abi::Composer>;
+        variants() -> Vec<String>;
+        tabs_enabled() -> bool;
+        tabs() -> Vec<abi::Tab>;
+        keymap_pending() -> Vec<abi::KeymapPending>;
+        keymap_active() -> Vec<abi::KeymapActive>;
+        keymap_commands() -> Vec<abi::KeymapCommand>;
+        shortcuts(name: &str) -> Vec<String>;
+        selection() -> Option<String>;
+        theme() -> Option<String>;
+        themes() -> Vec<String>;
+        plugins() -> Vec<abi::PluginEntry>;
+        setting(name: &str) -> Option<serde_json::Value>;
+        image_size(bytes: &[u8]) -> Option<(u32, u32)>;
+        utc_offset(at: i64) -> i32;
+        measure(text: &str) -> abi::Measure;
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {
@@ -1340,100 +1337,8 @@ impl abi::Read for Scoped<'_> {
         serde_json::from_str(&json).ok()
     }
 
-    fn info(&self) -> abi::Info {
-        self.read.info()
-    }
-
-    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::McpServer>> {
-        self.read.mcp_servers(location)
-    }
-
-    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::IntegrationInfo>> {
-        self.read.integrations(location)
-    }
-
-    fn vcs(&self, location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo> {
-        self.read.vcs(location)
-    }
-
-    fn route(&self) -> abi::Route {
-        self.read.route()
-    }
-
-    fn interactive(&self) -> bool {
-        self.read.interactive()
-    }
-
-    fn shortcut(&self, name: &str) -> Option<String> {
-        self.read.shortcut(name)
-    }
-
     fn dialog_open(&self, key: &str) -> bool {
         self.host.dialog_open(&self.scope.id, key)
-    }
-
-    fn composer(&self) -> Option<abi::Composer> {
-        self.read.composer()
-    }
-
-    fn variants(&self) -> Vec<String> {
-        self.read.variants()
-    }
-
-    fn tabs_enabled(&self) -> bool {
-        self.read.tabs_enabled()
-    }
-
-    fn tabs(&self) -> Vec<abi::Tab> {
-        self.read.tabs()
-    }
-
-    fn keymap_pending(&self) -> Vec<abi::KeymapPending> {
-        self.read.keymap_pending()
-    }
-
-    fn keymap_active(&self) -> Vec<abi::KeymapActive> {
-        self.read.keymap_active()
-    }
-
-    fn keymap_commands(&self) -> Vec<abi::KeymapCommand> {
-        self.read.keymap_commands()
-    }
-
-    fn shortcuts(&self, name: &str) -> Vec<String> {
-        self.read.shortcuts(name)
-    }
-
-    fn selection(&self) -> Option<String> {
-        self.read.selection()
-    }
-
-    fn theme(&self) -> Option<String> {
-        self.read.theme()
-    }
-
-    fn themes(&self) -> Vec<String> {
-        self.read.themes()
-    }
-
-    fn plugins(&self) -> Vec<abi::PluginEntry> {
-        self.read.plugins()
-    }
-
-    fn setting(&self, name: &str) -> Option<serde_json::Value> {
-        self.read.setting(name)
-    }
-
-    fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
-        self.read.image_size(bytes)
-    }
-
-    fn utc_offset(&self, at: i64) -> i32 {
-        self.read.utc_offset(at)
-    }
-
-    fn measure(&self, text: &str) -> abi::Measure {
-        self.read.measure(text)
     }
 
     fn scroll_state(&self, target: &abi::v2::Target) -> Option<abi::v2::ScrollState> {
