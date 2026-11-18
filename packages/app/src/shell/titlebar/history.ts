@@ -9,7 +9,6 @@ import {
   type TitlebarHistoryEffect,
   type TitlebarHistoryEvent,
 } from "./history-machine"
-import { stripBasePath } from "@/runtime/platform/base-path"
 
 /** The titlebar's own Back and Forward history, across tab switches and in-app navigation. */
 export function createTitlebarHistory() {
@@ -24,7 +23,7 @@ export function createTitlebarHistory() {
   const [historyState, setHistoryState] = createSignal(INITIAL_TITLEBAR_HISTORY_STATE)
   let settleTimer: ReturnType<typeof setTimeout> | undefined
 
-  const path = () => `${stripBasePath(location.pathname)}${location.search}${location.hash}`
+  const path = () => `${location.pathname}${location.search}${location.hash}`
 
   const dispatch = (event: TitlebarHistoryEvent) => {
     const result = transitionTitlebarHistory(untrack(historyState), event)

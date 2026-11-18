@@ -37,7 +37,7 @@ export function restorePwaRoute() {
 export function PwaRoutePersistence() {
   const location = useLocation()
   createEffect(() => {
-    const value = stripBasePath(location.pathname) + location.search + location.hash
+    const value = location.pathname + location.search + location.hash
 
     try {
       localStorage.setItem(LAST_ROUTE_KEY, value)
