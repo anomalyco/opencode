@@ -154,13 +154,13 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("theme", observe(&board.harness)));
     dispatch("board.toast", None);
     seen.push(("toast", observe(&board.harness)));
-    // Contract ergonomics 2.6 and 2.9: `/bf`, the command's alias, typed in the composer, reads the host's facts and asks
-    // in a prompt filled with its value under its description; the edited name goes to the prompt's action, and the
-    // page shows the facts within its layout's widths. The home screen is not compared: its composer's placeholder is
-    // drawn at random.
+    // Contract ergonomics 2.6 and 2.9: `/inspect`, the command's alias, which no fuzzy match of `board-facts` finds,
+    // typed in the composer, reads the host's facts and asks in a prompt filled with its value under its description;
+    // the edited name goes to the prompt's action, and the page shows the facts within its layout's widths. The home
+    // screen is not compared: its composer's placeholder is drawn at random.
     tui.navigate(Route::Home);
     settle(&board.harness);
-    app.type_text("/bf");
+    app.type_text("/inspect");
     settle(&board.harness);
     app.press("return");
     settle(&board.harness);
