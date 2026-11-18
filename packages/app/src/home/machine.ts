@@ -66,6 +66,8 @@ export type HomeSelectionState =
       readonly status: "ready"
       readonly server: ServerConnection.Key
       readonly project: HomeProjectItem | undefined
+      /** The directory the user chose, which may be a sibling clone the server lists only under its canonical path. */
+      readonly directory: string | undefined
     })
   | { readonly status: "disposed" }
 
@@ -170,7 +172,7 @@ export function selectHomeSelection(state: HomeSelectionState): HomeProjectSelec
   if (state.status === "verifying") return { server: state.server, directory: state.directory }
 
   if (state.status === "ready")
-    return state.project ? { server: state.server, directory: state.project.worktree } : { server: state.server }
+    return state.directory ? { server: state.server, directory: state.directory } : { server: state.server }
 
   const target = state.override ?? state.stored
   const entry = state.servers.find((server) => server.key === target.server)
@@ -237,13 +239,20 @@ function place(prev: LiveState, base: HomeSelectionBase, target: HomeProjectSele
 
   const next: LiveState = (() => {
     // The selected server is gone: its directory belonged to it, so only the first server is kept.
-    if (!entry) return { ...fields, status: "ready", server: first.key, project: undefined }
+    if (!entry) return { ...fields, status: "ready", server: first.key, project: undefined, directory: undefined }
 
-    if (!target.directory) return { ...fields, status: "ready", server: entry.key, project: undefined }
+    if (!target.directory)
+      return { ...fields, status: "ready", server: entry.key, project: undefined, directory: undefined }
 
     if (!entry.projectsReady) return { ...fields, status: "verifying", server: entry.key, directory: target.directory }
 
-    return { ...fields, status: "ready", server: entry.key, project: findProject(entry, target.directory) }
+    const project = findProject(entry, target.directory)
+
+    // With no used projects at all the directory cannot belong to this server; a sibling clone of a known one can.
+    if (!project && entry.usedProjects.length === 0)
+      return { ...fields, status: "ready", server: entry.key, project: undefined, directory: undefined }
+
+    return { ...fields, status: "ready", server: entry.key, project, directory: project?.worktree ?? target.directory }
   })()
 
   const persisted = selectHomeSelection(next)
@@ -304,7 +313,12 @@ function sameState(a: LiveState, b: LiveState) {
   if (a.status === "verifying" && b.status === "verifying") return a.server === b.server && a.directory === b.directory
 
   if (a.status === "ready" && b.status === "ready")
-    return a.server === b.server && a.project?.id === b.project?.id && a.project?.worktree === b.project?.worktree
+    return (
+      a.server === b.server &&
+      a.directory === b.directory &&
+      a.project?.id === b.project?.id &&
+      a.project?.worktree === b.project?.worktree
+    )
 
   return false
 }

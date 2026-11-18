@@ -88,6 +88,16 @@ describe("home selection machine", () => {
     expect(loaded.effects.map((effect) => effect.type)).toEqual(["worktrees.list"])
   })
 
+  test("keeps a sibling clone directory when the server lists only its canonical worktree", () => {
+    const clone = { server: SIDECAR, directory: "/srv/repo-copy" }
+    const servers = [server(SIDECAR, { usedProjects: [REPO] })]
+
+    const restored = settle(env({ stored: clone, servers }))
+
+    expect(selectHomeSelection(restored)).toEqual(clone)
+    expect(restored).toMatchObject({ status: "ready", project: undefined })
+  })
+
   test("always shows a listed server, and drops the directory of a server that is gone", () => {
     expect(selectHomeSelection(settle(env({ hydrated: false })))).toEqual({ server: SIDECAR })
 

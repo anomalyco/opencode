@@ -7,6 +7,7 @@ import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
 import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
+import { resolveStartProject } from "./projects/start"
 import {
   INITIAL_HOME_SELECTION_STATE,
   sameHomeSelection,
@@ -121,7 +122,19 @@ export function createHomeController() {
     return directory ? projects().find((project) => pathKey(project.worktree) === pathKey(directory)) : undefined
   })
 
-  const newSessionProject = createMemo(() => selectedProject() ?? focusedServerCtx()?.projects.last() ?? projects()[0])
+  const newSessionProject = createMemo(() => {
+    const ctx = focusedServerCtx()
+    const last = ctx?.projects.last()
+
+    const resolved = resolveStartProject(
+      selection().directory,
+      (directory) => ctx?.projects.forDirectory(directory),
+      projects(),
+      last && projects().find((project) => project.id === last.id),
+    )
+
+    return resolved ? { ...resolved.project, worktree: resolved.directory } : last ?? projects()[0]
+  })
 
   return {
     selection: {
