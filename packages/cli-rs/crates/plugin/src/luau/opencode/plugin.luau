@@ -646,6 +646,7 @@ export type InputEvent = ({
 } | {
     node: string,
     text: string,
+    seq: number?,
     type: "change",
 } | {
     node: string,
@@ -891,6 +892,7 @@ export type Node = ({
     placeholder: string?,
     lines: number?,
     layout: Layout?,
+    seen: number?,
     type: "input",
 } | {
     id: string?,

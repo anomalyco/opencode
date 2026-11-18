@@ -198,7 +198,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Hover { node: string(), inside: boolean() } { },
                 Closed { surface: string() } { },
                 Scroll { event: reference("ScrollEvent") } { },
-                Change { node: string(), text: string() } { },
+                Change { node: string(), text: string() } { seq: uint64() },
                 Submit { node: string(), text: string() } { },
                 Mount { mount: reference("MountId"), mounted: boolean() } { slot: nullable(reference("SlotInput")) },
                 #[cfg(feature = "next")]

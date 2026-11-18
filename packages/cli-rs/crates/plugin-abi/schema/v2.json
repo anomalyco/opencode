@@ -862,6 +862,18 @@
             "layout": {
               "$ref": "#/$defs/Layout"
             },
+            "seen": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": {
               "const": "input"
             }
@@ -3404,6 +3416,11 @@
             },
             "text": {
               "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
             },
             "type": {
               "const": "change"

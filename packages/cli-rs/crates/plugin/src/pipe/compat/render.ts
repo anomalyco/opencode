@@ -78,6 +78,9 @@ export class VNode {
   }
   // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
   typed?: string
+  // A mount's root: the `seq` of the last change each of its fields heard, by id, which a view sends as the edit the
+  // field's `value` answers (carbon cf-2).
+  seen?: Map<string, number>
   // The plugin asked where it is (CT-15, CT-24): it carries an id, and the host's layout of it is watched.
   measured = false
   // A mount's root: the room the host laid the mount out in, from its input (contract 2.x, addition 1, R1).
@@ -690,6 +693,7 @@ function node(at: VNode, reading: Reading): Json {
         placeholder: props.placeholder,
         lines: at.tag === "textarea" ? clamp(Number(props.height) || 3, 1, 65535) : undefined,
         layout,
+        seen: rootOf(at).seen?.get(idOf(at)),
       })
     default:
       return boxOf(at, layout, click, reading)

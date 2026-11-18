@@ -177,7 +177,7 @@ pub enum Node {
     /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
     /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
     /// enter (one line) or the submit key, and, on a host with [`crate::FOCUS_INPUT`], [`crate::Host::focus`] gives it
-    /// the focus, as a click does. A changed `value` replaces the text.
+    /// the focus, as a click does. A changed `value` replaces the text, unless it is the echo of an edit (`seen`).
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -191,6 +191,12 @@ pub enum Node {
         lines: Option<u16>,
         #[serde(default, skip_serializing_if = "is_default_layout")]
         layout: Layout,
+        /// The `seq` of the last [`crate::interact::Event::Change`] of the field the plugin heard as it made this
+        /// tree: a changed `value` that is that edit's text is its echo, and leaves what the user typed since. `None`
+        /// stands for every edit, as a plugin in the host's process hears each before its next view; one that answers
+        /// later (the JS host) says which.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seen: Option<u64>,
     },
     /// P3: a list the host scrolls and windows: only the items near the view have widgets. An item is the unit of
     /// reconcile: a [`Node::Keep`] in a list names one of its items or a node inside the same item.
@@ -915,6 +921,7 @@ impl Node {
             placeholder: String::new(),
             lines: None,
             layout: Layout::default(),
+            seen: None,
         }
     }
 

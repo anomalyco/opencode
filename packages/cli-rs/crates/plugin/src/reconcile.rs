@@ -328,8 +328,8 @@ pub(crate) enum Extra {
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
     Canvas(Canvas),
-    /// The field, the value the tree gave it last, and the texts it reported as `change` since ([`ECHOES`]).
-    Input(Field, RefCell<String>, Rc<RefCell<Vec<String>>>),
+    /// The field, the value the tree gave it last, and the edits it reported as `change` since ([`Edits`]).
+    Input(Field, RefCell<String>, Edits),
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
@@ -342,9 +342,29 @@ pub(crate) enum Extra {
     Taken,
 }
 
-/// The most texts a field remembers having reported as `change` and not yet seen again as its tree's value: a
-/// plugin that never sets the value from them (an uncontrolled field) only ever has the latest few compared.
+/// The most edits a field remembers having reported as `change` that its plugin's tree has not answered: a plugin that
+/// never sets the value from them (an uncontrolled field) only ever has the latest few kept.
 const ECHOES: usize = 32;
+
+/// A field's edits reported as `change` that its plugin's tree has not answered yet, each with its `seq`, oldest first.
+type Edits = Rc<RefCell<std::collections::VecDeque<(u64, String)>>>;
+
+/// The `seq` of the last edit reported by any field: an edit's number is the field's own across a field built again.
+static EDITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether `value`, which a tree gives a field made after its plugin heard edit `seen` (`None`: every edit reported),
+/// is that edit's echo: the plugin catching up with the user, over the pipe in a tree made before the keys that
+/// followed came (`P.8/session-manager`'s search lost letters). An echo answers the edits up to it, which go from
+/// `edits`; the ones after it are what the user typed since, and stay. A value the edit did not have is the plugin's
+/// own, also when an older edit had it (carbon cf-2: a clear to `""` after a backspace to `""`), and replaces the text.
+fn echo(edits: &mut std::collections::VecDeque<(u64, String)>, value: &str, seen: Option<u64>) -> bool {
+    let Some(heard) = seen.or_else(|| edits.back().map(|(seq, _)| *seq)) else { return false };
+    if !edits.iter().any(|(seq, text)| *seq == heard && text == value) {
+        return false;
+    }
+    edits.retain(|(seq, _)| *seq > heard);
+    true
+}
 
 /// An input of one line or many.
 #[derive(Clone)]
@@ -1683,16 +1703,23 @@ impl Pass<'_, '_> {
                 let built = self.build(new);
                 Err(Box::new((old, built)))
             }
-            (Node::Input { lines: had, layout: laid, .. }, Node::Input { value, placeholder, lines, layout, .. }) => {
+            (
+                Node::Input { lines: had, layout: laid, .. },
+                Node::Input { value, placeholder, lines, layout, seen, .. },
+            ) => {
                 if had != lines || laid != layout {
-                    // Built again, it keeps what the user typed, where the value stays, and the focus.
+                    // Built again, it keeps what the user typed, where the value stays or echoes an edit, the edits
+                    // not answered yet, and the focus.
                     let built = self.build(new);
-                    let (Extra::Input(was, given, _), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
+                    let (Extra::Input(was, given, edits), Extra::Input(field, _, kept)) = (&old.extra, &built.extra)
+                    else {
                         unreachable!()
                     };
                     let draft = was.draft();
-                    if *given.borrow() == *value && draft.0 != *value {
+                    let mut edits = edits.take();
+                    if (*given.borrow() == *value || echo(&mut edits, value, *seen)) && draft.0 != *value {
                         field.restore(&draft);
+                        *kept.borrow_mut() = edits;
                     }
                     if self.env.host.app().focused().is_some_and(|focused| focused.id() == was.widget().id()) {
                         self.refocus = Some(field.widget());
@@ -1701,19 +1728,15 @@ impl Pass<'_, '_> {
                 }
                 let Node::Input { placeholder: shown, .. } = &old.node else { unreachable!() };
                 let placeholder_changed = shown != placeholder;
-                let Extra::Input(field, given, reported) = &old.extra else { unreachable!() };
-                // The text is the host's: a value the tree did not change leaves what the user typed. A value the field
-                // reported is the plugin catching up with the user, over the pipe in a tree made before the keys that
-                // followed came, and leaves what they typed since (`P.8/session-manager`'s search lost letters).
+                let Extra::Input(field, given, edits) = &old.extra else { unreachable!() };
+                // The text is the host's: a value the tree did not change, or the echo of an edit, leaves what the user
+                // typed.
                 if *given.borrow() != *value {
-                    let mut reported = reported.borrow_mut();
-                    match reported.iter().position(|text| text == value) {
-                        Some(at) => drop(reported.drain(..=at)),
-                        None => {
-                            reported.clear();
-                            field.set(value);
-                            count(|work| work.set += 1);
-                        }
+                    let mut edits = edits.borrow_mut();
+                    if !echo(&mut edits, value, *seen) {
+                        edits.clear();
+                        field.set(value);
+                        count(|work| work.set += 1);
                     }
                     *given.borrow_mut() = value.clone();
                 }
@@ -2240,7 +2263,7 @@ impl Pass<'_, '_> {
                 }
                 (scroll.as_any(), Extra::Scroll(scroll))
             }
-            Node::Input { id, value, placeholder, lines, layout } => {
+            Node::Input { id, value, placeholder, lines, layout, .. } => {
                 let field = match lines {
                     None => Field::Line(opentui::widget::Input::new(app).placeholder(placeholder).set_value(value)),
                     Some(rows) => Field::Lines(
@@ -2254,21 +2277,22 @@ impl Pass<'_, '_> {
                 paint_field(&field, theme);
                 // With an id, its edits reach the mount's handler. The id stays while the field does: another builds it
                 // again.
-                let reported = Rc::new(RefCell::new(Vec::new()));
+                let edits: Edits = Rc::default();
                 if let (Some(id), Some(owner)) = (id.clone(), env.owner.cloned()) {
                     let hear = |submit: bool| {
-                        let (node, owner, reported) = (id.clone(), owner.clone(), reported.clone());
+                        let (node, owner, edits) = (id.clone(), owner.clone(), edits.clone());
                         move |_: &mut Cx<'_>, text: &str| {
                             let (node, text) = (node.clone(), text.to_owned());
                             let event = match submit {
                                 true => abi::interact::Event::Submit { node, text },
                                 false => {
-                                    let mut reported = reported.borrow_mut();
-                                    if reported.len() == ECHOES {
-                                        reported.remove(0);
+                                    let seq = EDITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                                    let mut edits = edits.borrow_mut();
+                                    if edits.len() == ECHOES {
+                                        edits.pop_front();
                                     }
-                                    reported.push(text.clone());
-                                    abi::interact::Event::Change { node, text }
+                                    edits.push_back((seq, text.clone()));
+                                    abi::interact::Event::Change { node, text, seq }
                                 }
                             };
                             if let Some(owner) = owner.upgrade() {
@@ -2283,7 +2307,7 @@ impl Pass<'_, '_> {
                 }
                 let widget = field.widget();
                 lay_out(&widget, layout);
-                (widget, Extra::Input(field, RefCell::new(value.clone()), reported))
+                (widget, Extra::Input(field, RefCell::new(value.clone()), edits))
             }
             Node::List { row, layout, .. } => {
                 let list = List::new(app, *row);

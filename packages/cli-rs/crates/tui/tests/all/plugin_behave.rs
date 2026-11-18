@@ -1138,6 +1138,7 @@ fn kinds_setup(setup: &mut abi::Setup) -> Result<(), String> {
             placeholder: "name".into(),
             lines: None,
             layout: abi::Layout::default(),
+            seen: None,
         };
         let mut split = v2::Node::row(vec![text("LEFT".into()), text("RIGHT".into())]).with_id("split");
         if let v2::Node::Box { split, .. } = &mut split {
@@ -2539,6 +2540,7 @@ fn input_setup(setup: &mut abi::Setup) -> Result<(), String> {
             placeholder: "name".into(),
             lines: many.then_some(3),
             layout: abi::Layout::default().width(abi::Width::Cells(width)),
+            seen: None,
         };
         v2::Node::column(vec![input]).layout(abi::Layout::default().grow())
     }));
@@ -2807,6 +2809,7 @@ fn twice_setup(setup: &mut abi::Setup) -> Result<(), String> {
             placeholder: "say".into(),
             lines: None,
             layout: abi::Layout::default(),
+            seen: None,
         };
         v2::Node::column(vec![input, list]).layout(abi::Layout::default().grow())
     })
