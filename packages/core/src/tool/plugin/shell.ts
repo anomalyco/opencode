@@ -77,7 +77,7 @@ const CodeModeInput = Schema.Struct({
   timeout: timeoutInput(CODE_MODE_TIMEOUT_MS),
 })
 
-const StructuredOutput = Schema.Struct({
+export const StructuredOutput = Schema.Struct({
   shellID: Schema.optionalKey(Schema.String).annotate({
     description:
       "Present only while the command is still running in the background. You will be notified when it exits. A result without shellID is final.",

@@ -5,10 +5,11 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
-import { Clock, Duration, Effect, Exit, Fiber, Option, Predicate, Schema, Scope, Stream } from "effect"
+import { Clock, Duration, Effect, Exit, Fiber, Option, Predicate, Schema, Scope, Stream, Struct } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
 import { WebSocketConstructor } from "../../effect/websocket-constructor.js"
+import { ShellTool } from "../../tool/plugin/shell.js"
 
 /** The `GET /api/v2/config` response header Console sends while the workspace has event watches. */
 export const header = "x-opencode-event-watches"
@@ -89,7 +90,7 @@ const decodeServerMessage = Schema.decodeUnknownOption(Schema.fromJsonString(Ser
 const Poll = Schema.Struct({ cursor: Schema.String, events: Schema.Array(WatchEvent) })
 const Problem = Schema.Struct({ message: Schema.optional(Schema.String), limit: Schema.optional(Schema.Number) })
 const ShellInput = Schema.Struct({ command: Schema.String })
-const ShellOutput = Schema.Struct({ exit: Schema.optional(Schema.Number), output: Schema.String })
+const ShellOutput = ShellTool.StructuredOutput.mapFields(Struct.pick(["exitCode", "output"]))
 
 interface Member {
   console: Console
@@ -613,7 +614,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
  * `git push` updated on GitHub, whose Actions runs settle the watch. Anything less clear-cut is skipped.
  */
 export function shellTarget(command: string, shell: typeof ShellOutput.Type) {
-  if (shell.exit !== 0) return undefined
+  if (shell.exitCode !== 0) return undefined
   if (/(?:^|[\s;&|(])gh\s+pr\s+create\b/.test(command)) {
     const urls = new Set(
       Array.from(shell.output.matchAll(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g), (match) => match[0]),

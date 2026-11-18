@@ -14,6 +14,7 @@ import { Session } from "@opencode/core/session"
 import { SyntheticConflictError } from "@opencode/core/session/error"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
+import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { Agent } from "@opencode/core/agent"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
@@ -918,7 +919,9 @@ describe("OpencodePlugin event watches", () => {
             id: Tool.CallID.make("call_shell"),
             input: { command },
             status: "completed",
-            result: { output: { exit: 0, output, truncated: false } },
+            result: {
+              output: { exitCode: 0, output, wallTimeSeconds: 1 } satisfies typeof ShellTool.StructuredOutput.Type,
+            },
           })
         const created = () =>
           console.state.requests.filter((request) => request.method === "POST" && request.path === "/api/event-watches")
@@ -958,7 +961,13 @@ describe("OpencodePlugin event watches", () => {
               id: Tool.CallID.make("call_shell"),
               input: { command: "gh pr create --fill" },
               status: "completed",
-              result: { output: { exit: 0, output: "https://github.com/Acme/App/pull/42\n", truncated: false } },
+              result: {
+                output: {
+                  exitCode: 0,
+                  output: "https://github.com/Acme/App/pull/42\n",
+                  wallTimeSeconds: 1,
+                } satisfies typeof ShellTool.StructuredOutput.Type,
+              },
             })
             yield* waitUntil(Effect.sync(() => created().length === posted))
           })
@@ -1002,23 +1011,28 @@ describe("OpencodeWatches.shellTarget", () => {
   it.effect("skips failed, ambiguous and non-GitHub commands", () =>
     Effect.sync(() => {
       const push = "To github.com:acme/app.git\n   1111111..2222222  main -> main\n"
-      expect(OpencodeWatches.shellTarget("git push", { exit: 0, output: push })).toEqual({
+      expect(OpencodeWatches.shellTarget("git push", { exitCode: 0, output: push })).toEqual({
         _tag: "GitHubBranch",
         repo: "acme/app",
         branch: "main",
       })
-      expect(OpencodeWatches.shellTarget("git push", { exit: 1, output: push })).toBeUndefined()
+      expect(OpencodeWatches.shellTarget("git push", { exitCode: 1, output: push })).toBeUndefined()
       expect(
-        OpencodeWatches.shellTarget("git push --all", { exit: 0, output: `${push}   3333333..4444444  dev -> dev\n` }),
+        OpencodeWatches.shellTarget("git push --all", {
+          exitCode: 0,
+          output: `${push}   3333333..4444444  dev -> dev\n`,
+        }),
       ).toBeUndefined()
       expect(
         OpencodeWatches.shellTarget("git push", {
-          exit: 0,
+          exitCode: 0,
           output: "To gitlab.com:acme/app.git\n   1111111..2222222  main -> main\n",
         }),
       ).toBeUndefined()
-      expect(OpencodeWatches.shellTarget("git push", { exit: 0, output: "Everything up-to-date\n" })).toBeUndefined()
-      expect(OpencodeWatches.shellTarget("echo git status", { exit: 0, output: push })).toBeUndefined()
+      expect(
+        OpencodeWatches.shellTarget("git push", { exitCode: 0, output: "Everything up-to-date\n" }),
+      ).toBeUndefined()
+      expect(OpencodeWatches.shellTarget("echo git status", { exitCode: 0, output: push })).toBeUndefined()
     }),
   )
 })
