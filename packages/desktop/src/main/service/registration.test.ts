@@ -3,8 +3,11 @@ import path from "node:path"
 import { localRegistrationFile, servicePort, stateHome } from "./registration"
 
 const home = path.resolve("home")
+
 const root = path.resolve("root")
+
 const profile = path.join(home, "AppData", "ai.opencode.desktop.dev")
+
 const registered = (state: string) => path.join(state, "opencode", "service-local.json")
 
 // The folder the source CLI registers under must never be the real home's when a test root is set.

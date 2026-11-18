@@ -2,7 +2,6 @@ import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
-import { ISOLATED_SERVER } from "../constants"
 import { registersProtocol } from "../deep-links/registration"
 import { DesktopPaths } from "../paths"
 import { stateHome, testRootDirectories } from "../service/registration"
@@ -49,19 +48,22 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
+    Object.assign(process.env, shellEnv)
+
+    // A test root keeps its directories whatever the shell's startup files export.
+    if (testRoot) Object.assign(process.env, testRootDirectories(testRoot))
+
     const state = stateHome({
-      isolated: ISOLATED_SERVER,
+      isolated: !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1",
       userData: app.getPath("userData"),
       testRoot,
       shell: shellEnv?.XDG_STATE_HOME,
     })
 
+    if (state) process.env.XDG_STATE_HOME = state
+
     if (!state) delete process.env.XDG_STATE_HOME
     Object.assign(process.env, {
-      ...shellEnv,
-      // A test root keeps its directories whatever the shell's startup files export.
-      ...(testRoot ? testRootDirectories(testRoot) : {}),
-      ...(state ? { XDG_STATE_HOME: state } : {}),
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",

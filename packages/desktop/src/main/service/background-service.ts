@@ -2,7 +2,7 @@ import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { SidecarChanged } from "../../shared/ipc-rpc/events"
-import { CHANNEL, ISOLATED_SERVER } from "../constants"
+import { CHANNEL } from "../constants"
 import { emitIpcEvent } from "../ipc-events"
 import { getMainWindows } from "../windows"
 import { BackgroundServiceMachine } from "./background-service-machine"
@@ -101,8 +101,9 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
 const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   yield* Effect.logInfo("starting v2 background service")
   const desktopCli = yield* DesktopCli.Service
+  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
-  const version = serviceVersion({ channel: CHANNEL, isolated: ISOLATED_SERVER, mode, version: cli.version })
+  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
   // The state directory was settled with the rest of the environment (`preferApplicationEnvironment`).
@@ -113,7 +114,7 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
 
   const port = servicePort(file ?? client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_PORT)
 
-  return { cli, client, file, isolated: ISOLATED_SERVER, port, version }
+  return { cli, client, file, isolated, port, version }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (
