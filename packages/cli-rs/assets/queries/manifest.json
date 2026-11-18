@@ -100,13 +100,6 @@
     ]
   },
   {
-    "filetype": "kotlin",
-    "aliases": [],
-    "sources": [
-      "https://raw.githubusercontent.com/fwcd/tree-sitter-kotlin/0.3.8/queries/highlights.scm"
-    ]
-  },
-  {
     "filetype": "ruby",
     "aliases": [],
     "sources": [
@@ -196,13 +189,6 @@
     "aliases": [],
     "sources": [
       "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/clojure/highlights.scm"
-    ]
-  },
-  {
-    "filetype": "swift",
-    "aliases": [],
-    "sources": [
-      "https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/main/queries/highlights.scm"
     ]
   },
   {

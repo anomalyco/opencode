@@ -3,8 +3,7 @@
 // downloaded and joined as Core's DownloadUtils.fetchHighlightQueries does. Core's own grammars (JavaScript,
 // TypeScript, TSX, Markdown, Markdown inline, Zig) take the queries bundled in @opentui/core. Every query then gets
 // Core's #lua-match? rewrite, so the files hold what Core compiles. The manifest lists
-// each filetype with its aliases and sources; crates/ui/src/grammars checks its table against it. OCaml and F# are
-// left out: their parsers are too large to link (parity/deviations/H06-highlight-queries.md).
+// each linked filetype with its aliases and sources (parity/deviations/H06-highlight-queries.md).
 import parsers from "../../../tui/src/parsers-config"
 
 const root = new URL("../../assets/queries/", import.meta.url).pathname
@@ -14,7 +13,7 @@ const cache = `${process.env.XDG_DATA_HOME || `${process.env.HOME}/.local/share`
 const bundled = ["javascript", "typescript", "typescriptreact", "markdown", "markdown_inline", "zig"]
 const coreVersion = (await Bun.file(`${core}package.json`).json()).version
 
-const linked = parsers.parsers.filter((parser) => !["ocaml", "fsharp"].includes(parser.filetype))
+const linked = parsers.parsers.filter((parser) => !["ocaml", "fsharp", "kotlin", "swift"].includes(parser.filetype))
 const tui = await Promise.all(
   linked.map(async (parser) => ({
     filetype: parser.filetype,
@@ -34,13 +33,16 @@ const own = await Promise.all(
   })),
 )
 const entries = [...own, ...tui]
+// A grammar dropped from the table must not leave a stale generated query in git.
+for (const file of new Bun.Glob("*/highlights.scm").scanSync(root))
+  if (!entries.some((entry) => file === `${entry.filetype}/highlights.scm`)) await Bun.file(root + file).delete()
 for (const entry of entries) await Bun.write(`${root}${entry.filetype}/highlights.scm`, translateLuaMatch(entry.query))
 const manifest = entries.map((entry) => ({ filetype: entry.filetype, aliases: entry.aliases, sources: entry.sources }))
 await Bun.write(`${root}manifest.json`, JSON.stringify(manifest, null, 2) + "\n")
 console.log(`grammars: ${tui.length} TUI and ${own.length} Core highlight queries`)
 
 // Core's cache first, as DownloadUtils.downloadOrLoad reads it: some sources follow a moving branch, and the cached
-// copy is what TUI users highlight with (swift's `main` has moved past it).
+// copy is what TUI users highlight with.
 async function load(url: string, filetype: string) {
   const cached = Bun.file(`${cache}/${filetype}-${hashUrl(url)}.scm`)
   if ((await cached.exists()) && cached.size > 0) return cached.text()

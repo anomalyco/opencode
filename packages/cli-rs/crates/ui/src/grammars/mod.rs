@@ -182,8 +182,7 @@ mod tests {
                 listed["aliases"].as_array().unwrap().iter().map(|alias| alias.as_str().unwrap()).collect();
             assert_eq!(aliases, entry.aliases, "{} aliases", entry.filetype);
         }
-        // Every filetype of the manifest but Kotlin and Swift with grammars; seven otherwise.
-        assert_eq!(entries.len(), if cfg!(feature = "grammars") { manifest.len() - 2 } else { 7 });
+        assert_eq!(entries.len(), if cfg!(feature = "grammars") { manifest.len() } else { 7 });
     }
 
     #[test]
