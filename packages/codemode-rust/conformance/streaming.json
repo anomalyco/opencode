@@ -211745,6 +211745,195 @@
           2
         ]
       ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() }\n   for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.throw(2) }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4573
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* inner() { yield 1 } function* g() { yield* inner() }\n   for (let j = 0; j < 100; j++) { const a = g(); a.next(); try { a.throw(2) } catch {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2207
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: false, value: n++ }), return: () => ({}) } } }\n   for (let j = 0; j < 100; j++) { for await (const x of sync) break }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4457
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() }\n   for (let j = 0; j < 100; j++) { for (const x of g()) {} const a = g(); a.next(); a.return(2) }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1551
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g() { yield 1 } function* h() { try { yield 1 } catch { yield 2 } }\n   for (let j = 0; j < 100; j++) { const a = g(); a.next(); try { a.throw(1) } catch {} const b = h(); b.next(); b.throw(1) }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 4798
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* g() { yield* [1, 2] } function* inner() { try { yield 1 } catch { yield 2 } } function* h() { yield* inner() }\n   for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.return(1); const b = g(); b.next(); try { b.throw(1) } catch {} const c = h(); c.next(); c.throw(1); c.next() }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2015
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); const it = { [Symbol.iterator]() { return this } }; it.next = function () { return { done: false, value: 1 } }.bind(it); it.throw = function (e) { return { done: false, value: e } }.bind(it); function* g() { yield* it }\n   for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.next(); a.throw(1) }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1972
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); async function* ag() { yield 1; yield 2 } function* gen() { yield 1; yield 2 }\n   for (let j = 0; j < 100; j++) { for await (const x of ag()) break; for await (const x of gen()) break; try { for await (const x of gen()) throw 1 } catch {} }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 1558
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); function* inner() { try { yield 1; yield 2 } catch { yield 9 } } async function* g() { yield* inner() }\n   for (let j = 0; j < 50; j++) { const a = g(); await a.next(); await a.return(3); const b = g(); await b.next(); await b.throw(3); await b.next() }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3069
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
     }
   ],
   "suspensions": [
