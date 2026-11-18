@@ -977,8 +977,7 @@ fn verbed(host: &Rc<TestHost>, registry: &Registry) -> Verbed {
         host.app.advance(Duration::from_millis(1));
         host.app().root().clear();
         host.app().root().add(parent);
-        // One frame: the claim shows what it renders for its size in the frame that lays it out (reviews bigboi-3,
-        // carbon-2).
+        // One frame: the claim shows what it renders for its size in the frame that lays it out.
         let text = host.app.render().text();
         text.lines().find(|line| line.contains("sample reads:")).unwrap_or_default().trim().to_owned()
     };
@@ -2018,7 +2017,7 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
                     r#"{"type":"toast","variant":"info","message":"from a render"}"#,
                     r#"{"type":"dialog","dialog":{"type":"alert","title":"T","message":"M"}}"#,
                     r#"{"type":"storage-set","key":"k","value":"{\"a\":1}"}"#,
-                    // The small verbs (review bigboi-13).
+                    // The small verbs.
                     r#"{"type":"set-variant","variant":"high"}"#,
                     r#"{"type":"set-model","provider":"p","model":"m"}"#,
                     r#"{"type":"tab","edit":{"type":"focus","session":"ses_1"}}"#,
@@ -2027,7 +2026,7 @@ unsafe extern "C" fn raw_call(_: *mut c_void, request: Bytes, out: *mut Owned) -
                     r#"{"type":"title","title":"t"}"#,
                     r#"{"type":"set-theme","name":"nord"}"#,
                     r#"{"type":"install-theme","name":"x","theme":{"theme":{}}}"#,
-                    // 2.0 (P3).
+                    // .
                     r#"{"type":"scroll","target":{"type":"node","surface":"s","id":"l"},"verb":{"type":"by","rows":1}}"#,
                 ];
                 let statuses = asks.iter().map(|ask| table.call(ask).0);
@@ -2620,7 +2619,7 @@ fn a_library_macos_refuses_says_why() {
         );
     }
     assert_eq!(explain_refusal(missing, true, false, Some(source)), format!("cannot load the library: {missing}"));
-    // Each of the words alone is enough (review carbon-7).
+    // Each of the words alone is enough.
     let alone = [
         ("mapping process and mapped file have different Team IDs", "library validation"),
         ("'x' is a platform binary", "library validation"),

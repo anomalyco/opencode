@@ -1,38 +1,7 @@
-//! The native backend (decision O-42): plugins are shared libraries on the C ABI of `opencode-plugin-abi`,
-//! loaded with `opencode_util::dl`. There is no sandbox; it is the user's machine. The host only keeps a plugin's
-//! panics out of the TUI:
-//!
-//! - the plugin's shims catch its panics, and the host's callbacks catch the host's, so no panic unwinds across
-//!   the boundary (a crash such as a segfault still takes the process down);
-//! - a panic fails the plugin: it is not called again, its fences fall back to the code view, its slots and routes
-//!   draw empty, the plugin manager lists it as `failed` with the message, and a toast says so. Enabling it again
-//!   in the plugin manager starts a fresh instance. Nothing the call that panicked asked for happens, and the storage
-//!   it wrote gets back what it held, as for a built-in;
-//! - host effects (toasts, attention, routes, dispatches, storage notifications) wait until the plugin returns, on the
-//!   effect queue in-process plugins share, so it never reenters itself through the host.
-//!
-//! An instance lives while its plugin is active: deactivation, unload and reload destroy it at once, whatever still
-//! holds a claim, route or fence of it, which then draw nothing.
-//!
-//! Every call into a plugin runs on the UI thread. A plugin that works on its own thread calls `wake`, which posts
-//! through the app's proxy; the host then asks that plugin's mounted claims to render again. A wake that finds the
-//! proxy's queue full is delivered once it has room, so the last one is never lost. Its threads `send` messages to its
-//! mailbox ([`crate::mailbox`]), which the UI thread hands to the plugin one call each.
-//!
-//! Versions follow the ABI's rules. The host serves ABI 2.0 to a library that exports [`abi::ENTRY`]. A major the host
-//! does not serve (also ABI 1.x, whose libraries export `opencode_plugin_v1`, decision O-169), a table shorter than
-//! 2.0's, a plugin that requires a newer host minor version, or one that requires a feature the host lacks is refused.
-//! Entries a later minor appends past the plugin's table size are absent.
-//!
-//! What the host takes from a plugin is decoded before anything of the call is applied: a buffer it cannot decode,
-//! or one that breaks the contract, fails the plugin and leaves no effect, as a panic does (4.14, `no-effects`).
-//!
-//! Every crossing of the C ABI on the UI thread is told to the conformance tap ([`crate::conformance`]), which records
-//! golden transcripts and checks the C ABI's protocol in the tests; it costs one thread-local read when nobody listens.
-//!
-//! Each build is copied to a file of its own before it is opened, because the platform loader returns the
-//! library already open at a path, and a rebuilt library is often written over the old one. Libraries are never
-//! unloaded: a running plugin's code must outlive every pointer into it, and a reload leaks one library.
+//! Loads native plugins through the C ABI. Native code runs in process; the panic boundary does not isolate a
+//! crash. Plugin effects commit when a call returns. If it panics, discard the effects, restore storage and stop
+//! calling the plugin until reactivation. Worker threads communicate through the mailbox and wake the UI thread for
+//! rendering. Deactivation destroys the instance even if a widget still holds one of its registrations.
 
 #![allow(unsafe_code)]
 
@@ -70,8 +39,8 @@ use crate::{Definition, ErrorFn, Host, Setup, Undo, defer, fail, next_request, r
 /// The host's minor version of the current major: it serves every entry and request up to it.
 pub const HOST_MINOR: u32 = ABI_MINOR;
 
-/// The entry of ABI 1.x, which no host serves any more (O-169): a library that exports it alone is refused by its
-/// major, with a reason, not as no plugin.
+/// The entry of ABI 1.x, which no host serves any more: a library that exports it alone is refused by its major, with
+/// a reason, not as no plugin.
 const ENTRY_V1: &str = "opencode_plugin_v1";
 
 /// What crossed the C ABI on this thread, counted outside any plugin and any mount (4.14, `work`).
@@ -167,9 +136,9 @@ fn define(library: Library, options: Option<&str>) -> Result<(Definition, ErrorF
     }
     let options = options.map(str::to_owned);
     // Setup runs on each activation only, so a disabled plugin starts nothing: loading a library runs its native
-    // initializers, never its setup. A library names its ID in `describe`, before any `create` (big-boi 6).
-    // The failure of the running instance, a panic, in a cell of each activation's own: a new activation leaves an old
-    // one's failure as it was.
+    // initializers, never its setup. A library names its ID in `describe`, before any `create`. The failure of the
+    // running instance, a panic, in a cell of each activation's own: a new activation leaves an old one's failure as
+    // it was.
     let current: Rc<RefCell<Rc<RefCell<Option<String>>>>> = Rc::default();
     let definition = Definition::fallible(id, {
         let current = current.clone();
@@ -263,9 +232,8 @@ impl Library {
     }
 
     /// Opens a library, `bytes` read from the file `source` with its raw quarantine, through a copy, so a new build
-    /// can replace the file, through [`abi::ENTRY`]. On macOS the copy carries the quarantine the bytes were read with,
-    /// so the system checks it as it would the file (review carbon-6, final review big-boi 3); a copy that cannot carry
-    /// it is not opened.
+    /// can replace the file, through [`abi::ENTRY`]. On macOS the copy carries the quarantine the bytes were read
+    /// with, so the system checks it as it would the file; a copy that cannot carry it is not opened.
     fn open(bytes: &[u8], source: Option<(&Path, Option<&[u8]>)>) -> Result<Self, String> {
         let dir = staging()?;
         let file = dir.path().join(format!("plugin.{}", std::env::consts::DLL_EXTENSION));
@@ -384,7 +352,7 @@ impl Library {
 
 /// The directory a library's copy is opened from: one this process makes, owner-only, so nobody else can place or swap
 /// the file in it. Windows cannot remove a mapped library, so there the copies go under `opencode-plugins` in the temp
-/// directory, and each open removes the directories there that no process maps any more (review carbon-6).
+/// directory, and each open removes the directories there that no process maps any more.
 fn staging() -> Result<opencode_util::temp::TempDir, String> {
     let temp = std::env::temp_dir();
     let base = if cfg!(windows) { temp.join("opencode-plugins") } else { temp };
@@ -411,10 +379,7 @@ fn sweep(base: &Path, age: Duration) {
     }
 }
 
-/// Why the system refused to open a library, in words a user can act on (4.5, reviews F12, bigboi-13, carbon-6), on
-/// macOS or elsewhere. On macOS a client signed with library validation refuses a library another team signed;
-/// `dyld` refuses one whose signature is missing or invalid, and one that carries the quarantine of a download
-/// (`quarantined`: the host put it on the copy, from the file `source`), with the same words.
+/// Explains a platform loader refusal, including macOS quarantine and library validation.
 pub fn explain_refusal(error: &str, macos: bool, quarantined: bool, source: Option<&Path>) -> String {
     let message = format!("cannot load the library: {error}");
     let lower = error.to_lowercase();
@@ -466,7 +431,7 @@ pub(crate) struct Ctx {
     quiet: bool,
     /// A render or a view runs: it may read, and ask for nothing.
     pub(crate) read_only: bool,
-    /// What the calls hold of the input (P2), from the end of setup: setup itself has no mount and no owner.
+    /// What the calls hold of the input, from the end of setup: setup itself has no mount and no owner.
     pub(crate) owners: Option<Rc<crate::Owners>>,
 }
 
@@ -547,11 +512,11 @@ pub(crate) enum Effect {
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
-    // 2.0 (P6c)
+
     Setting(String, serde_json::Value),
-    // 2.0 (P3): a scroll verb, bound to the mount it names when the plugin asked.
+    // a scroll verb, bound to the mount it names when the plugin asked.
     Scroll(Box<dyn FnOnce()>),
-    /// An input verb of P2, its owner taken as it was asked for.
+    /// Capture the owner when the input verb is requested.
     Input(crate::Effect),
 }
 
@@ -593,11 +558,8 @@ thread_local! {
     static OVER_LIST: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
-/// [`received`] for what a draw answered with `status`. The rules of every buffer come first: a descriptor
-/// [`received`] refuses is refused unread, whatever the status (re-review bigboi). An error or a panic is text, taken
-/// whole as any call's is. Only a list, an OK answer, is admitted by its length before a byte of it is copied (review
-/// bigboi 7): one past [`abi::canvas::MAX_BYTES`] is over its limit, which [`OVER_LIST`] tells and the canvas shows as
-/// its placeholder, if it starts as a list does; else it is malformed, as [`abi::canvas::check`] reads it.
+/// Validate the buffer descriptor before inspecting status or reading bytes. Only successful draw results are
+/// subject to display-list limits.
 ///
 /// # Safety
 /// As [`received`].
@@ -690,8 +652,7 @@ impl Instance {
                 context.undo();
                 return Err(format!("setup panicked: {}", text(bytes)));
             }
-            // An error the host cannot read is refused before its status is: nothing of it happens, as for a call
-            // (big-boi 8).
+            // An error the host cannot read is refused before its status is: nothing of it happens, as for a call.
             if let Err(error) = bytes {
                 context.undo();
                 return Err(format!("setup returned a bad result: {error}"));
@@ -951,7 +912,7 @@ unsafe extern "C" fn host_free(owned: Owned) {
 }
 
 pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::Value, String> {
-    // The host's names of a declared key, which no other plugin's key shares (review carbon-6).
+    // The host's names of a declared key, which no other plugin's key shares.
     let key = |ctx: &Ctx, key: &str| {
         if ctx.id.is_empty() {
             return Err("the plugin ID is not known during setup".to_owned());
@@ -1035,7 +996,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Plugins => return read(ctx, &mut |read| serde_json::to_value(read.plugins())),
         HostRequest::Setting { name } => return read(ctx, &mut |read| serde_json::to_value(read.setting(&name))),
         HostRequest::ImageSize { bytes } => {
-            // Bytes past what the host decodes show nothing, which their length says before they are decoded (PL-9).
+            // Bytes past what the host decodes show nothing, which their length says before they are decoded.
             if (bytes.len() / 4 * 3) as u64 > crate::limits::get().image_bytes + 2 {
                 return Ok(serde_json::Value::Null);
             }
@@ -1043,7 +1004,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             return read(ctx, &mut |read| serde_json::to_value(read.image_size(&bytes)));
         }
         HostRequest::UtcOffset { at } => return read(ctx, &mut |read| serde_json::to_value(read.utc_offset(at))),
-        // Past one node's text it is not measured (review bigboi 2): a plugin measures what it would draw.
+        // Past one node's text it is not measured: a plugin measures what it would draw.
         HostRequest::Measure { text } if text.len() as u64 > crate::limits::get().text => {
             return Err(format!("a text of {} bytes to measure, more than a node holds", text.len()));
         }
@@ -1069,7 +1030,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::Attention(attention) => ctx.effects.push(Effect::Attention(attention)),
         HostRequest::Navigate { route } => ctx.effects.push(Effect::Navigate(route)),
         HostRequest::Fetch(fetch) => {
-            // An ID is a promise of a reply: none is given unless the fetch's effect has room (bigboi's final pass).
+            // An ID is a promise of a reply: none is given unless the fetch's effect has room.
             if !crate::has_room(ctx.effects.len()) {
                 return Err(crate::REFUSED.to_owned());
             }
@@ -1167,9 +1128,9 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
                 ctx.effects.push(Effect::InstallTheme(name, theme));
             }
         }
-        // 2.0 (P3): the verbs and reads of the mount whose handler runs, else of the plugin's newest live mount of a
-        // surface, as for a built-in's command, which a library's command is bound to no mount like. A transcript verb
-        // answers the user's input only.
+        // the verbs and reads of the mount whose handler runs, else of the plugin's newest live mount of a surface, as
+        // for a built-in's command, which a library's command is bound to no mount like. A transcript verb answers the
+        // user's input only.
         HostRequest::Scroll { target, verb } => {
             if target == v2::Target::Transcript && !behave::in_handler() {
                 return Err("a transcript verb outside a handler of the user's input is dropped".to_owned());
@@ -1222,10 +1183,10 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
     Ok(serde_json::Value::Null)
 }
 
-/// The mount whose handler or view runs, which P3's verbs and reads name; `None` for a command, which is bound to no
-/// mount: then the plugin's newest live mount of the surface.
+/// Scroll commands use the current call's mount, or the newest live mount of the named surface if called outside a
+/// mount.
 fn called_mount(ctx: &Ctx) -> Option<std::rc::Weak<()>> {
-    // The mount the call is of, also a route command's, which holds no input (carbon own-1).
+    // The mount the call is of, also a route command's, which holds no input.
     ctx.owners.as_ref().and_then(|owners| owners.owning())
 }
 
@@ -1376,7 +1337,7 @@ struct Guest {
     revoked: RefCell<Vec<Disposer>>,
     /// The mounted slot claims and routes, which a wake draws again.
     activation: Rc<Activation>,
-    /// What its calls hold of the input (P2).
+    /// What its calls hold of the input.
     owners: Rc<crate::Owners>,
     monitor: Rc<crate::contain::Monitor>,
     slot: crate::contain::Slot,
@@ -1408,12 +1369,9 @@ impl Guest {
         self.checked(export, request, |_: &T| Ok(()))
     }
 
-    /// [`Guest::request`] whose result `check` must accept. A result the host cannot decode, or that `check` refuses,
-    /// fails the plugin as a panic does: what the call asked for is dropped, and the storage it wrote put back. An
-    /// error the plugin returns is an answer: what the call asked for happens, and the plugin then fails (4.14). A
-    /// render or a view may ask for nothing ([`renders`]). A call that returned late (an overrun, synthesis 4.4) did
-    /// return: what it asked for happens, then it fails, which revokes it; a cause of the call's own (a refusal, or an
-    /// error) names the failure before the overrun.
+    /// Checks the result before committing the call's effects. Malformed or refused results roll back storage. An
+    /// error returned by the plugin or an overrun after a valid result commits effects, then fails the plugin. The
+    /// call's own error takes precedence over an overrun.
     fn checked<T: DeserializeOwned>(
         self: &Rc<Self>,
         export: &'static str,
@@ -1504,7 +1462,7 @@ impl Guest {
         let guest = Rc::downgrade(self);
         Rc::new(move |_: &dyn Host, owner: &Rc<crate::interact::Owner>, event: &abi::interact::Event| {
             let Some(guest) = guest.upgrade() else { return abi::interact::Handled::Pass };
-            // A surface's handler hears which of its mounts the event is for (big-boi 4).
+            // A surface's handler hears which of its mounts the event is for.
             let to = match to {
                 To::Surface(surface) => abi::InputTo::Surface { surface, mount: owner.id().cloned() },
                 To::Layer(layer) => abi::InputTo::Layer { layer },
@@ -1525,14 +1483,14 @@ impl Guest {
 
     /// Sends a request to a handler, then, if it ran, invalidates the claims, whose state it may have changed.
     fn handle(self: &Rc<Self>, export: &'static str, request: &Request) {
-        // A handler answers `null` (O-135): anything else is a contract break.
+        // A handler answers `null`: anything else is a contract break.
         if self.request::<()>(export, request).is_some() {
             self.activation.invalidate();
         }
     }
 
-    /// Runs a command, which answers `"pass"` to decline the key that ran it (contract ergonomics 2.5) and `null` to
-    /// take it. A call that failed took its key.
+    /// Runs a command, which answers `"pass"` to decline the key that ran it and `null` to take it. A call that
+    /// failed took its key.
     fn command(self: &Rc<Self>, request: &Request) -> abi::interact::Handled {
         let answer = self.checked("run-command", request, |answer: &Option<String>| match answer.as_deref() {
             None | Some("pass") => Ok(()),
@@ -1634,7 +1592,7 @@ pub(crate) fn reply_to(
         if mount.upgrade().is_none() {
             return running.cancel(request);
         }
-        // Past the cap the request is not sent, and its reply is that refusal (carbon ac-1).
+        // Past the cap the request is not sent, and its reply is that refusal.
         if !wait(mount, guest, request) {
             let error = format!("more than {MOUNT_REQUESTS} requests of the plugin's mounts wait");
             return running.answer(Request::Reply { id: request, result: Err(error) });
@@ -1662,7 +1620,7 @@ pub(crate) fn reply_to(
 pub(crate) const MOUNT_REQUESTS: usize = 1024;
 
 /// The requests of mounts that wait for their reply ([`reply_to`]), by request and by mount, so that a reply and a
-/// mount's close each touch only their own (bigboi's ownership pass), and how many each instance has.
+/// mount's close each touch only their own, and how many each instance has.
 #[derive(Default)]
 struct Inflight {
     /// Each request: its mount's key, and the instance that asked.
@@ -1738,9 +1696,9 @@ fn take_inflight(request: abi::RequestId) -> bool {
 }
 
 /// Cancels at once the waiting requests of the mount whose key is `key`, which closed, rather than once their replies
-/// come: the JS host's fetch of a mount that closed settles while the server still holds it (bigboi's freeze pass). A
-/// surface's mount calls it as it ends. Each cancel an instance hears is an effect of its own, so many spread over
-/// frames as replies do (carbon ac-1). How many requests it cancelled: no other mount's are looked at.
+/// come: the JS host's fetch of a mount that closed settles while the server still holds it. A surface's mount calls
+/// it as it ends. Each cancel an instance hears is an effect of its own, so many spread over frames as replies do. How
+/// many requests it cancelled: no other mount's are looked at.
 pub(crate) fn cancel_closed(key: usize) -> usize {
     let cancelled: Vec<_> = INFLIGHT.with_borrow_mut(|inflight| {
         let Some((_, waiting)) = inflight.mounts.remove(&key) else { return Vec::new() };
@@ -1777,9 +1735,9 @@ fn owning(ctx: &Ctx) -> Option<Weak<()>> {
     ctx.owners.as_ref().and_then(|owners| owners.owning())
 }
 
-/// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`, and
-/// a dialog belongs to activation `generation`. Each effect is an entry of its own, as on the linked carrier, so each
-/// counts against the frame's bound and the dispatch depth (review carbon new-1).
+/// Queues `effects` of plugin `id` on the effect queue, as the host would for a built-in; a fetch replies to `guest`,
+/// and a dialog belongs to activation `generation`. Each effect is an entry of its own, as on the linked carrier, so
+/// each counts against the frame's bound and the dispatch depth.
 pub(crate) fn apply(
     host: &Weak<dyn Host>,
     id: String,
@@ -1828,7 +1786,7 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::ClearSelection => host.clear_selection(),
         Effect::Foreground(request, program, mount) => {
             // The program starts later, once the turn is done: only if the instance is still live then, and the mount
-            // that owns it is still open (bigboi's freeze pass).
+            // that owns it is still open.
             let (owner, owning) = (guest.clone(), mount.clone());
             let alive = Box::new(move || {
                 let open = owning.as_ref().is_none_or(|mount| mount.upgrade().is_some());
@@ -1974,7 +1932,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         });
         setup.view_route(name, render, route::commands(&scoped, name), mount, &activation);
     }
-    // P2: the searches, and the layers of setup, each with its own handler, the activation's.
+    // the searches, and the layers of setup, each with its own handler, the activation's.
     for name in &manifest.searches {
         let (guest, searched) = (guest.clone(), name.clone());
         let call: crate::SearchCall = Rc::new(move |_: &dyn Host, query: &str, options: &[abi::SelectOption]| {
@@ -1988,7 +1946,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let deliver = guest.deliver(To::Layer(index));
         guest.owners.input.register(&**setup.host(), std::slice::from_ref(layer), &deliver);
     }
-    // 2.0: the surfaces, whose views run through `View`.
+    // the surfaces, whose views run through `View`.
     for (index, claim) in manifest.surfaces.iter().enumerate() {
         let at: v2::Place = (&claim.place).into();
         // A route's commands are bound to the mount they run for, as in process: what they ask for is that mount's.
@@ -2019,7 +1977,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 guest.fail(error);
             }
         });
-        // P3: `layout` and the scroll handler run as calls of the library, as its view does.
+        // `layout` and the scroll handler run as calls of the library, as its view does.
         let place =
             surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: claim.notify.clone() };
         let calls = behave::Calls {
@@ -2049,11 +2007,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         let remote = Rc::new(Remote { guest: guest.clone(), index, draw: claim.draw });
         setup.surface(place, remote, commands, fail, calls, &guest.owners, input);
     }
-    // 2.0: the renderer claims, whose views run through `Claim`.
+    // the renderer claims, whose views run through `Claim`.
     for (index, entry) in manifest.claims.iter().enumerate() {
         setup.renderer_claim(entry.clone(), Rc::new(RemoteClaim { guest: guest.clone(), index }), &guest.owners);
     }
-    // 2.0: what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
+    // what the plugin's threads send runs `Message`, one call each, when its manifest says it takes messages; a
     // thread's panic fails the plugin, once.
     if !manifest.messages {
         guest.activation.mailbox.refuse_messages();
@@ -2078,7 +2036,6 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
 pub(crate) fn keyed(node: &v2::Node, kept: &dyn Fn(&str) -> usize) -> usize {
     let inside: usize = match node {
         v2::Node::Keep { key } => return kept(key).max(1),
-        // A list's items are nodes of the tree too (P6c: a memo a list item).
         v2::Node::List { items, .. } => items.iter().map(|item| keyed(&item.node, kept)).sum(),
         _ => node.children().iter().map(|child| keyed(child, kept)).sum(),
     };

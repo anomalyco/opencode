@@ -1,37 +1,7 @@
-//! What a native build asks the platform loader to load with it (bigboi-3; final review big-boi 2, carbon-7): the
-//! dependencies and search paths an ELF or Mach-O file names, read as the loader that loads that format reads them,
-//! glibc's or musl's `ld.so` for ELF and `dyld` for Mach-O. The loader opens a build from a private copy that holds
-//! only that one file, so a dependency comes from the system, from the paths the build names, from the user's own
-//! loader settings, or, for a relative path, from the current directory, which is the project. An approval names one
-//! file's bytes (rich-plugins 3.9), so what it covers must not reach code outside it.
-//!
-//! The policy is fail-closed: a name or a mechanism it does not know to be safe is refused, not passed.
-//!
-//! - No build may name a path the loader resolves against the current directory, a path with a `..` component
-//!   anywhere (which leaves the directory it starts in: the private copy, the client's, or a trusted root), an empty
-//!   search path entry (which glibc reads as the current directory), or a loader token other than the one leading
-//!   origin token, whole: `$ORIGIN` and `${ORIGIN}` on ELF (`$ORIGIN_X` is no token to `ld.so`, so it is a relative
-//!   path), `@loader_path`, `@executable_path` and `@rpath` on Mach-O, each followed by `/` or nothing. A bare name
-//!   is a library `ld.so` searches for; `dyld` reads one as a path, so on Mach-O it is refused.
-//! - No build may use a mechanism that brings in code the host does not read: ELF's `DT_FILTER`, `DT_AUXILIARY`,
-//!   `DT_AUDIT`, `DT_DEPAUDIT` and `DT_USED`, a dynamic tag the policy does not know, or Mach-O's
-//!   `LC_LOAD_DYLINKER` and `LC_DYLD_ENVIRONMENT`.
-//! - A project's build may also name no absolute path outside the system's libraries: `/usr/lib`, `/usr/lib64`,
-//!   `/lib` and `/lib64` on Linux and the other ELF systems, `/usr/lib` and `/System` on macOS, each matched by whole
-//!   components. A root is trusted once it and every directory above it, symbolic links resolved, are the
-//!   superuser's and no one else may write them; a path under one that exists must still be under one once its links
-//!   are resolved. A path that does not exist loads nothing (on macOS a system library is in the shared cache and not
-//!   on disk).
-//! - The user's own loader settings are the user's choice and trusted: `LD_LIBRARY_PATH` and `LD_PRELOAD` on ELF
-//!   systems, the `DYLD_*` paths on macOS, and the system's loader configuration. So a project's build is not
-//!   promised libraries from the system alone. One part of them is not the user's: an empty or relative entry in
-//!   `LD_LIBRARY_PATH` (whose entries glibc splits at `:` and at `;`) or a `DYLD_*` path is read against the current
-//!   directory, so a build that names a library the loader searches for is refused while one is set: on ELF a bare
-//!   name, on Mach-O any library, as `dyld` looks for every library's leaf name in those paths, `@rpath` ones too
-//!   (final re-review big-boi 2).
-//!
-//! Windows needs no reading: `win::load_library` searches no directory a project controls. A file that is neither
-//! ELF nor Mach-O passes here; the platform loader refuses it.
+//! An approval covers one library, not code it loads from the project. Check ELF and Mach-O dependencies and loader
+//! search paths before opening the private copy. Reject unknown loading mechanisms, relative paths and traversal.
+//! Project libraries may use absolute paths only under trusted, root-owned system directories after symlink
+//! resolution. The user's loader environment remains trusted.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -348,10 +318,10 @@ const GENERIC_TAGS: &[u64] = &[
     32, 33, 34, 35, 36, 37,
 ];
 
-/// Whether dynamic tag `tag` of a file for `machine` is one the policy knows loads no code but what it reads: each of
-/// [`GENERIC_TAGS`], each of [`GNU_TAGS`], and the processor tags its machine defines (x86-64's
-/// PLT tags; AArch64's BTI, PAC, variant PCS and memory tags; RISC-V's variant calling convention). A tag in a range
-/// but not named here is refused (final re-review big-boi 2, and its final pass: tag 31).
+/// Whether dynamic tag `tag` of a file for `machine` is one the policy knows loads no code but what it reads: each
+/// of [`GENERIC_TAGS`], each of [`GNU_TAGS`], and the processor tags its machine defines (x86-64's PLT tags;
+/// AArch64's BTI, PAC, variant PCS and memory tags; RISC-V's variant calling convention). A tag in a range but not
+/// named here is refused.
 fn known(tag: u64, machine: u64) -> bool {
     let processor: &[u64] = match machine {
         EM_X86_64 => &[0x7000_0000, 0x7000_0001, 0x7000_0003],
@@ -406,7 +376,7 @@ fn elf(bytes: &[u8]) -> Option<Vec<Name>> {
         .into_iter()
         .take_while(|(tag, _)| *tag != 0)
         .collect();
-    // A tag that brings in code, or one the policy does not know, is refused by its number (big-boi 2, carbon-7).
+    // A tag that brings in code, or one the policy does not know, is refused by its number.
     let mut out: Vec<Name> = entries
         .iter()
         .filter(|(tag, _)| !known(*tag, machine))
@@ -602,10 +572,6 @@ mod tests {
         (check_with(bytes, false, &policy()).is_ok(), check_with(bytes, true, &policy()).is_ok())
     }
 
-    // Expected (bigboi-3, final review big-boi 2 and carbon-7): an ELF build names its libraries and search paths,
-    // read as `ld.so` reads them, and the policy refuses what the current directory or a path outside where it starts
-    // would supply, `..` anywhere and a token `ld.so` does not expand; a project's build may name system libraries
-    // only, matched by whole components.
     #[test]
     fn elf_dependencies_follow_the_policy() {
         let plain = elf64(&["libc.so.6", "libm.so.6"], None);
@@ -660,10 +626,6 @@ mod tests {
         assert_eq!(check(b"MZ\x90\x00", true), Ok(()));
     }
 
-    // Expected (final review carbon-7, big-boi 2; final re-review big-boi 2): a dynamic tag that brings in code the
-    // policy does not read, a filter, an auxiliary filter, an audit library, `DT_USED`, `DT_CONFIG`, or a tag it does
-    // not know, is refused for every build, also one inside the ranges the known tags are in, and a processor tag of
-    // another machine; the tags a toolchain writes pass, a processor's own on its machine.
     #[test]
     fn elf_mechanisms_that_load_code_are_refused() {
         let refused = [
@@ -708,9 +670,6 @@ mod tests {
         }
     }
 
-    // Expected (final review big-boi 2): the user's loader settings are trusted, but an empty or relative entry in them
-    // is read against the current directory: a build that names a library the loader searches for is refused while
-    // one is set, and one that names only paths is not.
     #[test]
     fn a_relative_loader_path_setting_refuses_a_searched_library() {
         let searched = elf64(&["libc.so.6"], None);
@@ -725,16 +684,13 @@ mod tests {
             let dyld = Policy { settings: vec![("DYLD_LIBRARY_PATH", value.to_owned())], ..policy() };
             assert_eq!(check_with(&searched, false, &dyld), Ok(()), "{value:?}");
         }
-        // glibc splits `LD_LIBRARY_PATH` at `;` too (final re-review big-boi 2).
+        // glibc also splits `LD_LIBRARY_PATH` at semicolons.
         for value in ["/opt/lib;lib", ";/opt/lib", "/opt/lib;"] {
             let ld = Policy { settings: vec![("LD_LIBRARY_PATH", value.to_owned())], ..policy() };
             assert!(check_with(&searched, false, &ld).is_err(), "{value:?}");
         }
     }
 
-    // Expected (final re-review big-boi 2): `dyld` looks for every library's leaf name in its `DYLD_*` paths, an
-    // `@rpath` name's and an absolute one's too: a relative entry refuses a build that names any library, and an
-    // absolute one does not; it splits them at `:` alone, so a `;` is part of an absolute entry.
     #[test]
     fn a_relative_dyld_path_refuses_any_library() {
         for name in ["@rpath/libx.dylib", "@loader_path/libx.dylib", "/usr/lib/libSystem.B.dylib"] {
@@ -753,9 +709,6 @@ mod tests {
         }
     }
 
-    // Expected (final review big-boi 2): a trusted root is trusted as the loader finds it: a path under one that leads
-    // through a symbolic link out of every root is refused, as is a root someone else may write; one that stays in it
-    // passes. Here the roots are a directory of the user's own, which only the tests may own.
     #[cfg(unix)]
     #[test]
     fn a_trusted_root_is_checked_on_the_disk() {
@@ -790,9 +743,6 @@ mod tests {
         assert!(policy().trusts(Path::new("/usr/lib")), "/usr/lib is not a trusted root here");
     }
 
-    // Expected (bigboi-3, final review big-boi 2 and carbon-7): the same policy for Mach-O load commands, read as
-    // `dyld` reads them, also inside a universal file: a token followed by a separator or nothing, no `..` anywhere,
-    // a bare name refused (`dyld` reads it as a path), and the load commands of a main executable refused.
     #[test]
     fn macho_dependencies_follow_the_policy() {
         let system = macho64(&[(LC_LOAD_DYLIB, "/usr/lib/libSystem.B.dylib")]);

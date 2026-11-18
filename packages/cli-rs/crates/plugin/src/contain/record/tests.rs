@@ -10,8 +10,6 @@ fn fault() -> Artifact {
     Artifact::external("example.fault", "/plugins/fault", "00000000deadbeef")
 }
 
-// Expected: inside a call the record names its build (ID, target, digest) and call; after it, nobody. A built-in is
-// named by its ID alone, so a crash in it is never taken for an external build of the same ID.
 #[test]
 fn a_crash_names_the_build_and_the_call() {
     let (_dir, record) = record();
@@ -27,9 +25,6 @@ fn a_crash_names_the_build_and_the_call() {
     assert!(record.leave(builtin));
 }
 
-// Expected (bigboi 6, carbon 1): the watchdog claims a call only while it runs. A call that returned first keeps it
-// from claiming, so a client that is not hung is never ended; once it claimed, the call cannot leave, and the record
-// names the claimed call even if another one's word were written later.
 #[test]
 fn the_watchdog_claims_only_a_running_call() {
     let (_dir, record) = record();
@@ -49,8 +44,6 @@ fn the_watchdog_claims_only_a_running_call() {
     );
 }
 
-// Expected: a coherent read names nothing while the state and the call disagree: a stale start cannot pair with
-// another call's identity.
 #[test]
 fn a_torn_read_names_nobody() {
     let (_dir, record) = record();
@@ -64,8 +57,6 @@ fn a_torn_read_names_nobody() {
     assert_eq!(record.running(), None, "a call word that fails its checksum names nobody");
 }
 
-// Expected (carbon 6, bigboi 4): identities are kept whole or not at all. One too long for an entry stays unnamed
-// rather than be cut to a prefix another plugin may have; a slot past the table is unnamed; flipped bytes name nobody.
 #[test]
 fn an_identity_is_whole_or_unnamed() {
     let (_dir, record) = record();
@@ -85,8 +76,6 @@ fn an_identity_is_whole_or_unnamed() {
     assert_eq!(record.named(1), Some(fault()));
 }
 
-// Expected (bigboi 8): a snapshot is published whole. A writer interrupted while it fills the other slot leaves the
-// previous snapshot readable; a draft too long to keep is dropped, and says so.
 #[test]
 fn a_snapshot_survives_a_crash_in_the_middle_of_a_write() {
     let (_dir, record) = record();
@@ -112,7 +101,6 @@ fn a_snapshot_survives_a_crash_in_the_middle_of_a_write() {
     assert_eq!(record.snapshot(), Some(exact));
 }
 
-// Expected: the handoff reads back as written, and garbage reads as no handoff.
 #[test]
 fn the_handoff_reads_back() {
     let (_dir, record) = record();
@@ -130,8 +118,6 @@ fn the_handoff_reads_back() {
     assert_eq!(record.handoff(), Handoff::default());
 }
 
-// Expected (bigboi 7): a record is opened only from a file that is one, and a second mapping of the same file (the
-// client's, and the parent's that reads it after) sees the same words.
 #[test]
 fn a_handed_over_record_is_the_same_record() {
     let (dir, record) = record();
@@ -145,8 +131,6 @@ fn a_handed_over_record_is_the_same_record() {
     assert!(Record::open(stranger).is_err());
 }
 
-// Expected (carbon 1): the watchdog never pairs one call's identity or start with another call's generation, however
-// the UI thread's stores and its reads interleave. Each call here has slot and start that follow from its generation.
 #[test]
 fn a_running_call_is_read_whole_under_contention() {
     let (_dir, record) = record();
