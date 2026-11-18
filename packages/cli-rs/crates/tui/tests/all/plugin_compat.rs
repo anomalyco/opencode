@@ -276,6 +276,54 @@ fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     assert_eq!(focus("pf.new").as_deref(), Some("same"), "the new mount's own focus did not apply");
 }
 
+// Expected (open-jump): a slot claim that draws nothing, here one that only adds a key binding as the `anomaly.internal`
+// plugin's `app` claim does, moves no row while the JS host loads it, on Home and on a session: TS draws it in the
+// frame that mounts it. The placeholder of a slot mount whose key had shown nothing took a row until the first tree
+// came, which lifted the prompt and its footer a row for each such claim for some frames, then dropped them back.
+#[test]
+fn a_slot_claim_that_draws_nothing_moves_no_row_while_it_loads() {
+    let Some(config) = config() else { return };
+    let footer = |screen: &str| screen.lines().position(|line| line.contains("ctrl+p commands"));
+    for route in [Route::Home, support::session_route("ses_a")] {
+        let root = opencode_util::temp::tempdir().unwrap();
+        let plugin = root.path().join("config/plugins/keys");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(plugin.join("tui.ts"), KEYS).unwrap();
+        let server = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
+        let deps = Deps { route: route.clone(), ..support::deps(Arc::new(server)) };
+        let harness = support::mount(80, 24, deps);
+        let settled = footer(&harness.wait_for("ctrl+p commands"));
+        let external =
+            External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+        external_with(&harness.tui, external, Some(config.clone()));
+        let pipe = Pipe { harness, root };
+        let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+        pipe.active("example.keys");
+        let frames = std::cell::RefCell::new(Vec::new());
+        let registered = || tui.keymap.commands().iter().any(|command| command.id == "keys.toggle");
+        pipe.harness.wait("the claim drew", || {
+            app.advance(Duration::from_millis(1));
+            frames.borrow_mut().push(app.text());
+            registered() && pipe.scripts().idle()
+        });
+        pipe.settle();
+        frames.borrow_mut().push(app.text());
+        for frame in frames.borrow().iter() {
+            assert_eq!(footer(frame), settled, "{route:?}: a frame moved the prompt's footer:\n{frame}");
+            assert!(!frame.lines().any(|line| line.trim() == "…"), "{route:?}: a placeholder row showed:\n{frame}");
+        }
+    }
+}
+
+/// The probe of the open-jump row: an `app` slot claim that draws nothing and adds the command `keys.toggle`.
+const KEYS: &str = r#"export default { id: "example.keys", setup(api) {
+  api.ui.slot({ append: "app", render: () => {
+    api.keymap.layer(() => ({ commands: [{ id: "keys.toggle", title: "Toggle keys", run() {} }] }))
+    return null
+  } })
+} }
+"#;
+
 /// The TUI with the raw carrier plugin `example.<name>` of `source`, active.
 fn raw(config: Config, name: &str, source: &str) -> Pipe {
     let root = opencode_util::temp::tempdir().unwrap();
