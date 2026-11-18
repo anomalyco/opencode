@@ -606,6 +606,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   )
   makeEventListener(window, "focus", wakeCurrent)
   makeEventListener(document, "visibilitychange", wakeCurrent)
+  // The window is neither hidden nor minimized, so the person sees what a pane draws.
+  const [windowShown, setWindowShown] = createSignal(document.visibilityState === "visible")
+  makeEventListener(document, "visibilitychange", () => setWindowShown(document.visibilityState === "visible"))
   makeEventListener(document, "pointerdown", wakeCurrent)
   makeEventListener(document, "keydown", wakeCurrent)
 
@@ -798,7 +801,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
     seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
-    /** The pane would now draw the page an agent's show request revealed, which starts its delay. */
+    windowShown,
+    /** The pane now shows the person the tab an agent's show request selected, which starts the guard's delay. */
     revealDrawn: (session: Session, token: number) => dispatch({ type: "reveal.drawn", sessionKey: session.key, token }),
     answer(session: Session, tabID: Browser.TabID, id: number, answer: PromptAnswer) {
       return registration(session)?.answer(tabID, id, answer) ?? Promise.reject(new Error("browser.pane.unavailable"))

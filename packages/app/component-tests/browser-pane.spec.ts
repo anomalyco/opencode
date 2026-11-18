@@ -1840,6 +1840,28 @@ story("starts the bar's input protection over when the page asks again", async (
   }).toPass()
 })
 
+story("an agent's show request gives its page's permission bar no press that was on its way to the person's", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Permission request", exact: true }).evaluate((element: HTMLElement) => element.click())
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  const once = bar.getByRole("button", { name: "Allow this time", exact: true })
+  await expect(bar).toContainText("alpha.example wants to show notifications.")
+  // The person's bar has been there long enough to answer, so only the change of tab can refuse the next press.
+  await page.waitForTimeout(600)
+  const target = (await once.boundingBox())!
+  // The agent shows its own page, whose first request has the same kind and number as the one on screen. The press
+  // lands where the person's Allow was, at once.
+  await root.getByRole("button", { name: "Agent shows a page that asks", exact: true }).evaluate((element: HTMLElement) => element.click())
+  await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2)
+  await expect(root.getByText("Answers: []", { exact: true })).toBeVisible()
+  await expect(bar).toContainText("second.example wants to use your camera.")
+  // The whole tab takes no input while its page is held back, then a new press answers the request on screen, in its tab.
+  await expect(async () => {
+    await once.click({ timeout: 1_000 })
+    await expect(root.getByText('Answered in: ["Second"]', { exact: true })).toBeVisible({ timeout: 200 })
+  }).toPass()
+})
+
 story("takes the keyboard from the window for a dialog and gives it back where it was", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const composer = root.getByRole("textbox", { name: "Composer stand-in" })

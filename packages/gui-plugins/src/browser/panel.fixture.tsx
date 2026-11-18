@@ -78,6 +78,8 @@ type PaneFixtureState = {
   session: string
   /** The user's answers to the tab's prompts, as main receives them. */
   answers: PromptAnswer[]
+  /** The tab each answer went to, by title. */
+  answeredTabs: string[]
   secondTab: boolean
   mounted: boolean
   visible: boolean
@@ -193,6 +195,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
       answers: [],
+      answeredTabs: [],
       secondTab: false,
       mounted: true,
       visible: true,
@@ -554,6 +557,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       // Main answers the page, which then waits on nothing.
       answer: async (value) => {
         setStore("answers", (answers) => [...answers, value.answer])
+        setStore("answeredTabs", (titles) => [...titles, target(value).title])
         emit(store.session, { type: "prompt", tabID: value.tabID, prompt: null })
       },
       reveal: async () => undefined,
@@ -593,8 +597,17 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         narrow: () => false,
         fitsSide: () => true,
         stored: () => [],
-        state: () => "visible",
-        open() {},
+        // The open pane shows each session's current tab; its other tab is in the strip behind it.
+        state: (key: string) => (tabs.some((tab) => key === `browser:${tab.id}` && tab !== current(tab.owner)) ? "open" : "visible"),
+        // As the host does for the model's own selection of a tab: the strip selects it.
+        open(key: string, _session: unknown, options?: { tab?: string }) {
+          const tab = tabs.find((item) => key === `browser:${item.id}`)
+
+          if (options?.tab !== "select" || !tab || tab.owner !== "Alpha" || tab === current("Alpha")) return
+          setStore("secondTab", tab.title === "Second")
+          report("Alpha")
+          embed(tab)
+        },
         close() {},
         side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       },
@@ -976,8 +989,40 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             >
               Sign-in request
             </button>
+            <button
+              onClick={() => {
+                const second = tabs[2]
+
+                if (!second) return
+                // The agent's page asked before the agent showed it. Each tab counts its requests alone, so this one
+                // has the id of the first tab's "Permission request".
+                emit("Alpha", {
+                  type: "prompt",
+                  tabID: second.id,
+                  prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "second.example", embedded: false },
+                      permissions: ["camera"],
+                      remember: "none",
+                      agent: true,
+                      system: false,
+                    },
+                  },
+                })
+                emit("Alpha", { type: "activity", tabID: second.id, reveal: "tab" })
+              }}
+            >
+              Agent shows a page that asks
+            </button>
           </nav>
           <p>Answers: {JSON.stringify(store.answers)}</p>
+          <p>Answered in: {JSON.stringify(store.answeredTabs)}</p>
           <Show when={store.covered}>
             {/* Floating content portals into <body> like a menu or hover card over the page. */}
             <Portal mount={document.body}>

@@ -255,11 +255,12 @@ export default function SessionBrowserPane(props: {
   let anchor: HTMLFormElement | undefined
   let findInput: HTMLInputElement | undefined
 
-  const find = (action: FindAction) => {
+  // `tabID` is the tab whose find bar took the key or click, which answers for no other tab.
+  const find = (action: FindAction, tabID = state()?.id) => {
     const tab = state()
 
     // Nothing to search while a dialog blocks the page; the bar would also sit beside the dialog's focus trap.
-    if (!tab || (action.type !== "close" && promptKey(true))) return
+    if (!tab || tab.id !== tabID || (action.type !== "close" && promptKey(true))) return
 
     if (action.type === "open" && findInput?.isConnected) {
       findInput.focus()
@@ -307,10 +308,13 @@ export default function SessionBrowserPane(props: {
     return tab && !suspended() ? props.model.prompt(props.session, tab.id) : undefined
   }
 
+  // A prompt is its tab's: each tab counts its prompts from 1, so without the tab the first prompt of two tabs would
+  // be one prompt here, and a bar would stay mounted, with its input protection spent, when the tab on screen changes.
   const promptKey = (modal: boolean) => {
+    const tab = state()
     const current = prompt()
 
-    return current && blocking(current) === modal ? `${current.ask.kind}:${current.id}` : undefined
+    return tab && current && blocking(current) === modal ? `${tab.id}:${current.ask.kind}:${current.id}` : undefined
   }
 
   const drawn = () => shown() && prompt()?.ask.kind !== "dialog"
@@ -319,21 +323,27 @@ export default function SessionBrowserPane(props: {
   // One computation under the pane's owner. Written inline as the embed's prop, the condition compiles to a getter that
   // makes a new one on every read, and the embed reads it from callbacks that have no owner to dispose them.
   const pageVisible = createMemo(() => drawn() && revealGuard() === undefined)
+  // An agent's show request put this tab under the person's pointer. Until the guard ends, the page is hidden and
+  // nothing else of the tab takes a click or a key either: its bars, dialogs, toolbar and error views are all here.
+  const guarded = createMemo(() => revealGuard() !== undefined)
 
-  // The guard's delay starts when this panel would show the native view, not while its chunk is still loading.
-  createKeyed(() => drawn() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
+  // The guard's delay starts when the person can see this tab: the pane shows it, in a window that is not hidden.
+  createKeyed(() => visible() && props.model.windowShown() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
 
   // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
   const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
 
-  const answer = (value: PromptAnswer) => {
-    const tab = state()
-    const current = prompt()
+  // What a prompt that just mounted under `promptKey` answers: the request it was drawn for, in its session and tab,
+  // whichever tab is on screen by the time the press arrives.
+  const answer = () => {
+    const session = untrack(() => props.session)
+    const tab = untrack(state)
+    const current = untrack(prompt)
 
-    if (!tab || !current) return
-    void props.model
-      .answer(props.session, tab.id, current.id, value)
-      .catch(() => showToast({ title: plugin.t("prompt.failed") }))
+    if (!tab || !current) return () => undefined
+
+    return (value: PromptAnswer) =>
+      void props.model.answer(session, tab.id, current.id, value).catch(() => showToast({ title: plugin.t("prompt.failed") }))
   }
 
   const inspectable = () => !!address() && !failed() && !suspended()
@@ -822,6 +832,7 @@ export default function SessionBrowserPane(props: {
     <aside
       ref={root}
       id="browser-panel"
+      inert={guarded()}
       // A click on the pane's own surface, like its loading or error view, keeps focus here, so its shortcuts apply.
       tabIndex={-1}
       class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col outline-none"
@@ -1048,7 +1059,9 @@ export default function SessionBrowserPane(props: {
         </Popover>
         <div class="flex shrink-0 items-center gap-1">
           {/* Extensions load into the profile, where pages of a server on this computer browse. */}
-          <Show when={props.session.server.local && extensions().length > 0}>
+          {/* Keyed by the tab: when an agent's show request changes the tab on screen, an open menu closes rather than
+              act on the other tab. */}
+          <Show when={props.session.server.local && extensions().length > 0 && props.tab().id} keyed>
             <Menu gutter={4} modal={false} placement="bottom-end">
               <Tooltip placement="top" value={plugin.t("extensions.menu")}>
                 <Menu.Trigger
@@ -1133,106 +1146,109 @@ export default function SessionBrowserPane(props: {
               />
             </Tooltip>
           </Show>
-          <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
-            <Tooltip placement="top" value={plugin.t("options")}>
-              {/* The comment tool lives in this menu, so the button shows it while it waits for a pick. */}
-              <Menu.Trigger
-                as={IconButton}
-                variant="ghost-muted"
-                size="large"
-                disabled={!state()}
-                classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
-                icon={<Icon name="outline-dots" />}
-                aria-label={plugin.t("options")}
-              />
-            </Tooltip>
-            <Menu.Portal>
-              <Menu.Content class="w-[220px]" data-browser-popup>
-                {/* What most people reach for comes first; the rest is one step away under "More tools". */}
-                <Menu.Item
-                  disabled={!inspectable()}
-                  onSelect={() => find({ type: "open" })}
-                  shortcut={<Keybind keys={[...keybinds.keybind("browser.find")]} variant="neutral" />}
-                >
-                  {plugin.t("find.open")}
-                </Menu.Item>
-                {/* One row: out, the zoom itself (which resets it), in. Zooming closes the menu: the page stays a
-                    still while the menu covers it, so a zoom would show only once it closed. */}
-                <Menu.ItemRow label={plugin.t("zoom.label")}>
-                  <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.out")} onSelect={() => zoomPage("out")}>
-                    <Icon name="minus" size="small" />
+          {/* Keyed by the tab, as the extensions menu is: an open menu is of the tab it opened on, and closes with it. */}
+          <Show when={props.tab().id} keyed>
+            <Menu gutter={4} modal={false} placement="bottom-end" onOpenChange={open => setMenuPage(open ? pageTarget() : undefined)}>
+              <Tooltip placement="top" value={plugin.t("options")}>
+                {/* The comment tool lives in this menu, so the button shows it while it waits for a pick. */}
+                <Menu.Trigger
+                  as={IconButton}
+                  variant="ghost-muted"
+                  size="large"
+                  disabled={!state()}
+                  classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
+                  icon={<Icon name="outline-dots" />}
+                  aria-label={plugin.t("options")}
+                />
+              </Tooltip>
+              <Menu.Portal>
+                <Menu.Content class="w-[220px]" data-browser-popup>
+                  {/* What most people reach for comes first; the rest is one step away under "More tools". */}
+                  <Menu.Item
+                    disabled={!inspectable()}
+                    onSelect={() => find({ type: "open" })}
+                    shortcut={<Keybind keys={[...keybinds.keybind("browser.find")]} variant="neutral" />}
+                  >
+                    {plugin.t("find.open")}
                   </Menu.Item>
-                  <Menu.Item disabled={!zoomed()} aria-label={plugin.t("zoom.reset")} onSelect={() => zoomPage("reset")}>
-                    {plugin.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
+                  {/* One row: out, the zoom itself (which resets it), in. Zooming closes the menu: the page stays a
+                      still while the menu covers it, so a zoom would show only once it closed. */}
+                  <Menu.ItemRow label={plugin.t("zoom.label")}>
+                    <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.out")} onSelect={() => zoomPage("out")}>
+                      <Icon name="minus" size="small" />
+                    </Menu.Item>
+                    <Menu.Item disabled={!zoomed()} aria-label={plugin.t("zoom.reset")} onSelect={() => zoomPage("reset")}>
+                      {plugin.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
+                    </Menu.Item>
+                    <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.in")} onSelect={() => zoomPage("in")}>
+                      <Icon name="plus" size="small" />
+                    </Menu.Item>
+                  </Menu.ItemRow>
+                  {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
+                  <Menu.Group>
+                    <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
+                      {plugin.t("link.copy")}
+                    </Menu.Item>
+                    <Show when={menuPage()?.serverFile}>
+                      <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                        <span dir="auto" class="break-words leading-4">{plugin.t("menu.privateAddress")}</span>
+                      </Menu.GroupLabel>
+                    </Show>
+                  </Menu.Group>
+                  <Menu.Item disabled={!address() || suspended() || failed()} onSelect={openNote}>
+                    {plugin.t("page.add")}
                   </Menu.Item>
-                  <Menu.Item disabled={!address()} aria-label={plugin.t("zoom.in")} onSelect={() => zoomPage("in")}>
-                    <Icon name="plus" size="small" />
-                  </Menu.Item>
-                </Menu.ItemRow>
-                {/* A disabled item takes no pointer events, so a tooltip never shows: its reason is a line below it. */}
-                <Menu.Group>
-                  <Menu.Item disabled={!address() || serverFile()} onSelect={copyLink}>
-                    {plugin.t("link.copy")}
-                  </Menu.Item>
-                  <Show when={menuPage()?.serverFile}>
-                    <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
-                      <span dir="auto" class="break-words leading-4">{plugin.t("menu.privateAddress")}</span>
-                    </Menu.GroupLabel>
+                  <Show when={menuPage()?.source}>
+                    {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
                   </Show>
-                </Menu.Group>
-                <Menu.Item disabled={!address() || suspended() || failed()} onSelect={openNote}>
-                  {plugin.t("page.add")}
-                </Menu.Item>
-                <Show when={menuPage()?.source}>
-                  {(open) => <Menu.Item onSelect={() => open()()}>{plugin.t("preview.source")}</Menu.Item>}
-                </Show>
-                <Menu.Separator />
-                <Menu.Sub gutter={4} overflowPadding={16} overlap>
-                  <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
-                  <Menu.Portal>
-                    <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")}>
-                      <Menu.Item
-                        disabled={!inspectable()}
-                        onSelect={toggleInspect}
-                        shortcut={<Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />}
-                      >
-                        {plugin.t("inspect")}
-                      </Menu.Item>
-                      <Menu.Group>
-                        <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
-                          {plugin.t("menu.openPage")}
+                  <Menu.Separator />
+                  <Menu.Sub gutter={4} overflowPadding={16} overlap>
+                    <Menu.SubTrigger>{plugin.t("menu.more")}</Menu.SubTrigger>
+                    <Menu.Portal>
+                      <Menu.SubContent class="w-max min-w-[220px] max-w-[calc(100vw-32px)]" aria-label={plugin.t("menu.more")}>
+                        <Menu.Item
+                          disabled={!inspectable()}
+                          onSelect={toggleInspect}
+                          shortcut={<Keybind keys={[...keybinds.keybind("browser.inspect")]} variant="neutral" />}
+                        >
+                          {plugin.t("inspect")}
                         </Menu.Item>
-                        <Show when={!menuPage()?.open}>
-                          <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
-                            <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
-                          </Menu.GroupLabel>
+                        <Menu.Group>
+                          <Menu.Item disabled={!menuPage()?.open} onSelect={() => menuPage()?.openPage()}>
+                            {plugin.t("menu.openPage")}
+                          </Menu.Item>
+                          <Show when={!menuPage()?.open}>
+                            <Menu.GroupLabel class="!h-auto !pb-1.5 !pt-0">
+                              <span dir="auto" class="break-words leading-4">{plugin.t("menu.pageUnavailable")}</span>
+                            </Menu.GroupLabel>
+                          </Show>
+                        </Menu.Group>
+                        <Show when={menuPage()?.reveal}>
+                          <Menu.Item onSelect={() => menuPage()?.revealFile()}>{plugin.t("external.reveal")}</Menu.Item>
                         </Show>
-                      </Menu.Group>
-                      <Show when={menuPage()?.reveal}>
-                        <Menu.Item onSelect={() => menuPage()?.revealFile()}>{plugin.t("external.reveal")}</Menu.Item>
-                      </Show>
-                      <Menu.Item
-                        disabled={!address()}
-                        onSelect={() => {
-                          const tab = state()
+                        <Menu.Item
+                          disabled={!address()}
+                          onSelect={() => {
+                            const tab = state()
 
-                          if (tab) command({ type: "reload", tabID: tab.id, ignoreCache: true })
-                        }}
-                        shortcut={<Keybind keys={[...keybinds.keybind("browser.hardReload")]} variant="neutral" />}
-                      >
-                        {plugin.t("menu.hardReload")}
-                      </Menu.Item>
-                      <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
-                        {plugin.t("history.clear")}
-                      </Menu.Item>
-                    </Menu.SubContent>
-                  </Menu.Portal>
-                </Menu.Sub>
-                <Menu.Separator />
-                <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
+                            if (tab) command({ type: "reload", tabID: tab.id, ignoreCache: true })
+                          }}
+                          shortcut={<Keybind keys={[...keybinds.keybind("browser.hardReload")]} variant="neutral" />}
+                        >
+                          {plugin.t("menu.hardReload")}
+                        </Menu.Item>
+                        <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
+                          {plugin.t("history.clear")}
+                        </Menu.Item>
+                      </Menu.SubContent>
+                    </Menu.Portal>
+                  </Menu.Sub>
+                  <Menu.Separator />
+                  <Menu.Item onSelect={() => plugin.layout.settings("browser")}>{plugin.t("settings.open")}</Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu>
+          </Show>
         </div>
       </div>
       {/*
@@ -1247,7 +1263,7 @@ export default function SessionBrowserPane(props: {
       <Show when={promptKey(false)} keyed>
         {(key) => (
           <Show when={key ? prompt() : undefined}>
-            {(view) => <PromptBar view={view()} answer={answer} focus={untrack(promptFocus)} />}
+            {(view) => <PromptBar view={view()} answer={answer()} focus={untrack(promptFocus)} />}
           </Show>
         )}
       </Show>
@@ -1284,7 +1300,7 @@ export default function SessionBrowserPane(props: {
               )}
             </Show>
             <Show when={!suspended() && !promptKey(true) && props.model.search(props.session, id)}>
-              {(view) => <FindBar view={view()} input={(el) => { findInput = el }} run={find} />}
+              {(view) => <FindBar view={view()} input={(el) => { findInput = el }} run={(action) => find(action, id)} />}
             </Show>
           </>
         )}
@@ -1350,7 +1366,7 @@ export default function SessionBrowserPane(props: {
             {(key) => (
               <Show when={key ? prompt() : undefined}>
                 {(view) => (
-                  <PromptDialog view={view()} answer={answer} focus={untrack(promptFocus)} leave={focusAddress} />
+                  <PromptDialog view={view()} answer={answer()} focus={untrack(promptFocus)} leave={focusAddress} />
                 )}
               </Show>
             )}
