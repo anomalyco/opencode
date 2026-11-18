@@ -38,10 +38,10 @@ pub fn utc_offset(at: i64) -> i32 {
     opencode_util::time::Zone::Local.offset(at)
 }
 
-/// The cells `text` takes in a row as OpenTUI draws it in `app`, and its graphemes; a line break takes no cell and is
-/// no grapheme.
+/// The cells `text` takes in a row as OpenTUI draws it in `app`, and its graphemes; a line break (`\n` or `\r\n`) takes
+/// no cell and is no grapheme.
 pub fn measure(app: &App, text: &str) -> abi::Measure {
-    let lines = text.split('\n');
+    let lines = text.split('\n').map(|line| line.strip_suffix('\r').unwrap_or(line));
     let context = app.session().context();
     let (mut cells, mut graphemes) = (0, 0);
     for line in lines {
@@ -123,7 +123,7 @@ mod tests {
     }
 
     // Expected: a wide character takes two cells, an `e` with a combining accent one cell and one grapheme, a family
-    // joined by zero-width joiners one grapheme of two cells, and a line break neither.
+    // joined by zero-width joiners one grapheme of two cells, and a line break neither, `\r\n` as `\n` (cf-3).
     #[test]
     fn the_measure_counts_cells_and_graphemes_as_the_host_draws() {
         let app = opentui::testing::TestApp::new(40, 4);
@@ -137,5 +137,6 @@ mod tests {
         assert_eq!(measure(&[0x65, 0x301]), (1, 1));
         assert_eq!(measure(&[0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467]), (2, 1));
         assert_eq!(measure(&[0x61, 0x0a, 0x65e5]), (3, 2));
+        assert_eq!(measure(&[0x61, 0x0d, 0x0a, 0x62]), (2, 2));
     }
 }
