@@ -20,7 +20,7 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
   const event: ToolHooks["execute.before"] = {
     tool: "test",
     info: tool,
-    codeMode: false,
+    codemode: false,
     input,
     sessionID: Session.ID.make("ses_repair"),
     agent: Agent.ID.make("build"),

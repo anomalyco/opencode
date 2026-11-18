@@ -35,7 +35,7 @@ export interface Context {
    */
   readonly cancel?: Effect.Effect<void>
   /** True when the tool is invoked from inside Code Mode (`execute`). */
-  readonly codeMode?: boolean
+  readonly codemode?: boolean
 }
 
 export interface Namespace {

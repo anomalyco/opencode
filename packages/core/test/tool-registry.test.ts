@@ -761,13 +761,13 @@ describe("Tool", () => {
 
         const service = yield* Tool.Service
         const hooks = yield* PluginHooks.Service
-        const hooked: Array<{ phase: string; tool: string; codeMode: boolean; override: boolean }> = []
+        const hooked: Array<{ phase: string; tool: string; codemode: boolean; override: boolean }> = []
         yield* hooks.register("tool", "execute.before", (event) =>
           Effect.sync(() => {
             hooked.push({
               phase: "before",
               tool: event.tool,
-              codeMode: event.codeMode,
+              codemode: event.codemode,
               override: typeof event.info?.options?.codemode === "object",
             })
           }),
@@ -777,14 +777,14 @@ describe("Tool", () => {
             hooked.push({
               phase: "after",
               tool: event.tool,
-              codeMode: event.codeMode,
+              codemode: event.codemode,
               override: typeof event.info?.options?.codemode === "object",
             })
           }),
         )
         const directInput = Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) })
-        const codeModeInput = Schema.Struct({ command: Schema.String })
-        const codeModeOutput = Schema.Struct({ summary: Schema.String })
+        const codemodeInput = Schema.Struct({ command: Schema.String })
+        const codemodeOutput = Schema.Struct({ summary: Schema.String })
         yield* service.transform((editor) => {
           editor.add({
             name: "shell",
@@ -794,8 +794,8 @@ describe("Tool", () => {
             options: {
               codemode: {
                 description: "Code Mode shell",
-                input: codeModeInput,
-                output: codeModeOutput,
+                input: codemodeInput,
+                output: codemodeOutput,
               },
               pinned: true,
             },
@@ -808,8 +808,8 @@ describe("Tool", () => {
               const _backgroundOptional: Equal<typeof background, boolean | undefined> = true
               void _inputExact
               void _backgroundOptional
-              const summary = `${input.command}:${"background" in input ? String(input.background) : "omitted"}:${String(Boolean(context.codeMode))}`
-              return Effect.succeed({ output: context.codeMode ? { summary } : summary })
+              const summary = `${input.command}:${"background" in input ? String(input.background) : "omitted"}:${String(Boolean(context.codemode))}`
+              return Effect.succeed({ output: context.codemode ? { summary } : summary })
             },
           })
           editor.add({
@@ -870,7 +870,7 @@ describe("Tool", () => {
         expect(shellListing.line).not.toContain("background")
         expect(promoted.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
 
-        // Decodes and encodes Code Mode calls with the Code Mode override schemas and passes context.codeMode = true.
+        // Decodes and encodes Code Mode calls with the Code Mode override schemas and passes context.codemode = true.
         const executed = yield* promoted.execute({
           ...call("execute"),
           call: {
@@ -910,12 +910,12 @@ describe("Tool", () => {
         ).toContain("Code Mode shell")
 
         expect(hooked).toEqual([
-          { phase: "before", tool: "shell", codeMode: false, override: true },
-          { phase: "after", tool: "shell", codeMode: false, override: true },
-          { phase: "before", tool: "execute", codeMode: false, override: false },
-          { phase: "before", tool: "shell", codeMode: true, override: true },
-          { phase: "after", tool: "shell", codeMode: true, override: true },
-          { phase: "after", tool: "execute", codeMode: false, override: false },
+          { phase: "before", tool: "shell", codemode: false, override: true },
+          { phase: "after", tool: "shell", codemode: false, override: true },
+          { phase: "before", tool: "execute", codemode: false, override: false },
+          { phase: "before", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "shell", codemode: true, override: true },
+          { phase: "after", tool: "execute", codemode: false, override: false },
         ])
       }),
   )

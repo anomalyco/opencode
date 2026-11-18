@@ -163,7 +163,7 @@ export const create = (
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
                     id,
-                    codeMode: true,
+                    codemode: true,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.

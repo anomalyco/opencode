@@ -19,13 +19,13 @@ export const codecFor = (schema: JsonSchema.JsonSchema) => {
   return codec
 }
 
-const codeModeOverrides = (tool: Tool.Info<any, any>, codeMode: boolean) =>
-  codeMode && typeof tool.options?.codemode === "object" && tool.options.codemode !== null
+const codemodeOverrides = (tool: Tool.Info<any, any>, codemode: boolean) =>
+  codemode && typeof tool.options?.codemode === "object" && tool.options.codemode !== null
     ? tool.options.codemode
     : undefined
 
-export const definition = (tool: Tool.Info<any, any>, codeMode = false): ToolDefinition => {
-  const overrides = codeModeOverrides(tool, codeMode)
+export const definition = (tool: Tool.Info<any, any>, codemode = false): ToolDefinition => {
+  const overrides = codemodeOverrides(tool, codemode)
   const output = overrides?.output ?? tool.output
   return {
     type: "tool",
@@ -39,7 +39,7 @@ export const definition = (tool: Tool.Info<any, any>, codeMode = false): ToolDef
 
 export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
   Effect.gen(function* () {
-    const overrides = codeModeOverrides(tool, context.codeMode === true)
+    const overrides = codemodeOverrides(tool, context.codemode === true)
     const decoded = yield* decodeInput(tool, overrides?.input ?? tool.input, input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`

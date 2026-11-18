@@ -83,13 +83,13 @@ export const layer = Layer.effect(
           concurrency: "unbounded",
         })
         const direct = new Set(snapshot.definitions.map((tool) => tool.name))
-        const codeMode = new Set(snapshot.codeModeCatalog ? catalogPaths(snapshot.codeModeCatalog.tools) : [])
+        const codemode = new Set(snapshot.codeModeCatalog ? catalogPaths(snapshot.codeModeCatalog.tools) : [])
         // Instructions are useful only when this Session can reach at least one server tool.
         const visible = instructions
           .flatMap((item) => {
             const namespace = McpTool.namespace(item.server)
             const owned = tools.filter((tool) => tool.server === item.server)
-            const inCodeMode = owned.some((tool) => codeMode.has(`${namespace}.${normalizedName({ name: tool.name })}`))
+            const inCodeMode = owned.some((tool) => codemode.has(`${namespace}.${normalizedName({ name: tool.name })}`))
             const inDirect = owned.some((tool) => direct.has(McpTool.name(item.server, tool.name)))
             if (!inCodeMode && !inDirect) return []
             return [

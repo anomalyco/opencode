@@ -137,20 +137,20 @@ it.live("Promise tools that rethrow a decline attach it to the tool failure", ()
   }),
 )
 
-it.live("Promise tools infer codemode override schemas and pass info and codeMode to hooks", () =>
+it.live("Promise tools infer codemode override schemas and pass info and codemode to hooks", () =>
   Effect.gen(function* () {
     type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 
     const plugins = yield* Plugin.Service
     const tools = yield* Tool.Service
-    const seen: Array<{ tool: string; codeMode: boolean; override: boolean }> = []
+    const seen: Array<{ tool: string; codemode: boolean; override: boolean }> = []
     yield* PluginPromise.fromPromise({
       id: "override-promise-tool",
       async setup(context) {
         await context.tool.hook("execute.before", (event) => {
           seen.push({
             tool: event.tool,
-            codeMode: event.codeMode,
+            codemode: event.codemode,
             override: typeof event.info?.options?.codemode === "object",
           })
         })
@@ -177,7 +177,7 @@ it.live("Promise tools infer codemode override schemas and pass info and codeMod
               void _inputExact
               void _backgroundOptional
               const text = `${input.command}:${String(background ?? "none")}`
-              return { output: ctx.codeMode ? { summary: text } : text }
+              return { output: ctx.codemode ? { summary: text } : text }
             },
           })
           editor.add({
@@ -219,9 +219,9 @@ it.live("Promise tools infer codemode override schemas and pass info and codeMod
       })).output,
     ).toMatchObject({ output: JSON.stringify({ summary: "pwd:none" }) })
     expect(seen).toEqual([
-      { tool: "shell_like", codeMode: false, override: true },
-      { tool: "execute", codeMode: false, override: false },
-      { tool: "shell_like", codeMode: true, override: true },
+      { tool: "shell_like", codemode: false, override: true },
+      { tool: "execute", codemode: false, override: false },
+      { tool: "shell_like", codemode: true, override: true },
     ])
   }),
 )

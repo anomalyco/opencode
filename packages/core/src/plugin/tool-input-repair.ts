@@ -42,7 +42,7 @@ export const Plugin = define({
             aliased.set(event.id, event.tool)
             event.tool = aliasedTool.id
           }
-          const schema = definition(tool, event.codeMode).inputSchema
+          const schema = definition(tool, event.codemode).inputSchema
           if (schema.type !== "object") return
           event.input = repair(event.input, schema, schema, 0)
         }),

@@ -158,7 +158,7 @@ const layer = Layer.effect(
       hooks.trigger("tool", "execute.before", {
         tool: name,
         ...(info === undefined ? {} : { info }),
-        codeMode: context.codeMode === true,
+        codemode: context.codemode === true,
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,
@@ -185,7 +185,7 @@ const layer = Layer.effect(
       const base = {
         tool: name,
         info: tool,
-        codeMode: context.codeMode === true,
+        codemode: context.codemode === true,
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,
@@ -316,20 +316,20 @@ const layer = Layer.effect(
           const hidden = options?.tools?.hidden
           const promoted = options?.tools?.codemode
           const direct = new Map<string, Tool.Info>()
-          const codeModeEntries: Array<[string, Tool.Info]> = []
+          const codemodeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             if (codeModeEnabled && (defaultCodeMode(tool) || promoted?.has(name))) {
-              codeModeEntries.push([name, tool])
+              codemodeEntries.push([name, tool])
               continue
             }
             direct.set(name, tool)
           }
-          const codeMode = !codeModeEnabled
+          const codemode = !codeModeEnabled
             ? undefined
             : (() => {
-                const key = `${full ? "1" : "0"}\0${codeModeEntries.map(([name]) => name).join("\0")}`
+                const key = `${full ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
                 // Discovery is immutable for a registry revision and visible tool set. Keep executors
                 // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
                 // are cached by identity, and the execute tool's definition across steps.
@@ -339,7 +339,7 @@ const layer = Layer.effect(
                   catalogs.set(key, cached)
                 }
                 const inventory = cached?.inventory ?? {
-                  tools: new Map(codeModeEntries),
+                  tools: new Map(codemodeEntries),
                   namespaces: data.namespaces,
                 }
                 const tool = CodeModeTool.create(
@@ -363,12 +363,12 @@ const layer = Layer.effect(
                 return { tool, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codeMode === undefined ? {} : { codeModeCatalog: codeMode.catalog }),
+            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
                 .map(([name]) => data.definitions.get(name)!),
-              ...(codeMode ? [codeMode.definition] : []),
+              ...(codemode ? [codemode.definition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
@@ -380,15 +380,15 @@ const layer = Layer.effect(
                 cancel: input.cancel,
               }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
-              const initial = initialName === "execute" && codeMode ? codeMode.tool : direct.get(initialName)
+              const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
               const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
-              if (!requested && input.definitions && (direct.has(event.tool) || codeMode?.tool.name === event.tool))
+              if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeMode) {
-                const run = (ctx: Tool.Context) => executeTool(codeMode.tool, name, event.input, ctx)
+              if (name === "execute" && codemode) {
+                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background ? background(context, run) : run(context)
               }
@@ -431,7 +431,7 @@ const layer = Layer.effect(
               const context: Tool.Context = {
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
-                codeMode: true,
+                codemode: true,
               }
               return yield* run(tools, tool, name, toolInput, context)
             }),

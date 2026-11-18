@@ -29,10 +29,10 @@ const LocationInput = Schema.Struct({
 export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 
-const description = (codeMode: boolean) =>
+const description = (codemode: boolean) =>
   [
     "Read the contents of a file or directory. Supports text files, images, and PDFs.",
-    codeMode
+    codemode
       ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
       : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
     "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",

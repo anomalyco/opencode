@@ -26,7 +26,7 @@ export interface ToolHooks {
   readonly "execute.before": {
     tool: string
     readonly info?: Tool.Info
-    readonly codeMode: boolean
+    readonly codemode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
@@ -36,7 +36,7 @@ export interface ToolHooks {
   readonly "execute.after": {
     readonly tool: string
     readonly info?: Tool.Info
-    readonly codeMode: boolean
+    readonly codemode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID

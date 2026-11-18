@@ -126,7 +126,7 @@ type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "er
 
 const toolError = (tool: "edit" | "write" | "patch", error: Tool.Error): ToolErrorEvent => ({
   tool,
-  codeMode: false,
+  codemode: false,
   input: {},
   sessionID,
   agent: plan,

@@ -384,7 +384,7 @@ export const Plugin = {
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
             // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-            const foreground = input.timeout || (context.codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+            const foreground = input.timeout || (context.codemode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
             const timeout = background ? (input.timeout ?? 0) : foreground
             let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
