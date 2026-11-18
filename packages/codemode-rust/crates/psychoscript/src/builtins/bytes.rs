@@ -4,9 +4,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::{arg, describe_value, fuel, incompatible};
+use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, Input, Step};
 use crate::object::*;
 use crate::ops::{MAX_ARRAY_LEN, MAX_STRING_LEN};
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{Res, Vm};
 
 /// A Uint8Array: a view of `len` bytes at `start` in a buffer that subarrays share.
@@ -420,16 +421,27 @@ fn is_iterable(vm: &mut Vm, v: &Value) -> bool {
     }
 }
 
-/// The values a Uint8Array, array or iterable describes, each mapped (with the original values) then converted.
+/// What a built-in does with the bytes it collected: `new Uint8Array(...)` and `Uint8Array.from` make a Uint8Array of
+/// them, `set` writes them into `target` at `offset`.
+#[derive(Clone, Copy)]
+enum Sink {
+    New,
+    Set { target: Id, offset: Value },
+}
+
+/// The values a Uint8Array, array or iterable describes, each mapped (with the original values) then converted, handed
+/// to `into`. An iterable is read and mapped by a native frame (`Collect`).
 fn collect(
     vm: &mut Vm,
     source: &Value,
     name: &str,
     mapper: Option<(Value, Value)>,
     native: bool,
-) -> Result<Vec<u8>, Value> {
+    into: Sink,
+    callee: Id,
+) -> Res {
     if let (Some(b), None) = (bytes_of(vm, source), &mapper) {
-        return Ok(b);
+        return collected(vm, b, into);
     }
     // The reference's `collectBytes`, after the native's own call when a native hands on to it (see `fuel.rs`).
     if native {
@@ -445,32 +457,149 @@ fn collect(
             "{name} expects a Uint8Array, an array, or an iterable of numbers, received {d}."
         )));
     }
-    let mut values = Vec::new();
-    fuel::for_of(vm, source, |_, v| {
-        values.push(v);
-        Ok(true)
-    })?;
-    if let Some((f, this_arg)) = mapper {
-        for (i, v) in values.iter_mut().enumerate() {
-            *v = vm.call_counted(&f, this_arg, &[*v, Value::Num(i as f64)])?;
-            fuel::step(vm);
-        }
-    }
-    fuel::native(vm);
-    vm.bytecode_builtin();
-    let mut out = Vec::with_capacity(values.len());
-    for v in values {
-        out.push(to_u8(super::builtin_number(vm, &v)?));
-    }
-    Ok(out)
+    let (f, this_arg) = mapper.unwrap_or_default();
+    let (target, offset) = match into {
+        Sink::New => (Value::Undef, Value::Undef),
+        Sink::Set { target, offset } => (Value::Obj(target), offset),
+    };
+    let values = vm.new_array(Vec::new());
+    crate::native::enter_for_of_sub(
+        vm,
+        crate::native::NativeOp::Arrays,
+        COLLECT,
+        callee,
+        Value::Undef,
+        *source,
+        &[f, this_arg, values, target, offset, Value::Num(0.0)],
+    )
 }
 
-fn uint8_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// Hands collected bytes to what the built-in does with them.
+fn collected(vm: &mut Vm, data: Vec<u8>, into: Sink) -> Res {
+    let Sink::Set { target, offset } = into else {
+        return Ok(new_bytes(vm, data, false));
+    };
+    let offset = match offset {
+        Value::Undef => 0.0,
+        v => super::builtin_integer(vm, &v)?,
+    };
+    let len = len_of(vm, target);
+    if offset < 0.0 || data.len() as f64 + offset > len as f64 {
+        return Err(vm.range_error("Uint8Array.set: the source does not fit at that offset."));
+    }
+    let b = bytes_ref(vm, target);
+    for (i, v) in data.iter().enumerate() {
+        b.put(offset as usize + i, *v);
+    }
+    Ok(Value::Undef)
+}
+
+// The native frames of this family, by sub-op (see `family_step`).
+const COLLECT: u16 = 0;
+const WALK: u16 = 1;
+const REDUCE: u16 = 2;
+
+// The slots of a `Collect` frame, after the loop's: the mapper and its receiver, the values read (an array), where
+// they go (`set`'s target or undefined, and its offset), and the index the mapper is at.
+const COL_MAPPER: usize = FOR_OF_SLOTS;
+const COL_THIS: usize = FOR_OF_SLOTS + 1;
+const COL_VALUES: usize = FOR_OF_SLOTS + 2;
+const COL_TARGET: usize = FOR_OF_SLOTS + 3;
+const COL_OFFSET: usize = FOR_OF_SLOTS + 4;
+const COL_K: usize = FOR_OF_SLOTS + 5;
+
+/// The reference's `collectBytes` over an iterable: every value is read first, then each is mapped, with a back-edge
+/// after each call.
+struct Collect;
+
+impl ForOf for Collect {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        if let Some(Kind::Array(values)) = fr
+            .slot(vm, COL_VALUES)
+            .obj()
+            .map(|o| &mut vm.heap[o as usize].kind)
+        {
+            values.push(x);
+        }
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        fuel::native(vm);
+        vm.bytecode_builtin();
+        let values = values_of(vm, fr.slot(vm, COL_VALUES)).to_vec();
+        let mut data = Vec::with_capacity(values.len());
+        for v in values {
+            data.push(to_u8(super::builtin_number(vm, &v)?));
+        }
+        let into = match fr.get(vm, COL_TARGET) {
+            Value::Obj(target) => Sink::Set {
+                target,
+                offset: fr.get(vm, COL_OFFSET),
+            },
+            _ => Sink::New,
+        };
+        collected(vm, data, into)
+    }
+
+    fn done(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
+        if fr.slot(vm, COL_MAPPER) == Slot::UNDEF {
+            return Ok(Step::Done(Self::finish(vm, fr)?));
+        }
+        collect_map(vm, fr, 0)
+    }
+
+    fn after(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+        let k = fr.index(vm, COL_K);
+        match input {
+            Input::Returned(r) => {
+                if let Some(Kind::Array(values)) = fr
+                    .slot(vm, COL_VALUES)
+                    .obj()
+                    .map(|o| &mut vm.heap[o as usize].kind)
+                    && let Some(v) = values.get_mut(k)
+                {
+                    *v = r.get();
+                }
+                fuel::step(vm);
+                collect_map(vm, fr, k + 1)
+            }
+            Input::Threw(e) => Err(e),
+            Input::Start | Input::Finished(_) => collect_map(vm, fr, k),
+        }
+    }
+}
+
+/// Calls the mapper on the value at `k`, or finishes once every value is mapped.
+fn collect_map(vm: &mut Vm, fr: Frame, k: usize) -> Result<Step, Value> {
+    let Some(v) = values_of(vm, fr.slot(vm, COL_VALUES)).get(k).copied() else {
+        return Ok(Step::Done(Collect::finish(vm, fr)?));
+    };
+    fr.set_index(vm, COL_K, k);
+    let (f, this_arg) = (fr.slot(vm, COL_MAPPER), fr.slot(vm, COL_THIS));
+    fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::index(k)])
+}
+
+fn values_of<'a>(vm: &'a Vm, s: Slot) -> &'a [Value] {
+    match s.obj().map(|o| &vm.heap[o as usize].kind) {
+        Some(Kind::Array(values)) => values,
+        _ => &[],
+    }
+}
+
+fn uint8_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     requires_new(vm, &this, "Uint8Array")?;
     let source = arg(args, 0);
     if let Value::Obj(_) = source {
-        let data = collect(vm, &source, "new Uint8Array(...)", None, false)?;
-        return Ok(new_bytes(vm, data, false));
+        return collect(
+            vm,
+            &source,
+            "new Uint8Array(...)",
+            None,
+            false,
+            Sink::New,
+            callee,
+        );
     }
     let n = match source {
         Value::Undef => 0.0,
@@ -494,16 +623,17 @@ fn optional_callback(vm: &mut Vm, f: &Value, name: &str) -> Result<Option<Value>
     super::require_callback(vm, f, name).map(Some)
 }
 
-fn uint8_from(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn uint8_from(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let mapper = optional_callback(vm, &arg(args, 1), "Uint8Array.from")?;
-    let data = collect(
+    collect(
         vm,
         &arg(args, 0),
         "Uint8Array.from",
         mapper.map(|f| (f, arg(args, 2))),
         true,
-    )?;
-    Ok(new_bytes(vm, data, false))
+        Sink::New,
+        callee,
+    )
 }
 
 fn uint8_of(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -584,22 +714,21 @@ fn u_subarray(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(view_value(vm, v))
 }
 
-fn u_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn u_set(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = this_bytes(vm, &this, "set")?;
-    let data = collect(vm, &arg(args, 0), "Uint8Array.set", None, true)?;
-    let offset = match arg(args, 1) {
-        Value::Undef => 0.0,
-        v => super::builtin_integer(vm, &v)?,
+    let into = Sink::Set {
+        target: id,
+        offset: arg(args, 1),
     };
-    let len = len_of(vm, id);
-    if offset < 0.0 || data.len() as f64 + offset > len as f64 {
-        return Err(vm.range_error("Uint8Array.set: the source does not fit at that offset."));
-    }
-    let b = bytes_ref(vm, id);
-    for (i, v) in data.iter().enumerate() {
-        b.put(offset as usize + i, *v);
-    }
-    Ok(Value::Undef)
+    collect(
+        vm,
+        &arg(args, 0),
+        "Uint8Array.set",
+        None,
+        true,
+        into,
+        callee,
+    )
 }
 
 fn u_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -778,123 +907,204 @@ fn byte_at(vm: &Vm, id: Id, i: usize) -> Value {
     }
 }
 
-/// Calls `f(byte, index, bytes)` over the length fixed at the start, in order or reversed, until `stop`.
-fn walk(
-    vm: &mut Vm,
-    this: &Value,
-    args: &[Value],
-    name: &str,
-    reverse: bool,
-    stop: &mut dyn FnMut(&mut Vm, usize, Value, Value) -> Option<Value>,
-) -> Result<Option<Value>, Value> {
-    // The reference's `Uint8Array$prototype$...` and its shared item loop (see `fuel.rs`); the caller ends it.
+// The callback methods run as native frames (see `native.rs`): each checks its receiver and callback as the reference's
+// `Uint8Array$prototype$...` and its shared item loop do (see `fuel.rs`), then its frame calls the callback once per
+// index of the length fixed at the start, reading each byte live. The slots of a `walk` frame:
+const WALK_F: usize = 0;
+const WALK_THIS: usize = 1;
+const WALK_N: usize = 2;
+const WALK_K: usize = 3;
+const WALK_MODE: usize = 4;
+/// `map`'s and `filter`'s bytes, as an array of numbers.
+const WALK_OUT: usize = 5;
+/// The byte and index of the call that is running.
+const WALK_V: usize = 6;
+const WALK_I: usize = 7;
+/// What converting one of `map`'s results last threw, thrown once the walk ends; uninitialized while none did.
+const WALK_ERR: usize = 8;
+
+const FOR_EACH: usize = 0;
+const MAP: usize = 1;
+const FILTER: usize = 2;
+const SOME: usize = 3;
+const EVERY: usize = 4;
+const FIND: usize = 5;
+const FIND_INDEX: usize = 6;
+/// The methods from here on walk from the end.
+const FIND_LAST: usize = 7;
+const FIND_LAST_INDEX: usize = 8;
+
+fn walk(vm: &mut Vm, this: Value, args: &[Value], callee: Id, mode: usize, name: &str) -> Res {
     fuel::method(vm);
-    let id = this_bytes(vm, this, name)?;
+    let id = this_bytes(vm, &this, name)?;
     fuel::receiver_then_loop(vm);
     let f = super::require_callback(vm, &arg(args, 0), &format!("Uint8Array.{name}"))?;
     fuel::native(vm);
-    let this_arg = arg(args, 1);
+    let out = match mode {
+        MAP | FILTER => vm.new_array(Vec::new()),
+        _ => Value::Undef,
+    };
     let len = len_of(vm, id);
-    for k in 0..len {
-        let i = if reverse { len - 1 - k } else { k };
-        let item = byte_at(vm, id, i);
-        let r = vm.call_counted(&f, this_arg, &[item, Value::Num(i as f64), *this])?;
-        if let Some(v) = stop(vm, i, item, r) {
-            return Ok(Some(v));
+    vm.enter_native_sub(
+        crate::native::NativeOp::Arrays,
+        WALK,
+        callee,
+        this,
+        &[
+            f,
+            arg(args, 1),
+            Value::Num(len as f64),
+            Value::Num(0.0),
+            Value::Num(mode as f64),
+            out,
+            Value::Undef,
+            Value::Num(0.0),
+            Value::Uninit,
+        ],
+    )
+}
+
+/// The step of a `walk` frame.
+fn walk_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let mode = fr.index(vm, WALK_MODE);
+    let mut k = fr.index(vm, WALK_K);
+    match input {
+        Input::Start | Input::Finished(_) => {}
+        Input::Returned(r) => {
+            if let Some(done) = walk_visit(vm, fr, mode, r.get()) {
+                vm.bytecode_builtin();
+                return Ok(Step::Done(done));
+            }
+            fuel::step(vm);
+            k += 1;
         }
-        fuel::step(vm);
+        Input::Threw(e) => return Err(e),
     }
-    Ok(None)
-}
-
-fn u_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    walk(vm, &this, args, "forEach", false, &mut |_, _, _, _| None)?;
-    vm.bytecode_builtin();
-    Ok(Value::Undef)
-}
-
-fn u_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let mut out = Vec::new();
-    let mut err = None;
-    walk(vm, &this, args, "map", false, &mut |vm, _, _, r| {
-        match super::builtin_number(vm, &r) {
-            Ok(n) => out.push(to_u8(n)),
-            Err(e) => err = Some(e),
-        }
-        None
-    })?;
-    if let Some(e) = err {
-        return Err(e);
+    let this = fr.this_slot(vm);
+    let (Some(id), n) = (this.obj(), fr.index(vm, WALK_N)) else {
+        return Ok(Step::Done(Value::Undef));
+    };
+    if k >= n {
+        return walk_end(vm, fr, mode);
     }
-    fuel::native(vm);
-    vm.bytecode_builtin();
-    Ok(new_bytes(vm, out, false))
+    let i = if mode >= FIND_LAST { n - 1 - k } else { k };
+    let v = Slot::pack(byte_at(vm, id, i));
+    fr.set_index(vm, WALK_K, k);
+    fr.set_slot(vm, WALK_V, v);
+    fr.set_index(vm, WALK_I, i);
+    let (f, this_arg) = (fr.slot(vm, WALK_F), fr.slot(vm, WALK_THIS));
+    fr.call_slots(vm, f, this_arg, [v, Slot::index(i), this])
 }
 
-fn u_filter(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let mut out = Vec::new();
-    walk(vm, &this, args, "filter", false, &mut |vm, _, item, r| {
-        if vm.truthy(&r)
-            && let Value::Num(n) = item
-        {
-            out.push(n as u8);
-        }
-        None
-    })?;
-    fuel::native(vm);
-    vm.bytecode_builtin();
-    Ok(new_bytes(vm, out, false))
-}
-
-fn find_in(vm: &mut Vm, this: Value, args: &[Value], name: &str, last: bool, index: bool) -> Res {
-    let r = walk(vm, &this, args, name, last, &mut |vm, i, item, r| {
-        if vm.truthy(&r) {
-            Some(if index { Value::Num(i as f64) } else { item })
-        } else {
+/// What the callback's result `r` does: the method's result when it stops the walk.
+fn walk_visit(vm: &mut Vm, fr: Frame, mode: usize, r: Value) -> Option<Value> {
+    match mode {
+        MAP => {
+            match super::builtin_number(vm, &r) {
+                Ok(n) => push_out(vm, fr, Value::Num(to_u8(n) as f64)),
+                Err(e) => fr.set(vm, WALK_ERR, e),
+            }
             None
         }
-    })?;
+        FILTER => {
+            let item = fr.get(vm, WALK_V);
+            if vm.truthy(&r)
+                && let Value::Num(n) = item
+            {
+                push_out(vm, fr, Value::Num(n as u8 as f64));
+            }
+            None
+        }
+        SOME => vm.truthy(&r).then_some(Value::Bool(true)),
+        EVERY => (!vm.truthy(&r)).then_some(Value::Bool(false)),
+        FIND | FIND_LAST => vm.truthy(&r).then(|| fr.get(vm, WALK_V)),
+        FIND_INDEX | FIND_LAST_INDEX => vm
+            .truthy(&r)
+            .then(|| Value::Num(fr.index(vm, WALK_I) as f64)),
+        _ => None,
+    }
+}
+
+fn push_out(vm: &mut Vm, fr: Frame, v: Value) {
+    if let Some(Kind::Array(out)) = fr
+        .slot(vm, WALK_OUT)
+        .obj()
+        .map(|o| &mut vm.heap[o as usize].kind)
+    {
+        out.push(v);
+    }
+}
+
+/// The result of a `walk` frame that visited every index.
+fn walk_end(vm: &mut Vm, fr: Frame, mode: usize) -> Result<Step, Value> {
+    let e = fr.get(vm, WALK_ERR);
+    if mode == MAP && !matches!(e, Value::Uninit) {
+        return Err(e);
+    }
+    if let MAP | FILTER = mode {
+        fuel::native(vm);
+    }
     vm.bytecode_builtin();
-    Ok(r.unwrap_or(if index {
-        Value::Num(-1.0)
-    } else {
-        Value::Undef
+    Ok(Step::Done(match mode {
+        MAP | FILTER => {
+            let data = values_of(vm, fr.slot(vm, WALK_OUT))
+                .iter()
+                .map(|v| v.as_num() as u8)
+                .collect();
+            new_bytes(vm, data, false)
+        }
+        SOME => Value::Bool(false),
+        EVERY => Value::Bool(true),
+        FIND_INDEX | FIND_LAST_INDEX => Value::Num(-1.0),
+        _ => Value::Undef,
     }))
 }
 
-fn u_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    find_in(vm, this, args, "find", false, false)
+fn u_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FOR_EACH, "forEach")
 }
 
-fn u_find_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    find_in(vm, this, args, "findIndex", false, true)
+fn u_map(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, MAP, "map")
 }
 
-fn u_find_last(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    find_in(vm, this, args, "findLast", true, false)
+fn u_filter(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FILTER, "filter")
 }
 
-fn u_find_last_index(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    find_in(vm, this, args, "findLastIndex", true, true)
+fn u_find(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FIND, "find")
 }
 
-fn u_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = walk(vm, &this, args, "some", false, &mut |vm, _, _, r| {
-        vm.truthy(&r).then_some(Value::Bool(true))
-    })?;
-    vm.bytecode_builtin();
-    Ok(r.unwrap_or(Value::Bool(false)))
+fn u_find_index(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FIND_INDEX, "findIndex")
 }
 
-fn u_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = walk(vm, &this, args, "every", false, &mut |vm, _, _, r| {
-        (!vm.truthy(&r)).then_some(Value::Bool(false))
-    })?;
-    vm.bytecode_builtin();
-    Ok(r.unwrap_or(Value::Bool(true)))
+fn u_find_last(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FIND_LAST, "findLast")
 }
 
-fn reduce(vm: &mut Vm, this: Value, args: &[Value], right: bool) -> Res {
+fn u_find_last_index(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, FIND_LAST_INDEX, "findLastIndex")
+}
+
+fn u_some(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, SOME, "some")
+}
+
+fn u_every(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    walk(vm, this, args, callee, EVERY, "every")
+}
+
+// The slots of a `reduce` frame: the callback, the length fixed at the start, the next position, whether it walks
+// from the end, and the accumulator.
+const RED_F: usize = 0;
+const RED_N: usize = 1;
+const RED_K: usize = 2;
+const RED_REVERSE: usize = 3;
+const RED_ACC: usize = 4;
+
+fn reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id, right: bool) -> Res {
     let name = if right { "reduceRight" } else { "reduce" };
     fuel::method(vm);
     let id = this_bytes(vm, &this, name)?;
@@ -902,39 +1112,65 @@ fn reduce(vm: &mut Vm, this: Value, args: &[Value], right: bool) -> Res {
     let f = super::require_callback(vm, &arg(args, 0), &format!("Uint8Array.{name}"))?;
     fuel::native(vm);
     let len = len_of(vm, id);
-    let order: Vec<usize> = if right {
-        (0..len).rev().collect()
-    } else {
-        (0..len).collect()
-    };
-    let mut iter = order.into_iter();
-    let mut acc = if args.len() > 1 {
-        args[1]
-    } else {
-        match iter.next() {
-            Some(i) => byte_at(vm, id, i),
-            None => {
-                return Err(vm.type_error(&format!(
-                    "Uint8Array.{name} of an empty array with no initial value."
-                )));
-            }
+    let (acc, k) = match args.get(1) {
+        Some(acc) => (*acc, 0),
+        None if len == 0 => {
+            return Err(vm.type_error(&format!(
+                "Uint8Array.{name} of an empty array with no initial value."
+            )));
         }
+        None => (byte_at(vm, id, if right { len - 1 } else { 0 }), 1),
     };
-    for i in iter {
-        let item = byte_at(vm, id, i);
-        acc = vm.call_counted(&f, Value::Undef, &[acc, item, Value::Num(i as f64), this])?;
-        fuel::step(vm);
+    vm.enter_native_sub(
+        crate::native::NativeOp::Arrays,
+        REDUCE,
+        callee,
+        this,
+        &[
+            f,
+            Value::Num(len as f64),
+            Value::Num(k as f64),
+            Value::Bool(right),
+            acc,
+        ],
+    )
+}
+
+/// The step of a `reduce` frame.
+fn reduce_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start | Input::Finished(_) => {}
+        Input::Returned(r) => {
+            fr.set_slot(vm, RED_ACC, r);
+            fuel::step(vm);
+        }
+        Input::Threw(e) => return Err(e),
     }
-    vm.bytecode_builtin();
-    Ok(acc)
+    let this = fr.this_slot(vm);
+    let (Some(id), n, k) = (this.obj(), fr.index(vm, RED_N), fr.index(vm, RED_K)) else {
+        return Ok(Step::Done(Value::Undef));
+    };
+    if k >= n {
+        vm.bytecode_builtin();
+        return Ok(Step::Done(fr.get(vm, RED_ACC)));
+    }
+    let i = if matches!(fr.get(vm, RED_REVERSE), Value::Bool(true)) {
+        n - 1 - k
+    } else {
+        k
+    };
+    fr.set_index(vm, RED_K, k + 1);
+    let (f, acc) = (fr.slot(vm, RED_F), fr.slot(vm, RED_ACC));
+    let v = Slot::pack(byte_at(vm, id, i));
+    fr.call_slots(vm, f, Slot::UNDEF, [acc, v, Slot::index(i), this])
 }
 
-fn u_reduce(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    reduce(vm, this, args, false)
+fn u_reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    reduce(vm, this, args, callee, false)
 }
 
-fn u_reduce_right(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    reduce(vm, this, args, true)
+fn u_reduce_right(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    reduce(vm, this, args, callee, true)
 }
 
 // ---------- TextEncoder and TextDecoder ----------
@@ -1187,11 +1423,11 @@ fn global_btoa(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
 }
 
 /// The steps of this family's native frames (`native::NativeOp::Arrays`), by sub-op; see `native.rs`.
-pub(crate) fn family_step(
-    _vm: &mut Vm,
-    _sub: u16,
-    _fr: crate::native::Frame,
-    _input: crate::native::Input,
-) -> Result<crate::native::Step, Value> {
-    Ok(crate::native::Step::Done(Value::Undef))
+pub(crate) fn family_step(vm: &mut Vm, sub: u16, fr: Frame, input: Input) -> Result<Step, Value> {
+    match sub {
+        COLLECT => crate::native::for_of_step::<Collect>(vm, fr, input),
+        WALK => walk_step(vm, fr, input),
+        REDUCE => reduce_step(vm, fr, input),
+        _ => Ok(Step::Done(Value::Undef)),
+    }
 }
