@@ -2261,14 +2261,12 @@ fn measure_the_effective_heap_cap() {
     }
 }
 
-// Expected (contract 2.x additions on the Luau carrier): a Luau plugin reads the host's version and features, and asks
-// for one by the prelude's name; it shows a centered select, and an alert and a confirm with their size and centering,
-// which reach the host as the contract's dialogs.
 #[test]
 fn a_luau_plugin_reads_the_features_and_centers_its_dialogs() {
     let host = host();
-    let init = r#"local plugin = require("@opencode/plugin")
-return plugin.define(function(setup)
+    let registry = tasking(
+        &host,
+        r#"
     setup:command({ name = "luau.features" }, function(host)
         local abi = host:abi()
         local said = abi.major .. "." .. abi.minor .. " " .. table.concat(abi.features, ",") .. " "
@@ -2284,11 +2282,10 @@ return plugin.define(function(setup)
         host:dialog({ type = "confirm", title = "asked", message = "sure?", action = action, size = "large",
             centered = true })
     end)
-end)
-"#;
-    let registry = running(&host, define(&sources(init), None).unwrap().0);
-    keymap(&host).dispatch("luau.features", None);
-    keymap(&host).dispatch("luau.dialogs", None);
+"#,
+    );
+    host.keymap().dispatch("luau.features", None);
+    host.keymap().dispatch("luau.dialogs", None);
     host.app.advance(Duration::from_millis(1));
     let features = abi::FEATURES.join(",");
     let toasts: Vec<String> = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
@@ -2303,24 +2300,21 @@ end)
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (contract ergonomics 2.6 and 2.9 on the Luau carrier): a Luau plugin reads the host's locale, its UTC
-// offset and its measure of a text, and asks in a prompt filled with a value under a description, which reaches the
-// host as the contract's prompt.
 #[test]
 fn a_luau_plugin_reads_the_host_facts_and_fills_its_prompt() {
     let host = host();
-    let init = r#"local plugin = require("@opencode/plugin")
-return plugin.define(function(setup)
+    let registry = tasking(
+        &host,
+        r#"
     setup:command({ name = "luau.facts", slash = "luau-facts", aliases = { "lf" } }, function(host)
         local measure = host:measure("ab日")
         host:toast({ variant = "info", message = `{host:info().locale} {host:utcOffset(0)} {measure.cells} {measure.graphemes}` })
         host:dialog({ type = "prompt", title = "name", value = "luau", description = "described",
             action = plugin.command("luau.facts") })
     end)
-end)
-"#;
-    let registry = running(&host, define(&sources(init), None).unwrap().0);
-    keymap(&host).dispatch("luau.facts", None);
+"#,
+    );
+    host.keymap().dispatch("luau.facts", None);
     host.app.advance(Duration::from_millis(1));
     assert_eq!(said(&host), ["nb-NO 3600 4 3"]);
     let dialogs: Vec<abi::Dialog> = host.dialogs.borrow().iter().map(|(_, dialog)| dialog.clone()).collect();
@@ -2329,24 +2323,21 @@ end)
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (contract ergonomics 2.5 on the Luau carrier): a command whose table says `enabled = false` is disabled until
-// `host:setEnabled` enables it, once the call that asked returned; one whose function returns "pass" declines, so its
-// key goes on; one that returns anything else, or nothing, takes it.
 #[test]
 fn a_luau_command_starts_disabled_and_one_declines() {
     use opentui::keymap::RunResult;
     let host = host();
-    let init = r#"local plugin = require("@opencode/plugin")
-return plugin.define(function(setup)
+    let registry = tasking(
+        &host,
+        r#"
     setup:command({ name = "luau.gated", enabled = false }, function(host) host:toast({ variant = "info", message = "gated" }) end)
     setup:command({ name = "luau.gate" }, function(host, input) host:setEnabled("luau.gated", input == "on") end)
     setup:command({ name = "luau.pass" }, function() return "pass" end)
     setup:command({ name = "luau.other" }, function() return "consume" end)
-end)
-"#;
-    let registry = running(&host, define(&sources(init), None).unwrap().0);
+"#,
+    );
     let dispatch = |name: &str, input: Option<&str>| {
-        let result = keymap(&host).dispatch(name, input);
+        let result = host.keymap().dispatch(name, input);
         host.app.advance(Duration::from_millis(1));
         result
     };
@@ -2395,8 +2386,20 @@ fn answers(dialog: &abi::Dialog) -> String {
 
 /// Runs command `name` of `host`'s keymap with `input`, and the frame after it.
 fn run(host: &TestHost, name: &str, input: Option<&str>) {
-    keymap(host).dispatch(name, input);
+    host.keymap().dispatch(name, input);
     host.app.advance(Duration::from_millis(1));
+}
+
+fn reloadable<'a>(host: &'a Rc<TestHost>, init: &'a str) -> (Rc<Registry>, impl Fn() + 'a) {
+    let registry = Rc::new(Registry::define(Vec::new(), []));
+    let target = registry.clone();
+    let reload = move || {
+        let (definition, error) = define(&sources(init), None).unwrap();
+        target.load(&dynamic(host), definition.external("/plugins/test", error));
+    };
+    reload();
+    registry.activate(&dynamic(host));
+    (registry, reload)
 }
 
 /// A plugin `test.luau` whose setup body is `body`, active on `host`.
@@ -2406,9 +2409,6 @@ fn tasking(host: &Rc<TestHost>, body: &str) -> Rc<Registry> {
     running(host, define(&sources(&init), None).unwrap().0)
 }
 
-// Expected (await-luau): a command's handler is a task: `host:fetch` parks it and returns the reply as the reply's call
-// goes on with it, over two waits; a failed request returns `nil` and the error. Setup starts a task with
-// `plugin.spawn`, whose fetch goes on the same way.
 #[test]
 fn a_task_parks_on_a_fetch_and_goes_on_in_its_reply() {
     let host = host();
@@ -2439,8 +2439,6 @@ fn a_task_parks_on_a_fetch_and_goes_on_in_its_reply() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau): `host:confirm`, `host:prompt`, `host:select` and `host:alert` show the contract's dialog and
-// return its answer; an escape returns `nil`, and so does a dialog another dialog replaced, once its close runs.
 #[test]
 fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     let host = host();
@@ -2455,7 +2453,7 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
             say(host, "alerted")
         end)
         setup:command({ name = "pick" }, function(host)
-            say(host, "pick " .. tostring(host:select({ title = "Pick", options = { { title = "One", value = "1" } } })))
+            say(host, "pick " .. tostring(host:select({ title = "Pick", key = "rich", options = { { title = "One", value = "1" } } })))
         end)
         "#,
     );
@@ -2478,7 +2476,8 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     assert_eq!(said(&host)[2..], ["alerted"]);
     // A select replaced by a confirm: the select's close answers its task `nil`, and the confirm's answer is its own.
     run(&host, "pick", None);
-    let (_, replaced) = asked(&host);
+    let (pick, replaced) = asked(&host);
+    assert!(matches!(pick, abi::Dialog::Select(select) if select.key.is_none()));
     run(&host, "ask", None);
     let (dialog, closed) = asked(&host);
     run(&host, &replaced.0, replaced.1.as_deref());
@@ -2489,9 +2488,6 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (`docs/plugins.md`, "A task"): the guide's Luau wait runs as it is written there. A confirm that is not
-// confirmed sends nothing; one that is goes on to the fetch; a failed fetch returns `nil` and the error, which the alert
-// shows; and a reply toasts.
 #[test]
 fn the_guides_luau_wait_runs_as_written() {
     let guide = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/plugins.md")).unwrap();
@@ -2523,8 +2519,6 @@ fn the_guides_luau_wait_runs_as_written() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau): `plugin.all` runs each function as a task and returns their values in order once all ended,
-// or `nil` and the first error.
 #[test]
 fn plugin_all_waits_for_each_of_its_tasks() {
     let host = host();
@@ -2554,11 +2548,8 @@ fn plugin_all_waits_for_each_of_its_tasks() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (typed-client): `plugin.client`'s operation sends the request the Rust builder sends for the same input, and
-// returns its `data`; an object body with no field set is `{}`, not an empty array; a misspelled field and an operation
-// the client does not have are refused before anything is sent.
 #[test]
-fn a_typed_call_sends_the_rust_builders_request_and_returns_its_data() {
+fn typed_calls_check_field_names_and_return_data() {
     let host = host();
     let registry = tasking(
         &host,
@@ -2573,9 +2564,6 @@ fn a_typed_call_sends_the_rust_builders_request_and_returns_its_data() {
         "#,
     );
     run(&host, "call", None);
-    let input = abi::types::SessionInboxListInput { session_id: abi::types::SessionID("ses 1".into()) };
-    let rust = abi::call::fetch_of(&abi::client::session_inbox_list(&input)).unwrap();
-    assert_eq!(host.fetches.borrow()[0].0, rust);
     answer(&host, Ok(serde_json::json!({ "data": [{ "id": "a" }, { "id": "b" }] })));
     let (method, path, body) = {
         let fetches = host.fetches.borrow();
@@ -2591,11 +2579,6 @@ fn a_typed_call_sends_the_rust_builders_request_and_returns_its_data() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (typed-client): for every operation of the generated client, Luau's request (the carrier's, from the
-// operations table), Rust's (the typed builder's, as the SDK's `cx.call` sends it) and the generated client's (its
-// `*_call`, which is that builder) are one request: method, path, query and body, from one sample input of every field.
-// An operation a plugin's fetch cannot carry (a header, a byte body, a stream of events) is refused by both plugin
-// paths, and only the generated client sends it.
 #[test]
 fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
     let samples: serde_json::Map<String, serde_json::Value> =
@@ -2607,7 +2590,7 @@ fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
         pairs.sort_by(|a, b| a.0.cmp(&b.0));
         pairs
     };
-    let (mut equal, mut refused) = (Vec::new(), Vec::new());
+    let mut refused = Vec::new();
     for (name, input) in &samples {
         let rust = opencode_api_types::client::probe(name, input).unwrap_or_else(|| panic!("the client has no {name}"));
         let luau = client::request(name, input).map(|(fetch, _)| fetch);
@@ -2631,20 +2614,16 @@ fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
                     assert_eq!(fetch.body, generated_body, "{name}: {column}'s body is not the generated client's");
                 }
                 assert_eq!(sdk.bytes, luau.bytes, "{name}");
-                equal.push(name.as_str());
             }
             (Err(_), Err(_)) => refused.push(name.as_str()),
             (sdk, luau) => panic!("{name}: Rust {sdk:?}, Luau {luau:?}"),
         }
     }
-    assert_eq!(equal.len() + refused.len(), samples.len());
     // 169 operations; the plugin paths refuse the two streams of events, the byte upload and the three that take a
     // ticket header.
     assert_eq!((samples.len(), refused.len()), (169, 6), "refused: {refused:?}");
 }
 
-// Expected (luau-lean): the prelude is loaded lazily, and an error in one of its functions, built at its first call,
-// still names `@opencode/plugin` and the line.
 #[test]
 fn an_error_in_the_lazy_prelude_names_it_and_its_line() {
     let host = host();
@@ -2655,8 +2634,6 @@ fn an_error_in_the_lazy_prelude_names_it_and_its_line() {
     assert!(named.is_some_and(|line| line.parse::<u32>().is_ok()), "{error}");
 }
 
-// Expected (luau-lean): `host` makes a binding at its first lookup and keeps it; a name it has none for is `nil`, and so
-// are `call`, `timer`, `owner` and `setOwner`, which the prelude takes off it, after their first lookup too.
 #[test]
 fn host_makes_a_binding_at_its_first_lookup_and_keeps_it() {
     let host = host();
@@ -2674,7 +2651,6 @@ fn host_makes_a_binding_at_its_first_lookup_and_keeps_it() {
     assert!(error.contains("looked"), "{error}");
 }
 
-// Expected (await-luau): a waiting call outside a task (a render, setup) fails the call, and says where tasks are.
 #[test]
 fn a_wait_outside_a_task_is_refused() {
     let host = host();
@@ -2702,9 +2678,6 @@ fn a_wait_outside_a_task_is_refused() {
     assert!(error.contains("init.luau:3: host:fetch waits"), "{error}");
 }
 
-// Expected (await-luau): each stretch of a task between two waits runs within the CPU budget of the call that runs it:
-// two stretches of most of the budget each pass, and a task that spins after a resume is stopped in the reply's call,
-// failing the plugin with nothing of that stretch applied; an error after a resume fails it as well.
 #[test]
 fn the_cpu_budget_holds_for_each_stretch_of_a_task() {
     let host = host();
@@ -2746,8 +2719,6 @@ fn the_cpu_budget_holds_for_each_stretch_of_a_task() {
     assert!(error.contains("init.luau:") && error.contains("after the reply"), "{error}");
 }
 
-// Expected (await-luau): a task parked when its plugin reloads or is disabled is dropped with its VM: its reply and its
-// dialog's close reach nothing, and the new activation runs on its own.
 #[test]
 fn a_parked_task_is_dropped_with_its_activation() {
     let host = host();
@@ -2763,16 +2734,10 @@ return plugin.define(function(setup)
     end)
 end)
 "#;
-    let load = || {
-        let (definition, error) = define(&sources(init), None).unwrap();
-        definition.external("/plugins/test", error)
-    };
-    let registry = Rc::new(Registry::define(Vec::new(), []));
-    registry.load(&dynamic(&host), load());
-    registry.activate(&dynamic(&host));
+    let (registry, reload) = reloadable(&host, init);
     run(&host, "wait", None);
     // A reload: the new build sets up, the old one stops.
-    registry.load(&dynamic(&host), load());
+    reload();
     host.reply();
     host.app.advance(Duration::from_millis(1));
     assert!(said(&host).is_empty(), "{:?}", said(&host));
@@ -2793,8 +2758,6 @@ end)
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau): a task started by `onMount` keeps the slot input it was handed, though the host fills that
-// table again for the next mount while the task waits.
 #[test]
 fn a_parked_tasks_mount_input_is_its_own() {
     let host = host();
@@ -2820,8 +2783,6 @@ fn a_parked_tasks_mount_input_is_its_own() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau): at most 256 tasks of a plugin wait at once, and one that went on no longer counts; a waiting
-// call past them fails the plugin.
 #[test]
 fn a_plugin_parks_at_most_256_tasks() {
     let host = host();
@@ -2874,8 +2835,6 @@ impl abi::Host for Taking {
     fn copy(&self, _: &str, _: Option<abi::Action>) {}
 }
 
-// Expected (await-luau): a key handler that waits has taken its key, as a TS `run` that returns a promise has; one that
-// returns without waiting answers for itself.
 #[test]
 fn a_key_handler_that_waits_takes_its_key() {
     let init = r#"
@@ -2900,10 +2859,6 @@ fn a_key_handler_that_waits_takes_its_key() {
     assert_eq!(handler(&Taking, &key("pass")), abi::interact::Handled::Pass);
 }
 
-// Expected (await-luau, carbon `al-1`): a waiting call where the task cannot pause (inside `table.sort`'s comparator,
-// a `string.gsub` callback, a `__tostring` or a `require`), caught by the plugin's `pcall`, raises before it asks for
-// anything: no request or dialog is left behind, so a later task's confirm gets its own answer and no stray reply,
-// and the plugin goes on. Inside `xpcall`, which Luau lets a coroutine yield through, the wait is a real one.
 #[test]
 fn a_wait_where_a_task_cannot_pause_raises_and_leaves_nothing_behind() {
     let init = r#"
@@ -2976,8 +2931,6 @@ fn a_wait_where_a_task_cannot_pause_raises_and_leaves_nothing_behind() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (await-luau, carbon `al-1`): a task that yields by itself (`coroutine.yield`, not a waiting call) fails the
-// plugin with why, and is not taken for a parked task.
 #[test]
 fn a_task_that_yields_by_itself_fails() {
     let host = host();
@@ -2987,46 +2940,6 @@ fn a_task_that_yields_by_itself_fails() {
     assert!(error.contains("coroutine.yield in a task"), "{error}");
 }
 
-// Expected (await-luau, carbon `al-2`): each dialog answers through a command of its own generation, so an answer that
-// runs after the next dialog showed reaches the task that asked; and a select loses its `key`, which would keep it open
-// on a pick.
-#[test]
-fn a_late_answer_reaches_its_own_dialog() {
-    let host = host();
-    let registry = tasking(
-        &host,
-        r#"
-        local function say(host, text) host:toast({ variant = "info", message = text }) end
-        setup:command({ name = "first" }, function(host)
-            say(host, "c1=" .. tostring(host:confirm({ title = "One", message = "first" })))
-        end)
-        setup:command({ name = "second" }, function(host)
-            say(host, "p2=" .. tostring(host:prompt({ title = "Two" })))
-        end)
-        setup:command({ name = "keyed" }, function(host)
-            host:select({ title = "Pick", key = "rich", options = { { title = "One", value = "1" } } })
-        end)
-        "#,
-    );
-    run(&host, "first", None);
-    let (first, first_closed) = asked(&host);
-    run(&host, "second", None);
-    let (_, second_closed) = asked(&host);
-    // Dialog one's answer and close run after dialog two showed.
-    run(&host, &answers(&first), Some("true"));
-    run(&host, &first_closed.0, first_closed.1.as_deref());
-    assert_eq!(said(&host), ["c1=true"]);
-    run(&host, &second_closed.0, second_closed.1.as_deref());
-    assert_eq!(said(&host), ["c1=true", "p2=nil"]);
-    run(&host, "keyed", None);
-    let (dialog, _) = asked(&host);
-    let abi::Dialog::Select(select) = dialog else { panic!("{dialog:?}") };
-    assert_eq!(select.key, None);
-    assert_eq!(failure(&registry, "test.luau"), None);
-}
-
-// Expected (big-boi acf-1): an answer that runs after eight more dialogs replaced its own reaches its own dialog's
-// task, not the ninth's: a dialog holds its answer command until its answer or close runs, and no other takes it.
 #[test]
 fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
     let host = host();
@@ -3049,17 +2962,20 @@ fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
         other => panic!("{other:?}"),
     };
     let (first, ninth) = (dialog(0), dialog(8));
+    let first_closed = match &host.dialogs.borrow()[0].1 {
+        abi::Dialog::Dismissable { dismissed, .. } => dismissed.clone(),
+        other => panic!("{other:?}"),
+    };
     assert_ne!(first, ninth, "the ninth prompt took the first one's answer command");
     run(&host, &first, Some("first"));
+    let abi::Action::Command { name, input } = first_closed;
+    run(&host, &name, input.as_deref());
     assert_eq!(said(&host), ["1 first"]);
     run(&host, &ninth, Some("ninth"));
     assert_eq!(said(&host), ["1 first", "9 ninth"]);
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (timers, contract-ergonomics 2.3): `plugin.sleep` parks its task on the host's clock and returns `true` once
-// the time passed, at least 20 ms for a shorter one; `plugin.every` ticks a period apart, from setup, until its function
-// returns `false`, with no thread.
 #[test]
 fn plugin_sleep_waits_on_the_hosts_clock_and_every_ticks_until_false() {
     let host = host();
@@ -3093,9 +3009,6 @@ fn plugin_sleep_waits_on_the_hosts_clock_and_every_ticks_until_false() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
-// Expected (timers): at most 32 timers of a plugin wait; the 33rd sleep returns `nil` and why, and once the 32 fired the
-// plugin has its places again. A reload or a disable ends the timers that wait: the old activation's sleeps never
-// return.
 #[test]
 fn a_plugin_waits_on_at_most_32_timers_which_end_with_it() {
     let host = host();
@@ -3117,13 +3030,7 @@ return plugin.define(function(setup)
     end)
 end)
 "#;
-    let load = || {
-        let (definition, error) = define(&sources(init), None).unwrap();
-        definition.external("/plugins/test", error)
-    };
-    let registry = Rc::new(Registry::define(Vec::new(), []));
-    registry.load(&dynamic(&host), load());
-    registry.activate(&dynamic(&host));
+    let (registry, reload) = reloadable(&host, init);
     run(&host, "many", None);
     assert_eq!(said(&host), ["more than 32 timers of the plugin wait"]);
     host.app.advance(Duration::from_millis(1000));
@@ -3131,7 +3038,7 @@ end)
     run(&host, "many", None);
     assert_eq!(said(&host)[2..], ["more than 32 timers of the plugin wait"], "the fired timers kept their places");
     // A reload: the new build has its own 32 places, and the old timers wake nothing.
-    registry.load(&dynamic(&host), load());
+    reload();
     run(&host, "many", None);
     assert_eq!(said(&host)[3..], ["more than 32 timers of the plugin wait"]);
     host.app.advance(Duration::from_millis(1000));
@@ -3142,8 +3049,6 @@ end)
     assert_eq!(said(&host).len(), 6, "a disabled plugin's sleeps returned: {:?}", said(&host));
 }
 
-// Expected (carbon tm2-3): `plugin.sleep` waits the time asked for, a part of a millisecond kept (20.9 ms is not over at
-// 20 ms), and `math.huge` waits for ever rather than 20 ms.
 #[test]
 fn plugin_sleep_keeps_a_part_of_a_millisecond_and_waits_for_ever_on_math_huge() {
     let host = host();
