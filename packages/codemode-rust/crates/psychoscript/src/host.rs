@@ -1652,9 +1652,7 @@ fn module(vm: &mut Vm, specifier: &str) -> Res {
         },
     };
     let Some(found) = found else {
-        let message = format!(
-            "Cannot import \"{specifier}\": it isn't available in Code Mode, which can't load packages or files. Use the provided globals, or call tools through `tools`."
-        );
+        let message = cannot_import(specifier);
         let proto = vm.realm.error_proto;
         return Err(vm.make_error(proto, &message));
     };
@@ -1680,6 +1678,71 @@ fn alias(vm: &mut Vm, name: &str) -> Result<Option<Value>, Value> {
         "buffer" => pick(vm, &["Buffer", "atob", "btoa"]),
         _ => None,
     })
+}
+
+/// Why `specifier` can't be loaded, split so the error names the kind of import that failed.
+fn cannot_import(specifier: &str) -> String {
+    if specifier.starts_with('.') || specifier.starts_with('/') || specifier.starts_with("file:") {
+        return format!("Cannot import \"{specifier}\": local files can't be imported.");
+    }
+    if is_runtime_module(specifier) {
+        return format!("Cannot import \"{specifier}\": this runtime doesn't provide it.");
+    }
+    format!("Cannot import \"{specifier}\": packages can't be installed here.")
+}
+
+/// Node's core modules, fixed so every host gives the same answer, as the reference fixes them.
+const CORE_MODULES: &[&str] = &[
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "console",
+    "constants",
+    "crypto",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "domain",
+    "events",
+    "fs",
+    "http",
+    "http2",
+    "https",
+    "inspector",
+    "module",
+    "net",
+    "os",
+    "path",
+    "perf_hooks",
+    "process",
+    "punycode",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "string_decoder",
+    "sys",
+    "timers",
+    "tls",
+    "trace_events",
+    "tty",
+    "url",
+    "util",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+];
+
+/// Whether a specifier names a module a runtime provides, as Node's and Bun's own modules are, rather than a package.
+fn is_runtime_module(specifier: &str) -> bool {
+    specifier.starts_with("node:")
+        || specifier == "bun"
+        || specifier.starts_with("bun:")
+        || CORE_MODULES.contains(&specifier.split('/').next().unwrap_or_default())
 }
 
 fn pick(vm: &mut Vm, names: &[&str]) -> Option<Value> {

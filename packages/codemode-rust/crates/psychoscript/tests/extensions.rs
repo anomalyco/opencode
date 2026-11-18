@@ -386,9 +386,10 @@ fn import_require_and_dynamic_import_load_globals_and_fire_the_hooks() {
 #[test]
 fn a_module_that_is_not_provided_or_a_missing_export_fails_at_the_import() {
     let rt = Runtime::new().extension(files());
-    assert!(failure(&rt, r#"import yaml from "yaml""#).starts_with(
-        r#"Error: Cannot import "yaml": it isn't available in Code Mode, which can't load packages or files."#
-    ));
+    assert!(
+        failure(&rt, r#"import yaml from "yaml""#)
+            .starts_with(r#"Error: Cannot import "yaml": packages can't be installed here."#)
+    );
     assert!(
         value(
             &rt,
@@ -403,7 +404,8 @@ fn a_module_that_is_not_provided_or_a_missing_export_fails_at_the_import() {
             .starts_with(r#"SyntaxError: "fs" has no export named "writeFile"."#)
     );
     assert!(
-        failure(&Runtime::new(), r#"require("fs")"#).starts_with(r#"Error: Cannot import "fs""#)
+        failure(&Runtime::new(), r#"require("fs")"#)
+            .starts_with(r#"Error: Cannot import "fs": this runtime doesn't provide it."#)
     );
 }
 
