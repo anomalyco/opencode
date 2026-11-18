@@ -455,7 +455,14 @@ impl Guest {
     }
 
     /// The handler `seq` returned: its effects apply, or it threw, which fails the plugin with none.
-    pub(crate) fn done(self: &Rc<Self>, seq: u64, call: &Call, effects: Vec<HostRequest>, error: Option<String>) {
+    pub(crate) fn done(
+        self: &Rc<Self>,
+        seq: u64,
+        call: &Call,
+        effects: Vec<HostRequest>,
+        mounts: Vec<Option<v2::MountId>>,
+        error: Option<String>,
+    ) {
         if self.ended() {
             return;
         }
@@ -463,36 +470,69 @@ impl Guest {
             self.fail(error);
             return;
         }
-        let owner = call.owner.as_ref().and_then(Weak::upgrade);
-        let key = format!("c{seq}");
-        let apply = || match &call.mount {
-            Some(alive) => self.owners.owned_by(alive, || self.effects(&key, effects, call.user, call.export)),
-            None => self.effects(&key, effects, call.user, call.export),
-        };
-        match owner {
-            Some(owner) => self.owners.as_owner(&owner, apply),
-            None => apply(),
+        if effects.is_empty() {
+            return;
         }
+        if effects.len() > EFFECTS {
+            self.fail(format!("{} asked for {} effects at once, over {EFFECTS}", call.export, effects.len()));
+            return;
+        }
+        // In the call's order, each run as the mount it is of (carbon c2b-1): `dialog.clear()` then a field's focus.
+        let mut runs: Vec<(Option<v2::MountId>, Vec<HostRequest>)> = Vec::new();
+        for (effect, mount) in effects.into_iter().zip(mounts.into_iter().chain(std::iter::repeat(None))) {
+            match runs.last_mut() {
+                Some((of, run)) if *of == mount => run.push(effect),
+                _ => runs.push((mount, vec![effect])),
+            }
+        }
+        let owner = call.owner.as_ref().and_then(Weak::upgrade);
+        let own = |run: Vec<HostRequest>| {
+            let apply = || match &call.mount {
+                Some(alive) => self.owners.owned_by(alive, || self.applied(run, call.user, call.export)),
+                None => self.applied(run, call.user, call.export),
+            };
+            match &owner {
+                Some(owner) => self.owners.as_owner(owner, apply),
+                None => apply(),
+            }
+        };
+        let results: Vec<serde_json::Value> = runs
+            .into_iter()
+            .flat_map(|(mount, run)| match mount {
+                Some(mount) => self.applied_as(&mount, run, call.export),
+                None => own(run),
+            })
+            .collect();
+        self.answered(&format!("c{seq}"), results);
     }
 
     /// Applies `effects` the JS host sent outside a call as `mount`'s, as that mount's call would have asked for them: to
     /// it, or, once it closed, nowhere, answering each with nothing (the ownership rule of 2.8).
     pub(crate) fn mount_effects(self: &Rc<Self>, key: &str, mount: &v2::MountId, effects: Vec<HostRequest>) {
-        if self.ended() {
+        if effects.is_empty() || self.ended() {
             return;
         }
+        let results = self.applied_as(mount, effects, "update");
+        self.answered(key, results);
+    }
+
+    /// [`Guest::applied`] as `mount`'s: to it, or nowhere once it closed, each answered with nothing.
+    fn applied_as(
+        self: &Rc<Self>,
+        mount: &v2::MountId,
+        effects: Vec<HostRequest>,
+        export: &str,
+    ) -> Vec<serde_json::Value> {
         let owner = self.activation.owners().into_iter().find(|owner| owner.id() == Some(mount));
         let Some(owner) = owner else {
             log::debug!("plugin {}: effects of mount {mount:?}, which closed, apply nowhere", self.id());
-            let (activation, results) = (self.js.get(), vec![serde_json::Value::Null; effects.len()]);
-            self.send(Down::Answered { id: self.id().to_owned(), activation, key: key.to_owned(), results }, None);
-            return;
+            return vec![serde_json::Value::Null; effects.len()];
         };
-        let apply = || self.effects(key, effects, false, "update");
+        let apply = || self.applied(effects, false, export);
         self.owners.as_owner(&owner, || match owner.mounted() {
             Some(alive) => self.owners.owned_by(&alive, apply),
             None => apply(),
-        });
+        })
     }
 
     /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
@@ -506,6 +546,13 @@ impl Guest {
             self.fail(format!("{export} asked for {} effects at once, over {EFFECTS}", effects.len()));
             return;
         }
+        let results = self.applied(effects, user, export);
+        self.answered(key, results);
+    }
+
+    /// Queues `effects` on the effect queue, as a call of kind `export` (for the user's input when `user`) would have
+    /// asked for them, and what each answered.
+    fn applied(self: &Rc<Self>, effects: Vec<HostRequest>, user: bool, export: &str) -> Vec<serde_json::Value> {
         let mut ctx = Ctx::new(self.host.clone(), self.id(), self.keys.borrow().clone());
         // Setup holds nothing of the input, as in process.
         ctx.owners = (export != "setup").then(|| self.owners.clone());
@@ -534,6 +581,11 @@ impl Guest {
                 guest.refresh();
             }
         });
+        results
+    }
+
+    /// Tells the JS host what the effects it sent under `key` answered.
+    fn answered(&self, key: &str, results: Vec<serde_json::Value>) {
         let activation = self.js.get();
         self.send(Down::Answered { id: self.id().to_owned(), activation, key: key.to_owned(), results }, None);
     }

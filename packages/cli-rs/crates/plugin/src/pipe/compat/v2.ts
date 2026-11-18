@@ -556,8 +556,9 @@ export function context(base: Base, carrier: Carrier) {
       const dismissed = { type: "command", name: DISMISS, input: String(asked) }
       const mine = asked
       const send = () => {
-        // Another dialog came first: this one never shows.
-        if (asked !== mine) return
+        // Another dialog came first, or a `clear()` or a `show()` settled this one before it was built: it never shows
+        // (carbon c2b-3).
+        if (asked !== mine || answering !== resolve) return
         sent = mine
         const asking = { ...(typeof dialog === "function" ? dialog() : dialog), action: { type: "command", name: ANSWER } }
         void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog: asking, dismissed } })
@@ -714,6 +715,14 @@ export function context(base: Base, carrier: Carrier) {
       node.focusChanged(false)
       const mount = FOCUSABLE.has(node.tag) ? mountOf(node) : undefined
       if (mount) void carrier.effect({ type: "blur" }, mount)
+    },
+    // A focused node the plugin removed has the focus no more, as OpenTUI's destroyed renderable has not: a target
+    // layer no longer holds for it, and it emits `blurred`. The host's field went with its tree.
+    detached(node) {
+      if (!focusedNode || !within(node, focusedNode)) return
+      const was = focusedNode
+      focusedNode = undefined
+      was.focusChanged(false)
     },
   }
   // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its

@@ -301,6 +301,8 @@ interface Plugin {
   // What setup watches, told after it was answered, as the host knows the plugin from then on.
   setupWatches: Json[]
   callEffects?: Request[]
+  // The mount each of `callEffects` is of, where it is another mount's than the call's own (carbon c2b-1).
+  callMounts?: Array<Json | null>
   // The mount the call that runs is of, when it is a surface's input: an effect of that mount is the call's.
   callMount?: Json
   // Who waits for the answer of each effect of the call or setup that runs.
@@ -387,8 +389,10 @@ function thrown(error: unknown) {
 
 // Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer. A
 // call ends at its handler's first `await`: what it asks for after that is a batch's, the activation's, not the mount's.
-// A request of `mount` (the layer's focus of a field in that mount's tree, contract 2.x, step B) is that mount's: in
-// its own call, the call's; anywhere else, a batch that names the mount, which the host applies to it or nowhere.
+// A request of `mount` (the layer's focus of a field in that mount's tree, contract 2.x, step B) is that mount's: in a
+// call, one of the call's effects that names the mount unless it is the call's own, so it keeps its place among them
+// and goes with them if the call throws (carbon c2b-1); outside one, a batch that names the mount. The host applies it
+// to the mount, or nowhere once it closed.
 function effect(plugin: Plugin, request: Request, mount?: Json): Promise<Json> {
   return new Promise((resolve) => {
     if (plugin.failed) return resolve(undefined)
@@ -405,8 +409,9 @@ function effect(plugin: Plugin, request: Request, mount?: Json): Promise<Json> {
       plugin.resolvers.push(resolve)
       return
     }
-    if (plugin.callEffects && (!mount || sameMount(plugin.callMount, mount))) {
+    if (plugin.callEffects) {
       plugin.callEffects.push(request)
+      plugin.callMounts?.push(mount && !sameMount(plugin.callMount, mount) ? mount : null)
       plugin.resolvers.push(resolve)
       return
     }
@@ -1016,6 +1021,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
   if (!plugin.active || plugin.failed)
     return send({ type: "done", seq, ...(request.type === "command" ? { declined: true } : {}) })
   plugin.callEffects = []
+  plugin.callMounts = []
   plugin.callMount = request.type === "input" && request.to?.type === "surface" ? request.to.mount : undefined
   plugin.resolvers = []
   let error: string | undefined
@@ -1045,8 +1051,10 @@ function call(seq: number, plugin: Plugin, request: Json) {
     error = `${call} threw: ${thrown(caught)}`
   }
   const effects = plugin.callEffects
+  const mounts = plugin.callMounts ?? []
   const resolvers = plugin.resolvers
   plugin.callEffects = undefined
+  plugin.callMounts = undefined
   plugin.callMount = undefined
   plugin.resolvers = []
   if (error) {
@@ -1059,7 +1067,8 @@ function call(seq: number, plugin: Plugin, request: Json) {
   // command that returned `false` declined (TS's "return false to continue"): the host routes the key that ran it on.
   viewAll(plugin)
   const declined = request.type === "command" && result === false
-  sendFor(plugin, { type: "done", seq, effects, ...(declined ? { declined: true } : {}) }, seq)
+  const named = mounts.some((mount) => mount !== null) ? { mounts } : {}
+  sendFor(plugin, { type: "done", seq, effects, ...named, ...(declined ? { declined: true } : {}) }, seq)
 }
 
 const work: Json[] = []

@@ -416,6 +416,62 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
 })
 
+// Carbon c2b-3: an alert, a confirm or a select is built a microtask after it is asked (so a `dialog.set` right after
+// sizes it); one that a `dialog.clear()` or a `dialog.show()` settled before then answers nothing and never shows.
+test("a dialog cleared or replaced before it is built never shows", async () => {
+  const fake = host()
+  const ctx = plugin("t.stale", fake)
+  const shown = () => fake.effects.filter((effect: Json) => effect.type === "dialog").map((effect: Json) => JSON.stringify(effect))
+  const answers: unknown[] = []
+  void ctx.ui.dialog.alert({ title: "StaleAlert", message: "m" }).then((value: unknown) => answers.push(value))
+  ctx.ui.dialog.clear()
+  void ctx.ui.dialog.confirm({ title: "StaleConfirm", message: "m" }).then((value: unknown) => answers.push(value))
+  ctx.ui.dialog.show(() => h("text", { children: "LiveShow" }))
+  await turn()
+  await turn()
+  expect(shown().filter((dialog: string) => dialog.includes("Stale"))).toEqual([])
+  expect(shown().some((dialog: string) => dialog.includes("LiveShow"))).toBe(true)
+  expect(answers).toEqual([undefined, undefined])
+})
+
+// Carbon c2b-2: a focused field the plugin removes has the focus no more: it emits `blurred`, and the layer records no
+// focus in it, so a key layer that targets it no longer holds. A field moved to another place keeps its focus.
+test("a focused field the plugin removes has the focus no more", async () => {
+  const fake = host()
+  const ctx = plugin("t.removed", fake)
+  const refs: Json = {}
+  const [shown, setShown] = solid.createSignal(true)
+  const [first, setFirst] = solid.createSignal(true)
+  const ran: string[] = []
+  ctx.ui.router.register({ name: "r", render: () => {
+    ctx.keymap.layer(() => ({ target: () => refs.q, commands: [{ id: "t.removed.run", run: () => void ran.push("ran") }] }))
+    return h("box", {
+      get children() {
+        const field = h("input", { id: "q", ref: (el: Json) => (refs.q = el) })
+        const other = h("text", { children: "other" })
+        return () => (!shown() ? [other] : first() ? [field, other] : [other, field])
+      },
+    })
+  } })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  route.view({ mount: { surface: "r", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  const heard: string[] = []
+  refs.q.on("blurred", () => heard.push("blurred"))
+  refs.q.focus()
+  await turn()
+  const run = () => fake.commands.get("t.removed.run")!()
+  run()
+  setFirst(false)
+  await turn()
+  run()
+  expect([refs.q.focused, ran.length, heard]).toEqual([true, 2, []])
+  const removed = refs.q
+  setShown(false)
+  await turn()
+  run()
+  expect([removed.focused, ran.length, heard]).toEqual([false, 2, ["blurred"]])
+})
+
 // CT-11: the renderer's key handler hears each key through one global listener layer, registered with the first
 // `keypress` listener (opencode-navigator's `ctrl+,`), and `useKeyboard` listens on it while its component lives. A
 // route's field hears its edits, its submit and, while the plugin focused it, each key as `onKeyDown`.
