@@ -16,7 +16,7 @@ import { join, resolve } from "node:path"
 const override = process.argv[2] ?? process.env.CODEMODE_REF
 const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
 const { Effect, Fiber, Schema } = await import(Bun.resolveSync("effect", join(pkg, "src")))
-const { CodeMode, Extension, Tool } = await import(join(pkg, "src/index.ts"))
+const { CodeMode, Extension, Tool, toolError } = await import(join(pkg, "src/index.ts"))
 
 type Spec = {
   chunks?: Array<string | Array<number>>
@@ -268,9 +268,34 @@ const echo = (log: Array<unknown>) =>
       }),
   })
 
+// `t.fail` always fails as it runs; `t.typed` takes `{ id: number }`.
+const fail = (log: Array<unknown>) =>
+  Tool.make({
+    description: "Always fails",
+    input: Schema.Unknown,
+    output: Schema.Unknown,
+    execute: (input: unknown) =>
+      Effect.suspend(() => {
+        log.push(["fail", input])
+        return Effect.fail(toolError("boom"))
+      }),
+  })
+const typed = (log: Array<unknown>) =>
+  Tool.make({
+    description: "Takes an id",
+    input: Schema.Struct({ id: Schema.Number }),
+    output: Schema.Number,
+    execute: ({ id }: { id: number }) =>
+      Effect.sync(() => {
+        log.push(["typed", id])
+        return id
+      }),
+  })
+const tools = (log: Array<unknown>) => ({ t: { echo: echo(log), fail: fail(log), typed: typed(log) } })
+
 const record = async (code: string) => {
   const log: Array<unknown> = []
-  const runtime = CodeMode.make({ tools: { t: { echo: echo(log) } }, extensions: [web(log)] })
+  const runtime = CodeMode.make({ tools: tools(log), extensions: [web(log)] })
   const result = await Effect.runPromise(runtime.execute(code))
   return {
     code,
@@ -540,6 +565,21 @@ programs.push(
   after("const t = { toJSON: () => [1, 2] }", "for (let j = 0; j < 37; j++) await tools.t.echo({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.echo(Promise.resolve(j)).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) search({ query: Promise.resolve('echo'), limit: 1 })"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.echo(1, 2).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.fail({}).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: 'x' }).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then((x) => x)"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.reject(j).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).then((x) => x)"),
+  after("", "for (let j = 0; j < 37; j++) await tools.t.nope({}).catch(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then(String)"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then(async (x) => x)"),
+  after("", "for (let j = 0; j < 37; j++) await new Promise((done) => done(j))"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.resolve({ then(done) { done(j) } })"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).finally(() => 0)"),
+  after("", "for (let j = 0; j < 37; j++) await Promise.try(() => j)"),
+  after("", "for (let j = 0; j < 37; j++) { const { promise, resolve } = Promise.withResolvers(); Promise.resolve(j).then(resolve); await promise }"),
   after("let o = 1; for (let i = 0; i < 101; i++) o = { o }", "for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(1), o }).catch(() => 0)"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { tools.t.echo({ t, a: [1, 2, { c: 3 }] }); see(j) }"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { search({ query: t }); see(j) }"),
@@ -588,7 +628,7 @@ const suspend = async (code: string) => {
   })
   // Without `tools.wait`, the suspend comes once the response has arrived.
   const runtime = CodeMode.make({
-    tools: { wait, t: { echo: echo(log) } },
+    tools: { wait, ...tools(log) },
     extensions: [web(log, code.includes("tools.wait") ? undefined : started)],
   })
   const program = runtime.program(code)

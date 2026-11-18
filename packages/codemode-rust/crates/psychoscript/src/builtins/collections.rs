@@ -301,7 +301,7 @@ fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     }
     let p = vm.new_promise();
     let (res, rej) = vm.create_resolvers(p);
-    if let Err(e) = vm.call(&executor, Value::Undef, &[res, rej]) {
+    if let Err(e) = vm.call_settling(&executor, Value::Undef, &[res, rej]) {
         if vm.fatal.is_some() {
             return Err(e);
         }
@@ -461,7 +461,16 @@ fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     }
     let p = vm.new_promise();
     let rest = if args.is_empty() { &[][..] } else { &args[1..] };
-    match vm.call(&arg(args, 0), Value::Undef, rest) {
+    // The reference's native returns before the callback runs, which a call from bytecode spent its fifty on.
+    let counted = vm.host.meter.counted;
+    if counted {
+        fuel::native(vm);
+    }
+    let r = vm.call_settling(&arg(args, 0), Value::Undef, rest);
+    if counted {
+        vm.bytecode_builtin();
+    }
+    match r {
         Ok(v) => vm.resolve_promise(p, v),
         Err(e) => {
             if vm.fatal.is_some() {

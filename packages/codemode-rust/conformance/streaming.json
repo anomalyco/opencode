@@ -17772,6 +17772,765 @@
       ]
     },
     {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.echo(1, 2).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.fail({}).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "fail",
+          {}
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.typed({ id: 'x' }).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "typed",
+          0
+        ],
+        [
+          "typed",
+          1
+        ],
+        [
+          "typed",
+          2
+        ],
+        [
+          "typed",
+          3
+        ],
+        [
+          "typed",
+          4
+        ],
+        [
+          "typed",
+          5
+        ],
+        [
+          "typed",
+          6
+        ],
+        [
+          "typed",
+          7
+        ],
+        [
+          "typed",
+          8
+        ],
+        [
+          "typed",
+          9
+        ],
+        [
+          "typed",
+          10
+        ],
+        [
+          "typed",
+          11
+        ],
+        [
+          "typed",
+          12
+        ],
+        [
+          "typed",
+          13
+        ],
+        [
+          "typed",
+          14
+        ],
+        [
+          "typed",
+          15
+        ],
+        [
+          "typed",
+          16
+        ],
+        [
+          "typed",
+          17
+        ],
+        [
+          "typed",
+          18
+        ],
+        [
+          "typed",
+          19
+        ],
+        [
+          "typed",
+          20
+        ],
+        [
+          "typed",
+          21
+        ],
+        [
+          "typed",
+          22
+        ],
+        [
+          "typed",
+          23
+        ],
+        [
+          "typed",
+          24
+        ],
+        [
+          "typed",
+          25
+        ],
+        [
+          "typed",
+          26
+        ],
+        [
+          "typed",
+          27
+        ],
+        [
+          "typed",
+          28
+        ],
+        [
+          "typed",
+          29
+        ],
+        [
+          "typed",
+          30
+        ],
+        [
+          "typed",
+          31
+        ],
+        [
+          "typed",
+          32
+        ],
+        [
+          "typed",
+          33
+        ],
+        [
+          "typed",
+          34
+        ],
+        [
+          "typed",
+          35
+        ],
+        [
+          "typed",
+          36
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.resolve(j).then((x) => x); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2994
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.reject(j).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2994
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).then((x) => x); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "typed",
+          0
+        ],
+        [
+          "typed",
+          1
+        ],
+        [
+          "typed",
+          2
+        ],
+        [
+          "typed",
+          3
+        ],
+        [
+          "typed",
+          4
+        ],
+        [
+          "typed",
+          5
+        ],
+        [
+          "typed",
+          6
+        ],
+        [
+          "typed",
+          7
+        ],
+        [
+          "typed",
+          8
+        ],
+        [
+          "typed",
+          9
+        ],
+        [
+          "typed",
+          10
+        ],
+        [
+          "typed",
+          11
+        ],
+        [
+          "typed",
+          12
+        ],
+        [
+          "typed",
+          13
+        ],
+        [
+          "typed",
+          14
+        ],
+        [
+          "typed",
+          15
+        ],
+        [
+          "typed",
+          16
+        ],
+        [
+          "typed",
+          17
+        ],
+        [
+          "typed",
+          18
+        ],
+        [
+          "typed",
+          19
+        ],
+        [
+          "typed",
+          20
+        ],
+        [
+          "typed",
+          21
+        ],
+        [
+          "typed",
+          22
+        ],
+        [
+          "typed",
+          23
+        ],
+        [
+          "typed",
+          24
+        ],
+        [
+          "typed",
+          25
+        ],
+        [
+          "typed",
+          26
+        ],
+        [
+          "typed",
+          27
+        ],
+        [
+          "typed",
+          28
+        ],
+        [
+          "typed",
+          29
+        ],
+        [
+          "typed",
+          30
+        ],
+        [
+          "typed",
+          31
+        ],
+        [
+          "typed",
+          32
+        ],
+        [
+          "typed",
+          33
+        ],
+        [
+          "typed",
+          34
+        ],
+        [
+          "typed",
+          35
+        ],
+        [
+          "typed",
+          36
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.nope({}).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3919
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.resolve(j).then(String); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2069
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.resolve(j).then(async (x) => x); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2938
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await new Promise((done) => done(j)); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3937
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.resolve({ then(done) { done(j) } }); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2994
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.resolve(j).finally(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2957
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await Promise.try(() => j); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 3937
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
+      "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) { const { promise, resolve } = Promise.withResolvers(); Promise.resolve(j).then(resolve); await promise }; const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
+      "outcome": {
+        "ok": true,
+        "value": 2069
+      },
+      "log": [
+        [
+          "pull",
+          0
+        ],
+        [
+          "pull",
+          1
+        ],
+        [
+          "pull",
+          2
+        ]
+      ]
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); let o = 1; for (let i = 0; i < 101; i++) o = { o }\n   for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(1), o }).catch(() => 0); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
@@ -17938,138 +18697,138 @@
           }
         ],
         [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
           "pull",
           2
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
         ],
         [
           "echo",

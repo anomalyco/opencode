@@ -949,6 +949,37 @@ impl<'rt> Vm<'rt> {
         }
     }
 
+    /// Calls a promise reaction's, a `finally` cleanup's, a thenable job's `then`, an executor's or a `Promise.try`
+    /// callback as the reference enters it (`enterSettlingCall`): a plain function's frame directly, for nothing, and
+    /// a promise's resolve or reject function for nothing; anything else through `$vmSettleCall`, as bytecode calls
+    /// it: an async or generator function one unit, a native fifty.
+    pub(crate) fn call_settling(&mut self, f: &Value, this: Value, args: &[Value]) -> Res {
+        let Value::Obj(id) = *f else {
+            return self.call(f, this, args);
+        };
+        match &self.heap[id as usize].kind {
+            Kind::Bound(b) => {
+                let (target, bthis, bargs) = (b.0, b.1, b.2.clone());
+                let mut all = bargs;
+                all.extend_from_slice(args);
+                self.call_settling(&target, bthis, &all)
+            }
+            Kind::Closure(c) if !c.proto.is_async && !c.proto.is_generator => {
+                // Its frame's unit is not spent: credit the budget the call takes it from.
+                self.budget += 1;
+                self.call(f, this, args)
+            }
+            Kind::Native {
+                data: Value::Obj(state),
+                ..
+            } if matches!(self.heap[*state as usize].kind, Kind::Resolvers { .. }) => {
+                self.call(f, this, args)
+            }
+            Kind::Native { .. } => self.call_counted(f, this, args),
+            _ => self.call(f, this, args),
+        }
+    }
+
     /// Pushes a frame for the closure at `stack[fpos]`, with receiver and `argc` arguments above it.
     fn push_closure_frame(
         &mut self,

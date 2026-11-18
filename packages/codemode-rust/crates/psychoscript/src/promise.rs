@@ -161,7 +161,7 @@ impl<'rt> Vm<'rt> {
                     return Ok(());
                 }
                 let (res, rej) = self.create_resolvers(promise);
-                if let Err(e) = self.call(&then, thenable, &[res, rej]) {
+                if let Err(e) = self.call_settling(&then, thenable, &[res, rej]) {
                     if self.fatal.is_some() {
                         return Err(e);
                     }
@@ -193,7 +193,7 @@ impl<'rt> Vm<'rt> {
                     Err(e) => (on_rej, e, false),
                 };
                 if self.is_callable(&handler) {
-                    match self.call(&handler, Value::Undef, &[arg]) {
+                    match self.call_settling(&handler, Value::Undef, &[arg]) {
                         Ok(r) => self.resolve_promise(derived, r),
                         Err(e) => {
                             if self.fatal.is_some() {
@@ -224,10 +224,14 @@ impl<'rt> Vm<'rt> {
                 Ok(())
             }
             Reaction::Finally { cleanup, derived } => {
-                match self.call(&cleanup, Value::Undef, &[]) {
+                match self.call_settling(&cleanup, Value::Undef, &[]) {
                     Ok(r) => {
+                        // As the spec chains `then(valueThunk)` onto the cleanup's promise, the reference passes its
+                        // outcome through one more promise, a job later.
                         let p = self.promise_resolve(r);
-                        self.perform_then(p, Reaction::Restore { derived, outcome });
+                        let cleaned = self.new_promise();
+                        self.perform_then(p, Reaction::Resolve(cleaned));
+                        self.perform_then(cleaned, Reaction::Restore { derived, outcome });
                     }
                     Err(e) => {
                         if self.fatal.is_some() {

@@ -155,6 +155,32 @@ fn echo(log: &Log) -> Tool {
     .output(Schema::validated(json!({})))
 }
 
+/// `t.fail` of `conformance/streaming.ts`: fails as it runs.
+fn fail(log: &Log) -> Tool {
+    let log = log.clone();
+    Tool::new_async("Always fails", move |input: Json, _| {
+        log.lock().unwrap().push(json!(["fail", input]));
+        async move { Err("boom".into()) }
+    })
+    .output(Schema::validated(json!({})))
+}
+
+/// `t.typed` of `conformance/streaming.ts`: takes `{ id: number }`.
+fn typed(log: &Log) -> Tool {
+    let log = log.clone();
+    Tool::new_async("Takes an id", move |input: Json, _| {
+        log.lock().unwrap().push(json!(["typed", input["id"]]));
+        async move { Ok(input["id"].clone()) }
+    })
+    .input(Schema::validated(json!({
+        "type": "object",
+        "properties": { "id": { "type": "number" } },
+        "required": ["id"],
+        "additionalProperties": false
+    })))
+    .output(Schema::validated(json!({ "type": "number" })))
+}
+
 /// The host's side of the log the reference recorded: what the program cancelled with. How often the host runtime
 /// pulls ahead is its own buffering.
 fn cancels(log: &Json) -> Json {
@@ -186,6 +212,8 @@ fn streaming_responses_match_the_reference() {
         let log: Log = Arc::default();
         let rt = Runtime::new()
             .with_tool("t.echo", echo(&log))
+            .with_tool("t.fail", fail(&log))
+            .with_tool("t.typed", typed(&log))
             .extension(web(&log, None));
         let code = program["code"].as_str().unwrap();
         let o = rt.execute(code, &serde_json::Map::new());
@@ -274,6 +302,8 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
         let rt = Runtime::new()
             .with_tool("wait", waiting.tool())
             .with_tool("t.echo", echo(&log))
+            .with_tool("t.fail", fail(&log))
+            .with_tool("t.typed", typed(&log))
             .extension(web(&log, busy.then(|| waiting.clone())));
         let (run, suspend) = background(rt.program(code, &Default::default(), None), |s| {
             waiting.entered();
