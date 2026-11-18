@@ -1677,6 +1677,7 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::new("dlg.outside").scope(abi::Scope::Route("pg".into())), |host, _| {
         host.focus("outside");
     });
+    setup.command(abi::Command::new("dlg.blur"), |host, _| host.blur());
     let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]);
     setup.surface(v2::Surface::new("pg", v2::Place::Route("pg".into()), move |_| {
         v2::Node::column(vec![text("dialog page"), v2::Node::input("").with_id("outside")])
@@ -1713,6 +1714,7 @@ return plugin.define(function(setup)
         host:focus("name")
     end)
     setup:command({ name = "dlg.outside", scope = { route = "pg" } }, function(host) host:focus("outside") end)
+    setup:command({ name = "dlg.blur" }, function(host) host:blur() end)
     setup:surface({ name = "pg", place = { type = "route", name = "pg" } }, function()
         return { type = "box", children = { text("dialog page"), { type = "input", id = "outside" } } }
     end)
@@ -1783,8 +1785,9 @@ fn dialog_focus(harness: &Harness, surface: &str) -> (Option<String>, usize) {
 // Expected (contract ergonomics 2.7, CT-37): the command that shows the dialog focuses its field, which takes what the
 // user types and tells the handler; the route's own command cannot move the focus out of the dialog to its field under
 // it. Ctrl+C empties the focused field first, as in the host's own dialogs, then closes the dialog, whose handler hears
-// it closed and whose mount ends. Opened again, the dialog is a new mount whose field the command focuses again, and
-// escape closes it as one level, leaving the route.
+// it closed and whose mount ends. Opened again, the dialog is a new mount whose field the command focuses again; a blur
+// leaves the focus in the dialog, on its body, not on what is under it; escape closes it as one level, leaving the
+// route.
 #[test]
 fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
     for carrier in dialog_carriers() {
@@ -1817,6 +1820,13 @@ fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
         h.wait_for("dialog body");
         dialog_turns(&h);
         assert_eq!(dialog_focus(&h, "ask"), (Some("name".to_owned()), 1), "{carrier:?}: reopened, no focus");
+        _ = h.tui.keymap.dispatch("dlg.blur", None);
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "ask").0, None, "{carrier:?}: the blur kept the field's focus");
+        let host = h.tui.dialogs.host().id();
+        let focus = h.app.app().focused();
+        let in_dialog = std::iter::successors(focus, |widget| widget.parent()).any(|widget| widget.id() == host);
+        assert!(in_dialog, "{carrier:?}: the blur moved the focus out of the dialog");
         h.app.press("escape");
         dialog_turns(&h);
         assert!(!h.app.text().contains("dialog body") && h.app.text().contains("dialog page"), "{carrier:?}");

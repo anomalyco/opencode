@@ -1,6 +1,8 @@
 //! Who owns what a plugin asks for (bigboi's freeze and ownership passes, carbon own-1): one table of request and
-//! effect ownership, run on every carrier. A row is a request or an effect, the call that asks for it, and when a mount
-//! closes; its expected outcome comes from the one written rule ([`expected`]), not from the row.
+//! effect ownership, run on every carrier. A row is a request or an effect, the call that asks for it, when a mount
+//! closes, and where the mount shows: a route, or the body of a dialog (contract ergonomics 2.7), which opens and closes
+//! where a route is navigated to and away from. Its expected outcome comes from the one written rule ([`expected`]),
+//! not from the row.
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -77,6 +79,14 @@ enum Close {
     AfterReply,
 }
 
+/// Where the probe's mount shows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Place {
+    Route,
+    /// The body of a dialog of the plugin's own, which closes as the host's dialogs do.
+    Dialog,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     InProcess,
@@ -108,6 +118,7 @@ struct Row {
     kind: Kind,
     origin: Origin,
     close: Close,
+    place: Place,
 }
 
 /// The rule `Host::try_fetch` states: what a route's command or a handler of the mount's input asks for is the mount's,
@@ -137,7 +148,7 @@ fn expected(row: Row) -> Outcome {
 
 /// Whether the carrier can observe the combination. An effect has no reply, for example,
 /// and only the asynchronous pipe can race the end of a mount.
-fn reachable(carrier: Carrier, Row { kind, origin, close }: Row) -> bool {
+fn reachable(carrier: Carrier, Row { kind, origin, close, place }: Row) -> bool {
     use Close::*;
     use Kind::*;
     use Origin::*;
@@ -146,6 +157,13 @@ fn reachable(carrier: Carrier, Row { kind, origin, close }: Row) -> bool {
         return false;
     }
     if origin == MountEnd && close != BeforeDispatch {
+        return false;
+    }
+    // A dialog surface has no route whose commands it would own. The control's overlay and an overlay show under the
+    // host's dialogs, a dialog surface sets no mode (it would take the dialog's escape and ctrl+c), and a dialog of the
+    // plugin's replaces it, which is the close itself.
+    if place == Place::Dialog && (origin == Origin::Route || close == Other || matches!(kind, Overlay | Mode | Dialog))
+    {
         return false;
     }
     if kind.request() {
@@ -186,8 +204,12 @@ fn rows(carrier: Carrier) -> Vec<Row> {
         Close::Launched,
         Close::AfterReply,
     ];
-    let all = kinds.into_iter().flat_map(|kind| {
-        origins.into_iter().flat_map(move |origin| closes.into_iter().map(move |close| Row { kind, origin, close }))
+    let all = [Place::Route, Place::Dialog].into_iter().flat_map(|place| {
+        kinds.into_iter().flat_map(move |kind| {
+            origins
+                .into_iter()
+                .flat_map(move |origin| closes.into_iter().map(move |close| Row { kind, origin, close, place }))
+        })
     });
     all.filter(|row| reachable(carrier, *row)).collect()
 }
@@ -464,11 +486,11 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
     };
     let launched = || std::fs::read_to_string(&mark).unwrap_or_default().lines().count();
     // The route closes the moment a program exited, before its reply goes.
-    let closing = Rc::new(|tui: &opencode_tui::app::Tui| tui.navigate(Route::Home));
+    let closing = Rc::new(move |tui: &opencode_tui::app::Tui| close_mount(tui, row.place));
     opencode_tui::features::foreground::on_exit((row.close == Close::Launched).then_some(closing as _));
     let probe = Probe::start(carrier, row, root.path(), &mark, support::deps(Arc::new(fake)));
     let h = probe.harness();
-    let route = Route::Plugin { id: probe.id().into(), name: "probe".into() };
+    let (open, close) = (|| open_mount(h, probe.id(), row.place), || close_mount(&h.tui, row.place));
     if row.close == Close::Other {
         _ = h.tui.keymap.dispatch("probe.overlay", None);
         turns(h, 3);
@@ -479,12 +501,12 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         probe.hold(true);
     }
     // The route opens; a mount that navigates away as it begins closes again at once.
-    h.tui.navigate(route.clone());
+    open();
     if racing && row.origin == Origin::MountBegin {
-        h.tui.navigate(Route::Home);
+        close();
     }
     turns(h, 3);
-    trigger(h, row);
+    trigger(h, row, &close);
     if racing {
         probe.hold(false);
     }
@@ -496,7 +518,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
             return Err(format!("{carrier:?} {row:?}: the fetch was never sent"));
         }
         if row.origin == Origin::Setup {
-            h.tui.navigate(Route::Home);
+            close();
         }
         turns(h, 10);
         if carrier == Carrier::Pipe && expected(row) == Outcome::Cancelled {
@@ -518,12 +540,12 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
     if row.close == Close::AfterReply {
         release();
         probe.wait_replied(h, row.kind, &launched);
-        h.tui.navigate(Route::Home);
+        close();
         turns(h, 3);
     }
     // The route opens again, which mounts it anew, and what is still held answers.
     if !matches!(row.close, Close::Never | Close::Other) {
-        h.tui.navigate(route);
+        open();
         turns(h, 3);
     }
     release();
@@ -623,7 +645,8 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     let mark = root.path().join("launched");
     let probe = Probe::start(carrier, row, root.path(), &mark, support::deps(Arc::new(support::empty())));
     let h = probe.harness();
-    let (plugin, route) = (probe.id(), Route::Plugin { id: probe.id().into(), name: "probe".into() });
+    let plugin = probe.id();
+    let (open, close) = (|| open_mount(h, plugin, row.place), || close_mount(&h.tui, row.place));
     let mounts = || opencode_plugin::behave::mounts(h.app.app(), plugin, "probe");
     let shows = |count: usize| {
         h.app.wait_until(support::WAIT, || {
@@ -647,16 +670,16 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     if racing {
         probe.hold(true);
     }
-    h.tui.navigate(route.clone());
+    open();
     // A mount that closes as it begins leaves no mount to wait for.
     let begins_closed = row.origin == Origin::MountBegin && row.close != Close::Never;
     if racing && row.origin == Origin::MountBegin {
-        h.tui.navigate(Route::Home);
+        close();
     } else if !begins_closed && !shows(1) {
         return Err(format!("{carrier:?} {row:?}: the route never showed"));
     }
     turns(h, 3);
-    trigger(h, row);
+    trigger(h, row, &close);
     turns(h, 3);
     // The route opens again, a mount of its own, which focuses its node, before what the closed one asked applies:
     // held over the pipe, applied already elsewhere.
@@ -670,7 +693,7 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
         if !closed {
             return Err(format!("{carrier:?} {row:?}: the route never closed"));
         }
-        h.tui.navigate(route);
+        open();
         if !shows(1) {
             return Err(format!("{carrier:?} {row:?}: the route never showed again"));
         }
@@ -714,16 +737,39 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     }
 }
 
-fn trigger(h: &Harness, row: Row) {
+fn trigger(h: &Harness, row: Row, close: &dyn Fn()) {
     match row.origin {
         Origin::Global => _ = h.tui.keymap.dispatch("probe.global", None),
         Origin::Route => _ = h.tui.keymap.dispatch("probe.route", None),
         Origin::Input => h.app.press("x"),
-        Origin::MountEnd => h.tui.navigate(Route::Home),
+        Origin::MountEnd => close(),
         Origin::Setup | Origin::MountBegin => {}
     }
     if row.close == Close::Racing && matches!(row.origin, Origin::Global | Origin::Route | Origin::Input) {
-        h.tui.navigate(Route::Home);
+        close();
+    }
+}
+
+/// Opens the probe's mount: navigates to its route, or shows its dialog, as the host does for the plugin's running
+/// activation, at once: over the pipe a command of the plugin would wait for the JS host's answer, which a racing row
+/// holds.
+fn open_mount(h: &Harness, plugin: &str, place: Place) {
+    match place {
+        Place::Route => h.tui.navigate(Route::Plugin { id: plugin.into(), name: "probe".into() }),
+        Place::Dialog => {
+            let generation = (0..100_000).find(|generation| h.tui.plugins.live(plugin, *generation));
+            let generation = generation.expect("the probe has a running activation");
+            let dialog = abi::Dialog::Surface(abi::DialogSurface::new("probe"));
+            opencode_tui::plugins::panel::show(&h.tui, plugin, generation, dialog);
+        }
+    }
+}
+
+/// Closes the probe's mount, as the user does: navigates home, or closes the dialog.
+fn close_mount(tui: &opencode_tui::app::Tui, place: Place) {
+    match place {
+        Place::Route => tui.navigate(Route::Home),
+        Place::Dialog => tui.dialogs.clear(),
     }
 }
 
@@ -905,7 +951,7 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
     // A mount's end asks as it closes: the route is going already. Navigating home again would race the driver's
     // reopening over the pipe, where it lands after it (bigboi's review of contract 2.x).
     if row.close == Close::BeforeDispatch && origin != Origin::MountEnd {
-        host.navigate(abi::Route::Home);
+        leave(host, row.place);
     }
     let asked = match row.kind {
         Kind::Fetch => host.try_fetch(abi::Fetch::new("GET", "/api/hold")),
@@ -950,9 +996,17 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
     };
     SEEN.with_borrow_mut(|seen| seen.0.push(asked));
     match row.close {
-        Close::InFlight => host.navigate(abi::Route::Home),
+        Close::InFlight => leave(host, row.place),
         Close::Other => host.close_overlay("other"),
         _ => {}
+    }
+}
+
+/// The plugin closes its mount: navigates home, or closes its dialog.
+fn leave(host: &dyn abi::Host, place: Place) {
+    match place {
+        Place::Route => host.navigate(abi::Route::Home),
+        Place::Dialog => host.dialog(abi::Dialog::Close { key: "probe".into() }),
     }
 }
 
@@ -969,10 +1023,12 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_reply(|_, id, result| SEEN.with_borrow_mut(|seen| seen.1.push((id, format!("{result:?}")))));
     setup.on_cancelled(|_, id| SEEN.with_borrow_mut(|seen| seen.1.push((id, "cancelled".to_owned()))));
     let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("x", "probe")]);
-    let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page())
-        .mounts()
-        .layers(vec![layer])
-        .on(|host, event| match event {
+    let place = match ROW.get().map(|row| row.place) {
+        Some(Place::Dialog) => v2::Place::Dialog("probe".into()),
+        _ => v2::Place::Route("probe".into()),
+    };
+    let surface =
+        v2::Surface::new("probe", place, |_| page()).mounts().layers(vec![layer]).on(|host, event| match event {
             Event::Mount { mounted: true, .. } => {
                 ask(host, Origin::MountBegin);
                 Handled::Pass
@@ -1026,17 +1082,21 @@ fn script(row: Row, log: &Path, mark: &Path) -> String {
         log.display().to_string(),
         command,
         args,
+        format!("{:?}", row.place),
     ]);
     let page = serde_json::to_string(&page()).unwrap();
     format!(
         r#"import {{ appendFileSync }} from "node:fs"
-const [KIND, ORIGIN, CLOSE, LOG, COMMAND, ARGS] = {params}
+const [KIND, ORIGIN, CLOSE, LOG, COMMAND, ARGS, PLACE] = {params}
 const PAGE = {page}
 const log = (line) => appendFileSync(LOG, line + "\n")
 export default {{ id: "example.probe", setup(api) {{
   const carrier = api[Symbol.for("opencode.carrier")]
   let asked = false
-  const home = () => carrier.effect({{ type: "navigate", route: {{ type: "home" }} }})
+  const home = () =>
+    PLACE === "Dialog"
+      ? carrier.effect({{ type: "dialog", dialog: {{ type: "close", key: "probe" }} }})
+      : carrier.effect({{ type: "navigate", route: {{ type: "home" }} }})
   const ask = (origin) => {{
     if (origin !== ORIGIN || asked) return
     asked = true
@@ -1059,7 +1119,7 @@ export default {{ id: "example.probe", setup(api) {{
     if (CLOSE === "Other") carrier.effect({{ type: "close-overlay", surface: "other" }})
   }}
   ask("Setup")
-  carrier.surface("probe", {{ type: "route", name: "probe" }}, () => PAGE, {{
+  carrier.surface("probe", PLACE === "Dialog" ? {{ type: "dialog", name: "probe" }} : {{ type: "route", name: "probe" }}, () => PAGE, {{
     mounts: true,
     layers: [{{ scope: "global", keys: [{{ key: "x", name: "probe" }}] }}],
     on: (event) => {{
@@ -1119,11 +1179,16 @@ fn luau_literal(value: &serde_json::Value) -> String {
 fn luau_script(row: Row, mark: &Path) -> String {
     let (command, args) = witness(mark);
     let (kind, origin, close) = (format!("{:?}", row.kind), format!("{:?}", row.origin), format!("{:?}", row.close));
+    let place = format!("{:?}", row.place);
     let page = luau_literal(&serde_json::to_value(page()).unwrap());
     let args = luau_literal(&serde_json::json!(args));
     format!(
         r#"local plugin = require("@opencode/plugin")
-local KIND, ORIGIN, CLOSE = {kind:?}, {origin:?}, {close:?}
+local KIND, ORIGIN, CLOSE, PLACE = {kind:?}, {origin:?}, {close:?}, {place:?}
+local function leave(host)
+    if PLACE == "Dialog" then host:dialog({{ type = "close", key = "probe" }})
+    else host:navigate({{ type = "home" }}) end
+end
 local COMMAND, ARGS = {command:?}, {args}
 local PAGE = {page}
 local OTHER = {{ surface = "other", anchor = {{ point = {{ x = 0, y = 0 }} }}, width = 20, height = 1 }}
@@ -1146,7 +1211,7 @@ local asked = false
 local function ask(host, origin)
     if origin ~= ORIGIN or asked then return end
     asked = true
-    if CLOSE == "BeforeDispatch" and origin ~= "MountEnd" then host:navigate({{ type = "home" }}) end
+    if CLOSE == "BeforeDispatch" and origin ~= "MountEnd" then leave(host) end
     -- A request waits in a task of its own, started in this call, so the request is this call's. A task gets no
     -- request ID: 1 names the one it waits on, 0 a request the host did not take.
     local id
@@ -1171,7 +1236,7 @@ local function ask(host, origin)
     elseif KIND == "Scroll" then host:scroll({{ type = "node", surface = "probe", id = "s" }}, {{ type = "offset", offset = 3 }})
     else host:scroll({{ type = "transcript" }}, {{ type = "by", rows = 3 }}) end
     record(host, "asked", id or 0)
-    if CLOSE == "InFlight" then host:navigate({{ type = "home" }})
+    if CLOSE == "InFlight" then leave(host)
     elseif CLOSE == "Other" then host:closeOverlay("other") end
 end
 return plugin.define(function(setup)
@@ -1181,8 +1246,9 @@ return plugin.define(function(setup)
     setup:command({{ name = "probe.global" }}, function(host) ask(host, "Global") end)
     setup:command({{ name = "probe.route", scope = {{ route = "probe" }} }}, function(host) ask(host, "Route") end)
     setup:command({{ name = "probe.overlay" }}, function(host) host:overlay(OTHER) end)
+    local place = if PLACE == "Dialog" then {{ type = "dialog", name = "probe" }} else {{ type = "route", name = "probe" }}
     local layer = {{ scope = "global", keys = {{ {{ key = "x", name = "probe" }} }} }}
-    setup:surface({{ name = "probe", place = {{ type = "route", name = "probe" }}, mounts = true, layers = {{ layer }} }},
+    setup:surface({{ name = "probe", place = place, mounts = true, layers = {{ layer }} }},
         function() return PAGE end,
         function(host, event)
             if event.type == "mount" then
