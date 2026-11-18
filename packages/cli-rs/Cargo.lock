@@ -580,9 +580,8 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "luau0-src"
-version = "0.24.0+luau747"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806b0b204f3f41d45c983a039fd337395ba73eb03035e99c3fc99f1cf3ece865"
+version = "0.24.1+luau747.sk.aa9d8201"
+source = "git+https://github.com/simonklee/luau-src-rs?rev=1ac5ecd2183f9d0e9b95a62d6e5b41ee7fdfc185#1ac5ecd2183f9d0e9b95a62d6e5b41ee7fdfc185"
 dependencies = [
  "cc",
 ]

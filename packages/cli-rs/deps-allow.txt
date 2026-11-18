@@ -158,14 +158,14 @@ zmij build
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
 # with --all-features. The same rules apply. opencode-plugin's `luau` feature (Luau plugins, off by default) brings all
 # of these in, accepted by O-168 (the O-58 decision for `luau-spike`); mlua and mlua-sys from mlua's git at Luau 747,
-# and maybe-dangling, which that mlua adds, by O-172.
+# and maybe-dangling, which that mlua adds, by O-172; luau0-src from simonklee/luau-src-rs's git, by O-176.
 
 autocfg
 bstr
 either
 jobserver
 lock_api
-luau0-src
+luau0-src git
 maybe-dangling
 mlua git
 mlua-sys build cc git
