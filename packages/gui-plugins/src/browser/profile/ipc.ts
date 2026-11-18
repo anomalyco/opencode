@@ -267,17 +267,19 @@ export const BrowserProfile = Ipc.define({
     remove: { input: Schema.Struct({ id: text(64) }) },
     /**
      * The user chose an extension in the pane's extensions menu, whose button sits at `anchor` in the window's
-     * content, in CSS pixels: its popup opens with its right edge on the button's and its top edge on `pageTop`, the
-     * top of the page area under the toolbar and its bars, or the extension hears the click. False when the extension
-     * has no toolbar button, so the window opens its options page instead.
+     * content, in CSS pixels: its popup opens with its top edge on `pageTop`, the top of the page area under the
+     * toolbar and its bars, and its right edge on the button's, or its left edge when the toolbar runs right to left
+     * (`rtl`). Or the extension hears the click. Main bounds all of it (`popupBounds`). False when the extension has
+     * no toolbar button, so the window opens its options page instead.
      */
     click: {
       input: Schema.Struct({
         binding: text(256),
         tabID: Browser.TabID,
         id: text(64),
-        anchor: Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number }),
-        pageTop: Schema.Number,
+        anchor: Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
+        pageTop: Schema.Finite,
+        rtl: Schema.Boolean,
       }),
       output: Schema.Boolean,
     },

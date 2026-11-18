@@ -7,26 +7,43 @@ const POPUP_MIN = { width: 25, height: 25 }
 const POPUP_MAX = { width: 800, height: 600 }
 
 /**
- * Where a popup belongs in its window's content, in device-independent pixels: `anchor` is the extensions button and
- * `top` the top edge of the page area under the toolbar and its bars, both as the window reported them.
+ * Where a popup belongs in its window's content, in device-independent pixels. The window reports `anchor`, the
+ * extensions button, and `top`, the top edge of the page area under the toolbar and its bars; neither is trusted
+ * (`popupBounds`). `pageTop` is main's own: the top edge of the tab's page view while the page fills the page area,
+ * absent with a device viewport, whose page sits lower than the area's top. `rtl`: the toolbar runs right to left, so
+ * the button is at its left end.
  */
-export type PopupPlacement = { readonly anchor: Rectangle; readonly top: number }
+export type PopupPlacement = {
+  readonly anchor: Rectangle
+  readonly top: number
+  readonly pageTop?: number
+  readonly rtl?: boolean
+}
 
 /**
- * Where a popup goes in its window's content: its top edge on the page area's, its right edge on its button's, at the
- * size its page asks for within Chrome's limits, moved left or up to stay inside the content.
+ * Where a popup goes in its window's content: its top edge on the page area's, and the edge at the end of the toolbar
+ * on its button's (the right edge, or the left one in a right-to-left layout), at the size its page asks for within
+ * Chrome's limits, moved sideways or up to stay inside the content.
+ *
+ * The window's numbers only ever lower the popup. A number that is not finite counts as missing, the button is taken
+ * as inside the content, and the popup never starts above the bottom edge of its button, nor above the top of the page
+ * view main knows. So nothing the window reports puts it over the app's own bars.
  */
 export function popupBounds(
   placement: PopupPlacement,
   size: { width: number; height: number },
   content: { width: number; height: number },
 ) {
-  const width = Math.min(Math.max(Math.round(size.width), POPUP_MIN.width), POPUP_MAX.width, content.width)
-  const height = Math.min(Math.max(Math.round(size.height), POPUP_MIN.height), POPUP_MAX.height, content.height)
-  const x = Math.min(Math.max(placement.anchor.x + placement.anchor.width - width, 0), content.width - width)
-  const y = placement.top + height <= content.height ? placement.top : Math.max(content.height - height, 0)
+  const whole = (value: number, low: number, high: number) => Math.min(Math.max(Number.isFinite(value) ? Math.round(value) : low, low), Math.max(high, low))
+  const width = whole(size.width, POPUP_MIN.width, Math.min(POPUP_MAX.width, content.width))
+  const height = whole(size.height, POPUP_MIN.height, Math.min(POPUP_MAX.height, content.height))
+  const left = whole(placement.anchor.x, 0, content.width)
+  const right = whole(placement.anchor.x + placement.anchor.width, left, content.width)
+  const floor = Math.max(whole(placement.anchor.y + placement.anchor.height, 0, content.height), whole(placement.pageTop ?? 0, 0, content.height))
+  // One that would not fit below moves up, as far as the floor, and is cut short at the window's bottom edge after that.
+  const y = Math.max(Math.min(whole(placement.top, floor, content.height), content.height - height), floor)
 
-  return { x: Math.round(x), y: Math.round(y), width, height }
+  return { x: whole(placement.rtl ? left : right - width, 0, content.width - width), y, width, height: Math.max(Math.min(height, content.height - y), 0) }
 }
 
 /** How to close the popup that is open, while one is. */
@@ -59,7 +76,7 @@ export function createPopups(input: { partition: string; tabs: ExtensionTabs }) 
       if (!URL.canParse(url) || new URL(url).protocol !== "chrome-extension:" || new URL(url).host !== extension) return
       close()
       const content = window.getContentBounds()
-      // A popup an extension opens before any click in this window has no reported place: the window's top end corner.
+      // A popup an extension opens before any click in this window has no reported place: the window's top right corner.
       const placement = anchors.get(window.id) ?? { anchor: { x: content.width - 40, y: 0, width: 32, height: 32 }, top: 32 }
 
       const view = new electron.WebContentsView({

@@ -417,9 +417,9 @@ export function createBrowserPane(input: {
 
       // The visible toolbar's menu temporarily covers its native view. Resolve the clicked binding and
       // selection, not view visibility or the window's last activation (which can be in another session).
-      if (!handles.get(binding)?.shared || inventory(binding).focusedTabID !== tabID) return
+      if (!target || !handles.get(binding)?.shared || inventory(binding).focusedTabID !== tabID) return
 
-      return target?.nativeID
+      return { id: target.nativeID, pageTop: target.areaTop() }
     },
     notice(window: number, binding: string, tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean) {
       owned(window, binding)

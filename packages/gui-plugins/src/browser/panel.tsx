@@ -192,7 +192,9 @@ export default function SessionBrowserPane(props: {
 
     if (current.status !== "active" || !rect || pageTop === undefined || !binding || !tab) return fallback()
     const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor, pageTop }).then((handled) => {
+    // In a right-to-left layout the button is at the left end of the bar, and the popup opens to its right.
+    const rtl = !!extensionsButton.element?.matches(":dir(rtl)")
+    void current.value.click({ id: extension.id, binding, tabID: tab.id, anchor, pageTop, rtl }).then((handled) => {
       if (!handled) fallback()
     }, fallback)
   }

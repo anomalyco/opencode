@@ -1277,6 +1277,11 @@ export function createBrowserPage(
     view,
     contents,
     nativeID: contents.id,
+    /**
+     * The top edge of the page's view in the window's content, once it has been placed, while the page fills the
+     * pane's page area. Undefined with a device viewport, whose page sits inside that area, lower than its top.
+     */
+    areaTop: () => (metrics.applied().viewport.mode === "auto" && view.getBounds().height > 0 ? view.getBounds().y : undefined),
     state: () => state(true),
     childActivity: () => childActivity(activity),
     previewUsed: () => !!options.popupOptions || !!options.workspace?.used(),

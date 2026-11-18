@@ -221,7 +221,7 @@ const setup: Plugin.MainSetup = (ctx) => {
       const x = Math.round(anchor.x * zoom)
       const y = Math.round(anchor.y * zoom)
 
-      return current.clickExtension(win, input.id, tab, {
+      return current.clickExtension(win, input.id, tab.id, {
         anchor: {
           x,
           y,
@@ -229,6 +229,8 @@ const setup: Plugin.MainSetup = (ctx) => {
           height: Math.round((anchor.y + anchor.height) * zoom) - y,
         },
         top: Math.round(input.pageTop * zoom),
+        pageTop: tab.pageTop,
+        rtl: input.rtl,
       })
     },
     enable: (input) => serial(async () => (await profile()).enable(input.id, input.enabled)),
