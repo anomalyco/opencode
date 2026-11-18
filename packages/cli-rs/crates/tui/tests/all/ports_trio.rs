@@ -466,6 +466,9 @@ fn subagents_sidebar_lists_folds_and_picks_alike_in_ts_rust_and_luau() {
             h.sidebar(usize::from(SIDEBAR)).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
         });
         h.settle();
+        let theme = h.tui.page();
+        assert_eq!(h.fg("• Child 03", 0), theme.text.feedback.success.base);
+        assert_eq!(h.fg("• Child 04", 0), theme.text.muted);
         let mut steps = vec![("listed".to_owned(), cells(&h, SIDEBAR, block(&h, "Subagents", 13)))];
         let storage = h.tui.storage().unwrap();
         let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
@@ -514,11 +517,18 @@ fn force_input_sends_and_hints_alike_in_ts_rust_and_luau() {
             let (_, y) = h.find("⏎ ");
             cells(h, 0, y..y + 1)
         };
+        let theme = h.tui.page();
+        assert_eq!(h.fg("ctrl+⏎", 0), theme.text.action.primary.base);
+        assert_eq!(h.fg("steer", 0), theme.text.muted);
+        assert_eq!(h.fg("⏎ steer", 0), theme.text.base);
         let mut steps = vec![("running".to_owned(), footer(&h))];
         h.app.type_text("hello");
         h.app.press("ctrl+return");
         h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
         h.settle();
+        assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
+        let prompt = h.log.lock().unwrap().iter().find(|seen| seen.path.ends_with("/prompt")).unwrap().body.clone();
+        assert_eq!(prompt["text"], "hello", "ctrl+enter added no newline");
         h.app.type_text("!");
         h.wait_gone("⏎ steer");
         h.app.press("backspace");
