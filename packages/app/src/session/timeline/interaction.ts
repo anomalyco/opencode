@@ -25,10 +25,12 @@ import {
 } from "./history-machine"
 import { createRouteRevealState, routeRevealTarget, transitionRouteReveal } from "./machine"
 import { createTimelineModel } from "./model"
+import { useSettings } from "@/settings/model"
 
 /** `visible`: the conversation is on screen, not behind another narrow-screen view. */
 export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
   const location = useLocation<{ reveal?: string }>()
+  const settings = useSettings()
   const timeline = createTimelineModel({ session })
 
   const [state, setState] = createStore<{
@@ -55,7 +57,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   // The single source of truth for "follow the newest content". The virtualizer feeds it scroll geometry and the
   // reader's input; everything else only expresses explicit intent.
-  const follow = createTimelineFollow(session.identity.sessionKey)
+  const follow = createTimelineFollow(session.identity.sessionKey, settings.general.followStreaming)
   const detach = () => follow.dispatch({ type: "detach" })
 
   let scroller: HTMLDivElement | undefined
