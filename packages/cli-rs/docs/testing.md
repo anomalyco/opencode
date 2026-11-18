@@ -1,14 +1,13 @@
 # Testing
 
-`opencode-native` is tested against the TypeScript client: the same input goes to both, and what they print, draw
-and send is compared. This document describes the suites, how to run them, and how to add a case. Paths are relative
-to `packages/cli-rs`, and commands run from that directory.
-
-## The suites
+`opencode-native` is tested against the TypeScript client: both get the same input, and what they print, draw and
+send is compared. The TypeScript client is the source of truth. An intended difference is a file in
+`parity/deviations/` that states both behaviors and the reason; a scenario names the file where it lets cells differ,
+and a difference without a file fails. Paths are relative to `packages/cli-rs`, and commands run there.
 
 | Suite | Compares | Runs as |
 | --- | --- | --- |
-| Unit and integration tests | The Rust code alone | `cargo test` |
+| Unit and integration | The Rust code alone | `cargo test` |
 | P-ORACLE | A function's output with the TypeScript function's, over a corpus | `cargo test`, against committed fixtures |
 | P-COMP | One widget's cells with the TypeScript component's | `cargo test`, against committed fixtures |
 | P-APP | The whole TUI's screens and requests, over an in-memory server | `cargo test`, against committed recordings |
@@ -18,17 +17,12 @@ to `packages/cli-rs`, and commands run from that directory.
 | P-TUI | The whole TUI's screens and requests, against a simulated server | `bun run parity:sim` |
 | P-WIRE | ACP JSON-RPC transcripts | `bun run parity:acp` |
 
-P-REQ is the comparison of requests, which P-APP, P-CLI, P-PTY and P-TUI share: writes must match in order, and
-reads are compared as a sorted set.
-
-The TypeScript client is the source of truth. A difference that is intended is a file in `parity/deviations/`, which
-states the TypeScript behavior, the Rust behavior and the reason. A scenario names the file where it allows cells to
-differ, and a difference without a file fails.
+P-APP, P-CLI, P-PTY and P-TUI also compare requests: writes must match in order, and reads as a sorted set.
 
 ## Running
 
-Run cargo through the package script, which installs OpenTUI's native library first and runs in this directory, where
-`.cargo/config.toml` is:
+Run cargo through the package script, which installs OpenTUI's native library and runs where `.cargo/config.toml`
+is:
 
 ```sh
 bun run cargo fmt --check
@@ -38,12 +32,13 @@ bun run cargo test -p opencode-tui --test all tabs::      # one area of the TUI'
 bun run cargo test -p opencode-tui --lib                  # its unit tests
 ```
 
-The integration tests of `opencode-tui` and `opencode-ui` link the static OpenTUI library, so each crate has one test
-binary, `tests/all/main.rs`, with one module for each area and the shared helpers under `tests/all/support`. A new
-test file is a module there, not a new `tests/*.rs`.
+`opencode-tui` and `opencode-ui` link the static OpenTUI library, so each has one integration test binary,
+`tests/all/main.rs`, with a module for each area and shared helpers in `tests/all/support`. Add a module there, not a
+new `tests/*.rs`.
 
-The four `parity:*` commands run the TypeScript client from source, so run `bun install` at the repository root once
-first. Each builds the debug binary, unless `OPENCODE_RS_BIN` names one.
+The `parity:*` commands run the TypeScript client from source, so run `bun install` at the repository root first;
+without it a run fails with `Cannot find module '@opentui/solid/preload'`. Each builds the debug binary unless
+`OPENCODE_RS_BIN` names one.
 
 ```sh
 bun run parity:cli [--sides ts,rs] [parity/scenarios/<group>/<name>.cli.ts ...]
@@ -52,17 +47,13 @@ bun run parity:sim [--sides ts,rs] [parity/scenarios/<group>/<name>.sim.ts ...]
 bun run parity:acp [suite ...]
 ```
 
-Without files, a runner runs every scenario of its kind. `--sides ts,ts` runs the TypeScript client twice, which
-shows whether a scenario is deterministic.
-
-Some Rust tests run TypeScript helpers and skip without Bun or `node_modules`. `OPENCODE_RS_REQUIRE_TS=1` makes them
-fail instead.
-
-Other checks:
+Without files a runner runs every scenario of its kind. `--sides ts,ts` runs the TypeScript client twice, which
+shows whether a scenario is deterministic. Rust tests that run TypeScript helpers skip without Bun or `node_modules`;
+`OPENCODE_RS_REQUIRE_TS=1` makes them fail instead.
 
 | Command | Checks |
 | --- | --- |
-| `bun run check:drift` | Generated files and oracle fixtures still match the TypeScript they came from |
+| `bun run check:drift` | Generated files and oracle fixtures still match their TypeScript sources |
 | `bun run check:deny` | Licences, banned crates and sources of the dependencies (`deny.toml`) |
 | `bun run check:advisories` | Security advisories of the dependencies |
 | `bun run check:luau-types` | Every Luau plugin in the repository type-checks with `luau-analyze` |
@@ -72,25 +63,17 @@ Other checks:
 
 ## Scenarios and fixtures
 
-A scenario is one file under `parity/scenarios/<group>/`. Its suffix says which suite runs it: `.app.ts`, `.cli.ts`,
-`.pty.ts` or `.sim.ts`. A group is a directory named for the area it covers. Runners find scenarios by glob, so
-adding one edits no list.
+A scenario is a file under `parity/scenarios/<group>/`, where a group is named for the area it covers. Its suffix
+picks the suite: `.app.ts`, `.cli.ts`, `.pty.ts` or `.sim.ts`. Runners find scenarios by glob, so adding one edits no
+list.
 
-Committed fixtures are under `parity/fixtures/<group>/`. Only their writers write them, never a person and never a
-Rust test:
-
-```sh
-bun run fixtures          # every P-ORACLE script, P-COMP script and P-APP scenario, in name order
-```
-
-Run outputs go to `parity/out/` and `$TMPDIR/opencode-parity/`, which git ignores.
-
-### Cell fixtures
+Committed fixtures are under `parity/fixtures/<group>/`, and only their writers write them, never a person or a Rust
+test. `bun run fixtures` runs every P-ORACLE script, P-COMP script and P-APP scenario, in name order. Run outputs go
+to `parity/out/` and `$TMPDIR/opencode-parity/`, which git ignores.
 
 P-COMP, P-APP and P-TUI compare screens cell by cell: symbol, foreground, background and attributes. A cell fixture
-is JSON with the size and the style table on its first line, then one line for each screen row with the row's text
-and its `[style, cell count]` runs. `parity/lib/cells.ts` documents the format, and `crates/parity` reads and
-compares it.
+is JSON with the size and style table on its first line, then one line per row with its text and its
+`[style, cell count]` runs (`parity/lib/cells.ts` documents the format; `crates/parity` reads it):
 
 ```json
 {"width":100,"height":30,"styles":["#eeeeeeff #0a0a0aff 0",…],"lines":[
@@ -102,13 +85,13 @@ compares it.
 ## P-ORACLE and P-COMP
 
 A P-ORACLE script (`parity/oracle/<name>.ts`) runs a TypeScript function over a corpus and writes the results to
-`parity/fixtures/`. A Rust test applies the same inputs and compares. Oracle fixtures are written through
-`parity/lib/records.ts`, one record on a line, so a re-record diffs one line for each changed case. A script whose
-first line calls it a "helper" writes no fixture: a Rust test runs it with arguments.
+`parity/fixtures/` through `parity/lib/records.ts`, one record a line, so a re-record diffs one line for each changed
+case. A Rust test applies the same inputs and compares. A script whose first line calls it a "helper" writes no
+fixture; a Rust test runs it with arguments.
 
 A P-COMP script (`parity/component/<name>.tsx`) renders one TypeScript component at a fixed size and theme and writes
-its cells (`parity/lib/component.tsx`). The Rust test renders the matching widget in a `TestApp` at the same size and
-calls `opencode_parity::assert_fixture`, which fails with a readable list of the cells that differ:
+its cells (`parity/lib/component.tsx`). The Rust test renders the matching widget at the same size and fails with a
+list of the cells that differ:
 
 ```rust
 let app = TestApp::new(60, 12);
@@ -118,9 +101,8 @@ opencode_parity::assert_fixture(&app.render(), "U.3/alert");
 
 ## P-APP: the whole TUI in memory
 
-P-APP runs one scenario through the whole TypeScript TUI and the whole Rust TUI. Both get the same server responses,
-events and keys. It compares the screens at each checkpoint and the requests each side sent. It needs no server
-process.
+P-APP runs one scenario through the whole TypeScript TUI and the whole Rust TUI, with the same server responses,
+events and keys and no server process, and compares the screens at each checkpoint and the requests each side sent.
 
 ```text
 parity/scenarios/<group>/<name>.app.ts            one scenario, written by hand
@@ -132,8 +114,6 @@ parity/fixtures/<group>/<name>/<checkpoint>.json  cells
         ▼
 pass, or a report of the differing cells and requests
 ```
-
-### A scenario
 
 ```ts
 // parity/scenarios/H.2/session-open.app.ts
@@ -159,89 +139,60 @@ export default defineApp({
 ```
 
 - **`routes`** have a `method` (default `GET`), a `path` with `:name` segments, a `status`, and `json`, `body`, or
-  neither (204). They are matched before the TUI test defaults of `packages/tui/test/fixture/tui-client.ts`, which
-  answer everything else the TypeScript TUI reads at startup. The defaults answer `/api/session` with an empty list,
-  so a scenario with sessions routes it.
-- **`args`**: `sessionID` opens a session, and `continue` is `-c`.
-- **Steps** run in order. `parity/lib/app.ts` has the full list. The common ones:
-  - `keys`: shortcuts such as `enter`, `escape`, `ctrl+x`, `shift+tab`, or a character;
-  - `type`: text, one key press for each character; `paste`: a bracketed paste;
-  - `click`, `rightClick`: `[x, y]`, a press and release at a cell; `drag`: from one cell to another;
-  - `event`: one `/api/event` event. The stream starts with `server.connected` on both sides;
-  - `wait`: milliseconds that pass with no input;
-  - `checkpoint`: a named screen, compared cell by cell.
-- **Checkpoint fields:**
-  - `until`: text the TypeScript frame must contain before the capture. Rust waits for it too, but at most 2 s, so a
-    screen Rust does not draw still gets compared and reported.
-  - `masks`: cells blanked on both sides before the comparison, each with a `reason`. A mask is a rectangle
-    `{ x, y, width, height }` or a `line` regex, which blanks every match on every row. Masks are for text that is
-    not deterministic: the random prompt placeholder, durations, relative times. A mask over a whole widget needs a
-    deviation file.
-  - `deviation`: a list of `{ file, cells, styleOnly? }`: the file `parity/deviations/<file>.md` and the number of
-    cells it allows to differ. With `styleOnly`, those cells must keep their symbols. The entries add up, and the
-    checkpoint passes when it differs in no more cells than they allow. A difference beyond them fails, and so does
-    a missing file. A checkpoint that now matches prints a note to remove its deviations.
-- **`requests: { deviation }`** at the top level does the same for the request comparison.
+  neither (204). The TUI test defaults of `packages/tui/test/fixture/tui-client.ts` answer the rest of what the
+  TypeScript TUI reads at startup, including an empty `/api/session`, so a scenario with sessions routes it.
+- **Steps** run in order (`parity/lib/app.ts` has them all): `keys` (shortcuts such as `ctrl+x`, or a character),
+  `type` (one key press a character), `paste`, `click` and `rightClick` at `[x, y]`, `drag`, `event` (one
+  `/api/event` event after the initial `server.connected`), `wait` (milliseconds), and `checkpoint`.
+- **A checkpoint** waits for its `until` text in the TypeScript frame; Rust waits for it at most 2 s, so a screen
+  Rust does not draw is still compared. `masks` blank cells on both sides, each with a `reason`: a rectangle
+  `{ x, y, width, height }` or a `line` regex, for text that is not deterministic (the random placeholder, durations,
+  relative times). A mask over a whole widget needs a deviation file. `deviation` lists `{ file, cells, styleOnly? }`:
+  the file `parity/deviations/<file>.md` and how many cells it lets differ (with `styleOnly`, only in style). The
+  allowances add up; a difference beyond them, or a missing file, fails, and a checkpoint that now matches prints a
+  note to remove them. A top-level `requests: { deviation }` does the same for requests.
 
-Scenario data uses fixed IDs and times. The helpers in `parity/lib/app.ts` (`session`, `user`, `assistant`) build
-valid wire objects with fixed times.
+Scenario data uses fixed IDs and times; the helpers `session`, `user` and `assistant` build valid wire objects.
 
-### The recording
+The recording holds the scenario and every request with its response. A read is a GET or a plugin RPC named `get`;
+everything else is a write. `reads` are sorted and deduplicated, because the TypeScript TUI starts many at once;
+`writes` keep their order. The event stream is not logged, and recording twice must give identical files.
 
-`parity/fixtures/<group>/<name>.app.json` holds the scenario and every request with the response it got.
+The TypeScript runner (`parity/app/scenarios.test.tsx`, under `TZ=UTC`) mounts the TUI's app fixture, serves the
+routes then the defaults, runs the steps, and at a checkpoint waits for `until` and three identical polls. The Rust
+runner (`crates/tui/tests/all/app.rs`) is one test, `scenarios`, which runs every recording and reports every failing
+one at the end. It serves the recording from `opencode_api::memory::Memory`, mounts the TUI on a `TestApp`, and at a
+checkpoint waits until no request is in flight and two renders are equal. It then compares the cells, the writes
+(method, path and JSON body, in order), and the reads: every Rust read must be in the recording, and a TypeScript read
+Rust did not send is listed, not failed. `Memory` knows nothing of scenarios, so other tests use it as a small fixture
+server: routes, `/api/event` fed by `Memory::emit`, a request log, and an in-flight count.
 
-- A read is a GET, or a plugin RPC named `get`. Everything else is a write.
-- `reads` are sorted by method, path and query, with duplicates removed: the TypeScript TUI starts many reads at
-  once, so their order is not stable. `writes` keep the order in which they were sent.
-- The event stream is not logged.
-- Replaying a scenario twice must give byte-identical files.
-
-### The runners
-
-The TypeScript runner (`parity/app/scenarios.test.tsx`) makes one `bun test` case for each scenario file. It mounts
-the TUI's app fixture at the scenario's size, serves the routes and then the defaults, runs the steps, and at a
-checkpoint polls until the frame contains `until` and three polls in a row read the same cells. The process runs with
-`TZ=UTC`.
-
-The Rust runner (`crates/tui/tests/all/app.rs`) is one test, `scenarios`, which runs every recording and fails at the
-end with every failing scenario's report. It serves the recording's routes, then its reads and writes, from
-`opencode_api::memory::Memory`; mounts the TUI on a `TestApp`; runs the steps; and at a checkpoint waits until no
-request is in flight and two renders are equal. Then it compares:
-
-- cells, with `opencode_parity::app::compare_checkpoint`;
-- writes: method, path and JSON body, in order;
-- reads: every Rust read must be answered by the recording. A request no route answers fails with its name. Reads
-  the TypeScript TUI sent and Rust did not are listed, not failed.
-
-`Memory` knows nothing of scenarios, so other tests use it as a small fixture server: it serves a list of routes,
-feeds `/api/event` from `Memory::emit`, logs every request, and counts requests in flight.
-
-### Adding a scenario
+To add a scenario:
 
 1. Write `parity/scenarios/<group>/<name>.app.ts`.
-2. Record it, twice. `git status` must show no change after the second run.
+2. Record it twice; `git status` must show no change after the second run.
 
    ```sh
    PARITY_SCENARIO=<group>/<name> bun test --cwd parity ./app/scenarios.test.tsx
    ```
 
-3. Replay it. On a difference, the runner writes the Rust cells to
-   `$TMPDIR/opencode-parity/<group>/<name>/<checkpoint>.json` for a diff against the recorded file.
-   `PARITY_VERBOSE=1` prints the full report of a checkpoint that passes within its deviations.
+3. Replay it. On a difference the runner writes the Rust cells to
+   `$TMPDIR/opencode-parity/<group>/<name>/<checkpoint>.json` to diff against the recording. `PARITY_VERBOSE=1`
+   prints the full report of a checkpoint that passes within its deviations.
 
    ```sh
    PARITY_SCENARIO=<group>/<name> bun run cargo test -p opencode-tui --test all app::scenarios -- --nocapture
    ```
 
-4. When a change makes a checkpoint match, remove the deviation from the scenario. When no scenario names a
-   deviation file any more, delete the file.
+4. When a checkpoint matches, remove its deviation, and delete a deviation file no scenario names.
 
 ## P-CLI and P-PTY: one command
 
-Both runners start the TypeScript CLI from source and `opencode-native` with the same arguments. Each run gets a
-fresh home with its own XDG roots and `TMPDIR`, an environment without the caller's `OPENCODE_*` variables, and its
-own fake server. `--server <url>` is appended to the arguments, or replaces a `$SERVER` argument. Neither client
-touches the user's service. Records go to `$TMPDIR/opencode-parity/{cli,pty}/<name>.<n>-<side>.json`.
+Both runners start the TypeScript CLI from source and `opencode-native` with the same arguments, each in a fresh
+home with its own XDG roots and `TMPDIR`, without the caller's `OPENCODE_*` variables, and against its own fake
+server: `--server <url>` is appended, or replaces a `$SERVER` argument. Neither touches the user's service. Records
+go to `$TMPDIR/opencode-parity/{cli,pty}/<name>.<n>-<side>.json`. P-CLI compares the exit code, stdout, stderr and
+requests:
 
 ```ts
 // parity/scenarios/C.1/models.cli.ts
@@ -253,7 +204,11 @@ export default defineCli({
 })
 ```
 
-P-CLI compares the exit code, stdout, stderr and the requests.
+P-PTY runs the program in a pseudo-terminal of `cols` by `rows` (default 100 by 30) and feeds its output to OpenTUI's
+embedded terminal, which also answers terminal queries. Each step writes `keys`, waits for `until` (OSC or screen
+text, a string or a RegExp) and for `settle` ms without a change, and records the screen at `checkpoint`. It compares
+the OSC log (titles, progress, clipboard, notifications), the masked checkpoints, the exit code (`exits: true`) and
+the requests (`requests: true`):
 
 ```ts
 import { definePty } from "../../pty/run"
@@ -271,95 +226,109 @@ export default definePty({
 })
 ```
 
-P-PTY runs the program under a pseudo-terminal of `cols` by `rows` (default 100 by 30). It feeds the output to
-OpenTUI's embedded terminal, which also answers the program's terminal queries. Each step writes `keys`, waits for
-`until` (an OSC sequence or screen text, a string or a RegExp) and for `settle` ms without a screen change, then
-records the screen at `checkpoint`. P-PTY compares the OSC log (titles, progress, clipboard, notifications), the
-checkpoints after masks, the exit code (`exits: true`) and the requests (`requests: true`).
-
-The fake server (`parity/lib/fake-server.ts`):
-
-- `routes`: `{ method = GET, path, status, json | body | events, headers }`. `:name` in `path` matches one segment.
-  `events` keeps an event stream open with one `data:` frame for each event.
-- `/api/info` reports version `local`, the version both clients have when run from source. `version: "x"` gives
-  another version, and `false` takes it out of the defaults.
-- `fallback: "tui"` answers the remaining requests with the TUI test defaults, `/api/event` included. `emit(event)`
-  pushes an event.
-- Every request is logged. A request without a route returns 404 and appears as `(unmatched)` in the request log.
-
-Before the comparison, both sides' output is normalized: the server URL, the sandbox root, prefixed IDs, ISO times,
-versions, durations and `127.0.0.1` ports.
+The fake server (`parity/lib/fake-server.ts`) takes `routes` of
+`{ method = GET, path, status, json | body | events, headers }`, where `:name` matches one segment and `events` keeps
+a stream open with one `data:` frame per event. `/api/info` reports version `local`, as both clients run from source
+do; `version: "x"` changes it, and `false` removes it. `fallback: "tui"` answers the rest with the TUI test defaults,
+`/api/event` included, and `emit(event)` pushes an event. An unrouted request gets 404 and logs as `(unmatched)`.
+Both sides' output is normalized first: the server URL, sandbox root, prefixed IDs, ISO times, versions, durations and
+`127.0.0.1` ports.
 
 ## P-TUI: the simulated server
 
-P-TUI runs the TypeScript server in simulation mode and drives the TypeScript TUI and `opencode-native` through the
-same steps over their `OPENCODE_DRIVE` UI endpoints. A backend driver in the harness answers every model call. At
-each checkpoint the runner captures both screens and compares them cell by cell, with the same masks and deviation
-files as P-APP. Writes to the server are compared too.
+P-TUI drives the TypeScript TUI and `opencode-native` through the same steps over their `OPENCODE_DRIVE` UI
+endpoints, against the TypeScript server in simulation mode, and compares the screens at each checkpoint (with
+P-APP's masks and deviations) and the writes. Each side runs alone, in its own sandbox (an empty environment, a fresh
+home and `tmp`, the same working directory path), so the clients never share a server or database. Per side, the
+runner starts `opencode serve` from source in simulation mode with an in-memory database, a backend driver
+(`parity/sim/backend.ts`) that answers each model call with the scenario's next reply (and a fixed title to a request
+with no tools), a recording proxy (`parity/sim/proxy.ts`), and the client with `--server <proxy>` and a headless
+renderer. It sends the steps through `parity/sim/drive.ts`, and kills every process it started at the end.
 
-Each side runs alone, one after the other, so the two clients never share a server or a database:
+A scenario is `parity/scenarios/<group>/<name>.sim.ts` with `export default defineSim({...})`
+(`parity/sim/scenario.ts` has every field):
 
-1. **Sandbox.** One temporary root for each run. Each side gets a fresh home and `tmp`. The working directory is the
-   same path for both sides, so paths on screen match. The environment starts empty.
-2. **Server.** `opencode serve` from source, in simulation mode, with an in-memory database and a config that holds
-   the `simulation` provider and the scenario's permission rules.
-3. **Backend driver** (`parity/sim/backend.ts`). It answers each model request with the scenario's next reply. A
-   request that offers no tools is the title request, and gets a fixed title, so the scripted replies stay in order.
-4. **Recording proxy** (`parity/sim/proxy.ts`). The client talks to a proxy that forwards to the server and logs each
-   request.
-5. **Client.** The TypeScript CLI from source or `opencode-native`, with `--server <proxy>`, a headless renderer and
-   the scenario's viewport.
-6. **Steps.** The runner sends the scenario's steps to the UI endpoint (`parity/sim/drive.ts`). At the end every
-   process the side started is killed, also on failure.
+- `width`, `height`: the viewport (default 100 by 30);
+- `permissions`: rules after the allow-all rule, such as `{ action: "bash", resource: "*", effect: "ask" }`;
+- `files`: written under the working directory before the server starts;
+- `model`: the replies, one per model call, each `{ items, finish }` with protocol items (`textDelta`,
+  `reasoningDelta`, `toolCall`, …);
+- `steps`: `{ type }`, `{ press, modifiers? }`, `{ enter: true }`, `{ arrow }`, `{ mouse }` at a cell,
+  `{ resize: [cols, rows] }`, `{ until: "text" }`, and `{ checkpoint, until?, masks?, deviation? }`, which waits for
+  three identical captures before comparing.
 
-A scenario is `parity/scenarios/<group>/<name>.sim.ts`, with `export default defineSim({...})`.
-`parity/sim/scenario.ts` has every field. The main ones:
-
-- `width`, `height`: the viewport (default 100 by 30).
-- `permissions`: rules after the allow-all rule, such as `{ action: "bash", resource: "*", effect: "ask" }`.
-- `files`: files written under the working directory before the server starts.
-- `model`: the replies, in order, one for each model call of the session. A reply is `{ items, finish }` with the
-  protocol's items (`textDelta`, `reasoningDelta`, `toolCall`, …).
-- `steps`: `{ type }`, `{ press, modifiers? }`, `{ enter: true }`, `{ arrow }` for keys; `{ mouse }` for a mouse
-  event at a cell; `{ resize: [cols, rows] }`; `{ until: "text" }`, which waits until the screen shows the text; and
-  `{ checkpoint, until?, masks?, deviation? }`, which waits for `until`, then for three captures in a row with the
-  same cells, then records and compares.
-
-Writing a scenario:
-
-- Wait for readiness with `until`, not with time. On home, wait for the model line: the TUI ignores Enter until its
-  catalogs have loaded.
-- The Rust endpoint has no `ui.focus`, `ui.click` or `ui.state`
-  ([`parity/deviations/T14a-drive-capabilities.md`](../parity/deviations/T14a-drive-capabilities.md)), so scenarios
-  address the screen by cells. Find coordinates for `mouse` steps in the `.txt` files of a TypeScript run (row and
-  column from 0).
-- Files of a run are in `parity/out/<group>/<name>.sim/`: `<checkpoint>.<side>.json` (cells after masks) and `.txt`
-  (text), and `report.json`, which lists every model call.
-- On failure the runner prints both processes' stderr, the model calls, the requests and the last screen, and keeps
-  the sandbox.
+Wait with `until`, not with time; on home, wait for the model line, because the TUI ignores Enter until its catalogs
+load. The Rust endpoint has no `ui.focus`, `ui.click` or `ui.state`
+([`T14a-drive-capabilities.md`](../parity/deviations/T14a-drive-capabilities.md)), so steps address cells: take
+coordinates from the `.txt` files of a TypeScript run (row and column from 0). A run's files are in
+`parity/out/<group>/<name>.sim/`: `<checkpoint>.<side>.json` and `.txt`, and `report.json` with every model call. On
+failure the runner prints both sides' stderr, the model calls, the requests and the last screen, and keeps the
+sandbox.
 
 ## P-WIRE: ACP
 
-`bun run parity:acp` runs each ACP subprocess suite of `packages/cli/test/acp` twice, once for each agent, through
-`parity/acp/record.sh`, which records every agent's JSON-RPC traffic. It fails when a test fails on either side or
-when the normalized transcripts differ. The transcripts are kept in `$TMPDIR/opencode-parity/acp/<suite>-<side>/`.
+`bun run parity:acp` runs each ACP subprocess suite of `packages/cli/test/acp` once per agent through
+`parity/acp/record.sh`, which records the JSON-RPC traffic. It fails when a test fails on either side or the
+normalized transcripts differ. Transcripts are kept in `$TMPDIR/opencode-parity/acp/<suite>-<side>/`.
 
 ## The plugin state machine
 
-`parity/machines/plugins.json` is a state machine of a plugin's life, with a reader in each client. The Rust reader
-is `crates/tui/tests/all/plugin_machines.rs`. The TypeScript one, `parity/machines/plugins.test.tsx`, drives the
-TypeScript TUI and builds no binary: `bun run test` covers each edge of the machine once and the seeded walks, and
-`bun run parity:machines` adds every path to the file's depth and the fault trials.
-
-The plugin contract has a suite of its own, the conformance transcripts
-([`plugin-abi.md`](plugin-abi.md#conformance)).
+`parity/machines/plugins.json` is a state machine of a plugin's life, read by both clients:
+`crates/tui/tests/all/plugin_machines.rs`, and `parity/machines/plugins.test.tsx`, which drives the TypeScript TUI.
+`bun run test` covers each edge once and the seeded walks; `bun run parity:machines` adds every path to the file's
+depth and the fault trials. The plugin contract has its own suite, the
+[conformance transcripts](plugin-abi.md#conformance).
 
 ## Generated files and drift
 
 `bun run check:drift` (`script/drift.ts`) runs every generator in `script/gen/` and every fixture-writing oracle in
-`parity/oracle/`, then lists each file whose content changed. Run it on a clean tree. A change means a TypeScript
-source moved: commit the regenerated files, or fix the Rust side if the TypeScript change was intended.
+`parity/oracle/` on a clean tree, and lists each file that changed. A change means a TypeScript source moved: commit
+the regenerated files, or fix the Rust side. `--all` adds the two generators whose output depends on more than the
+checkout (`grammars.ts` downloads queries; `time.ts` depends on Bun's ICU data), and `--recordings` the slow P-COMP
+and P-APP recordings.
 
-Two generators are left out by default, because their output is not a function of the checkout alone:
-`script/gen/grammars.ts` downloads queries, and `script/gen/time.ts` depends on the ICU data of the running Bun.
-`--all` adds them. `--recordings` adds the P-COMP and P-APP recordings, which are slow.
+## Windows, by hand
+
+`crates/cli/tests/windows_smoke.rs` checks on a pseudoconsole that the TUI reaches home and that Ctrl+C leaves the
+alternate screen. What a person sees in a real terminal needs this checklist, on Windows 11 24H2 or Windows 10 1809
+or later, before a Windows build ships and when a release changes console code.
+
+Unzip `opencode-native-<version>-x86_64-pc-windows-msvc.zip` (or `aarch64-pc-windows-msvc`) into a folder without
+spaces, such as `C:\tools\opencode-native`, keeping `opencode-native.exe` beside the `opencode.exe` it starts. Run
+`Unblock-File *` there from PowerShell, because the build is not signed, and check that `opencode-native --version`
+prints the release. Install `nvim` (`winget install Neovim.Neovim`), and open a git repository with a few files.
+
+Run every check in Windows Terminal (with PowerShell 7 and with `cmd.exe`) and in VS Code's integrated terminal. If
+you can, run them in conhost too, which has known limits (no OSC 52 copy, weaker key reporting). mintty and Git Bash
+without ConPTY are not supported, because the program's input there is a pipe. Record your machine, the Windows,
+Windows Terminal, VS Code and `opencode-native` versions, and for each failure the check, the terminal, and what you
+did, expected and got.
+
+1. **Start and quit.** Run `opencode-native`, wait for home, press Ctrl+C. The logo and "Ask anything" show. It exits
+   0 (`$LASTEXITCODE`, `%ERRORLEVEL%`) to a clean prompt with no stray escape text, and typing echoes normally.
+2. **Keys.** In the prompt: type, Left, Right, Home, End, Ctrl+Left, Ctrl+Right, Backspace, Delete, Shift+Enter for a
+   new line, Up and Down for history; Ctrl+P and Esc; Ctrl+X then M. Each key acts once: none repeats, is lost, prints
+   escape text, or shows a key release as input.
+3. **Keys in mini.** Repeat check 2 in `opencode-native mini`.
+4. **Mouse.** Click a session in the list, wheel through a long transcript, click dialog buttons. Clicks hit what is
+   under the pointer, and the wheel scrolls the view, not the terminal's scrollback.
+5. **Selection and copy.** Drag over message text and paste into Notepad; also Ctrl+X then Y. The selection
+   highlights while dragging and pastes in Notepad (in conhost, copy does nothing).
+6. **Paste.** Paste several lines from Notepad with Ctrl+V and with the terminal's paste. The text arrives once, as
+   one paste, unsent; three or more lines show as `[Pasted ~N lines]`.
+7. **Image paste.** Copy a screenshot (Win+Shift+S) and press Ctrl+V. It attaches as `[Image 1]`.
+8. **Resize.** Drag the edge, maximize, restore, change the font size (Ctrl+= and Ctrl+-). Each redraws cleanly.
+9. **Close the window** while the TUI runs, then run `opencode-native` in a new tab. No `opencode-native.exe` is left
+   in Task Manager, the new run starts normally, and the service still runs (`opencode-native service status`).
+10. **Theme.** Start in a dark, then a light, color scheme, and switch themes from the palette. The TUI picks the
+    matching theme without a slow start, and a switch redraws everything.
+11. **Links.** Ctrl+click a URL in a message, and open a link from a dialog. The default browser opens it.
+12. **Sounds.** Let a session finish while the window is unfocused. The attention sound plays (Windows Terminal may
+    notify), and unknown OSC sequences print nothing.
+13. **External editor.** With `EDITOR=nvim` (`$env:EDITOR = "nvim"`), type text, press Ctrl+X then E, edit, `:wq`.
+    nvim takes the screen with a normal cursor and no mouse garbage, and the TUI comes back with the edited text.
+14. **GUI editors.** Repeat check 13 with `EDITOR=notepad` and `EDITOR=code --wait`. The text comes back after the
+    editor closes.
+15. **CLI prompts.** Step through `opencode-native auth login` with arrows, Enter and Ctrl+C. Prompts redraw in place
+    from the left edge, and Ctrl+C prints "Cancelled" and exits.
+16. **Piped input.** `echo hi | opencode-native mini` reads `hi`, then takes keys from the keyboard.
