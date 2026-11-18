@@ -46,7 +46,7 @@
     [
       "hasOwnProperty",
       "TypeError",
-      "Object.prototype.hasOwnProperty called on incompatible receiver a tool reference."
+      "Object.prototype.hasOwnProperty called on incompatible receiver a namespace reference."
     ],
     [
       "isPrototypeOf",
@@ -92,7 +92,7 @@
     [
       "isPrototypeOf",
       "TypeError",
-      "Object.prototype.isPrototypeOf called on incompatible receiver a tool reference."
+      "Object.prototype.isPrototypeOf called on incompatible receiver a namespace reference."
     ],
     [
       "propertyIsEnumerable",
@@ -138,7 +138,7 @@
     [
       "propertyIsEnumerable",
       "TypeError",
-      "Object.prototype.propertyIsEnumerable called on incompatible receiver a tool reference."
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a namespace reference."
     ],
     [
       "toString",

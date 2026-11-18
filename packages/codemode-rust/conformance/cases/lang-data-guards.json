@@ -46,15 +46,15 @@
     "function",
     [
       "TypeError",
-      "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`."
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
     ],
     [
       "TypeError",
-      "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`."
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
     ],
     [
       "TypeError",
-      "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`."
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
     ],
     "number",
     false,

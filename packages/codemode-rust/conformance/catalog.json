@@ -225,9 +225,9 @@
       {"code":"keep(new Map([[new Date(1), new Set([new URL(\"https://m.test/\")])]])); return 1","outcome":{"ok":true,"value":1},"kept":[{"map":[[{"date":1},{"set":[{"url":"https://m.test/"}]}]]}]},
       {"code":"keep([new Headers({ \"X-Y\": \"1\" }), new URLSearchParams(\"z=9\"), /q/]); return 1","outcome":{"ok":true,"value":1},"kept":[{"array":[{"headers":[["x-y","1"]]},{"params":[["z","9"]]},{"regexp":["q",""]}]}]},
       {"code":"function f() { return keep(arguments) }\nf(1, \"two\"); keep(new WeakMap()); keep(new TextDecoder()); return 1","outcome":{"ok":true,"value":1},"kept":[{"object":[["0",1],["1","two"]]},{"object":[]},{"object":[]}]},
-      {"code":"try { keep((function* () {})()) } catch (e) { return e.message }","outcome":{"ok":true,"value":"Argument 1 to keep contains a generator, which cannot be passed to an extension."},"kept":[]},
-      {"code":"try { keep(new Map().entries()) } catch (e) { return e.message }","outcome":{"ok":true,"value":"Argument 1 to keep contains an iterator, which cannot be passed to an extension."},"kept":[]},
-      {"code":"try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }","outcome":{"ok":true,"value":"Argument 1 to keep contains an un-awaited Promise, which cannot be passed to an extension."},"kept":[]},
+      {"code":"try { keep((function* () {})()) } catch (e) { return e.message }","outcome":{"ok":true,"value":"Argument 1 to keep contains a generator, which cannot be passed to the host."},"kept":[]},
+      {"code":"try { keep(new Map().entries()) } catch (e) { return e.message }","outcome":{"ok":true,"value":"Argument 1 to keep contains an iterator, which cannot be passed to the host."},"kept":[]},
+      {"code":"try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }","outcome":{"ok":true,"value":null},"kept":[{"object":[["p",1]]}]},
       {"code":"return JSON.stringify([make(\"date\"), make(\"url\"), make(\"params\"), make(\"headers\"), make(\"bytes\"), make(\"buffer\"), make(\"regexp\")])","outcome":{"ok":true,"value":"[\"1970-01-01T00:00:00.000Z\",\"https://user@a.test:8080/p%20a?q=1&r=%20#h\",{},{\"x-a\":\"1, 3\",\"x-b\":\"2\"},{\"0\":1,\"1\":2,\"2\":3},{\"type\":\"Buffer\",\"data\":[104,105]},{}]"},"kept":[]}
     ]
   }

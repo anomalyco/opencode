@@ -308,7 +308,7 @@
     ],
     [
       "TypeError",
-      "DataCloneError: a tool reference could not be cloned."
+      "DataCloneError: a namespace reference could not be cloned."
     ],
     [
       "TypeError",

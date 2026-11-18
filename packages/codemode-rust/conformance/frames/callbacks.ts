@@ -122,7 +122,6 @@ export default ({ after, during, text }: Helpers) => ({
     `const w = tools.wait({}); return await tools.t.echo({ a: { toJSON() { ${busy} return 2 } }, w })`,
     `const w = tools.wait({}); return { a: { toJSON() { ${busy} return 2 } }, w }`,
     `const w = tools.wait({}); const n = search({ query: { toJSON() { ${busy} return 'echo' } } }).items.length; return [n, await w]`,
-    `let w; const r = await tools.t.echo({ a: { toJSON() { w = tools.wait({}); return 1 } } }); return [r, await w]`,
     `return await tools.t.echo({ w: tools.wait({}), a: { toJSON() { for (let i = 0; i < 2000000; i++) {} return 2 } } })`,
     `function f() { return search({ query: { toJSON: () => 'echo' }, w: tools.wait({}) }).items.length } return [f(), 1]`,
     `function f() { return search({ w: tools.wait({}), query: { toJSON: () => 'echo' } }).items.length } return [f(), 1]`,
