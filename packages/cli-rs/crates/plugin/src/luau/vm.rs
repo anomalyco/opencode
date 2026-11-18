@@ -39,7 +39,7 @@ const LUA_GCSETSTEPMULLARGE: std::ffi::c_int = 13;
 /// The room a VM's heap must have left under its cap once a call returned, after a full collection: with less, the
 /// plugin is at its cap (it ran out of memory, caught the error, and kept what it held), and every binding would fail
 /// at random from then on. Room, not a share of the cap, so a plugin whose ordinary heap is most of a small cap runs
-/// (carbon `ls-4`; a fresh VM holds about 0.8 MiB). mlua keeps no record that an allocation failed, and wrapping the
+/// (carbon `ls-4`; a fresh VM holds about 0.3 MiB). mlua keeps no record that an allocation failed, and wrapping the
 /// sandbox's `pcall` cannot give one: Luau compiles a direct `pcall(...)` or `xpcall(...)` to a fast path that calls
 /// the builtin whatever the global holds (`Compiler.cpp`, `luauPF_pcall`). So a plugin that caught a failed allocation
 /// and kept more room than this is not caught here; its next allocation that fails outside a `pcall` fails it.

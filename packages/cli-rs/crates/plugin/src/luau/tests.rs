@@ -536,6 +536,75 @@ fn a_split_on_a_long_separator_is_linear() {
     assert!(took < Duration::from_millis(1500), "the split held the thread {took:?}");
 }
 
+// Expected (luau-fork-3, Luau class scan): a pattern of one class (a byte, `.`, a %-class or a set, alone or with
+// `*`, `+` or `-`) is matched against a byte table, not through the general matcher; `gsub`, `gmatch` and `find` give
+// what the general matcher gives for the same pattern behind a position capture, over every byte value.
+#[test]
+fn a_one_class_pattern_matches_as_the_general_matcher_does() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "scan" }, function(host)
+                local bytes = {}
+                for byte = 0, 255 do bytes[#bytes + 1] = string.char(byte) end
+                local subject = table.concat(bytes) .. "  aa_12 bé\240\159\152\128x " .. table.concat(bytes, "ab")
+                local patterns = {
+                    "a", ".", "%a", "%d", "%s", "%W", "[%d_]", "[^%s]", "[\240-\247]", "[a-c%]]",
+                    "%a+", "%d*", "[ab]-", "a*", "[^%w]+", ".-",
+                }
+                local differ = {}
+                for _, pattern in patterns do
+                    local general = "()" .. pattern
+                    local scanned, n = string.gsub(subject, pattern, "<%0>")
+                    local matched, m = string.gsub(subject, general, "<%0>")
+                    local gs, gm = {}, {}
+                    for found in string.gmatch(subject, pattern) do gs[#gs + 1] = found end
+                    for _, found in string.gmatch(subject, "()(" .. pattern .. ")") do gm[#gm + 1] = found end
+                    local fs, fe = string.find(subject, pattern, 40)
+                    local ms, me = string.find(subject, general, 40)
+                    if scanned ~= matched or n ~= m or table.concat(gs, "|") ~= table.concat(gm, "|") or fs ~= ms or fe ~= me then
+                        table.insert(differ, pattern)
+                    end
+                end
+                host:toast({ variant = "info", message = `differ: {table.concat(differ, " ")}` })
+            end)
+        end)
+    "#;
+    let (_, failed, toast) = timed(init, "scan");
+    assert_eq!(failed, None);
+    assert_eq!(toast.as_deref(), Some("differ: "));
+}
+
+// Expected (luau-fork-3, Luau UBSan-clean): `string.format`'s `%x`, `%X` and `%o` of a number at or past 2^64 give
+// Luau's defined `0x8000000000000000` (a gcc build gave 0), and `bit32.extract` and `bit32.replace` with a field near
+// `INT_MAX` raise (a gcc build returned garbage).
+#[test]
+fn format_and_bit32_edge_cases_are_defined() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "edges" }, function(host)
+                local big, field = 2^64, 2^31 - 1
+                local seen = {
+                    string.format("%x", big), string.format("%X", math.huge), string.format("%o", 1e300),
+                    tostring((select(2, pcall(bit32.extract, 0xff, field)))),
+                    tostring((select(2, pcall(bit32.replace, 0, 1, field)))),
+                    tostring((select(2, pcall(bit32.extract, 0xff, field, field)))),
+                }
+                host:toast({ variant = "info", message = table.concat(seen, "\n") })
+            end)
+        end)
+    "#;
+    let (_, failed, toast) = timed(init, "edges");
+    assert_eq!(failed, None);
+    let toast = toast.unwrap();
+    let seen: Vec<&str> = toast.lines().collect();
+    assert_eq!(seen[..3], ["8000000000000000", "8000000000000000", "1000000000000000000000"], "{toast}");
+    for refused in &seen[3..] {
+        assert!(refused.contains("trying to access non-existent bits"), "{toast}");
+    }
+}
+
 // Expected (luau-fork-2, Luau sort-interrupt carbon 5): `table.move` of 32,768 absent elements into absent keys of a
 // table with 16,383 hash keys returns at once. Stock Luau wrote each nil, and each write rehashed the table to the same
 // size: about 7 s of CPU with no safepoint, past the 2 s watchdog.
@@ -770,46 +839,38 @@ fn a_build_for_a_plugin_that_went_is_dropped() {
     assert!(registry.entries().iter().all(|entry| entry.target.as_deref() != Some(&*dir.to_string_lossy())));
 }
 
-// Expected (luau-safety-2 4, carbon ls-4): a VM under a 1 MiB cap runs an idle plugin. The fixed 1 MiB margin of the
-// out-of-memory latch failed every call of a VM with a cap that small.
+/// What a VM under a heap cap of `cap` bytes fails with once a call, after calls that filled its heap with live data
+/// until `free` bytes were left under the cap (the allocator's count, which the latch reads), ran and made nothing.
+fn holding(cap: usize, free: usize) -> Result<(), String> {
+    let init = r#"
+        local keep = nil
+        return {
+            grow = function() local node = table.create(16); node[1] = keep; keep = node end,
+            idle = function() end,
+        }
+    "#;
+    let compiled = Rc::new(vm::Compiled::new(&sources(init), "test.luau", "init.luau").unwrap());
+    let vm = vm::Vm::new(&compiled, Duration::from_secs(60), cap).unwrap();
+    let mlua::Value::Table(module) = vm.start(&compiled).unwrap() else { panic!("the module returns a table") };
+    let (grow, idle): (mlua::Function, mlua::Function) = (module.get("grow").unwrap(), module.get("idle").unwrap());
+    while vm.memory() + free < cap {
+        vm.call(|| grow.call::<()>(())).unwrap();
+    }
+    vm.call(|| idle.call::<()>(()))
+}
+
+// Expected (luau-safety-2 4, carbon ls-4): a plugin that never ran out of memory keeps running with 200 KiB of a 1 MiB
+// cap left. A margin of a share of the cap (a quarter, 256 KiB here) failed it; the latch asks for 64 KiB of room.
 #[test]
 fn a_plugin_runs_under_a_small_cap() {
-    let host = host();
-    let init = r#"
-        local plugin = require("@opencode/plugin")
-        return plugin.define(function(setup)
-            setup:command({ name = "hello" }, function(host)
-                host:toast({ variant = "info", message = "hello" })
-            end)
-        end)
-    "#;
-    let registry = running(&host, define_with(&sources(init), None, 1 << 20).unwrap().0);
-    keymap(&host).dispatch("hello", None);
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(failure(&registry, "test.luau"), None);
-    assert_eq!(host.toasts.borrow().last().map(|toast| toast.message.as_str()), Some("hello"));
+    assert_eq!(holding(1 << 20, 200 << 10), Ok(()));
 }
 
 // Expected (luau-safety-2 4, carbon ls-4): a plugin that holds most of its cap and never ran out of memory keeps
-// running: with about 0.4 MiB of a 4 MiB cap free, past any margin that is a share of the cap.
+// running: with 400 KiB of a 4 MiB cap left, inside the old fixed margin of 1 MiB.
 #[test]
 fn a_plugin_holding_most_of_its_cap_runs() {
-    let host = host();
-    let init = r#"
-        local plugin = require("@opencode/plugin")
-        local keep = nil
-        return plugin.define(function(setup)
-            setup:command({ name = "hold" }, function(host)
-                for _ = 1, 2600 do local node = table.create(64); node[1] = keep; keep = node end
-                host:toast({ variant = "info", message = "held" })
-            end)
-        end)
-    "#;
-    let registry = running(&host, define_with(&sources(init), None, 4 << 20).unwrap().0);
-    keymap(&host).dispatch("hold", None);
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(failure(&registry, "test.luau"), None);
-    assert_eq!(host.toasts.borrow().last().map(|toast| toast.message.as_str()), Some("held"));
+    assert_eq!(holding(4 << 20, 400 << 10), Ok(()));
 }
 
 // Expected (luau-safety-2 4, carbon ls-4): a plugin's error is kept and logged cut to 4 KiB, with its control
