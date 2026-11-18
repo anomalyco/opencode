@@ -1,5 +1,4 @@
-//! Tasks: a handler that waits for a dialog's answer or a reply in a straight line, as TS awaits them
-//! (`design/contract-ergonomics.md` 2.1).
+//! Tasks: a handler that waits for a dialog's answer or a reply in a straight line, as TS awaits them.
 //!
 //! [`crate::Setup::tasks`] gives the plugin a [`Tasks`] handle, and a handler starts a task with it:
 //!
@@ -117,10 +116,10 @@ impl Tasks {
     }
 }
 
-/// How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until its
-/// answer or its close runs. The host runs a dialog's answer before its close, so no answer can still come for a
-/// command once it is free: an answer reaches the one dialog that holds its command (big-boi `acf-1`). A dialog that
-/// finds every command held, as more dialogs wait unclosed than that, answers `None` at once.
+/// How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until
+/// its answer or its close runs. The host runs a dialog's answer before its close, so no answer can still come for a
+/// command once it is free: an answer reaches the one dialog that holds its command. A dialog that finds every command
+/// held, as more dialogs wait unclosed than that, answers `None` at once.
 pub const ANSWERS: usize = 64;
 
 /// The most [`Cx::blocking`] threads a plugin runs at once.
@@ -654,9 +653,8 @@ impl Shared {
     }
 
     /// Runs `deliver` and polls the tasks that are ready until none is, with `host` as their host, each under its own
-    /// owner ([`Host::set_owner`]): what a task asks for is its starting call's owner's, whichever call goes on with it
-    /// (carbon `tm2-1`). Inside a poll (a task that spawns), it only delivers: the poll that runs goes on with what is
-    /// ready.
+    /// owner ([`Host::set_owner`]): what a task asks for is its starting call's owner's, whichever call goes on with
+    /// it. Inside a poll (a task that spawns), it only delivers: the poll that runs goes on with what is ready.
     fn enter(&self, host: &dyn Host, deliver: impl FnOnce(&Self)) {
         if self.host.get().is_some() {
             return deliver(self);
@@ -1192,9 +1190,6 @@ mod tests {
         assert!(registered.manifest().wake);
     }
 
-    // Expected (carbon ac-2): a task waiting on a dialog that another task's dialog replaces does not go on in that
-    // task's call, whose host may be a mount's: it goes on in its close's call, so what it asks for next is the
-    // activation's, not the mount's.
     #[test]
     fn a_replaced_dialogs_task_goes_on_in_its_close_not_in_the_call_that_replaced_it() {
         let (registered, tasks, _) = plugin();
@@ -1209,9 +1204,6 @@ mod tests {
         assert_eq!((mount.fetches.get(), closing.fetches.get()), (0, 1));
     }
 
-    // Expected (carbon tm2-1): a task keeps the owner of the call that started it. A mount's task resumed by a reply,
-    // which is the activation's call, asks for its next fetch and its next sleep under the mount, as an `every` whose
-    // tick awaits a fetch does; so they end with the mount.
     #[test]
     fn a_task_asks_under_the_owner_of_the_call_that_started_it() {
         let (registered, tasks, _) = plugin();
@@ -1229,8 +1221,6 @@ mod tests {
         assert_eq!(activation.forced.get(), None, "the call did not get its own owner back");
     }
 
-    // Expected (carbon tm2-1): a task of the activation's that goes on in a mount's call (here another task wakes it)
-    // asks under the activation, not the mount, so the mount's close cancels none of its work.
     #[test]
     fn a_task_woken_in_a_mounts_call_keeps_the_activations_owner() {
         let (_registered, tasks, _) = plugin();
@@ -1265,8 +1255,6 @@ mod tests {
         assert_eq!(mount.forced.get(), None);
     }
 
-    // Expected (carbon tm2-3): a sleep dropped before its time, as the loser of a race, lets its timer go, so it holds
-    // no place among the plugin's timers; one that slept its time lets nothing go.
     #[test]
     fn a_dropped_sleep_lets_its_timer_go() {
         let (registered, tasks, _) = plugin();
@@ -1315,8 +1303,6 @@ mod tests {
         }
     }
 
-    // Expected (carbon ar-2): a failed plugin's abandon drops its tasks, each inside a catch: destructors that use
-    // their `Cx` with no host fail alone, never unwind into the host, and nothing drops later outside a catch.
     #[test]
     fn abandoning_drops_the_tasks_under_a_catch() {
         let (mut registered, tasks, _) = plugin();
@@ -1329,7 +1315,6 @@ mod tests {
         assert!(log.borrow().is_empty());
     }
 
-    // Expected (carbon ar-2): registrations dropped with neither a dispose nor an abandon drop their tasks the same way.
     #[test]
     fn dropping_the_registrations_drops_the_tasks_under_a_catch() {
         let (registered, tasks, _) = plugin();
@@ -1339,7 +1324,6 @@ mod tests {
         assert!(log.borrow().is_empty());
     }
 
-    // Expected (carbon ar-3): the closure that builds a task runs with the host lent, as the task does.
     #[test]
     fn a_task_is_built_with_the_host_lent() {
         let (_registered, tasks, _) = plugin();
@@ -1351,7 +1335,6 @@ mod tests {
         assert_eq!(*host.toasts.borrow(), ["built"]);
     }
 
-    // Expected (carbon ar-3): a wait dropped before its reply leaves no entry behind; a reply to it reaches nobody.
     #[test]
     fn a_dropped_wait_leaves_no_entry() {
         let (registered, tasks, _) = plugin();
@@ -1367,8 +1350,6 @@ mod tests {
         assert_eq!(replies(), 0);
     }
 
-    // Expected (carbon ar-3): at most MAX_THREADS blocking jobs run at once a plugin; the others wait their turn, and
-    // every one gives its value.
     #[test]
     fn blocking_runs_at_most_its_threads_at_once() {
         let (registered, tasks, _) = plugin();
@@ -1401,8 +1382,6 @@ mod tests {
         assert!(most <= MAX_THREADS, "{most} blocking jobs ran at once");
     }
 
-    // Expected (typed-client): a typed call sends the fetch its builder describes, and its reply decodes as the
-    // operation's output, out of `data` where the operation answers in `data`; a reply of another shape is the error.
     #[test]
     fn a_call_sends_its_request_and_decodes_its_output() {
         use crate::types::{SessionID, SessionInboxListInput, SessionListInput};
@@ -1431,8 +1410,6 @@ mod tests {
         assert!(logged.starts_with("Ok(0) Err(\"MalformedResponse: invalid type"), "{logged}");
     }
 
-    // Expected (typed-client): a call the host's fetch cannot carry fails at once and sends nothing: a header, or a
-    // stream of events.
     #[test]
     fn a_call_the_fetch_cannot_carry_fails_at_once() {
         use crate::types::{EventSubscribeInput, SessionID};
@@ -1458,7 +1435,6 @@ mod tests {
         drop(registered);
     }
 
-    // Expected (typed-client): `call_on_thread` asks for the reply's bytes and decodes them off the UI thread, `data` too.
     #[test]
     fn a_call_on_a_thread_decodes_the_bytes_there() {
         use crate::types::{SessionID, SessionInboxListInput};

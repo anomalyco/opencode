@@ -1,60 +1,14 @@
-//! The C ABI of native TUI plugins for opencode-native (`docs/plugin-abi.md`).
+//! C ABI and Rust SDK for native TUI plugins. A shared library exports [`ENTRY`], which returns its [`PluginApi`].
+//! Requests and replies cross the boundary in byte buffers. Each side frees what it allocates.
 //!
-//! A plugin is a shared library (`.so`, `.dylib`, `.dll`) that exports [`ENTRY`], a function returning a
-//! [`PluginApi`]. Everything after that crosses the boundary as JSON in byte buffers: the plugin's [`Manifest`],
-//! [`Request`]s from the host, and [`HostRequest`]s from the plugin. A buffer one side returns is freed by that
-//! side's `free`, so each side keeps its own allocator.
+//! Within an ABI major, tables grow only at the end. Readers check table size before reading an entry and check
+//! callbacks for null before calling them. JSON readers ignore unknown fields. A plugin declares its minimum host
+//! minor in [`PluginApi::requires_minor`] and required features in [`Metadata::requires`]. The wire schema is
+//! `schema/v2.json`.
 //!
-//! # Versions
-//!
-//! The ABI has a major and a minor version ([`ABI_MAJOR`], [`ABI_MINOR`]). A minor version only appends:
-//!
-//! - [`PluginApi`] and [`HostApi`] start with their own size and version. New entries are only ever added at the
-//!   end, and each new entry is optional (an `Option` of a function, null when absent). A reader treats entries
-//!   past the other side's size as absent, so a plugin built against an older minor version loads and works.
-//!   Every callback is an `Option` of a function, which has the layout of a nullable C function pointer, so a
-//!   null from C code is checked rather than called; the host refuses a plugin that leaves a required one null.
-//! - JSON payloads only gain optional fields, and readers ignore fields they do not know.
-//! - A newer plugin on an older host uses what the host offers: the host answers an unknown [`HostRequest`] with an
-//!   error, and a plugin that cannot work without a newer host sets [`PluginApi::requires_minor`], which the host
-//!   refuses with a message naming both versions.
-//! - The major version is for a deliberate breaking change. A major the host does not serve is the only thing that
-//!   refuses a plugin outright. The entry symbol carries the major version ([`ENTRY`], `opencode_plugin_v2`).
-//! - Nothing is removed inside a major: an entry, a request or a field that a later 2.x replaces stays as an alias
-//!   until 3.0, because a compiled library cannot follow a rename.
-//! - A plugin that needs an optional feature of the host lists it in [`Metadata::requires`]; a host without it
-//!   refuses the plugin at load and names the feature. The host lists its own in [`HostApi::features`].
-//!
-//! # 2.0
-//!
-//! ABI 2.0 is the first version this host loads (decision O-169: the 1.x versions of the branch's development are
-//! gone, and a 1.x library is refused as any other major). It carries the contract 2.0 of the rich-plugin design:
-//! keyed surfaces ([`v2`], [`Request::View`]), renderer claims of tool calls and fences ([`claim`],
-//! [`Request::Claim`]), threads that send messages to the UI thread through a bounded mailbox ([`mail`],
-//! [`HostApi::send`]), and the slot claims, routes, fences, dialogs, reads and verbs of [`Setup`] and [`Host`]. Every
-//! message's schema is `schema/v2.json`, generated from these types ([`v2::schema`]).
-//!
-//! A plugin written in Rust is a `cdylib` that depends on this crate and calls [`plugin!`] with a setup
-//! function. The setup registers the P.1 surface through [`Setup`]: commands, code-fence renderers, slot claims,
-//! routes, storage keys, and handlers of events, replies, mounts, wakes and disposal. Renderers return data
-//! ([`Fenced`], [`Render`] with [`Node`]s); the host turns it into widgets. `crates/plugin-abi/README.md` has a quick
-//! start. Panics are caught at every boundary and reported to the host, which shows them in its plugin manager; the
-//! plugin's own panic hook is silenced so nothing prints over the TUI. Keep the default `panic = "unwind"`. Other
-//! languages implement the same structs and JSON by hand.
-//!
-//! # One API (O-67)
-//!
-//! The host's built-in plugins use the same [`Setup`], closures and types, called in process with Rust values; an
-//! external plugin gets them over this ABI. A render (a code fence or a slot claim) receives a [`Read`]: it reads and
-//! returns a value, and has no effects. Reads are pure too: a read of something the host has not loaded yet (a
-//! catalog) returns `None`, and the host starts the load once the outermost plugin callback has returned. A command
-//! or an event handler receives a [`Host`], which also has effects; they wait until then as well, so a plugin never reenters itself
-//! through the host.
-//!
-//! A plugin sets the minimum of ABI 2 it asks for with `requires_minor` on [`plugin!`], 0 by default
-//! ([`PluginApi::requires_minor`]).
-//!
-//! Session and catalog values are the HTTP API's generated types, re-exported as [`types`].
+//! A Rust plugin exports a `cdylib` with [`plugin!`] and registers renderers and handlers through [`Setup`].
+//! Renderers receive a [`Read`] and return data for the host to draw. Handlers receive a [`Host`]; their effects
+//! run after the outermost callback returns. Keep `panic = "unwind"` so the SDK can report panics to the host.
 
 #![allow(unsafe_code)]
 
@@ -137,7 +91,7 @@ pub const MIN_TIMER: std::time::Duration = std::time::Duration::from_millis(20);
 pub const MAX_TIMERS: usize = 32;
 
 /// `delay` in the whole milliseconds of [`HostRequest::Timer`], a part of one counted as one: a timer never fires
-/// before its time (big-boi tm-4).
+/// before its time.
 fn timer_ms(delay: std::time::Duration) -> u64 {
     u64::try_from(delay.as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX)
 }
@@ -145,18 +99,18 @@ fn timer_ms(delay: std::time::Duration) -> u64 {
 /// The optional features this crate's host side knows ([`HostApi::features`]).
 pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
 
-/// 2.0: the host answers [`HostRequest::ImageBounds`] with the bounds of the images it decodes, so the SDK answers
-/// [`Read::image_size`] of bytes past them without sending them (PL-9). A host without it is asked every time.
+/// The host answers [`HostRequest::ImageBounds`] with the bounds of the images it decodes, so the SDK answers
+/// [`Read::image_size`] of bytes past them without sending them. A host without it is asked every time.
 pub const IMAGE_BOUNDS: &str = "image-bounds";
 
-/// 2.0: [`Host::focus`] gives the focus to a [`v2::Node::Input`] with an id, as a click does, so what the user types
-/// goes into the field. A host without it refuses that focus, and the field takes the focus only from the user's click.
-/// A plugin that cannot work without it names it in `requires` on [`plugin!`]; one that can reads
-/// [`Read::abi`]'s [`Abi::has_feature`].
+/// [`Host::focus`] gives the focus to a [`v2::Node::Input`] with an id, as a click does, so what the user types goes
+/// into the field. A host without it refuses that focus, and the field takes the focus only from the user's click. A
+/// plugin that cannot work without it names it in `requires` on [`plugin!`]; one that can reads [`Read::abi`]'s
+/// [`Abi::has_feature`].
 pub const FOCUS_INPUT: &str = "focus-input";
 
-/// 2.0: the host draws [`v2::Node::Fence`], its own code view of a claimed fence, in a fence claim's tree. A host
-/// without it fails a plugin that sends one; [`v2::View::or`] lowers it for that host.
+/// The host draws [`v2::Node::Fence`], its own code view of a claimed fence, in a fence claim's tree. A host without
+/// it fails a plugin that sends one; [`v2::View::or`] lowers it for that host.
 pub const FENCE_NODE: &str = "fence-node";
 
 /// What [`HostRequest::ImageBounds`] answers: the most bytes one image may have, and the most pixels a side its header
@@ -469,22 +423,22 @@ pub struct Manifest {
     /// The plugin has [`Setup::on_deltas`] handlers, which [`Request::Deltas`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub deltas: bool,
-    /// 2.0 (P6b): the plugin has [`Setup::on_plugins`] handlers, which [`Request::Plugins`] runs.
+    /// The plugin has [`Setup::on_plugins`] handlers, which [`Request::Plugins`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub plugins: bool,
-    /// 2.0: the surfaces of [`Setup::surface`], in order; [`Request::View`] names one by index.
+    /// The surfaces of [`Setup::surface`], in order; [`Request::View`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surfaces: Vec<SurfaceClaim>,
-    /// 2.0: the renderer claims of [`Setup::claim`], in order; [`Request::Claim`] names one by index.
+    /// The renderer claims of [`Setup::claim`], in order; [`Request::Claim`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claims: Vec<claim::Entry>,
-    /// 2.0: the plugin has a [`Setup::messages`] handler, which [`Request::Message`] runs.
+    /// The plugin has a [`Setup::messages`] handler, which [`Request::Message`] runs.
     #[serde(default, skip_serializing_if = "is_false")]
     pub messages: bool,
-    /// 2.0 (P2): the key layers of [`Setup::layer`], in order; [`Request::Input`] names one by index.
+    /// The key layers of [`Setup::layer`], in order; [`Request::Input`] names one by index.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<interact::Layer>,
-    /// 2.0 (P2): the names of the searches of [`Setup::search`], which [`Request::Search`] runs.
+    /// The names of the searches of [`Setup::search`], which [`Request::Search`] runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub searches: Vec<String>,
 }
@@ -501,19 +455,19 @@ pub struct SurfaceClaim {
     /// The surface has a draw ([`v2::Surface::draw`]), which [`Request::Draw`] runs for its canvases.
     #[serde(default, skip_serializing_if = "is_false")]
     pub draw: bool,
-    /// 2.0 (P3): what the surface's `layout` is told about; [`Request::Layout`] runs it.
+    /// What the surface's `layout` is told about; [`Request::Layout`] runs it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notify: Vec<v2::Notify>,
-    /// 2.0 (P3): the surface has a `layout`.
+    /// The surface has a `layout`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub layout: bool,
-    /// P2: the surface has a handler ([`v2::Surface::on`]), which [`Request::Input`] calls.
+    /// The surface has a handler ([`v2::Surface::on`]), which [`Request::Input`] calls.
     #[serde(default, skip_serializing_if = "is_false")]
     pub handler: bool,
-    /// P2: the key layers each mount of it registers ([`v2::Surface::layers`]).
+    /// The key layers each mount of it registers ([`v2::Surface::layers`]).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<interact::Layer>,
-    /// P6a: its handler hears [`interact::Event::Mount`] ([`v2::Surface::mounts`]).
+    /// Its handler hears [`interact::Event::Mount`] ([`v2::Surface::mounts`]).
     #[serde(default, skip_serializing_if = "is_false")]
     pub mounts: bool,
 }
@@ -530,7 +484,7 @@ pub enum SurfacePlace {
         kind: SlotKind,
         path: String,
     },
-    /// P2: a docked panel, and an overlay, which [`HostRequest::OpenPanel`] and [`HostRequest::Overlay`] open.
+    /// A docked panel, and an overlay, which [`HostRequest::OpenPanel`] and [`HostRequest::Overlay`] open.
     Panel {
         name: String,
     },
@@ -591,8 +545,8 @@ pub struct Command {
     /// `aliases`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
-    /// Contract ergonomics 2.5: while `false` the command binds no key, and is in neither the palette nor the slash
-    /// list, as TS binds no disabled command. The plugin changes it with [`Host::set_enabled`].
+    /// While `false` the command binds no key, and is in neither the palette nor the slash list, as TS binds no
+    /// disabled command. The plugin changes it with [`Host::set_enabled`].
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub enabled: bool,
 }
@@ -623,8 +577,8 @@ pub enum Scope {
     #[default]
     Global,
     Route(String),
-    /// P8: everywhere, while the keyboard is in its base mode (TS's keymap layer without `mode: "global"`): not while
-    /// a dialog or a mode a plugin pushed has it.
+    /// Everywhere, while the keyboard is in its base mode (TS's keymap layer without `mode: "global"`): not while a
+    /// dialog or a mode a plugin pushed has it.
     Base,
 }
 
@@ -768,9 +722,8 @@ pub struct Span {
     pub dim: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub strikethrough: bool,
-    /// An OSC 8 hyperlink to this URL (TS `<a href>`); a terminal without OSC 8 shows the text alone. The host
-    /// draws the text without it for a URL with a C0 or C1 control character or DEL
-    /// (OpenTUI writes no such link).
+    /// An OSC 8 hyperlink to this URL; a terminal without OSC 8 shows the text alone. The host draws the text without
+    /// it for a URL with a C0 or C1 control character or DEL (OpenTUI writes no such link).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
 }
@@ -872,7 +825,7 @@ pub enum Node {
         /// Cells inside each edge, instead of `padding`. A negative side counts as 0.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         padding_sides: Option<Edges>,
-        /// Children that do not fit go on to another row or column (TS `flexWrap="wrap"`).
+        /// Children that do not fit go on to another row or column.
         #[serde(default, skip_serializing_if = "is_false")]
         wrap: bool,
         /// Whether what does not fit in the box draws outside it.
@@ -987,7 +940,7 @@ pub struct Border {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "TitleAlign::is_left")]
     pub title_align: TitleAlign,
-    /// A title on the bottom side, in the border's color (TS `bottomTitle`, CT-26).
+    /// A title on the bottom side, in the border's color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bottom_title: Option<String>,
     #[serde(default, skip_serializing_if = "TitleAlign::is_left")]
@@ -1085,7 +1038,7 @@ fn is_zero_i16(value: &i16) -> bool {
     *value == 0
 }
 
-/// What a [`Node::Box`] does with what does not fit in it (TS `overflow`).
+/// What a [`Node::Box`] does with what does not fit in it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -1216,13 +1169,13 @@ pub struct Layout {
     /// Cells outside each edge; a negative margin moves the node over its neighbors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub margin: Option<Edges>,
-    /// 2.0 (P8): out of its parent's flow, placed against its edges (TS `position: "absolute"`).
+    /// Out of its parent's flow, placed against its edges.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub absolute: Option<Absolute>,
 }
 
-/// 2.0 (P8): where an absolute node sits: cells from its parent's edges, a negative one outside them, and its paint
-/// order among its siblings (TS `top`, `right`, `bottom`, `left` and `zIndex`).
+/// Where an absolute node sits: cells from its parent's edges, a negative one outside them, and its paint order among
+/// its siblings (TS `top`, `right`, `bottom`, `left` and `zIndex`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Absolute {
@@ -1299,14 +1252,13 @@ pub struct SlotInput {
     /// `prompt.footer*`: the prompt's mode and whether its details show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<PromptInput>,
-    /// The width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed (TS
-    /// `onSizeChange`); 0 before its first layout, so also as it mounts, and for any other claim. When it changes,
-    /// the claim renders again with [`Changed::size`] in the same frame, so that frame shows what it renders for the
-    /// size; it does not mount again. A claim whose node changes its size with each render renders at most twice a
-    /// frame, then again after it. A hidden claim ([`Render::Hide`]) has no size, as in TS a claim that renders nothing
-    /// has no box: one that follows the width while showing nothing returns an empty [`Node::column`]. A
-    /// [`Changed::size`] for a terminal resize may come before the layout, with the old width. A route has the
-    /// terminal's size in [`Info::size`].
+    /// The width in cells a frame laid out a claim of [`Setup::sized`] at, the last time it changed; 0 before its
+    /// first layout, so also as it mounts, and for any other claim. When it changes, the claim renders again with
+    /// [`Changed::size`] in the same frame, so that frame shows what it renders for the size; it does not mount again.
+    /// A claim whose node changes its size with each render renders at most twice a frame, then again after it. A
+    /// hidden claim ([`Render::Hide`]) has no size, as in TS a claim that renders nothing has no box: one that follows
+    /// the width while showing nothing returns an empty [`Node::column`]. A [`Changed::size`] for a terminal resize
+    /// may come before the layout, with the old width. A route has the terminal's size in [`Info::size`].
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub width: u16,
     /// The claim's height in rows, as `width`.
@@ -1448,10 +1400,10 @@ fn is_zero_usize(value: &usize) -> bool {
     *value == 0
 }
 
-/// 2.0 (P6b): a TUI plugin as the host lists it, from [`Read::plugins`]: a built-in, a plugin of the `plugins`
-/// config or directories, or one of those that did not load. Only the host enables or disables one, on the user's
-/// pick of a [`SelectOption::toggle`] row (synthesis 3.6). What failed is not in it: an error may hold paths, data or
-/// a secret of another plugin, so only the host shows it, to the user ([`ErrorDetails::plugin`]).
+/// A TUI plugin as the host lists it, from [`Read::plugins`]: a built-in, a plugin of the `plugins` config or
+/// directories, or one of those that did not load. Only the host enables or disables one, on the user's pick of a
+/// [`SelectOption::toggle`] row. What failed is not in it: an error may hold paths, data or a secret of another
+/// plugin, so only the host shows it, to the user ([`ErrorDetails::plugin`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct PluginEntry {
@@ -1468,7 +1420,7 @@ pub struct PluginEntry {
     /// It has an activation, failed or not (TS `registered().active`): a toggle disables it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub active: bool,
-    /// What its calls cost, while it is slow (synthesis 4.4).
+    /// What its calls cost, while it is slow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slow: Option<String>,
 }
@@ -1498,7 +1450,7 @@ pub enum PluginStatus {
     Skipped,
     /// It failed to load or while it ran; the host's error view says how.
     Failed,
-    /// Found in a project and waiting for the user's approval (rich-plugins 3.9); a toggle asks.
+    /// Found in a project and waiting for the user's approval; a toggle asks.
     Pending,
     /// Found in a project, and the user declined this build; a toggle asks again.
     Declined,
@@ -1581,25 +1533,25 @@ pub enum Request {
     Deltas {
         events: Vec<V2Event>,
     },
-    /// 2.0: runs the view of the surface [`Manifest::surfaces`] names by index, for `mount`, with `input`. The content
-    /// it gives the host is numbered after `next`. Result: [`ViewReply`].
+    /// Runs the view of the surface [`Manifest::surfaces`] names by index, for `mount`, with `input`. The content it
+    /// gives the host is numbered after `next`. Result: [`ViewReply`].
     View {
         surface: usize,
         mount: v2::MountId,
         input: v2::SurfaceInput,
         next: u64,
     },
-    /// 2.0: runs the draw of the surface [`Manifest::surfaces`] names by index, for canvas `canvas` of `mount` at
-    /// `frame` ([`v2::Draw`]). Its result is not JSON: it is the list's bytes ([`canvas`]), or none to keep the list
-    /// the host holds.
+    /// Runs the draw of the surface [`Manifest::surfaces`] names by index, for canvas `canvas` of `mount` at `frame`
+    /// ([`v2::Draw`]). Its result is not JSON: it is the list's bytes ([`canvas`]), or none to keep the list the host
+    /// holds.
     Draw {
         surface: usize,
         mount: v2::MountId,
         canvas: String,
         frame: v2::Frame,
     },
-    /// 2.0: runs the view of the claim [`Manifest::claims`] names by index on `part`, for the part's `mount`, with
-    /// `input`. The content it gives the host is numbered after `next`. Result: [`claim::Reply`].
+    /// Runs the view of the claim [`Manifest::claims`] names by index on `part`, for the part's `mount`, with `input`.
+    /// The content it gives the host is numbered after `next`. Result: [`claim::Reply`].
     Claim {
         claim: usize,
         mount: v2::MountId,
@@ -1607,35 +1559,35 @@ pub enum Request {
         part: claim::Part,
         next: u64,
     },
-    /// 2.0: `mount` (a surface's or a claimed part's) ended; the plugin drops what it kept for it, such as its
-    /// [`v2::Memo`] table.
+    /// `mount` (a surface's or a claimed part's) ended; the plugin drops what it kept for it, such as its [`v2::Memo`]
+    /// table.
     Unmount {
         mount: v2::MountId,
     },
-    /// 2.0: runs the [`Setup::messages`] handler with a message a thread sent, in the order the mailbox holds them.
-    /// The message's JSON text, as its sender wrote it.
+    /// Runs the [`Setup::messages`] handler with a message a thread sent, in the order the mailbox holds them. The
+    /// message's JSON text, as its sender wrote it.
     Message {
         message: String,
     },
-    /// 2.0 (P3): runs the `layout` of the surface [`Manifest::surfaces`] names by index, after the solve, with what it
-    /// named. Result: [`v2::LayoutReply`].
+    /// Runs the `layout` of the surface [`Manifest::surfaces`] names by index, after the solve, with what it named.
+    /// Result: [`v2::LayoutReply`].
     Layout {
         surface: usize,
         geometry: v2::Geometry,
     },
-    /// 2.0 (P2): calls the handler `to` names with `event`. Result: [`interact::Handled`].
+    /// Calls the handler `to` names with `event`. Result: [`interact::Handled`].
     Input {
         to: InputTo,
         event: interact::Event,
     },
-    /// 2.0 (P2): runs the search `name` of [`Setup::search`] with `query` and the select's enabled `options`. Result:
-    /// the values of the options to list, in order.
+    /// Runs the search `name` of [`Setup::search`] with `query` and the select's enabled `options`. Result: the values
+    /// of the options to list, in order.
     Search {
         name: String,
         query: String,
         options: Vec<SelectOption>,
     },
-    /// 2.0 (P6b): runs the [`Setup::on_plugins`] handlers after the plugins the host lists changed.
+    /// Runs the [`Setup::on_plugins`] handlers after the plugins the host lists changed.
     Plugins,
 }
 
@@ -1645,8 +1597,8 @@ pub enum Request {
 #[serde(tag = "type", rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum InputTo {
-    /// A surface's handler, for the mount the event is for (big-boi 4), which [`Read::mount`] names to the handler;
-    /// none for [`interact::Event::Mount`], which the plugin hears rather than the mount, and which names its mount.
+    /// A surface's handler, for the mount the event is for, which [`Read::mount`] names to the handler; none for
+    /// [`interact::Event::Mount`], which the plugin hears rather than the mount, and which names its mount.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Surface {
         surface: usize,
@@ -1730,7 +1682,7 @@ impl<'de> Deserialize<'de> for Blob {
 pub mod base64 {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     /// The sextet of each byte, or [`NONE`] for a byte not in [`ALPHABET`]: a lookup a character, as an image of
-    /// megabytes crosses this way (PL-9).
+    /// megabytes crosses this way.
     const SEXTETS: [u8; 256] = {
         let mut sextets = [NONE; 256];
         let mut index = 0;
@@ -1795,9 +1747,9 @@ pub mod base64 {
     }
 }
 
-/// 2.0 (P6c): the width and height in pixels the header of a PNG, GIF, JPEG or WebP image names, as the host reads it
-/// before it decodes a [`v2::Node::Image`]; `None` for other bytes, and for a header that names no pixels. It reads
-/// only the header: [`Read::image_size`] is what the host decodes.
+/// The width and height in pixels the header of a PNG, GIF, JPEG or WebP image names, as the host reads it before it
+/// decodes a [`v2::Node::Image`]; `None` for other bytes, and for a header that names no pixels. It reads only the
+/// header: [`Read::image_size`] is what the host decodes.
 pub fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
     header_size(bytes).filter(|&(width, height)| width > 0 && height > 0)
 }
@@ -1920,7 +1872,7 @@ pub enum HostRequest {
     Messages {
         id: String,
     },
-    /// 2.0 (P6a): [`Read::message`], one message or null.
+    /// [`Read::message`], one message or null.
     Message {
         session: String,
         message: String,
@@ -2064,13 +2016,13 @@ pub enum HostRequest {
     Theme,
     /// [`Read::themes`].
     Themes,
-    /// 2.0 (P6b): [`Read::plugins`].
+    /// [`Read::plugins`].
     Plugins,
-    /// 2.0 (P6c): [`Read::setting`].
+    /// [`Read::setting`].
     Setting {
         name: String,
     },
-    /// 2.0 (P6c): [`Read::image_size`] of the bytes, in base64 ([`base64::encode`]).
+    /// [`Read::image_size`] of the bytes, in base64 ([`base64::encode`]).
     ImageSize {
         bytes: String,
     },
@@ -2084,7 +2036,7 @@ pub enum HostRequest {
     Measure {
         text: String,
     },
-    /// 2.0 (P6c): [`Host::set_setting`], once the current call returns.
+    /// [`Host::set_setting`], once the current call returns.
     SetSetting {
         name: String,
         value: serde_json::Value,
@@ -2098,70 +2050,70 @@ pub enum HostRequest {
         name: String,
         theme: serde_json::Value,
     },
-    /// 2.0 (P3): [`Host::scroll`], once the current call returns.
+    /// [`Host::scroll`], once the current call returns.
     Scroll {
         target: v2::Target,
         verb: v2::Scroll,
     },
-    /// 2.0 (P3): [`Read::scroll_state`].
+    /// [`Read::scroll_state`].
     ScrollState {
         target: v2::Target,
     },
-    /// 2.0 (P3): [`Read::anchors`].
+    /// [`Read::anchors`].
     Anchors {
         target: v2::Target,
         group: String,
     },
-    /// 2.0 (P3): [`Read::top_anchor`].
+    /// [`Read::top_anchor`].
     TopAnchor {
         target: v2::Target,
         group: String,
         #[serde(default)]
         inset: u16,
     },
-    /// 2.0 (P3): [`Read::transcript`].
+    /// [`Read::transcript`].
     Transcript,
-    /// 2.0 (P2): [`Host::open_panel`], once the current call returns.
+    /// [`Host::open_panel`], once the current call returns.
     OpenPanel(interact::OpenPanel),
-    /// 2.0 (P2): [`Host::close_panel`], once the current call returns.
+    /// [`Host::close_panel`], once the current call returns.
     ClosePanel {
         surface: String,
     },
-    /// 2.0 (P2): [`Host::overlay`], once the current call returns, for the mount whose handler runs.
+    /// [`Host::overlay`], once the current call returns, for the mount whose handler runs.
     Overlay(interact::Overlay),
-    /// 2.0 (P2): [`Host::close_overlay`], once the current call returns.
+    /// [`Host::close_overlay`], once the current call returns.
     CloseOverlay {
         surface: String,
     },
-    /// Contract ergonomics 2.5: [`Host::set_enabled`], once the current call returns.
+    /// [`Host::set_enabled`], once the current call returns.
     SetEnabled {
         name: String,
         enabled: bool,
     },
-    /// 2.0 (P2): [`Host::focus`], once the current call returns; of a field too, on a host with [`FOCUS_INPUT`].
+    /// [`Host::focus`], once the current call returns; of a field too, on a host with [`FOCUS_INPUT`].
     Focus {
         node: String,
     },
-    /// 2.0 (P2): [`Host::blur`], once the current call returns.
+    /// [`Host::blur`], once the current call returns.
     Blur,
-    /// 2.0 (P2): [`Host::set_mode`], once the current call returns.
+    /// [`Host::set_mode`], once the current call returns.
     SetMode {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
     },
-    /// 2.0 (P2): [`Host::release_keys`], once the current call returns.
+    /// [`Host::release_keys`], once the current call returns.
     ReleaseKeys,
-    /// 2.0 (P2): [`Read::rect`].
+    /// [`Read::rect`].
     Rect {
         node: String,
     },
-    /// 2.0 (P2): [`Read::focused`].
+    /// [`Read::focused`].
     Focused,
-    /// 2.0 (P2): [`Read::mode`].
+    /// [`Read::mode`].
     InputMode,
-    /// 2.0 (P8): [`Read::sessions`].
+    /// [`Read::sessions`].
     Sessions,
-    /// 2.0 (P8): [`Read::pending`].
+    /// [`Read::pending`].
     Pending {
         id: String,
     },
@@ -2185,12 +2137,12 @@ pub struct Composer {
 #[serde(tag = "type", rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum ComposerEdit {
-    /// Replaces the text and its attachments, and puts the cursor at the end (TS `ref.set`). The mode stays.
+    /// Replaces the text and its attachments, and puts the cursor at the end. The mode stays.
     Set { text: String },
     /// Inserts `text` at the cursor, in place of a selection, as typing it does.
     Insert { text: String },
-    /// Submits the composer as enter does, whether or not it has focus (TS `ref.submit`); nothing while it may not
-    /// submit (a home form, another pane with the input), as TS's `submit` refuses a disabled prompt.
+    /// Submits the composer as enter does, whether or not it has focus; nothing while it may not submit (a home form,
+    /// another pane with the input), as TS's `submit` refuses a disabled prompt.
     Submit,
 }
 
@@ -2442,8 +2394,8 @@ pub struct Fetch {
     /// A JSON body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
-    /// 2.0 (P6c): the reply is the body's bytes, whatever they are (a file the server reads), as a JSON string in
-    /// base64 ([`base64::decode`]).
+    /// The reply is the body's bytes, whatever they are (a file the server reads), as a JSON string in base64
+    /// ([`base64::decode`]).
     #[serde(default, skip_serializing_if = "is_false")]
     pub bytes: bool,
 }
@@ -2460,7 +2412,7 @@ pub struct RequestId(pub u64);
 pub enum Dialog {
     Prompt(Prompt),
     Panel(Panel),
-    /// Closes the plugin's [`Panel`] `key` if it is open; since P8, with an empty `key`, whatever dialog of the plugin
+    /// Closes the plugin's [`Panel`] `key` if it is open. An empty `key` closes whichever dialog of the plugin
     /// shows.
     Close {
         key: String,
@@ -2468,24 +2420,23 @@ pub enum Dialog {
     /// A list to pick from, with a filter. Enter or a click closes it and runs its `action` with the option's value as
     /// the input; escape closes it.
     Select(Select),
-    /// A question with `Cancel` and `Confirm` buttons (TS `dialog.confirm`).
+    /// A question with `Cancel` and `Confirm` buttons.
     Confirm(Confirm),
-    /// A message with `ok` (TS `dialog.alert`).
+    /// A message with `ok`.
     Alert(Alert),
-    /// 2.0: an error's details, drawn by the host's own error view (TS `DialogErrorDetails`); `back` runs from its
-    /// Back button and from escape.
+    /// An error's details, drawn by the host's own error view; `back` runs from its Back button and from escape.
     ErrorDetails(ErrorDetails),
-    /// P8: `dialog`, whose `dismissed` runs once as it closes, after its own action if that ran as it closed: so a
-    /// plugin that waits for an answer hears of each close, also escape, the backdrop, another plugin's dialog that
-    /// replaces it, or its unload (TS settles the dialog's promise in each case). One the host does not open, as
-    /// while its own plugin list or approval shows, runs `dismissed` at once.
+    /// `dialog`, whose `dismissed` runs once as it closes, after its own action if that ran as it closed: so a plugin
+    /// that waits for an answer hears of each close, also escape, the backdrop, another plugin's dialog that replaces
+    /// it, or its unload (TS settles the dialog's promise in each case). One the host does not open, as while its own
+    /// plugin list or approval shows, runs `dismissed` at once.
     Dismissable {
         dialog: Box<Dialog>,
         dismissed: Action,
     },
-    /// 2.0 (P6c): images in the host's image preview (TS `DialogImagePreview`), starting at `index`.
+    /// Images in the host's image preview, starting at `index`.
     Images(Images),
-    /// The plugin's dialog surface ([`v2::Place::Dialog`]) as the dialog's body (TS `ui.dialog.show`).
+    /// The plugin's dialog surface ([`v2::Place::Dialog`]) as the dialog's body.
     Surface(DialogSurface),
 }
 
@@ -2529,10 +2480,10 @@ pub struct Prompt {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
-    /// The text the field starts with, which the user edits (TS `value`), such as the title a rename changes.
+    /// The text the field starts with, which the user edits, such as the title a rename changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    /// A line above the field (TS `description`).
+    /// A line above the field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub action: Action,
@@ -2570,14 +2521,14 @@ pub struct ErrorDetails {
     pub context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back: Option<Action>,
-    /// 2.0 (P6b): the reference the user quotes to report it (TS `diagnosticRef`).
+    /// The reference the user quotes to report it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
-    /// 2.0 (P6b): the plugin's name for the view, which [`Read::dialog_open`] answers for while it shows.
+    /// The plugin's name for the view, which [`Read::dialog_open`] answers for while it shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    /// 2.0 (P6b): the [`PluginEntry::key`] of a TUI plugin whose error this is: the host shows that plugin's own error
-    /// (or why it is skipped) in place of `error`, which no plugin reads.
+    /// The [`PluginEntry::key`] of a TUI plugin whose error this is: the host shows that plugin's own error (or why it
+    /// is skipped) in place of `error`, which no plugin reads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin: Option<String>,
 }
@@ -2595,10 +2546,10 @@ pub struct Confirm {
     #[serde(default, skip_serializing_if = "ConfirmLabel::is_default")]
     pub label: ConfirmLabel,
     pub action: Action,
-    /// 2.0: the dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
+    /// The dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PanelSize>,
-    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
+    /// In the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
 }
@@ -2629,15 +2580,15 @@ pub struct Alert {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
-    /// 2.0: the dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
+    /// The dialog's width; [`PanelSize::Medium`] when unset (TS `dialog.set({ size })`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PanelSize>,
-    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
+    /// In the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
 }
 
-/// A [`Dialog::Select`] (TS `dialog.select`).
+/// A [`Dialog::Select`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Select {
@@ -2651,46 +2602,45 @@ pub struct Select {
     pub current: Option<String>,
     /// What picking an option runs, with its value as the input.
     pub action: Action,
-    /// 2.0: the rich select (synthesis 4.10). A select shown again while one of the plugin's with this key is open
-    /// changes in place: its rows, footers and actions, with the filter and the selected row kept. Picking a row no
-    /// longer closes it.
+    /// The rich select. A select shown again while one of the plugin's with this key is open changes in place: its
+    /// rows, footers and actions, with the filter and the selected row kept. Picking a row no longer closes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    /// 2.0: actions on the selected row, in the footer with their keys; each runs with the row's value as its input.
+    /// Actions on the selected row, in the footer with their keys; each runs with the row's value as its input.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<SelectAction>,
-    /// 2.0: keys that run an action with the selected row's value as its input, or none without a row.
+    /// Keys that run an action with the selected row's value as its input, or none without a row.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binds: Vec<PanelBind>,
-    /// 2.0: the plugin's search of this name ([`Setup::search`]) lists the rows for the query instead of the host's
-    /// filter, in its order and flat, as TS's `search` does; the host calls it as the query changes, and for the empty
-    /// query as the select opens.
+    /// The plugin's search of this name ([`Setup::search`]) lists the rows for the query instead of the host's filter,
+    /// in its order and flat, as TS's `search` does; the host calls it as the query changes, and for the empty query
+    /// as the select opens.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search: Option<String>,
-    /// 2.0 (P6b): the dialog's width; [`PanelSize::Medium`] when unset.
+    /// The dialog's width; [`PanelSize::Medium`] when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PanelSize>,
-    /// 2.0 (P6b): the value of the option selected as the list opens, without `current`'s mark.
+    /// The value of the option selected as the list opens, without `current`'s mark.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focus: Option<String>,
-    /// 2.0 (P6c): the host lists the rows as they are and filters none; it runs this with the filter's text as the
-    /// input once the text has stayed `query_delay` milliseconds, so the plugin lists the rows for it, such as from the
-    /// server (TS `skipFilter` with `onFilter`).
+    /// The host lists the rows as they are and filters none; it runs this with the filter's text as the input once the
+    /// text has stayed `query_delay` milliseconds, so the plugin lists the rows for it, such as from the server (TS
+    /// `skipFilter` with `onFilter`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<Action>,
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     pub query_delay: u16,
-    /// 2.0 (P6c): no filter field, and no filtering (TS `skipFilter` with `renderFilter={false}`).
+    /// No filter field, and no filtering (TS `skipFilter` with `renderFilter={false}`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub filterless: bool,
-    /// 2.0 (P6c): what shows while no row does, as the text of the plugin (TS `emptyView` and `noMatchView`).
+    /// What shows while no row does, as the text of the plugin (TS `emptyView` and `noMatchView`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub empty: Option<Span>,
-    /// 2.0 (P6c): a line under the rows (TS `footer`).
+    /// A line under the rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<Span>,
-    /// 2.0: in the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`). A host that
-    /// does not know it places the select as before.
+    /// In the middle of the screen, not a quarter of the way down (TS `dialog.set({ centered })`). A host that does
+    /// not know it places the select as before.
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
 }
@@ -2738,30 +2688,30 @@ pub struct SelectOption {
     pub category: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
-    /// 2.0: the footer's color.
+    /// The footer's color.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub footer_color: Option<Color>,
-    /// 2.0: a mark left of the title.
+    /// A mark left of the title.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gutter: Option<Gutter>,
-    /// 2.0: what picking this row runs, with its value as the input, instead of the select's action.
+    /// What picking this row runs, with its value as the input, instead of the select's action.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
-    /// 2.0: picking this row enables or disables a plugin, which the host does, and only the host (synthesis 3.6). From
-    /// 2.0 P6b it names the entry by its [`PluginEntry::key`] (an ID still names a plugin of the registry): the host draws
-    /// the `enable` or `disable` action from that entry's state, naming the plugin unless the row's title is its ID,
-    /// refuses the caller's own plugin and the plugin manager, and runs it after the key, if the row still names that
-    /// entry; for a held build, `enable` releases it. For a project plugin waiting for approval, the host asks the user
-    /// to approve or decline the build it holds; once the question closes, it runs the row's `action`, if any, with
-    /// the row's value, or shows the select again on that row.
+    /// Picking this row enables or disables a plugin, which the host does, and only the host. It names the entry by
+    /// its [`PluginEntry::key`] (an ID still names a plugin of the registry): the host draws the `enable` or `disable`
+    /// action from that entry's state, naming the plugin unless the row's title is its ID, refuses the caller's own
+    /// plugin and the plugin manager, and runs it after the key, if the row still names that entry; for a held build,
+    /// `enable` releases it. For a project plugin waiting for approval, the host asks the user to approve or decline
+    /// the build it holds; once the question closes, it runs the row's `action`, if any, with the row's value, or
+    /// shows the select again on that row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toggle: Option<String>,
-    /// 2.0 (P6b): what the filter matches beside the title and the category (TS `searchText`).
+    /// What the filter matches beside the title and the category.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub search_text: Option<String>,
 }
 
-/// 2.0: a mark left of a [`SelectOption`]'s title.
+/// A mark left of a [`SelectOption`]'s title.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -2771,7 +2721,7 @@ pub enum Gutter {
     Span(Span),
 }
 
-/// 2.0: an action of a [`Select`] on the selected row.
+/// An action of a [`Select`] on the selected row.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct SelectAction {
@@ -2786,18 +2736,18 @@ pub struct SelectAction {
     /// an action on the selected row and the second for a rowless one, as TS's `group`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary: Option<bool>,
-    /// Runs with no row and no value, so it shows and runs also while no row matches (TS `selection: "none"`).
+    /// Runs with no row and no value, so it shows and runs also while no row matches.
     #[serde(default, skip_serializing_if = "is_false")]
     pub rowless: bool,
-    /// 2.0 (P6b): the name of the user's keybind for it, such as `dialog.plugins.check`: for a name the host's keybinds
-    /// know, the config's keys alone run it (so the user's `none` turns it off), and `key` for any other name.
+    /// The name of the user's keybind for it, such as `dialog.plugins.check`: for a name the host's keybinds know, the
+    /// config's keys alone run it (so the user's `none` turns it off), and `key` for any other name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    /// 2.0 (P6b): shown dimmed, and its key does nothing (TS `disabled`).
+    /// Shown dimmed, and its key does nothing.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
-    /// 2.0 (P6b): hidden on every row and with none, and its key goes on to the list; a select shown again with only
-    /// this changed changes in place (TS `hidden`).
+    /// Hidden on every row and with none, and its key goes on to the list; a select shown again with only this changed
+    /// changes in place.
     #[serde(default, skip_serializing_if = "is_false")]
     pub hidden_all: bool,
 }
@@ -2829,15 +2779,15 @@ pub struct Panel {
     /// The panel sits in the middle of the screen, rather than near its top as a dialog does.
     #[serde(default, skip_serializing_if = "is_false")]
     pub centered: bool,
-    /// P8: only the dialog's frame around the body, as TS draws a plugin's own view (`ui.dialog.show`): no header,
-    /// footer, inset or scroll, and the body lays itself out. The title, actions and keys go unused.
+    /// Only the dialog's frame around the body, as TS draws a plugin's own view (`ui.dialog.show`): no header, footer,
+    /// inset or scroll, and the body lays itself out. The title, actions and keys go unused.
     #[serde(default, skip_serializing_if = "is_false")]
     pub bare: bool,
-    /// 2.0 (P6c): the header's close label; `esc` when unset.
+    /// The header's close label; `esc` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close: Option<String>,
-    /// 2.0 (P6c): the body's rows, whatever it holds; it scrolls inside them. A panel of a set height without actions
-    /// has no footer row (TS `DialogLayout` without a footer).
+    /// The body's rows, whatever it holds; it scrolls inside them. A panel of a set height without actions has no
+    /// footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
 }
@@ -2849,7 +2799,7 @@ pub enum PanelSize {
     #[default]
     Medium,
     Large,
-    /// The widest (TS `xlarge`).
+    /// The widest.
     #[serde(rename = "xlarge")]
     XLarge,
 }
@@ -2898,7 +2848,7 @@ pub struct PanelBind {
 /// }
 /// ```
 pub trait Read {
-    /// Whether the page theme is dark or light (TS `api.themeMode`).
+    /// Whether the page theme is dark or light.
     fn theme_mode(&self) -> ThemeMode;
     /// A color of the page theme: a token path such as `text.muted`, or a scale step such as `categorical.3.300`
     /// or `interactive.500`. `None` when the theme has no such color.
@@ -2911,13 +2861,13 @@ pub trait Read {
     fn family(&self, _id: &str) -> Family {
         Family::default()
     }
-    /// 2.0 (P8): every session the host has loaded, most recently updated first, and whether each runs (TS
+    /// Every session the host has loaded, most recently updated first, and whether each runs (TS
     /// `data.session.list()`).
     fn sessions(&self) -> Vec<Session> {
         Vec::new()
     }
-    /// 2.0 (P8): the inbox items of session `id` the server has not delivered yet, in the order they were admitted
-    /// (TS `data.session.pending.list()`); empty when its inbox is not loaded.
+    /// The inbox items of session `id` the server has not delivered yet, in the order they were admitted (TS
+    /// `data.session.pending.list()`); empty when its inbox is not loaded.
     fn pending(&self, _id: &str) -> Vec<types::SessionInboxInfo> {
         Vec::new()
     }
@@ -2926,8 +2876,8 @@ pub trait Read {
     fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
         visit(&[]);
     }
-    /// 2.0 (P6a): calls `visit` with loaded message `message` of session `session`, or `None`. Over the C ABI only that
-    /// message crosses, so a view that hears a change in place of one message reads what changed, not the session.
+    /// Calls `visit` with loaded message `message` of session `session`, or `None`. Over the C ABI only that message
+    /// crosses, so a view that hears a change in place of one message reads what changed, not the session.
     fn message(&self, session: &str, message: &str, visit: &mut dyn FnMut(Option<&SessionMessageInfo>)) {
         self.messages(session, &mut |messages| visit(messages.iter().find(|item| item.id() == message)));
     }
@@ -2973,8 +2923,8 @@ pub trait Read {
     fn route(&self) -> Route {
         Route::Home
     }
-    /// Whether the session pane owns the input (TS `useInteractivity`): no side pane has it and no panel is full
-    /// screen. Claims render again with [`Changed::all`] when it changes; a claim stays mounted.
+    /// Whether the session pane owns the input: no side pane has it and no panel is full screen. Claims render again
+    /// with [`Changed::all`] when it changes; a claim stays mounted.
     fn interactive(&self) -> bool {
         true
     }
@@ -2991,10 +2941,10 @@ pub trait Read {
     fn composer(&self) -> Option<Composer> {
         None
     }
-    /// What the host serves the plugin, as it stated at load: its major, its minor of that major, and its
-    /// optional features (big-boi 13). A plugin of this SDK that uses what a later 2.x minor adds checks it here, or
-    /// lowers it with [`v2::View::or`]; one that cannot work without it sets `requires_minor` on [`plugin!`] instead,
-    /// and an older host refuses it. In process the host is this crate's own.
+    /// What the host serves the plugin, as it stated at load: its major, its minor of that major, and its optional
+    /// features. A plugin of this SDK that uses what a later 2.x minor adds checks it here, or lowers it with
+    /// [`v2::View::or`]; one that cannot work without it sets `requires_minor` on [`plugin!`] instead, and an older
+    /// host refuses it. In process the host is this crate's own.
     fn abi(&self) -> Abi {
         Abi::current()
     }
@@ -3043,57 +2993,57 @@ pub trait Read {
     fn themes(&self) -> Vec<String> {
         Vec::new()
     }
-    /// 2.0 (P3): where scroll `target` is, as of the last settled frame and the current offset.
+    /// Where scroll `target` is, as of the last settled frame and the current offset.
     fn scroll_state(&self, _target: &v2::Target) -> Option<v2::ScrollState> {
         None
     }
-    /// 2.0 (P3): the anchors of `group` in scroll `target`, in content order. A list's items that have no widgets
-    /// give theirs, their own and those inside them, hunks included, at the row the host assumes for the item.
+    /// The anchors of `group` in scroll `target`, in content order. A list's items that have no widgets give theirs,
+    /// their own and those inside them, hunks included, at the row the host assumes for the item.
     fn anchors(&self, _target: &v2::Target, _group: &str) -> Vec<v2::AnchorAt> {
         Vec::new()
     }
-    /// 2.0 (P3): the last anchor of `group`, in content order, at or above `inset` rows below the top of `target`.
+    /// The last anchor of `group`, in content order, at or above `inset` rows below the top of `target`.
     fn top_anchor(&self, _target: &v2::Target, _group: &str, _inset: u16) -> Option<v2::AnchorAt> {
         None
     }
-    /// 2.0 (P3): the published `Viewport::Transcript`, while the session route shows.
+    /// The published `Viewport::Transcript`, while the session route shows.
     fn transcript(&self) -> Option<v2::TranscriptView> {
         None
     }
-    /// 2.0: where the node with id `id` of the running call's mount is, as the last settled frame laid it out; `None`
+    /// Where the node with id `id` of the running call's mount is, as the last settled frame laid it out; `None`
     /// outside a mount's call, or for an id its tree does not hold.
     fn rect(&self, _id: &str) -> Option<interact::Rect> {
         None
     }
-    /// 2.0: where the focus is, for the running call's mount.
+    /// Where the focus is, for the running call's mount.
     fn focused(&self) -> interact::Focused {
         interact::Focused::default()
     }
-    /// 2.0: the mode the running call's owner, its mount or else the plugin, is in ([`Host::set_mode`]); `None` in the
-    /// base mode, also after the host ended the mode.
+    /// The mode the running call's owner, its mount or else the plugin, is in ([`Host::set_mode`]); `None` in the base
+    /// mode, also after the host ended the mode.
     fn mode(&self) -> Option<String> {
         None
     }
-    /// 2.0: the mount the running call is for: of a surface's handler ([`v2::Surface::on`]), its view, draw and
-    /// `layout`; `None` for a call of the plugin's own (a command, a layer of setup, a message) (big-boi 4). Two mounts
-    /// of one surface with the same tree hear the same events: a plugin with a model per mount finds the model by it,
-    /// and drops it on [`interact::Event::Mount`] or [`Request::Unmount`].
+    /// The mount the running call is for: of a surface's handler ([`v2::Surface::on`]), its view, draw and `layout`;
+    /// `None` for a call of the plugin's own (a command, a layer of setup, a message). Two mounts of one surface with
+    /// the same tree hear the same events: a plugin with a model per mount finds the model by it, and drops it on
+    /// [`interact::Event::Mount`] or [`Request::Unmount`].
     fn mount(&self) -> Option<v2::MountId> {
         None
     }
-    /// 2.0 (P6b): the TUI plugins, in the host's order; [`Setup::on_plugins`] hears when they change.
+    /// The TUI plugins, in the host's order; [`Setup::on_plugins`] hears when they change.
     fn plugins(&self) -> Vec<PluginEntry> {
         Vec::new()
     }
-    /// 2.0 (P6c): the user's setting `name`, one of the host's named settings ([`SETTINGS`]), as the TUI config
-    /// (`tui.json`) holds it; `None` when it holds none, and for a name the host does not name. A change of it is a
-    /// change of the host's own state ([`Changed::local`]).
+    /// The user's setting `name`, one of the host's named settings ([`SETTINGS`]), as the TUI config (`tui.json`)
+    /// holds it; `None` when it holds none, and for a name the host does not name. A change of it is a change of the
+    /// host's own state ([`Changed::local`]).
     fn setting(&self, _name: &str) -> Option<serde_json::Value> {
         None
     }
-    /// 2.0 (P6c): the width and height of the image `bytes` decode to in the host, or `None` where an image node of
-    /// them would show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not
-    /// decode. [`image_size`] reads only the header. Over the C ABI the bytes cross to the host in base64, and the host
+    /// The width and height of the image `bytes` decode to in the host, or `None` where an image node of them would
+    /// show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not decode.
+    /// [`image_size`] reads only the header. Over the C ABI the bytes cross to the host in base64, and the host
     /// decodes an image within its bounds: ask once per content and keep the answer, not in each view. A host with
     /// [`IMAGE_BOUNDS`] states its bounds once, and bytes past them answer `None` without crossing.
     fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
@@ -3113,8 +3063,8 @@ pub trait Read {
     }
 }
 
-/// 2.0 (P6c): the user's settings a plugin reads ([`Read::setting`]) and writes ([`Host::set_setting`]), by name: the
-/// diff viewer's (TS `config.diffs`).
+/// The user's settings a plugin reads ([`Read::setting`]) and writes ([`Host::set_setting`]), by name: the diff
+/// viewer's.
 pub const SETTINGS: [&str; 5] = ["diffs.source", "diffs.view", "diffs.fullscreen", "diffs.tree", "diffs.single"];
 
 /// What a command or an event handler reads and asks of the host. An effect waits until the outermost plugin
@@ -3187,15 +3137,15 @@ pub trait Host: Read {
     fn copy(&self, text: &str, then: Option<Action>);
     /// Edits the composer on screen ([`Read::composer`]); without one, it does nothing.
     fn edit_composer(&self, _edit: ComposerEdit) {}
-    /// Selects `variant` of the model the next prompt uses, or its default for `None` (TS
-    /// `ui.model.variant.set`). `false`, and nothing happens, when no model is selected or it has no such variant.
+    /// Selects `variant` of the model the next prompt uses, or its default for `None`. `false`, and nothing happens,
+    /// when no model is selected or it has no such variant.
     fn set_variant(&self, _variant: Option<&str>) -> bool {
         false
     }
     /// Selects model `model` of provider `provider` for the next prompt and adds it to the recent models, as the
     /// model dialog does. A model the host does not list is ignored.
     fn set_model(&self, _provider: &str, _model: &str) {}
-    /// Opens, shows, moves or closes a session tab (TS `ui.tabs.*`); whether it will.
+    /// Opens, shows, moves or closes a session tab; whether it will.
     fn edit_tab(&self, _edit: TabEdit) -> bool {
         false
     }
@@ -3241,8 +3191,7 @@ pub trait Host: Read {
     /// requests are that mount's, and end with it, also when it has closed already; and its input verbs act on it.
     /// `None` gives the call its own owner back. It lasts until the call returns.
     fn set_owner(&self, _owner: Option<u64>) {}
-    /// Sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
-    /// change, such as a route change.
+    /// Sets the terminal title. The host sets its own again with its next change, such as a route change.
     fn set_title(&self, _title: &str) {}
     /// Selects theme `name` and saves it as the user's choice, as the theme dialog does (TS 1.x
     /// `api.theme.set`). `false`, and nothing happens, for a theme the host does not have.
@@ -3253,44 +3202,43 @@ pub trait Host: Read {
     /// `api.theme.install`), at once for [`Host::set_theme`] in the same call. It does not select it. A name that is
     /// not a plain file name, or a value without `theme` or `base`, installs nothing.
     fn install_theme(&self, _name: &str, _theme: serde_json::Value) {}
-    /// 2.0 (P6c): saves `value` as the user's setting `name` ([`SETTINGS`]) in the TUI config, once the call returns,
-    /// as the host's settings dialog does. A name the host does not name, or a value the setting does not take, is not
-    /// saved.
+    /// Saves `value` as the user's setting `name` ([`SETTINGS`]) in the TUI config, once the call returns, as the
+    /// host's settings dialog does. A name the host does not name, or a value the setting does not take, is not saved.
     fn set_setting(&self, _name: &str, _value: serde_json::Value) {}
-    /// 2.0 (P3): scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler of the
-    /// user's input only (a key, a click, the palette, the user's scroll), never from a view, `layout`, a wake, a
-    /// reply, a command the plugin dispatched or the report of its own step.
+    /// Scrolls `target` by `verb` once the call returns. The transcript takes a verb from a handler of the user's
+    /// input only (a key, a click, the palette, the user's scroll), never from a view, `layout`, a wake, a reply, a
+    /// command the plugin dispatched or the report of its own step.
     fn scroll(&self, _target: v2::Target, _verb: v2::Scroll) {}
-    /// 2.0: opens the plugin's panel surface beside a session ([`v2::Place::Panel`]); it replaces the panel on screen.
+    /// Opens the plugin's panel surface beside a session ([`v2::Place::Panel`]); it replaces the panel on screen.
     fn open_panel(&self, _open: interact::OpenPanel) {}
-    /// 2.0: closes the plugin's panel `surface`, if it shows.
+    /// Closes the plugin's panel `surface`, if it shows.
     fn close_panel(&self, _surface: &str) {}
-    /// 2.0: opens the plugin's overlay surface ([`v2::Place::Overlay`]); it belongs to the running call's mount, or to
-    /// the plugin, and replaces the plugin's overlay on screen.
+    /// Opens the plugin's overlay surface ([`v2::Place::Overlay`]); it belongs to the running call's mount, or to the
+    /// plugin, and replaces the plugin's overlay on screen.
     fn overlay(&self, _overlay: interact::Overlay) {}
-    /// 2.0: closes the plugin's overlay `surface`, if it shows.
+    /// Closes the plugin's overlay `surface`, if it shows.
     fn close_overlay(&self, _surface: &str) {}
-    /// 2.0: gives the focus to the node with id `id` of the running call's mount: a box with
+    /// Gives the focus to the node with id `id` of the running call's mount: a box with
     /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`] or a
     /// [`v2::Node::Scroll`], as a click does, so what the user types goes into the field, and the arrows and the page
-    /// keys scroll the scroll. Any other node, one in a hidden box, another plugin's node and a host
-    /// widget are refused, as is any focus while a host dialog is open, but for a node of the plugin's own dialog
-    /// surface ([`v2::Place::Dialog`]) while its dialog is on top; a host without [`FOCUS_INPUT`] refuses a field.
-    /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it. A node the
-    /// mount's tree does not hold yet takes the focus if the mount's next view shows it (the view after the call, or
-    /// the JS host's next revision), so a call can show a field and focus it; if that view does not, the focus is
-    /// dropped, and no later view (a resize, a theme) applies it. A call of the plugin's own (a command) that names a
-    /// node no mount holds yet names the mount that holds it once the effects before it applied: a command can show
-    /// its dialog surface ([`Dialog::Surface`]) and focus a field in it.
+    /// keys scroll the scroll. Any other node, one in a hidden box, another plugin's node and a host widget are
+    /// refused, as is any focus while a host dialog is open, but for a node of the plugin's own dialog surface
+    /// ([`v2::Place::Dialog`]) while its dialog is on top; a host without [`FOCUS_INPUT`] refuses a field. A call the
+    /// user did not cause may ask for it too, as a click can: the host does not refuse it. A node the mount's tree
+    /// does not hold yet takes the focus if the mount's next view shows it (the view after the call, or the JS host's
+    /// next revision), so a call can show a field and focus it; if that view does not, the focus is dropped, and no
+    /// later view (a resize, a theme) applies it. A call of the plugin's own (a command) that names a node no mount
+    /// holds yet names the mount that holds it once the effects before it applied: a command can show its dialog
+    /// surface ([`Dialog::Surface`]) and focus a field in it.
     fn focus(&self, _id: &str) {}
-    /// 2.0: takes the focus from the running call's mount, if it has it, and gives it to the composer.
+    /// Takes the focus from the running call's mount, if it has it, and gives it to the composer.
     fn blur(&self) {}
-    /// 2.0: sets the mode of the running call's owner, its mount or else the plugin: its layers of that mode hold,
-    /// and the host's base layers do not. `None` ends it. It ends too when the focus leaves the owner's scope, when
-    /// the owner ends, and on [`interact::RESERVED`]. A dialog surface's mount sets none: it would take the dialog's
-    /// escape and `ctrl+c`.
+    /// Sets the mode of the running call's owner, its mount or else the plugin: its layers of that mode hold, and the
+    /// host's base layers do not. `None` ends it. It ends too when the focus leaves the owner's scope, when the owner
+    /// ends, and on [`interact::RESERVED`]. A dialog surface's mount sets none: it would take the dialog's escape and
+    /// `ctrl+c`.
     fn set_mode(&self, _mode: Option<&str>) {}
-    /// 2.0: routes the keys a [`interact::Bind::hold`] key held, in order.
+    /// Routes the keys a [`interact::Bind::hold`] key held, in order.
     fn release_keys(&self) {}
     /// Declares storage key `key` of the plugin, for [`Setup::storage_key`].
     #[doc(hidden)]
@@ -3344,7 +3292,7 @@ struct HostHandle {
     api: *const HostApi,
     /// The bounds of the images the host decodes, asked once, on the first [`Read::image_size`]; `None` inside for a
     /// host that has no [`IMAGE_BOUNDS`] or did not answer. The instance's own: a table at the same address after it
-    /// is another host's (bigboi's final pass).
+    /// is another host's.
     image_bounds: Rc<std::cell::OnceCell<Option<ImageBounds>>>,
 }
 
@@ -3380,7 +3328,7 @@ impl HostHandle {
             return None;
         }
         // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
-        // Nothing past it is read before `size` says the table has it (big-boi's drop-abi1 check).
+        // Nothing past it is read before `size` says the table has it.
         let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
         if size < size_of::<HostApi>() {
             return None;
@@ -3650,7 +3598,7 @@ impl Read for HostHandle {
     }
 
     fn image_size(&self, bytes: &[u8]) -> Option<(u32, u32)> {
-        // Bytes past the bounds the host states are no image it decodes: no need to encode and send them (PL-9).
+        // Bytes past the bounds the host states are no image it decodes: no need to encode and send them.
         if self.image_bounds().is_some_and(|bounds| bounds.over(bytes)) {
             return None;
         }
@@ -3845,7 +3793,7 @@ impl HostHandle {
     /// The ID of the reply to `request`; an error, the host's, when it did not take it.
     fn requested(&self, request: &HostRequest) -> Result<RequestId, String> {
         match serde_json::from_value(self.request(request)?) {
-            // 0 names no request, so no reply carries it: an answer of 0 is malformed (bigboi's last pass).
+            // 0 names no request, so no reply carries it: an answer of 0 is malformed.
             Ok(RequestId(0)) => Err("the host returned a bad result: request ID 0".to_owned()),
             Ok(id) => Ok(id),
             Err(error) => Err(format!("the host answered no request ID: {error}")),
@@ -3918,8 +3866,8 @@ pub type ReplyFn = Rc<dyn Fn(&dyn Host, RequestId, Result<serde_json::Value, Str
 /// there.
 pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>) -> interact::Handled>;
 
-/// What a command's closure may return: nothing, which takes the key that ran it, or [`interact::Handled`] (contract
-/// ergonomics 2.5). A closure that only panics returns `!`, which is neither: give it `-> ()`.
+/// What a command's closure may return: nothing, which takes the key that ran it, or [`interact::Handled`]. A
+/// closure that only panics returns `!`, which is neither: give it `-> ()`.
 #[diagnostic::on_unimplemented(
     message = "a command's closure returns nothing or `Handled`, not `{Self}`",
     note = "a closure that only panics returns `!`: write `|host, input| -> () {{ panic!(...) }}`"
@@ -3956,7 +3904,7 @@ pub type DeltasFn = Rc<dyn Fn(&dyn Host, &[V2Event])>;
 /// A registered dispose callback.
 pub type DisposeFn = Box<dyn FnOnce(&dyn Host)>;
 
-/// What a plugin's setup registers through, for the length of setup (the C-ABI form of P.1's `Setup`).
+/// What a plugin's setup registers through, for the length of setup.
 ///
 /// A callback reaches the host only through the [`Read`] or [`Host`] it is called with, so a render cannot have
 /// effects. Setup itself reaches it through [`Setup::host`], which no callback can keep:
@@ -4089,8 +4037,8 @@ impl Setup<'_> {
     }
 
     /// Gives the claim registered last at `at` (by [`Setup::slot`]) its laid-out size in [`SlotInput::width`] and
-    /// [`SlotInput::height`], and renders it again with [`Changed::size`] when that changes (TS `onSizeChange`). Other
-    /// claims get 0, so a size they do not read costs them no render. Without a claim at `at`, it does nothing.
+    /// [`SlotInput::height`], and renders it again with [`Changed::size`] when that changes. Other claims get 0, so a
+    /// size they do not read costs them no render. Without a claim at `at`, it does nothing.
     pub fn sized(&mut self, at: Placement) {
         let claims = self.registered.manifest.slots.iter_mut();
         if let Some(claim) = claims.rev().find(|claim| claim.kind == at.kind && claim.path == at.path) {
@@ -4142,8 +4090,8 @@ impl Setup<'_> {
         self.registered.wakes.push(Rc::new(run));
     }
 
-    /// 2.0 (P6b): calls `run` on the UI thread after the TUI plugins [`Read::plugins`] lists changed: one was enabled,
-    /// disabled, loaded, approved or declined, failed, or became slow. Changes that come together run it once.
+    /// Calls `run` on the UI thread after the TUI plugins [`Read::plugins`] lists changed: one was enabled, disabled,
+    /// loaded, approved or declined, failed, or became slow. Changes that come together run it once.
     pub fn on_plugins(&mut self, run: impl Fn(&dyn Host) + 'static) {
         self.registered.manifest.plugins = true;
         self.registered.plugins.push(Rc::new(run));
@@ -4237,8 +4185,8 @@ impl Setup<'_> {
         &self.registered.features
     }
 
-    /// 2.0: what the host serves the plugin: its major, minor and features ([`Read::abi`]). Its features are
-    /// [`Setup::features`], on every carrier (bigboi's final pass).
+    /// What the host serves the plugin: its major, minor and features ([`Read::abi`]). Its features are
+    /// [`Setup::features`], on every carrier.
     pub fn abi(&self) -> Abi {
         let served = match self.host {
             Some(host) => host.abi(),
@@ -4248,16 +4196,16 @@ impl Setup<'_> {
         Abi::new(served.major, served.minor, self.registered.features.clone())
     }
 
-    /// 2.0: a search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options,
-    /// it returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of
-    /// the plugin, with no effects, while the user types; over the C ABI, as [`Request::Search`].
+    /// A search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options, it
+    /// returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of the
+    /// plugin, with no effects, while the user types; over the C ABI, as [`Request::Search`].
     pub fn search(&mut self, name: &str, search: impl Fn(&dyn Read, &str, &[SelectOption]) -> Vec<String> + 'static) {
         self.registered.manifest.searches.push(name.to_owned());
         self.registered.searches.push((name.to_owned(), Rc::new(search)));
     }
 
-    /// 2.0: keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They
-    /// are the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
+    /// Keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They are
+    /// the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
     /// Over the C ABI, its handler runs as [`Request::Input`].
     pub fn layer(
         &mut self,
@@ -4512,7 +4460,7 @@ impl Registered {
     }
 
     /// Refuses a tree that holds a node kind the host lacks, before it crosses: the author lowers it with
-    /// [`v2::View::or`] (big-boi 13).
+    /// [`v2::View::or`].
     fn lowered(&self, node: &v2::Node) -> Result<(), String> {
         let host = self.abi.as_ref().map_or_else(String::new, |abi| format!("{}.{}", abi.major, abi.minor));
         if let Some(feature) = self.abi.as_ref().and_then(|abi| v2::unknown_feature(node, abi)) {
@@ -4543,7 +4491,7 @@ impl Registered {
             }
             Request::Command { name, input } => {
                 let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
-                // A command that declines its key answers `"pass"` (contract ergonomics 2.5).
+                // A command that declines its key answers `"pass"`.
                 match run(&self.host, input.as_deref()) {
                     interact::Handled::Consume => Ok(serde_json::Value::Null),
                     interact::Handled::Pass => Ok(serde_json::Value::String("pass".to_owned())),
@@ -4557,7 +4505,7 @@ impl Registered {
                 let (_, render) = self.views.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
                 json(serde_json::to_value(render(&self.host, &changed)))
             }
-            // 0 names no request, so no handler hears a reply to it (bigboi's freeze pass).
+            // 0 names no request, so no handler hears a reply to it.
             Request::Reply { id: RequestId(0), .. } => Err("the host sent a reply to request ID 0".to_owned()),
             Request::Reply { id, result } => {
                 self.replies.iter().for_each(|run| run(&self.host, id, result.clone()));
@@ -4701,7 +4649,7 @@ macro_rules! plugin {
     (id = $id:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
         $crate::plugin!(id = $id, requires_minor = 0, requires = [$($feature),*], $setup);
     };
-    // A plugin that cannot work without what host minor `requires_minor` of ABI 2 added (big-boi 13, carbon-4).
+    // A plugin that cannot work without what host minor `requires_minor` of ABI 2 added.
     (id = $id:expr, requires_minor = $requires:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
         $crate::export_plugin!(@entry $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, [$($feature),*]);
     };
@@ -4793,7 +4741,7 @@ pub mod runtime {
     }
 
     /// The table [`plugin!`] exports, built here rather than in the plugin's crate, so an entry a later 2.x appends to
-    /// [`PluginApi`] is no break of the plugin's source (carbon-4).
+    /// [`PluginApi`] is no break of the plugin's source.
     pub const fn table(
         major: u32,
         minor: u32,
@@ -5430,7 +5378,7 @@ mod tests {
         let reply = serde_json::from_slice(&serde_json::to_vec(&reply).unwrap()).unwrap();
         assert_eq!(setup.handle(reply).unwrap(), serde_json::Value::Null);
         assert_eq!(*seen.borrow(), [(RequestId(7), Err("gone".to_owned())), (RequestId(7), Err("gone".to_owned()))]);
-        // A reply to ID 0, which names no request, is refused before a handler runs (bigboi's freeze pass).
+        // A reply to ID 0, which names no request, is refused before a handler runs.
         let zero = serde_json::json!({ "type": "reply", "id": 0, "result": { "Ok": null } });
         assert!(setup.handle(serde_json::from_value(zero).unwrap()).is_err());
         assert_eq!(seen.borrow().len(), 2, "a handler heard a reply to ID 0");
@@ -5730,7 +5678,7 @@ mod tests {
         assert!(setup.manifest().wake);
         assert_eq!(setup.handle(serde_json::from_str(r#"{"type":"wake"}"#).unwrap()).unwrap(), serde_json::Value::Null);
         assert_eq!(runs.get(), 2);
-        // P6b: the plugins' change runs the plugins handlers alone, and a manifest without one does not name it.
+        // the plugins' change runs the plugins handlers alone, and a manifest without one does not name it.
         assert!(!serde_json::to_string(setup.manifest()).unwrap().contains("plugins"));
         let heard = runs.clone();
         setup.on_plugins(move |_| heard.set(heard.get() + 10));

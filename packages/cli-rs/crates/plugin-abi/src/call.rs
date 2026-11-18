@@ -1,5 +1,4 @@
-//! Typed calls: a request from [`crate::client`] sent as a [`Fetch`] and its reply decoded as the operation's output
-//! (`design/contract-ergonomics.md` 2.2 B). [`Cx::call`], [`Cx::call_on_thread`] and [`Cx::send`] send them.
+//! Typed calls: a request from [`crate::client`] sent as a [`Fetch`] and its reply decoded as the operation's output. [`Cx::call`], [`Cx::call_on_thread`] and [`Cx::send`] send them.
 //!
 //! ```
 //! # use opencode_plugin_abi::*;

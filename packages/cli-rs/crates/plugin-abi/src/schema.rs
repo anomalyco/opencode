@@ -1,8 +1,5 @@
-//! The JSON Schema of the plugin ABI 2.0 (synthesis 4.6), generated from the Rust types without a dependency (O-132):
-//! the tree a view returns and the calls of P3 here, the envelopes and replies of the C ABI in [`wire`]. Each
-//! definition names every field and variant of its type, without `..`, so a field or a variant added to a type does
-//! not compile until its schema has it; enum values are what serde writes. A test checks a corpus of trees against
-//! both the schema and serde, and every message of the conformance transcripts against the schema.
+//! JSON Schema for the plugin ABI. The macros exhaustively match Rust fields and variants so additions require
+//! a schema update. [`wire`] defines the request and reply envelopes.
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -569,8 +566,8 @@ mod tests {
     }
 
     /// Whether `value` conforms to `schema`, for the keywords [`schema`] and the OpenAPI document write, but the
-    /// patterns of the OpenAPI document's strings. A schema with nothing to check, such as an annotation alone, panics:
-    /// a binding could not check it either (bigboi's re-review). `{}` takes anything.
+    /// patterns of the OpenAPI document's strings. A schema with nothing to check, such as an annotation alone,
+    /// panics: a binding could not check it either. `{}` takes anything.
     fn conforms(value: &Value, schema: &Value, defs: &Value) -> bool {
         if *schema == json!({}) {
             return true;
@@ -693,10 +690,6 @@ mod tests {
         read
     }
 
-    // Expected (big-boi 14, carbon-13): every message of the golden transcripts, as the reference and the C library
-    // wrote them, conforms to the schema: each request to its side's envelope, each answer of status OK to the
-    // definition `x-messages` names for its request's type, and each draw's bytes to the list's format. A request type
-    // `x-messages` does not name is answered with null.
     #[test]
     fn the_schema_takes_every_message_of_the_transcripts() {
         let schema = shipped();
@@ -755,15 +748,10 @@ mod tests {
             }
         }
         assert!(requests > 100 && replies > 100, "{requests} requests and {replies} replies checked");
-        // A completed call, whose output the host keeps from the claim's view (bigboi's final pass).
+        // A completed call, whose output the host keeps from the claim's view.
         assert!(completed > 0, "no completed tool claim in the transcripts");
     }
 
-    // Expected (bigboi's re-review, finding 14): the shipped schema resolves without Rust. Every reference it makes
-    // names a definition of its own or a component of the HTTP API's OpenAPI document, whose key in Pascal case is the
-    // generated Rust type; none is an annotation alone, which the validator refuses. Against the shipped file, a
-    // `describe` without a nonempty ID is refused as `define` refuses it, and an API value of the wrong shape is refused
-    // through its reference.
     #[test]
     fn the_shipped_schema_resolves_its_references_and_refuses_what_the_host_refuses() {
         let schema = shipped();
@@ -813,7 +801,7 @@ mod tests {
         assert!(conforms(&Value::Null, session, defs));
         assert!(!conforms(&json!({ "info": 1, "status": "idle" }), session, defs));
         assert!(!conforms(&json!({ "info": {}, "status": "idle" }), session, defs), "an empty Session.Info");
-        // A request ID is never 0, in what `fetch` answers and in a reply (bigboi's last pass).
+        // A request ID is never 0, in what `fetch` answers and in a reply.
         let fetched = &schema["x-messages"]["host"]["fetch"];
         assert!(conforms(&json!(1), fetched, defs) && !conforms(&json!(0), fetched, defs));
         let reply = |id| {
@@ -822,9 +810,6 @@ mod tests {
         assert!(conforms(&reply(1), &defs["Request"], defs) && !conforms(&reply(0), &defs["Request"], defs));
     }
 
-    // Expected (big-boi 14): the envelopes take and refuse what serde takes and refuses: an unknown request type, a
-    // field left out that is required, a newtype variant's fields beside its tag, and a mount left out of a surface's
-    // input, which a mount's begin and end do.
     #[test]
     fn the_envelopes_take_what_serde_takes() {
         for (value, taken) in [
@@ -873,9 +858,6 @@ mod tests {
         ));
     }
 
-    // Expected (O-132): what serde writes for every variant, with every field set, conforms to its definition, and a
-    // corpus of trees is taken or refused alike by the schema and by serde: a required field left out, an unknown
-    // variant, a number out of range, a color in either case.
     #[test]
     fn the_schema_takes_what_serde_takes() {
         let span = Span {
@@ -1039,7 +1021,6 @@ mod tests {
         assert!(!agree::<Frame>("Frame", frame(json!("drawn"), json!({ "secs": 0, "nanos": 0 }))));
         assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": 0 }))));
         assert!(!agree::<Frame>("Frame", frame(json!("first"), json!({ "secs": -1, "nanos": 0 }))));
-        // The calls of P3, every variant with every field set.
         let anchor = AnchorAt { id: "d#1".into(), owner: "d".into(), index: 1, variant: "v".into(), row: -3 };
         let verbs = [
             Scroll::To { node: "n".into(), align: ScrollAlign::Nearest { inset: 2 } },

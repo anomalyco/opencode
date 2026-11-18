@@ -1,7 +1,4 @@
-//! The schema of the envelopes and replies of the C ABI (big-boi 14, carbon-13): what `describe` and `create` answer,
-//! the requests each side sends and what each answers, and the binary list a draw answers. As in the parent, each
-//! definition names every field and variant of its type, so a field or a variant added to one does not compile until
-//! its schema has it.
+//! Wire schemas for plugin metadata, manifests, requests, replies and binary draw lists.
 
 use super::*;
 use crate::claim::{self, FencePart, ToolPart};
@@ -30,7 +27,6 @@ type ScreenEdge = interact::Edge;
 type Overlay = interact::Overlay;
 type OpenPanel = interact::OpenPanel;
 
-/// The definitions of the envelopes and replies, beside the parent's of the tree and the calls of P3.
 pub(super) fn definitions() -> Vec<(&'static str, Value)> {
     vec![
         ("Metadata", {
@@ -569,7 +565,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             let _ = |value: &RequestId| {
                 let RequestId(_) = value;
             };
-            // 0 names no request (bigboi's last pass).
+            // 0 names no request.
             described(
                 json!({ "type": "integer", "minimum": 1, "maximum": u64::MAX }),
                 "What a `fetch` or a `foreground` the host takes answers, which its one reply names; never 0, which \
@@ -732,7 +728,7 @@ pub(super) fn messages() -> Value {
         ("draw", reference("DrawList")),
         ("layout", reference("LayoutReply")),
         ("input", reference("Handled")),
-        // A command that declines the key that ran it answers "pass" (contract ergonomics 2.5).
+        // A command that declines the key that ran it answers "pass".
         ("command", json!({ "enum": [null, "pass"] })),
         ("search", array(string())),
         ("*", json!({ "type": "null" })),
@@ -804,7 +800,7 @@ pub(super) fn messages() -> Value {
 /// A claim's tool call: the HTTP API's assistant tool part, but that a completed call's `content`, what it returned,
 /// is empty, since a `part-output` source names it and the host reads it (`claim::ToolPart`); an error's is left out,
 /// and metadata past 4096 bytes of JSON is empty. The HTTP API requires a completed call's content, so its own
-/// definition would refuse every completed claim (bigboi's final pass).
+/// definition would refuse every completed claim.
 fn claim_tool() -> Value {
     let tool = |pointer: &str| api(&format!("Session.Message.Assistant.Tool/properties/{pointer}"));
     let completed = json!({
