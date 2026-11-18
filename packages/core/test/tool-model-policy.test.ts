@@ -105,20 +105,16 @@ describe("modelTools", () => {
     })
   })
 
-  test("keeps file tools, shell, glob, grep, and webfetch direct for non-strong models with fullCodeMode on, while moving websearch into Code Mode", () => {
+  test("keeps file tools, shell, glob, grep, webfetch, and websearch direct for non-strong models even with fullCodeMode on", () => {
     for (const model of [makeModel("deepseek", "deepseek-reasoner"), makeModel("opencode", "gemini-4-carbon")]) {
       const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode]).toEqual(["websearch"])
+      expect([...result.codemode]).toEqual([])
       expect([...result.hidden]).toEqual(["patch"])
     }
   })
 
-  test("places websearch in Code Mode when available with fullCodeMode on, hides it when unavailable, and applies no model rules when model is absent", () => {
+  test("hides websearch when unavailable and keeps it direct when model is absent", () => {
     expect(modelTools({ model: undefined, websearch: true, fullCodeMode: true })).toEqual({
-      hidden: new Set(),
-      codemode: new Set(["websearch"]),
-    })
-    expect(modelTools({ model: undefined, websearch: true, fullCodeMode: false })).toEqual({
       hidden: new Set(),
       codemode: new Set(),
     })
@@ -355,6 +351,7 @@ describe("SessionContext.select model tool policy", () => {
           "read",
           "shell",
           "webfetch",
+          "websearch",
           "write",
           "execute",
         ])
@@ -362,7 +359,6 @@ describe("SessionContext.select model tool policy", () => {
         expect(codeModeListings(deepseek.tools.codeModeCatalog!).map((entry) => entry.path)).toEqual([
           "alpha.search",
           "opencode.session_move",
-          "websearch",
         ])
 
         // Removing all providers or turning off websearch hides the websearch tool from Code Mode too.
