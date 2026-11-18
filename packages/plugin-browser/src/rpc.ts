@@ -266,6 +266,29 @@ function strict<const Fields extends Schema.Struct.Fields>(name: string, fields:
   ])
 }
 
+const webAddress = optional(
+  short.annotate({
+    description:
+      "An http:// or https:// address, or about:blank. A file: or workspace: address that tabs.list shows is taken as path.",
+  }),
+)
+const workspaceFile = optional(
+  short.annotate({
+    description:
+      'A file on the server, relative to the workspace or absolute, for example "report.html". The file: or workspace: address that tabs.list shows for such a tab works too.',
+  }),
+)
+const focus = optional(
+  Schema.Boolean.annotate({
+    description:
+      "For a web address. True: ask to show this tab if the pane is closed and the person's settings allow it. Omit to make it active for the agent without revealing it. False keeps it in the background until the person selects it. Never switches the person's open tab. A workspace file is always shown to the person.",
+  }),
+)
+const FileTab = Schema.Struct({
+  ...Tab.fields,
+  path: optional(short.annotate({ description: "The workspace file this tab shows, when the call passed path." })),
+})
+
 export const Operations = [
   operation(
     "tabs.list",
@@ -275,17 +298,10 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open an HTTP(S) tab in the Review pane. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server. For workspace HTML, use browser.preview({ path }) and its returned tabID instead.",
-    {
-      url: optional(short.annotate({ description: "An http:// or https:// address, or about:blank." })),
-      focus: optional(
-        Schema.Boolean.annotate({
-          description:
-            "True: ask to show this tab if the pane is closed and the person's settings allow it. Omit to make it active for the agent without revealing it. False keeps it in the background until the person selects it. Never switches the person's open tab.",
-        }),
-      ),
-    },
-    Tab,
+    'Open a tab on a web address (url), or show a workspace file to the user (path). Pass one of them, or neither for about:blank. A web address loads over the connected server\'s network; localhost reaches that server. Use path to present an artifact, result or output for the user to view. An HTML page opens in a tab, even off screen, and opening the same file again reloads that tab; keep its assets in its own folder or subfolders, because hidden and secret files cannot load. Any other file opens in the file panel instead, for display once the session is on screen, and returns { path, shown: "file" } without a tab: images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as media previews; text and code show source. A missing file, a folder or a path outside the workspace fails.',
+    { url: webAddress, focus },
+    Schema.Union([FileTab, Schema.Struct({ path: short, shown: Schema.Literal("file") })]),
+    { url: webAddress, path: workspaceFile, focus },
   ),
   operation(
     "tabs.focus",
@@ -300,16 +316,11 @@ export const Operations = [
     State,
   ),
   operation(
-    "preview",
-    "Show a workspace file to the user. Present an artifact, result, or output on the attached desktop. An HTML page opens in the session browser even off screen. Keep its assets in its own folder or subfolders; hidden and secret files cannot load. The same file reloads in its existing tab. Use the returned tabID and url, e.g. snapshot({tabID}). Other files are requested in the file panel for display when the session is on screen: images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as media previews; text and code show source. Use a server-local path, relative to the workspace or absolute. A missing file, folder or path outside the workspace fails.",
-    { path: short.annotate({ description: "Server-local path, relative to the workspace or absolute. Pass another workspace path to move to another file; do not pass a file: or oc-preview: URL." }) },
-    Schema.Struct({ path: short, tabID: optional(TabID), url: optional(Tab.fields.url) }),
-  ),
-  operation(
     "navigate",
-    "Navigate this tab to HTTP(S) or about:blank and wait for the document load. Element refs expire. For workspace HTML, click a relative link or call browser.preview({ path }) and use its returned tabID. Preview addresses are not navigation arguments.",
+    "Navigate this tab to a web address (url) or an HTML workspace file (path), and wait for the document load. Pass exactly one of them. Element refs expire. A workspace file is shown to the person, as with tabs.open({ path }). A file that is not HTML fails: open it with tabs.open({ path }).",
     { ...tab, url: short },
-    Tab,
+    FileTab,
+    { ...tab, url: webAddress, path: workspaceFile },
   ),
   operation("back", "Go back in this tab and wait for loading to finish. Does not change the focused tab.", tab, Tab),
   operation("forward", "Go forward in this tab and wait for loading to finish.", tab, Tab),
@@ -653,15 +664,30 @@ export const Operations = [
 ] as const
 
 export type Operation = (typeof Operations)[number]
-export type Method = Operation["name"]
-export const Action = Schema.Union(Operations.map((operation) => operation.action)).annotate({
+// What the path forms of tabs.open and navigate send, which no tool is named after. `preview` is the action that
+// desktops and servers already exchange for a workspace file, so its name stays. A desktop from before `navigate.path`
+// cannot decode it and answers `unsupported`, where an extra field on `preview` would open the file in another tab.
+const fileActions = [
+  Schema.Struct({ type: Schema.Literal("preview"), path: short }),
+  Schema.Struct({ type: Schema.Literal("navigate.path"), ...tab, path: short }),
+]
+/** The desktop's answer to a file action. Desktops from before the path forms leave out `tab`. */
+export const Shown = Schema.Struct({
+  path: short,
+  tabID: optional(TabID),
+  url: optional(Tab.fields.url),
+  tab: optional(Tab),
+})
+export const Action = Schema.Union([...Operations.map((operation) => operation.action), ...fileActions]).annotate({
   identifier: "Browser.Action",
 })
 export type Action = typeof Action.Type
+/** The name of an action the desktop can receive: every tool's, and the file actions'. */
+export type Method = Action["type"]
 /** What a tool call passes: the operation's parameters, which may differ from its action's fields. */
 export type Input = {
-  [Name in Method]: Schema.Schema.Type<Extract<Operation, { readonly name: Name }>["input"]> & { readonly type: Name }
-}[Method]
+  [Name in Operation["name"]]: Schema.Schema.Type<Extract<Operation, { readonly name: Name }>["input"]> & { readonly type: Name }
+}[Operation["name"]]
 // Metadata only: never page content, headers, bodies, or file bytes.
 export const Target = Schema.Struct({ resources: Schema.Array(text), key: text })
 export type Target = typeof Target.Type

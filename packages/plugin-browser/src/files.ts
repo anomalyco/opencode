@@ -78,7 +78,7 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], na
 export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
   const value = path.trim()
   if (address(value) && !/^file:/i.test(value)) return undefined
-  const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "browser.preview could not resolve this file inside the workspace." })
+  const invalid = () => new Tool.Error({ metadata: { code: "unresolved_path" }, message: "This path does not resolve to a file inside the workspace." })
   const url = yield* Effect.try({ try: () => /^file:/i.test(value) ? new URL(value) : undefined, catch: invalid })
   if (url?.hostname) return { absolute: value, found: false, directory: false, outside: true }
   const local = yield* Effect.try({ try: () => (url ? fileURLToPath(url) : value).replaceAll("\\", "/"), catch: invalid })

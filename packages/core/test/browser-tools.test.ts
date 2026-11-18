@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { join } from "node:path"
-import { mkdir, stat, symlink } from "node:fs/promises"
+import { mkdir, rm, stat, symlink } from "node:fs/promises"
+import { pathToFileURL } from "node:url"
 import { Context, Deferred, Effect, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Agent } from "@opencode/schema/agent"
@@ -112,7 +113,7 @@ const setup = (respond: Respond, options: { readonly attach?: boolean; readonly 
       })
       return (result.output as { readonly output: string }).output
     })
-    return { directory, commands, cancelled, run }
+    return { directory, session, commands, cancelled, run }
   })
 
 const evaluated = (value: typeof Schema.Json.Type) => success({ tab, value })
@@ -284,30 +285,98 @@ it.live("an element wait reads the desktop's codes, and ends on time when the pa
   }),
 )
 
-it.live("HTML preview passes the checked relative path and requires a usable tab from the desktop", () =>
+it.live("a workspace file opens through tabs.open and navigate, by path or by the address tabs.list shows", () =>
   Effect.gen(function* () {
     const url = "workspace://ses_fixture/page.html"
-    const browser = yield* setup((action) => success(action.type === "preview" && action.path === "page.html"
-      ? {path: action.path, tabID, url} : {path:"older.html"}), {linked:true})
-    yield* Effect.promise(() => Promise.all(["page.html", "older.html"].map(path => Bun.write(join(browser.directory, path), "<!doctype html>"))))
-    expect(JSON.parse(yield* browser.run(`return await tools.browser.preview({path:"page.html#L2"})`))).toEqual({path:"page.html#L2",tabID,url})
-    expect(browser.commands).toEqual([{type:"preview",path:"page.html"}])
-    expect(yield* browser.run(`return await tools.browser.preview({path:"older.html"}).catch(error => error.message)`)).toContain("did not return its tab")
+    const shown = { ...tab, url }
+    const browser = yield* setup((action) => {
+      if (action.type === "preview" && action.path === "page.html") return success({ path: action.path, tabID, url, tab: shown })
+      // A desktop from before the path forms returns the tab's ID and address only, or no tab at all.
+      if (action.type === "preview" && action.path === "state.html") return success({ path: action.path, tabID, url })
+      if (action.type === "preview" && action.path === "gone.html") return failure("browser.preview failed. The workspace file could not be loaded.", "preview_unavailable")
+      if (action.type === "preview") return success({ path: action.path })
+      if (action.type === "navigate.path" && action.path === "second.html") return success({ path: action.path, tabID: action.tabID, url, tab: shown })
+      // What a desktop answers to an action it cannot decode.
+      if (action.type === "navigate.path") return failure("This desktop cannot decode the requested browser operation. Check the desktop and server versions.", "unsupported")
+      return success(tab)
+    }, { linked: true })
+    yield* Effect.promise(() => Promise.all(["page.html", "state.html", "gone.html", "older.html", "second.html", "old.html"].map(path => Bun.write(join(browser.directory, path), "<!doctype html>"))))
+    yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
+    const open = (input: object) => browser.run(`return await tools.browser.tabs.open(${JSON.stringify(input)}).catch(error => error.message)`)
+    const move = (input: object) => browser.run(`return await tools.browser.navigate(${JSON.stringify({ tabID, ...input })}).catch(error => error.message)`)
+
+    // The result is the tab, as for a web address, with the file it shows. The path is the entry that was checked.
+    expect(JSON.parse(yield* open({ path: "page.html#L2" }))).toEqual({ ...shown, path: "page.html" })
+    for (const address of [pathToFileURL(join(browser.directory, "page.html")).href, `workspace://${browser.session.id.toLowerCase()}/page.html`]) {
+      expect(JSON.parse(yield* open({ url: address }))).toEqual({ ...shown, path: "page.html" })
+      expect(JSON.parse(yield* open({ path: address }))).toEqual({ ...shown, path: "page.html" })
+    }
+    expect(JSON.parse(yield* open({ path: "state.html" }))).toEqual({ ...tab, path: "state.html" })
+    expect(yield* open({ path: "older.html" })).toContain("did not return its tab")
+    // The desktop names the action it received; the agent reads the name of the tool it called.
+    expect(yield* open({ path: "gone.html" })).toContain("[browser.preview_unavailable] browser.tabs.open failed. The workspace file could not be loaded.")
+    expect(browser.commands.map((command) => ("path" in command ? `${command.type} ${command.path}` : command.type))).toEqual([...Array.from({ length: 5 }, () => "preview page.html"), "preview state.html", "preview older.html", "preview gone.html"])
+    browser.commands.length = 0
+
+    expect(JSON.parse(yield* move({ path: "second.html" }))).toEqual({ ...shown, path: "second.html" })
+    expect(JSON.parse(yield* move({ url: pathToFileURL(join(browser.directory, "second.html")).href }))).toEqual({ ...shown, path: "second.html" })
+    expect(yield* move({ path: "old.html" })).toBe("[browser.unsupported] This desktop is older than the server and cannot move a tab to a workspace file. Update the desktop app, or call browser.tabs.open({ path }) to open the file in its own tab.")
+    expect(browser.commands).toEqual([{ type: "navigate.path", tabID, path: "second.html" }, { type: "navigate.path", tabID, path: "second.html" }, { type: "navigate.path", tabID, path: "old.html" }])
+    browser.commands.length = 0
+
+    // A file that is not HTML has no tab: tabs.open sends it to the file panel, and navigate has no tab to move to it.
+    expect(JSON.parse(yield* open({ path: "chart.svg" }))).toEqual({ path: "chart.svg", shown: "file" })
+    expect(yield* move({ path: "chart.svg" })).toBe("browser.navigate moves a tab to an HTML file, and chart.svg is not one. Call browser.tabs.open({ path }) to show it in the file panel.")
+    expect(browser.commands).toEqual([{ type: "preview", path: "chart.svg" }])
+
+    // No tool has the old name. The call fails with what to call instead, not with a guessed tool.
+    expect(yield* browser.run(`return await tools.browser.preview({ path: "page.html" }).catch(error => error.message)`)).toBe(
+      "browser.preview was removed: call browser.tabs.open({ path }) to show a workspace file, or browser.navigate({ tabID, path }) to move a tab to one.",
+    )
+    expect(yield* browser.run(`return search({ query: "preview", namespace: "browser" }).items.map(item => item.path)`)).not.toContain("tools.browser.preview")
   }),
 )
 
-it.live("preview fails for a missing file; an unattached inventory stays iterable and actions do not report success", () =>
+it.live("both path forms refuse what is not a file inside the workspace, before the desktop hears of it", () =>
   Effect.gen(function* () {
-    const browser = yield* setup((action) => success(action.type === "preview" ? { path: action.path } : tab))
-    yield* Effect.promise(() => Bun.write(join(browser.directory, "chart.svg"), "<svg/>"))
-    expect(JSON.parse(yield* browser.run(`return await tools.browser.preview({ path: "chart.svg" })`))).toEqual({
-      path: "chart.svg",
+    const browser = yield* setup(() => success(tab))
+    const outside = join(browser.directory, "..", `outside-${crypto.randomUUID()}`)
+    yield* Effect.promise(async () => {
+      await mkdir(join(browser.directory, "site"), { recursive: true })
+      await mkdir(outside, { recursive: true })
+      await Bun.write(join(outside, "secret.html"), "<!doctype html>")
+      await symlink(outside, join(browser.directory, "escape"), process.platform === "win32" ? "junction" : "dir")
     })
-    expect(
-      yield* browser.run(`return await tools.browser.preview({ path: "chart.png" }).catch((error) => error.message)`),
-    ).toContain(`browser.preview found no file at ${join(browser.directory, "chart.png")}.`)
-    expect(browser.commands).toEqual([{ type: "preview", path: "chart.svg" }])
+    yield* Effect.addFinalizer(() => Effect.promise(() => rm(outside, { recursive: true, force: true })))
+    const beyond = "cannot show a file outside this session's workspace. Choose a file inside the workspace."
+    const refusals: ReadonlyArray<readonly [name: string, input: object, refusal: (call: string) => string]> = [
+      ["a missing file", { path: "missing.html" }, (call) => `${call} found no file at ${join(browser.directory, "missing.html")}.`],
+      ["a folder", { path: "site" }, (call) => `${join(browser.directory, "site")} is a folder. ${call} shows one file`],
+      ["a parent folder", { path: "../secret.html" }, (call) => `${call} ${beyond}`],
+      ["an absolute path elsewhere", { path: join(outside, "secret.html") }, (call) => `${call} ${beyond}`],
+      ["a link that leaves the workspace", { path: "escape/secret.html" }, (call) => `${call} ${beyond}`],
+      ["a file: address elsewhere, as path", { path: pathToFileURL(join(outside, "secret.html")).href }, (call) => `${call} ${beyond}`],
+      ["a file: address elsewhere, as url", { url: pathToFileURL(join(outside, "secret.html")).href }, (call) => `${call} ${beyond}`],
+      ["a file: address on another host", { url: "file://fileserver/share/page.html" }, (call) => `${call} ${beyond}`],
+      ["another session's workspace address", { url: "workspace://ses_another/page.html" }, (call) => `${call} ${beyond}`],
+      ["a workspace address with an encoded separator", { path: `workspace://${browser.session.id.toLowerCase()}/site%2f..%2f..%2fsecret.html` }, (call) => `${call} ${beyond}`],
+      ["a name the server cannot hold", { path: "site/\u0001.html" }, () => "This path is not a valid workspace filename on the server."],
+      ["the internal address of a file's tab", { url: "oc-preview://grant/page.html" }, () => "This is an internal address of a workspace file, which no call can open."],
+      ["a web address as path", { path: "https://example.com/page.html" }, (call) => `${call} needs path to name a workspace file`],
+      ["both parameters", { url: "https://example.com", path: "page.html" }, (call) => `${call} takes url or path, not both.`],
+    ]
+    for (const [name, input, refusal] of refusals) {
+      const opened = yield* browser.run(`return await tools.browser.tabs.open(${JSON.stringify(input)}).then(() => "opened", error => error.message)`)
+      const moved = yield* browser.run(`return await tools.browser.navigate(${JSON.stringify({ tabID, ...input })}).then(() => "moved", error => error.message)`)
+      expect(`${name}: ${opened}`).toContain(`${name}: ${refusal("browser.tabs.open")}`)
+      expect(`${name}: ${moved}`).toContain(`${name}: ${refusal("browser.navigate")}`)
+    }
+    expect(browser.commands).toEqual([])
+  }),
+)
 
+it.live("an unattached inventory stays iterable and actions do not report success", () =>
+  Effect.gen(function* () {
     const detached = yield* setup(() => success(tab), { attach: false })
     yield* Effect.promise(() => Bun.write(join(detached.directory, "chart.svg"), "<svg/>"))
     expect(JSON.parse(yield* detached.run(`const s = await tools.browser.tabs.list({}); return { ...s, tabs: s.tabs.map(t => t.id) }`))).toMatchObject({ connected: false, tabs: [], focusedTabID: null })

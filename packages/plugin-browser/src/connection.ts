@@ -423,18 +423,18 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * call reveals nothing but the denial. Without a desktop the session has no grant, and core would deny the call
      * with its own message before any hook ran.
      */
-    refuse: Effect.fn("BrowserConnection.refuse")(function* (tool: Tool.Context, operation: Browser.Method) {
+    refuse: Effect.fn("BrowserConnection.refuse")(function* (tool: Tool.Context, operations: readonly string[]) {
       const session = yield* ctx.session
         .get({ sessionID: tool.sessionID })
         .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
-      const denied = denial(rulesFor(session, tool.agent), [operation])
+      const denied = denial(rulesFor(session, tool.agent), operations)
       if (denied) return yield* new Tool.Error({ message: denied })
     }),
     /**
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[]) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[]) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
       if (!connection.ok) return { connected: false as const, message: connection.error.message }
       const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
@@ -449,8 +449,9 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         sessionID: tool.sessionID,
         agent: tool.agent,
         action: "browser",
-        // Keep exact operation resources for existing permission rules and tool.use policies.
-        resources: [action.type],
+        // Keep exact operation resources for existing permission rules and tool.use policies. A call that stands for
+        // more than one operation names each, and a deny of any of them refuses it.
+        resources: operations ?? [action.type],
         save,
         metadata: { input: {
           ...(action.type === "tabs.list" && { scope: "Tab inventories for attached sessions in this project" }),
@@ -498,7 +499,10 @@ function denial(rules: readonly Permission.Rule[], operations: readonly string[]
   if (!denied) return undefined
   return denied.rule?.resource === "*"
     ? "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools."
-    : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+    : denied.operation === "preview"
+      ? // No tool has this name any more: it is the permission that covers showing a workspace file.
+        "[browser.denied] Showing a workspace file in the browser (permission browser.preview) is denied for this agent by configuration; no action ran. Do not retry it."
+      : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
 }
 
 function writePermissions(

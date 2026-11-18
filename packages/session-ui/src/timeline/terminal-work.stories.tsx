@@ -225,7 +225,7 @@ export const ExecuteFailed = {
           },
           {
             output:
-              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
+              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.tabs.open({ path }) to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
             metadata: {
               error: true,
               toolCalls: [

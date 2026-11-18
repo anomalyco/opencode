@@ -17,6 +17,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -343,6 +344,8 @@ it.live("a deny on wait refuses it before it probes the page", () =>
 )
 
 const missingTab = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+// The two calls that show a workspace file.
+const files = (input: object): [string, object][] => [["tabs.open", input], ["navigate", { tabID: tab.id, ...input }]]
 
 it.live("browser file reads require the file's own permission before reading or sending it", () =>
   Effect.gen(function* () {
@@ -354,10 +357,9 @@ it.live("browser file reads require the file's own permission before reading or 
         expect(error).toContain(`Permission denied: ${action}`)
       }
     }
-    const missing = yield* refusal(browser, "preview", { path: "./blocked.txt#L1" })
-    expect(missing).toBe("Permission denied: read")
+    for (const [operation, input] of files({ path: "./blocked.txt#L1" })) expect(yield* refusal(browser, operation, input)).toBe("Permission denied: read")
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "blocked.txt"), "fixture"))
-    expect(yield* refusal(browser, "preview", { path: "./blocked.txt#L1" })).toBe(missing)
+    for (const [operation, input] of files({ path: "./blocked.txt#L1" })) expect(yield* refusal(browser, operation, input)).toBe("Permission denied: read")
     expect(browser.commands.count).toBe(0)
   }),
 )
@@ -390,10 +392,12 @@ it.live("a denied call reveals neither its files, its tab nor the connection", (
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
     const fileID = `file_${crypto.randomUUID()}`
     const calls: [string, object, Session.ID][] = [
-      ["preview", { path: "page.html" }, detached.id],
-      ["preview", { path: "missing.html" }, browser.session.id],
-      ["preview", { path: "missing.html" }, detached.id],
-      ["preview", { path: "." }, browser.session.id],
+      ...[
+        [{ path: "page.html" }, detached.id] as const,
+        [{ path: "missing.html" }, browser.session.id] as const,
+        [{ path: "missing.html" }, detached.id] as const,
+        [{ path: "." }, browser.session.id] as const,
+      ].flatMap(([input, sessionID]) => files(input).map(([operation, call]): [string, object, Session.ID] => [operation, call, sessionID])),
       ...["files.upload", "files.drop"].flatMap((operation): [string, object, Session.ID][] => [
         [operation, { tabID: tab.id, ref: "e1", paths: ["page.html"] }, detached.id],
         [operation, { tabID: tab.id, ref: "e1", paths: ["missing.html"] }, detached.id],
@@ -418,9 +422,9 @@ it.live("a call a tool.use policy blocks hears the same answer whatever tab or f
     const browser = yield* setup({ policies: [{ action: "tool.use", resource: "browser:*", effect: "deny" }] })
     yield* Effect.promise(() => Bun.write(path.join(browser.ref.directory, "page.html"), "<p>page</p>"))
     for (const [operation, input] of [
-      ["preview", { path: "page.html" }],
-      ["preview", { path: "missing.html" }],
-      ["preview", { path: "." }],
+      ...files({ path: "page.html" }),
+      ...files({ path: "missing.html" }),
+      ...files({ path: "." }),
       ["snapshot", { tabID: missingTab }],
       ["wait", { tabID: missingTab, selector: "#done" }],
     ] as const)
@@ -462,7 +466,7 @@ it.live("without a deny, a session with no desktop hears that it is disconnected
     // Whether the file exists is not said: without a desktop no permission check, policies included, can run.
     const status = (yield* browser.call("build", detached.id)).output
     expect(status).toMatchObject({ connected: false, message: expect.stringContaining("retry only after it attaches") })
-    for (const [op, input] of [["preview", { path: "page.html" }], ["preview", { path: "missing.html" }], ["wait", { tabID: tab.id, selector: "#done" }], ["snapshot", { tabID: missingTab }]] as const)
+    for (const [op, input] of [...files({ path: "page.html" }), ...files({ path: "missing.html" }), ["wait", { tabID: tab.id, selector: "#done" }], ["snapshot", { tabID: missingTab }]] as const)
       expect((yield* browser.run(op, input, "build", detached.id).pipe(Effect.flip)).message).toStartWith("[browser.not_attached]")
     expect(browser.commands.count).toBe(0)
   }),
@@ -476,6 +480,55 @@ it.live("a wildcard resource pattern in a browser deny is honoured", () =>
     )
     expect(browser.commands.count).toBe(0)
     expect((yield* browser.call()).output).toEqual({ tabs: [], focusedTabID: null })
+  }),
+)
+
+// browser.preview was the tool that showed a workspace file. tabs.open and navigate show one now, when they get a path,
+// and every way there was to deny the old name must still refuse them.
+it.live("a deny of preview, the name the path forms had, still refuses them, and so does a deny of their own operation", () =>
+  Effect.gen(function* () {
+    const page = { "page.html": "<p>page</p>" }
+    const forms = files({ path: "page.html" })
+    // A person's rule in config.
+    const configured = yield* setup({ permissions: [rule("preview", "deny")] }, page)
+    for (const [operation, input] of forms)
+      expect(yield* refusal(configured, operation, input)).toBe(
+        "[browser.denied] Showing a workspace file in the browser (permission browser.preview) is denied for this agent by configuration; no action ran. Do not retry it.",
+      )
+    // An agent's own rule.
+    const agent = yield* setup({ agents: { reviewer: { mode: "subagent", permissions: [rule("preview", "deny")] } } }, page)
+    for (const [operation, input] of forms)
+      expect(yield* refusal(agent, operation, input, agent.session.id, "reviewer")).toStartWith("[browser.denied] Showing a workspace file")
+    // A managed policy.
+    const policy = yield* setup({ policies: [{ action: "tool.use", resource: "browser:preview", effect: "deny" }] }, page)
+    for (const [operation, input] of forms) expect(yield* refusal(policy, operation, input)).toBe("Blocked by configuration policy")
+    // A deny that another plugin's experimental.rules hook adds.
+    const hooked = yield* setup({}, page)
+    yield* Context.get(hooked.context, PluginHooks.Service).register("permission", "experimental.rules", (event) =>
+      Effect.sync(() => event.deny({ action: "browser", resource: "preview" })),
+    )
+    for (const [operation, input] of forms) expect(yield* refusal(hooked, operation, input)).toBe("Permission denied: browser")
+    // None of them reached the desktop, and none of them stops a web address.
+    for (const browser of [configured, policy, hooked]) {
+      expect(browser.commands.count).toBe(0)
+      // The stand-in desktop answers with a tab list rather than a tab; reaching it is the assertion.
+      yield* browser.run("tabs.open", { url: "https://example.com" }).pipe(Effect.exit)
+      expect(browser.commands.count).toBe(1)
+    }
+    expect(agent.commands.count).toBe(0)
+
+    // The operation's own name refuses its path form as it refuses its web form.
+    const own = yield* setup({ permissions: [rule("tabs.open", "deny"), rule("navigate", "deny")] }, page)
+    expect(yield* refusal(own, "tabs.open", { path: "page.html" })).toStartWith("[browser.denied] browser.tabs.open")
+    expect(yield* refusal(own, "navigate", { tabID: tab.id, path: "page.html" })).toStartWith("[browser.denied] browser.navigate")
+    expect(own.commands.count).toBe(0)
+
+    // An ask on the old name prompts for the path form, and the request names both operations.
+    const asking = yield* setup({ permissions: [rule("preview", "ask")] }, page)
+    const prompt = yield* answer(asking, "tabs.open", { path: "page.html" }, "reject")
+    expect(prompt.request.resources).toEqual(["tabs.open", "preview"])
+    expect(prompt.request.metadata?.input).toEqual({ paths: ["page.html"] })
+    expect(asking.commands.count).toBe(0)
   }),
 )
 

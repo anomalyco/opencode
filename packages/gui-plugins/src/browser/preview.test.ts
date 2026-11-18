@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { previewAddress, previewFile, previewResource, reloadAddress } from "./preview"
 import { refusal } from "./policy"
 import { navigationNotice } from "./refusal-notice"
-import { reusableFile } from "./link"
+import { fileTab, reusableFile, workspaceFileURL } from "./link"
 
 const roots = ["/work/repo #1"]
 
@@ -15,6 +15,24 @@ test("new-tab intent never matches the plain-open file key", () => {
   expect(reusableFile(url, "new")).toBeUndefined()
   expect(reusableFile(url, "present")).toBe("workspace://ses_x/site.html")
   expect(reusableFile("https://example.test/", "present")).toBeUndefined()
+})
+
+test("a file the agent opens again goes to the tab that already shows it", () => {
+  const page = workspaceFileURL("/work/repo #1", "site/index.html")
+
+  const tabs = [
+    { id: "web", url: "https://example.test/site/index.html" },
+    { id: "other", url: workspaceFileURL("/work/repo #1", "site/other.html") },
+    // The page moved within itself since it was opened: a query and a fragment do not make it another file.
+    { id: "shown", url: `${page}?step=2#result` },
+    { id: "second", url: page },
+  ]
+
+  expect(fileTab(tabs, page)?.id).toBe("shown")
+  expect(fileTab(tabs, workspaceFileURL("/work/repo #1", "site/index.htm"))).toBeUndefined()
+  // A remote server's file has its own address, so the same path in this machine's workspace is another file.
+  expect(fileTab(tabs, workspaceFileURL("/work/repo #1", "site/index.html", "ses_x"))).toBeUndefined()
+  expect(fileTab([{ id: "remote", url: "workspace://ses_x/site/index.html#top" }], workspaceFileURL("/work", "site/index.html", "ses_x"))?.id).toBe("remote")
 })
 
 test("a remote policy opens only its own session's workspace and explains a refusal as a workspace restriction", () => {

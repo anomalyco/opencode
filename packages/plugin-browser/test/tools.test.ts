@@ -50,28 +50,19 @@ test("URL normalization refuses extension pages, which would run with the extens
 })
 
 test("URL normalization rejects filesystem paths instead of treating them as hostnames", () => {
-  // 58 calls passed a local file to tabs.open or navigate; the error names it and says what to call instead.
-  for (const path of [
-    "/tmp/page.html",
-    "./page.html",
-    "../page.html",
-    "C:\\Users\\me\\page.html",
-    "D:/page.html",
-    "file:///D:/site/index.html",
-    "~/report.html",
-  ])
+  // 58 calls passed a local file as the url of tabs.open or navigate; the error names it and says to pass it as path.
+  for (const path of ["/tmp/page.html", "./page.html", "../page.html", "C:\\Users\\me\\page.html", "D:/page.html", "~/report.html"]) {
     expect(() => navigate(path)).toThrow(
-      `${JSON.stringify(path)} is a local file, not a web address. Use browser.preview({ path })`,
+      `${JSON.stringify(path)} is a local file, not a web address. Pass it as path: browser.navigate({ tabID, path }).`,
     )
+    expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url: path })).toThrow(
+      `${JSON.stringify(path)} is a local file, not a web address. Pass it as path: browser.tabs.open({ path }).`,
+    )
+  }
   expect(() => navigate("ftp://example.com/file")).toThrow(
     '"ftp://example.com/file" is not a browser URL. Use an http:// or https:// address',
   )
   expect(() => navigate("https://user:secret@example.com")).toThrow("is not a browser URL")
-  // Preview addresses, internal or as tabs.list shows a remote server's file, point to browser.preview.
-  for (const url of ["workspace://ses_1/site/index.html", "oc-preview://abc/site/index.html"]) {
-    expect(() => navigate(url)).toThrow("Use browser.preview({ path })")
-    expect(() => BrowserTools.normalizeAction({ type: "tabs.open", url })).toThrow("Use browser.preview({ path })")
-  }
   expect(navigate("example.com/docs")).toEqual({ type: "navigate", tabID, url: "https://example.com/docs" })
   expect(navigate("localhost:8000")).toEqual({ type: "navigate", tabID, url: "http://localhost:8000/" })
   // A subdomain of localhost is this machine too, as the pane's address bar reads it.
@@ -81,6 +72,35 @@ test("URL normalization rejects filesystem paths instead of treating them as hos
     type: "tabs.open",
     url: "about:blank",
   })
+})
+
+test("a workspace file takes one route, whichever parameter names it", () => {
+  const open = (input: { url?: string; path?: string; focus?: boolean }) => BrowserTools.normalizeAction({ type: "tabs.open", ...input })
+  const move = (input: { url?: string; path?: string }) => BrowserTools.normalizeAction({ type: "navigate", tabID, ...input })
+  // A path, or the address tabs.list shows for a file's tab: file: for this machine's workspace, workspace: for a remote server's.
+  const addresses = ["file:///D:/site/index.html", "workspace://ses_1/site/index.html"]
+  for (const file of ["site/index.html", " site/index.html#L2 ", "C:\\repo\\site\\index.html", "../outside.html", ...addresses]) {
+    expect(open({ path: file })).toEqual({ type: "preview", path: file.trim() })
+    expect(move({ path: file })).toEqual({ type: "navigate.path", tabID, path: file.trim() })
+  }
+  for (const url of addresses) {
+    expect(open({ url })).toEqual({ type: "preview", path: url })
+    expect(move({ url })).toEqual({ type: "navigate.path", tabID, path: url })
+  }
+  // A workspace file is always shown to the person, so focus does not travel with it.
+  expect(open({ path: "site/index.html", focus: false })).toEqual({ type: "preview", path: "site/index.html" })
+  expect(() => open({ url: "https://example.com", path: "site/index.html" })).toThrow("browser.tabs.open takes url or path, not both.")
+  expect(() => move({ url: "https://example.com", path: "site/index.html" })).toThrow("browser.navigate takes url or path, not both.")
+  expect(() => move({})).toThrow("browser.navigate needs url or path")
+  // The address a file's tab loads from names a grant, not a file. The refusal says what to pass instead.
+  for (const input of [{ url: "oc-preview://abc/site/index.html" }, { path: "oc-preview://abc/site/index.html" }]) {
+    expect(() => open(input)).toThrow("Pass the file's own path to browser.tabs.open({ path })")
+    expect(() => move(input)).toThrow("Pass the file's own path to browser.navigate({ tabID, path })")
+  }
+  for (const path of ["https://example.com/report.html", "skill://browser/SKILL.md", " "]) {
+    expect(() => open({ path })).toThrow("browser.tabs.open needs path to name a workspace file")
+    expect(() => move({ path })).toThrow("browser.navigate needs path to name a workspace file")
+  }
 })
 
 test("evaluate takes expression and code as script", () => {
@@ -296,7 +316,7 @@ describe("wait reads the condition from the keys models write", () => {
   })
 })
 
-test("preview paths resolve the way the Review pane resolves them", async () => {
+test("a workspace file's path resolves the way the file panel resolves it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "browser-preview-"))
   try {
     await mkdir(join(directory, "site", "docs"), { recursive: true })

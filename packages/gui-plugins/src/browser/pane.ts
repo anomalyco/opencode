@@ -48,7 +48,7 @@ import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
 import { FileVerificationError } from "@opencode/util/file-verification"
 import { artifactKind } from "@opencode/util/artifact"
-import { reusableFile, workspaceFileURL } from "./link"
+import { fileTab, reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
 import { pluginTabs } from "./plugin-tabs"
 import { remotePreview } from "./remote-preview"
@@ -1032,17 +1032,24 @@ export function createBrowserPane(input: {
 
     if (action.type === "tabs.list") return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
 
+    // The address a tab loads this workspace file from, once the session is known to read it still.
+    const fileURL = async (path: string) => {
+      const roots = selectFileRoots(machine.state, binding)
+      const remote = remoteSource(binding)
+      const url = remote ? `${remote.prefix}${path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], path)
+
+      if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal, path, true)) : await workspaceFile(url, roots)))
+        throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace files in the browser." : "The workspace file no longer exists or cannot be read by this session.")
+      signal.throwIfAborted()
+      normalizeURL(url, pagePolicy(binding))
+
+      return url
+    }
+
     if (action.type === "preview") {
       if (artifactKind(action.path) === "html") {
-        const roots = selectFileRoots(machine.state, binding)
-        const remote = remoteSource(binding)
-        const url = remote ? `${remote.prefix}${action.path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], action.path)
-
-        if (!url || !(remote ? Number.isSafeInteger(await remote.stat(action.path, signal, action.path, true)) : await workspaceFile(url, roots)))
-          throw new CodedError(Browser.FailureCode.previewUnavailable, remote?.needsUpdate?.() ? "Update this session's server to open workspace previews." : "The workspace file no longer exists or cannot be read by this session.")
-        signal.throwIfAborted()
-        normalizeURL(url, pagePolicy(binding))
-        const existing = inventory(binding).tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === url)
+        const url = await fileURL(action.path)
+        const existing = fileTab(inventory(binding).tabs, url)
 
         if (existing) handles.get(binding)?.pluginTabs.forget(existing.id)
         const tab = existing ? acquire(existing.id) : create(binding, { activity: createdActivity(origin, command.agent) })
@@ -1054,11 +1061,11 @@ export function createBrowserPane(input: {
         if (!existing) opening.defer(() => { if (page(binding, tabID) === tab) dispatchBinding(binding, { type: "tab.closed", tabID }) })
         await tab.execute({ action: { type: "navigate", tabID, url }, files: [] }, signal, origin)
         refresh(binding, tabID, tab)
-        // A preview means "show this to the person": it takes the pane even when another tab is selected there.
+        // A workspace file is opened to show it to the person: it takes the pane even when another tab is selected there.
         present(tabID, "tab")
         opening.move()
 
-        return { value: { path: action.path, tabID, url: tab.state().url }, files: [] }
+        return { value: { path: action.path, tabID, url: tab.state().url, tab: tab.state() }, files: [] }
       }
 
       // The window owns file tabs; an off-screen session processes this request when its file panel mounts.
@@ -1164,11 +1171,23 @@ export function createBrowserPane(input: {
       return { value: inventory(binding, origin === "agent" ? "agent" : "window"), files: [] }
     }
 
-    if (action.type === "navigate" || action.type === "back" || action.type === "forward" || action.type === "reload")
+    const url = action.type === "navigate.path" ? await fileURL(action.path) : undefined
+
+    if (action.type === "navigate" || action.type === "navigate.path" || action.type === "back" || action.type === "forward" || action.type === "reload")
       handles.get(binding)?.pluginTabs.forget(action.tabID)
     const target = acquire(action.tabID)
 
     if (!target) throw new Error("Browser tab is unavailable. Call browser.tabs.list({}) and use an existing tabID.")
+
+    // The same navigation as a web address, checks on the tab's generation and site included, and shown as a file is.
+    if (action.type === "navigate.path" && url) {
+      await target.execute({ ...command, action: { type: "navigate", tabID: action.tabID, url } }, signal, origin)
+      refresh(binding, action.tabID, target)
+      present(action.tabID, "tab")
+
+      return { value: { path: action.path, tabID: action.tabID, url: target.state().url, tab: target.state() }, files: [] }
+    }
+
     const result = await target.execute(command, signal, origin)
     refresh(binding, action.tabID, target)
 

@@ -12,3 +12,8 @@ export function workspaceFileURL(root: string, path: string, remoteSession?: str
 export function reusableFile(url: string | undefined, intent: "present" | "new") {
   return intent === "present" && url && /^(?:file|workspace):/.test(url) ? url.split(/[?#]/, 1)[0] : undefined
 }
+
+/** The tab that already shows this file, whatever query or fragment its address has. Opening the file again reloads that tab. */
+export function fileTab<Tab extends { readonly url: string }>(tabs: readonly Tab[], file: string) {
+  return tabs.find((tab) => tab.url.split(/[?#]/, 1)[0] === file)
+}

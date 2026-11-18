@@ -30,6 +30,14 @@ Screenshots, clicks and hovers work while the tab is hidden; only a full-page sc
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
+`tabs.open` and `navigate` take a web address in `url` or a workspace file in
+`path`, never both. The server checks that a path is a readable file inside the
+workspace, then sends the desktop a file action: `preview` for `tabs.open`
+(older desktops and servers already exchange it under that name) and
+`navigate.path` for `navigate`. No tool is named after either. The permission
+check for a path names the called operation and `preview`, so a rule, policy or
+hook that denies `browser: preview` still stops it.
+
 The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
 IDs, snapshots and refs, showing results to the user, recipes for debugging,
 performance and memory, and recovery after failures. It lists every operation

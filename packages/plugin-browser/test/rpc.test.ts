@@ -128,9 +128,9 @@ test.each([
   "svg",
   "render",
   "source code",
-])("browser.preview is found by searching %s", (query) => {
-  const preview = Browser.Operations.find((operation) => operation.name === "preview")!
-  const description = preview.description.toLowerCase()
+])("browser.tabs.open is found by searching %s", (query) => {
+  const open = Browser.Operations.find((operation) => operation.name === "tabs.open")!
+  const description = open.description.toLowerCase()
   const terms = query
     .toLowerCase()
     .split(/[^a-z0-9]+/)
