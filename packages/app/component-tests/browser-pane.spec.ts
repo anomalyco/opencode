@@ -171,6 +171,34 @@ story("keeps the native view live while a resize handle is dragged on macOS", as
   await expect(still).toHaveCount(0)
 })
 
+story("re-measures the native view when the pane moves without resizing", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  const frame = root.getByTestId("pane-frame")
+  const bounds = async () => ({
+    x: Number(await native.getAttribute("data-x")),
+    width: Number(await native.getAttribute("data-width")),
+  })
+  const before = await bounds()
+  const frameX = async () => (await frame.boundingBox())?.x ?? 0
+  const startX = await frameX()
+  // Let the 300 ms window a mount measures through end, so only the move can correct the bounds after this.
+  await page.waitForTimeout(400)
+
+  // The pane's frame moves with no transition, drag, or resize of the pane itself, so nothing the embed listens to
+  // reports it. A native view left on its old bounds then draws outside its pane.
+  await frame.evaluate((element) => {
+    element.style.marginInlineStart = "120px"
+  })
+  const shifted = (await frameX()) - startX
+
+  expect(before.x).toBeGreaterThan(0)
+  expect(shifted).toBe(120)
+  await expect.poll(async () => (await bounds()).x).toBe(before.x + shifted)
+  // The pane did not resize, so only its position changed.
+  expect((await bounds()).width).toBe(before.width)
+})
+
 story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const handle = root.getByTestId("pane-resize-handle")
