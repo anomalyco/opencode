@@ -5567,7 +5567,7 @@
             }
           }
         },
-        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs for 7 days; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Create a video generation",
         "requestBody": {
           "content": {
@@ -12335,7 +12335,7 @@
             }
           }
         },
-        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are deleted 7 days after they're written. Experimental: may change without compatibility guarantees.",
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
         "summary": "Read a blob"
       }
     },
@@ -16688,13 +16688,9 @@
           },
           "bytes": {
             "type": "number"
-          },
-          "expiresAt": {
-            "type": "number",
-            "description": "Epoch milliseconds after which the blob may be deleted. Read it with GET /api/experimental/blob/:id"
           }
         },
-        "required": ["id", "mime", "bytes", "expiresAt"],
+        "required": ["id", "mime", "bytes"],
         "additionalProperties": false
       },
       "BlobNotFoundErrorEncoded": {

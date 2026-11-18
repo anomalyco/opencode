@@ -265,9 +265,7 @@ const layer = Layer.effect(
       // A blob that expired or was deleted is dropped.
       const found = yield* Effect.forEach(job.blobs, (blob) => blobs.read(blob).pipe(Effect.option))
       const infos = found.flatMap((blob) =>
-        Option.isSome(blob)
-          ? [{ id: blob.value.id, mime: blob.value.mime, bytes: blob.value.bytes, expiresAt: blob.value.expiresAt }]
-          : [],
+        Option.isSome(blob) ? [{ id: blob.value.id, mime: blob.value.mime, bytes: blob.value.bytes }] : [],
       )
       if (infos.length === 0) return yield* missing
       return { id, status: "completed", blobs: infos } satisfies VideoJob

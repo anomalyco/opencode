@@ -22,7 +22,4 @@ export const Info = Schema.Struct({
   id: ID,
   mime: Schema.String,
   bytes: Schema.Finite,
-  expiresAt: Schema.Finite.annotate({
-    description: "Epoch milliseconds after which the blob may be deleted. Read it with GET /api/experimental/blob/:id",
-  }),
 }).annotate({ identifier: "Blob.Info" })

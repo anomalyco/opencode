@@ -82,7 +82,7 @@ it.live("generates a video in the background and serves its blob with Range and 
     expect(completed.data).toEqual({
       id: data.id,
       status: "completed",
-      blobs: [{ id: expect.stringMatching(/^blob_/), mime: "video/mp4", bytes: 20, expiresAt: expect.any(Number) }],
+      blobs: [{ id: expect.stringMatching(/^blob_/), mime: "video/mp4", bytes: 20 }],
     })
     const blob = (completed.data.blobs as { id: string }[])[0].id
     const route = `${base}/blob/${blob}`
