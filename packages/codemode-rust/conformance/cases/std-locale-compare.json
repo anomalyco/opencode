@@ -49,5 +49,6 @@
     "empty": 0,
     "undef": 0
   },
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

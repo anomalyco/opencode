@@ -23,15 +23,15 @@
     "function",
     [
       "Error",
-      "Unknown tool namespace 'nope'."
+      "No namespace at tools.nope."
     ],
     [
       "Error",
-      "Unknown tool namespace 'git.nope'."
+      "No namespace at tools.git.nope."
     ],
     [
       "Error",
-      "Unknown tool namespace 'git.status.x'."
+      "No namespace at tools.git.status.x."
     ],
     [],
     [
@@ -75,5 +75,6 @@
       "Cannot read properties of undefined (reading '1,2')."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

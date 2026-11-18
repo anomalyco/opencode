@@ -110,5 +110,6 @@
   ],
   "logs": [
     "Symbol(codemode.iterator) [Symbol(codemode.async-iterator)] {\"k\":Symbol(codemode.iterator)}"
-  ]
+  ],
+  "metadata": null
 }

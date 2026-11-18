@@ -10,5 +10,6 @@
     "Cannot assign to read only property 'size'.",
     "Cannot assign to read only property 'size'."
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

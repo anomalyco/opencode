@@ -311,5 +311,6 @@
   ],
   "logs": [
     "WeakMap { <items unknown> } WeakSet { <items unknown> }"
-  ]
+  ],
+  "metadata": null
 }

@@ -1,1 +1,0 @@
-return await tools.echo({})

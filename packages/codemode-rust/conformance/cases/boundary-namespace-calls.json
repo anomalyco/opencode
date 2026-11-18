@@ -23,5 +23,6 @@
       "Only data fields may be deleted."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

@@ -15,5 +15,6 @@
       "An import declaration may only appear at the top level of the program."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

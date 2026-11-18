@@ -7,5 +7,6 @@
     "multi 1 true null undefined",
     "{\"a\":[1,\"s\"]} [1,2]",
     "t1"
-  ]
+  ],
+  "metadata": null
 }

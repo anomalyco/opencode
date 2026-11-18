@@ -23,5 +23,6 @@
     "SyntaxError",
     "x[y]x"
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

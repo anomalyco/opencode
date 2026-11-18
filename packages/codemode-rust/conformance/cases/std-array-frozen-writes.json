@@ -120,5 +120,6 @@
     "nonext popEmpty 1 ok []",
     "nonext popEmpty 2 ok [2]"
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

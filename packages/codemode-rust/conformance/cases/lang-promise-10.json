@@ -4,5 +4,6 @@
   "value": "object",
   "logs": [
     "[Promise (await it to get its value)]"
-  ]
+  ],
+  "metadata": null
 }

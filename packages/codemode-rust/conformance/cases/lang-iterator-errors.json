@@ -17,5 +17,6 @@
     "asyncReturn": "TypeError: Iterator return must be a function.",
     "asyncReturnResult": "TypeError: Iterator return() result must be an object."
   },
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

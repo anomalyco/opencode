@@ -4,5 +4,6 @@
   "kind": "ExecutionFailure",
   "logs": [
     "before"
-  ]
+  ],
+  "metadata": null
 }

@@ -489,5 +489,6 @@
       "Number.prototype.toString requires that 'this' be a Number."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

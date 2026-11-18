@@ -34,5 +34,6 @@
       "TypeError: Uint8Array.sort expects a function callback."
     ]
   },
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

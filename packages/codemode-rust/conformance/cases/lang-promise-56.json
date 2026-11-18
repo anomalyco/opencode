@@ -2,5 +2,6 @@
   "bindings": {},
   "ok": true,
   "value": "nested",
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

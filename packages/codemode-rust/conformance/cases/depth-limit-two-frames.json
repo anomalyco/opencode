@@ -58,5 +58,6 @@
       "Maximum call stack size exceeded"
     ]
   },
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

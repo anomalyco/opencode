@@ -10,5 +10,6 @@
     "Promise.race([]) would never settle; provide at least one promise or value.",
     1
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

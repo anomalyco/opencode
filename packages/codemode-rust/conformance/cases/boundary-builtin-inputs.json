@@ -804,5 +804,6 @@
       "Arguments contain a value that is out of range of code points"
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

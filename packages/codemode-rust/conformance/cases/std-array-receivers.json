@@ -953,5 +953,6 @@
       "Array.prototype.with called on incompatible receiver undefined."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

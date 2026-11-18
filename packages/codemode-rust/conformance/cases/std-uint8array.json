@@ -219,5 +219,6 @@
   ],
   "logs": [
     "Uint8Array(2) [1,2] [Uint8Array(0) []]"
-  ]
+  ],
+  "metadata": null
 }

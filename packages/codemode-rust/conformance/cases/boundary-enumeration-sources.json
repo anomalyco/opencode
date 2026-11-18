@@ -381,5 +381,6 @@
       "Object.create property descriptors are not supported; assign the fields after creating the object."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

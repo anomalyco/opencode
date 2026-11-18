@@ -2,5 +2,6 @@
   "bindings": {},
   "ok": false,
   "kind": "UnsupportedSyntax",
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

@@ -11,5 +11,6 @@
     "ReferenceError: Unknown identifier 'unknownName'.",
     4
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

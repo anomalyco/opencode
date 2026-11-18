@@ -1,12 +1,17 @@
 {
   "bindings": {},
+  "translate": {
+    "functions": "drop",
+    "promises": "await"
+  },
   "ok": true,
   "value": [
     1,
     2,
     "main",
     "boom",
-    "Unknown tool 'git.stat'. Did you mean tools.git.status?"
+    "No function at tools.git.stat."
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

@@ -60,5 +60,6 @@
     "race: TypeError: Iterator method must be a function.",
     "next0,next1,next2,stop"
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

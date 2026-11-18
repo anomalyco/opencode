@@ -97,5 +97,6 @@
       "yield* requires a compatible iterable value."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

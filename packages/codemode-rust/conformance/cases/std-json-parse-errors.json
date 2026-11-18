@@ -123,5 +123,6 @@
       "JSON.parse received invalid JSON: JSON Parse error: Unrecognized token '/'"
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

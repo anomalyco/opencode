@@ -46,5 +46,6 @@
     "Object.fromEntries expects [key, value] entry objects.",
     "{\"5\":6,\"[object Object]\":1,\"1,2\":2,\"null\":3,\"undefined\":4}"
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

@@ -592,5 +592,6 @@
       "Only data fields may be assigned."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

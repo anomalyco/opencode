@@ -20,5 +20,6 @@
     "aliased": "TypeError: make is not a function.",
     "nextResult": "TypeError: Iterator next() result must be an object."
   },
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

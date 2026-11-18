@@ -2,5 +2,6 @@
   "bindings": {},
   "ok": false,
   "kind": "ParseError",
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

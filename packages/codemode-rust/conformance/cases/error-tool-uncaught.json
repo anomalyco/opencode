@@ -1,6 +1,7 @@
 {
   "bindings": {},
   "ok": false,
-  "kind": "ToolFailure",
-  "logs": []
+  "kind": "HostFailure",
+  "logs": [],
+  "metadata": null
 }

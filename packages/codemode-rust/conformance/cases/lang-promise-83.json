@@ -4,9 +4,10 @@
   "value": [
     "AggregateError",
     [
-      "Unknown tool 'host.fail'. Did you mean tools.fail?",
+      "No function at tools.host.fail.",
       "plain"
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

@@ -1,3 +1,4 @@
+// @translate {"functions": "drop", "promises": "await"}
 // A tool's arguments await a promise inside them, a pending one first, and leave a function out; a rejection fails
 // the call with its reason.
 const nested = await tools.echo({ id: tools.echo({ id: 1 }) })

@@ -6,14 +6,14 @@
       "status": "rejected",
       "reason": {
         "name": "Error",
-        "message": "Unknown tool 'host.echo'. Did you mean tools.echo?"
+        "message": "No function at tools.host.echo."
       }
     },
     {
       "status": "rejected",
       "reason": {
         "name": "Error",
-        "message": "Unknown tool 'host.fail'. Did you mean tools.fail?"
+        "message": "No function at tools.host.fail."
       }
     },
     {
@@ -28,5 +28,6 @@
       }
     }
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

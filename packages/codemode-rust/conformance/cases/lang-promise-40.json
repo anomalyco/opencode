@@ -1,6 +1,7 @@
 {
   "bindings": {},
   "ok": true,
-  "value": "Unknown tool 'host.echo'. Did you mean tools.echo?",
-  "logs": []
+  "value": "No function at tools.host.echo.",
+  "logs": [],
+  "metadata": null
 }

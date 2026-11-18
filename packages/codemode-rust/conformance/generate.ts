@@ -1,46 +1,33 @@
 #!/usr/bin/env bun
 
-// Regenerates conformance/cases/<name>.json by running every <name>.js through the reference CodeMode.
+// Regenerates conformance/cases/<name>.json by running every <name>.js through the reference's language layer
+// (`Language.Runtime.make`).
 // Usage: bun conformance/generate.ts [reference] — the reference CodeMode package directory, from the argument,
 // CODEMODE_REF, or by default ../codemode relative to this workspace.
 //
+// Host globals: only `tools`, the namespace of conformance/reference.ts (`tools.echo`, `tools.fail`, `tools.git.status`,
+// all async; any other path an async function that rejects with NotFound). No `modules`.
+//
 // A case may start with header comments that set its inputs:
-//   // @bindings {"event": {"type": "init"}}
-//   // @limits {"max_tool_calls": 2}
+//   // @bindings {"event": {"type": "init"}}            the program's bindings (default `{}`)
+//   // @limits {"timeout_ms": 50, "max_output_bytes": 9}  the runtime's `limits` (default none)
+//   // @translate {"functions": "drop", "promises": "await"}  the runtime's `translate` (default the reference's:
+//                                                          both "error")
 //   // @platform "linux"
 // A case with @platform depends on the system libm or compiler, so it is recorded and checked only on that platform
 // (`process.platform`); elsewhere this leaves its expectation as it is.
+//
+// Each <name>.json: `{ bindings, limits?, translate?, ok: true, value } | { bindings, limits?, translate?, ok: false,
+// kind }`, then `logs` (the result's logs, `[]` when none) and `metadata` (the result's `run.metadata`: always `null`
+// here, as `tools` keeps no run state).
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
+import { reference, toolsGlobal } from "./reference.ts"
 
-const override = process.argv[2] ?? process.env.CODEMODE_REF
-const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") : resolve(override)
-const { Effect, Schema } = await import(Bun.resolveSync("effect", join(pkg, "src")))
-const { CodeMode, Tool, toolError } = await import(join(pkg, "src/index.ts"))
-
-const tools = {
-  echo: Tool.make({
-    description: "Echo an id",
-    input: Schema.Struct({ id: Schema.Number }),
-    output: Schema.Number,
-    execute: ({ id }: { id: number }) => Effect.succeed(id),
-  }),
-  fail: Tool.make({
-    description: "Always fails",
-    input: Schema.Struct({}),
-    output: Schema.Number,
-    execute: () => Effect.fail(toolError("boom")),
-  }),
-  git: {
-    status: Tool.make({
-      description: "Working tree status",
-      input: Schema.Struct({}),
-      output: Schema.Struct({ branch: Schema.String, dirty: Schema.Boolean }),
-      execute: () => Effect.succeed({ branch: "main", dirty: true }),
-    }),
-  },
-}
+const ref = await reference(process.argv[2] ?? process.env.CODEMODE_REF)
+const Effect = ref.Effect
+const tools = toolsGlobal(ref)
 
 const header = (code: string, tag: string) => {
   const line = code.split("\n").find((l) => l.startsWith(`// @${tag} `))
@@ -62,16 +49,22 @@ for (const name of names) {
   }
   const bindings = header(code, "bindings") ?? {}
   const limits = header(code, "limits")
-  const runtime = CodeMode.make({
-    tools,
-    ...(limits === undefined ? {} : { limits: { maxToolCalls: limits.max_tool_calls, timeoutMs: limits.timeout_ms } }),
+  const translate = header(code, "translate")
+  const runtime = ref.Language.Runtime.make({
+    globals: () => ({ tools }),
+    ...(limits === undefined
+      ? {}
+      : { limits: { timeoutMs: limits.timeout_ms, maxOutputBytes: limits.max_output_bytes } }),
+    ...(translate === undefined ? {} : { translate }),
   })
-  const result = await Effect.runPromise(runtime.execute(code, bindings))
+  const result = await Effect.runPromise(runtime.execute(code, { bindings }))
   const expected = {
     bindings,
     ...(limits === undefined ? {} : { limits }),
+    ...(translate === undefined ? {} : { translate }),
     ...(result.ok ? { ok: true, value: result.value } : { ok: false, kind: result.error.kind }),
     logs: result.logs ?? [],
+    metadata: result.metadata,
   }
   writeFileSync(join(dir, `${name}.json`), JSON.stringify(expected, null, 2) + "\n")
   console.log(`${name.padEnd(36)} ${result.ok ? "ok" : result.error.kind}`)

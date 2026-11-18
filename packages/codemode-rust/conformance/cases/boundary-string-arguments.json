@@ -150,5 +150,6 @@
       "String.prototype.padEnd called on null or undefined."
     ]
   ],
-  "logs": []
+  "logs": [],
+  "metadata": null
 }

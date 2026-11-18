@@ -331,5 +331,6 @@
   ],
   "logs": [
     "http://user:pw@foo:99/a%20b#x%20y a=3&b=9&c=++d&e=x%2Fy+%C3%A9 Headers {\"accept\":\"text/html, application/json\",\"content-type\":\"text/plain\",\"x-count\":\"2\",\"set-cookie\":\"b=2\"} Headers {}"
-  ]
+  ],
+  "metadata": null
 }
