@@ -1754,8 +1754,10 @@ const CHAIN: u32 = 64;
 /// cannot grow the queue without bound (review carbon new-1). The host's own work is never dropped.
 const QUEUE: usize = 1 << 16;
 /// At most this many effects run in a frame; the rest waits for the next paint, so a chain that fans out, or many
-/// answers that arrive at once, still let the UI read input and paint (reviews carbon-2, carbon new-1).
-const FRAME_EFFECTS: usize = 1024;
+/// answers that arrive at once, still let the UI read input and paint (reviews carbon-2, carbon new-1). Public for the
+/// tests, which bound a drain by frames, not by the wall clock.
+#[doc(hidden)]
+pub const FRAME_EFFECTS: usize = 1024;
 
 /// Acts on what the budget said of a call of plugin `id`: a plugin that became slow is told once a session, unless the
 /// call `failed` it, which tells its own report; a call that opened a frame has the frames closed at the next paint.

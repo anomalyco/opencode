@@ -3624,10 +3624,13 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     });
     assert_eq!(lines(), "Err\n");
     h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "probe", false);
-    h.wait("the queue drained", || {
+    // A frame runs its budget of what waits: the drain is so many frames, however long each takes under load
+    // (pipe-flakes: 65 frames of the full queue took 5 s alone, past the 30 s of a wait under the lane's load).
+    let waiting = opencode_plugin::effects_waiting();
+    for _ in 0..waiting.div_ceil(opencode_plugin::FRAME_EFFECTS) {
         h.app.render();
-        opencode_plugin::effects_waiting() == 0
-    });
+    }
+    assert_eq!(opencode_plugin::effects_waiting(), 0, "the queue drained within a frame for each budget of {waiting}");
     h.tui.keymap.dispatch("refused.fetch", None);
     h.wait("the fetch ended", || {
         h.app.advance(Duration::from_millis(1));
