@@ -98,7 +98,6 @@ import {
   storeName,
 } from "./stores"
 import { ui } from "./ui"
-import { stripBasePath } from "@/runtime/platform/base-path"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
@@ -1188,7 +1187,7 @@ export function createPluginAttachment(apis: HostApis) {
     command: (id) => void run(id),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
     routing: useIsRouting(),
-    path: () => `${stripBasePath(location.pathname)}${location.search}`,
+    path: () => `${location.pathname}${location.search}`,
     keybind: command.keybindParts,
     matches: command.matches,
     servers: () => global.servers.list().map(ServerConnection.key),
