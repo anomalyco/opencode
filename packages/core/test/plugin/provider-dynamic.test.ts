@@ -24,8 +24,8 @@ function npmPackage(directory = "") {
     resolve: (name) => Effect.succeed({ directory, name }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory, name }),
-rollback: () => Effect.succeed(false),
-        which: () => Effect.undefined,
+    reject: () => Effect.succeed(false),
+    which: () => Effect.undefined,
   })
 }
 

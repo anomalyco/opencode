@@ -18,8 +18,8 @@ const npm = Npm.Service.of({
   resolve: (name) => Effect.succeed({ directory: "", name }),
   check: () => Effect.succeed(false),
   update: (name) => Effect.succeed({ directory: "", name }),
-rollback: () => Effect.succeed(false),
-    which: () => Effect.undefined,
+  reject: () => Effect.succeed(false),
+  which: () => Effect.undefined,
 })
 
 const addPlugin = Effect.fn(function* () {

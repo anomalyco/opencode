@@ -171,7 +171,7 @@ export const layer = Layer.effectDiscard(
         : immediate
       if (resolved !== immediate) yield* apply(resolved)
       running = resolved.packages
-      // A newer version that fails to load leaves the running one in place. Remove the newer one from disk too, so a
+      // A newer version that fails to load leaves the running one in place. Stop using the newer one on disk too, so a
       // restart loads the version that works.
       yield* Effect.forEach(
         resolved.failures,
@@ -181,13 +181,14 @@ export const layer = Layer.effectDiscard(
             const target = failure.source.target
             const kept = resolved.packages.get(target)?.source
             if (kept?.type !== "package" || !kept.version) return
-            if ((yield* npm.resolve(target)).version === kept.version) return
-            if (!(yield* npm.rollback(target))) return
+            const installed = (yield* npm.resolve(target)).version
+            if (!installed || installed === kept.version) return
+            if (!(yield* npm.reject(target, installed))) return
             yield* Effect.logWarning("kept the running plugin version after the new one failed to load", {
               target,
               version: kept.version,
             })
-          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to roll back plugin", { cause }))),
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to reject plugin version", { cause }))),
         { discard: true },
       )
       const targets = new Set(

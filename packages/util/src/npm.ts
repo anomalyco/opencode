@@ -37,8 +37,11 @@ export interface Interface {
   readonly resolve: (pkg: string) => Effect.Effect<Package>
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
   readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
-  /** Remove the newest installed version, so the previous one is current again. False when there is no previous one. */
-  readonly rollback: (pkg: string) => Effect.Effect<boolean, InstallFailedError | EffectFlock.LockError>
+  /**
+   * Stop using the newest installed version when it is `version`, so the previous one is current again. Its files stay
+   * until they expire, for anything still running it. False when it isn't the newest or there is no previous one.
+   */
+  readonly reject: (pkg: string, version: string) => Effect.Effect<boolean, InstallFailedError | EffectFlock.LockError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -92,8 +95,7 @@ async function parse(pkg: string): Promise<Target | undefined> {
 }
 
 function key(pkg: string, target: Target | undefined) {
-  if (target?.type === "git")
-    return `git-${target.slug}-${createHash("sha256").update(pkg).digest("hex").slice(0, 12)}`
+  if (target?.type === "git") return `git-${target.slug}-${createHash("sha256").update(pkg).digest("hex").slice(0, 12)}`
   if (target?.type === "registry") return sanitize(`${target.name}@${target.spec}`)
   return sanitize(pkg)
 }
@@ -153,7 +155,7 @@ const layer = Layer.effect(
         Effect.orElseSucceed(() => [] as string[]),
         Effect.map((entries) =>
           entries
-            .filter((entry) => /^\d+$/.test(entry))
+            .filter((entry) => /^\d+$/.test(entry) && !entries.includes(`${entry}.rejected`))
             .toSorted((a, b) => Number(a) - Number(b)),
         ),
       )
@@ -163,13 +165,13 @@ const layer = Layer.effect(
       return latest ? path.join(dir, latest) : undefined
     })
     const mkdir = (dir: string) =>
-      fs.makeDirectory(dir, { recursive: true }).pipe(
-        Effect.mapError((cause) => new InstallFailedError({ dir, cause })),
-      )
+      fs
+        .makeDirectory(dir, { recursive: true })
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
     const remove = (target: string, dir: string) =>
-      fs.remove(target, { recursive: true, force: true }).pipe(
-        Effect.mapError((cause) => new InstallFailedError({ dir, cause })),
-      )
+      fs
+        .remove(target, { recursive: true, force: true })
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
     const rename = (from: string, to: string, dir: string) =>
       fs.rename(from, to).pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
     const installedName = Effect.fnUntraced(function* (pkg: string, dir: string, target?: Target) {
@@ -191,7 +193,10 @@ const layer = Layer.effect(
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
         return Option.isSome(manifest) ? manifest.value.version : undefined
       }
-      for (const file of [path.join(root, "package-lock.json"), path.join(root, "node_modules", ".package-lock.json")]) {
+      for (const file of [
+        path.join(root, "package-lock.json"),
+        path.join(root, "node_modules", ".package-lock.json"),
+      ]) {
         const lock = yield* afs
           .readJson(file)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageLock)), Effect.option)
@@ -206,7 +211,7 @@ const layer = Layer.effect(
         .readJson(path.join(dir, "package.json"))
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(PackageJson)), Effect.option)
       const manifestVersion = Option.isSome(manifest) ? manifest.value.version : undefined
-      const revision = target ? (yield* installedRevision(root, name, target)) ?? manifestVersion : undefined
+      const revision = target ? ((yield* installedRevision(root, name, target)) ?? manifestVersion) : undefined
       const version = target?.type === "git" ? revision : manifestVersion
       return {
         directory: dir,
@@ -338,13 +343,15 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         entries,
         (name) => {
-          const timestamp = /^\d+$/.test(name)
-            ? Number(name)
+          const timestamp = /^\d+(\.rejected)?$/.test(name)
+            ? Number(name.split(".")[0])
             : Number(name.match(/^\.staging-(\d+)-/)?.[1] ?? Number.NaN)
           const maximumAge = name.startsWith(".staging-") ? stagingRetention : retention
           if (!Number.isFinite(timestamp) || keep.has(name) || now - timestamp <= maximumAge) return Effect.void
           return remove(path.join(dir, name), dir).pipe(
-            Effect.catchCause((cause) => Effect.logWarning("failed to remove stale npm generation", { dir, name, cause })),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to remove stale npm generation", { dir, name, cause }),
+            ),
           )
         },
         { concurrency: "unbounded", discard: true },
@@ -414,13 +421,19 @@ const layer = Layer.effect(
       return installed
     }, Effect.scoped)
 
-    const rollback = Effect.fn("Npm.rollback")(function* (pkg: string) {
-      const dir = directory(pkg, yield* Effect.promise(() => parse(pkg)))
+    const reject = Effect.fn("Npm.reject")(function* (pkg: string, version: string) {
+      const target = yield* Effect.promise(() => parse(pkg))
+      const dir = directory(pkg, target)
       yield* flock.acquire(`npm-install:${dir}`)
       const completed = yield* generations(dir)
       const newest = completed.at(-1)
       if (completed.length < 2 || !newest) return false
-      yield* remove(path.join(dir, newest), dir)
+      const root = path.join(dir, newest)
+      const name = yield* installedName(pkg, root, target)
+      if ((yield* metadata(root, name, path.join(root, "node_modules", name), target)).version !== version) return false
+      yield* fs
+        .writeFileString(path.join(dir, `${newest}.rejected`), "")
+        .pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
       return true
     }, Effect.scoped)
 
@@ -439,7 +452,9 @@ const layer = Layer.effect(
         if (files.length === 1) return Option.some(path.join(binDir, files[0]))
 
         const packageName = target?.name ?? pkg
-        const pkgJson = yield* afs.readJson(path.join(dir, "node_modules", packageName, "package.json")).pipe(Effect.option)
+        const pkgJson = yield* afs
+          .readJson(path.join(dir, "node_modules", packageName, "package.json"))
+          .pipe(Effect.option)
 
         if (Option.isSome(pkgJson)) {
           const parsed = pkgJson.value as { bin?: string | Record<string, string> }
@@ -479,7 +494,7 @@ const layer = Layer.effect(
       resolve,
       check,
       update,
-      rollback,
+      reject,
       which,
     })
   }),

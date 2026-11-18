@@ -92,7 +92,7 @@ const instances = Layer.effect(
                       cause: new Error(`Unexpected Npm.update(${pkg})`),
                     }),
                   ),
-            rollback: () => Effect.succeed(false),
+            reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),
         ),
@@ -347,7 +347,9 @@ describe("PluginSupervisor", () => {
 
       expect(source.activations).toBe(2)
 
-      yield* sdk.register(greeter("greet-cross-location", "cross-location")).pipe(Effect.provide(locations.get(refA)))
+      yield* sdk
+        .register(greeter("greet-cross-location", "cross-location"))
+        .pipe(Effect.provide(locations.get(refA)))
 
       yield* advance(() => source.activations === 4)
 

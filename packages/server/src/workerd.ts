@@ -118,8 +118,8 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (pkg) => npmUnavailable("Npm.update", pkg),
-rollback: () => Effect.succeed(false),
-        which: () => Effect.undefined,
+    reject: () => Effect.succeed(false),
+    which: () => Effect.undefined,
   }),
 )
 

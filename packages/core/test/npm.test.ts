@@ -310,31 +310,33 @@ describe("Npm.add", () => {
     expect(result.current).toBeFalse()
   }, 30_000)
 
-  test("rolls back to the previous installed version", async () => {
+  test("rejects only the newest installed version, keeping its files for what still runs it", async () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
     const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
 
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
-      const first = yield* npm.rollback(mutable)
-      yield* npm.add(mutable)
+      const first = yield* npm.add(mutable)
+      const alone = yield* npm.reject(mutable, first.version ?? "")
       yield* Effect.promise(async () => {
         await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
         await Bun.$`git -C ${fixture.repository} add .`
         await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
       })
-      yield* npm.update(mutable)
-      const rolledBack = yield* npm.rollback(mutable)
+      const second = yield* npm.update(mutable)
+      const other = yield* npm.reject(mutable, first.version ?? "")
+      const rejected = yield* npm.reject(mutable, second.version ?? "")
       const current = yield* npm.resolve(mutable)
       return {
-        first,
-        rolledBack,
-        again: yield* npm.rollback(mutable),
+        alone,
+        other,
+        rejected,
         current: yield* Effect.promise(() => Bun.file(path.join(current.directory, "index.js")).text()),
+        kept: yield* Effect.promise(() => Bun.file(path.join(second.directory, "index.js")).exists()),
       }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
-    expect(result).toMatchObject({ first: false, rolledBack: true, again: false })
+    expect(result).toMatchObject({ alone: false, other: false, rejected: true, kept: true })
     expect(result.current).toContain("root: true")
   }, 30_000)
 
@@ -352,33 +354,29 @@ describe("Npm.add", () => {
   }, 30_000)
 
   // Symlink creation needs elevated privileges on Windows.
-  test.skipIf(win)(
-    "records Git revisions when the cache directory is reached through a symlink",
-    async () => {
-      await using tmp = await tmpdir()
-      const fixture = await createGitFixture(tmp.path)
-      await fs.mkdir(path.join(tmp.path, "cache"))
-      await fs.symlink(path.join(tmp.path, "cache"), path.join(tmp.path, "link"))
-      const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
+  test.skipIf(win)("records Git revisions when the cache directory is reached through a symlink", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    await fs.mkdir(path.join(tmp.path, "cache"))
+    await fs.symlink(path.join(tmp.path, "cache"), path.join(tmp.path, "link"))
+    const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
 
-      const result = await Effect.gen(function* () {
-        const npm = yield* Npm.Service
-        const added = yield* npm.add(mutable)
-        const current = yield* npm.check(mutable)
-        yield* Effect.promise(async () => {
-          await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
-          await Bun.$`git -C ${fixture.repository} add .`
-          await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
-        })
-        return { added, current, outdated: yield* npm.check(mutable) }
-      }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "link"))), Effect.runPromise)
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const added = yield* npm.add(mutable)
+      const current = yield* npm.check(mutable)
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+        await Bun.$`git -C ${fixture.repository} add .`
+        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+      })
+      return { added, current, outdated: yield* npm.check(mutable) }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "link"))), Effect.runPromise)
 
-      expect(result.added.version).toBe(fixture.commit)
-      expect(result.current).toBeFalse()
-      expect(result.outdated).toBeTrue()
-    },
-    30_000,
-  )
+    expect(result.added.version).toBe(fixture.commit)
+    expect(result.current).toBeFalse()
+    expect(result.outdated).toBeTrue()
+  }, 30_000)
 })
 
 describe("Npm.resolve", () => {
