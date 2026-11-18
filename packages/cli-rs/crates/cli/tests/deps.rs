@@ -1,4 +1,5 @@
-//! Checks the target-specific dependency allowlist for binaries, tests and build tools.
+//! Checks the target-specific dependency allowlist for binaries, tests and build tools, and the layers of the
+//! workspace's own crates.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -68,6 +69,119 @@ fn allow_list_matches_the_graph() {
          decision (O-58, an O- entry in decisions.md) before its line goes into deps-allow.txt; otherwise remove the \
          dependency. For a crate that left the graph, delete its line.",
         differences.into_iter().flatten().collect::<Vec<_>>().join("\n"),
+    );
+}
+
+/// The workspace's crates in layers, lowest first, each as (name without `opencode-`, the workspace crates it takes as
+/// normal or build dependencies, the ones it takes only as dev-dependencies). A normal or build dependency is on a
+/// lower layer, so the shipped graph has no cycle and an edit never rebuilds a crate beside or below it. The table is
+/// the graph: a new crate or a new or removed edge changes it here, deliberately.
+const LAYERS: [&[Crate]; 6] = [
+    &[("api-types", &[], &[]), ("parity", &[], &[]), ("util", &[], &[])],
+    &[
+        ("api", &["api-types", "util"], &[]),
+        ("drive", &["api-types", "util"], &[]),
+        ("local", &["api-types", "util"], &[]),
+        ("plugin-abi", &["api-types"], &[]),
+    ],
+    &[
+        // Their tests draw through the plugin host above them: an upward dev edge, which ships nothing.
+        ("latex", &["plugin-abi"], &["parity", "plugin", "ui"]),
+        ("mermaid", &["plugin-abi"], &["parity", "plugin", "ui"]),
+        ("service", &["api", "local", "util"], &[]),
+        ("ui", &["api-types", "util"], &["parity"]),
+    ],
+    &[
+        ("plugin", &["api-types", "plugin-abi", "ui", "util"], &["latex", "mermaid"]),
+        ("store", &["api", "util"], &["local", "service"]),
+    ],
+    &[
+        ("acp", &["api", "service", "util"], &[]),
+        ("mini", &["api", "local", "store", "ui", "util"], &[]),
+        (
+            "tui",
+            &["api", "drive", "local", "plugin", "store", "ui", "util"],
+            &["latex", "mermaid", "parity", "plugin-abi"],
+        ),
+    ],
+    &[(
+        "cli",
+        &["acp", "api", "latex", "local", "mermaid", "mini", "plugin", "service", "store", "tui", "ui", "util"],
+        &[],
+    )],
+];
+
+type Crate = (&'static str, &'static [&'static str], &'static [&'static str]);
+
+#[test]
+fn workspace_crates_depend_only_downward() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+    let metadata: Value = serde_json::from_str(&cargo(&manifest, &["metadata", "--format-version", "1", "--no-deps"]))
+        .expect("cargo metadata prints JSON");
+    let short = |name: &str| name.strip_prefix("opencode-").unwrap_or(name).to_owned();
+    let members = metadata["packages"].as_array().unwrap();
+    let names = members.iter().map(|p| short(p["name"].as_str().unwrap())).collect::<BTreeSet<_>>();
+    let graph = members
+        .iter()
+        .map(|package| {
+            let deps = |dev: bool| {
+                package["dependencies"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|dep| (dep["kind"] == "dev") == dev)
+                    .map(|dep| short(dep["name"].as_str().unwrap()))
+                    .filter(|name| names.contains(name))
+                    .collect::<BTreeSet<_>>()
+            };
+            let normal = deps(false);
+            let dev = deps(true).difference(&normal).cloned().collect::<BTreeSet<_>>();
+            (short(package["name"].as_str().unwrap()), (normal, dev))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let layer = LAYERS
+        .iter()
+        .enumerate()
+        .flat_map(|(at, crates)| crates.iter().map(move |(name, _, _)| (name.to_string(), at)))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut problems = Vec::new();
+    if layer.len() != LAYERS.iter().map(|crates| crates.len()).sum::<usize>() {
+        problems.push("  LAYERS lists a crate twice".to_owned());
+    }
+    for (at, crates) in LAYERS.iter().enumerate() {
+        for (name, normal, dev) in crates.iter() {
+            let up = normal.iter().filter(|dep| layer.get(**dep).is_none_or(|l| *l >= at)).collect::<Vec<_>>();
+            if !up.is_empty() {
+                problems.push(format!("  {name} (layer {at}) takes {up:?}, which are not on a lower layer"));
+            }
+            let Some((real_normal, real_dev)) = graph.get(*name) else {
+                problems.push(format!("  {name} is in LAYERS but not in the workspace"));
+                continue;
+            };
+            let listed = |deps: &[&str]| deps.iter().map(|dep| dep.to_string()).collect::<BTreeSet<_>>();
+            for (kind, real, listed) in [("", real_normal, listed(normal)), ("dev-", real_dev, listed(dev))] {
+                let added = real.difference(&listed).collect::<Vec<_>>();
+                let removed = listed.difference(real).collect::<Vec<_>>();
+                if !added.is_empty() {
+                    problems.push(format!("  {name} has the {kind}dependencies {added:?}, which LAYERS does not list"));
+                }
+                if !removed.is_empty() {
+                    problems
+                        .push(format!("  {name} no longer has the {kind}dependencies {removed:?} that LAYERS lists"));
+                }
+            }
+        }
+    }
+    for name in graph.keys().filter(|name| !layer.contains_key(*name)) {
+        problems.push(format!("  {name} is a workspace crate without a layer"));
+    }
+    assert!(
+        problems.is_empty(),
+        "the workspace's crate graph does not match LAYERS in crates/cli/tests/deps.rs:\n{}\n\nA normal or build \
+         dependency goes to a lower layer. Before adding an edge or moving a crate to another layer, check that the \
+         crate below really needs nothing above it; for a removed edge, delete it from LAYERS.",
+        problems.join("\n"),
     );
 }
 
