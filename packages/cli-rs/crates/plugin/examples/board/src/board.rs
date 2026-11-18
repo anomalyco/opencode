@@ -9,7 +9,7 @@
 //! panic; the header lists the keys the handlers heard, each with the mode the handler read. A panel beside a session,
 //! `notes`, focuses its pad, reads where the focus is and the pad's place, holds a key and releases it, opens an
 //! overlay under its pad, gives its field the focus (`focus-input`), and gives the focus back; a centered select lists
-//! the cards a search finds. `board.facts`, also `/bf`, reads the host's locale, UTC offset and measure of a text, shows
+//! the cards a search finds. `board.facts`, also `/inspect`, reads the host's locale, UTC offset and measure of a text, shows
 //! them in a row its layout bounds at both widths, and asks for a name in a prompt filled with a value under a
 //! description (contract ergonomics 2.6 and 2.9).
 //!
@@ -117,7 +117,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         tasks.spawn(host, move |cx| ask(cx, board));
     });
     let read = board.clone();
-    setup.command(command("board.facts").slash("board-facts").aliases(["bf".to_owned()]), move |host, _| {
+    setup.command(command("board.facts").slash("board-facts").aliases(["inspect".to_owned()]), move |host, _| {
         // Wide characters, a space and an `e` with a combining accent: 8 cells, 5 graphemes.
         let text: String = [0x65e5, 0x672c, 0x8a9e, 0x20, 0x65, 0x301].into_iter().filter_map(char::from_u32).collect();
         let measure = host.measure(&text);
