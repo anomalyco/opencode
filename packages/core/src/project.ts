@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -17,6 +17,7 @@ import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
+import { SessionTable } from "./session/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -138,6 +139,25 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
 
     const announcing = new Set<string>()
+    const hasSessionsToAdopt = (projectIDs: ReadonlyArray<ID>, directory: AbsolutePath) =>
+      projectIDs.length === 0
+        ? Effect.succeed(false)
+        : db
+            .select({ directory: SessionTable.directory })
+            .from(SessionTable)
+            .where(
+              and(
+                inArray(SessionTable.project_id, [...projectIDs]),
+                isNull(SessionTable.workspace_id),
+                gte(SessionTable.directory, directory),
+                lte(SessionTable.directory, AbsolutePath.make(directory + "\uffff")),
+              ),
+            )
+            .all()
+            .pipe(
+              Effect.orDie,
+              Effect.map((rows) => rows.some((row) => FSUtil.contains(directory, row.directory))),
+            )
     const persist = Effect.fnUntraced(function* (project: Resolved) {
       const previous = yield* db
         .select({ canonical: ProjectTable.worktree })
@@ -173,6 +193,11 @@ const layer = Layer.effect(
         Effect.ignoreCause,
         Effect.forkIn(scope),
       )
+      // The marker is the durable link between a directory and the project ID it had
+      // before an origin change. Existing checkouts may predate the writer, so the
+      // directory history below is also used for adoption.
+      if (project.vcs && project.id !== ID.global && project.previous !== project.id)
+        yield* fs.writeFileString(path.join(project.vcs.store, "opencode"), project.id).pipe(Effect.ignore)
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
         { projectID: project.id, directory: project.canonical },
@@ -199,8 +224,35 @@ const layer = Layer.effect(
             .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
             .get()
             .pipe(Effect.orDie)
-          if (stored) return
           const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
+          // A directory keeps its sessions across origin changes. The marker is
+          // preferred, but checkouts created before the writer existed only have
+          // project/worktree rows to identify their previous IDs.
+          const history = yield* db
+            .select({ id: WorktreeTable.project_id })
+            .from(WorktreeTable)
+            .innerJoin(ProjectTable, eq(WorktreeTable.project_id, ProjectTable.id))
+            .where(
+              and(
+                eq(WorktreeTable.directory, directory),
+                isNotNull(ProjectTable.vcs),
+                isNull(ProjectTable.time_archived),
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+          const canonical = yield* db
+            .select({ id: ProjectTable.id })
+            .from(ProjectTable)
+            .where(
+              and(
+                eq(ProjectTable.worktree, directory),
+                isNotNull(ProjectTable.vcs),
+                isNull(ProjectTable.time_archived),
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
           const markerless = yield* db
             .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
             .from(ProjectTable)
@@ -224,13 +276,24 @@ const layer = Layer.effect(
               return (yield* fs.resolve(path.dirname(found[0]))) === directory
             }),
           )
+          const adoptedIDs = [
+            ...new Set([
+              ...history.map((row) => row.id),
+              ...canonical.map((row) => row.id),
+              ...adopted.map((candidate) => candidate.id),
+            ]),
+          ].filter((id) => id !== item.projectID && id !== ID.global)
+          const candidates = [...new Set([project.previous ?? ID.global, ...adoptedIDs])].filter(
+            (id) => id !== item.projectID,
+          )
+          if (stored && !(yield* hasSessionsToAdopt(candidates, directory))) return
           yield* bus.publish(
             Worktree.Event.Resolved,
             {
               projectID: item.projectID,
               directory: item.directory,
               previous: project.previous ?? ID.global,
-              ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
+              ...(adoptedIDs.length ? { adopted: adoptedIDs } : {}),
             },
             {
               commit: () =>

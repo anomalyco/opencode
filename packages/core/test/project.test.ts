@@ -549,18 +549,19 @@ describe("Project.resolve", () => {
 
       expect(result.previous).toBe(Project.ID.make("old-id"))
       expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())).toBe(result.id)
     }),
   )
 
-  it.live("does not write the cache while resolving", () =>
+  it.live("writes the resolved project id to the cache while resolving", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       const project = yield* Project.Service
 
-      yield* project.resolve(abs(tmp.path))
+      const result = yield* project.resolve(abs(tmp.path))
 
-      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())).toBe(result.id)
     }),
   )
 
@@ -710,6 +711,8 @@ describe("Project.resolve", () => {
         expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
         expect(spawns()).toBeGreaterThan(0)
 
+        // The first resolve writes .git/opencode, so the next lookup warms the new fingerprint.
+        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
         const before = spawns()
         expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
         expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)

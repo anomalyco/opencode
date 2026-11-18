@@ -33,10 +33,11 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { Workspace } from "@opencode/core/workspace"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { initGit } from "./fixture/git"
+import { initGit, initRepo } from "./fixture/git"
 import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
@@ -301,6 +302,141 @@ describe("Session.create", () => {
           .all()
           .pipe(Effect.orDie)
         expect(announced.map((event) => event.type)).toEqual(["worktree.resolved.1"])
+      }),
+    ),
+  )
+
+  ;["main", "main-copy"].forEach((renamed) =>
+    projectIt.live(`keeps other clone sessions when ${renamed} changes origin`, () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const main = AbsolutePath.make(path.join(directory, "main"))
+          const clone = AbsolutePath.make(path.join(directory, "main-copy"))
+          const target = renamed === "main" ? main : clone
+          const other = target === main ? clone : main
+          const nested = AbsolutePath.make(path.join(target, "packages", "app"))
+          yield* Effect.promise(async () => {
+            await initRepo(main)
+            await initRepo(clone)
+            await fs.mkdir(nested, { recursive: true })
+            await $`git remote add origin git@github.com:owner/before.git`.cwd(main).quiet()
+            await $`git remote add origin git@github.com:owner/before.git`.cwd(clone).quiet()
+          })
+          const projects = yield* Project.Service
+          const session = yield* Session.Service
+          const before = yield* projects.resolve(main)
+          yield* projects.resolve(clone)
+          const kept = yield* session.create({ location: Location.Ref.make({ directory: other }) })
+          const moved = yield* session.create({ location: Location.Ref.make({ directory: nested }) })
+          expect(kept.projectID).toBe(before.id)
+          expect(moved.projectID).toBe(before.id)
+
+          yield* Effect.promise(() => $`git remote set-url origin git@github.com:owner/after.git`.cwd(target).quiet())
+          const after = yield* projects.resolve(target)
+
+          expect(after.id).not.toBe(before.id)
+          expect(yield* session.get(kept.id)).toMatchObject({ projectID: before.id, location: { directory: other } })
+          expect(yield* session.get(moved.id)).toMatchObject({
+            projectID: after.id,
+            location: { directory: nested },
+            subpath: "packages/app",
+            time: { updated: moved.time.updated },
+          })
+          yield* projects.resolve(target)
+          yield* projects.resolve(other)
+          expect(yield* session.get(kept.id)).toMatchObject({ projectID: before.id })
+          expect(yield* session.get(moved.id)).toMatchObject({ projectID: after.id })
+          const database = yield* Database.Service
+          const emitted = yield* database.db
+            .select({ type: EventTable.type })
+            .from(EventTable)
+            .where(eq(EventTable.aggregate_id, after.id))
+            .all()
+            .pipe(Effect.orDie)
+          expect(emitted.filter((event) => event.type === "worktree.resolved.1")).toHaveLength(1)
+        }),
+      ),
+    ),
+  )
+
+  projectIt.live("keeps sessions when the origin changes without a cache marker", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const projects = yield* Project.Service
+        const { db } = yield* Database.Service
+        yield* Effect.promise(() => initRepo(directory))
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/before.git`.cwd(directory).quiet())
+
+        const before = yield* projects.resolve(AbsolutePath.make(directory))
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+          title: "Kept across origin change",
+        })
+        // A checkout created before the marker writer existed has no cached project ID.
+        yield* Effect.promise(() => fs.rm(path.join(directory, ".git", "opencode"), { force: true }))
+        yield* Effect.promise(() => $`git remote set-url origin git@github.com:owner/after.git`.cwd(directory).quiet())
+
+        const after = yield* projects.resolve(AbsolutePath.make(directory))
+        const adopted = yield* session.get(created.id)
+        const emitted = yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, after.id))
+          .all()
+          .pipe(Effect.orDie)
+
+        expect(after.id).not.toBe(before.id)
+        expect(adopted).toMatchObject({
+          projectID: after.id,
+          location: { directory: AbsolutePath.make(directory) },
+        })
+        expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git", "opencode")).text())).toBe(after.id)
+        expect(emitted.filter((event) => event.type === "worktree.resolved.1")).toHaveLength(1)
+
+        yield* projects.resolve(AbsolutePath.make(directory))
+        expect(yield* session.get(created.id)).toMatchObject({ projectID: after.id })
+      }),
+    ),
+  )
+
+  projectIt.live("keeps sessions when the new project already owns the directory", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const projects = yield* Project.Service
+        const { db } = yield* Database.Service
+        const location = AbsolutePath.make(directory)
+        yield* Effect.promise(() => initRepo(directory))
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/before.git`.cwd(directory).quiet())
+
+        yield* projects.resolve(location)
+        const created = yield* session.create({
+          location: Location.Ref.make({ directory: location }),
+          title: "Already registered",
+        })
+        yield* Effect.promise(() => fs.rm(path.join(directory, ".git", "opencode"), { force: true }))
+        yield* Effect.promise(() => $`git remote set-url origin git@github.com:owner/after.git`.cwd(directory).quiet())
+        const afterID = Project.ID.make(Hash.fast("git-remote:github.com/owner/after"))
+        yield* db
+          .insert(ProjectTable)
+          .values({
+            id: afterID,
+            worktree: location,
+            vcs: "git",
+            sandboxes: [],
+            time_created: 1,
+            time_updated: 1,
+            time_active: 1,
+          })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db.insert(WorktreeTable).values({ project_id: afterID, directory: location }).run().pipe(Effect.orDie)
+
+        const after = yield* projects.resolve(location)
+
+        expect(after.id).toBe(afterID)
+        expect(yield* session.get(created.id)).toMatchObject({ projectID: afterID })
       }),
     ),
   )
