@@ -69,6 +69,15 @@ export default Plugin.define({
         // A printable key bound globally by a command whose `enabled` follows a signal (contract ergonomics 2.5).
         { id: "v2probe.caret", bind: "^", enabled: () => caret(), run: () => log({ caret: true }) },
         { id: "v2probe.caretOn", run: (input?: string) => void setCaret(input === "on") },
+        // Registers a layer, which reloads the plugin's registrations, and enables `^` a turn later, after the manifest
+        // that reload sends.
+        {
+          id: "v2probe.lateCaret",
+          run: () => {
+            context.keymap.layer(() => ({ commands: [{ id: "v2probe.lateLayer", run() {} }] }))
+            setTimeout(() => setCaret(true), 0)
+          },
+        },
         { id: "v2probe.throw", run: () => void setMode("throw") },
         { id: "v2probe.loop", run: () => void setMode("loop") },
         { id: "v2probe.select", run: () => void setMode("select") },

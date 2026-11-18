@@ -413,6 +413,13 @@ impl Autocomplete {
         self.0.visible.get()
     }
 
+    /// A command was enabled or disabled: an open list of commands lists them as they are now (carbon ce-5).
+    pub fn commands_changed(&self) {
+        if self.0.visible.get() == Some(Mode::Command) {
+            self.0.refresh();
+        }
+    }
+
     /// The prompt's text changed (`onInput`).
     pub fn on_input(&self, value: &str) {
         self.0.on_input(value);

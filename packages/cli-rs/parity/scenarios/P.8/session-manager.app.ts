@@ -1,5 +1,6 @@
 // Ports trio (complex): `@0xuwui/opencode-session-manager@0.1.2`, unmodified from npm: `/session-manager` opens its
-// page (a route of its own) with the sessions grouped by directory, `j` moves the selection, Tab groups by project,
+// page (a route of its own) with the sessions grouped by directory, `j` moves the selection and PageUp and PageDown a
+// page of it, Tab groups by project,
 // `/` searches in a field that takes the focus, `r` asks for a new title in a prompt, `d` asks before it deletes. TS
 // loads the package from node_modules; the Rust client runs the same files on the JS host through the V2
 // compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
@@ -80,5 +81,12 @@ export default defineApp({
     { checkpoint: "delete", until: "This cannot be undone." },
     { keys: ["enter"] },
     { checkpoint: "deleted", until: "Deleted 1 session" },
+    // Its listing layer and its searching layer each bind `pageup` and `pagedown`, the same commands, one enabled while
+    // the other is not: listing, they move the selection a page (carbon ce-1: the searching layer's disabled state
+    // disabled them).
+    { keys: ["pagedown"] },
+    { checkpoint: "paged-down", until: "Plan the release" },
+    { keys: ["pageup"] },
+    { checkpoint: "paged-up", until: "Plan the release" },
   ],
 })

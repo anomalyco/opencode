@@ -12,6 +12,7 @@ import {
   createContext,
   createMemo,
   createRenderEffect,
+  createSignal,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -66,8 +67,15 @@ export class VNode {
   // The Solid owner it was created under, whose mount reports what the plugin asks of it while it is in no mount's
   // tree: a field it removed, or one it never added, has no focus on the host (contract 2.x, step B).
   made?: Owner | null
-  // It has the focus, as the layer last said ([`VNode.focusChanged`]).
-  focused = false
+  // It has the focus, as the layer last said ([`VNode.focusChanged`]): a signal, so what reads it (a key layer's
+  // `enabled`, file-browser's `inputFocused()`) follows it (carbon ce-2).
+  #focused = createSignal(false)
+  get focused() {
+    return this.#focused[0]()
+  }
+  set focused(focused: boolean) {
+    this.#focused[1](focused)
+  }
   // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
   typed?: string
   // The plugin asked where it is (CT-15, CT-24): it carries an id, and the host's layout of it is watched.
@@ -247,8 +255,8 @@ export class VNode {
 
   // The node gained or lost the focus: it emits as an OpenTUI renderable does.
   focusChanged(focused: boolean) {
-    if (this.focused === focused) return
-    this.focused = focused
+    if (this.#focused[0]() === focused) return
+    this.#focused[1](focused)
     this.emit(focused ? "focused" : "blurred")
   }
 

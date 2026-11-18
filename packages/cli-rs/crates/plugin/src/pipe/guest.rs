@@ -83,6 +83,9 @@ pub(crate) struct Loaded {
     pub continues: Option<u64>,
     /// Where the replies to the handed-over activation's requests go, which the new guest keeps ([`Relay`]).
     pub relay: RefCell<Option<Rc<Relay>>>,
+    /// The states the handed-over activation set its commands to after it handed on, which the new guest takes over its
+    /// manifest's (carbon ce-5: a `set-enabled` that came while the reload waited changed the guest that went).
+    pub states: RefCell<Vec<(String, bool)>>,
 }
 
 /// Where the replies to the requests of one activation of the JS host go: the guest that runs it when the reply comes.
@@ -408,6 +411,9 @@ impl Guest {
             return;
         }
         self.effects("setup", effects, false, "setup");
+        // The commands' states are the JS host's now, also when its manifest is the last one's: a setup run again after
+        // a restart, where the last activation had set them otherwise (carbon ce-5).
+        self.activation.commands(&manifest.commands);
         if manifest == self.loaded.manifest && holds == self.loaded.holds {
             return;
         }
@@ -454,6 +460,7 @@ impl Guest {
                 watches: RefCell::new(watches),
                 continues: Some(self.continues.unwrap_or(self.generation)),
                 relay: RefCell::new(Some(self.relay.borrow().clone())),
+                states: RefCell::default(),
             };
             (load.state, load.registered) = (super::Loading::Loaded(Rc::new(loaded)), false);
         }
@@ -560,6 +567,9 @@ impl Guest {
     /// Queues `effects` on the effect queue, as a call of kind `export` (for the user's input when `user`) would have
     /// asked for them, and what each answered.
     fn applied(self: &Rc<Self>, effects: Vec<HostRequest>, user: bool, export: &str) -> Vec<serde_json::Value> {
+        if self.handed_over.get() {
+            self.carry(&effects);
+        }
         let mut ctx = Ctx::new(self.host.clone(), self.id(), self.keys.borrow().clone());
         // Setup holds nothing of the input, as in process.
         ctx.owners = (export != "setup").then(|| self.owners.clone());
@@ -598,6 +608,21 @@ impl Guest {
             }
         });
         results
+    }
+
+    /// The states `effects` set the commands to, which a guest that handed its activation on gives the one that takes it
+    /// over, as the pending load's manifest does not hold them (carbon ce-5).
+    fn carry(&self, effects: &[HostRequest]) {
+        let Some(scripts) = self.scripts.upgrade() else { return };
+        let loads = scripts.loads.borrow();
+        let Some(super::Loading::Loaded(loaded)) = loads.get(&self.loaded.target).map(|load| &load.state) else {
+            return;
+        };
+        let set = effects.iter().filter_map(|effect| match effect {
+            HostRequest::SetEnabled { name, enabled } => Some((name.clone(), *enabled)),
+            _ => None,
+        });
+        loaded.states.borrow_mut().extend(set);
     }
 
     /// Tells the JS host what the effects it sent under `key` answered.
@@ -890,6 +915,9 @@ fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: 
 fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     let manifest = &guest.loaded.manifest;
     guest.activation.commands(&manifest.commands);
+    for (name, enabled) in guest.loaded.states.take() {
+        guest.activation.set_enabled(guest.id(), &name, enabled);
+    }
     let disposed = guest.clone();
     setup.on_dispose(move || disposed.dispose());
     let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> =

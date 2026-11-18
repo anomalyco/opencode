@@ -34,6 +34,8 @@ pub const BASE_MODE: &str = "base";
 /// The layer mode that opts out of the mode stack.
 pub const GLOBAL_MODE: &str = "global";
 pub const COMMAND_PALETTE_COMMAND: &str = "command.palette.show";
+/// The keymap data [`TuiKeymap::conditions_changed`] sets, which no layer requires.
+const CONDITIONS_KEY: &str = "conditions";
 
 /// The key aliases the keymap expands in a binding as its layer registers (TS `keymap.tsx`), each `(alias, key)`.
 const ALIASES: &[(&str, &str)] = &[("enter", "return"), ("esc", "escape"), ("pgdown", "pagedown"), ("pgup", "pageup")];
@@ -646,6 +648,13 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         binding.run(move |context| {
             check(&command.enabled) && (command.run)(None, context.event.as_ref()) == Outcome::Handled
         })
+    }
+
+    /// A command's `enabled` condition changed outside the keymap (a plugin's `set-enabled`): a pending sequence it no
+    /// longer completes goes, and what follows the keymap's state hears it. The keymap has no call for it, but setting
+    /// data does both; no layer requires this key.
+    pub fn conditions_changed(&self) {
+        self.keymap.set_data(CONDITIONS_KEY, self.keymap.revision().to_string());
     }
 
     /// How many layers are registered, for a ledger of who holds what.

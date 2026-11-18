@@ -18,8 +18,10 @@ mod board;
 use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::{self, Harness};
 
+use std::cell::Cell;
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -276,6 +278,24 @@ fn one_source_is_equal_on_every_carrier() {
                 panic!("{run:?} at {name}: the frames differ");
             }
         }
+    }
+}
+
+// Expected (carbon ce-5): a plugin enabling or disabling its command tells the keymap, whose state listeners hear it
+// (the plugins' reads of `keymap.commands()` and its pending keys follow them), where only the command's condition
+// changed and nothing that follows the keymap knew.
+#[test]
+fn a_commands_state_change_tells_the_keymaps_listeners() {
+    let board = open(Run::In(Carrier::Linked));
+    let tui = &board.harness.tui;
+    let heard = Rc::new(Cell::new(0));
+    let counted = heard.clone();
+    let _listening = tui.keymap.keymap().on_state(move || counted.set(counted.get() + 1));
+    for gate in ["on", "off"] {
+        let before = heard.get();
+        tui.keymap.dispatch("board.gate", Some(gate));
+        settle(&board.harness);
+        assert!(heard.get() > before, "the keymap's listeners did not hear `board.hotkey` turned {gate}");
     }
 }
 

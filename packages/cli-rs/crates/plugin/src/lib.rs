@@ -257,6 +257,9 @@ pub trait Host: 'static {
     }
     /// Gives the composer the focus, as when a plugin's surface that had it goes.
     fn focus_composer(&self) {}
+    /// A plugin's command was enabled or disabled (contract ergonomics 2.5): what lists or matches the keymap's commands
+    /// follows it, such as a pending key sequence the command no longer completes or an open slash list (carbon ce-5).
+    fn commands_changed(&self) {}
     /// The plugins moved the focus ([`interact::refocus`]): the host's own idea of which pane has the input follows it.
     fn focus_moved(&self) {}
     /// Whether a dialog of the host is on screen, which ends a plugin's pointer capture.

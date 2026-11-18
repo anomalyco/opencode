@@ -942,6 +942,57 @@ fn a_disabled_commands_key_is_not_held() {
     assert_eq!(live(), before, "a change of the command's state reloaded the plugin");
 }
 
+// Expected (carbon ce-5): a JS host that started again sets the plugin up afresh, and its commands take the states that
+// setup gives them: `^`'s command, enabled before, is disabled again, so the palette lists it nowhere, where the host
+// kept it enabled because the restarted setup's manifest was the first one's.
+#[test]
+fn a_restarted_js_hosts_commands_take_its_setups_states() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    let reachable = || tui.keymap.commands().iter().any(|command| command.id == "v2probe.caret");
+    tui.keymap.dispatch("v2probe.caretOn", Some("on"));
+    pipe.settle();
+    assert!(reachable(), "the enabled command is not reachable");
+    let pid = pipe.scripts().pid();
+    // The swapped call ends the JS host as the next one comes.
+    pipe.scripts().fault(Fault::Swap);
+    tui.keymap.dispatch("v2probe.add", Some("x"));
+    tui.keymap.dispatch("v2probe.add", Some("y"));
+    harness.wait("the JS host started again", || {
+        harness.app.advance(Duration::from_millis(1));
+        pipe.scripts().pid().is_some_and(|now| Some(now) != pid)
+    });
+    pipe.settle();
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+    assert!(!reachable(), "the restarted plugin's disabled command is reachable");
+}
+
+// Expected (carbon ce-5): a command enabled after a reload of the plugin's registrations was sent, but before the host
+// took it, is enabled on the guest that takes the plugin over. Everything the JS host sends is handed over at once, so
+// the `set-enabled` comes to the guest that handed over, and `^` is taken.
+#[test]
+fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    pipe.scripts().hold_answers(true);
+    tui.keymap.dispatch("v2probe.lateCaret", None);
+    harness.wait("the reload and the state came", || {
+        harness.app.advance(Duration::from_millis(1));
+        let types = pipe.scripts().held_types();
+        types
+            .iter()
+            .position(|kind| kind == "manifest")
+            .is_some_and(|at| types[at..].iter().any(|kind| kind == "effects"))
+    });
+    pipe.scripts().hold_answers(false);
+    pipe.settle();
+    harness.app.type_text("^");
+    pipe.settle();
+    assert_eq!((harness.text(), calls(&log)), (String::new(), vec![json!({ "caret": true })]));
+}
+
 // Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
 // as declined, even under a hold limit far longer than the test; its command is not sent again.
 #[test]

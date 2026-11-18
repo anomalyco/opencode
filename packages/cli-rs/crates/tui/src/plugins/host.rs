@@ -498,6 +498,14 @@ impl Host for Tui {
         crate::frame::follow_focus(self);
     }
 
+    fn commands_changed(&self) {
+        self.keymap.conditions_changed();
+        let prompt = self.prompt.current.borrow().upgrade();
+        if let Some(complete) = prompt.as_ref().and_then(|prompt| prompt.autocomplete.get()) {
+            complete.commands_changed();
+        }
+    }
+
     fn focus_composer(&self) {
         let prompt = self.prompt.current.borrow().upgrade();
         if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {
