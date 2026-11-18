@@ -119,7 +119,7 @@ story("desktop user message actions still appear on hover and keyboard focus", a
   await expect(actions).toHaveCSS("pointer-events", "auto")
 })
 
-story("desktop response copy stays visible while its metadata waits for hover or focus", async ({ mount, page }) => {
+story("desktop response copy and metadata appear together on hover or focus", async ({ mount, page }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "interruption" } })
   expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(true)
 
@@ -128,19 +128,18 @@ story("desktop response copy stays visible while its metadata waits for hover or
   await expect(actions).toHaveCSS("height", "20px")
   await expect(actions).toHaveCSS("margin-top", "8px")
   await expect(actions).toHaveCSS("gap", "4px")
-  await expect(actions).toHaveCSS("opacity", "1")
-  await expect(actions).toHaveCSS("pointer-events", "auto")
+  await expect(actions).toHaveCSS("opacity", "0")
+  await expect(actions).toHaveCSS("pointer-events", "none")
 
   const copy = actions.getByRole("button", { name: "Copy response", exact: true })
-  await expect(copy).toBeVisible()
+
   await expect(copy).toHaveCSS("width", "20px")
   await expect(copy).toHaveCSS("height", "20px")
   await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
   const rest = await copy.boundingBox()
 
   const meta = actions.locator('[data-slot="text-part-meta"]')
-  await expect(meta).toHaveCSS("opacity", "0")
-  await expect(meta).toHaveCSS("pointer-events", "none")
+
   await expect(meta).toHaveCSS("font-size", "12px")
   await expect(meta).toHaveCSS("line-height", "18px")
   await expect(meta).toHaveCSS("gap", "4px")
@@ -152,15 +151,16 @@ story("desktop response copy stays visible while its metadata waits for hover or
     await expect(separator).toHaveText("\u00B7")
   }
 
-  await actions.locator("..").hover()
-  await expect(meta).toHaveCSS("opacity", "1")
-  await expect(meta).toHaveCSS("pointer-events", "auto")
+  await actions.locator("..").locator('[data-slot="text-part-body"]').hover()
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
   expect(await copy.boundingBox()).toEqual(rest)
+  await copy.hover()
+  await expect(actions).toHaveCSS("opacity", "1")
 
   await page.mouse.move(0, 0)
-  await expect(meta).toHaveCSS("opacity", "0")
-  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("opacity", "0")
   await copy.focus()
-  await expect(meta).toHaveCSS("opacity", "1")
-  await expect(meta).toHaveCSS("pointer-events", "auto")
+  await expect(actions).toHaveCSS("opacity", "1")
+  await expect(actions).toHaveCSS("pointer-events", "auto")
 })
