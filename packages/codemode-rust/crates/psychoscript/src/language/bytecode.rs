@@ -55,6 +55,10 @@ pub enum Op {
     SetProp(Atom),
     GetElem,
     SetElem,
+    /// A destructuring pattern's read of `key`: a member read that lets a promise's missing key read as undefined.
+    DestructProp(Atom),
+    /// `obj key` -> `value`: [`Op::DestructProp`] with a key that `ToKey` made.
+    DestructElem,
     /// `obj` -> `f obj`
     GetMethod(Atom),
     DelProp(Atom),
@@ -250,6 +254,9 @@ pub struct FuncProto {
     /// How each call or `new` names its callee in errors (`o.f`, `f(...)`), by the instruction's index, ascending.
     /// A callee that cannot be named is not listed.
     pub callees: Vec<(u32, Box<str>)>,
+    /// The source offsets of the object and the key of each member instruction whose errors may point at them
+    /// instead of at the member, by the instruction's index, ascending.
+    pub sites: Vec<(u32, [u32; 2])>,
 }
 
 impl FuncProto {
@@ -261,6 +268,30 @@ impl FuncProto {
             .ok()?;
         Some(&self.callees[i].1)
     }
+
+    /// Where an error the instruction at `at` raised points, for an error that names the part `site` of its member
+    /// expression; `None` when the instruction has no member site.
+    pub fn site(&self, at: usize, site: Site) -> Option<u32> {
+        let i = self
+            .sites
+            .binary_search_by_key(&(at as u32), |(pc, _)| *pc)
+            .ok()?;
+        match site {
+            Site::Instruction => None,
+            Site::Object => Some(self.sites[i].1[0]),
+            Site::Key => Some(self.sites[i].1[1]),
+        }
+    }
+}
+
+/// The part of a member expression an error points at, as the reference locates each failure at a node: a base that
+/// cannot be read at the object, a namespace path's non-string key at the key, anything else at the instruction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Site {
+    #[default]
+    Instruction,
+    Object,
+    Key,
 }
 
 pub struct Program {

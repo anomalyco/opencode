@@ -1,7 +1,7 @@
 //! Property access, conversions, operators and iteration on program values.
 
 use crate::builtins::exotic;
-use crate::bytecode::ITER_FOR_OF;
+use crate::bytecode::{ITER_FOR_OF, Site};
 use crate::iteration::{BY_CLOSE, BY_COUNTED, BY_RESUME, BY_UNCOUNTED};
 use crate::object::*;
 use crate::strings::StrId;
@@ -35,7 +35,7 @@ impl<'rt> Vm<'rt> {
                     && matches!(self.heap[*id as usize].kind, Kind::Promise(_))
                     && !self.has_key(*id, key)
                 {
-                    return Err(self.invalid_data(UNAWAITED));
+                    return Err(self.unawaited());
                 }
                 Ok(v)
             }
@@ -72,9 +72,35 @@ impl<'rt> Vm<'rt> {
                 } else {
                     "undefined"
                 };
-                Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")))
+                Err(self.nullish_read(t, &k))
             }
         }
+    }
+
+    /// A destructuring pattern's read: a member read, except that a promise's missing key reads as undefined
+    /// instead of reporting a missing await, as the reference's `destructuredProperty` does.
+    pub fn get_destructured(&mut self, v: &Value, key: Atom) -> Res {
+        if let Value::Obj(id) = v
+            && self.is_promise(*id)
+        {
+            let r = self.get_obj(*id, key);
+            if let Value::Uninit = r {
+                return Err(crate::builtins::accessor_error(self, *id, key));
+            }
+            return Ok(r);
+        }
+        self.get(v, key)
+    }
+
+    /// [`Vm::get_destructured`] with a key value `ToKey` made.
+    pub fn get_elem_destructured(&mut self, v: &Value, k: &Value) -> Res {
+        if let Value::Obj(id) = v
+            && self.is_promise(*id)
+        {
+            let a = self.key_of(k)?;
+            return self.get_destructured(v, a);
+        }
+        self.get_elem(v, k)
     }
 
     pub fn key_text(&self, key: Atom) -> String {
@@ -244,9 +270,7 @@ impl<'rt> Vm<'rt> {
                 } else {
                     "undefined"
                 };
-                return Err(
-                    self.type_error(&format!("Cannot read properties of {t} (reading '{k}')."))
-                );
+                return Err(self.nullish_read(t, &k));
             }
             _ => {}
         }
@@ -264,7 +288,10 @@ impl<'rt> Vm<'rt> {
             }
             Value::Sym(s) => *s,
             Value::Obj(_) => {
-                let p = self.primitive_of(k, Hint::String)?;
+                // A member's key that fails to convert fails at the key.
+                let p = self
+                    .primitive_of(k, Hint::String)
+                    .map_err(|e| self.at_site(e, Site::Key))?;
                 // A namespace or a promise stays as it is; its key is its text.
                 if let Value::Obj(_) = p {
                     let s = self.string_of(&p)?;
@@ -390,7 +417,7 @@ impl<'rt> Vm<'rt> {
                 } else {
                     "undefined"
                 };
-                Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")))
+                Err(self.nullish_read(t, &k))
             }
             Value::Sym(_) => {
                 Err(self.type_error("Cannot access a property on a non-object value."))
@@ -408,7 +435,7 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     pub fn set_obj(&mut self, id: Id, key: Atom, val: Value) -> Result<(), Value> {
         if matches!(self.heap[id as usize].kind, Kind::Promise(_)) && !self.has_key(id, key) {
-            return Err(self.invalid_data(UNAWAITED));
+            return Err(self.unawaited());
         }
         let flags = self.heap[id as usize].flags;
         let length = self.names.length;
@@ -545,7 +572,7 @@ impl<'rt> Vm<'rt> {
             } else {
                 "undefined"
             };
-            return Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")));
+            return Err(self.nullish_read(t, &k));
         }
         let a = self.key_of(k)?;
         self.set(v, a, val)
@@ -649,7 +676,7 @@ impl<'rt> Vm<'rt> {
                 } else {
                     "undefined"
                 };
-                Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")))
+                Err(self.nullish_read(t, &k))
             }
             Value::Str(s)
                 if key == self.names.length
@@ -954,7 +981,22 @@ impl<'rt> Vm<'rt> {
     /// A namespace path read with a number or a symbol, which the reference refuses.
     #[cold]
     pub(crate) fn namespace_key_error(&mut self) -> Value {
-        self.type_error("tools paths must use string property names.")
+        let e = self.type_error("tools paths must use string property names.");
+        self.at_site(e, Site::Key)
+    }
+
+    /// Reading `key` of a nullish base, which the reference reports at the member's object.
+    #[cold]
+    fn nullish_read(&mut self, t: &str, k: &str) -> Value {
+        let e = self.type_error(&format!("Cannot read properties of {t} (reading '{k}')."));
+        self.at_site(e, Site::Object)
+    }
+
+    /// A member of a promise it doesn't have, read or written: a missing await, reported at the member's object.
+    #[cold]
+    fn unawaited(&mut self) -> Value {
+        let e = self.invalid_data(UNAWAITED);
+        self.at_site(e, Site::Object)
     }
 
     /// The reference's `enumerableSource`: the value whose own enumerable properties `label` (`Object.keys(...)`,

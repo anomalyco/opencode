@@ -109,6 +109,8 @@ pub struct Failure {
     pub message: String,
     /// Source offset of the instruction that raised it, filled in when first thrown.
     pub offset: Option<u32>,
+    /// The part of the raising member expression the offset is taken from when it is filled in.
+    pub site: crate::bytecode::Site,
 }
 
 pub struct Closure {

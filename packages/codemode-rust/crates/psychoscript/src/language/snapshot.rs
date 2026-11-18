@@ -1621,6 +1621,7 @@ impl Dec<'_> {
                     kind: kind_named(&string(at(e, 0)?)?)?,
                     message: string(at(e, 1)?)?,
                     offset: opt_u32(at(e, 2)?)?,
+                    site: Default::default(),
                 })),
             }),
             "p" => {

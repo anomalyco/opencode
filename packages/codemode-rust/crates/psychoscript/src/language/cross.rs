@@ -978,11 +978,15 @@ pub fn tool_args(
         bytes: false,
     };
     let mut out = Vec::with_capacity(args.len());
+    // What the arguments can't cross fails at the call, as the reference locates it.
+    let site = vm.call_offset();
     for (i, a) in args.iter().enumerate() {
         x.arg = i;
         out.push(match flat(vm, a) {
             Some(j) => Some(j),
-            None => x.visit(vm, a, 0)?,
+            None => x
+                .visit(vm, a, 0)
+                .inspect_err(|e| crate::host::locate_at(vm, e, site))?,
         });
     }
     if !x.waiting.is_empty() {

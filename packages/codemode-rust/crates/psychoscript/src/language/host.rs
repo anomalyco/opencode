@@ -623,7 +623,7 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
 }
 
 /// Points an error the VM made, not yet located, at a host call's source offset.
-fn locate_at(vm: &mut Vm, e: &Value, site: Option<u32>) {
+pub(crate) fn locate_at(vm: &mut Vm, e: &Value, site: Option<u32>) {
     if let Value::Obj(id) = e
         && let Kind::Error(Some(f)) = &mut vm.heap[*id as usize].kind
         && f.offset.is_none()
@@ -1565,7 +1565,12 @@ fn import_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res 
             let p = vm.new_promise();
             match namespace(vm, &specifier) {
                 Ok(ns) => vm.fulfill(p, ns),
-                Err(e) => vm.reject(p, e),
+                // The rejection reports the `import()`, as the reference locates it.
+                Err(e) => {
+                    let site = vm.call_offset();
+                    locate_at(vm, &e, site);
+                    vm.reject(p, e)
+                }
             }
             Ok(Value::Obj(p))
         }

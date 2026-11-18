@@ -155,6 +155,7 @@ pub fn proto() -> FuncProto {
         is_program: false,
         needs_extra: false,
         callees: Vec::new(),
+        sites: Vec::new(),
     }
 }
 

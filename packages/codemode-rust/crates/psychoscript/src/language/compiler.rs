@@ -509,6 +509,7 @@ struct FnState<'a> {
     is_generator: bool,
     needs_extra: bool,
     callees: Vec<(u32, Box<str>)>,
+    sites: Vec<(u32, [u32; 2])>,
     /// The instruction index a jump may land on; no instruction fuses across it.
     barrier: usize,
 }
@@ -651,7 +652,13 @@ impl<'a, 's> Compiler<'a, 's> {
             && let Some(prev) = f.code.last_mut()
         {
             let fused = match (*prev, op) {
-                (Op::Int(k), op) => Arith::of(op).map(|a| Op::ArithI(a, k)),
+                // The operator raises any error, so the fused instruction is at the operator.
+                (Op::Int(k), op) => Arith::of(op).map(|a| {
+                    if let Some(p) = f.pos.last_mut() {
+                        *p = pos;
+                    }
+                    Op::ArithI(a, k)
+                }),
                 (Op::GetLocal(a), Op::GetLocal(b)) => Some(Op::GetLocal2(a, b)),
                 (Op::ArithI(a, k), Op::JumpIfFalse(t)) if a.is_comparison() => {
                     Some(Op::JumpUnlessI(a, k, t))
@@ -680,6 +687,26 @@ impl<'a, 's> Compiler<'a, 's> {
         f.code.push(op);
         f.pos.push(pos);
         f.code.len() - 1
+    }
+
+    /// Emits a member instruction, recording where its object and key are when an error from it may point at them
+    /// (see [`Site`]): the reference's object node has no parentheses, and its key is the computed key's expression.
+    fn emit_member(&mut self, op: Op, object: &Expression, key: Option<&Expression>) -> usize {
+        let at = self.emit(op);
+        let pos = self.pos;
+        let object = object.without_parentheses().span().start;
+        let key = key.map_or(pos, |k| k.without_parentheses().span().start);
+        if object != pos || key != pos {
+            self.f().sites.push((at as u32, [object, key]));
+        }
+        at
+    }
+
+    fn emit_at(&mut self, pos: u32, op: Op) -> usize {
+        let saved = std::mem::replace(&mut self.pos, pos);
+        let at = self.emit(op);
+        self.pos = saved;
+        at
     }
 
     fn here(&mut self) -> u32 {
@@ -1243,6 +1270,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 is_program: true,
                 needs_extra: false,
                 callees: f.callees,
+                sites: f.sites,
             },
         );
         // Closure instructions index `protos` assuming the program is not in the list; shift them.
@@ -1434,6 +1462,7 @@ impl<'a, 's> Compiler<'a, 's> {
             is_program: false,
             needs_extra: f.needs_extra,
             callees: f.callees,
+            sites: f.sites,
         });
         Ok(self.protos.len() as u32 - 1)
     }
@@ -2043,7 +2072,9 @@ impl<'a, 's> Compiler<'a, 's> {
         self.init_scope(&syms);
         self.loop_head_expr(&f.right, &syms)?;
         let slot = self.iter_slot();
+        self.pos = f.right.span().start;
         self.emit(Op::ForIn(slot));
+        self.pos = f.span.start;
         let top = self.here();
         let exit = self.emit(Op::IterNext(slot, 0));
         self.push_loop(labels, None);
@@ -2065,6 +2096,7 @@ impl<'a, 's> Compiler<'a, 's> {
             labels.push(inner.label.name.as_str());
             body = &inner.body;
         }
+        self.pos = body.span().start;
         match body {
             Statement::WhileStatement(w) => self.while_loop(w, labels),
             Statement::DoWhileStatement(w) => self.do_while(w, labels),
@@ -2230,34 +2262,21 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.bind_pattern(&a.left, mode)
             }
             BindingPattern::ObjectPattern(o) => {
+                let saved = self.pos;
+                self.pos = o.span.start;
                 self.emit(Op::RequireCoercible);
                 let mut saved_keys = Vec::new();
                 for prop in &o.properties {
+                    self.pos = prop.span.start;
                     self.emit(Op::Dup);
-                    match static_key(&prop.key, prop.computed) {
-                        Some(k) => {
-                            let a = self.atom(&k);
-                            self.emit(Op::GetProp(a));
-                            saved_keys.push(KeyRef::Static(k));
-                        }
-                        None => {
-                            let Some(e) = prop.key.as_expression() else {
-                                return Err(unsupported("Private names", prop.span));
-                            };
-                            self.expr(e)?;
-                            if o.rest.is_some() {
-                                let t = self.new_local();
-                                self.emit(Op::Dup);
-                                self.emit(Op::SetLocal(t));
-                                saved_keys.push(KeyRef::Local(t));
-                            }
-                            self.emit(Op::GetElem);
-                        }
-                    }
+                    let k =
+                        self.destruct_key(&prop.key, prop.computed, prop.span, o.rest.is_some())?;
+                    saved_keys.push(k);
                     self.bind_pattern(&prop.value, mode)?;
                 }
-                match &o.rest {
+                let r = match &o.rest {
                     Some(rest) => {
+                        self.pos = rest.span.start;
                         self.push_keys(&saved_keys);
                         self.emit(Op::ObjRest(saved_keys.len() as u32));
                         self.bind_pattern(&rest.argument, mode)
@@ -2266,14 +2285,19 @@ impl<'a, 's> Compiler<'a, 's> {
                         self.emit(Op::Pop);
                         Ok(())
                     }
-                }
+                };
+                self.pos = saved;
+                r
             }
             BindingPattern::ArrayPattern(a) => {
+                let saved = self.pos;
+                self.pos = a.span.start;
                 let slot = self.iter_slot();
                 self.emit(Op::GetIter(slot, ITER_DESTRUCTURE));
                 let guard = self.emit(Op::PushFinally(0));
                 self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
+                    self.pos = el.as_ref().map_or(a.span.start, |p| p.span().start);
                     self.emit(Op::IterStep(slot));
                     match el {
                         Some(p) => self.bind_pattern(p, mode)?,
@@ -2283,13 +2307,50 @@ impl<'a, 's> Compiler<'a, 's> {
                     }
                 }
                 if let Some(rest) = &a.rest {
+                    self.pos = rest.span.start;
                     self.emit(Op::IterRest(slot));
                     self.bind_pattern(&rest.argument, mode)?;
                 }
+                self.pos = a.span.start;
                 self.close_iter_guard(guard, slot);
+                self.pos = saved;
                 Ok(())
             }
         }
+    }
+
+    /// Reads a destructuring pattern property's key from the object on the stack, at the property, as the
+    /// reference's `GET_PROP`/`GET_ELEM` in destructuring mode do. A computed key is made a key at its expression
+    /// first, and kept in a local when `keep` (an object rest excludes it).
+    fn destruct_key(
+        &mut self,
+        key: &'a PropertyKey<'a>,
+        computed: bool,
+        span: Span,
+        keep: bool,
+    ) -> R<KeyRef> {
+        if let Some(k) = static_key(key, computed) {
+            let a = self.atom(&k);
+            self.emit(Op::DestructProp(a));
+            return Ok(KeyRef::Static(k));
+        }
+        let Some(e) = key.as_expression() else {
+            return Err(unsupported("Private names", span));
+        };
+        self.expr(e)?;
+        self.pos = e.span().start;
+        self.emit(Op::ToKey);
+        self.pos = span.start;
+        let k = if keep {
+            let t = self.new_local();
+            self.emit(Op::Dup);
+            self.emit(Op::SetLocal(t));
+            KeyRef::Local(t)
+        } else {
+            KeyRef::Static(String::new())
+        };
+        self.emit(Op::DestructElem);
+        Ok(k)
     }
 
     /// Ends array destructuring guarded by the `PushFinally` at `guard`: closes the iterator, and on an abrupt
@@ -2323,11 +2384,14 @@ impl<'a, 's> Compiler<'a, 's> {
     fn assign_target(&mut self, t: &'a AssignmentTarget<'a>) -> R<()> {
         match t {
             AssignmentTarget::ArrayAssignmentTarget(a) => {
+                let saved = self.pos;
+                self.pos = a.span.start;
                 let slot = self.iter_slot();
                 self.emit(Op::GetIter(slot, ITER_DESTRUCTURE));
                 let guard = self.emit(Op::PushFinally(0));
                 self.f().controls.push(Control::Iter(slot));
                 for el in &a.elements {
+                    self.pos = el.as_ref().map_or(a.span.start, |m| m.span().start);
                     self.emit(Op::IterStep(slot));
                     match el {
                         Some(m) => self.assign_maybe_default(m)?,
@@ -2337,22 +2401,28 @@ impl<'a, 's> Compiler<'a, 's> {
                     }
                 }
                 if let Some(rest) = &a.rest {
+                    self.pos = rest.span.start;
                     self.emit(Op::IterRest(slot));
                     self.assign_target(&rest.target)?;
                 }
+                self.pos = a.span.start;
                 self.close_iter_guard(guard, slot);
+                self.pos = saved;
                 Ok(())
             }
             AssignmentTarget::ObjectAssignmentTarget(o) => {
+                let saved = self.pos;
+                self.pos = o.span.start;
                 self.emit(Op::RequireCoercible);
                 let mut saved_keys = Vec::new();
                 for prop in &o.properties {
+                    self.pos = prop.span().start;
                     self.emit(Op::Dup);
                     match prop {
                         AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(p) => {
                             let name = p.binding.name.as_str();
                             let a = self.atom(name);
-                            self.emit(Op::GetProp(a));
+                            self.emit(Op::DestructProp(a));
                             saved_keys.push(KeyRef::Static(name.to_owned()));
                             if let Some(init) = &p.init {
                                 let j = self.emit(Op::JumpIfNotUndef(0));
@@ -2360,35 +2430,20 @@ impl<'a, 's> Compiler<'a, 's> {
                                 self.expr_named(init, Some(name))?;
                                 self.patch(j);
                             }
+                            self.pos = p.binding.span.start;
                             self.store_ident(&p.binding)?;
                         }
                         AssignmentTargetProperty::AssignmentTargetPropertyProperty(p) => {
-                            match static_key(&p.name, p.computed) {
-                                Some(k) => {
-                                    let a = self.atom(&k);
-                                    self.emit(Op::GetProp(a));
-                                    saved_keys.push(KeyRef::Static(k));
-                                }
-                                None => {
-                                    let Some(e) = p.name.as_expression() else {
-                                        return Err(unsupported("Private names", p.span));
-                                    };
-                                    self.expr(e)?;
-                                    if o.rest.is_some() {
-                                        let t = self.new_local();
-                                        self.emit(Op::Dup);
-                                        self.emit(Op::SetLocal(t));
-                                        saved_keys.push(KeyRef::Local(t));
-                                    }
-                                    self.emit(Op::GetElem);
-                                }
-                            }
+                            let k =
+                                self.destruct_key(&p.name, p.computed, p.span, o.rest.is_some())?;
+                            saved_keys.push(k);
                             self.assign_maybe_default(&p.binding)?;
                         }
                     }
                 }
-                match &o.rest {
+                let r = match &o.rest {
                     Some(rest) => {
+                        self.pos = rest.span.start;
                         self.push_keys(&saved_keys);
                         self.emit(Op::ObjRest(saved_keys.len() as u32));
                         self.assign_target(&rest.target)
@@ -2397,10 +2452,18 @@ impl<'a, 's> Compiler<'a, 's> {
                         self.emit(Op::Pop);
                         Ok(())
                     }
-                }
+                };
+                self.pos = saved;
+                r
             }
             other => match other.as_simple_assignment_target() {
-                Some(s) => self.assign_simple(s),
+                Some(s) => {
+                    let saved = self.pos;
+                    self.pos = s.span().start;
+                    let r = self.assign_simple(s);
+                    self.pos = saved;
+                    r
+                }
                 None => Err(unsupported("This assignment target", other.span())),
             },
         }
@@ -2429,7 +2492,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.expr(&m.object)?;
                 self.emit(Op::Swap);
                 let a = self.atom(m.property.name.as_str());
-                self.emit(Op::SetProp(a));
+                self.emit_member(Op::SetProp(a), &m.object, None);
                 self.emit(Op::Pop);
                 Ok(())
             }
@@ -2437,7 +2500,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
                 self.emit(Op::Rot3Back);
-                self.emit(Op::SetElem);
+                self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                 self.emit(Op::Pop);
                 Ok(())
             }
@@ -2546,14 +2609,14 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.opt_chain();
                 }
                 let a = self.atom(m.property.name.as_str());
-                self.emit(Op::GetProp(a));
+                self.emit_member(Op::GetProp(a), &m.object, None);
             }
             Expression::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 if m.optional {
                     self.opt_chain();
                 }
-                self.elem_key(&m.expression)?;
+                self.elem_key(&m.object, &m.expression)?;
             }
             Expression::ChainExpression(c) => {
                 self.chains.push(Vec::new());
@@ -2621,16 +2684,16 @@ impl<'a, 's> Compiler<'a, 's> {
         }
     }
 
-    fn elem_key(&mut self, key: &'a Expression<'a>) -> R<()> {
+    fn elem_key(&mut self, object: &'a Expression<'a>, key: &'a Expression<'a>) -> R<()> {
         if let Expression::StringLiteral(s) = key {
             let a = self.atom(&js_str(&s.value));
             if self.atoms.index(a).is_none() {
-                self.emit(Op::GetProp(a));
+                self.emit_member(Op::GetProp(a), object, Some(key));
                 return Ok(());
             }
         }
         self.expr(key)?;
-        self.emit(Op::GetElem);
+        self.emit_member(Op::GetElem, object, Some(key));
         Ok(())
     }
 
@@ -2647,7 +2710,7 @@ impl<'a, 's> Compiler<'a, 's> {
             }
             if let Some(e) = t.expressions.get(i) {
                 self.expr(e)?;
-                self.emit(Op::ToStr);
+                self.emit_at(e.without_parentheses().span().start, Op::ToStr);
                 parts += 1;
             }
         }
@@ -2663,12 +2726,12 @@ impl<'a, 's> Compiler<'a, 's> {
             Expression::StaticMemberExpression(m) => {
                 self.expr(&m.object)?;
                 let a = self.atom(m.property.name.as_str());
-                self.emit(Op::GetMethod(a));
+                self.emit_member(Op::GetMethod(a), &m.object, None);
             }
             Expression::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.emit(Op::Dup);
-                self.elem_key(&m.expression)?;
+                self.elem_key(&m.object, &m.expression)?;
                 self.emit(Op::Swap);
             }
             tag => {
@@ -2746,6 +2809,7 @@ impl<'a, 's> Compiler<'a, 's> {
             match p {
                 ObjectPropertyKind::SpreadProperty(s) => {
                     self.expr(&s.argument)?;
+                    self.pos = s.span.start;
                     self.emit(Op::ObjectSpread);
                 }
                 ObjectPropertyKind::ObjectProperty(p) => {
@@ -2768,7 +2832,7 @@ impl<'a, 's> Compiler<'a, 's> {
                                 return Err(unsupported("Private names", p.span));
                             };
                             self.expr(e)?;
-                            self.emit(Op::ToKey);
+                            self.emit_at(e.without_parentheses().span().start, Op::ToKey);
                             self.expr(&p.value)?;
                             self.emit(Op::DefineElem);
                         }
@@ -2837,7 +2901,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
                 let a = self.atom(m.property.name.as_str());
                 self.pos = m.span.start;
-                self.emit(Op::DelProp(a));
+                self.emit_member(Op::DelProp(a), &m.object, None);
             }
             MemberExpression::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
@@ -2846,7 +2910,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
                 self.expr(&m.expression)?;
                 self.pos = m.span.start;
-                self.emit(Op::DelElem);
+                self.emit_member(Op::DelElem, &m.object, Some(&m.expression));
             }
             MemberExpression::PrivateFieldExpression(p) => {
                 return Err(unsupported("Private fields", p.span));
@@ -2874,7 +2938,7 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.opt_chain();
                 }
                 let a = self.atom(m.property.name.as_str());
-                self.emit(Op::GetMethod(a));
+                self.emit_member(Op::GetMethod(a), &m.object, None);
             }
             Expression::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
@@ -2882,7 +2946,7 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.opt_chain();
                 }
                 self.emit(Op::Dup);
-                self.elem_key(&m.expression)?;
+                self.elem_key(&m.object, &m.expression)?;
                 self.emit(Op::Swap);
             }
             Expression::Super(s) => return Err(unsupported("`super`", s.span)),
@@ -2905,6 +2969,11 @@ impl<'a, 's> Compiler<'a, 's> {
             None => self.emit(Op::CallSpread),
         };
         self.name_callee(at, &c.callee);
+        // A callee that isn't a function fails at the callee, which the reference's node has without parentheses.
+        let callee = c.callee.without_parentheses().span().start;
+        if callee != self.pos {
+            self.f().sites.push((at as u32, [callee, callee]));
+        }
         Ok(())
     }
 
@@ -2968,14 +3037,14 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.expr(&m.object)?;
                     self.expr(&a.right)?;
                     let at = self.atom(m.property.name.as_str());
-                    self.emit(Op::SetProp(at));
+                    self.emit_member(Op::SetProp(at), &m.object, None);
                     return Ok(());
                 }
                 AssignmentTarget::ComputedMemberExpression(m) => {
                     self.expr(&m.object)?;
                     self.expr(&m.expression)?;
                     self.expr(&a.right)?;
-                    self.emit(Op::SetElem);
+                    self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                     return Ok(());
                 }
                 AssignmentTarget::ArrayAssignmentTarget(_)
@@ -3014,11 +3083,11 @@ impl<'a, 's> Compiler<'a, 's> {
                 let at = self.atom(m.property.name.as_str());
                 self.expr(&m.object)?;
                 self.emit(Op::Dup);
-                self.emit(Op::GetProp(at));
+                self.emit_member(Op::GetProp(at), &m.object, None);
                 if let Some(jop) = logical {
                     let j = self.emit(jop);
                     self.expr(&a.right)?;
-                    self.emit(Op::SetProp(at));
+                    self.emit_member(Op::SetProp(at), &m.object, None);
                     let end = self.emit(Op::Jump(0));
                     self.patch(j);
                     self.emit(Op::Swap);
@@ -3028,19 +3097,19 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
                 self.expr(&a.right)?;
                 self.emit(compound_op(op));
-                self.emit(Op::SetProp(at));
+                self.emit_member(Op::SetProp(at), &m.object, None);
                 Ok(())
             }
             AssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
-                self.emit(Op::ToKey);
+                self.emit_at(m.expression.without_parentheses().span().start, Op::ToKey);
                 self.emit(Op::Dup2);
-                self.emit(Op::GetElem);
+                self.emit_member(Op::GetElem, &m.object, Some(&m.expression));
                 if let Some(jop) = logical {
                     let j = self.emit(jop);
                     self.expr(&a.right)?;
-                    self.emit(Op::SetElem);
+                    self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                     let end = self.emit(Op::Jump(0));
                     self.patch(j);
                     self.emit(Op::Rot3);
@@ -3051,7 +3120,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 }
                 self.expr(&a.right)?;
                 self.emit(compound_op(op));
-                self.emit(Op::SetElem);
+                self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                 Ok(())
             }
             other => Err(unsupported("This assignment target", other.span())),
@@ -3081,16 +3150,16 @@ impl<'a, 's> Compiler<'a, 's> {
                 let at = self.atom(m.property.name.as_str());
                 self.expr(&m.object)?;
                 self.emit(Op::Dup);
-                self.emit(Op::GetProp(at));
+                self.emit_member(Op::GetProp(at), &m.object, None);
                 if u.prefix {
                     self.emit(step);
-                    self.emit(Op::SetProp(at));
+                    self.emit_member(Op::SetProp(at), &m.object, None);
                 } else {
                     self.emit(Op::ToNumeric);
                     self.emit(Op::Dup);
                     self.emit(Op::Rot3);
                     self.emit(step);
-                    self.emit(Op::SetProp(at));
+                    self.emit_member(Op::SetProp(at), &m.object, None);
                     self.emit(Op::Pop);
                 }
                 Ok(())
@@ -3098,19 +3167,19 @@ impl<'a, 's> Compiler<'a, 's> {
             SimpleAssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
-                self.emit(Op::ToKey);
+                self.emit_at(m.expression.without_parentheses().span().start, Op::ToKey);
                 self.emit(Op::Dup2);
-                self.emit(Op::GetElem);
+                self.emit_member(Op::GetElem, &m.object, Some(&m.expression));
                 if u.prefix {
                     self.emit(step);
-                    self.emit(Op::SetElem);
+                    self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                 } else {
                     let t = self.new_local();
                     self.emit(Op::ToNumeric);
                     self.emit(Op::Dup);
                     self.emit(Op::SetLocal(t));
                     self.emit(step);
-                    self.emit(Op::SetElem);
+                    self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                     self.emit(Op::Pop);
                     self.emit(Op::GetLocal(t));
                 }
@@ -3163,6 +3232,7 @@ impl<'a> FnState<'a> {
             is_generator: false,
             needs_extra: false,
             callees: Vec::new(),
+            sites: Vec::new(),
             barrier: 0,
         }
     }

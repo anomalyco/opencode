@@ -529,6 +529,7 @@ impl<'rt> Vm<'rt> {
                 kind,
                 message: msg.to_owned(),
                 offset: None,
+                site: Default::default(),
             })));
         }
         e
@@ -1369,7 +1370,8 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     fn not_a_function(&mut self) -> Value {
         let name = self.callee_name();
-        self.type_error(&format!("{name} is not a function."))
+        let e = self.type_error(&format!("{name} is not a function."));
+        self.at_site(e, crate::bytecode::Site::Object)
     }
 
     #[inline(never)]
@@ -1446,8 +1448,19 @@ impl<'rt> Vm<'rt> {
                 DiagnosticKind::ExecutionFailure | DiagnosticKind::InvalidDataValue
             )
         {
-            f.offset = func.pos.get(pc.saturating_sub(1)).copied();
+            let at = pc.saturating_sub(1);
+            f.offset = func.site(at, f.site).or_else(|| func.pos.get(at).copied());
         }
+    }
+
+    /// Marks a failure as pointing at the part `site` of the member expression whose instruction raises it.
+    pub(crate) fn at_site(&mut self, e: Value, site: crate::bytecode::Site) -> Value {
+        if let Value::Obj(id) = e
+            && let Kind::Error(Some(f)) = &mut self.heap[id as usize].kind
+        {
+            f.site = site;
+        }
+        e
     }
 
     /// Runs a step of the native frame `fi` (see `native.rs`): `Some` with the frame's result when it was this run's
@@ -2818,6 +2831,17 @@ impl<'rt> Vm<'rt> {
                         let v = tri!(self.get(&o, a));
                         self.push(v);
                     }
+                    Op::DestructProp(a) => {
+                        let o = self.pop();
+                        let v = tri!(self.get_destructured(&o, a));
+                        self.push(v);
+                    }
+                    Op::DestructElem => {
+                        let k = self.pop();
+                        let o = self.pop();
+                        let v = tri!(self.get_elem_destructured(&o, &k));
+                        self.push(v);
+                    }
                     Op::SetProp(a) => {
                         let v = self.pop();
                         let o = self.pop();
@@ -3857,7 +3881,7 @@ impl<'rt> Vm<'rt> {
     #[inline(never)]
     fn tdz_error(&mut self, name: Atom) -> Value {
         let n = self.atoms.text(name).to_owned();
-        self.reference_error(&format!("Cannot access '{n}' before initialization"))
+        self.reference_error(&format!("Cannot access '{n}' before initialization."))
     }
 
     // ---------- driver ----------

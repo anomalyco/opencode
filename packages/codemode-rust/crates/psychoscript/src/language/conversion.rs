@@ -541,7 +541,7 @@ fn begin(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
 fn next_method(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     let v = fr.get(vm, VALUE);
     let Value::Obj(id) = v else {
-        return Err(vm.type_error("Cannot convert object to primitive value."));
+        return Err(unconvertible(vm));
     };
     let names = match hint_of(fr.index(vm, HINT)) {
         Hint::String => [vm.names.to_string, vm.names.value_of],
@@ -556,7 +556,14 @@ fn next_method(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
             return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), []);
         }
     }
-    Err(vm.type_error("Cannot convert object to primitive value."))
+    Err(unconvertible(vm))
+}
+
+/// A value with no method that converts it. The only member instructions that convert are those whose key does, so
+/// at one the failure points at the key, as the reference's key conversion does.
+fn unconvertible(vm: &mut Vm) -> Value {
+    let e = vm.type_error("Cannot convert object to primitive value.");
+    vm.at_site(e, crate::bytecode::Site::Key)
 }
 
 /// A value converted to `r`: kept with the answers, then the operation or built-in runs again.
