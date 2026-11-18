@@ -550,6 +550,23 @@ describe("ClaudeAgentPlugin session hooks", () => {
       expect(event.decision).toEqual({ retry: false })
     }),
   )
+
+  it.live("keeps a retry another plugin asked for after a subscription limit", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([]) }))
+      const hooks = yield* PluginHooks.Service
+      const session = yield* newSession
+      const event = yield* hooks.trigger("session", "retry", {
+        sessionID: session.id,
+        agent: Agent.ID.make("build"),
+        model: haiku,
+        error: { type: "provider.quota", message: "You've hit your weekly limit" },
+        attempt: 1,
+        decision: { retry: true, delay: 0 },
+      })
+      expect(event.decision).toEqual({ retry: true, delay: 0 })
+    }),
+  )
 })
 
 describe("ClaudeAgentPlugin provider config", () => {
