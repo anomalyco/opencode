@@ -161,11 +161,18 @@ pub fn setup(vm: &mut Vm) {
     vm.global("Math", Value::Obj(math));
 }
 
-fn this_str(vm: &mut Vm, this: &Value) -> Result<StrId, Value> {
+/// The receiver's text; null and undefined fail with the method's name, as the reference's `simple` does.
+fn this_str(vm: &mut Vm, this: &Value, callee: Id) -> Result<StrId, Value> {
     match this {
         Value::Str(s) => Ok(*s),
         Value::Undef | Value::Null => {
-            Err(vm.type_error("String.prototype method called on null or undefined"))
+            let name = match vm.heap[callee as usize].kind {
+                Kind::Native { name, .. } => vm.atoms.text(name).to_owned(),
+                _ => String::new(),
+            };
+            Err(vm.type_error(&format!(
+                "String.prototype.{name} called on null or undefined."
+            )))
         }
         v => vm.string_of(v),
     }
@@ -176,6 +183,7 @@ fn this_str(vm: &mut Vm, this: &Value) -> Result<StrId, Value> {
 /// null check and before `body` runs on the receiver's text and the arguments.
 fn simple(
     vm: &mut Vm,
+    callee: Id,
     this: Value,
     args: &[Value],
     hints: &[Hint],
@@ -184,12 +192,12 @@ fn simple(
     let n = hints.len().min(args.len());
     let mut c = Conversions::default();
     if !matches!(this, Value::Obj(_)) && !args[..n].iter().any(|v| matches!(v, Value::Obj(_))) {
-        let s = this_str(vm, &this)?;
+        let s = this_str(vm, &this, callee)?;
         let r = body(vm, &mut c, s, args);
         return c.finish(vm, r);
     }
     if this.is_nullish() {
-        this_str(vm, &this)?;
+        this_str(vm, &this, callee)?;
     }
     let mut list = Vec::with_capacity(args.len() + 1);
     list.push(this);
@@ -198,16 +206,30 @@ fn simple(
     kinds.push(Hint::String);
     kinds.extend_from_slice(&hints[..n]);
     c.convert(vm, &kinds, &mut list, false)?;
-    let s = this_str(vm, &list[0])?;
+    let s = this_str(vm, &list[0], callee)?;
     list.remove(0);
     list.extend_from_slice(&args[n..]);
     let r = body(vm, &mut c, s, &list);
     c.finish(vm, r)
 }
 
-fn arg_str(vm: &mut Vm, args: &[Value], i: usize) -> Result<StrId, Value> {
-    let v = arg(args, i);
+/// The reference's `str`: argument `i` as text, once it is data (see `data_arg`).
+fn arg_str(vm: &mut Vm, name: &str, args: &[Value], i: usize) -> Result<StrId, Value> {
+    let v = data_arg(vm, name, args, i)?;
     vm.string_of(&v)
+}
+
+/// The reference's `requireDataArgument`: an argument a `String` method reads that is still a promise or a namespace
+/// once the receiver and the arguments converted (conversion keeps both) is not data.
+fn data_arg(vm: &mut Vm, name: &str, args: &[Value], i: usize) -> Res {
+    let v = arg(args, i);
+    if vm.is_opaque_operand(&v) {
+        return Err(vm.invalid_data(&format!(
+            "String.{name} expects argument {} to be a data value.",
+            i + 1
+        )));
+    }
+    Ok(v)
 }
 
 fn string_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -297,13 +319,14 @@ fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> R
     })
 }
 
-fn pos_arg(vm: &mut Vm, args: &[Value], i: usize) -> Result<f64, Value> {
-    Ok(to_integer(vm.number_of(&arg(args, i))?))
+fn pos_arg(vm: &mut Vm, name: &str, args: &[Value], i: usize) -> Result<f64, Value> {
+    let v = data_arg(vm, name, args, i)?;
+    Ok(to_integer(vm.number_of(&v)?))
 }
 
-fn s_char_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
-        let i = pos_arg(vm, args, 0)?;
+fn s_char_at(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, "charAt", args, 0)?;
         let c = if i < 0.0 {
             None
         } else {
@@ -316,9 +339,9 @@ fn s_char_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_char_code_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
-        let i = pos_arg(vm, args, 0)?;
+fn s_char_code_at(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, "charCodeAt", args, 0)?;
         if i < 0.0 {
             return Ok(Value::Num(f64::NAN));
         }
@@ -332,9 +355,9 @@ fn s_char_code_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_code_point_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
-        let i = pos_arg(vm, args, 0)?;
+fn s_code_point_at(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::Number], |vm, _, s, args| {
+        let i = pos_arg(vm, "codePointAt", args, 0)?;
         let units = vm.atoms.sref(s).utf16();
         if i < 0.0 || i as usize >= units.len() {
             return Ok(Value::Undef);
@@ -353,10 +376,10 @@ fn s_code_point_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_at(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
+fn s_at(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::Number], |vm, _, s, args| {
         let len = vm.atoms.sref(s).len16() as f64;
-        let mut i = pos_arg(vm, args, 0)?;
+        let mut i = pos_arg(vm, "at", args, 0)?;
         if i < 0.0 {
             i += len;
         }
@@ -399,31 +422,36 @@ fn rfind16(hay: StrRef, needle: StrRef, from: usize) -> Option<usize> {
     (0..=start).rev().find(|&i| h[i..i + n.len()] == n[..])
 }
 
-fn s_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_index_of(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::String, Hint::Number],
         |vm, _, s, args| {
-            let n = arg_str(vm, args, 0)?;
+            let n = arg_str(vm, "indexOf", args, 0)?;
             let len = vm.atoms.sref(s).len16() as f64;
-            let from = pos_arg(vm, args, 1)?.clamp(0.0, len) as usize;
+            let from = pos_arg(vm, "indexOf", args, 1)?.clamp(0.0, len) as usize;
             let r = find16(vm.atoms.sref(s), vm.atoms.sref(n), from);
             Ok(Value::Num(r.map(|i| i as f64).unwrap_or(-1.0)))
         },
     )
 }
 
-fn s_last_index_of(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_last_index_of(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::String, Hint::Number],
         |vm, _, s, args| {
-            let n = arg_str(vm, args, 0)?;
-            let pos = vm.number_of(&arg(args, 1))?;
+            let n = arg_str(vm, "lastIndexOf", args, 0)?;
+            let pos = {
+                let v = data_arg(vm, "lastIndexOf", args, 1)?;
+                vm.number_of(&v)?
+            };
             let from = if pos.is_nan() {
                 usize::MAX
             } else {
@@ -445,28 +473,28 @@ fn reject_regexp(vm: &mut Vm, args: &[Value], name: &str) -> Result<(), Value> {
     Ok(())
 }
 
-fn s_includes(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_includes(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         reject_regexp(vm, args, "includes")?;
         let listed = &args[..args.len().min(2)];
         let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
-        let n = arg_str(vm, &args, 0)?;
+        let n = arg_str(vm, "includes", &args, 0)?;
         let len = vm.atoms.sref(s).len16() as f64;
-        let from = pos_arg(vm, &args, 1)?.clamp(0.0, len) as usize;
+        let from = pos_arg(vm, "includes", &args, 1)?.clamp(0.0, len) as usize;
         Ok(Value::Bool(
             find16(vm.atoms.sref(s), vm.atoms.sref(n), from).is_some(),
         ))
     })
 }
 
-fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         reject_regexp(vm, args, "startsWith")?;
         let listed = &args[..args.len().min(2)];
         let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
-        let n = arg_str(vm, &args, 0)?;
+        let n = arg_str(vm, "startsWith", &args, 0)?;
         let len = vm.atoms.sref(s).len16() as f64;
-        let from = pos_arg(vm, &args, 1)?.clamp(0.0, len) as usize;
+        let from = pos_arg(vm, "startsWith", &args, 1)?.clamp(0.0, len) as usize;
         let (h, n) = (vm.atoms.sref(s), vm.atoms.sref(n));
         if h.ascii && n.ascii {
             return Ok(Value::Bool(h.s[from..].starts_with(n.s)));
@@ -478,14 +506,14 @@ fn s_starts_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_ends_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_ends_with(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         reject_regexp(vm, args, "endsWith")?;
         let listed = &args[..args.len().min(2)];
         let args = c.converted(vm, &[Hint::String, Hint::Number], listed, false)?;
-        let n = arg_str(vm, &args, 0)?;
+        let n = arg_str(vm, "endsWith", &args, 0)?;
         let len = vm.atoms.sref(s).len16();
-        let end = match arg(&args, 1) {
+        let end = match data_arg(vm, "endsWith", &args, 1)? {
             Value::Undef => len,
             v => to_integer(vm.number_of(&v)?).clamp(0.0, len as f64) as usize,
         };
@@ -497,16 +525,19 @@ fn s_ends_with(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_slice(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::Number, Hint::Number],
         |vm, _, s, args| {
             let len = vm.atoms.sref(s).len16();
-            let start = to_index(vm, &arg(args, 0), len, 0)?;
-            let end = to_index(vm, &arg(args, 1), len, len)?;
+            let start = data_arg(vm, "slice", args, 0)?;
+            let start = to_index(vm, &start, len, 0)?;
+            let end = data_arg(vm, "slice", args, 1)?;
+            let end = to_index(vm, &end, len, len)?;
             if start == 0 && end >= len {
                 return Ok(Value::Str(s));
             }
@@ -516,16 +547,17 @@ fn s_slice(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     )
 }
 
-fn s_substring(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_substring(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::Number, Hint::Number],
         |vm, _, s, args| {
             let len = vm.atoms.sref(s).len16() as f64;
-            let a = pos_arg(vm, args, 0)?.clamp(0.0, len) as usize;
-            let b = match arg(args, 1) {
+            let a = pos_arg(vm, "substring", args, 0)?.clamp(0.0, len) as usize;
+            let b = match data_arg(vm, "substring", args, 1)? {
                 Value::Undef => len as usize,
                 v => to_integer(vm.number_of(&v)?).clamp(0.0, len) as usize,
             };
@@ -535,16 +567,18 @@ fn s_substring(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     )
 }
 
-fn s_substr(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_substr(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::Number, Hint::Number],
         |vm, _, s, args| {
             let len = vm.atoms.sref(s).len16();
-            let start = to_index(vm, &arg(args, 0), len, 0)?;
-            let count = match arg(args, 1) {
+            let start = data_arg(vm, "substr", args, 0)?;
+            let start = to_index(vm, &start, len, 0)?;
+            let count = match data_arg(vm, "substr", args, 1)? {
                 Value::Undef => len,
                 v => to_integer(vm.number_of(&v)?).max(0.0) as usize,
             };
@@ -554,55 +588,59 @@ fn s_substr(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     )
 }
 
-fn map_text(vm: &mut Vm, this: &Value, f: fn(&str) -> String) -> Res {
-    simple(vm, *this, &[], &[], |vm, _, s, _| {
+fn map_text(vm: &mut Vm, callee: Id, this: &Value, f: fn(&str) -> String) -> Res {
+    simple(vm, callee, *this, &[], &[], |vm, _, s, _| {
         let out = f(vm.text(s));
         Ok(vm.string_val(out))
     })
 }
 
-fn s_to_upper(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_text(vm, &this, str::to_uppercase)
+fn s_to_upper(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    map_text(vm, callee, &this, str::to_uppercase)
 }
 
-fn s_to_lower(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_text(vm, &this, str::to_lowercase)
+fn s_to_lower(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    map_text(vm, callee, &this, str::to_lowercase)
 }
 
-fn s_trim(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_text(vm, &this, |s| s.trim_matches(is_js_whitespace).to_owned())
+fn s_trim(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    map_text(vm, callee, &this, |s| {
+        s.trim_matches(is_js_whitespace).to_owned()
+    })
 }
 
-fn s_trim_start(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_text(vm, &this, |s| {
+fn s_trim_start(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    map_text(vm, callee, &this, |s| {
         s.trim_start_matches(is_js_whitespace).to_owned()
     })
 }
 
-fn s_trim_end(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    map_text(vm, &this, |s| {
+fn s_trim_end(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    map_text(vm, callee, &this, |s| {
         s.trim_end_matches(is_js_whitespace).to_owned()
     })
 }
 
-fn pad(vm: &mut Vm, this: Value, args: &[Value], at_start: bool) -> Res {
+fn pad(vm: &mut Vm, callee: Id, this: Value, args: &[Value], at_start: bool) -> Res {
+    let name = if at_start { "padStart" } else { "padEnd" };
     simple(
         vm,
+        callee,
         this,
         args,
         &[Hint::Number, Hint::String],
         |vm, _, s, args| {
-            let target = to_integer(vm.number_of(&arg(args, 0))?);
-            let fill = match arg(args, 1) {
-                Value::Undef => " ".to_owned(),
-                v => {
-                    let f = vm.string_of(&v)?;
-                    vm.text(f).to_owned()
-                }
-            };
+            let target = pos_arg(vm, name, args, 0)?;
             if target > MAX_STRING_LEN as f64 {
                 return Err(vm.range_error("Invalid string length"));
             }
+            let fill = match arg(args, 1) {
+                Value::Undef => " ".to_owned(),
+                _ => {
+                    let f = arg_str(vm, name, args, 1)?;
+                    vm.text(f).to_owned()
+                }
+            };
             let len = vm.atoms.sref(s).len16();
             if target <= len as f64 || fill.is_empty() {
                 return Ok(Value::Str(s));
@@ -624,17 +662,17 @@ fn pad(vm: &mut Vm, this: Value, args: &[Value], at_start: bool) -> Res {
     )
 }
 
-fn s_pad_start(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    pad(vm, this, args, true)
+fn s_pad_start(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    pad(vm, callee, this, args, true)
 }
 
-fn s_pad_end(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    pad(vm, this, args, false)
+fn s_pad_end(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    pad(vm, callee, this, args, false)
 }
 
-fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::Number], |vm, _, s, args| {
-        let n = to_integer(vm.number_of(&arg(args, 0))?);
+fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::Number], |vm, _, s, args| {
+        let n = pos_arg(vm, "repeat", args, 0)?;
         if n < 0.0 || n.is_infinite() {
             return Err(vm.range_error("String.repeat expects a finite non-negative count."));
         }
@@ -646,8 +684,8 @@ fn s_repeat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_split(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], split)
+fn s_split(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], split)
 }
 
 /// The reference's `split` body: the limit, then a separator that is not a RegExp, are one list of conversions.
@@ -666,7 +704,7 @@ fn split(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value]) -> Res {
     let limit = match (arg(args, 1), listed[0]) {
         (Value::Undef, _) => Value::Undef,
         (_, Value::Undef) => Value::Num(f64::NAN),
-        (_, v) => v,
+        (_, v) => data_arg(vm, "split", &[Value::Undef, v], 1)?,
     };
     if let Some(re) = re {
         return regexp::string_split(vm, s, re, limit);
@@ -675,12 +713,11 @@ fn split(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value]) -> Res {
         Value::Undef => u32::MAX as usize,
         v => to_uint32(vm.number_of(&v)?) as usize,
     };
-    let sep = listed[1];
-    let parts: Vec<Value> = match sep {
+    let parts: Vec<Value> = match arg(args, 0) {
         Value::Undef if limit == 0 => Vec::new(),
         Value::Undef => vec![Value::Str(s)],
         _ => {
-            let sep = vm.string_of(&sep)?;
+            let sep = arg_str(vm, "split", &listed[1..], 0)?;
             if vm.text(sep).is_empty() {
                 let units = vm.atoms.sref(s).utf16();
                 units.iter().take(limit).map(|c| vm.char_str(*c)).collect()
@@ -750,8 +787,8 @@ fn expand_replacement(template: &str, matched: &str, pos: usize, subject: &str) 
     out
 }
 
-fn replace(vm: &mut Vm, this: Value, args: &[Value], all: bool) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn replace(vm: &mut Vm, callee: Id, this: Value, args: &[Value], all: bool) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         replace_in(vm, c, s, args, all)
     })
 }
@@ -762,8 +799,7 @@ fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: b
     let re = regexp::as_regexp(vm, &arg(args, 0));
     let rep = arg(args, 1);
     let callable = super::supported_callback(vm, &rep);
-    // A function callback sites don't admit fails once the pattern converted; a namespace reference is no object to
-    // convert.
+    // A function callback sites don't admit fails once the pattern converted.
     let refused = !callable && vm.type_of(&rep) == "function";
     let mut listed = [
         if re.is_some() {
@@ -771,14 +807,7 @@ fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: b
         } else {
             arg(args, 0)
         },
-        if callable
-            || (refused
-                && matches!(rep, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::ToolRef(_))))
-        {
-            Value::Undef
-        } else {
-            rep
-        },
+        if callable { Value::Undef } else { rep },
     ];
     c.convert(vm, &[Hint::String], &mut listed, false)?;
     if refused {
@@ -790,16 +819,21 @@ fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: b
             "(match) => fn(match)",
         ));
     }
+    let name = if all { "replaceAll" } else { "replace" };
     if let Some(re) = re {
-        let rep = if callable { rep } else { listed[1] };
+        let rep = if callable {
+            rep
+        } else {
+            data_arg(vm, name, &listed, 1)?
+        };
         return regexp::string_replace(vm, c, s, re, &rep, all);
     }
-    let pat = vm.string_of(&listed[0])?;
+    let pat = arg_str(vm, name, &listed, 0)?;
     let rep = if callable { rep } else { listed[1] };
     let template = if callable {
         None
     } else {
-        let t = vm.string_of(&rep)?;
+        let t = arg_str(vm, name, &listed, 1)?;
         Some(vm.text(t).to_owned())
     };
     if !(vm.atoms.sref(s).ascii && vm.atoms.sref(pat).ascii) {
@@ -1078,31 +1112,31 @@ fn expand_replacement16(
     }
 }
 
-fn s_replace(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    replace(vm, this, args, false)
+fn s_replace(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    replace(vm, callee, this, args, false)
 }
 
-fn s_replace_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    replace(vm, this, args, true)
+fn s_replace_all(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    replace(vm, callee, this, args, true)
 }
 
-fn s_concat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_concat(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         let args = c.converted(vm, &[Hint::String], args, false)?;
         let mut out = vm.text(s).to_owned();
-        for a in args.iter() {
-            let t = vm.string_of(a)?;
+        for i in 0..args.len() {
+            let t = arg_str(vm, "concat", &args, i)?;
             out.push_str(vm.text(t));
         }
         Ok(vm.string_val(out))
     })
 }
 
-fn s_to_string(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |_, _, s, _| Ok(Value::Str(s)))
+fn s_to_string(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |_, _, s, _| Ok(Value::Str(s)))
 }
 
-fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     use icu_collator::options::{CollatorOptions, Strength};
     use icu_collator::{Collator, CollatorBorrowed};
     // The root collation the reference's host uses for its default locale (en-US), built once per process.
@@ -1116,8 +1150,8 @@ fn s_locale_compare(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
             options.strength = Some(Strength::Primary);
             Collator::try_new(Default::default(), options).ok()
         });
-    simple(vm, this, args, &[Hint::String], |vm, _, s, args| {
-        let o = arg_str(vm, args, 0)?;
+    simple(vm, callee, this, args, &[Hint::String], |vm, _, s, args| {
+        let o = arg_str(vm, "localeCompare", args, 0)?;
         let (a, b) = (vm.atoms.sref(s), vm.atoms.sref(o));
         let order = match (COLLATOR.as_ref(), PRIMARY.as_ref()) {
             (Some(c), Some(p)) if a.units.is_some() || b.units.is_some() => {
@@ -1178,29 +1212,29 @@ fn pattern_value(vm: &mut Vm, c: &mut Conversions, args: &[Value]) -> Res {
     Ok(p[0])
 }
 
-fn s_match(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_match(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         let p = pattern_value(vm, c, args)?;
         regexp::string_match(vm, s, &p)
     })
 }
 
-fn s_match_all(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_match_all(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         let p = pattern_value(vm, c, args)?;
         regexp::string_match_all(vm, s, &p)
     })
 }
 
-fn s_search(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, c, s, args| {
+fn s_search(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, c, s, args| {
         let p = pattern_value(vm, c, args)?;
         regexp::string_search(vm, s, &p)
     })
 }
 
-fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[Hint::String], |vm, _, s, args| {
+fn s_normalize(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[Hint::String], |vm, _, s, args| {
         normalize(vm, s, args)
     })
 }
@@ -1209,8 +1243,8 @@ fn normalize(vm: &mut Vm, s: StrId, args: &[Value]) -> Res {
     use unicode_normalization::UnicodeNormalization;
     let form = match arg(args, 0) {
         Value::Undef => "NFC".to_owned(),
-        v => {
-            let f = vm.string_of(&v)?;
+        _ => {
+            let f = arg_str(vm, "normalize", args, 0)?;
             vm.text(f).to_owned()
         }
     };
@@ -1234,14 +1268,14 @@ fn normalize(vm: &mut Vm, s: StrId, args: &[Value]) -> Res {
     Ok(vm.string_val(out))
 }
 
-fn s_is_well_formed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, _, s, _| {
+fn s_is_well_formed(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, _, s, _| {
         Ok(Value::Bool(vm.atoms.sref(s).well_formed()))
     })
 }
 
-fn s_to_well_formed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, _, s, _| {
+fn s_to_well_formed(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, _, s, _| {
         if vm.atoms.sref(s).well_formed() {
             return Ok(Value::Str(s));
         }
@@ -1250,8 +1284,8 @@ fn s_to_well_formed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn s_iterator(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    simple(vm, this, args, &[], |vm, _, s, _| {
+fn s_iterator(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    simple(vm, callee, this, args, &[], |vm, _, s, _| {
         vm.get_iterator(&Value::Str(s))
     })
 }
