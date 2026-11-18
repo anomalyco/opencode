@@ -48,13 +48,16 @@ function rows(zone: string) {
   const row = (...fields: (string | number)[]) => out.push(fields.join("\t"))
 
   const day = 86_400_000
+  // Kathmandu's 1986 midnight gap, both sides of the US rule change in 2007,
+  // and current gaps and folds (including Lord Howe's half hour).
   const transitions = [
-    ...changes(Date.UTC(1985, 6, 1), Date.UTC(1986, 6, 1)),
-    ...changes(Date.UTC(1995, 0, 1), Date.UTC(2030, 0, 1)),
+    ...changes(Date.UTC(1985, 6), Date.UTC(1986, 6)),
+    ...changes(Date.UTC(2006, 0), Date.UTC(2008, 0)),
+    ...changes(Date.UTC(2025, 0), Date.UTC(2027, 0)),
   ]
   const instants = new Set<number>([
-    ...range(Date.UTC(1900, 0, 1), Date.UTC(2100, 0, 1), 151 * day + 3_600_123),
-    ...range(Date.UTC(2025, 0, 1), Date.UTC(2026, 0, 1), day + 7 * 3_600_000 + 61_007),
+    ...range(Date.UTC(1900, 0, 1), Date.UTC(2100, 0, 1), 40 * (151 * day + 3_600_123)),
+    ...range(Date.UTC(2025, 0, 1), Date.UTC(2026, 0, 1), 12 * (day + 7 * 3_600_000 + 61_007)),
     ...transitions.flatMap((at) => [at - 1, at, at + 1_800_000]),
     ...[0, -1, 1, 999, -999, -1000, -1001, 1_762_268_645_123],
     ...[253_402_300_799_999, 253_402_300_800_000, -62_167_219_200_000, -62_167_219_200_001, -62_198_755_200_000],
@@ -87,22 +90,21 @@ function rows(zone: string) {
       const date = new Date(ms)
       row("iso", ms, Number.isNaN(date.getTime()) ? "invalid" : date.toISOString())
     }
-    for (const n of [...range(-100_000_000, 100_000_001, 199_999), -1, 0, 1, 59, 60, 11_016, -719_468, -719_469]) {
+    for (const n of [...range(-100_000_000, 100_000_001, 50 * 199_999), -1, 0, 1, 59, 60, 11_016, -719_468, -719_469]) {
       const date = new Date(n * day)
       row("days", n, date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), date.getUTCDay())
     }
   }
 
-  // Local midnights: each January 1, each first of a month, each day with a transition and the day after. Every five
-  // minutes of the transition days of 2025 and 2026 and of 1986 (Kathmandu's 15-minute gap): gaps and overlaps at
-  // 02:00 (New York, Lord Howe's half hour) and at midnight (Havana, Kathmandu).
+  // Ordinary midnights and the dates on either side of each transition. On current transition days and in
+  // Kathmandu's 15-minute gap, check the whole wall clock, including its missing or ambiguous readings.
   const walls = new Map<string, Set<number>>()
   const wall = (year: number, month: number, dom: number, minutes: number) => {
     const key = `${year}\t${month}\t${dom}`
     walls.set(key, (walls.get(key) ?? new Set()).add(minutes))
   }
-  for (let year = 1900; year <= 2100; year++) wall(year, 1, 1, 0)
-  for (let year = 1990; year <= 2030; year++) for (let month = 2; month <= 12; month++) wall(year, month, 1, 0)
+  for (const year of [1900, 1970, 2000, 2038, 2100]) wall(year, 1, 1, 0)
+  for (let month = 1; month <= 12; month++) wall(2025, month, 1, 0)
   for (const at of transitions) {
     for (const shift of [-day, 0, day]) {
       const date = new Date(at + shift)

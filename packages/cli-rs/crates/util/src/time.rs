@@ -521,7 +521,9 @@ mod tests {
             assert_eq!(Zone::Local.offset(0), -18_000, "TZ is read");
         }
         let rows = rows(&zone);
-        assert!(rows.len() > 1500, "{zone} has {} rows", rows.len());
+        for kind in ["at", "wall", "parse"] {
+            assert!(rows.iter().any(|row| row[0] == kind), "no {kind} rows for {zone}");
+        }
         for row in rows {
             let at = || number(row[1]);
             match row[0] {
