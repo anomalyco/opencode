@@ -90,16 +90,6 @@ export default ({ after, during, text }: Helpers) => ({
     `const t = Promise.prototype.then; const log = []; Promise.prototype.then = function (f, r) { log.push('then'); return t.call(this, f, r) }
      const n = await search({ query: 'echo' }).then((r) => r.items.length); Promise.prototype.then = t; return [n > 0, log]`,
     `const r = search({ query: 'echo' }); return [await r.catch(() => 0) === r, await r.finally(5) !== r, (await r.finally(() => 1)).items.length > 0]`,
-    // Busy loops in the walk's callbacks: its fuel decides when the reference starts the queued read.
-    during("const doc = { a: [1, { b: 2 }], c: 'x', d: { toJSON: () => see(3) } }", "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (k, v) => see(v), 1); JSON.stringify(doc, ['a', 'b', 'c']); see(j) }"),
-    during("const it = () => ({ [Symbol.iterator]() { let n = 0; return { next: () => (n < 3 ? { done: false, value: ['k' + n, see(n++)] } : { done: true }) } } })",
-      "for (let j = 0; j < 300; j++) { Object.fromEntries(it()); new URLSearchParams(it()); new Headers(it()); Math.sumPrecise(new Set([1, 2])); new AggregateError(it()); see(j) }"),
-    after("", "for (let j = 0; j < 37; j++) Object.fromEntries([['a', j]])"),
-    after("", "for (let j = 0; j < 37; j++) new AggregateError([j])"),
-    after("", "for (let j = 0; j < 37; j++) Math.sumPrecise([j, 1])"),
-    after("", "for (let j = 0; j < 37; j++) ({}).toLocaleString()"),
-    after("", "for (let j = 0; j < 37; j++) { new URLSearchParams([['a', 'b']]); new Headers([['a', 'b']]) }"),
-    after("", "for (let j = 0; j < 37; j++) JSON.stringify({ a: [j, { b: 2 }] }, (k, v) => v, 1)"),
     // A toJSON a crossing to the host calls runs in the crossing's frame: its jobs, what it returns and throws.
     `const log = []; const p = tools.t.echo({ p: Promise.resolve(1), t: { toJSON() { log.push('tj'); Promise.resolve().then(() => log.push('then')); return 1 } } })
      Promise.resolve().then(() => log.push('job')); log.push('after'); const r = await p; return [r, log]`,

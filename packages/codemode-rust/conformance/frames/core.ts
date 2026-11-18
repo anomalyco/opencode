@@ -77,7 +77,6 @@ export default ({ after, text }: Helpers) => ({
       "const o = { valueOf() { return 1 }, toString() { return 'a' } }",
       "for (let j = 0; j < 300; j++) { o + 1; o < 2; o == 1; `${o}`; [o].join(); 'a'.padStart(o); String(o); Math.max(o, 0); const m = {}; m[o] = 1 }",
     ),
-    after("const o = { valueOf() { return 3 } }", "for (let j = 0; j < 300; j++) { let s = 0; for (let i = 0; i < o; i++) s++; let x = o; x++ }"),
     // `yield*` over a custom iterator and over a generator that gets `return()` and `throw()`, and `for await`: results,
     // errors and closing.
     `const log = []; const it = { i: 0, [Symbol.iterator]() { return this }, next(v) { log.push('next ' + v); return { done: this.i > 1, value: ++this.i } }, return(v) { log.push('return ' + v); return { done: true, value: v * 2 } }, throw(e) { log.push('throw ' + e); return { done: false, value: e + 100 } } }; function* g() { const r = yield* it; log.push('r ' + r); return r } const out = []; for (const x of g()) out.push(x); it.i = 0; const gen = g(); out.push(gen.next(1), gen.next(2), gen.throw(3), gen.return(4), gen.next(5)); return [out, log]`,
@@ -97,34 +96,10 @@ export default ({ after, text }: Helpers) => ({
       "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() } let closed = 0; function* inner() { try { yield 1 } finally { closed++ } } function* h() { yield* inner() }",
       "for (let j = 0; j < 100; j++) { for (const x of g()) {} const b = h(); b.next(); b.return(3) }",
     ),
-    after(
-      "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() } let closed = 0; function* inner() { try { yield 1 } finally { closed++ } } function* h() { yield* inner() }",
-      "for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.return(2); const b = h(); b.next(); b.return(3) }",
-    ),
-    after(
-      "const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 1, value: n }), return: () => ({}) } } }; const asy = { [Symbol.asyncIterator]() { let n = 0; return { next: () => Promise.resolve({ done: n++ > 1, value: n }), return: () => ({}) } } }; async function* g() { return yield* asy } function* gen() { yield 1; yield 2 }",
-      "for (let j = 0; j < 30; j++) { for await (const x of sync) {} for await (const x of asy) {} for await (const x of asy) break }",
-    ),
-    after(
-      "const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n++ > 1, value: n }), return: () => ({}) } } }; const asy = { [Symbol.asyncIterator]() { let n = 0; return { next: () => Promise.resolve({ done: n++ > 1, value: n }), return: () => ({}) } } }; async function* g() { return yield* asy } function* gen() { yield 1; yield 2 }",
-      "for (let j = 0; j < 30; j++) { for await (const x of g()) {} for await (const x of gen()) {} }",
-    ),
-    // Abrupt requests forwarded by `yield*`, `for await` over a sync iterable closed by `break`.
-    after(
-      "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() }",
-      "for (let j = 0; j < 100; j++) { const a = g(); a.next(); a.throw(2) }",
-    ),
+    // An abrupt request forwarded by `yield*`.
     after(
       "function* inner() { yield 1 } function* g() { yield* inner() }",
       "for (let j = 0; j < 100; j++) { const a = g(); a.next(); try { a.throw(2) } catch {} }",
-    ),
-    after(
-      "const sync = { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: false, value: n++ }), return: () => ({}) } } }",
-      "for (let j = 0; j < 100; j++) { for await (const x of sync) break }",
-    ),
-    after(
-      "const mk = () => ({ i: 0, [Symbol.iterator]() { return this }, next() { return { done: this.i++ > 1, value: 1 } }, return: (v) => ({ done: true, value: v }), throw: (e) => ({ done: false, value: e }) }); function* g() { yield* mk() }",
-      "for (let j = 0; j < 100; j++) { for (const x of g()) {} const a = g(); a.next(); a.return(2) }",
     ),
     // A generator method's fifty before the body runs, a delegated method that is missing, bound or caught, and
     // closing what `for await` iterates.

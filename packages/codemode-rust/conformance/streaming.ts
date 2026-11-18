@@ -315,7 +315,8 @@ const record = async (code: string) => {
 
 // Busy loops: the reference starts queued calls whenever its interpreter runs out of fuel (10,000 units: one per loop
 // back-edge, function call and job, fifty per call of a built-in or extension function), so a loop sees `locked` or
-// `bodyUsed` change at a fixed iteration.
+// `bodyUsed` change at a fixed iteration. The busy loops here and in conformance/frames/ keep one case per cost rule
+// and code path (one built-in stands for its family): add a case for a new rule, not for another method of a family.
 const busy = (setup: string, loop: string, op = "r.text()", flag = "r.body.locked") =>
   `const r = await fetch(${JSON.stringify(text)}); ${setup}; const p = ${op}; let flip = -1; const seen = () => flip < 0 && ${flag}
    ${loop}
@@ -348,7 +349,6 @@ programs.push(
   busy("const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }", "for (const i of it) { if (flip < 0 && r.body.locked) flip = i }"),
   busy("const m = new Map(); for (let i = 0; i < 30000; i++) m.set(i, i)", "for (const [k] of m) { if (flip < 0 && r.body.locked) flip = k }"),
   busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const i of a.values()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const [i] of a.entries()) { if (flip < 0 && r.body.locked) flip = i }"),
   busy("", "for (const c of 'x'.repeat(30000)) { if (flip < 0 && r.body.locked) flip = 1 }"),
   busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for await (const i of a) { if (flip < 0 && r.body.locked) flip = i }"),
   busy("async function* gen() { for (let i = 0; i < 30000; i++) yield i }", "for await (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
@@ -379,46 +379,24 @@ const after = (setup: string, work: string) =>
 const range = (from: number, to: number) => `Array.from({ length: ${to - from} }, (_, i) => i + ${from})`
 programs.push(
   during("", "a.forEach(see)"),
-  during("", "a.map(see)"),
-  during("", "a.filter(see)"),
-  during("", "a.some((x) => !see(x))"),
-  during("", "a.every(see)"),
-  during("", "a.find((x) => !see(1))"),
-  during("", "a.findIndex((x) => !see(1))"),
-  during("", "a.findLast((x) => !see(1))"),
-  during("", "a.findLastIndex((x) => !see(1))"),
-  during("", "a.reduce((s, x) => see(s), 0)"),
-  during("", "a.reduce((s, x) => see(s))"),
-  during("", "a.reduceRight((s, x) => see(s))"),
   during("", "a.flatMap((x) => x % 2 ? [see(x), , x] : see(x))"),
-  during("const b = a.slice(0, 100)", "for (let j = 0; j < 3000; j++) b.forEach(see)"),
   during("const b = [1, , 3]", "for (let j = 0; j < 3000; j++) { b.map(see); b.some(see); b.reduce(see) }"),
-  during("const f = see.bind(null)", "a.filter(f)"),
-  during("", "a.forEach((x) => [x].forEach(see))"),
   during("", "Array.prototype.forEach.call(a, see)"),
-  during("const b = a.slice(0, 50)", "for (let j = 0; j < 3000; j++) { b.map(String); see(j) }"),
   after("const b = a.slice(0, 2000)", "b.toLocaleString(); [[], [1]].forEach((c) => c.reduce(see))"),
   after("const pairs = d.slice(0, 1000).map((x) => [x, x])", "new Map(pairs)"),
-  after("", "new Set(a.slice(0, 3000))"),
-  after("const os = d.slice(0, 500).map((x) => ({ x }))", "new WeakSet(os); new WeakMap(os.map((o) => [o, 1]))"),
   during("const m = new Map(d.slice(0, 9000).map((x) => [x, x]))", "m.forEach(see)"),
-  during("const s = new Set(a)", "s.forEach(see)"),
   during("", "Object.groupBy(a, (x) => see(x) % 3)"),
-  during("", "Map.groupBy(a, (x) => see(x) % 3)"),
   during("const m = new Map()", "for (let i = 0; i < 30000; i++) { m.getOrInsertComputed(i % 100, see); m.getOrInsert(i, 1) }"),
-  ...["union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf", "isDisjointFrom"].flatMap((name) => [
+  // One method stands for the Set methods: they share the prelude loop and the set-like path.
+  ...["union"].flatMap((name) => [
     after(`const s1 = new Set(${range(0, 1000)}); const s2 = new Set(${range(500, 1500)}); const s3 = new Set(${range(0, 300)})`,
       `s1.${name}(s2); s3.${name}(s1); s1.${name}(s3)`),
     during(`const like = { size: 3, has: (x) => see(x) % 7 === 0, keys: () => [1, 2, 3].values() }; const s1 = new Set(${range(0, 2)})`,
       `for (let j = 0; j < 3000; j++) { s1.${name}(like); see(j) }`),
   ]),
   during("const u = new Uint8Array(d.slice(0, 20000))", "u.forEach(see); u.map(see); u.filter(see)"),
-  during("const u = new Uint8Array(d.slice(0, 20000))", "u.some((x) => !see(x)); u.every(see); u.find((x) => !see(1)); u.findLastIndex((x) => !see(1))"),
-  during("const u = new Uint8Array(d.slice(0, 20000))", "u.reduce((s, x) => see(s)); u.reduceRight((s, x) => see(s), 0)"),
-  during("", "Uint8Array.from(d.slice(0, 20000), see)"),
   after("const b = d.slice(0, 3000); const u = new Uint8Array(3000)", "new Uint8Array(b); Uint8Array.from(b); u.set(b); u.set(new Uint8Array(b)); new Uint8Array(u)"),
   during("const b = d.slice(0, 3000).reverse()", "b.slice().sort((x, y) => see(x) - y); b.toSorted((x, y) => see(y) - x)"),
-  during("const u = new Uint8Array(d.slice(0, 3000).reverse())", "u.sort((x, y) => see(x) - y)"),
   after("const b = d.slice(0, 20000).reverse(); const c = d.slice(0, 4096)", "b.slice().sort(); c.slice().sort(); b.toSorted(); [3, 1, 2].sort((x, y) => x - y)"),
   during("const s = 'ab'.repeat(5000)", "s.replace(/b/g, see); s.replaceAll('a', see); s.replace('b', see); 'é'.repeat(2000).replaceAll('é', see); s.replace(/z/g, see)"),
   during("const j = JSON.stringify({ x: d.slice(0, 3000), y: { z: d.slice(0, 2000) } })", "JSON.parse(j, (key, v) => see(v))"),
@@ -437,25 +415,13 @@ const wrapped =
   "   const H = w(new Headers([['a', 'b']])); const L = (function () { return w(arguments) })(5, 6)"
 programs.push(
   during("", "d.values().map(see).toArray()"),
-  during("", "d.values().filter((x) => see(x) % 3).toArray()"),
-  during("", "d.values().drop(5000).map(see).toArray(); d.values().take(20000).forEach(see)"),
   during("", "d.values().flatMap((x) => [see(x), x]).toArray()"),
-  during("", "d.values().flatMap((x) => x % 2 ? [see(x)] : new Set([x])).reduce((s, x) => s + x, 0)"),
-  during(gen, "g(30000).map(see).filter((x) => x % 2).toArray()"),
-  during(gen, "for (const x of g(30000).map(see)) {}"),
-  during(gen, "[...d.values().map(see)]"),
   during("", "d.values().reduce((s, x) => see(s)); d.values().some((x) => see(x) > 15000); d.values().every((x) => see(x) < 15000); d.values().find((x) => see(x) > 20000)"),
-  during(gen, "for (let j = 0; j < 3000; j++) { g(5).map(see).take(2).toArray(); see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { const h = g(5).map(see); h.next(); h.return(); see(j) }"),
-  during(gen, "for (let j = 0; j < 3000; j++) { const h = [1, 2].values().filter(see); h.return(); g(3).take(0).next(); see(j) }"),
   during(gen, "for (let j = 0; j < 3000; j++) { Iterator.from(g(2)).toArray(); Iterator.from([1, 2]).toArray(); Iterator.from('ab').toArray(); see(j) }"),
   during("let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }", "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }"),
-  during(gen, "for (let j = 0; j < 3000; j++) { for (const x of g(4).map(see)) if (x > 1) break; see(j) }"),
-  during("const it = { [Symbol.iterator]() { return this }, next: Object.fromEntries.bind(null, [['done', true]]) }; const it2 = { ...it, next: Object }",
-    "for (let j = 0; j < 3000; j++) { for (const x of it) {} const [y] = it; see(j) }"),
   during(wrapped, "for (let j = 0; j < 1000; j++) { for (const x of A) {} const [y, z] = M; [...S]; for (const x of T) break; const [h] = H; [...L]; see(j) }"),
   during(wrapped, "for (let j = 0; j < 1000; j++) { Array.from(A); new Map(M); Object.fromEntries(M); new Set(S); Promise.all(T); new Headers(H); see(j) }"),
-  during(gen, "for (let j = 0; j < 3000; j++) { g(6).drop(2).flatMap((x) => g(x)).some((x) => see(x) > 3); see(j) }"),
   during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
 )
 
@@ -470,12 +436,8 @@ const syncs =
   "   async function* ag() { yield 1; yield* g(2) }"
 programs.push(
   after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of [1, 2]) {} for await (const x of 'ab') {} for await (const x of new Map([[1, 2]])) {} }"),
-  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of g(2)) {} for await (const x of g(3).map((x) => x)) {} }"),
-  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of it) {} for await (const x of bound) {} for await (const x of wrapped) {} for await (const x of h.entries()) {} }"),
   after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of ag()) {} }"),
   after(syncs + "; async function* a2() { yield* g(2) }", "for (let j = 0; j < 37; j++) { for await (const x of a2()) {} }"),
-  after(syncs + "; async function* a3() { yield* [1, 2] }", "for (let j = 0; j < 37; j++) { for await (const x of a3()) {} }"),
-  after(syncs + "; async function* a3() { yield* [1, 2] }", "for (let j = 0; j < 37; j++) { const i = a3(); await i.next(); await i.next(); await i.next() }"),
   after(syncs + "; const ai = { [Symbol.asyncIterator]() { let c = 0; return { next: async () => ({ done: c++ >= 2, value: 1 }) } } }; async function* a7() { yield* ai }", "for (let j = 0; j < 37; j++) { for await (const x of a7()) {} }"),
 )
 
@@ -486,14 +448,6 @@ const objects =
   "   const v = { valueOf: () => see(1) }"
 programs.push(
   during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(o, 2); 'abc'.padStart(o, s); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.includes('b', o); 'a-b'.split(s, o); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.replace(s, 'x'); 'ab'.concat(o, 1, s); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { String.prototype.trim.call(s); 'abc'.indexOf(n); 'ab'.match(s); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { Math.max(1, o, 2); Math.abs(o); Math.pow(o, 2); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { Number(o); String(s); parseInt(s, o); isNaN(o); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { (1.5).toFixed(o); JSON.parse(t); String.fromCharCode(o, 66); String.raw({ raw: ['a', 'b'] }, o); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { new Error(s); Error(s); new Date(o); new Date(o, o); Date.UTC(2000, o); dt.setMonth(o); [1, 2, 3].slice(o); [1, 2].includes(2, o); [3, 1].fill(0, o); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { [1, [2, o], s].join(s); String([o, [o]]); [n, 1].toString(); [1, 2].join(); see(j) }"),
   during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }"),
   during(objects, "for (let j = 0; j < 1000; j++) { [s, 'a', o].sort(); [n, 2, 1].toSorted(); [3, 1].sort(); see(j) }"),
   after(objects, "const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort()"),
@@ -503,11 +457,8 @@ programs.push(
 const doc = "const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }"
 programs.push(
   during(doc, "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => see(v)); see(j) }"),
-  during(doc, "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => typeof v === 'number' ? undefined : see(v), 2); see(j) }"),
   during(doc, "for (let j = 0; j < 3000; j++) { JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); see(j) }"),
-  after(doc, "JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); JSON.stringify(doc, (k, v) => v)"),
   after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
-  after("const err = new TypeError('boom'); err.extra = [1, 2]", "JSON.stringify({ err, n: [new Date(5)], h: new Headers({ a: 'b' }) }, (k, v) => v)"),
   // Past depth 100 the internal walk throws through `$Throw`.
   after("let deep = 1; for (let i = 0; i < 101; i++) deep = { deep }", "for (let j = 0; j < 37; j++) try { JSON.stringify(deep, (k, v) => v) } catch {}"),
   // The native walk gives up at its 2,048th visit of an object it has seen already.
@@ -515,11 +466,8 @@ programs.push(
   after("const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })", "JSON.stringify(nest); JSON.stringify(nest.slice(0, 600))"),
   during("const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }",
     "for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }"),
-  during("const t = new Date(0); const e = {}; const arr = [1]", "for (let i = 0; i < 3000; i++) { t - 0; t + 1; t < 5; 'a' + e; arr == 1; see(i) }"),
   `const ks = []; const s = JSON.stringify({ h: new Headers({ a: 'b' }), e: new TypeError('x'), u: new Uint8Array([1]) }, (k, v) => { ks.push(k); return v }, 1)
    return [s, ks, JSON.stringify({ h: new Headers({ a: 'b' }) }, ['h', 'z'])]`,
-  during(doc + "; const t = { x: [1, 2, { toJSON: () => see(7) }], y: doc }", "for (let j = 0; j < 300; j++) { JSON.stringify(t); JSON.stringify([doc, { toJSON() { return see(1) } }]); see(j) }"),
-  during("const err = new TypeError('boom'); err.extra = [1, 2]", "for (let j = 0; j < 3000; j++) { JSON.stringify({ err, n: [new Date(5)] }, (k, v) => v); see(j) }"),
 )
 
 // Crossing to the host: a tool's or search's arguments, and the result, cross as JSON; a promise inside is awaited by
@@ -622,25 +570,18 @@ programs.push(
 // Busy loops through the walk: its fuel decides when the reference starts the queued read.
 programs.push(
   after("", "for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' })"),
+  // Spreading a generator opens it with a call of its `Symbol.iterator`.
+  after("function* g() { yield 1 }", "for (let j = 0; j < 37; j++) [...g()]"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.echo([Promise.resolve(1), [Promise.resolve(2), [Promise.resolve(3)]]])"),
   after("const t = { toJSON: () => [1, 2] }", "for (let j = 0; j < 37; j++) await tools.t.echo({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })"),
-  after("", "for (let j = 0; j < 37; j++) await tools.t.echo(Promise.resolve(j)).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) search({ query: Promise.resolve('echo'), limit: 1 })"),
-  after("", "for (let j = 0; j < 37; j++) await tools.t.echo(1, 2).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.fail({}).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: 'x' }).catch(() => 0)"),
-  after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then((x) => x)"),
-  after("", "for (let j = 0; j < 37; j++) await Promise.reject(j).catch(() => 0)"),
-  after("", "for (let j = 0; j < 37; j++) await tools.t.typed({ id: j }).then((x) => x)"),
   after("", "for (let j = 0; j < 37; j++) await tools.t.nope({}).catch(() => 0)"),
-  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then(String)"),
-  after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then(async (x) => x)"),
-  after("", "for (let j = 0; j < 37; j++) await new Promise((done) => done(j))"),
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve({ then(done) { done(j) } })"),
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).finally(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await Promise.try(() => j)"),
-  after("", "for (let j = 0; j < 37; j++) { const { promise, resolve } = Promise.withResolvers(); Promise.resolve(j).then(resolve); await promise }"),
   after("let o = 1; for (let i = 0; i < 101; i++) o = { o }", "for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(1), o }).catch(() => 0)"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { tools.t.echo({ t, a: [1, 2, { c: 3 }] }); see(j) }"),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { search({ query: t }); see(j) }"),

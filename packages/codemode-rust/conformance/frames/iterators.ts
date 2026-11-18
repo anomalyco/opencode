@@ -79,10 +79,6 @@ export default ({ after, during, text }: Helpers) => ({
      for (const v of [5, { [Symbol.iterator]: 5 }, { [Symbol.iterator]: () => 5 }, { [Symbol.iterator]() { throw new RangeError('open') } }])
        try { Iterator.from(v) } catch (e) { log.push(e.name + ': ' + e.message) }
      return log`,
-    during(gen, "for (let j = 0; j < 3000; j++) { const h = g(4).flatMap((x) => [x, x]); h.next(); h.return(); see(j) }"),
-    during(gen, "for (let j = 0; j < 3000; j++) { try { g(3).map(() => { throw 1 }).next() } catch {} try { [1].values().flatMap(() => 1).next() } catch {} see(j) }"),
-    during("const it = { [Symbol.iterator]: () => [1, 2].values() }", "for (let j = 0; j < 3000; j++) { Iterator.from(it).toArray(); see(j) }"),
-    after(gen, "for (let j = 0; j < 37; j++) { const h = g(3).take(1); h.next(); h.next(); g(2).take(0).next(); g(2).drop(5).next() }"),
   ] as Array<string>,
   // Suspended while a busy loop runs inside a helper's callback, its source's `next`, an inner record or a close.
   suspensions: [
