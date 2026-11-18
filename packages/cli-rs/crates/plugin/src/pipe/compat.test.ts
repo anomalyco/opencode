@@ -1222,6 +1222,54 @@ test("data collections load through the client", async () => {
   expect(fake.toasts()).toEqual([])
 })
 
+// CT-36: a plugin that lists the status, permissions and forms of each of 900 sessions (sesh, agents-view,
+// op1/threads). The statuses come from the one read of every session the host has loaded, with no read of each session,
+// which churned 1,800 watches past the host's bound; the permissions load at most 4 at once, where 900 fetches went in
+// one pass, and an event reloads only its session's; the forms load once for the location, not once a session.
+test("listing hundreds of sessions stays within the host's bounds", async () => {
+  const ids = Array.from({ length: 900 }, (_, index) => `ses_${index}`)
+  const fake = host((key) => (key === "sessions" ? [{ info: { id: "ses_1" }, status: "running" }] : []))
+  const fetched: string[] = []
+  let flying = 0
+  let most = 0
+  fake.fetch = async (request: Json) => {
+    fetched.push(`${request.method} ${request.path}`)
+    most = Math.max(most, ++flying)
+    await turn()
+    flying--
+    if (request.path === "/api/form") return { Ok: { data: [{ id: "frm_1", sessionID: "ses_2" }] } }
+    return { Ok: { data: [] } }
+  }
+  const handlers = new Map<string, (event: Json) => unknown>()
+  const base = {
+    id: "t.many",
+    options: {},
+    app: { version: "", channel: "" },
+    themeMode: "dark",
+    data: { on: (type: string, handler: (event: Json) => unknown) => (handlers.set(type, handler), () => {}) },
+  }
+  const ctx = context(base, fake) as Json
+  ids.forEach((id) => ctx.data.session.status(id))
+  await turn()
+  expect(ids.filter((id) => ctx.data.session.status(id) === "running")).toEqual(["ses_1"])
+  expect([...fake.watches]).toEqual(["sessions"])
+  ids.forEach((id) => ctx.data.session.permission.list(id))
+  for (let rounds = 0; rounds < 1000 && (fetched.length < ids.length || flying > 0); rounds++) await turn()
+  expect([fetched.length, most]).toEqual([ids.length, 4])
+  fetched.length = 0
+  handlers.get("permission.asked")!({ type: "permission.asked", data: { sessionID: "ses_7", id: "per_1" } })
+  for (let rounds = 0; rounds < 4; rounds++) await turn()
+  expect(fetched).toEqual(["GET /api/session/ses_7/permission"])
+  fetched.length = 0
+  ids.forEach((id) => ctx.data.session.form.list(id))
+  for (let rounds = 0; rounds < 4; rounds++) await turn()
+  expect(fetched).toEqual(["GET /api/form"])
+  expect([ctx.data.session.form.list("ses_2"), ctx.data.session.form.list("ses_3")]).toEqual([
+    [{ id: "frm_1", sessionID: "ses_2" }],
+    [],
+  ])
+})
+
 // Contract 2.x, addition 1, the room rule: before the host laid a node out, a top node of the mount answers its own
 // width, `"100%"` of the room the mount's input gave or a number; a nested one answers nothing. Once laid out, a node's
 // own numeric width or height is what it answers, as the host lays it out so, where the host's rect is a frame late.

@@ -268,10 +268,16 @@ export function context(base: Base, carrier: Carrier) {
     })
 
   const sessions = (): Json[] => read("sessions", { type: "sessions" }) ?? []
-  const session = (sessionID: string): Json =>
-    sessions().find((item) => item.info.id === sessionID) ??
-    read(`session:${sessionID}`, { type: "session", id: sessionID }) ??
-    undefined
+  // A session and whether it runs, from the one read of every session the host has loaded: the host answers a
+  // session's own read from the same store and loads nothing for it (`Read::session`), so a read a session would only
+  // churn the bounded watches, a watch and a release for each ID past them. opencode-sesh asks the status of each of
+  // 900 listed sessions in one pass: 1,800 messages, which flooded the host (CT-36). Indexed once a snapshot.
+  let indexed: { list: Json[]; byID: Map<string, Json> } | undefined
+  const session = (sessionID: string): Json => {
+    const list = sessions()
+    if (indexed?.list !== list) indexed = { list, byID: new Map(list.map((item) => [item.info.id, item])) }
+    return indexed.byID.get(sessionID)
+  }
   const info = (): Json => read("info", { type: "info" })
   const locationOf = (location: Json) =>
     location ? { directory: location.directory, workspace: location.workspaceID ?? undefined } : null
@@ -304,7 +310,33 @@ export function context(base: Base, carrier: Carrier) {
   // A collection the contract has no read of, loaded through the plugin's `client` over the host's fetch: as the plugin
   // first lists or syncs it, again on `invalidate`, and again on each event `events` names, which it subscribes to with
   // its first load. A list answers `undefined` until its load came, and its reader follows it.
-  const fetched = (events: string[], load: (...args: Json[]) => Promise<Json>, key = (...args: Json[]) => JSON.stringify(args)) => {
+  // At most 4 of the plugin's loads of what the host does not push run at once; the others wait their turn. A plugin
+  // that lists the permissions or forms of each of 900 sessions asked 1,800 fetches in one pass, each an effect, past
+  // the host's bound on what it has not taken (CT-36: agents-view, op1/threads).
+  const LOADS = 4
+  let loads = 0
+  const turns: Array<() => void> = []
+  const inTurn = <T,>(run: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const start = () => {
+        loads++
+        run()
+          .then(resolve, reject)
+          .finally(() => {
+            loads--
+            turns.shift()?.()
+          })
+      }
+      if (loads < LOADS) start()
+      else turns.push(start)
+    })
+  // `concerns`: whether an event of `events` changes what the entry of `args` holds; an event reloads only those.
+  const fetched = (
+    events: string[],
+    load: (...args: Json[]) => Promise<Json>,
+    key = (...args: Json[]) => JSON.stringify(args),
+    concerns = (_event: Json, _args: Json[]) => true,
+  ) => {
     const entries = new Map<string, { args: Json[]; value?: Json; version: ReturnType<typeof createSignal<number>>; loading?: Promise<void> }>()
     let heard = false
     const entry = (args: Json[]) => {
@@ -318,9 +350,14 @@ export function context(base: Base, carrier: Carrier) {
     const reload = (at: ReturnType<typeof entry>): Promise<void> => {
       if (!heard) {
         heard = true
-        for (const type of events) base.data.on(type, () => entries.forEach((known) => void reload(known)))
+        for (const type of events)
+          base.data.on(type, (event: Json) =>
+            entries.forEach((known) => {
+              if (concerns(event, known.args)) void reload(known)
+            }),
+          )
       }
-      at.loading = load(...at.args).then(
+      at.loading = inTurn(() => load(...at.args)).then(
         (value) => {
           at.value = value
           at.version[1]((count) => count + 1)
@@ -346,11 +383,28 @@ export function context(base: Base, carrier: Carrier) {
     fetched(events, (location?: Json) => (raw as Json)[name].list({ location: directoryOf(location) }).then((out: Json) => out.data), (location?: Json) =>
       locationKey(location),
     )
-  const forms = fetched(
+  // One list of a location's forms, which each session's are of: a list a session refetched the location's whole list
+  // for each session (CT-36).
+  const locationForms = fetched(
     ["form.created", "form.replied", "form.cancelled"],
-    (sessionID: string, location?: Json) =>
-      raw.form.list({ location: directoryOf(location) }).then((out: Json) => out.data.filter((form: Json) => form.sessionID === sessionID)),
+    (location?: Json) => raw.form.list({ location: directoryOf(location) }).then((out: Json) => out.data),
+    (location?: Json) => locationKey(location),
   )
+  const sessionForms = new Map<string, { of: Json; forms: Json }>()
+  const forms = {
+    list(sessionID: string, location?: Json) {
+      const of = locationForms.list(location)
+      if (of === undefined) return undefined
+      const at = `${sessionID} ${locationKey(location)}`
+      const known = sessionForms.get(at)
+      if (known?.of === of) return known.forms
+      const made = of.filter((form: Json) => form.sessionID === sessionID)
+      sessionForms.set(at, { of, forms: made })
+      return made
+    },
+    sync: (_sessionID: string, location?: Json) => locationForms.sync(location),
+    invalidate: (_sessionID: string, location?: Json) => locationForms.invalidate(location),
+  }
   const shells = listed("shell", ["shell.created", "shell.exited", "shell.deleted"])
   const projects = fetched(["project.updated"], () => raw.project.list())
 
@@ -404,7 +458,12 @@ export function context(base: Base, carrier: Carrier) {
         sync: (sessionID: string) => synced(`messages:${sessionID}`, { type: "messages", id: sessionID }),
         invalidate() {},
       },
-      permission: fetched(["permission.asked", "permission.replied"], (sessionID: string) => raw.permission.list({ sessionID })),
+      permission: fetched(
+        ["permission.asked", "permission.replied"],
+        (sessionID: string) => raw.permission.list({ sessionID }),
+        undefined,
+        (event: Json, [sessionID]: Json[]) => event?.data?.sessionID === undefined || event.data.sessionID === sessionID,
+      ),
       form: {
         ...forms,
         reply: async (input: Json, location?: Json) => {
