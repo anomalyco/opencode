@@ -49,6 +49,7 @@ import {
   type TabsHydrationEffect,
   type TabsHydrationEvent,
 } from "./hydration-machine"
+import { stripBasePath } from "@/runtime/platform/base-path"
 
 export type SessionTab = typeof TabStorage.Session.Type
 
@@ -610,7 +611,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             return
           }
 
-          const active = location.pathname === "/new-session" && location.query.draftId === draftID
+          const active = stripBasePath(location.pathname) === "/new-session" && location.query.draftId === draftID
           setStore(
             produce((tabs) => {
               tabs[index] = next

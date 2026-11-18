@@ -22,6 +22,7 @@ import {
   type ProjectImportTarget,
 } from "./import-machine"
 import { useRevealProject } from "./reveal"
+import { stripBasePath } from "@/runtime/platform/base-path"
 
 export function createProjectActions() {
   const platform = usePlatform()
@@ -57,7 +58,7 @@ export function createProjectActions() {
 
   const directories = (project: LocalProject) => [project.worktree, ...(project.sandboxes ?? [])]
 
-  const currentPath = () => location.pathname + location.search
+  const currentPath = () => stripBasePath(location.pathname) + location.search
   const [importState, setImportState] = createSignal(INITIAL_PROJECT_IMPORT_STATE)
   let pendingToast: number | undefined
 

@@ -30,7 +30,7 @@ import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { PluginRoot } from "@/runtime/plugin/root"
-import { baseRouter } from "@/runtime/platform/base-path-router"
+import { basePath } from "@/runtime/platform/base-path"
 
 export { preloadRoute }
 
@@ -126,7 +126,7 @@ export function AppInterface(props: {
   return (
     <ServersProvider canonicalLocalServer={props.canonicalLocalServer} servers={props.servers}>
       <SettingsProvider>
-        <Dynamic component={props.router ?? baseRouter ?? Router} root={Root}>
+        <Dynamic component={props.router ?? Router} base={basePath || undefined} root={Root}>
           <AppRoutes />
         </Dynamic>
       </SettingsProvider>

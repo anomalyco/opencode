@@ -43,6 +43,7 @@ import {
   type ScopedSessionEffect,
   type ScopedSessionEvent,
 } from "./scoped-machine"
+import { stripBasePath } from "@/runtime/platform/base-path"
 
 const DEFAULT_SIDEBAR_WIDTH = 344
 
@@ -110,7 +111,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
 export const useCurrentRoute = () => {
   const location = useLocation()
 
-  return createMemo(() => currentRoute(location.pathname, location.search))
+  return createMemo(() => currentRoute(stripBasePath(location.pathname), location.search))
 }
 
 const sessionTabsSchema = Persistence.struct({

@@ -15,6 +15,7 @@ import {
   type TimelineCursorEvent,
 } from "./cursor-machine"
 import type { HistorySeekStatus } from "./history-machine"
+import { stripBasePath } from "@/runtime/platform/base-path"
 
 /** The active prompt, the route's `#message-<id>` target, and the scroll that brings either into view. */
 export function createTimelineCursor(input: {
@@ -61,9 +62,12 @@ export function createTimelineCursor(input: {
     if (effect.type === "history.seek") return input.seekHistory()
 
     if (effect.type === "hash.set")
-      return navigate(location.pathname + location.search + `#${input.anchor(effect.messageID)}`, { replace: true })
+      return navigate(stripBasePath(location.pathname) + location.search + `#${input.anchor(effect.messageID)}`, {
+        replace: true,
+      })
 
-    if (effect.type === "hash.clear") return navigate(location.pathname + location.search, { replace: true })
+    if (effect.type === "hash.clear")
+      return navigate(stripBasePath(location.pathname) + location.search, { replace: true })
 
     if (effect.type === "anchor.scroll") {
       const target = document.getElementById(effect.id)
