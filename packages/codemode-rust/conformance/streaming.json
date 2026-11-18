@@ -211679,6 +211679,33 @@
       "log": []
     },
     {
+      "code": "const f = (n) => f(n + 1); f(1)",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "RangeError: Maximum call stack size exceeded (line 1, col 18)"
+      },
+      "log": []
+    },
+    {
+      "code": "const f = () => [0].map(f); f()",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "RangeError: Maximum call stack size exceeded (line 1, col 17)"
+      },
+      "log": []
+    },
+    {
+      "code": "const r = (n) => (n > 1 ? r(n - 1) : n); r(10000); return r(10001)",
+      "outcome": {
+        "ok": false,
+        "kind": "ExecutionFailure",
+        "message": "RangeError: Maximum call stack size exceeded (line 1, col 27)"
+      },
+      "log": []
+    },
+    {
       "code": "const log = []; function* g() { try { yield 1; yield 2 } finally { log.push('finally'); throw new Error('close') } }\n     const r = []; try { for (const x of g()) { r.push(x); break } } catch (e) { r.push(e.message) }\n     try { const [a] = g(); r.push(a) } catch (e) { r.push(e.message) }\n     try { new Map([[1, 2]].values().map((x) => x)) } catch (e) { r.push(e.message) }\n     try { Array.from(g(), (x) => { if (x === 1) throw new Error('mapper') }) } catch (e) { r.push(e.message) }\n     return [r, log]",
       "outcome": {
         "ok": true,

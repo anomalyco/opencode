@@ -51,6 +51,11 @@ export default ({ after, text }: Helpers) => ({
     "await (async () => { const it = { [Symbol.asyncIterator]() { return this }, next: async () => ({ done: false, value: S(1) }), return: async (v) => ({ done: true, value: S(2) + v }), throw: async (e) => ({ done: false, value: S(3) + e }) }; async function* g() { yield* it } const gen = g(); return [await gen.next(), await gen.throw(10), await gen.return(5), await gen.next()] })()",
   ],
   programs: [
+    // The call depth limit's RangeError uncaught, with its location: plain recursion, through a callback, and one
+    // level over the exact limit.
+    `const f = (n) => f(n + 1); f(1)`,
+    `const f = () => [0].map(f); f()`,
+    `const r = (n) => (n > 1 ? r(n - 1) : n); r(10000); return r(10001)`,
     `const log = []; function* g() { try { yield 1; yield 2 } finally { log.push('finally'); throw new Error('close') } }
      const r = []; try { for (const x of g()) { r.push(x); break } } catch (e) { r.push(e.message) }
      try { const [a] = g(); r.push(a) } catch (e) { r.push(e.message) }
